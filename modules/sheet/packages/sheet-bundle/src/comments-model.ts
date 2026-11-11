@@ -936,9 +936,6 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
     const engine = deps.engine();
     const sheet = engine?.listSheets().find((x) => x.id === at.sheet);
     if (!engine || !sheet) return { ok: false, reason: "no workbook" };
-    if (!host.supports("comments@1")) {
-      return { ok: false, reason: "the host has no comments door" };
-    }
     const text = at.text.trim();
     if (!text) return { ok: false, reason: "no text" };
     const existing = readWorkbook(engine).find(

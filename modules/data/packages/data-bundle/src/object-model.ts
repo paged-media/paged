@@ -39,7 +39,6 @@ import {
   runMergeCommand,
   type MergeCommandArgs,
 } from "./merge-command";
-import { objectsOf } from "./property-lane";
 import type { PropertyBindingSpec } from "./property-session";
 import type { BarcodeSymbology, DataSourceSession } from "./session";
 import { dataTemplateFields, inspectionCommands } from "./template-fields";
@@ -476,16 +475,15 @@ export async function defineBinding(
   id: string,
   spec: PropertyBindingSpec,
 ): Promise<{ ok: boolean; reason?: string }> {
-  const objects = objectsOf(host);
+  const objects = host.objects;
   const kind = `plugin:${PLUGIN_ID}/binding`;
   let registered = false;
   try {
-    registered =
-      !!objects && (await objects.kinds()).some((k) => k.kind === kind);
+    registered = (await objects.kinds()).some((k) => k.kind === kind);
   } catch {
     registered = false;
   }
-  if (!objects || !registered) return session.addPropertyBinding(id, spec);
+  if (!registered) return session.addPropertyBinding(id, spec);
   let schema: unknown;
   try {
     schema =

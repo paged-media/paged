@@ -289,7 +289,7 @@ export class SlidesStore {
   thumbnail(pageId: string): string | null {
     const url = this.thumbs.get(pageId);
     if (url) return url;
-    if (!this.pending.has(pageId) && this.host.supports("render.snapshot@1")) {
+    if (!this.pending.has(pageId)) {
       const gen = this.generation;
       const job = this.host.render
         .snapshot(pageId, { widthPx: THUMB_WIDTH })

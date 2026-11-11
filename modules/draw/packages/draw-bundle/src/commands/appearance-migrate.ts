@@ -69,15 +69,11 @@ import {
   readGraphicAppearanceAs,
   withGraphicStyleRef,
   writeGraphicStyleLibrary,
-  GRAPHIC_STYLES_FEATURE,
   GRAPHIC_STYLES_PART,
   type GraphicStyleRef,
 } from "./graphic-styles";
 import { readRecipeBytes } from "../recipe-store";
-import {
-  migrateAppearanceMutations,
-  nativeAppearanceOn,
-} from "./appearance-native";
+import { migrateAppearanceMutations } from "./appearance-native";
 import { batchChildrenOf, batchMutationFor } from "./batch-handles";
 import { parentGroupOf } from "./parentage";
 import { linkIndex } from "../link-index";
@@ -132,13 +128,11 @@ async function migrationOpsFor(
 
 /** Move every metadata stack of the open document onto the engine's
  *  native appearance, in one batch, and the graphic styles with them.
- *  Null when there is nothing to move or the engine draws no native
- *  appearance. */
+ *  Null when there is nothing to move. */
 export async function migrateAppearanceStacks(
   host: BundleHost,
 ): Promise<AppearanceMigration | null> {
   const label = "Migrate appearances";
-  if (!nativeAppearanceOn(host)) return null;
   const index = linkIndex(host);
   index.invalidate();
   const snap = await index.snapshot();
@@ -196,13 +190,11 @@ export async function migrateAppearanceStacks(
   }
   // The library, written back as native styles.
   let library = false;
-  if (host.supports(GRAPHIC_STYLES_FEATURE)) {
-    const raw = parseGraphicStyleLibrary(
-      await readRecipeBytes(host, GRAPHIC_STYLES_PART).catch(() => null),
-    );
-    if (raw.styles.some((st) => !isNativeStyleAppearance(st.appearance)))
-      library = await writeGraphicStyleLibrary(host, nativeLibraryOf(raw));
-  }
+  const raw = parseGraphicStyleLibrary(
+    await readRecipeBytes(host, GRAPHIC_STYLES_PART).catch(() => null),
+  );
+  if (raw.styles.some((st) => !isNativeStyleAppearance(st.appearance)))
+    library = await writeGraphicStyleLibrary(host, nativeLibraryOf(raw));
   if (moved === 0 && stamps.length === 0 && !library) return null;
   host.log.info(
     `${label}: ${moved} appearance(s) moved onto the engine's native appearance` +

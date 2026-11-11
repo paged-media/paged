@@ -17,12 +17,10 @@
  */
 
 // SYMBOLS on the engine's instance node (engine ADR 1039) — the draw
-// commands through the REAL engine wasm, on a host that says
-// `supports("document.symbols@1")`: define keeps the selection and adds a
-// document symbol, place makes an `instance:` item, redefine reaches every
-// instance, break link gives the artwork back, rename and delete are one
-// undo step each — and the re-emitted lane (`symbols.spec.ts`) stays the
-// fallback for a host without the flag.
+// commands through the REAL engine wasm: define keeps the selection and
+// adds a document symbol, place makes an `instance:` item, redefine
+// reaches every instance, break link gives the artwork back, rename and
+// delete are one undo step each.
 
 import {
   afterAll,
@@ -47,13 +45,9 @@ import {
   applyResetSymbolTransform,
   SELECT_SAME_SYMBOL_COMMAND_ID,
 } from "../../src";
-import {
-  ENGINE_SYMBOLS_FEATURE,
-  engineSymbols,
-  readEngineSymbols,
-} from "../../src/commands/symbols-engine";
+import { readEngineSymbols } from "../../src/commands/symbols-engine";
 import { F6_RING_PAIR } from "../fixtures/corpus";
-import { openHost, withoutEngineSymbols } from "./host";
+import { openHost } from "./host";
 
 const poly = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
 const INNER = poly(F6_RING_PAIR.innerId);
@@ -71,17 +65,6 @@ describe("symbols on the engine (document.symbols@1)", () => {
   beforeEach(async () => {
     await h.load(F6_RING_PAIR.bytes());
     await h.host.selection.set([]);
-  });
-
-  it("the engine carries symbols, and the lane follows the flag", async () => {
-    expect(h.host.supports(ENGINE_SYMBOLS_FEATURE)).toBe(true);
-    expect(engineSymbols(h.host)).toBe(true);
-    const other = withoutEngineSymbols(await openHost());
-    try {
-      expect(engineSymbols(other.host)).toBe(false);
-    } finally {
-      other.dispose();
-    }
   });
 
   it("DEFINE adds a document symbol and leaves the selection as it was", async () => {

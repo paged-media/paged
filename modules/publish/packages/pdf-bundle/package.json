@@ -18,8 +18,7 @@
     "@paged-media/helpers": "workspace:*",
     "@paged-media/panel-kit": "workspace:*",
     "@paged-media/strings": "workspace:*",
-    "@paged-media/wasm-boot": "workspace:*",
-    "jszip": "^3.10.2"
+    "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",

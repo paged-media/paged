@@ -98,3 +98,13 @@ upright with radius 2 smaller, else a plain path) and the star's anchors are `pl
 `star`; the Illustrator oracle spec checks that implementation. Not carried over: turning the star by
 dragging and the click that opened the dialog. Flare stays here.
 
+
+## Amendment (2026-11-11): one Scissors
+
+The scissors no longer stay two. The host's Scissors (`paged.tool.scissors`, in every context) cuts
+at any point, through the path's transform: on an anchor a `pathOpenAt` there, on a segment the
+de Casteljau insert and then `pathOpenAt`, one batch. The plan and the write are
+`@paged-media/vector-tools`' `applyScissorsAt`, which this bundle's `scissorsAt` command also calls.
+This bundle's "Scissors (any point)" tool and its handler are gone (the id leaves through the
+deprecation window). The star's anchors and insert moved from `helpers` to
+`@paged-media/vector-geometry`'s `star` the same day.

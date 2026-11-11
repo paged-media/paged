@@ -33,7 +33,7 @@ import { useState, type CSSProperties, type ReactElement } from "react";
 
 import type { EdgeStyle } from "../engine";
 import type { BorderKind, SessionResult, WorkbookSession } from "../session";
-import { font, space } from "@paged-media/panel-kit";
+import { ColorInput, font, space } from "@paged-media/panel-kit";
 import { useStrings } from "@paged-media/strings";
 
 import { FORMAT, NAMES, TOKENS } from "../messages";
@@ -84,9 +84,9 @@ const linkButton: CSSProperties = {
 export function FormatSection(props: {
   session: WorkbookSession;
   styles: FormatSectionStyles;
-  /** Opens the Sheet properties panel when the host renders it; the rows
-   *  that panel carries then live there only. Absent = render them here. */
-  openProperties?: () => void;
+  /** Opens the Sheet properties panel; the rows that panel carries live
+   *  there only. */
+  openProperties: () => void;
 }): ReactElement {
   const { session, styles: st, openProperties } = props;
   const { t } = useStrings();
@@ -142,23 +142,21 @@ export function FormatSection(props: {
         </div>
       )}
 
-      {openProperties && (
-        <p
-          data-sheet-fmt-pointer
-          style={{ ...st.body, margin: `${space[1]} 0 0` }}
+      <p
+        data-sheet-fmt-pointer
+        style={{ ...st.body, margin: `${space[1]} 0 0` }}
+      >
+        {t(FORMAT.pointer)}{" "}
+        <button
+          type="button"
+          data-sheet-open-properties
+          onClick={openProperties}
+          style={linkButton}
         >
-          {t(FORMAT.pointer)}{" "}
-          <button
-            type="button"
-            data-sheet-open-properties
-            onClick={openProperties}
-            style={linkButton}
-          >
-            {t(FORMAT.properties)}
-          </button>
-          .
-        </p>
-      )}
+          {t(FORMAT.properties)}
+        </button>
+        .
+      </p>
 
       {/* Borders. */}
       <div style={st.row}>
@@ -175,11 +173,12 @@ export function FormatSection(props: {
             </option>
           ))}
         </select>
-        <input
-          data-sheet-fmt-border-color
-          type="color"
+        <ColorInput
+          compact
+          data-sheet-fmt-border-color=""
           value={borderColor}
-          onChange={(e) => setBorderColor(e.target.value)}
+          onChange={setBorderColor}
+          ariaLabel={t(FORMAT.borderColour)}
           title={t(FORMAT.borderColour)}
         />
         {(

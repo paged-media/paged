@@ -58,7 +58,7 @@ export function activate(host: BundleHost): BundleHandle {
   return {
     dispose() {
       idmlIoSub.dispose();
-      commandsSub?.dispose();
+      commandsSub.dispose();
     },
   };
 }

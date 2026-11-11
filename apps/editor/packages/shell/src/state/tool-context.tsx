@@ -48,20 +48,33 @@ export const VIEW_TOOL_IDS: readonly ToolId[] = [HAND_TOOL_ID, ZOOM_TOOL_ID];
 
 /** Editor ADR 311 (plan WP10.7) — host tools that work on the page the
  *  edit context sits on, in every context: Free Transform moves, scales,
- *  rotates and shears the frame being edited, whatever content it holds;
- *  the Pen, Direct Selection and the shape tools (Line, Rectangle, Ellipse,
- *  Polygon) draw and edit page paths and shapes beside any module's content
- *  (capability register, "Reach": path tools in every context). Inside a context that restricts the rail (`toolIds`) these
- *  stay on it; picking one does not leave the context; and a press with
- *  one in hand goes to the tool, not to the context's content pointer. */
+ *  rotates and shears the frame being edited, whatever content it holds
+ *  (and Rotate, Scale and Shear on their own); the Pen, Pencil, Smooth,
+ *  Scissors, Direct Selection and the shape tools (Line, Rectangle,
+ *  Ellipse, Polygon) draw and edit page paths and shapes beside any
+ *  module's content; Gradient, Eyedropper and Measure paint, sample and
+ *  measure them (capability register, "Reach": one vector tool set in
+ *  every context). Inside a context that restricts the rail (`toolIds`)
+ *  these stay on it; picking one does not leave the context; and a press
+ *  with one in hand goes to the tool, not to the context's content
+ *  pointer. */
 export const CONTEXT_SHARED_TOOL_IDS: readonly ToolId[] = [
   "paged.tool.freeTransform",
+  "paged.tool.rotate",
+  "paged.tool.scale",
+  "paged.tool.shear",
   "paged.tool.pen",
+  "paged.tool.pencil",
+  "paged.tool.smooth",
+  "paged.tool.scissors",
   "paged.tool.directSelect",
   "paged.tool.line",
   "paged.tool.rectangle",
   "paged.tool.ellipse",
   "paged.tool.polygon",
+  "paged.tool.gradientSwatch",
+  "paged.tool.eyedropper",
+  "paged.tool.measure",
 ];
 
 /** Does picking `toolId` keep the user inside an edit context that

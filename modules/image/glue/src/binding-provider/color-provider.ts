@@ -127,7 +127,6 @@ export function makeColorBindingProvider(
   /** A swatch's on-screen colour, through the document's colour
    *  management. */
   const swatchColour = async (id: string): Promise<Rgba01 | null> => {
-    if (!host.supports("document.swatchDisplay@1")) return null;
     const [shown] = await host.document.swatchDisplay([id]);
     const rgb = shown ? hexToRgb(shown.rgbHex) : null;
     return rgb ? [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 1] : null;

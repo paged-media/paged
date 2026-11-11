@@ -37,6 +37,10 @@ import type {
   OverlayContribution,
   OverlayProps,
 } from "@paged-media/plugin-api";
+import {
+  evalCubic,
+  splitSegmentDeCasteljau,
+} from "@paged-media/vector-geometry";
 import * as React from "react";
 
 import type { SlideEngine } from "../engine.js";
@@ -137,10 +141,7 @@ function pointAt(segs: readonly PathSeg[], i: number, t: number): Pt | null {
   const a = startOf(segs, i);
   if (!s || s.kind === "close" || s.kind === "move" || !a) return null;
   if (s.kind === "line") return lerp(a, s.to, t);
-  const ab = lerp(a, s.c1, t);
-  const bc = lerp(s.c1, s.c2, t);
-  const cd = lerp(s.c2, s.to, t);
-  return lerp(lerp(ab, bc, t), lerp(bc, cd, t), t);
+  return evalCubic(a, s.c1, s.c2, s.to, t);
 }
 
 /** The place on the path nearest `p` (slide fractions, measured in
@@ -182,17 +183,12 @@ export function insertPoint(
     out.splice(seg, 1, { kind: "line", to: lerp(a, s.to, t) }, s);
     return out;
   }
-  const ab = lerp(a, s.c1, t);
-  const bc = lerp(s.c1, s.c2, t);
-  const cd = lerp(s.c2, s.to, t);
-  const abc = lerp(ab, bc, t);
-  const bcd = lerp(bc, cd, t);
-  const mid = lerp(abc, bcd, t);
+  const cut = splitSegmentDeCasteljau(a, s.c1, s.c2, s.to, t);
   out.splice(
     seg,
     1,
-    { kind: "curve", c1: ab, c2: abc, to: mid },
-    { kind: "curve", c1: bcd, c2: cd, to: s.to },
+    { kind: "curve", c1: cut.startRight, c2: cut.midLeft, to: cut.midAnchor },
+    { kind: "curve", c1: cut.midRight, c2: cut.endLeft, to: s.to },
   );
   return out;
 }

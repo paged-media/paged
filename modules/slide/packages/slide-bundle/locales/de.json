@@ -129,7 +129,6 @@
   "slide.deck.fontsUsed": "Verwendete Schriften: {fonts}",
   "slide.deck.format": "PowerPoint-Präsentation (.pptx)",
   "slide.deck.fromTemplate": "Die Vorlage „{name}“ wurde als neue Präsentation geöffnet. Exportieren Sie sie als Präsentation oder speichern Sie sie mit Datei ▸ Als Vorlage speichern erneut als Vorlage.",
-  "slide.deck.noFontDoor": "Dieser Host kann dem Dokument die Schriften, die die Präsentation einbettet, nicht geben ({families}); Text in diesen Schriften wird mit einer Ersatzschrift dargestellt.",
   "slide.deck.notFromDeck": "Dieses Dokument wurde nicht aus einer PowerPoint-Präsentation geöffnet und kann daher noch nicht als eine exportiert werden.",
   "slide.deck.templateFormat": "PowerPoint-Vorlage (.potx)",
   "slide.deck.untitled": "Präsentation",

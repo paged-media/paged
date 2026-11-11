@@ -223,12 +223,6 @@ export const OBJECTS_ON_PATH_PART = "objects-on-path.json";
 
 export const OBJECTS_ON_PATH_LIBRARY_VERSION = 1;
 
-/** The capability the recipe rides. NOTE what it is NOT needed for: the
- *  HOME transform lives on each object's own link, so Release and Update
- *  work on a host that wires no container writer — only the PARAMETERS
- *  are lost there. */
-export const OBJECTS_ON_PATH_FEATURE = "storage.parts@1";
-
 /** How many objects one path may carry. The ceiling exists so a hostile
  *  selection refuses rather than building a thousand-op batch. */
 export const OBJECTS_ON_PATH_MAX = 200;
@@ -841,16 +835,6 @@ type PartsHost = RecipeHost;
 export async function readObjectsOnPathLibrary(
   host: PartsHost,
 ): Promise<ObjectsOnPathLibrary> {
-  if (!host.supports(OBJECTS_ON_PATH_FEATURE)) {
-    host.log.warn(
-      "objects-on-path: this host wires no `.paged` container writer " +
-        `(supports("${OBJECTS_ON_PATH_FEATURE}") is false) — the ` +
-        "distribution PARAMETERS cannot be saved here. Everything else " +
-        "still works: each object's home transform rides its own link, so " +
-        "release and update reach it either way",
-    );
-    return emptyLibrary();
-  }
   try {
     return parseObjectsOnPathLibrary(
       await readRecipeBytes(host, OBJECTS_ON_PATH_PART),
@@ -865,7 +849,6 @@ export async function writeObjectsOnPathLibrary(
   host: PartsHost,
   library: ObjectsOnPathLibrary,
 ): Promise<boolean> {
-  if (!host.supports(OBJECTS_ON_PATH_FEATURE)) return false;
   try {
     await writeRecipeBytes(
       host,
@@ -1284,7 +1267,7 @@ export async function applyMakeObjectsOnPath(
       `object(s) on a ${plan.pathLength.toFixed(1)} pt path in 1 undo step. ` +
       (saved
         ? "The parameters are saved, so the distribution can be updated."
-        : "The parameters were NOT saved (no container writer) — release and " +
+        : "The parameters were NOT saved (the write failed) — release and " +
           "update still work, because each object's home transform rides its " +
           "own link.") +
       " Nothing was created: these ARE your objects, ids and all.",

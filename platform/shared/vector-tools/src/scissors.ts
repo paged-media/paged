@@ -36,11 +36,19 @@
 // nothing.
 //
 // A click ON an existing anchor (within `tolerance`) cuts there with no
-// insert — the host Scissors' own behaviour, kept so this tool is a
-// superset of it rather than a different rule near anchors.
+// insert. `applyScissorsAt` is the whole cut over a document door: the
+// host Scissors tool (`paged.tool.scissors`, in every context) and
+// paged.draw's `scissorsAt` command both cut through it, any point,
+// through the path's transform.
 
 import type { ElementId } from "@paged-media/plugin-api";
-import type { AnchorTable, Vec2 } from "@paged-media/vector-geometry";
+import {
+  affineScale,
+  inverseApplyAffine,
+  type Affine,
+  type AnchorTable,
+  type Vec2,
+} from "@paged-media/vector-geometry";
 
 import {
   nearestAnchorIndex,
@@ -120,4 +128,65 @@ export function scissorsMutation(
       : [];
   ops.push({ op: "pathOpenAt", args: { elementId, index: plan.index } });
   return { op: "batch", args: { ops } };
+}
+
+/** The path kinds `pathOpenAt` accepts. */
+export const SCISSORS_CUTTABLE: ReadonlySet<string> = new Set([
+  "polygon",
+  "rectangle",
+  "textFrame",
+  "graphicLine",
+]);
+
+/** What a cut reads and writes: a path's anchors (its own space, with the
+ *  transform into the page) and one mutation. The editor's client and a
+ *  bundle's `host.document` both serve it. */
+export interface ScissorsDoor {
+  pathAnchors(target: ElementId): Promise<{
+    pageId?: string | null;
+    anchors: AnchorTable["anchors"];
+    subpathStarts: readonly number[];
+    subpathOpen?: readonly boolean[];
+    itemTransform?: readonly number[] | null;
+  } | null>;
+  /** Apply one mutation; true when the engine applied it. */
+  mutate(m: ScissorsBatchWire | PathOpenAtWire): Promise<boolean>;
+}
+
+/**
+ * Cut `target` at `pagePoint` (page-local pt on `pageId`): on an anchor
+ * within `tolerancePt` (page pt, scaled into the path's space), else
+ * anywhere on a segment. Null when nothing is cut there (no anchor or
+ * segment in reach, an open contour's endpoint, a path kind that cannot
+ * be cut, a refusal). An anchor cut is one `pathOpenAt`; a segment cut
+ * one batch (insert, then open): one undo step either way.
+ */
+export async function applyScissorsAt(
+  door: ScissorsDoor,
+  target: ElementId,
+  pageId: string,
+  pagePoint: Vec2,
+  tolerancePt: number,
+): Promise<ScissorsPlan | null> {
+  if (!SCISSORS_CUTTABLE.has(target.kind)) return null;
+  const read = await door.pathAnchors(target).catch(() => null);
+  if (!read || read.anchors.length < 2 || read.pageId !== pageId) return null;
+  const m = (read.itemTransform ?? null) as Affine | null;
+  const local = inverseApplyAffine(m, pagePoint[0], pagePoint[1]);
+  if (!local) return null;
+  const plan = planScissorsAt(
+    {
+      anchors: read.anchors,
+      subpathStarts: read.subpathStarts,
+      subpathOpen: read.subpathOpen,
+    },
+    local,
+    tolerancePt / affineScale(m),
+  );
+  if (!plan) return null;
+  const batch = scissorsMutation(plan, target);
+  const op = plan.kind === "anchor" ? batch.args.ops[0]! : batch;
+  return (await door.mutate(op as ScissorsBatchWire | PathOpenAtWire))
+    ? plan
+    : null;
 }

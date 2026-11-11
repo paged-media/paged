@@ -49,7 +49,6 @@ import {
   HEX_ROW_FACTOR,
   PATTERN_DEFAULTS,
   PATTERN_LIBRARY_VERSION,
-  PATTERN_PAINT_FEATURE,
   SAVE_PATTERN_SWATCH_COMMAND_ID,
   type PatternParams,
   type PatternPlan,
@@ -181,10 +180,6 @@ describe("[plugin-draw.pattern-bake] WP6.9 — Save swatch through the real engi
     )
       .filter((s) => s.kind === "pattern")
       .map((s) => s.selfId);
-
-  it("the host has the pattern paint", () => {
-    expect(h.host.supports(PATTERN_PAINT_FEATURE)).toBe(true);
-  });
 
   it("saves the field as one swatch in one undo step, updates it in place, and a frame takes it", async () => {
     await h.host.selection.set([INNER]);

@@ -48,7 +48,6 @@ describe("publish in German", () => {
     const titles = (): string[] => {
       let commands: TypedCommandContribution[] = [];
       const host = {
-        supports: () => true,
         contribute: {
           objectModel: (m: { commands: TypedCommandContribution[] }) => {
             commands = m.commands;

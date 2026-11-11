@@ -19,7 +19,7 @@
 // ORACLE — Illustrator's POLYGON and STAR against the live shapes (engine
 // ADR 1047): the host's Insert star makes an upright live star from the
 // regular polygon on Radius 1 plus its points and inset, which the engine
-// draws as `starAnchors` (`@paged-media/helpers`) draws it; the Polygon
+// draws as `starAnchors` (`@paged-media/vector-geometry`) draws it; the Polygon
 // tool's live polygon follows InDesign's polygon tool.
 //
 // The recording (`tooling/oracle/illustrator/probes/live-shapes.jsx`) asks
@@ -44,8 +44,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { regularPolygonPath } from "@paged-media/vector-geometry";
-import { starAnchors } from "@paged-media/helpers";
+import { regularPolygonPath, starAnchors } from "@paged-media/vector-geometry";
 
 import { loadOracle, type Vec2 } from "./oracle";
 

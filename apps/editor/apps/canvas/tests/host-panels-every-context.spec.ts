@@ -214,6 +214,12 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         "tool:paged.tool.pen",
         "tool:paged.tool.directSelect",
         "tool:paged.tool.rectangle",
+        "tool:paged.tool.pencil",
+        "tool:paged.tool.scissors",
+        "tool:paged.tool.rotate",
+        "tool:paged.tool.gradientSwatch",
+        "tool:paged.tool.eyedropper",
+        "tool:paged.tool.measure",
         "menu:Edit/History",
         "menu:Object/Effects/Picture adjustments…",
         "menu:Window/Styles/Gradients",
@@ -297,6 +303,12 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         ["paged.tool.pen", "pen"],
         ["paged.tool.directSelect", "directSelect"],
         ["paged.tool.rectangle", "shape"],
+        ["paged.tool.pencil", "pencil"],
+        ["paged.tool.scissors", "scissors"],
+        ["paged.tool.rotate", "transform"],
+        ["paged.tool.gradientSwatch", "gradientSwatch"],
+        ["paged.tool.eyedropper", "eyedropper"],
+        ["paged.tool.measure", "measure"],
       ] as const) {
         const slot = page.locator(`[data-tool-slot="${group}"]`).first();
         await expect(slot, tool).toBeVisible();

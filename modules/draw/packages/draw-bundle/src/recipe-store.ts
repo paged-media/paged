@@ -94,9 +94,6 @@ export type RecipeHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
  *  `data` (plugin-sdk DESIGN.md §21.8) — core itself never sees a sub-key. */
 export const RECIPE_LABEL_KEY = labelKey(manifest.id);
 
-/** The feature the label lane rides. */
-export const RECIPE_LABEL_FEATURE = "document.documentMetadata@1";
-
 /** The label is capped at 64 KiB by the engine; inline copies stop well
  *  short of it so the hashes always fit. */
 export const INLINE_BUDGET = 48 * 1024;
@@ -126,11 +123,6 @@ export function recipeHash(text: string): string {
     fnv1a32Utf16(text).toString(16).padStart(8, "0") +
     fnv1a32Utf16(text, 0x9dc5811c).toString(16).padStart(8, "0")
   );
-}
-
-/** Does this host carry the undoable label lane? */
-export function labelled(host: RecipeHost): boolean {
-  return host.supports(RECIPE_LABEL_FEATURE);
 }
 
 /** The recipes map out of a document envelope (tolerant). */
@@ -237,7 +229,6 @@ export async function readRecipeBytes(
   const legacy = await readLegacy(host, legacyPart);
   // Only commands ever wrote it (or it predates labels): no label read.
   if (legacy.bytes && legacy.base === null) return legacy.bytes;
-  if (!labelled(host)) return legacy.bytes;
   const name = recipeNameOf(legacyPart);
   const entry = recipeEntriesOf(await readLabel(host))[name] ?? null;
   const current = entry?.h ?? null;
@@ -322,16 +313,14 @@ export async function writeRecipeBytes(
   bytes: Uint8Array,
 ): Promise<void> {
   let base: string | null = null;
-  if (labelled(host)) {
-    const known = lastBase.get(host)?.get(legacyPart);
-    const stamped =
-      known !== undefined ? known : (await readLegacy(host, legacyPart)).base;
-    if (stamped !== null) {
-      const entry = recipeEntriesOf(await readLabel(host))[
-        recipeNameOf(legacyPart)
-      ];
-      base = entry?.h ?? null;
-    }
+  const known = lastBase.get(host)?.get(legacyPart);
+  const stamped =
+    known !== undefined ? known : (await readLegacy(host, legacyPart)).base;
+  if (stamped !== null) {
+    const entry = recipeEntriesOf(await readLabel(host))[
+      recipeNameOf(legacyPart)
+    ];
+    base = entry?.h ?? null;
   }
   await host.parts.write(legacyPart, stampBase(bytes, base));
   rememberBase(host, legacyPart, base);
@@ -376,13 +365,6 @@ export async function planRecipeWrites(
   writes: readonly RecipeWrite[],
 ): Promise<RecipeStatePlan | string> {
   if (writes.length === 0) return "no library to write";
-  if (!labelled(host)) {
-    const names = writes.map((w) => recipeNameOf(w.legacyPart)).join(", ");
-    return (
-      `${names}: this editor version cannot store document labels (${RECIPE_LABEL_FEATURE}) — ` +
-      "a library write cannot be made undoable here"
-    );
-  }
   const last = new Map<string, RecipeWrite>();
   for (const w of writes) last.set(w.legacyPart, w);
   const label = await readLabel(host);

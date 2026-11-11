@@ -54,7 +54,11 @@ import {
   type MixerValue,
 } from "./color-space";
 import { hsbToRgb, rgbToHsb } from "./hsb";
-import { HARMONY_NAMES, harmonySet, type HarmonyName } from "./harmonies";
+import {
+  HARMONY_RULES,
+  harmonyOf,
+  type HarmonyRule,
+} from "@paged-media/helpers";
 
 type FieldModel = "HEX" | "RGB" | "CMYK" | "HSL";
 
@@ -98,6 +102,14 @@ function seedHsv(value: ColorWheelProps["value"]): Hsv {
 }
 
 const r2 = Math.round;
+
+/** The rules that keep one hue (they vary saturation and brightness), so
+ *  the wheel draws no polygon between their markers. */
+const ONE_HUE_RULES: ReadonlySet<HarmonyRule> = new Set([
+  "monochromatic",
+  "shades",
+  "tints",
+]);
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 
 const CONIC =
@@ -113,7 +125,7 @@ export function ColorWheel({
 }: ColorWheelProps) {
   const strings = useStrings();
   const [hsv, setHsv] = useState<Hsv>(() => seedHsv(value));
-  const [harmony, setHarmony] = useState<HarmonyName>("Triadic");
+  const [harmony, setHarmony] = useState<HarmonyRule>("triadic");
   const [model, setModel] = useState<FieldModel>("HEX");
   const [copied, setCopied] = useState("");
   const wheelRef = useRef<HTMLDivElement | null>(null);
@@ -145,9 +157,13 @@ export function ColorWheel({
   };
 
   // ── harmony set ───────────────────────────────────────────────
-  const harm = harmonySet([hsv.h, hsv.s, hsv.v], harmony);
-  const harmRgb = harm.map((c) => hsbToRgb(c));
-  const isMono = harmony === "Monochromatic";
+  // The Color Guide's rules and maths (`harmonyOf`, base first), so the
+  // wheel and the guide answer the same colours for the same base.
+  const harmRgb = harmonyOf(rgb, harmony).map(([r, g, b]) => [r, g, b]);
+  const harm = harmRgb.map((c, i) =>
+    i === 0 ? [hsv.h, hsv.s, hsv.v] : rgbToHsb(c),
+  );
+  const isMono = ONE_HUE_RULES.has(harmony);
 
   // ── wheel geometry ────────────────────────────────────────────
   const pos = (h: number, s: number): [number, number] => {
@@ -302,7 +318,7 @@ export function ColorWheel({
           >
             {!isMono && harm.length > 1 && (
               <polygon
-                points={harm.map((c) => pos(c[0], c[1]).join(",")).join(" ")}
+                points={harm.map((c) => pos(c[0]!, c[1]!).join(",")).join(" ")}
                 fill="none"
                 stroke="rgba(255,255,255,0.5)"
                 strokeWidth={1.5}
@@ -310,7 +326,8 @@ export function ColorWheel({
               />
             )}
             {harm.map((c, i) => {
-              const [x, y] = isMono && i === 0 ? [selX, selY] : pos(c[0], c[1]);
+              const [x, y] =
+                isMono && i === 0 ? [selX, selY] : pos(c[0]!, c[1]!);
               const main = i === 0;
               return (
                 <circle
@@ -318,7 +335,7 @@ export function ColorWheel({
                   cx={x}
                   cy={y}
                   r={main ? 10 : 7}
-                  fill={rgbToHex(hsbToRgb(c))}
+                  fill={rgbToHex(harmRgb[i]!)}
                   stroke="#fff"
                   strokeWidth={main ? 3 : 2}
                   style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.5))" }}
@@ -554,7 +571,7 @@ export function ColorWheel({
             marginBottom: 10,
           }}
         >
-          {HARMONY_NAMES.map((k) => (
+          {HARMONY_RULES.map((k) => (
             <Segment
               key={k}
               data-wheel-harmony={k}
@@ -577,7 +594,7 @@ export function ColorWheel({
                 fontFamily: "var(--font-sans)",
               }}
             >
-              {strings.t(HARMONY[k === "Split-Comp" ? "SplitComp" : k])}
+              {strings.t(HARMONY[k])}
             </Segment>
           ))}
         </div>

@@ -51,6 +51,7 @@ import type {
   Mutation,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
+import { dataUrl } from "@paged-media/helpers";
 import { rasterizeElements } from "@paged-media/plugin-sdk";
 
 import {
@@ -121,12 +122,7 @@ const RASTER_HANDLE = "raster";
 /** `bytes` as a `data:image/png;base64,` URI (chunked: a large PNG would
  *  overflow `String.fromCharCode`'s argument list). Pure. */
 export function pngDataUri(bytes: Uint8Array): string {
-  let binary = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return `data:image/png;base64,${btoa(binary)}`;
+  return dataUrl("image/png", bytes);
 }
 
 /** What the batch removes: groups to dissolve (outermost first) and the

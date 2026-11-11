@@ -339,9 +339,7 @@ describe("paged.slide palette commands", () => {
       "keybinding:pageup→media.paged.slide.command.previousSlide",
       "keybinding:pagedown→media.paged.slide.command.nextSlide",
     );
-    // Without the scope door (or without the deck context) none is bound.
-    const plain = setup({ scopedKeys: true });
-    expect(plain.keys.some((k) => k.scope)).toBe(false);
+    // Without the deck context none is bound.
     const noContext = setup({
       features: [...ALL, "contribute.keybinding.scope@1"],
     });
@@ -581,11 +579,9 @@ describe("paged.slide palette commands", () => {
     });
     await bare.run(CMD.importPptx);
     await bare.run(CMD.exportPptx);
-    await bare.run(CMD.newSlide);
     expect(bare.picks).toEqual([]);
     expect(bare.saves).toEqual([]);
-    expect(bare.invoked).toEqual([]);
-    expect(bare.logs.filter((l) => /has no/.test(l)).length).toBe(3);
+    expect(bare.logs.filter((l) => /has no/.test(l)).length).toBe(2);
   });
 
   it("without the page doors only the file verbs are contributed", () => {
@@ -619,11 +615,11 @@ describe("paged.slide palette commands", () => {
         onDidChangeActivePage: () => ({ dispose() {} }),
       },
       parts: { read: async () => null },
+      manifest: { capabilities: {} },
     } as unknown as BundleHost);
-    // Every declared command but the Slide Sorter and the Slide Master view, which need the view
-    // door this host does not have, and Insert ▸ Shapes…, which opens the
-    // Shapes panel and needs the panel and snapshot doors this host lacks.
-    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 3);
+    // Every declared command but the Slide Master view, which needs the
+    // views door this host does not have.
+    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 1);
     expect(r.menus.length).toBe(
       MENU_ENTRIES.length +
         SHOW_MENU.length +
@@ -632,7 +628,7 @@ describe("paged.slide palette commands", () => {
         CONTENT_MENU.length +
         DESIGN_MENU.length +
         MASTER_MENU.length -
-        3,
+        1,
     );
     h.dispose();
     expect(r.commands.size).toBe(0);

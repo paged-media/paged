@@ -137,7 +137,7 @@ const W8: Measured = onLabelled(
     storeQueries: 1,
   },
   {
-    hostCalls: 16,
+    hostCalls: 15,
     hostReads: 10,
     mutates: 1,
     mutationOps: 403,

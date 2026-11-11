@@ -30,11 +30,11 @@
 // keeps as a container part brings the faces back each time it is reopened.
 
 import type {
-  AssetSurface,
   BundleHost,
   Diagnostic,
   DocumentFontOutcome,
 } from "@paged-media/plugin-api";
+import { giveEmbeddedFonts, usableFaces } from "@paged-media/helpers";
 
 import { t } from "@paged-media/strings";
 
@@ -43,70 +43,27 @@ import { DECK } from "./messages.js";
 
 export type { DocumentFontOutcome };
 
-/** The host's document-font door, or null where the host has no backend for
- *  it (`supports("assets.documentFont@1")` false). */
-export function documentFontDoor(
-  host: BundleHost,
-): Pick<AssetSurface, "registerDocumentFont"> | null {
-  return host.supports("assets.documentFont@1") ? host.assets : null;
-}
-
-/** The faces the document may use, in the report's order. */
-export function usableFaces(
-  faces: readonly EmbeddedFaceReport[],
-): EmbeddedFaceReport[] {
-  return faces.filter((f) => f.use === "editable" && f.length > 0);
-}
+export { usableFaces };
 
 /**
  * Give the document every embedded face it may use. Returns what the host
- * refused (a face over its budget, a door it lacks), as diagnostics: the
- * text set in such a face is drawn in a substitute.
+ * refused (a face over its budget), as diagnostics: the text set in such a
+ * face is drawn in a substitute. The hand-off is `@paged-media/helpers`'
+ * `giveEmbeddedFonts`, shared with the other Office importer.
  */
 export async function giveDocumentEmbeddedFonts(
   host: BundleHost,
   faces: readonly EmbeddedFaceReport[],
   data: Uint8Array,
 ): Promise<Diagnostic[]> {
-  const usable = usableFaces(faces);
-  if (usable.length === 0) return [];
-  const door = documentFontDoor(host);
-  if (!door) {
-    const families = [...new Set(usable.map((f) => f.family))].join(", ");
-    return [
-      {
-        severity: "warning",
-        message: t(DECK.noFontDoor, { families }),
-        source: "pptx",
-      },
-    ];
-  }
-  const out: Diagnostic[] = [];
-  for (const f of usable) {
-    let outcome: DocumentFontOutcome;
-    try {
-      outcome = await door.registerDocumentFont(
-        data.slice(f.offset, f.offset + f.length),
-        f.family,
-        f.style,
-      );
-    } catch (err) {
-      outcome = {
-        status: "refused",
-        reason: err instanceof Error ? err.message : String(err),
-      };
-    }
-    if (outcome.status === "refused") {
-      out.push({
-        severity: "warning",
-        message: t(DECK.fontRefused, {
-          family: f.family,
-          style: f.style,
-          reason: outcome.reason,
-        }),
-        source: "pptx",
-      });
-    }
-  }
-  return out;
+  const refused = await giveEmbeddedFonts(host.assets, faces, data);
+  return refused.map((r) => ({
+    severity: "warning" as const,
+    message: t(DECK.fontRefused, {
+      family: r.family,
+      style: r.style,
+      reason: r.reason,
+    }),
+    source: "pptx",
+  }));
 }

@@ -242,12 +242,6 @@ describe("data_lower_variable_field session lane (D-01)", () => {
       "€ 9,99",
     );
   });
-
-  it("refreshFields is a no-op when the host lacks document.placeholders@1", async () => {
-    const fake = fakeHost({ supports: (f) => f !== "document.placeholders@1" });
-    const s = await sessionWith(fake.host, fakeEngine());
-    expect(await s.refreshFields()).toBe(0);
-  });
 });
 
 describe("data_lower_image_place session lane (D-14)", () => {

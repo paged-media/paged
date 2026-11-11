@@ -22,6 +22,7 @@
 // one the transitions run on, ADR 721). The WGSL comes from
 // sources.generated.ts (`bun run gen:shaders`).
 
+import { hexToRgb } from "@paged-media/helpers";
 import type { RenderRect } from "@paged-media/plugin-api";
 
 import type { Box } from "../../anim/model.js";
@@ -85,10 +86,8 @@ export const LAYER_UNIFORM_BYTES = 160;
 export const LAYER_UNIFORM_STRIDE = 256;
 
 const rgb = (hex: string | null): [number, number, number] | null => {
-  const m = hex ? /^#?([0-9a-f]{6})$/i.exec(hex) : null;
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  const c = hex ? hexToRgb(hex) : null;
+  return c ? [c[0] / 255, c[1] / 255, c[2] / 255] : null;
 };
 
 const maskVec = (m: MaskState | undefined): [number[], number[]] => {

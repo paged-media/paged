@@ -403,7 +403,6 @@
   "data.sources.persistenceEmpty": "Von Ihnen definierte Quellen und Verknüpfungen werden mit dem Dokument gespeichert.",
   "data.sources.persistencePending": "Die Datendefinitionen werden mit dem Dokument gespeichert…",
   "data.sources.persistenceSaved": "Quellen, Verknüpfungen und importierte Daten werden mit dem Dokument gespeichert.",
-  "data.sources.persistenceUnavailable": "Dieser Editor kann Datendefinitionen nicht mit dem Dokument speichern – nach dem erneuten Öffnen ist ein neuer Import nötig.",
   "data.sources.policyEvery": "alle …",
   "data.sources.policyEverySecs": "alle {secs} s",
   "data.sources.policyManual": "manuell",

@@ -29,7 +29,7 @@
 // HANDLES are the net points one step away along the mesh lines, and a
 // node drag carries them along, as Illustrator's envelope mesh does.
 
-import { closestTOnCubic, evalCubic } from "./bezier";
+import { bernstein, closestTOnCubic, evalCubic } from "./bezier";
 import type { AnchorTriple, Vec2, Vec2Mut } from "./types";
 
 /** A control net, row-major, in the box's unit square. */
@@ -77,11 +77,6 @@ export function isNet(
       (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]),
     )
   );
-}
-
-function bernstein(t: number): [number, number, number, number] {
-  const s = 1 - t;
-  return [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
 }
 
 /** The engine's map: `(u, v)` of the box's unit square to where the

@@ -121,7 +121,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 0,
       },
-      { hostCalls: 5 },
+      { hostCalls: 4 },
     );
     it("W6 re-paginates a record flow across 200 reflow events [data.perf.gates]", async () => {
       h = await openDataHost();
@@ -281,7 +281,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 0,
       },
-      { hostCalls: 41, hostReads: 4 },
+      { hostCalls: 39, hostReads: 4 },
     );
     it("W7 activates without booting either engine [data.perf.gates]", async () => {
       h = await openRealHost();

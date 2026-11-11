@@ -18,8 +18,7 @@
 
 // SYMBOLS on the ENGINE's instance node (engine ADR 1039, draw ADR 361).
 //
-// When the host says `supports("document.symbols@1")`, a symbol is the
-// engine's: one definition in the document's symbol store, and instances
+// A symbol is the engine's: one definition in the document's symbol store, and instances
 // (`instance:<id>` page items) that DRAW it — text, gradients and placed
 // images included, every instance following a redefinition at once. The
 // verbs map one-to-one onto wire ops, each one undo step:
@@ -34,9 +33,9 @@
 //   break     → breakSymbolLink, one batch for the selection
 //   delete    → deleteSymbol (the engine breaks every instance first)
 //
-// Without the flag, `commands/symbols.ts` keeps its re-emitted artwork (the
-// interim of draw ADR 356) as the fallback; the panel and the commands pick
-// the lane per call.
+// The re-emitted artwork of draw ADR 356 (`commands/symbols.ts`) survives
+// only as the v0 library a document made before engine ADR 1039 carries;
+// `symbols-migrate.ts` moves it onto the engine on open.
 
 import type {
   BundleHost,
@@ -47,9 +46,6 @@ import type {
 
 import { resolveTargetPage } from "../target-page";
 import { pageOriginOf } from "../page-origin";
-
-/** The flag the engine lane rides. */
-export const ENGINE_SYMBOLS_FEATURE = "document.symbols@1";
 
 /** One symbol as the engine's `symbols` collection lists it. */
 export interface EngineSymbol {
@@ -62,11 +58,6 @@ export interface EngineSymbol {
   itemCount: number;
   /** `instance:<id>` addresses. */
   instances: string[];
-}
-
-/** Whether this host's engine carries symbols. */
-export function engineSymbols(host: BundleHost): boolean {
-  return host.supports(ENGINE_SYMBOLS_FEATURE);
 }
 
 /** The document's engine symbols (empty on any read failure). */

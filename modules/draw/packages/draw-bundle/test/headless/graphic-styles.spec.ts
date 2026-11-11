@@ -44,11 +44,7 @@
 import { t } from "@paged-media/strings";
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
-import type {
-  BundleHost,
-  CommandContribution,
-  ElementId,
-} from "@paged-media/plugin-api";
+import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
@@ -75,7 +71,6 @@ import {
   parseGraphicStyleLibrary,
   projectGraphicAppearance,
   readGraphicAppearance,
-  readGraphicStyleLibrary,
   removeGraphicStyleFrom,
   renameGraphicStyleIn,
   serializeGraphicStyleLibrary,
@@ -99,7 +94,7 @@ import {
   type GraphicStyleLibrary,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost, withoutNativeAppearance } from "./host";
+import { openHost } from "./host";
 
 const RECT = {
   kind: "rectangle",
@@ -520,42 +515,6 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
     });
   });
 
-  // ------------------------------------------- the honest capability gate
-
-  describe("a host with no `.paged` container writer", () => {
-    const warnings: string[] = [];
-    const noParts = {
-      supports: () => false,
-      log: {
-        debug: () => {},
-        info: () => {},
-        warn: (m: string) => void warnings.push(m),
-        error: () => {},
-      },
-      parts: {
-        write: async () => {
-          throw new Error("must not be reached");
-        },
-        read: async () => null,
-        list: async () => [],
-      },
-    } as unknown as BundleHost;
-
-    it("degrades with a warn — an empty library and a refused write, never a throw", async () => {
-      warnings.length = 0;
-      expect(await readGraphicStyleLibrary(noParts)).toEqual({
-        v: 1,
-        styles: [],
-      });
-      expect(
-        await writeGraphicStyleLibrary(noParts, { v: 1, styles: [STYLE] }),
-      ).toBe(false);
-      expect(warnings).toHaveLength(2);
-      expect(warnings[0]).toContain('supports("storage.parts@1") is false');
-      expect(warnings[1]).toContain("NOT saved");
-    });
-  });
-
   // --------------------------------------------------- against the engine
 
   describe("against the real engine (F1)", () => {
@@ -565,9 +524,6 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       h = await openHost();
       await h.load(F1_MULTI_SHAPE.bytes());
       h.loadBundle(drawBundle);
-      // The metadata lane (draw ADR 354); the native one is
-      // graphic-styles-native.spec.ts (draw ADR 367).
-      withoutNativeAppearance(h);
     });
     afterAll(() => h?.dispose());
 
@@ -629,7 +585,8 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       const library = parseGraphicStyleLibrary(
         await h.host.parts.read(GRAPHIC_STYLES_PART),
       );
-      expect(library.v).toBe(1);
+      // v2: the style carries the native parts too (draw ADR 367).
+      expect(library.v).toBe(2);
       expect(library.styles).toHaveLength(1);
       const style = library.styles[0]!;
       expect(style.id).toBe("gs-1");

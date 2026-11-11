@@ -160,13 +160,14 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
     expect(await h.objects.query("page")).toEqual(before);
   });
 
-  it("the image path needs a canvas: under Node it fails honestly and keeps the document", async () => {
+  it("the image path rasterises without a canvas: under Node it opens the page images", async () => {
     covers("command:media.paged.pdf.importPdf");
-    const before = await h.objects.query("page");
-    await expect(
-      h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "image" })),
-    ).rejects.toThrow();
-    expect(await h.objects.query("page")).toEqual(before);
+    const out = (await h.objects.invoke(
+      IMPORT_PDF_COMMAND,
+      args({ mode: "image" }),
+    )) as { mode: string; pageCount: number };
+    expect(out.mode).toBe("image");
+    expect(out.pageCount).toBeGreaterThan(0);
   }, 60_000);
 });
 

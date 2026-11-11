@@ -92,7 +92,7 @@ export async function controlAtCaret(
   host: BundleHost,
 ): Promise<ControlAtCaret | null> {
   const sel = host.text?.selection() ?? null;
-  if (!sel || !host.supports("document.readStory@1")) return null;
+  if (!sel) return null;
   const content = (await host.document.storyContent(sel.storyId)) as {
     paragraphs: Array<{ runs: ReadRun[] }>;
   } | null;

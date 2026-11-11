@@ -73,13 +73,10 @@ import {
 } from "../../web-model/src";
 
 const M = defineMessages("web.persist", {
-  tooLarge:
-    "the web source is {kib} KiB; a document label holds at most 64 KiB and this host has no container parts to store it in",
   notStored: "the web source ({kib} KiB) could not be stored: {error}",
-  noValueParts: "this host has no container parts to keep document values in",
 });
 
-type PersistHost = Pick<BundleHost, "document" | "parts" | "supports">;
+type PersistHost = Pick<BundleHost, "document" | "parts">;
 
 const decoder = new TextDecoder();
 
@@ -106,7 +103,6 @@ async function readPartText(
   host: PersistHost,
   path: string,
 ): Promise<string | null> {
-  if (!host.supports("storage.parts@1")) return null;
   const bytes = await host.parts.read(path);
   return bytes ? decoder.decode(bytes) : null;
 }
@@ -190,11 +186,6 @@ export async function prepareSourceLabel(
   const stored = storeSource(source);
   if (stored.kind === "inline") return { label: stored.label };
   const kib = Math.ceil(stored.ref.bytes / 1024);
-  if (!host.supports("storage.parts@1")) {
-    return {
-      refused: t(M.tooLarge, { kib }),
-    };
-  }
   try {
     const path = sourcePartPath(stored.ref);
     await host.parts.write(path, new TextEncoder().encode(stored.partText));
@@ -239,16 +230,10 @@ export interface PlannedSourceWrite {
 export function planSourceWrite(
   host: PersistHost,
   source: WebFrameSource,
-): PlannedSourceWrite | { refused: string } {
+): PlannedSourceWrite {
   const stored = storeSource(source);
   if (stored.kind === "inline")
     return { labelValue: JSON.stringify(stored.label), parts: [] };
-  if (!host.supports("storage.parts@1")) {
-    const kib = Math.ceil(stored.ref.bytes / 1024);
-    return {
-      refused: t(M.tooLarge, { kib }),
-    };
-  }
   const path = sourcePartPath(stored.ref);
   partsWrittenThisSession(host).add(path);
   return {
@@ -272,7 +257,7 @@ export function planSourceWrite(
  *  into the metadata, and from then on the part is never read. The part
  *  itself is dropped by the collector (parts-gc.ts) on the save of a later
  *  session — one that opened the document already migrated, so no undo can
- *  return to the part. A host without the door keeps using the part. */
+ *  return to the part. */
 export const DOCUMENT_VALUES_PART = "web/document-values.json";
 
 /** The version of this plugin's document metadata envelope. */
@@ -284,10 +269,6 @@ const PLUGIN_ID = "media.paged.web";
 
 /** A valid document-value key (`{{doc.<key>}}`). */
 export const DOCUMENT_VALUE_KEY = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
-
-function hasDocumentMetadata(host: PersistHost): boolean {
-  return host.supports("document.documentMetadata@1");
-}
 
 /** The valid entries of a stored value map (names a template can write,
  *  string or number values). */
@@ -335,23 +316,19 @@ async function readValuesPart(
 export async function readDocumentValues(
   host: PersistHost,
 ): Promise<Record<string, string>> {
-  if (hasDocumentMetadata(host)) {
-    const envelope = await readDocumentEnvelope(host);
-    if (envelope) return valueMap(envelope.data?.documentValues);
-  }
+  const envelope = await readDocumentEnvelope(host);
+  if (envelope) return valueMap(envelope.data?.documentValues);
   return readValuesPart(host);
 }
 
-/** Whether the document has moved its values out of the old part: the
- *  host has the metadata door and this plugin's document metadata carries a
- *  value map, so {@link readDocumentValues} never reads the part. Only an
+/** Whether the document has moved its values out of the old part: this
+ *  plugin's document metadata carries a value map, so {@link readDocumentValues} never reads the part. Only an
  *  undo of the write that created the metadata could make the part read
  *  again — so the collector (parts-gc.ts) drops the part only when this
  *  held when the document was opened and still holds at the save. */
 export async function documentValuesMigrated(
   host: PersistHost,
 ): Promise<boolean> {
-  if (!hasDocumentMetadata(host)) return false;
   const values = (await readDocumentEnvelope(host))?.data?.documentValues;
   return !!values && typeof values === "object" && !Array.isArray(values);
 }
@@ -380,50 +357,26 @@ export async function documentValuesMutation(
   } as MutationInput;
 }
 
-/** Write the document value map: one undoable document-metadata write, or —
- *  on a host without that door — the container part. Refused (with the
- *  reason) when neither is available. */
+/** Write the document value map: one undoable document-metadata write.
+ *  Refused (with the reason) when the write is. */
 export async function writeDocumentValues(
   host: PersistHost,
   values: Record<string, string>,
 ): Promise<WriteOutcome> {
-  if (hasDocumentMetadata(host)) {
-    const current = await readDocumentEnvelope(host);
-    const envelope: PluginMetadataEnvelope = {
-      ...current,
-      v: DOCUMENT_METADATA_VERSION,
-      data: { ...current?.data, documentValues: values },
-    };
-    try {
-      const outcome = await host.document.setDocumentMetadata(envelope);
-      return outcome.applied
-        ? { applied: true }
-        : { applied: false, reason: describeRefusal(outcome.error) };
-    } catch (err) {
-      return { applied: false, reason: describeRefusal(err) };
-    }
-  }
-  if (!host.supports("storage.parts@1")) {
-    return {
-      applied: false,
-      reason: t(M.noValueParts),
-    };
-  }
+  const current = await readDocumentEnvelope(host);
+  const envelope: PluginMetadataEnvelope = {
+    ...current,
+    v: DOCUMENT_METADATA_VERSION,
+    data: { ...current?.data, documentValues: values },
+  };
   try {
-    await host.parts.write(
-      DOCUMENT_VALUES_PART,
-      new TextEncoder().encode(JSON.stringify(values)),
-    );
-    return { applied: true };
+    const outcome = await host.document.setDocumentMetadata(envelope);
+    return outcome.applied
+      ? { applied: true }
+      : { applied: false, reason: describeRefusal(outcome.error) };
   } catch (err) {
     return { applied: false, reason: describeRefusal(err) };
   }
-}
-
-/** Whether a document-value write raises a document change by itself (the
- *  metadata door). A part write does not: the writer then re-renders. */
-export function documentValuesNotify(host: PersistHost): boolean {
-  return hasDocumentMetadata(host);
 }
 
 // ------------------------------------------------------- source resources
@@ -435,13 +388,12 @@ export function documentValuesNotify(host: PersistHost): boolean {
 export const RESOURCE_PREFIX = "resources/";
 
 /** The bytes of a source resource the container carries, or `null` (no
- *  parts door, or no such part). The one other part reader: resources are
+ *  such part). The one other part reader: resources are
  *  not sources, and never the label's truth. */
 export async function readResourcePart(
-  host: Pick<BundleHost, "supports" | "parts">,
+  host: Pick<BundleHost, "parts">,
   path: string,
 ): Promise<Uint8Array | null> {
-  if (!host.supports("storage.parts@1")) return null;
   try {
     return await host.parts.read(RESOURCE_PREFIX + path);
   } catch {
@@ -453,11 +405,10 @@ export async function readResourcePart(
  *  not undoable; a resource is content the source points at, like a linked
  *  image file. Answers whether it was written. */
 export async function writeResourcePart(
-  host: Pick<BundleHost, "supports" | "parts">,
+  host: Pick<BundleHost, "parts">,
   path: string,
   bytes: Uint8Array,
 ): Promise<boolean> {
-  if (!host.supports("storage.parts@1")) return false;
   try {
     await host.parts.write(RESOURCE_PREFIX + path, bytes);
     return true;
@@ -507,10 +458,9 @@ function faceHeadCache(
 /** Keep a face the bake gave the document. Writes nothing when the document
  *  already keeps it. Answers whether the document keeps it now. */
 export async function keepFace(
-  host: Pick<BundleHost, "supports" | "parts">,
+  host: Pick<BundleHost, "parts">,
   face: KeptFace,
 ): Promise<boolean> {
-  if (!host.supports("storage.parts@1")) return false;
   const text = JSON.stringify({
     v: 1,
     family: face.family,
@@ -535,9 +485,8 @@ export async function keepFace(
 
 /** The paths of the face parts the document carries. */
 export async function keptFacePaths(
-  host: Pick<BundleHost, "supports" | "parts">,
+  host: Pick<BundleHost, "parts">,
 ): Promise<string[]> {
-  if (!host.supports("storage.parts@1")) return [];
   try {
     return (await host.parts.list(FACE_PREFIX)).filter((p) =>
       FACE_PART.test(p),
@@ -549,10 +498,9 @@ export async function keptFacePaths(
 
 /** A kept face, or `null` when the part is gone or unreadable. */
 export async function readKeptFace(
-  host: Pick<BundleHost, "supports" | "parts">,
+  host: Pick<BundleHost, "parts">,
   path: string,
 ): Promise<KeptFace | null> {
-  if (!host.supports("storage.parts@1")) return null;
   try {
     const bytes = await host.parts.read(path);
     if (!bytes) return null;
@@ -588,7 +536,7 @@ export async function readKeptFace(
 /** The family a face part keeps a face for (read once per path), or `null`
  *  when the part is unreadable. */
 export async function keptFaceFamily(
-  host: Pick<BundleHost, "supports" | "parts">,
+  host: Pick<BundleHost, "parts">,
   path: string,
 ): Promise<string | null> {
   const cached = faceHeadCache(host).get(path);

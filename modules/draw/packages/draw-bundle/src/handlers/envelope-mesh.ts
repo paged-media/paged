@@ -42,6 +42,7 @@ import type {
 import {
   cellOf,
   ENVELOPE_MAX_CELLS,
+  applyAffine,
   invertAffine,
   invertEnvelope,
   isNet,
@@ -80,9 +81,7 @@ export interface MeshSession {
 }
 
 const map = (m: Affine | null, p: Vec2): [number, number] =>
-  m
-    ? [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]]
-    : [p[0], p[1]];
+  applyAffine(m, p[0], p[1]);
 
 /** A unit-square point of `s`'s box, on the page. */
 export function unitToPage(s: MeshSession, p: Vec2): [number, number] {

@@ -31,12 +31,7 @@ import {
   type HostFacts,
   type PayloadJson,
 } from "./labels";
-import {
-  commitProperties,
-  NO_OBJECT_MODEL,
-  objectsOf,
-  type PropertyLaneResult,
-} from "./property-lane";
+import { commitProperties, type PropertyLaneResult } from "./property-lane";
 import {
   engineRecordStatus,
   ownRecords,
@@ -221,7 +216,7 @@ export function propertyMethods(ctx: PropertyContext) {
     const variables = (payload.bindings ?? [])
       .filter((b) => b.kind === "variable")
       .map((b) => b.id);
-    if (variables.length > 0 && host.supports("document.placeholders@1")) {
+    if (variables.length > 0) {
       try {
         const fields = (await host.document.placeholders()).filter(
           (p) => p.plugin === "media.paged.data",
@@ -280,8 +275,8 @@ export function propertyMethods(ctx: PropertyContext) {
     storyId: string,
     tableId: string,
   ): Promise<number | null> {
-    const objects = objectsOf(host);
-    if (!objects || !(await textVariablesOn(host))) return null;
+    const objects = host.objects;
+    if (!(await textVariablesOn(host))) return null;
     try {
       const i = (await objects.query(`story:${storyId} > table`)).indexOf(
         `table:${tableId}`,
@@ -297,8 +292,7 @@ export function propertyMethods(ctx: PropertyContext) {
     storyId: string,
     index: number,
   ): Promise<string | null> {
-    const objects = objectsOf(host);
-    if (!objects) return null;
+    const objects = host.objects;
     try {
       const t = (await objects.query(`story:${storyId} > table`))[index];
       return t ? t.slice("table:".length) : null;
@@ -512,8 +506,7 @@ export function propertyMethods(ctx: PropertyContext) {
       spec: PropertyBindingSpec,
       mode?: LabelMode,
     ): Promise<DefineResult> {
-      const objects = objectsOf(host);
-      if (!objects) return { ok: false, reason: NO_OBJECT_MODEL };
+      const objects = host.objects;
       let addresses: string[];
       try {
         addresses = await objects.query(spec.target);
@@ -697,7 +690,7 @@ export function propertyMethods(ctx: PropertyContext) {
     ): Promise<PropertyBindingInfo[]> {
       const e = ctx.engineIfUp();
       if (!e) return [];
-      const objects = objectsOf(host);
+      const objects = host.objects;
       const payload = (e.payload() ?? {}) as PayloadJson;
       const out: PropertyBindingInfo[] = [];
       for (const b of payload.bindings ?? []) {
@@ -707,7 +700,7 @@ export function propertyMethods(ctx: PropertyContext) {
         const selector =
           (b.target as { selector?: string } | null)?.selector ?? "";
         let addresses: string[] = [];
-        if (objects && selector) {
+        if (selector) {
           try {
             addresses = await objects.query(selector);
           } catch {
@@ -830,10 +823,10 @@ export function propertyMethods(ctx: PropertyContext) {
         binding: p.binding,
         address: `${p.element.kind}:${p.element.id}`,
       }));
-      const objects = objectsOf(host);
+      const objects = host.objects;
       const seen = new Set(placed.map((p) => p.binding));
       for (const b of payload.bindings ?? []) {
-        if (b.kind !== "property" || seen.has(b.id) || !objects) continue;
+        if (b.kind !== "property" || seen.has(b.id)) continue;
         const sel = (b.target as { selector?: unknown } | null)?.selector;
         if (typeof sel !== "string") continue;
         try {

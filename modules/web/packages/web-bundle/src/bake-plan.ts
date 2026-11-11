@@ -50,6 +50,7 @@
 // orchestrator offsets by the frame's page origin.
 
 import { fnv1a32Hex, KAPPA } from "@paged-media/helpers";
+import { nativeSwatchMintOps } from "@paged-media/plugin-sdk";
 import type {
   MutationInput,
   PageId,
@@ -1305,24 +1306,23 @@ export function bakeBatchOps(
     masks: [] as string[],
   };
 
-  for (const { plan } of placed) {
-    for (const s of plan.swatches) {
-      if (seen.has(s.id)) continue;
-      seen.add(s.id);
-      swatchIds.push(s.id);
-      ops.push({
-        op: "createSwatch",
-        args: {
-          spec: {
-            selfId: s.id,
-            name: s.id,
-            space: "RGB",
-            value: [s.r, s.g, s.b],
-            model: "Process",
-          },
-        },
-      } as MutationInput);
-    }
+  const swatchMints = nativeSwatchMintOps(
+    placed.flatMap(({ plan }) =>
+      plan.swatches.map((s) => ({
+        selfId: s.id,
+        name: s.id,
+        space: "RGB",
+        value: [s.r, s.g, s.b],
+        model: "Process",
+      })),
+    ),
+    { known: seen },
+  );
+  for (const op of swatchMints) {
+    const id = (op.args as { spec: { selfId: string } }).spec.selfId;
+    seen.add(id);
+    swatchIds.push(id);
+    ops.push(op as MutationInput);
   }
   for (const { plan } of placed) {
     for (const g of plan.gradients ?? []) {

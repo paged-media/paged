@@ -2581,13 +2581,12 @@ function placementPart(hash: string): string {
 }
 
 /** Keep `content` as what a placed table shows (see above). Best effort: a
- *  host without container parts keeps nothing, and a later session then
- *  replaces a stale table instead of refreshing it. */
+ *  failed write keeps nothing, and a later session then replaces a stale
+ *  table instead of refreshing it. */
 export async function rememberShownContent(
   host: BundleHost,
   content: LoweredContent,
 ): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   try {
     await host.parts.write(
       placementPart(contentHash(content)),
@@ -2599,13 +2598,12 @@ export async function rememberShownContent(
 }
 
 /** The content a placed table's binding says it shows (`hash`), or null
- *  when it was not kept (placed before records existed, or by a host
- *  without container parts) or does not hash to `hash`. */
+ *  when it was not kept (placed before records existed) or does not hash
+ *  to `hash`. */
 export async function recallShownContent(
   host: BundleHost,
   hash: string,
 ): Promise<LoweredContent | null> {
-  if (!host.supports("storage.parts@1")) return null;
   try {
     const bytes = await host.parts.read(placementPart(hash));
     if (!bytes) return null;
@@ -2624,7 +2622,6 @@ export async function forgetShownContent(
   host: BundleHost,
   hash: string,
 ): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   try {
     await host.parts.delete(placementPart(hash));
   } catch (err) {
@@ -3080,10 +3077,6 @@ function seqTracking(host: BundleHost): {
   return { host: view, last: () => last };
 }
 
-/** The feature a chain record's stamp needs: it joins the pass's last
- *  write (engine ADR 1004), so it costs no undo step of its own. */
-const AMEND_FEATURE = "document.mutate.amend@1";
-
 /** The chain record a pass leaves (ADR 522 amendment): the key it is
  *  compared by (with the frame it rides) and the write that stamps it on
  *  the chain's first frame. Null when a table has no id. */
@@ -3132,9 +3125,7 @@ function chainRecordStamp(
  * finds the chain again and keeps it live. A pass that refreshes its tables
  * in place carries the record in its last table's batch; any other pass
  * writes it INTO its last undo step (`mutate(…, { amend })`). Only a record
- * that changed is written; a host that cannot amend a step keeps no record
- * of a pass that added or deleted tables (the chain then stays live for
- * this session only). Returns the record now on the page.
+ * that changed is written. Returns the record now on the page.
  */
 async function stampChainRecord(
   host: BundleHost,
@@ -3158,7 +3149,8 @@ async function stampChainRecord(
     }
     return stamp.key;
   }
-  if (!host.supports(AMEND_FEATURE)) return prevKey;
+  // The stamp joins the pass's last write (engine ADR 1004), so it costs
+  // no undo step of its own.
   const r = await host.document.mutate(stamp.op(), { amend: seq });
   if (!r.applied) {
     host.log.debug("chain-lower: the chain record was not stamped", r);

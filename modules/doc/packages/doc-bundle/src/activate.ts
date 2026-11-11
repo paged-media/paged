@@ -259,14 +259,13 @@ function activateDoc(
    * A document's bytes for export, from its PERSISTED state (the label's
    * .docx part, which object-model writes advance): the edited story read
    * back, overlaid on that baseline and saved as a targeted patch; the part
-   * verbatim when the host has no story read. Null when the part is missing.
+   * verbatim when it has no section stories. Null when the part is missing.
    */
   async function exportState(state: DocState): Promise<Uint8Array | null> {
     const source = await readDocBytes(host, state);
     if (!source) return null;
     const sections = state.data.sections ?? [];
-    if (!host.supports("document.readStory@1") || sections.length === 0)
-      return source;
+    if (sections.length === 0) return source;
     const ir = await readLowered(host, state);
     if (!ir) return source;
     const readStory = host.document.storyContent;
@@ -325,15 +324,13 @@ function activateDoc(
   }
 
   /**
-   * Produce the bytes to save. M2 edited save-back (DOC-03): when the host has
-   * the structured story read, pull the EDITED story back, let the engine overlay
+   * Produce the bytes to save. M2 edited save-back (DOC-03): pull the EDITED
+   * story back through the structured story read, let the engine overlay
    * it on the import baseline, diff, and write a TARGETED patch (only changed
    * `w:t`/`w:rPr` rewritten; every other part + untouched subtree byte-identical).
    *
-   * Degrades honestly at every step — no read door, no story id, or a failing
-   * save all fall back to the verbatim source rather than exporting something
-   * wrong. (A host without the v54 read reports `readStory@1` false; the SDK's
-   * reserved member is never called.)
+   * Degrades honestly at every step — no story id or a failing save fall back
+   * to the verbatim source rather than exporting something wrong.
    */
   async function exportDocx(): Promise<{
     bytes: Uint8Array;
@@ -362,13 +359,8 @@ function activateDoc(
         return verbatim;
       }
     }
-    if (!host.supports("document.readStory@1") || last.storyIds.length === 0) {
-      return verbatim;
-    }
+    if (last.storyIds.length === 0) return verbatim;
     try {
-      // `storyContent` is a v54 read, typed by the plugin-api canary this
-      // bundle builds against. Guarded by the `readStory@1` probe above, so an
-      // older host never reaches this.
       const readStory = host.document.storyContent;
       // One read per story, merged in order into the one body the import
       // baseline is (a standalone document has a story per Word section).
@@ -548,9 +540,7 @@ function activateDoc(
       ),
     );
   };
-  if (host.supports("document.onDidOpen@1")) {
-    disposers.push(host.document.onDidOpen(reloadFonts).dispose);
-  }
+  disposers.push(host.document.onDidOpen(reloadFonts).dispose);
   reloadFonts();
 
   disposers.push(
@@ -561,12 +551,10 @@ function activateDoc(
         canInsert: () => host.supports("shell.pickFile@1"),
         selectFrame: (frameId) =>
           void host.selection.set([frameId as ElementId]),
-        readiness: () => ({ readStory: host.supports("document.readStory@1") }),
         // A heading click goes to the heading's text in the placed story.
         // `revealText` is newer than the plugin-api this bundle builds
         // against, so it is reached through the probe, not the type.
-        ...(host.supports("viewport.revealText@1") &&
-        host.supports("document.readStory@1")
+        ...(host.supports("viewport.revealText@1")
           ? {
               revealHeading: async (text: string, occurrence: number) => {
                 const storyId = docStore.get()?.storyId;
@@ -709,20 +697,18 @@ function activateDoc(
 
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
-  if (objectModel && host.supports("contribute.schemaPanel@1")) {
-    const schema = docPropertiesPanel();
-    disposers.push(
-      host.contribute.schemaPanel({
-        id: PROPERTIES_PANEL_ID,
-        title: schema.title,
-        icon: schema.icon,
-        defaultDock: "right",
-        schema,
-      }).dispose,
-    );
-    const lists = publishPropertyLists(host);
-    disposers.push(() => lists.dispose());
-  }
+  const schema = docPropertiesPanel();
+  disposers.push(
+    host.contribute.schemaPanel({
+      id: PROPERTIES_PANEL_ID,
+      title: schema.title,
+      icon: schema.icon,
+      defaultDock: "right",
+      schema,
+    }).dispose,
+  );
+  const lists = publishPropertyLists(host);
+  disposers.push(() => lists.dispose());
 
   host.log.info("paged.doc activated");
   // F1 — the menu bar. Before plugin-api 0.2.33 there was no menu door,
@@ -733,7 +719,7 @@ function activateDoc(
     dispose() {
       menuSub.dispose();
       word?.dispose();
-      objectModel?.dispose();
+      objectModel.dispose();
       for (const d of disposers) d();
     },
   };

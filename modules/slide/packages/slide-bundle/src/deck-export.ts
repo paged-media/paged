@@ -156,14 +156,12 @@ export async function deckPlan(
     sections.push({ id: sec.id, name: sec.name, firstPage: p.selfId });
   }
   let label: Record<string, unknown> | null = null;
-  if (host.supports("document.documentMetadata@1")) {
-    try {
-      label = parseLabel<Record<string, unknown>>(
-        await host.document.getDocumentMetadata(),
-      );
-    } catch {
-      label = null;
-    }
+  try {
+    label = parseLabel<Record<string, unknown>>(
+      await host.document.getDocumentMetadata(),
+    );
+  } catch {
+    label = null;
   }
   const shows = liveShows(
     showsOfLabel(label),

@@ -53,7 +53,6 @@ import {
   createLivePaintSelectHandler,
 } from "./handlers/live-paint";
 import { createRepeatHandler } from "./handlers/repeat";
-import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
@@ -105,7 +104,6 @@ const M = defineMessages("draw.tools", {
   typeOnPath: "Type on a Path (attach story)",
   repeat: "Repeat (steer the selected repeat)",
   knife: "Knife",
-  scissorsAnyPoint: "Scissors (any point)",
   reshape: "Reshape",
   join: "Join",
   pathEraser: "Path Eraser",
@@ -186,10 +184,7 @@ export const REPEAT_TOOL_IDS = ["media.paged.draw.tool.repeat"] as const;
 
 /** The CUTTING tools — they join the host's built-in Scissors flyout
  *  (host-free, the PRO_TOOL_IDS pattern). */
-export const CUT_TOOL_IDS = [
-  "media.paged.draw.tool.knife",
-  "media.paged.draw.tool.scissorsAnyPoint",
-] as const;
+export const CUT_TOOL_IDS = ["media.paged.draw.tool.knife"] as const;
 
 /** WP6.1 part 2 — Illustrator's remaining quick-win tools (host-free,
  *  the PRO_TOOL_IDS pattern). EVERY ONE IS KEYLESS: the shortcut
@@ -581,21 +576,6 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 3,
       cursor: CROSS,
       gesture: () => createKnifeHandler(host),
-    },
-    // SCISSORS AT ANY POINT — the host's Scissors cuts at ANCHORS only;
-    // this one splits the clicked segment where the click lands (the
-    // de Casteljau insert) and opens the path there, in one batch
-    // (handlers/scissors.ts). Same flyout, same glyph, same keyless
-    // reason as the Knife above.
-    {
-      id: "media.paged.draw.tool.scissorsAnyPoint",
-      title: t(M.scissorsAnyPoint),
-      icon: "tool-scissors",
-      group: "scissors",
-      section: "transform",
-      order: 2,
-      cursor: CROSS,
-      gesture: () => createScissorsHandler(host),
     },
     // WP6.1 part 2 — keyless, each in the host flyout Illustrator keeps it
     // in (WAVE3_TOOL_IDS says why there are no keys). Glyphs: REAL tokens

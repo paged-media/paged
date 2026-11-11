@@ -47,7 +47,6 @@ describe("paged.doc in German", () => {
       insert: () => {},
       canInsert: () => true,
       selectFrame: () => {},
-      readiness: () => ({ readStory: false }),
     });
     expect(panel.title).toBe("Dokumentgliederung");
     const schema = docPropertiesPanel();

@@ -128,7 +128,6 @@
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
       "baseline": [
-        "apps/editor/apps/canvas/src/clipboard-commands.ts",
         "apps/editor/apps/canvas/test/unit/commands/edit-commands.test.ts",
         "apps/editor/apps/canvas/tests/fidelity/canvas-driver.ts",
         "apps/editor/apps/canvas/tests/journey/driver/designer.ts",
@@ -136,8 +135,6 @@
         "apps/editor/apps/canvas/tests/showcase/chapters/900-assemble.spec.ts",
         "apps/editor/apps/canvas/tests/showcase/driver.ts",
         "modules/data/packages/data-bundle/src/__tests__/assets.test.ts",
-        "modules/data/packages/data-bundle/src/assets.ts",
-        "modules/draw/packages/draw-bundle/src/commands/rasterize.ts",
         "modules/web/packages/web-bundle/test/engine-inputs.spec.ts",
         "platform/extensions/packages/plugin-sdk/src/bytes.ts",
         "tests/gpu/slide-transitions/harness.ts"
@@ -232,6 +229,24 @@
       "baseline": []
     },
     {
+      "name": "affine-ts",
+      "description": "multiply and apply 2x3 affines with @paged-media/helpers' transform (compose, invert, apply; vector-geometry's applyAffine / composeAffine are its null-tolerant spellings); the patterns are the first term of a product and of an application",
+      "owner": ["platform/shared/helpers/src/transform.ts"],
+      "patterns": [
+        "(\\w+)\\[0\\]!? \\* (\\w+)\\[0\\]!? \\+ \\1\\[2\\]!? \\* \\2\\[1\\]!?(,| \\+ \\1\\[4\\])",
+        "\\ba1 \\* a2 \\+ c1 \\* b2\\b"
+      ],
+      "extensions": [".ts", ".tsx", ".mjs"],
+      "baseline": [
+        "apps/editor/apps/canvas/tests/e2e/gesture-width.spec.ts",
+        "apps/editor/apps/canvas/tests/e2e/mesh-tool.spec.ts",
+        "modules/draw/packages/draw-bundle/test/headless/shape-builder-regions.spec.ts",
+        "modules/draw/packages/draw-bundle/test/page-space/fake-engine.ts",
+        "modules/draw/packages/draw-bundle/test/roundtrip/view.ts",
+        "modules/slide/packages/slide-bundle/test/headless/live-presets.spec.ts"
+      ]
+    },
+    {
       "name": "polygon-coverage-scan",
       "description": "fill polygons into 8-bit coverage with paged_kernels::coverage::polygons; the pattern is its sub-scanline position",
       "owner": ["engine/core/crates/paged-kernels/src/coverage.rs"],
@@ -280,21 +295,14 @@
     },
     {
       "name": "raw-color-input",
-      "description": "pick colours with the host ColorPicker / widgets.ColorPicker, not a raw <input type=\"color\">",
+      "description": "pick colours with panel-kit's ColorInput (the host ColorPicker behind it) or widgets.ColorPicker, not a raw <input type=\"color\">",
       "owner": [
         "platform/extensions/packages/plugin-sdk/src/widgets-fallback.tsx",
-        "modules/image/glue/src/panels/sections/color-input.tsx"
+        "platform/shared/panel-kit/src/color-input.tsx"
       ],
       "extensions": [".tsx"],
       "patterns": ["type=\"color\""],
-      "baseline": [
-        "apps/editor/apps/canvas/src/panels/gradient-editor.tsx",
-        "apps/editor/apps/canvas/src/panels/picture-adjustments-panel.tsx",
-        "apps/editor/apps/canvas/src/panels/theme-panel.tsx",
-        "apps/editor/apps/canvas/src/panels/view-preferences-dialog.tsx",
-        "modules/sheet/packages/sheet-bundle/src/panels/format-section.tsx",
-        "modules/sheet/packages/sheet-bundle/src/surface/data-cards.tsx"
-      ]
+      "baseline": []
     },
     {
       "name": "star-anchors",
@@ -304,14 +312,24 @@
         "engine/core/crates/paged-model/src/live_shape.rs"
       ],
       "extensions": [".ts", ".tsx"],
-      "patterns": ["i % 2 === 0 \\? r1 : r2"],
-      "baseline": ["platform/shared/helpers/src/star.ts"]
+      "patterns": [
+        "i % 2 === 0 \\? r1 : r2",
+        "i % 2 === 1 \\? inner : 1",
+        "-Math\\.PI / 2 \\+ \\(i \\* 2 \\* Math\\.PI\\)"
+      ],
+      "baseline": [],
+      "allowReason": "DOM specs that compute the expected points on their own, independently of the code they check (test oracles)",
+      "allow": [
+        "apps/editor/apps/canvas/test/panels/live-shape-handles.dom.test.tsx",
+        "apps/editor/apps/canvas/test/panels/object-transform-panel.dom.test.tsx"
+      ]
     },
     {
       "name": "homography",
-      "description": "solve a four-point homography with platform/shared/vector-geometry (TS) or paged_warp (Rust)",
+      "description": "solve a four-point homography with platform/shared/vector-geometry (TS), the SDK's transform-box (the public SDK cannot import it) or paged_warp::from_quads (Rust); a parity test holds the three to the same numbers",
       "owner": [
         "platform/shared/vector-geometry/src/warp/homography.ts",
+        "platform/extensions/packages/plugin-sdk/src/transform-box.ts",
         "engine/core/crates/paged-warp/"
       ],
       "extensions": [".rs", ".ts", ".tsx"],
@@ -321,8 +339,7 @@
       ],
       "baseline": [
         "modules/image/image-conformance/tests/it/family_geom.rs",
-        "modules/image/image-js/src/smart.rs",
-        "platform/extensions/packages/plugin-sdk/src/transform-box.ts"
+        "modules/image/image-js/src/smart.rs"
       ]
     },
     {

@@ -142,11 +142,11 @@ test.describe("Panel gallery — Color Wheel", () => {
   test("AC-CW-4 — harmony switching resizes the palette; swatch click selects @feat:editor-shell.panels.color-wheel @level:gesture", async ({
     page,
   }) => {
-    await page.locator('[data-wheel-harmony="Complementary"]').click();
+    await page.locator('[data-wheel-harmony="complementary"]').click();
     await expect(page.locator("[data-wheel-palette-swatch]")).toHaveCount(2);
-    await page.locator('[data-wheel-harmony="Monochromatic"]').click();
+    await page.locator('[data-wheel-harmony="monochromatic"]').click();
     await expect(page.locator("[data-wheel-palette-swatch]")).toHaveCount(5);
-    await page.locator('[data-wheel-harmony="Tetradic"]').click();
+    await page.locator('[data-wheel-harmony="tetradic"]').click();
     await expect(page.locator("[data-wheel-palette-swatch]")).toHaveCount(4);
     // Clicking a non-main palette swatch adopts it as the colour.
     const target = page.locator('[data-wheel-palette-swatch="2"]');

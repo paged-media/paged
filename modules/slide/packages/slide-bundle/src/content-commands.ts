@@ -461,11 +461,10 @@ export function contributeContentCommands(
   add(CONTENT_CMD.insertIcon, t(CONTENT.insertIcon), slideActive, () =>
     deps.openIconsPanel?.() ? null : pickAndPlace(host, deps, true),
   );
-  const mediaActive = () => slideActive() && host.supports("document.media@1");
-  add(CONTENT_CMD.insertVideo, t(CONTENT.insertVideo), mediaActive, () =>
+  add(CONTENT_CMD.insertVideo, t(CONTENT.insertVideo), slideActive, () =>
     pickAndPlaceMedia(host, deps, "video"),
   );
-  add(CONTENT_CMD.insertAudio, t(CONTENT.insertAudio), mediaActive, () =>
+  add(CONTENT_CMD.insertAudio, t(CONTENT.insertAudio), slideActive, () =>
     pickAndPlaceMedia(host, deps, "audio"),
   );
   add(
@@ -564,7 +563,7 @@ export function contributeContentCommands(
     if (ids.has(command))
       handles.push(host.contribute.menu({ path, command, group, order }));
   }
-  if (gates.scopedKeys && host.supports("contribute.keybinding.scope@1")) {
+  if (gates.scopedKeys) {
     // Esc puts a locked (or armed) painter down.
     handles.push(
       host.contribute.keybinding({

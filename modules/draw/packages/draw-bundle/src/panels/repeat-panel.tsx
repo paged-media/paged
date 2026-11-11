@@ -46,7 +46,6 @@ import {
   repeatInstanceCounts,
   resolveRepeat,
   REPEAT_DEFAULTS,
-  REPEAT_FEATURE,
   REPEAT_KINDS,
   type RepeatParams,
   type RepeatRecord,
@@ -74,8 +73,6 @@ const M = defineMessages("draw.repeatPanel", {
   heading: "Repeats",
   buildHint: "Build a {kind} repeat from the selection",
   selectArtwork: "Select artwork first",
-  degraded:
-    "This editor cannot save data into the document, so repeat settings are not kept and clipping is not available.",
   kind: "Kind",
   repeat: "Repeat",
   radial: "Radial",
@@ -178,7 +175,6 @@ export function makeRepeatPanel(host: BundleHost): {
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [hasSelection, setHasSelection] = React.useState(false);
-    const [portable, setPortable] = React.useState(true);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<RepeatParams>(REPEAT_DEFAULTS);
 
@@ -197,7 +193,6 @@ export function makeRepeatPanel(host: BundleHost): {
         if (!live()) return;
         const tally = await repeatInstanceCounts(host, library);
         if (!live()) return;
-        setPortable(host.supports(REPEAT_FEATURE));
         setRecords(library.repeats);
         setHasSelection(selection.length > 0);
         setActive(id);
@@ -253,7 +248,6 @@ export function makeRepeatPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-repeat-panel={records.length}
-        data-draw-repeat-portable={portable ? "true" : "false"}
         data-draw-repeat-active={active ?? ""}
       >
         <PanelIntro
@@ -289,12 +283,6 @@ export function makeRepeatPanel(host: BundleHost): {
         </div>
 
         <Refusal text={refusal} />
-
-        {!portable && (
-          <div style={mutedStyle} data-draw-repeat-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
 
         <div style={sectionStyle}>{s.t(M.kind)}</div>
         <div style={rowStyle}>

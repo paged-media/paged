@@ -102,8 +102,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.repeat",
         // The Knife — joins the host's Scissors flyout.
         "media.paged.draw.tool.knife",
-        // Scissors at any point — the same flyout.
-        "media.paged.draw.tool.scissorsAnyPoint",
         // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
         // flyouts.
         "media.paged.draw.tool.reshape",
@@ -154,10 +152,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // wave-2 pair (Width, Lasso Select; the Eyedropper is the host's) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
-        // with no shortcut — see tools.ts) + the Knife and Scissors
-        // at any point (keyless too) — seventeen tools (the Pencil is the
-        // host's, ADR 359).
-        "tool",
+        // with no shortcut — see tools.ts) + the Knife (keyless too) —
+        // sixteen tools (the Pencil and Scissors are the host's, ADR 359).
         "tool",
         "tool",
         "tool",
@@ -695,7 +691,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(41);
+    expect(harness.toolsContributed()).toHaveLength(40);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

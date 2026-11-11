@@ -93,12 +93,6 @@ export async function readTableCells(
     (b) => b.kind === "table" && (b.flow ?? []).length === 0,
   );
   if (!hasTables) return { cells, tables, skips };
-  if (!host.supports("objects@1")) {
-    skips.push(
-      "this host cannot read table cells: canvas edits in tables are not saved",
-    );
-    return { cells, tables, skips };
-  }
   const { places, missing } = await locateTables(host, ir, storyIds, {
     rowsMayChange: true,
   });
@@ -163,8 +157,7 @@ function fillColors(paragraphs: readonly unknown[], into: Set<string>): void {
  * (`RRGGBB`), as the host displays it: the save-back writes a run's colour
  * from it when the swatch is one the canvas made (the import's own are
  * known to the engine already), and a theme swatch the user edited is
- * written as its new colour instead of the theme reference (doc ADR 609). Empty on a host without the swatch display
- * read; a run in such a colour then keeps its Word colour.
+ * written as its new colour instead of the theme reference (doc ADR 609).
  */
 export async function canvasColors(
   host: BundleHost,
@@ -172,7 +165,6 @@ export async function canvasColors(
   cells: readonly CellContent[],
   extra: readonly string[] = [],
 ): Promise<Record<string, string>> {
-  if (!host.supports("document.swatchDisplay@1")) return {};
   const ids = new Set<string>(extra);
   fillColors(paragraphs, ids);
   for (const c of cells) fillColors(c.paragraphs ?? [], ids);

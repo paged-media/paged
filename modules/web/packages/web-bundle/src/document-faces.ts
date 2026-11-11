@@ -85,7 +85,7 @@ export interface ProvidedFaces {
 
 /** Give the document a face for every family in `families` it holds none
  *  for, from the faces the bundle shaped with. Answers the problems: a family
- *  the bundle holds no face for (or a host without the door), or a face the
+ *  the bundle holds no face for, or a face the
  *  document would not take. */
 export async function provideDocumentFaces(
   host: BundleHost,
@@ -96,7 +96,6 @@ export async function provideDocumentFaces(
   const given: KeptFace[] = [];
   // Each capability is probed once, and only when a family needs it.
   let canTell: boolean | undefined;
-  let door: boolean | undefined;
   const asked = new Set<string>();
   for (const family of families) {
     const key = family.toLowerCase();
@@ -107,8 +106,7 @@ export async function provideDocumentFaces(
     const holds = canTell ? await documentHolds(host, family) : null;
     if (holds === true) continue;
     const faces = heldFaces(host, engine, family);
-    if (faces.length > 0) door ??= host.supports("assets.documentFont@1");
-    if (faces.length === 0 || !door) {
+    if (faces.length === 0) {
       // Only a family the document is known to lack is a problem.
       if (holds === false) {
         out.push(
@@ -174,7 +172,6 @@ export async function giveBackDocumentFaces(
   host: BundleHost,
 ): Promise<WebDiagnostic[]> {
   const problems: WebDiagnostic[] = [];
-  if (!host.supports("assets.documentFont@1")) return problems;
   const paths = await keptFacePaths(host);
   if (paths.length === 0) return problems;
   let missing: Set<string>;

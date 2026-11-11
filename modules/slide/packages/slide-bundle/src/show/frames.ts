@@ -77,27 +77,19 @@ export function createFrameSource(host: BundleHost): FrameSource {
     hide: readonly string[],
   ): Promise<Frame | null> => {
     if (typeof createImageBitmap !== "function") return null;
-    if (host.supports("render.layers@1")) {
-      const out = await host.render.layers(pageId, {
-        scale,
-        format: "bitmap",
-        // Media hidden while they do not play (slide ADR 718).
-        ...(hide.length > 0
-          ? {
-              hideItems: hide.map(
-                (id) => ({ kind: "rectangle", id }) as unknown as ElementId,
-              ),
-            }
-          : {}),
-      });
-      return out?.background.bitmap ?? null;
-    }
-    if (!host.supports("render.snapshot@1")) return null;
-    const shot = await host.render.snapshot(pageId, { dpi: scale * 72 });
-    if (!shot) return null;
-    return createImageBitmap(
-      new Blob([shot.png as Uint8Array<ArrayBuffer>], { type: "image/png" }),
-    );
+    const out = await host.render.layers(pageId, {
+      scale,
+      format: "bitmap",
+      // Media hidden while they do not play (slide ADR 718).
+      ...(hide.length > 0
+        ? {
+            hideItems: hide.map(
+              (id) => ({ kind: "rectangle", id }) as unknown as ElementId,
+            ),
+          }
+        : {}),
+    });
+    return out?.background.bitmap ?? null;
   };
 
   const evict = () => {

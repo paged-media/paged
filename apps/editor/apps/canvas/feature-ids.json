@@ -7,7 +7,7 @@
     "keybinding": 201,
     "menu": 665,
     "panel": 151,
-    "tool": 126
+    "tool": 125
   },
   "features": [
     {
@@ -9846,11 +9846,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.scissorsAnyPoint",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.shapeBuilder",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -10751,6 +10746,12 @@
     {
       "id": "tool:media.paged.draw.tool.reflect",
       "replacement": "command:paged.transform.reflectOptions",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.scissorsAnyPoint",
+      "replacement": "tool:paged.tool.scissors",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },

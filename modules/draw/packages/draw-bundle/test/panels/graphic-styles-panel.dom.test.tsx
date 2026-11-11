@@ -96,9 +96,6 @@ describe("Graphic styles panel — rendered against the engine", () => {
     it("the CONTRIBUTED component mounts and shows the empty state", async () => {
       const panel = await mountContributed(h, GRAPHIC_STYLES_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-graphic-styles-panel")).toBe("0");
-      expect(panel.attr(PANEL, "data-draw-graphic-styles-portable")).toBe(
-        "true",
-      );
       expect(panel.text()).toContain("Graphic styles (0)");
       expect(panel.text()).toContain(
         "No graphic styles yet — select an object and save its appearance.",

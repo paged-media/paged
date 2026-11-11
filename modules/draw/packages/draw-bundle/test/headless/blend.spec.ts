@@ -95,7 +95,6 @@ import {
   BLEND_COMMAND_ID,
   BLEND_COMMAND_IDS,
   BLEND_DEFAULTS,
-  BLEND_FEATURE,
   BLEND_LIBRARY_VERSION,
   BLEND_LIVE_NOTE,
   BLEND_MAX_STEPS,
@@ -721,10 +720,6 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     beforeEach(async () => {
       await h.host.selection.set([]);
       await writeBlendLibrary(h.host, { v: BLEND_LIBRARY_VERSION, blends: [] });
-    });
-
-    it("the host wires the container-parts door this feature rides", () => {
-      expect(h.host.supports(BLEND_FEATURE)).toBe(true);
     });
 
     it("MAKE = ONE batch ⇒ ONE undo step (v0 needed two, and said so)", async () => {

@@ -35,8 +35,7 @@
 //   release→ ONE batch (`commands/symbolism.ts`): one drag, one undo step
 //   Escape → nothing is written
 //
-// The tools act on the engine's instances (`document.symbols@1`); on a
-// host without them a press only says so.
+// The tools act on the engine's instances (`document.symbols@1`).
 
 import type {
   BundleHost,
@@ -58,7 +57,6 @@ import {
   writeSymbolism,
   type SymbolismScope,
 } from "../commands/symbolism";
-import { engineSymbols } from "../commands/symbols-engine";
 import {
   createToolOptionsReader,
   SYMBOLISM_OPTIONS,
@@ -176,12 +174,6 @@ export function createSymbolismHandler(
       const point = e.pagePoint;
       const alt = e.modifiers.alt;
       queue.run(async () => {
-        if (!engineSymbols(host)) {
-          host.log.warn(
-            `symbolism ${kind}: this engine keeps no symbols (document.symbols@1) — nothing to act on`,
-          );
-          return;
-        }
         scope = await symbolismScope(host, page);
         if (kind === "sprayer" && !scope.symbol) {
           host.log.warn(

@@ -122,7 +122,6 @@ import {
   emptyCatalogueState,
   type CatalogueMethods,
 } from "./catalogue";
-import { objectsOf } from "./property-lane";
 import { readTextVariableFields, textVariablesOn } from "./text-variables";
 import { contentPatch, type PayloadJson } from "./labels";
 import {
@@ -339,11 +338,10 @@ export interface QueryPreview {
 }
 
 /** Where the session stands against the document's `session` part:
- *  `unavailable` — this host has no container parts, nothing is saved;
  *  `empty` — nothing defined yet; `pending` — a change not yet written;
  *  `saved` — the part matches the session. */
 export interface PersistenceState {
-  status: "unavailable" | "empty" | "pending" | "saved";
+  status: "empty" | "pending" | "saved";
   /** The content hash of the last written session part, or null. */
   hash: string | null;
 }
@@ -1179,7 +1177,6 @@ export function createSession(
   let lastWritten: string | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let persistChain: Promise<void> = Promise.resolve();
-  let partsMissingReported = false;
   let restorePromise: Promise<void> | null = null;
   // Bumped when another document opens: a write queued for the previous
   // document checks it and is dropped instead of landing in the new one.
@@ -1286,24 +1283,8 @@ export function createSession(
     }
   }
 
-  const partsAvailable = () => host.supports("storage.parts@1");
-
   /** A definition or decision changed: write the session part soon. */
   function markDirty(): void {
-    if (!partsAvailable()) {
-      persistence.status = "unavailable";
-      if (!partsMissingReported) {
-        partsMissingReported = true;
-        report({
-          level: "info",
-          source: "persist",
-          message:
-            "this host has no document container parts — sources, queries and bindings are not saved with the document",
-        });
-      }
-      emit();
-      return;
-    }
     persistence.status = "pending";
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
@@ -1562,7 +1543,7 @@ export function createSession(
     }
     const epoch = docEpoch;
     persistChain = persistChain.then(async () => {
-      if (!partsAvailable() || epoch !== docEpoch) return;
+      if (epoch !== docEpoch) return;
       try {
         const built = await buildPersisted();
         if (!built || epoch !== docEpoch) return;
@@ -1608,7 +1589,6 @@ export function createSession(
   /** Drop `data/*.csv` parts the current session no longer names. The session
    *  is not on the undo stack, so no undo step can name one again. */
   async function collectDataParts(): Promise<void> {
-    if (!host.supports("storage.parts@2")) return;
     // With labelled versions an undo can bring back a session that names a
     // part the live one dropped: keep them all.
     if (labelActive) return;
@@ -1896,7 +1876,6 @@ export function createSession(
   /** Re-read which variable bindings have a field in the document (after a
    *  restore, and after undo/redo, which can add or remove one). */
   async function reconcilePlaced(): Promise<PlaceholderField[] | null> {
-    if (!host.supports("document.placeholders@1")) return null;
     let fields: PlaceholderField[];
     try {
       fields = (
@@ -2052,7 +2031,7 @@ export function createSession(
     // Elements without a known kind resolve from ONE scene-tree read.
     const ctx: LowerContext = {};
     const wantsField = applies.some((a) => a.applicable && a.kind === "text");
-    if (wantsField && host.supports("document.placeholders@1")) {
+    if (wantsField) {
       try {
         const placed =
           (await host.document.placeholders()) as PlaceholderField[];
@@ -2400,7 +2379,6 @@ export function createSession(
     lastWritten = null;
     persistence.status = "empty";
     persistence.hash = null;
-    partsMissingReported = false;
     if (!opts.keepEngines) {
       engine?.free();
       engine = null;
@@ -2458,7 +2436,6 @@ export function createSession(
     given?: Uint8Array,
     reload = false,
   ): Promise<void> {
-    if (!partsAvailable()) return;
     let bytes: Uint8Array | null = given ?? null;
     try {
       // Protocol 69: the part, or the version the document's label names.
@@ -2795,7 +2772,6 @@ export function createSession(
     hostElements,
     relink: relinkSources,
   });
-  const objectsUp = () => objectsOf(host) !== null;
 
   // ── data issues (data ADR 564) ──────────────────────────────────────────
   /** The stories each data field's text variable has an instance in, read
@@ -2809,40 +2785,36 @@ export function createSession(
   async function variableInstanceStories(): Promise<Map<string, Set<string>>> {
     if (instanceStories?.at === docChanges) return instanceStories.stories;
     const out = new Map<string, Set<string>>();
-    const objects = objectsOf(host);
-    if (objects) {
-      try {
-        const bindingOf = new Map<string, string>();
-        for (const address of await objects.query(
-          'textVariable[name^="paged:"]',
-        )) {
-          const name = (await objects.get(address, "textVariableName")) as {
-            value?: unknown;
-          };
-          if (typeof name?.value !== "string") continue;
-          const id = address.slice("textVariable:".length);
-          bindingOf.set(bareVariableId(id), name.value.slice("paged:".length));
-        }
-        if (bindingOf.size > 0)
-          for (const address of await objects.query("story")) {
-            const storyId = address.slice("story:".length);
-            const content = await host.document.storyContent(storyId);
-            for (const para of content?.paragraphs ?? [])
-              for (const run of para.runs) {
-                const v = run.textVariable;
-                const binding = v
-                  ? bindingOf.get(bareVariableId(v))
-                  : undefined;
-                if (!binding) continue;
-                let set = out.get(binding);
-                if (!set) out.set(binding, (set = new Set()));
-                set.add(storyId);
-              }
-          }
-      } catch {
-        // a host without the object model or story reads: the session's own
-        // placements are still checked
+    const objects = host.objects;
+    try {
+      const bindingOf = new Map<string, string>();
+      for (const address of await objects.query(
+        'textVariable[name^="paged:"]',
+      )) {
+        const name = (await objects.get(address, "textVariableName")) as {
+          value?: unknown;
+        };
+        if (typeof name?.value !== "string") continue;
+        const id = address.slice("textVariable:".length);
+        bindingOf.set(bareVariableId(id), name.value.slice("paged:".length));
       }
+      if (bindingOf.size > 0)
+        for (const address of await objects.query("story")) {
+          const storyId = address.slice("story:".length);
+          const content = await host.document.storyContent(storyId);
+          for (const para of content?.paragraphs ?? [])
+            for (const run of para.runs) {
+              const v = run.textVariable;
+              const binding = v ? bindingOf.get(bareVariableId(v)) : undefined;
+              if (!binding) continue;
+              let set = out.get(binding);
+              if (!set) out.set(binding, (set = new Set()));
+              set.add(storyId);
+            }
+        }
+    } catch {
+      // a host without the object model or story reads: the session's own
+      // placements are still checked
     }
     instanceStories = { at: docChanges, stories: out };
     return out;
@@ -3029,7 +3001,6 @@ export function createSession(
     // one-frame stories only.
     if (frameIds.length > 1 && !e.text_overset_chain && !e.text_overset_runs)
       return false;
-    if (!host.supports("document.readStory@1")) return false;
     const content = await host.document.storyContent(storyId);
     if (!content) return false;
     const text = content.paragraphs
@@ -3085,7 +3056,6 @@ export function createSession(
     const id = String(element.id);
     const known = linkedPixels.get(id);
     if (known) return known;
-    if (!host.supports("assets.images@1")) return null;
     const placed = await host.assets.getPlacedImage(id);
     if (!placed || !(placed.width > 0 && placed.height > 0)) return null;
     const pixels: [number, number] = [placed.width, placed.height];
@@ -3237,7 +3207,6 @@ export function createSession(
 
   /** The open document's asset index (read once per document). */
   function documentAssetIndex(): Promise<AssetIndex | null> {
-    if (!partsAvailable()) return Promise.resolve(null);
     if (assetIndexRead?.epoch !== docEpoch)
       assetIndexRead = {
         epoch: docEpoch,
@@ -3254,7 +3223,6 @@ export function createSession(
    *  (`persist.ts` `storeAssets`). A column whose query has no records yet
    *  keeps what the document carried for it. */
   async function persistAssets(): Promise<void> {
-    if (!partsAvailable()) return;
     const epoch = docEpoch;
     try {
       const previous = await documentAssetIndex();
@@ -3280,19 +3248,14 @@ export function createSession(
         columns.set(key, failed === n ? null : refs);
       }
       if (epoch !== docEpoch) return;
-      const cleans = host.supports("storage.parts@2");
       const { index } = await storeAssets(
         columns,
         (reference) => assets.kept(reference),
         previous,
         {
           write: (path, bytes) => host.parts.write(path, bytes),
-          ...(cleans
-            ? {
-                list: (prefix: string) => host.parts.list(prefix),
-                delete: (path: string) => host.parts.delete(path),
-              }
-            : {}),
+          list: (prefix: string) => host.parts.list(prefix),
+          delete: (path: string) => host.parts.delete(path),
         },
       );
       assetIndexRead = {
@@ -4435,10 +4398,10 @@ export function createSession(
         // the preview stepped to is left (editor ADR 291).
         if (steppedAt.delete(id)) markDirty();
         // ADR 558: property bindings (and visibility, re-expressed as its
-        // elementVisible triple, where the host has the object model) write
-        // through host.objects — in lowerAll, all of them in ONE batch.
+        // elementVisible triple) write through host.objects — in lowerAll,
+        // all of them in ONE batch.
         const kind = bindingKinds.get(id);
-        if (kind === "property" || (kind === "visibility" && objectsUp())) {
+        if (kind === "property" || kind === "visibility") {
           if (lowerCtx?.properties) {
             lowerCtx.properties.push(id);
           } else {
@@ -4785,7 +4748,7 @@ export function createSession(
         // Rules and record flows have no per-record value to step through.
         if (kind === "rule" || kind === "recordFlow") return;
         // ADR 558: a property binding steps through host.objects.
-        if (kind === "property" || (kind === "visibility" && objectsUp())) {
+        if (kind === "property" || kind === "visibility") {
           await props.applyProperties({
             record,
             ids: [bindingId],
@@ -4971,15 +4934,6 @@ export function createSession(
       // start, and a write shifts every later field in the story). Pinned and
       // Overridden bindings are skipped before they are resolved, because a
       // resolve re-links (ADR 553).
-      if (!host.supports("document.placeholders@1")) {
-        report({
-          level: "warn",
-          source: "refresh",
-          message:
-            "the host predates the placeholder field model (document.placeholders@1)",
-        });
-        return 0;
-      }
       let e: DataEngineLike;
       try {
         e = await ensureEngine();

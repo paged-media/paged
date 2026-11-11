@@ -32,13 +32,12 @@ import {
   writeWorkbookPart,
 } from "../src/workbook-part";
 
-/** A host exposing just the `parts` door + `supports`, backed by an in-memory
+/** A host exposing just the `parts` door, backed by an in-memory
  *  store (the host normally prepends the plugin namespace; this fake keeps the
  *  relative paths verbatim, which is all the module speaks). */
-function partsHost(partsSupported = true) {
+function partsHost() {
   const store = new Map<string, Uint8Array>();
   const host = {
-    supports: (f: string) => f === "storage.parts@1" && partsSupported,
     parts: {
       write: async (p: string, b: Uint8Array) => void store.set(p, b),
       read: async (p: string) => store.get(p) ?? null,
@@ -69,13 +68,6 @@ describe("sheet_plugin_workbook_part", () => {
 
   it("returns null when no workbook part is present", async () => {
     const { host } = partsHost();
-    expect(await readWorkbookPart(host)).toBeNull();
-  });
-
-  it("is a clean no-op when the host has no container writer", async () => {
-    const { host, store } = partsHost(false);
-    await writeWorkbookPart(host, new Uint8Array([1, 2, 3]), "x.xlsx");
-    expect(store.size).toBe(0); // nothing written
     expect(await readWorkbookPart(host)).toBeNull();
   });
 

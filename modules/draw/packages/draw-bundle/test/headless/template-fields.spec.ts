@@ -34,10 +34,10 @@ import {
   applyPlaceSymbolInstance,
   documentStories,
   drawBundle,
-  symbolInstances,
+  readInstanceStates,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost, withoutEngineSymbols } from "./host";
+import { openHost } from "./host";
 
 const D = "media.paged.draw";
 const RECT = { kind: "rectangle", id: "urect" } as ElementId;
@@ -95,6 +95,8 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
   let swatchB = "";
   let swatchOff = "";
   let instance = "";
+  let box = "";
+  let hook = "";
   let story = "";
   const fields: Record<string, TemplateFieldRef> = {};
 
@@ -102,9 +104,6 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
     h = await openHost();
     await h.load(F1_MULTI_SHAPE.bytes());
     h.loadBundle(drawBundle);
-    // The symbol field kind reads the re-emitted lane's library (draw ADR
-    // 356).
-    withoutEngineSymbols(h);
     expect(
       (await send(h, "setSessionPolicy", { policy: { role: "author" } })).kind,
     ).toBe("sessionPolicyApplied");
@@ -166,14 +165,14 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       expect(made.applied, made.reason).toBe(true);
     }
 
-    // Three symbols: two of one piece, one of two; an instance of "Box".
+    // Three symbols; an instance of "Box".
     await h.host.selection.set([RECT]);
-    expect(await applyDefineSymbol(h.host, { name: "Box" })).not.toBeNull();
+    box = (await applyDefineSymbol(h.host, { name: "Box" }))!.id;
     await h.host.selection.set([POLY]);
-    expect(await applyDefineSymbol(h.host, { name: "Hook" })).not.toBeNull();
+    hook = (await applyDefineSymbol(h.host, { name: "Hook" }))!.id;
     await h.host.selection.set([RECT, POLY]);
     expect(await applyDefineSymbol(h.host, { name: "Pair" })).not.toBeNull();
-    const [leaf] = await applyPlaceSymbolInstance(h.host, "sym-1", {
+    const [leaf] = await applyPlaceSymbolInstance(h.host, box, {
       x: 400,
       y: 400,
     });
@@ -238,14 +237,6 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       await grantsOf(h, "textOnPath"),
       defs.caption,
     );
-    await markField(
-      h,
-      { kind: "polygon", id: instance } as ElementId,
-      "badge",
-      `${D}.symbolChoice`,
-      await grantsOf(h, "symbolChoice"),
-      defs.badge,
-    );
     fields.colour = ref("colour", "urect", "paint", defs.colour);
     fields.style = ref("style", "upoly", "graphicStyle", defs.style);
     fields.caption = ref("caption", "uline", "textOnPath", defs.caption);
@@ -279,7 +270,6 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       colour: `${D}.paint`,
       style: `${D}.graphicStyle`,
       caption: `${D}.textOnPath`,
-      badge: `${D}.symbolChoice`,
     });
   });
 
@@ -371,29 +361,31 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
     });
   });
 
-  it("symbolChoice: swaps a one-piece symbol in place, refuses a two-piece one", async () => {
+  it("symbolChoice: the instance draws the chosen symbol, in place", async () => {
     const read = await h.objects.readTemplateField(fields.badge!);
-    expect(read.value).toBe("sym-1");
-    expect(await h.objects.writeTemplateField(fields.badge!, "Hook")).toEqual({
-      ok: true,
-    });
-    expect((await h.objects.readTemplateField(fields.badge!)).value).toBe(
-      "sym-2",
+    expect(read.value).toBe(box);
+    // An engine instance carries no plugin metadata (setPluginMetadata is
+    // not implemented for it), so it cannot hold the field's mark and its
+    // grants: a filler is refused, an author writes.
+    expect((await h.objects.writeTemplateField(fields.badge!, "Hook")).ok).toBe(
+      false,
     );
-    // The same element, now the other symbol's shape.
-    const [inst] = await symbolInstances(h.host);
-    expect(inst!.symbol).toBe("sym-2");
-    expect(inst!.leaves.map((l) => String(l.id))).toEqual([instance]);
-    const anchors = await h.host.document.pathAnchors({
-      kind: "polygon",
-      id: instance,
-    } as ElementId);
-    expect(anchors!.anchors.length).toBe(3);
-
-    expect(await h.objects.writeTemplateField(fields.badge!, "Pair")).toEqual({
-      ok: false,
-      problem: `"Pair" has 2 pieces; a symbol field swaps one-piece symbols`,
-    });
+    expect(
+      (await send(h, "setSessionPolicy", { policy: { role: "author" } })).kind,
+    ).toBe("sessionPolicyApplied");
+    try {
+      expect(await h.objects.writeTemplateField(fields.badge!, "Hook")).toEqual(
+        { ok: true },
+      );
+    } finally {
+      await send(h, "setSessionPolicy", { policy: { role: "filler" } });
+    }
+    expect((await h.objects.readTemplateField(fields.badge!)).value).toBe(hook);
+    // The same instance, now drawing the other symbol.
+    const [state] = await readInstanceStates(h.host, [
+      { kind: "instance", id: instance } as unknown as ElementId,
+    ]);
+    expect(state!.symbol).toBe(hook);
   });
 
   it("textOnPath: reads the story; a filler writes it with the field's own grant", async () => {

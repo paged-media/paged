@@ -6,6 +6,7 @@
 // before/after toggle; OK keeps the filter as ONE undo step, Cancel puts
 // the image back.
 
+import { hexToRgb } from "@paged-media/helpers";
 import { ColorInput } from "./color-input";
 import type { FilterDef, FilterValue, ParamSpec } from "../../filters";
 import type { FilterDialogState } from "../../session";
@@ -93,11 +94,10 @@ const toHex = (c: readonly [number, number, number]) =>
         .padStart(2, "0"),
     )
     .join("");
-const fromHex = (h: string): [number, number, number] => [
-  parseInt(h.slice(1, 3), 16) / 255,
-  parseInt(h.slice(3, 5), 16) / 255,
-  parseInt(h.slice(5, 7), 16) / 255,
-];
+const fromHex = (h: string): [number, number, number] => {
+  const [r, g, b] = hexToRgb(h) ?? [0, 0, 0];
+  return [r / 255, g / 255, b / 255];
+};
 
 /** Degrees from a pointer position on the dial (0° = right, counter-
  *  clockwise positive, as Photoshop's angle wheels read). */

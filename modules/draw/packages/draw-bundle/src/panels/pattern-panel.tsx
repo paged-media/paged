@@ -47,9 +47,7 @@ import {
   readPatternLibrary,
   resolvePatternField,
   PATTERN_DEFAULTS,
-  PATTERN_FEATURE,
   PATTERN_LEGACY_FIELD,
-  PATTERN_PAINT_FEATURE,
   type PatternField,
   type PatternLayout,
   type PatternParams,
@@ -76,8 +74,6 @@ const M = defineMessages("draw.patternPanel", {
   makeHint: "Tile the selection with the settings below",
   selectArtwork: "Select artwork first",
   fromSelection: "+ From selection",
-  degraded:
-    "This editor cannot save data into the document, so pattern settings are not kept. Copies can still be released or deleted.",
   tile: "Tile",
   layout: "Layout",
   hSpacing: "Horizontal spacing (pt, negative overlaps)",
@@ -113,8 +109,6 @@ const M = defineMessages("draw.patternPanel", {
     "Save this pattern as a pattern swatch with the settings above (an earlier save is updated)",
   done: "Done",
   doneHint: "Save the pattern swatch and remove the preview copies",
-  noPaint:
-    "This editor's engine has no pattern swatches; the copies stay artwork",
   swatchOf: "Swatch: {swatch}",
 });
 
@@ -184,8 +178,6 @@ export function makePatternPanel(host: BundleHost): {
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [hasSelection, setHasSelection] = React.useState(false);
-    const [portable, setPortable] = React.useState(true);
-    const paint = host.supports(PATTERN_PAINT_FEATURE);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<PatternParams>(PATTERN_DEFAULTS);
 
@@ -208,7 +200,6 @@ export function makePatternPanel(host: BundleHost): {
         for (const tile of links.tiles) {
           tally[tile.ref.pattern] = (tally[tile.ref.pattern] ?? 0) + 1;
         }
-        setPortable(host.supports(PATTERN_FEATURE));
         setFields(library.fields);
         setHasSelection(selection.length > 0);
         setActive(field);
@@ -244,7 +235,6 @@ export function makePatternPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-pattern-panel={fields.length}
-        data-draw-pattern-portable={portable ? "true" : "false"}
         data-draw-pattern-active={active ?? ""}
       >
         <PanelIntro
@@ -269,12 +259,6 @@ export function makePatternPanel(host: BundleHost): {
         </div>
 
         <Refusal text={refusal} />
-
-        {!portable && (
-          <div style={mutedStyle} data-draw-pattern-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
 
         <div style={sectionStyle}>{s.t(M.tile)}</div>
         <div style={rowStyle}>
@@ -467,9 +451,8 @@ export function makePatternPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title={paint ? s.t(M.saveSwatchHint) : s.t(M.noPaint)}
+                  title={s.t(M.saveSwatchHint)}
                   data-draw-pattern-save-swatch
-                  disabled={!paint}
                   onClick={() =>
                     void run(() =>
                       applySavePatternSwatch(host, {
@@ -484,9 +467,8 @@ export function makePatternPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title={paint ? s.t(M.doneHint) : s.t(M.noPaint)}
+                  title={s.t(M.doneHint)}
                   data-draw-pattern-done
-                  disabled={!paint}
                   onClick={() =>
                     void run(() =>
                       applySavePatternSwatch(host, {

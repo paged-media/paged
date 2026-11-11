@@ -56,7 +56,11 @@
 // offset by InDesign's default step of 1p0 (12 pt) right and down, directly
 // above each source, one undo step (`duplicateElements`).
 
-import { escapeXmlAttr } from "@paged-media/helpers";
+import {
+  base64ToBytes,
+  bytesToBase64,
+  escapeXmlAttr,
+} from "@paged-media/helpers";
 import type {
   CommandContribution,
   KeybindingContribution,
@@ -182,19 +186,12 @@ export const pageItemClipboard = {
   },
 };
 
-function toBase64(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
+const toBase64 = (s: string): string =>
+  bytesToBase64(new TextEncoder().encode(s));
 
 function fromBase64(s: string): string | null {
   try {
-    const bin = atob(s);
-    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
+    return new TextDecoder().decode(base64ToBytes(s));
   } catch {
     return null;
   }

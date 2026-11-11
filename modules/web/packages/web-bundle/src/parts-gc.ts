@@ -130,7 +130,6 @@ export function startPartsCollector(host: BundleHost): Disposable {
 
   const markAtOpen = (): void => {
     garbage = (async () => {
-      if (!host.supports("storage.parts@1")) return [];
       try {
         const paths = await host.parts.list("");
         const reach = await reachable(host, paths);
@@ -143,7 +142,7 @@ export function startPartsCollector(host: BundleHost): Disposable {
 
   const willSave = host.document.onWillSave(async () => {
     const marked = await garbage;
-    if (marked.length === 0 || !host.supports("storage.parts@2")) return;
+    if (marked.length === 0) return;
     const reach = await reachable(host, marked);
     const written = partsWrittenThisSession(host);
     const dropped: string[] = [];

@@ -54,5 +54,11 @@ page item were not, or only by accident:
   slide and web get them (and every solo profile keeps them: `SHARED_HOST_TOOLS` is the same list).
   They draw and edit paths and shapes on the page beside the context's content; the context's own
   pointer is bypassed while one is in hand, exactly as for Free Transform.
+- **Amendment 2026-11-11: one vector tool set in every context.** `CONTEXT_SHARED_TOOL_IDS` also lists
+  Rotate, Scale and Shear, the Pencil and Smooth tools, Scissors, the Gradient tool, the Eyedropper and
+  Measure, so doc, sheet, slide, web and data get the same vector tools as draw and the page (the solo
+  profiles keep them through `SHARED_HOST_TOOLS`). Each acts on the page items beside the context's
+  content, the context's pointer bypassed while it is in hand. The e2e picks each from its rail slot in
+  every context and checks the context holds.
 - A further shared tool joins `CONTEXT_SHARED_TOOL_IDS`; a further shared panel joins
   `SHARED_HOST_PANELS` (ADR 309's three can move there when both land).

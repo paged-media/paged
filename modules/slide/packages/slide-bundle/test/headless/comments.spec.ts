@@ -147,7 +147,9 @@ describe("[plugin-slide.comments] comments, headless", () => {
       text: "Done",
       author: "Ben Ode",
     })) as { reply: string };
-    expect(reply).toMatch(/^\{.+\}$/);
+    // The engine's own id (the comments door made it); the PowerPoint
+    // writer turns any id into a GUID on export.
+    expect(reply).toMatch(/^comment-/);
     await d.h.objects.invoke(RESOLVE_COMMENT_COMMAND, { slide, comment });
     await d.h.objects.invoke(DELETE_COMMENT_COMMAND, { slide, comment });
     await expect(

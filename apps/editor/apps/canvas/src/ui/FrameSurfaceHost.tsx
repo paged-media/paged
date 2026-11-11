@@ -52,7 +52,7 @@ import {
   useRegistryView,
 } from "@paged-media/shell";
 
-import { contentToHostMatrix, invert } from "./frame-surface-math";
+import { contentToHostMatrix, invert, type Mat } from "./frame-surface-math";
 import type { PageRect } from "./layout";
 
 export interface FrameSurfaceHostProps {
@@ -124,7 +124,7 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
   };
   // On the frame: the content-box transform. Full screen: upright, one CSS
   // pixel a point, below the bar.
-  const m: [number, number, number, number, number, number] = fullscreen
+  const m: Mat = fullscreen
     ? [1, 0, 0, 1, 0, FULLSCREEN_BAR_PX]
     : contentToHostMatrix(props.camera, page, geom);
   const inverse = invert(m);

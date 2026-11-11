@@ -524,8 +524,6 @@ async function commitPlans(
         throw new Rejected(
           "the document's label names no story to write (placed by an older version)",
         );
-      if (!host.supports("objects@1"))
-        throw new Rejected("this host cannot read a table cell's text");
       located ??= await locateTables(host, plan.ir, stories);
       const place = located.places.get(block);
       if (!place)
@@ -1430,12 +1428,10 @@ export function createDocObjectModel(
   };
 }
 
-/** Register it when the host has the door (plugin-api 0.2.43); `null` on an
- *  older host. */
+/** Register it with the host. */
 export function contributeDocObjectModel(
   host: BundleHost,
   deps: DocObjectModelDeps,
-): ObjectModelHandle | null {
-  if (!host.supports("contribute.objectModel@1")) return null;
+): ObjectModelHandle {
   return host.contribute.objectModel(createDocObjectModel(host, deps));
 }

@@ -240,9 +240,6 @@ export const LIVE_PAINT_PART = "live-paint.json";
  *  library rather than a crash — the graphic-styles convention). */
 export const LIVE_PAINT_LIBRARY_VERSION = 1;
 
-/** The capability this whole feature rides. */
-export const LIVE_PAINT_FEATURE = "storage.parts@1";
-
 /** The binding the last RESOLVED face id is published on, so the panel
  *  (and the face-selection tool) can name what the pointer is over —
  *  including a face that carries no paint and therefore no element. */
@@ -757,21 +754,10 @@ export function livePaintDeleteBatchFor(ids: readonly ElementId[]): Mutation {
 
 type PartsHost = RecipeHost;
 
-/** Read the recipes out of the container part. A host with no container
- *  writer (`supports("storage.parts@1")` false — an older editor) is not
- *  an error: it reads as an EMPTY library and WARNS, so the degrade is
- *  visible in the log instead of looking like "no groups yet". */
+/** Read the recipes out of the container part (empty on a read failure). */
 export async function readLivePaintLibrary(
   host: PartsHost,
 ): Promise<LivePaintLibrary> {
-  if (!host.supports(LIVE_PAINT_FEATURE)) {
-    host.log.warn(
-      "live paint: this host wires no `.paged` container writer " +
-        `(supports("${LIVE_PAINT_FEATURE}") is false) — the recipe cannot be ` +
-        "read or saved here, so nothing can be regenerated later",
-    );
-    return emptyLibrary();
-  }
   try {
     return parseLivePaintLibrary(await readRecipeBytes(host, LIVE_PAINT_PART));
   } catch (e) {
@@ -780,19 +766,12 @@ export async function readLivePaintLibrary(
   }
 }
 
-/** Write the recipes back. `false` = it did not persist (no container
- *  door, or the write was refused) — logged, never thrown. */
+/** Write the recipes back. `false` = it did not persist (the write was
+ *  refused) — logged, never thrown. */
 export async function writeLivePaintLibrary(
   host: PartsHost,
   library: LivePaintLibrary,
 ): Promise<boolean> {
-  if (!host.supports(LIVE_PAINT_FEATURE)) {
-    host.log.warn(
-      "live paint: no `.paged` container writer — the recipe was NOT saved " +
-        "(the fills are real artwork, but nothing can regenerate them)",
-    );
-    return false;
-  }
   try {
     await writeRecipeBytes(
       host,

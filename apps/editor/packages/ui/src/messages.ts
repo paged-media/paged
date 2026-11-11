@@ -53,14 +53,16 @@ export const COLOR = defineMessages("ui.color", {
   swatchReference: "swatch reference",
 });
 
-/** The colour harmonies, by their English name (`HarmonyName`). */
+/** The colour harmonies, by rule (`HarmonyRule`, @paged-media/helpers). */
 export const HARMONY = defineMessages("ui.harmony", {
-  Complementary: "Complementary",
-  Analogous: "Analogous",
-  Triadic: "Triadic",
-  SplitComp: "Split-Comp",
-  Tetradic: "Tetradic",
-  Monochromatic: "Monochromatic",
+  complementary: "Complementary",
+  analogous: "Analogous",
+  triadic: "Triadic",
+  splitComplementary: "Split complementary",
+  tetradic: "Tetradic",
+  monochromatic: "Monochromatic",
+  shades: "Shades",
+  tints: "Tints",
 });
 
 export const INPUT = defineMessages("ui.input", {

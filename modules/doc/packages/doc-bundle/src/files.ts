@@ -95,14 +95,13 @@ interface StoryRead {
 /**
  * "Save as .docx" for a document that did not come from Word: its stories
  * (in the host's order), the styles and colours they use, and the first
- * page, written by the engine as a new package. Null on a host without the
- * story read, or when the document has no text.
+ * page, written by the engine as a new package. Null when the document has
+ * no text.
  */
 export async function nativeDocx(
   host: BundleHost,
   engine: DocEngine,
 ): Promise<{ bytes: Uint8Array; leftOut: string[] } | null> {
-  if (!host.supports("document.readStory@1")) return null;
   const stories = await host.document
     .collection<{ selfId: string }>("stories")
     .catch(() => []);

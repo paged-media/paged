@@ -65,7 +65,6 @@ import {
   type RuleResult,
   type RuleTarget,
 } from "../../data-host-model/src";
-import { objectsOf } from "./property-lane";
 import { transformBounds } from "./merge";
 import { t as tr } from "@paged-media/strings";
 import { STATUS } from "./messages";
@@ -528,13 +527,6 @@ export async function commitLoweredVariable(
   targetStoryId?: string | null,
   ctx?: LowerContext,
 ): Promise<{ storyId: string; offset: number } | null> {
-  if (!host.supports("document.placeholders@1")) {
-    host.log.info(
-      `variable "${variable.target}" resolved to "${variable.text}"; the host ` +
-        "predates the placeholder field model (document.placeholders@1) — placement skipped",
-    );
-    return null;
-  }
   let point: InsertionPoint | { mint: PageId } | null;
   if (targetStoryId) {
     // A caller-pinned story still honors the caret's OFFSET, but only when the
@@ -628,8 +620,7 @@ export async function commitSpanVariables(
     value: string | null;
   }[],
 ): Promise<boolean> {
-  if (!host.supports("document.placeholders@1") || spans.length === 0)
-    return false;
+  if (spans.length === 0) return false;
   const carrier = await variableCarrier(host);
   const ordered = [...spans].sort((a, b) =>
     a.storyId === b.storyId
@@ -680,13 +671,6 @@ export async function commitLoweredVariables(
       ctx,
     );
     if (one) placed.set(items[0]!.key, one);
-    return placed;
-  }
-  if (!host.supports("document.placeholders@1")) {
-    host.log.info(
-      `${items.length} variables resolved; the host predates the placeholder field model ` +
-        "(document.placeholders@1) — placement skipped",
-    );
     return placed;
   }
   const point = await variableInsertionPoint(host, ctx);
@@ -1153,7 +1137,7 @@ export async function commitRule(
         existing,
       );
       if (ops.length === 0) return 0;
-      const out = await objectsOf(host)!.batch(ops, {
+      const out = await host.objects.batch(ops, {
         label: tr(STATUS.ruleUndo, { scope: result.scope }),
       });
       if (!out.applied) {

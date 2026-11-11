@@ -28,7 +28,10 @@
 // API through Emscripten `cwrap` + the HEAP views.
 
 import { singleFlight, wasmBytes } from "@paged-media/wasm-boot";
-import { bytesToBase64 } from "@paged-media/helpers";
+import {
+  bytesToBase64,
+  encodePng as encodeRgbaPng,
+} from "@paged-media/helpers";
 
 import type {
   DocumentIr,
@@ -330,49 +333,19 @@ export async function pdfPageCount(bytes: Uint8Array): Promise<number | null> {
   }
 }
 
-/** Encode RGBA pixels to PNG bytes through a canvas (OffscreenCanvas when
- *  available — worker-safe — else a DOM `<canvas>`). Uses `createImageData` +
- *  `.data.set` rather than the `ImageData` constructor to sidestep the
- *  generic-typed-array mismatch on the constructor overload. */
-async function encodePng(
+/** Encode RGBA pixels to PNG bytes: `@paged-media/helpers`' encoder (the
+ *  one PNG writer of the built-ins; no canvas, so it runs in a worker and a
+ *  test alike). */
+const encodePng = (
   rgba: Uint8ClampedArray,
-  w: number,
-  h: number,
-): Promise<Uint8Array> {
-  const paint = (
-    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
-  ): void => {
-    const img = ctx.createImageData(w, h);
-    img.data.set(rgba);
-    ctx.putImageData(img, 0, 0);
-  };
-  if (typeof OffscreenCanvas !== "undefined") {
-    const canvas = new OffscreenCanvas(w, h);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("rasterizePdf: OffscreenCanvas 2d unavailable");
-    paint(ctx);
-    const blob = await canvas.convertToBlob({ type: "image/png" });
-    return new Uint8Array(await blob.arrayBuffer());
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("rasterizePdf: canvas 2d unavailable");
-  paint(ctx);
-  return await new Promise<Uint8Array>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error("rasterizePdf: canvas.toBlob returned null"));
-        return;
-      }
-      blob
-        .arrayBuffer()
-        .then((b) => resolve(new Uint8Array(b)))
-        .catch(reject);
-    }, "image/png");
+  width: number,
+  height: number,
+): Promise<Uint8Array> =>
+  encodeRgbaPng({
+    width,
+    height,
+    data: rgba,
   });
-}
 
 export interface ExtractOptions {
   maxPages?: number;

@@ -51,18 +51,12 @@ export interface PanelDescriptor {
   icon: string;
 }
 
-export interface SaveBackReadiness {
-  /** The host can read an edited story back (structured story read). */
-  readStory: boolean;
-}
-
 export interface OutlinePanelActions {
   /** Pick a .docx and insert it into the current document. */
   insert: () => void;
   /** False when the host has no file picker (the button is disabled). */
   canInsert: () => boolean;
   selectFrame: (frameId: unknown) => void;
-  readiness: () => SaveBackReadiness;
   /** Take the user to a heading (its text and which repeat of that text it
    *  is). Absent → the host cannot navigate, and headings are plain rows.
    *  Resolves false when the heading is not on the page any more. */
@@ -217,12 +211,6 @@ function CappedList<T>({
   );
 }
 
-function readinessLine(live: boolean, readStory: boolean): string {
-  if (live) return OUTLINE.live;
-  if (readStory) return OUTLINE.notCaptured;
-  return OUTLINE.cannotReadBack;
-}
-
 export function makeOutlinePanel(
   store: DocStore,
   actions: OutlinePanelActions,
@@ -251,8 +239,7 @@ export function makeOutlinePanel(
     const summary = summarize(ir);
     const outline = outlineEntries(ir);
     const diagnostics = sortedDiagnostics(ir);
-    const ready = actions.readiness();
-    const saveBackLive = ready.readStory && doc.storyId != null;
+    const saveBackLive = doc.storyId != null;
     const counts = [
       t(OUTLINE.paragraphs, { count: summary.paragraphs }),
       summary.tables > 0 ? t(OUTLINE.tables, { count: summary.tables }) : null,
@@ -456,7 +443,9 @@ export function makeOutlinePanel(
           data-doc-readiness={saveBackLive ? "live" : "verbatim"}
         >
           <h4 style={h4}>{t(OUTLINE.savingBack)}</h4>
-          <p style={note}>{t(readinessLine(saveBackLive, ready.readStory))}</p>
+          <p style={note}>
+            {t(saveBackLive ? OUTLINE.live : OUTLINE.notCaptured)}
+          </p>
         </div>
       </div>
     );

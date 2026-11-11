@@ -5335,8 +5335,7 @@ export function createWorkbookSession(
 
     async documentSwatchColors(ids) {
       const out = new Map<string, string>();
-      if (ids.length === 0 || !host.supports("document.swatchDisplay@1"))
-        return out;
+      if (ids.length === 0) return out;
       try {
         for (const shown of await host.document.swatchDisplay(ids))
           out.set(shown.id, shown.rgbHex);
@@ -5474,7 +5473,6 @@ export function createWorkbookSession(
     },
 
     async documentSwatchRef(id) {
-      if (!host.supports("document.swatchDisplay@1")) return null;
       try {
         const [shown] = await host.document.swatchDisplay([id]);
         if (!shown) return null;
@@ -5498,7 +5496,6 @@ export function createWorkbookSession(
     },
 
     async documentTextDefault() {
-      if (!host.supports("document.styleProperties@1")) return null;
       try {
         let props: Awaited<ReturnType<typeof host.document.styleProperties>> =
           null;
@@ -5540,7 +5537,6 @@ export function createWorkbookSession(
 
     async documentStyleLooks(ids) {
       const out = new Map<string, DocStyleLook>();
-      if (!host.supports("document.styleProperties@1")) return out;
       const colorOf = new Map<string, string>();
       for (const { collection, id } of ids) {
         try {
@@ -5562,7 +5558,7 @@ export function createWorkbookSession(
           host.log.debug(`documentStyleLooks: ${id} unreadable`, err);
         }
       }
-      if (colorOf.size > 0 && host.supports("document.swatchDisplay@1")) {
+      if (colorOf.size > 0) {
         try {
           const shown = new Map(
             (

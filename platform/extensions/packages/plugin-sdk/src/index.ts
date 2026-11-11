@@ -222,6 +222,9 @@ export {
   nativeFxColors,
   nativeGradientId,
   nativeGradientMintOps,
+  nativeHexBody,
+  nativeHexRgb,
+  nativeSwatchMintOps,
   type GradientMintOptions,
   type NativeEffect,
   type NativeFeather,
@@ -232,6 +235,7 @@ export {
   type NativeInnerShadow,
   type NativeShadow,
   type NativeStroke,
+  type NativeSwatch,
 } from "./lowering.js";
 export {
   createObjectRegistry,
