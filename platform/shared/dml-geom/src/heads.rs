@@ -278,7 +278,6 @@ pub fn heads(
     (out, undrawn)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,5 +405,4 @@ mod tests {
         let rect = square();
         assert!(heads(&rect, Some(&end("triangle")), None, 1.0).0.is_empty());
     }
-
 }
