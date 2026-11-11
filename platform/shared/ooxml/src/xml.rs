@@ -107,34 +107,9 @@ pub fn general_ref_as<E: FromXmlError>(r: &BytesRef<'_>) -> Result<String, E> {
     }
 }
 
-/// Escape element text: `&`, `<` and `>`.
-pub fn escape_text(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
-/// Escape an attribute value (double-quoted): `&`, `<`, `>` and `"`.
-pub fn escape_attr(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
+/// Escape element text (`&`, `<`, `>`) and attribute values (and `"`):
+/// the engine's one XML escaper.
+pub use paged_fmt::xml::{escape_attr, escape_text};
 
 /// Undo the five predefined entities of an attribute value as written
 /// (`&amp;` last, so `&amp;lt;` reads as `&lt;`). Character references stay.

@@ -107,16 +107,9 @@ impl Report {
 
 /// `s` escaped for an XML attribute.
 pub(crate) fn escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            c if (c as u32) < 0x20 && c != '\t' => out.push(' '),
-            c => out.push(c),
-        }
-    }
-    out
+    let e = paged_fmt::xml::AttrEscape {
+        controls: paged_fmt::xml::Controls::Space,
+        ..Default::default()
+    };
+    paged_fmt::xml::escape_attr_with(s, e).into_owned()
 }

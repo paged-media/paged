@@ -289,7 +289,7 @@ fn rect(x0: f32, y0: f32, x1: f32, y1: f32, op: SubOp) -> SubPath {
 }
 
 fn circle(cx: f32, cy: f32, r: f32, op: SubOp) -> SubPath {
-    let k = 0.552_284_8 * r;
+    let k = paged_geom::KAPPA_F32 * r;
     let s = |px: f32, py: f32, ix: f32, iy: f32, ox: f32, oy: f32| PathAnchor {
         p: [px, py],
         i: [ix, iy],

@@ -64,7 +64,7 @@ const TEXT_PT: f32 = 18.0;
 
 /// Kappa — the Bézier handle length (as a fraction of the radius) that
 /// approximates a quarter circle. Standard circle-from-cubics constant.
-const KAPPA: f32 = 0.552_284_8;
+use paged_geom::KAPPA_F32 as KAPPA;
 
 /// One styled run pinned to the body font so shaping is deterministic.
 fn run(text: &str) -> Run {

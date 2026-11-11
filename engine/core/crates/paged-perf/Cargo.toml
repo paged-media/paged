@@ -17,6 +17,7 @@ paged-compose = { path = "../paged-compose" }
 # The planar-arrangement workload (engine ADR 1019).
 paged-model = { path = "../paged-model" }
 paged-mutate = { path = "../paged-mutate" }
+paged-geom = { path = "../paged-geom" }
 image = { workspace = true }
 serde_json = "1"
 

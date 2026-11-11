@@ -101,6 +101,17 @@ pub fn b_color_burn(cb: f32, cs: f32) -> f32 {
     }
 }
 
+/// Colour burn in the W3C order (Cb = 1 → 1 before Cs = 0 → 0): what SVG
+/// `feBlend` and CSS `mix-blend-mode` mean, as browsers draw it. Differs
+/// from [`b_color_burn`] only at white backdrop over black source.
+pub fn b_color_burn_w3c(cb: f32, cs: f32) -> f32 {
+    if cb >= 1.0 {
+        1.0
+    } else {
+        b_color_burn(cb, cs)
+    }
+}
+
 /// W3C "soft-light" (the Photoshop formula): for Cs ≤ 0.5
 /// `Cb − (1 − 2·Cs)·Cb·(1 − Cb)`, else `Cb + (2·Cs − 1)·(D(Cb) − Cb)`
 /// with `D(Cb) = ((16·Cb − 12)·Cb + 4)·Cb` for Cb ≤ 0.25, else √Cb.

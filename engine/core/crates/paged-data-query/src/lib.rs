@@ -295,14 +295,10 @@ pub fn stabilize(records: &RecordSet, keys: &[String]) -> RecordSet {
 
 // ── Content hashing (spec §8 ResolveStamp) ──────────────────────────────────
 
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+use paged_pixel::FNV1A_64_OFFSET as FNV_OFFSET;
 
 fn fnv_bytes(h: &mut u64, bytes: &[u8]) {
-    for &b in bytes {
-        *h ^= b as u64;
-        *h = h.wrapping_mul(FNV_PRIME);
-    }
+    *h = paged_pixel::fnv1a_64_update(*h, bytes);
 }
 
 fn hash_value(h: &mut u64, v: &Value) {

@@ -134,29 +134,36 @@ pub fn decode_data_url(url: &str) -> Option<Vec<u8>> {
     }
 }
 
+/// A `data:` URL's base64 body, read as browsers read it: either alphabet
+/// (standard or URL-safe), whitespace skipped, padding optional, anything
+/// after the first `=` ignored.
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(s.len() * 3 / 4);
-    let mut acc: u32 = 0;
-    let mut bits = 0;
-    for c in s.bytes() {
-        let v = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' | b'-' => 62,
-            b'/' | b'_' => 63,
-            b'=' => break,
-            b' ' | b'\n' | b'\r' | b'\t' => continue,
-            _ => return None,
-        };
-        acc = (acc << 6) | u32::from(v);
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((acc >> bits) as u8);
+    use base64::engine::{
+        general_purpose::GeneralPurpose, DecodePaddingMode, GeneralPurposeConfig,
+    };
+    use base64::Engine as _;
+    const LENIENT: GeneralPurpose = GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent)
+            .with_decode_allow_trailing_bits(true),
+    );
+    let body = s.split('=').next().unwrap_or("");
+    let mut clean = Vec::with_capacity(body.len());
+    for c in body.bytes() {
+        match c {
+            b' ' | b'\n' | b'\r' | b'\t' => {}
+            b'-' => clean.push(b'+'),
+            b'_' => clean.push(b'/'),
+            c => clean.push(c),
         }
     }
-    Some(out)
+    // A last group of one character carries no whole byte: drop it, as the
+    // bit-accumulating reader did.
+    if clean.len() % 4 == 1 {
+        clean.pop();
+    }
+    LENIENT.decode(&clean).ok()
 }
 
 /// Answers a document's fetches from the registered resources and `data:`

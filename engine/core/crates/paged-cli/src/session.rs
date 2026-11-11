@@ -324,10 +324,10 @@ fn emit(out: &mut impl Write, value: &Value) -> Result<()> {
 /// differently — which two copies of a hash fold eventually always do.
 pub fn digest_payload(m: &paged_canvas::CanvasModel) -> Value {
     let mut page_digests = serde_json::Map::new();
-    let mut combined: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a basis
+    let mut combined: u64 = paged_pixel::FNV1A_64_OFFSET;
     for page_id in m.page_ids() {
         let digest = m.display_list_for_page(page_id).map_or(0, |dl| dl.digest());
-        combined = combined.wrapping_mul(0x0000_0100_0000_01b3) ^ digest;
+        combined = combined.wrapping_mul(paged_pixel::FNV1A_64_PRIME) ^ digest;
         page_digests.insert(page_id.0.clone(), json!(digest));
     }
     json!({

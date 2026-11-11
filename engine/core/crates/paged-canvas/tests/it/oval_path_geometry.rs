@@ -32,7 +32,7 @@ use paged_canvas::channel::Mutation;
 use paged_canvas::element_selection::ElementId;
 use paged_canvas::{blank::blank_idml, CanvasModel, CanvasOptions, PageId};
 
-const KAPPA: f32 = 0.552_284_8;
+use paged_geom::KAPPA_F32 as KAPPA;
 
 fn model_with_two_ovals() -> (CanvasModel, String, String) {
     let mut model =

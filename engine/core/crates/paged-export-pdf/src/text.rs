@@ -337,10 +337,11 @@ pub fn write_fonts(
 /// The conventional 6-letter subset tag, derived deterministically
 /// from the glyph set (NOT random — determinism).
 fn subset_tag(gids: &[u16]) -> String {
-    let mut h: u32 = 0x811c_9dc5;
+    // FNV-1a's constants over whole glyph ids rather than bytes.
+    let mut h = paged_pixel::FNV1A_32_OFFSET;
     for g in gids {
         h ^= *g as u32;
-        h = h.wrapping_mul(0x0100_0193);
+        h = h.wrapping_mul(paged_pixel::FNV1A_32_PRIME);
     }
     let mut tag = String::with_capacity(6);
     let mut v = h;

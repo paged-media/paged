@@ -60,17 +60,7 @@ impl PatternTile {
     /// A tile, its content hashed.
     pub fn new(period: (f32, f32), items: Vec<PatternShape>, copies: Vec<(f32, f32)>) -> Self {
         use std::fmt::Write as _;
-        struct Fnv(u64);
-        impl std::fmt::Write for Fnv {
-            fn write_str(&mut self, s: &str) -> std::fmt::Result {
-                for b in s.bytes() {
-                    self.0 ^= u64::from(b);
-                    self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
-                }
-                Ok(())
-            }
-        }
-        let mut h = Fnv(0xcbf2_9ce4_8422_2325);
+        let mut h = paged_pixel::Fnv1a64::default();
         let _ = write!(h, "{period:?}{items:?}{copies:?}");
         PatternTile {
             period,

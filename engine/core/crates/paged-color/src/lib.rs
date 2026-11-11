@@ -243,14 +243,7 @@ impl IccTransform {
         // matches poppler's pdftoppm-equivalent output values.
         let mut output = [[0u8; 3]];
         self.inner.transform.transform_pixels(&input, &mut output);
-        let to_linear = |b: u8| -> f32 {
-            let s = b as f32 / 255.0;
-            if s <= 0.040_45 {
-                s / 12.92
-            } else {
-                ((s + 0.055) / 1.055).powf(2.4)
-            }
-        };
+        let to_linear = |b: u8| -> f32 { crate::math::srgb_to_linear(b as f32 / 255.0) };
         LinearRgb([
             to_linear(output[0][0]),
             to_linear(output[0][1]),
@@ -271,14 +264,7 @@ impl IccTransform {
         ];
         let mut output = [0u8; 3];
         self.inner.transform.convert(&input, &mut output);
-        let to_linear = |b: u8| -> f32 {
-            let s = b as f32 / 255.0;
-            if s <= 0.040_45 {
-                s / 12.92
-            } else {
-                ((s + 0.055) / 1.055).powf(2.4)
-            }
-        };
+        let to_linear = |b: u8| -> f32 { crate::math::srgb_to_linear(b as f32 / 255.0) };
         LinearRgb([
             to_linear(output[0]),
             to_linear(output[1]),

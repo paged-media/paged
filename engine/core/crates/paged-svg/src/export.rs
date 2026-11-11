@@ -185,11 +185,7 @@ struct Writer<'a> {
 }
 
 fn srgb(v: f32) -> u8 {
-    let s = if v <= 0.003_130_8 {
-        12.92 * v
-    } else {
-        1.055 * v.max(0.0).powf(1.0 / 2.4) - 0.055
-    };
+    let s = paged_colour_math::linear_to_srgb_f32(v);
     (s.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
@@ -208,20 +204,12 @@ fn blend_css(b: BlendMode) -> Option<&'static str> {
 }
 
 fn esc(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            c if (c as u32) < 0x20 && c != '\t' && c != '\n' => {}
-            c => out.push(c),
-        }
-    }
-    out
+    let e = paged_fmt::xml::AttrEscape {
+        controls: paged_fmt::xml::Controls::Drop { keep_newline: true },
+        ..Default::default()
+    };
+    paged_fmt::xml::escape_attr_with(s, e).into_owned()
 }
-
 fn apply(t: &Transform, x: f32, y: f32) -> (f32, f32) {
     let [a, b, c, d, e, f] = t.0;
     (a * x + c * y + e, b * x + d * y + f)

@@ -62,17 +62,7 @@ use crate::module::geometry::rewrite_tail_for_overprint;
 /// emission appended to `list` from `path_base` / `cmd_base` on.
 fn range_print(list: &paged_compose::DisplayList, path_base: usize, cmd_base: usize) -> u64 {
     use std::fmt::Write as _;
-    struct Fnv(u64);
-    impl std::fmt::Write for Fnv {
-        fn write_str(&mut self, s: &str) -> std::fmt::Result {
-            for b in s.bytes() {
-                self.0 ^= u64::from(b);
-                self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
-            }
-            Ok(())
-        }
-    }
-    let mut h = Fnv(0xcbf2_9ce4_8422_2325);
+    let mut h = paged_pixel::Fnv1a64::default();
     for cmd in &list.commands[cmd_base..] {
         let _ = write!(h, "c{cmd:?}");
     }

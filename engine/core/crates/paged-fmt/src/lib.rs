@@ -17,7 +17,8 @@
  */
 
 //! Formatting facts the built-in modules share (docs/adr/PM-0002): the
-//! calendar, the locale table and digit grouping. Standard library only.
+//! calendar, the locale table, digit grouping and XML escaping. Standard
+//! library only.
 //!
 //! What it is not: a number-format or date-format grammar. Each formatter
 //! keeps its own (Excel's in sheet-format, which slide's charts use too;
@@ -28,3 +29,4 @@
 pub mod calendar;
 pub mod digits;
 pub mod locale;
+pub mod xml;

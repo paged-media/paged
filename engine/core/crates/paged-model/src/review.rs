@@ -287,12 +287,7 @@ const AUTHOR_RGB: [[f32; 3]; 8] = [
 /// keeps one colour across documents and sessions.
 pub fn author_slot(author: Option<&str>) -> usize {
     let name = author.unwrap_or("");
-    // FNV-1a.
-    let mut h: u32 = 0x811c_9dc5;
-    for b in name.bytes() {
-        h ^= u32::from(b);
-        h = h.wrapping_mul(0x0100_0193);
-    }
+    let h = paged_pixel::fnv1a_32(name.as_bytes());
     (h as usize) % AUTHOR_RGB.len()
 }
 

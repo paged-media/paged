@@ -136,14 +136,10 @@ fn format_tag(format: Option<FileFormat>) -> &'static str {
     }
 }
 
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+use paged_pixel::FNV1A_64_OFFSET as FNV_OFFSET;
 
 fn fnv_bytes(h: &mut u64, bytes: &[u8]) {
-    for b in bytes {
-        *h ^= u64::from(*b);
-        *h = h.wrapping_mul(FNV_PRIME);
-    }
+    *h = paged_pixel::fnv1a_64_update(*h, bytes);
 }
 
 #[cfg(test)]

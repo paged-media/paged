@@ -68,16 +68,7 @@ pub fn is_container_part(name: &str) -> bool {
 /// `DisplayList::digest` — a fast change-detector, NOT a cryptographic or
 /// cross-version-persistent hash; it backs the data-loss guard, which only
 /// needs "did the IDML parts change since the last Paged save").
-fn fnv1a(seed: u64, bytes: &[u8]) -> u64 {
-    let mut h = seed;
-    for b in bytes {
-        h ^= u64::from(*b);
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
-}
-
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+use paged_pixel::{fnv1a_64_update as fnv1a, FNV1A_64_OFFSET as FNV_OFFSET};
 
 /// Content hash of the IDML parts of a package — every entry that is NOT a
 /// `paged/` part, NOT the `manifest.json`, and NOT the `mimetype` magic.

@@ -105,13 +105,10 @@ struct Fnv(u64);
 
 impl Fnv {
     fn new() -> Self {
-        Fnv(0xcbf2_9ce4_8422_2325)
+        Fnv(paged_pixel::FNV1A_64_OFFSET)
     }
     fn f(&mut self, v: f32) {
-        for b in v.to_bits().to_le_bytes() {
-            self.0 ^= u64::from(b);
-            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
-        }
+        self.0 = paged_pixel::fnv1a_64_update(self.0, &v.to_bits().to_le_bytes());
     }
     fn color(&mut self, c: Color) {
         self.f(c.r);

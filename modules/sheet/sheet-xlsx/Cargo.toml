@@ -12,6 +12,7 @@ description = "paged.sheet XLSX I/O (spec §10): SpreadsheetML parse over the sh
 workspace = true
 
 [dependencies]
+paged-pixel = { path = "../../../engine/core/crates/paged-pixel" }
 sheet-core = { path = "../sheet-core" }
 # DOCUMENTED DEVIATION from the spec §4 dependency table (which lists xlsx ->
 # core only). The M1 style-map track (spec §8.3) has `VisualStyles` implement

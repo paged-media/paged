@@ -282,7 +282,7 @@ fn formats_xml() -> String {
     for (id, name, blocks) in FORMATS {
         out.push_str(&format!(
             "<CrossReferenceFormat Self=\"{id}\" Name=\"{}\" AppliedCharacterStyle=\"n\">",
-            name.replace('&', "&amp;")
+            paged_fmt::xml::escape_attr(name)
         ));
         for (n, (kind, text)) in blocks.iter().enumerate() {
             out.push_str(&format!(

@@ -16537,11 +16537,7 @@ fn working_color_of_with(
 /// Linear RGB → `#rrggbb` (sRGB-encoded, the wire convention).
 fn rgb_to_hex(rgb: [f32; 3]) -> String {
     let to_byte = |v: f32| -> u8 {
-        let s = if v <= 0.003_130_8 {
-            12.92 * v
-        } else {
-            1.055 * v.powf(1.0 / 2.4) - 0.055
-        };
+        let s = paged_color::math::linear_to_srgb(v);
         (s.clamp(0.0, 1.0) * 255.0).round() as u8
     };
     format!(

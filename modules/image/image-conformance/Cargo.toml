@@ -12,6 +12,7 @@ description = "TEST-ONLY (spec §4): scalar reference kernels, gpu↔ref parity 
 workspace = true
 
 [dependencies]
+paged-colour-math = { path = "../../../engine/core/crates/paged-colour-math" }
 # This crate IS the dev-dependency tree: it's the only crate allowed to
 # activate image-kernels' `reference` feature (spec §4 dep rule 2; CI
 # proves no production crate reaches it via cargo-tree).
@@ -34,6 +35,7 @@ bytemuck = { workspace = true }
 paged-test-resources = { workspace = true }
 
 [dev-dependencies]
+paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 proptest = { workspace = true }
 # The oracle lanes (PSD composite, Photoshop replay, journal properties)
 # drive the LAYER STACK the bundle ships, and the layer fold's cache

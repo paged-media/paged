@@ -220,20 +220,13 @@ pub fn render_dxf(d: &DifferentialFormat, p: &str) -> String {
 
 /// A stable id (≥ 164 + 2000) for a differential number format code.
 fn dxf_num_fmt_id(code: &str) -> u32 {
-    let mut h: u32 = 0x811c_9dc5;
-    for b in code.bytes() {
-        h = (h ^ u32::from(b)).wrapping_mul(0x0100_0193);
-    }
-    2164 + h % 20_000
+    2164 + paged_pixel::fnv1a_32(code.as_bytes()) % 20_000
 }
 
 /// A deterministic `{GUID}` for a rule's x14 link.
 fn rule_guid(sheet: SheetId, b: usize, r: usize, rule: &CfRule) -> String {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let seed = format!("{sheet}/{b}/{r}/{}/{:?}", rule.priority, rule.kind);
-    for byte in seed.bytes() {
-        h = (h ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
-    }
+    let h = paged_pixel::fnv1a_64(seed.as_bytes());
     let h2 = h.rotate_left(29) ^ 0x9e37_79b9_7f4a_7c15;
     format!(
         "{{{:08X}-{:04X}-4{:03X}-8{:03X}-{:012X}}}",

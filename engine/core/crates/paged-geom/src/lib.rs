@@ -38,6 +38,7 @@ pub const KAPPA_F32: f32 = KAPPA as f32;
 pub mod affine;
 pub mod affine64;
 pub mod bezier_conv;
+pub mod ellipse;
 pub mod flatten;
 pub mod kurbo_kernel;
 pub mod orientation;
@@ -46,6 +47,8 @@ pub mod planar;
 mod planar_dcel;
 pub mod stroke_kernel;
 pub mod trim;
+
+pub use ellipse::{arc_cubics, arc_handle, oval_anchors};
 
 #[cfg(test)]
 mod tests {

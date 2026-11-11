@@ -12,7 +12,7 @@ workspace = true
 
 [features]
 default = ["render"]
-render = ["dep:paged-renderer", "dep:image", "dep:paged-compose", "dep:anyhow"]
+render = ["dep:paged-renderer", "dep:paged-raster", "dep:image", "dep:paged-compose", "dep:anyhow"]
 
 [dependencies]
 paged-blend = { path = "../paged-blend" }
@@ -21,6 +21,7 @@ paged-scene = { path = "../paged-scene" }
 paged-mutate = { path = "../paged-mutate" }
 paged-wire = { path = "../paged-wire" }
 paged-renderer = { path = "../paged-renderer", optional = true }
+paged-raster = { path = "../paged-raster", optional = true }
 paged-compose = { path = "../paged-compose", optional = true }
 anyhow = { workspace = true, optional = true }
 image = { workspace = true, optional = true }

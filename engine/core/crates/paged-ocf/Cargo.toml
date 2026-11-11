@@ -1,0 +1,16 @@
+[package]
+name = "paged-ocf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The one writer of OCF-style zip packages (IDML, .paged): `mimetype` first and stored, every timestamp 1980-01-01, parts stored or deflated. Depends on zip alone, so the generators and the repository link it without the model."
+
+[lints]
+workspace = true
+
+[dependencies]
+zip = { workspace = true }
+# zip's `deflate-flate2` names no backend: list flate2 beside it (see the root Cargo.toml).
+flate2 = { workspace = true }

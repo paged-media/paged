@@ -11,6 +11,8 @@ description = "Import parser (ZIP + XML source packages). Produces a typed AST o
 workspace = true
 
 [dependencies]
+# The affine product (one owner: paged-geom).
+paged-geom = { path = "../paged-geom" }
 paged-scene = { workspace = true }
 # N5 — the Paged model types live here (parser depends on the model, imports
 # into it). idml-import re-exports them so its dependents are untouched.

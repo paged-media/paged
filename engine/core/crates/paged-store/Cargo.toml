@@ -11,6 +11,9 @@ description = "Native Paged document codec — (de)serialize the Paged model to/
 workspace = true
 
 [dependencies]
+# The OCF package writer (one owner).
+paged-ocf = { path = "../paged-ocf" }
+paged-fmt = { path = "../paged-fmt" }
 paged-scene = { path = "../paged-scene" }
 paged-model = { path = "../paged-model" }
 blake3 = "1"

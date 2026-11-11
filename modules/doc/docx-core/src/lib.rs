@@ -739,44 +739,12 @@ impl NoteProps {
 /// `upperRoman`, `lowerLetter`, `upperLetter` (Word's letters repeat:
 /// 27 is `AA`). `None` for any other format.
 pub fn format_note_number(n: u32, fmt: Option<&str>) -> Option<String> {
-    fn roman(mut n: u32) -> String {
-        const T: &[(u32, &str)] = &[
-            (1000, "m"),
-            (900, "cm"),
-            (500, "d"),
-            (400, "cd"),
-            (100, "c"),
-            (90, "xc"),
-            (50, "l"),
-            (40, "xl"),
-            (10, "x"),
-            (9, "ix"),
-            (5, "v"),
-            (4, "iv"),
-            (1, "i"),
-        ];
-        let mut s = String::new();
-        for (v, r) in T {
-            while n >= *v {
-                s.push_str(r);
-                n -= v;
-            }
-        }
-        s
-    }
-    fn letter(n: u32) -> String {
-        if n == 0 {
-            return String::new();
-        }
-        let c = char::from(b'a' + ((n - 1) % 26) as u8);
-        std::iter::repeat_n(c, ((n - 1) / 26 + 1) as usize).collect()
-    }
     Some(match fmt.unwrap_or("decimal") {
         "decimal" => n.to_string(),
-        "lowerRoman" => roman(n),
-        "upperRoman" => roman(n).to_uppercase(),
-        "lowerLetter" => letter(n),
-        "upperLetter" => letter(n).to_uppercase(),
+        "lowerRoman" => paged_model::roman(n, true),
+        "upperRoman" => paged_model::roman(n, false),
+        "lowerLetter" => paged_model::repeated_letters(n, true),
+        "upperLetter" => paged_model::repeated_letters(n, false),
         _ => return None,
     })
 }

@@ -83,6 +83,7 @@ futures-channel = { version = "0.3" }
 naga = { version = "30", features = ["wgsl-in"] }
 
 [dev-dependencies]
+paged-geom = { path = "../paged-geom" }
 paged-test-resources.workspace = true
 # The placed-SVG reference lane (tests/it/svg_reference.rs): ΔE2000 and
 # PNG reading.

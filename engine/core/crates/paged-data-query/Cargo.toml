@@ -16,6 +16,7 @@ name = "data_query"
 workspace = true
 
 [dependencies]
+paged-pixel = { path = "../paged-pixel" }
 paged-data-core = { path = "../paged-data-core" }
 thiserror = "2"
 smallvec = { version = "1", features = ["serde"] }

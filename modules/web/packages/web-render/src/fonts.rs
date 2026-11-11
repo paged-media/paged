@@ -109,12 +109,8 @@ pub fn font_ctx() -> FontContext {
 
 /// FNV-1a over the face bytes and the family override — the idempotence key.
 fn content_key(bytes: &[u8], family: Option<&str>) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes.iter().chain(family.unwrap_or("").as_bytes()) {
-        h ^= u64::from(*b);
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    }
-    h
+    let h = paged_pixel::fnv1a_64(bytes);
+    paged_pixel::fnv1a_64_update(h, family.unwrap_or("").as_bytes())
 }
 
 /// Register a face (TrueType / OpenType / WOFF / WOFF2 bytes; a collection

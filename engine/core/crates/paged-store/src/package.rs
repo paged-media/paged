@@ -26,7 +26,7 @@
 //! produces documents natively (paged.pdf's mapper, paged.doc's section
 //! skeleton) so the container format has one writer.
 
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 
 use paged_scene::Document;
 
@@ -78,13 +78,7 @@ fn backing() -> String {
     ))
 }
 
-fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
+use paged_fmt::xml::escape_attr;
 fn designmap(name: &str) -> String {
     xml(&format!(
         "<?aid style=\"50\" type=\"document\" readerVersion=\"6.0\" featureSet=\"257\" product=\"20.0(32)\"?>\n\
@@ -190,20 +184,12 @@ pub fn wrap_document_with_parts(
     // InDesign's GeometricBounds order is "y0 x0 y1 x1".
     let bounds = format!("0 0 {fallback_height_pt} {fallback_width_pt}");
 
-    let mut zip = zip::write::ZipWriter::new(Cursor::new(Vec::<u8>::new()));
-    let stored =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    let deflated = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-
-    // In-memory writes are infallible; `expect` documents the invariant.
-    let mut put = |name: &str, body: &[u8], stored_entry: bool| {
-        let opts = if stored_entry { stored } else { deflated };
-        zip.start_file(name, opts).expect("zip start_file");
-        zip.write_all(body).expect("zip write_all");
-    };
     // mimetype first + STORED (OCF convention): the sniff keys on it.
-    put("mimetype", MIME.as_bytes(), true);
+    // In-memory writes are infallible; `expect` documents the invariant.
+    let mut zip = paged_ocf::OcfZip::new(MIME.as_bytes()).expect("zip mimetype");
+    let mut put = |name: &str, body: &[u8], stored_entry: bool| {
+        zip.put(name, body, stored_entry).expect("zip part");
+    };
     put("designmap.xml", designmap(name).as_bytes(), false);
     put("META-INF/container.xml", container().as_bytes(), false);
     put("Resources/Graphic.xml", graphic().as_bytes(), false);
@@ -238,5 +224,5 @@ pub fn wrap_document_with_parts(
         }
     }
 
-    Ok(zip.finish().expect("zip finish").into_inner())
+    Ok(zip.finish().expect("zip finish"))
 }

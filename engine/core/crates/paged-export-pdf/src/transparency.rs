@@ -137,12 +137,7 @@ pub use paged_compose::mask::{
 };
 
 fn short_hash(s: &str) -> u32 {
-    let mut h: u32 = 0x811c_9dc5;
-    for b in s.as_bytes() {
-        h ^= *b as u32;
-        h = h.wrapping_mul(0x0100_0193);
-    }
-    h
+    paged_pixel::fnv1a_32(s.as_bytes())
 }
 
 /// A rasterised blurred-alpha stamp in the path's page space,
