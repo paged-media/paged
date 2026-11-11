@@ -16,10 +16,10 @@
     "bench": "bun ./test/bezier.bench.ts && bun ./test/compound.bench.ts && bun ./test/polygon.bench.ts && bun ./test/rdp.bench.ts"
   },
   "dependencies": {
-    "@paged-media/helpers": "workspace:*",
-    "@paged-media/plugin-sdk": "workspace:*"
+    "@paged-media/helpers": "workspace:*"
   },
   "devDependencies": {
+    "@paged-media/plugin-sdk": "workspace:*",
     "fast-check": "^4.10.2",
     "typescript": "catalog:",
     "@types/bun": "catalog:",

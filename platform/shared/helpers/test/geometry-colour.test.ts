@@ -18,7 +18,9 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { linearToSrgb, srgbToLinear } from "../src/colour.ts";
+import { nativeHexRgb } from "@paged-media/plugin-sdk";
+
+import { hexToRgb, linearToSrgb, srgbToLinear } from "../src/colour.ts";
 import { KAPPA } from "../src/geometry.ts";
 
 describe("KAPPA", () => {
@@ -37,5 +39,21 @@ describe("the sRGB transfer curve", () => {
   it("round-trips every 8-bit value", () => {
     for (let i = 0; i <= 255; i++)
       expect(Math.round(linearToSrgb(srgbToLinear(i / 255)) * 255)).toBe(i);
+  });
+});
+
+describe("hexToRgb", () => {
+  it("reads every form the SDK's nativeHexRgb reads, to the same channels", () => {
+    for (const hex of [
+      "#abc",
+      "ABC",
+      " #a1B2c3 ",
+      "000000",
+      "#12345",
+      "",
+      "#ggg",
+      "#ffffff",
+    ])
+      expect(hexToRgb(hex)).toEqual(nativeHexRgb(hex));
   });
 });

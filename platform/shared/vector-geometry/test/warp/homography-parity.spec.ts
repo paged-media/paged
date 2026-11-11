@@ -16,13 +16,17 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The four-point homography has one TypeScript solve (the extension SDK's
-// `transform-box`, which vector-geometry delegates to) and one Rust solve
-// (`paged_warp::from_quads`). Both are held to the same numbers here and in
-// `engine/core/crates/paged-warp/tests/ts_parity.rs`, so the editor's
-// preview and the engine's warp cannot drift apart.
+// The four-point homography is solved in three places that cannot share
+// code across their boundaries: this package (`homographyFromQuads`), the
+// public extension SDK (`transform-box`, which cannot import platform/shared)
+// and the engine (`paged_warp::from_quads`). All three are held to the same
+// numbers, here and in `engine/core/crates/paged-warp/tests/ts_parity.rs`,
+// so the editor's preview, an extension's box and the engine's warp cannot
+// drift apart.
 
 import { describe, expect, it } from "bun:test";
+
+import { homographyFromQuads as sdkHomography } from "@paged-media/plugin-sdk";
 
 import { homographyFromQuads } from "../../src/index.ts";
 
@@ -69,6 +73,11 @@ describe("homography parity with paged-warp", () => {
       )!;
       expect(h).not.toBeNull();
       h.forEach((v, i) => expect(Math.abs(v - c.h[i]!)).toBeLessThan(1e-12));
+      const sdk = sdkHomography(
+        RECT.map((p) => [p[0], p[1]]) as never,
+        c.to.map((p) => [p[0], p[1]]) as never,
+      )!;
+      sdk.forEach((v, i) => expect(Math.abs(v - c.h[i]!)).toBeLessThan(1e-12));
     }
   });
 });

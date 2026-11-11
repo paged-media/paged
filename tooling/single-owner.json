@@ -420,8 +420,9 @@
     },
     {
       "name": "homography",
-      "description": "solve a four-point homography with the extension SDK's transform-box (TS; @paged-media/vector-geometry delegates to it) or paged_warp::from_quads (Rust); a parity test holds the two to the same numbers",
+      "description": "solve a four-point homography with platform/shared/vector-geometry (TS), the SDK's transform-box (the public SDK cannot import it) or paged_warp::from_quads (Rust); a parity test holds the three to the same numbers",
       "owner": [
+        "platform/shared/vector-geometry/src/warp/homography.ts",
         "platform/extensions/packages/plugin-sdk/src/transform-box.ts",
         "engine/core/crates/paged-warp/"
       ],

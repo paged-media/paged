@@ -21,13 +21,17 @@
 // for a field's round trip and an interchange preview, never authoritative
 // (the colour-managed path is the engine's).
 
-import { nativeHexRgb } from "@paged-media/plugin-sdk";
-
 /** `#rgb` / `#rrggbb` (the `#` optional) to RGB channels, or null. The
- *  reader is the lowering kit's (`nativeHexRgb`, plugin-sdk), the one hex
- *  parser of the SDK, the built-ins and the editor. */
-export const hexToRgb: (hex: string) => [number, number, number] | null =
-  nativeHexRgb;
+ *  twin of the public SDK's `nativeHexRgb` (same forms, held equal by
+ *  test/geometry-colour.test.ts): this package stays free of the SDK at run time, so
+ *  a worker or a Node test that reads a hex does not load the contract. */
+export function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const body = m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1];
+  const n = Number.parseInt(body, 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
 
 /** One channel rounded and clamped to 0..255. NaN stays NaN: the caller's
  *  input was not a colour, and a guard upstream must say so. */

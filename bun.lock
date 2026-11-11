@@ -856,9 +856,9 @@
       "version": "0.1.0-canary.0",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
-        "@paged-media/plugin-sdk": "workspace:*",
       },
       "devDependencies": {
+        "@paged-media/plugin-sdk": "workspace:*",
         "@types/bun": "catalog:",
         "fast-check": "^4.10.2",
         "mitata": "^1.0.34",
