@@ -57,3 +57,22 @@ hold such a distort live is a later work package (WP3.2).
   as the Selection tool's handles do.
 - The image module drives the same box for a layer through `host.transformBox` (extensions ADR
   338) and resamples with `geom.warp_projective`.
+
+## Amendment (2026-11-11): distort and perspective are live
+
+The engine has the effect this ADR waited for: the live Free Distort of `paged-vector-fx`
+(engine ADR 1042), an entry of the object effect stack. Free Distort and Perspective now write it
+instead of rewriting the path:
+
+- One map for both: the box's new quad as one projective map (Perspective mirrors the partner
+  corner, as before). The bilinear map Free Distort used is gone, so the tool and the effect agree
+  (an edge stays straight, as in Illustrator).
+- Each target gets a `freeDistort` entry at the head of its `frameEffectStack`: the four corners
+  of its tight path box (`vector-geometry` `runBox`, the box `free_distort` maps) taken through its
+  item transform, the map, and back into the box's unit square (`liveDistortBatchFor`). An item
+  turned or scaled distorts exactly. A head `freeDistort` already there is composed with, so a
+  second drag continues the first; other entries stay behind it.
+- One `setElementProperty` per target in one batch, one undo step. The path keeps its anchors; the
+  Appearance panel lists the entry and removing it takes the distortion off.
+- Refused, with the reason on the canvas: text frames, placed images, groups (as before) and an
+  item with no area (a straight line, whose box the effect cannot map).

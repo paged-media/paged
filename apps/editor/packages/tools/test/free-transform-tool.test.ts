@@ -20,8 +20,9 @@
 // Free Transform (editor ADR 295) through the gesture DSL against the
 // editor-shaped fake: each arm and its modifiers become the right ENGINE
 // gesture (translate / scale / rotate / shear, one commit each), and the
-// distort / perspective arms one framePath batch (one commit) with every
-// anchor mapped — or a refusal with nothing written.
+// distort / perspective arms one live Free Distort write per target (one
+// commit) whose corners make the box's map — or a refusal with nothing
+// written.
 
 import { describe, expect, it } from "bun:test";
 
@@ -30,8 +31,8 @@ import { covers, expectNoCommit, expectOneCommit } from "@paged-media/test-kit";
 
 import {
   createFreeTransformHandler,
-  distortBatchFor,
   freeTransformBoxOf,
+  liveDistortBatchFor,
   referencePointOf,
 } from "../src";
 import { harness, leaves } from "./support";
@@ -219,7 +220,27 @@ describe("Free Transform tool [editor-tools.free-transform]", () => {
     });
   });
 
-  it("Cmd on a corner free-distorts the path: one framePath, the corner moved, no gesture @level:gesture", async () => {
+  /** The corners of the live Free Distort a commit wrote. */
+  const cornersOf = (fake: ReturnType<typeof setup>["fake"]) => {
+    const write = leaves(fake).find((m) => m.op === "setElementProperty") as {
+      args: {
+        path: string;
+        value: {
+          type: string;
+          value: { entries: { kind: string; corners: number[][] }[] };
+        };
+      };
+    };
+    expect(write.args.path).toBe("frameEffectStack");
+    expect(write.args.value.type).toBe("effectStack");
+    const [entry] = write.args.value.value.entries;
+    expect(entry!.kind).toBe("freeDistort");
+    return entry!.corners.map((c) =>
+      c.map((v) => Math.round(v * 1e6) / 1e6 + 0),
+    );
+  };
+
+  it("Cmd on a corner free-distorts live: one effect-stack write, the corner moved in the box's unit square, no gesture @level:gesture", async () => {
     const { fake, g } = setup([POLY]);
     const mark = fake.mark();
     await g
@@ -228,17 +249,13 @@ describe("Free Transform tool [editor-tools.free-transform]", () => {
       .settle();
     expect(fake.gestureMessages()).toEqual([]);
     expectOneCommit(fake, mark);
-    const write = leaves(fake).find((m) => m.op === "setElementProperty") as {
-      args: {
-        path: string;
-        value: { value: { anchors: { anchor: number[] }[] } };
-      };
-    };
-    expect(write.args.path).toBe("framePath");
-    const a = write.args.value.value.anchors.map((x) => x.anchor);
-    expect(a[2]).toEqual([340, 240]);
-    expect(a[0]).toEqual([100, 100]);
-    expect(a[1]).toEqual([300, 100]);
+    // The path box is 100..300 × 100..200: (340, 240) is (1.2, 1.4).
+    expect(cornersOf(fake)).toEqual([
+      [0, 0],
+      [1, 0],
+      [1.2, 1.4],
+      [0, 1],
+    ]);
   });
 
   it("Cmd+Alt+Shift on a corner is perspective: the partner corner mirrors @level:gesture", async () => {
@@ -247,15 +264,10 @@ describe("Free Transform tool [editor-tools.free-transform]", () => {
       .tool(createFreeTransformHandler)
       .drag({ from: [300, 100], to: [340, 104], mods: ["cmd", "alt", "shift"] })
       .settle();
-    const write = leaves(fake).find((m) => m.op === "setElementProperty") as {
-      args: { value: { value: { anchors: { anchor: number[] }[] } } };
-    };
-    const a = write.args.value.value.anchors.map((x) =>
-      x.anchor.map((v) => Math.round(v * 1e6) / 1e6),
-    );
-    expect(a[1]).toEqual([340, 100]);
-    expect(a[0]).toEqual([60, 100]);
-    expect(a[2]).toEqual([300, 200]);
+    const c = cornersOf(fake);
+    expect(c[1]).toEqual([1.2, 0]);
+    expect(c[0]).toEqual([-0.2, 0]);
+    expect(c[2]).toEqual([1, 1]);
   });
 
   it("the Free Distort mode distorts without Cmd", async () => {
@@ -345,22 +357,62 @@ describe("Free Transform geometry [editor-tools.free-transform]", () => {
     expect(referencePointOf(q, "c")).toEqual([200, 150]);
   });
 
-  it("the distort batch maps anchors AND handles through the item's own transform", () => {
-    const path = {
+  it("the live distort goes through the item's own transform and continues a head Free Distort", () => {
+    // A 100 × 50 path box at inner (0, 0); inner (0, 0) is page (100, 50).
+    const target = {
       id: POLY,
-      anchors: [{ anchor: [0, 0], left: [-5, 0], right: [5, 0] }],
-      subpathStarts: [],
-      // Inner (0,0) is page (100, 50).
+      path: {
+        anchors: square(0, 0, 100, 50),
+        subpathStarts: [],
+      } as never,
       itemTransform: [1, 0, 0, 1, 100, 50],
-    } as unknown as PathAnchorsResult;
-    const batch = distortBatchFor([path], ([x, y]) => [x * 2, y + 10]) as {
+      entries: [
+        {
+          kind: "freeDistort",
+          enabled: true,
+          corners: [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0.5, 1],
+          ],
+        },
+        { kind: "roughen", enabled: true },
+      ],
+    };
+    // Page x doubled about the page origin.
+    const batch = liveDistortBatchFor([target], ([x, y]) => [x * 2, y]) as {
       args: {
-        value: { value: { anchors: { anchor: number[]; left: number[] }[] } };
+        value: { value: { entries: { kind: string; corners?: number[][] }[] } };
       };
     };
-    const a = batch.args.value.value.anchors[0]!;
-    // page (100,50) → (200,60) → inner (100,10); left (95,50) → (190,60) → (90,10).
-    expect(a.anchor).toEqual([100, 10]);
-    expect(a.left).toEqual([90, 10]);
+    const entries = batch.args.value.value.entries;
+    expect(entries.map((e) => e.kind)).toEqual(["freeDistort", "roughen"]);
+    // Inner (0,0) → page (100,50) → (200,50) → inner (100,0) → u 1.
+    // Inner (50,50) (the head's 4th corner) → page (150,100) → (300,100)
+    // → inner (200,50) → (2, 1).
+    expect(entries[0]!.corners).toEqual([
+      [1, 0],
+      [3, 0],
+      [3, 1],
+      [2, 1],
+    ]);
+  });
+
+  it("a target with no area (a straight line) gets no distort", () => {
+    const line = {
+      id: POLY,
+      path: {
+        anchors: [
+          { anchor: [0, 0], left: [0, 0], right: [0, 0] },
+          { anchor: [100, 0], left: [100, 0], right: [100, 0] },
+        ],
+        subpathStarts: [],
+        subpathOpen: [true],
+      } as never,
+      itemTransform: null,
+      entries: [],
+    };
+    expect(liveDistortBatchFor([line], (p) => p)).toBeNull();
   });
 });

@@ -364,6 +364,10 @@ Status (draw items, one line each; updated as they land):
 - Scissors: DONE 2026-11-11. One tool, the host's (`paged.tool.scissors`, every context): any point,
   through the path's transform (`@paged-media/vector-tools` `applyScissorsAt`, also behind draw's
   `scissorsAt` command). Draw's "Scissors (any point)" tool and handler are gone (draw ADR 359 amended).
+- Free Distort / Perspective: DONE 2026-11-11. The host's Free Transform writes the engine's live
+  Free Distort (`paged-vector-fx` `free_distort`, the head `freeDistort` entry of the object effect
+  stack; `liveDistortBatchFor`), not a rewritten path; both modes are the one projective map (the
+  bilinear Free Distort is gone). Editor ADR 295 amended.
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot
