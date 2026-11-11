@@ -3794,7 +3794,7 @@ export function createBundleHost(
       // Engine ADR 1031 (protocol v77). The engine PLANS (a read) and the
       // plan's one batch goes through `mutate`, so the write gate, the
       // namespace check and the undo step are the ordinary ones.
-      const empty = { items: 0, notes: [] };
+      const empty = { items: 0, losses: [] };
       const { pageId: wanted, ...svgOptions } = options;
       try {
         const pageId = wanted ?? (await activePageId());
@@ -3840,7 +3840,7 @@ export function createBundleHost(
     async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
       // Engine ADR 1031 (protocol v77): a pure read.
       requireDocRead("document.exportSvg");
-      const empty = { items: 0, notes: [] };
+      const empty = { items: 0, losses: [] };
       const { pageId: wanted, elementIds, ...options } = request;
       try {
         const pageId = wanted ?? (await activePageId());

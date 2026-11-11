@@ -8,6 +8,7 @@ members = [
     "crates/paged-text",
     "crates/paged-color",
     "crates/paged-pixel",
+    "crates/paged-loss",
     "crates/paged-warp",
     "crates/paged-math",
     "crates/paged-colour-math",
@@ -313,6 +314,7 @@ serde_json = "1"
 # The other crates spell the same path directly (`path = "../paged-model"`);
 # both resolve to the one package.
 paged-model = { path = "crates/paged-model" }
+paged-loss = { path = "crates/paged-loss" }
 paged-scene = { path = "crates/paged-scene" }
 paged-store = { path = "crates/paged-store" }
 paged-pdf-annots = { path = "crates/paged-pdf-annots" }

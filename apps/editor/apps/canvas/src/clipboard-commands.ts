@@ -646,12 +646,12 @@ export async function pasteSvg(
     deps.report("error", refusedText(verb, refusal));
     return reply;
   }
-  for (const n of plan.report.notes) {
+  for (const n of plan.report.losses) {
     deps.report(
       "warning",
       t(M.svgApproximated, {
         verb: verbText(verb),
-        message: n.message,
+        message: n.message ?? n.code,
         count: n.count,
       }),
     );

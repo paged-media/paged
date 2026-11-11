@@ -47,7 +47,7 @@ fn loss(page: &pdf_import::vectors::ir::VectorPage, code: &str) -> u32 {
     page.losses
         .iter()
         .find(|l| l.code == code)
-        .map_or(0, |l| l.count)
+        .map_or(0, |l| l.count as u32)
 }
 
 #[test]

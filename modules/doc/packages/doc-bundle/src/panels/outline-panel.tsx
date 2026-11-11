@@ -28,6 +28,7 @@
 // (pure, unit-tested). No DOCX semantics here (CLAUDE.md hard rule).
 
 import type { DockEdge, PanelProps } from "@paged-media/plugin-api";
+import { lossDiagnosticSeverity } from "@paged-media/plugin-sdk";
 import { subscribeOf, useLive } from "@paged-media/react-live";
 import { t as tActive, useStrings } from "@paged-media/strings";
 import * as React from "react";
@@ -427,7 +428,7 @@ export function makeOutlinePanel(
               cap={DIAGNOSTICS_CAP}
               render={(d, i) => (
                 <div key={i} data-doc-diagnostic={d.severity} style={dotRow}>
-                  <SeverityDot severity={d.severity} />
+                  <SeverityDot severity={lossDiagnosticSeverity(d.severity)} />
                   <span style={clamp3} title={d.message}>
                     {d.message}
                   </span>

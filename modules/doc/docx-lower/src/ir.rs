@@ -923,31 +923,35 @@ impl Default for LoweredSection {
     }
 }
 
-/// An honest diagnostic (ADR-007) — a construct not lowered natively this pass.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Diagnostic {
-    /// `"info" | "warning" | "error"`.
-    pub severity: String,
-    pub message: String,
-    /// The fidelity tier the construct belongs to (0–4).
-    pub tier: u8,
-}
+/// An honest diagnostic (ADR-007): a construct not lowered natively this
+/// pass, as the shared [`paged_loss::LossEntry`] (capability register C18).
+/// Word gives no code, so the code is the fidelity tier the construct
+/// belongs to (`docx.tier0` … `docx.tier4`) and the sentence is the
+/// message; the severity says whether it was left out (`dropped`), carried
+/// with a difference (`approximated`) or is only worth knowing (`info`).
+pub type Diagnostic = paged_loss::LossEntry;
+pub use paged_loss::LossSeverity;
 
-impl Diagnostic {
-    pub fn info(message: impl Into<String>, tier: u8) -> Self {
-        Diagnostic {
-            severity: "info".into(),
-            message: message.into(),
-            tier,
-        }
+/// The constructors of a [`Diagnostic`].
+pub mod diag {
+    use super::{Diagnostic, LossSeverity};
+
+    fn entry(severity: LossSeverity, message: impl Into<String>, tier: u8) -> Diagnostic {
+        Diagnostic::new(format!("docx.tier{tier}"), severity, message)
     }
 
-    pub fn warning(message: impl Into<String>, tier: u8) -> Self {
-        Diagnostic {
-            severity: "warning".into(),
-            message: message.into(),
-            tier,
-        }
+    /// Worth knowing; nothing visible changed.
+    pub fn info(message: impl Into<String>, tier: u8) -> Diagnostic {
+        entry(LossSeverity::Info, message, tier)
+    }
+
+    /// Carried, with a visible difference from Word.
+    pub fn warning(message: impl Into<String>, tier: u8) -> Diagnostic {
+        entry(LossSeverity::Approximated, message, tier)
+    }
+
+    /// Not shown at all (the source keeps it).
+    pub fn dropped(message: impl Into<String>, tier: u8) -> Diagnostic {
+        entry(LossSeverity::Dropped, message, tier)
     }
 }

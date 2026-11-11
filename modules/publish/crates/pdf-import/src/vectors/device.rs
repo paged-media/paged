@@ -66,7 +66,7 @@ struct Open {
 
 pub(super) struct Collector {
     stack: Vec<Open>,
-    losses: BTreeMap<&'static str, u32>,
+    losses: BTreeMap<String, u32>,
     page: Rect,
     opts: ReadOptions,
     depth: u32,
@@ -112,18 +112,18 @@ impl Collector {
         let losses = self
             .losses
             .into_iter()
-            .map(|(code, count)| Loss { code, count })
+            .map(|(code, count)| Loss::counted(code, count as usize))
             .collect();
         (root, losses)
     }
 
     fn loss(&mut self, code: &'static str) {
-        *self.losses.entry(code).or_default() += 1;
+        *self.losses.entry(code.to_string()).or_default() += 1;
     }
 
     fn absorb(&mut self, losses: Vec<Loss>) {
         for l in losses {
-            *self.losses.entry(l.code).or_default() += l.count;
+            *self.losses.entry(l.code).or_default() += l.count as u32;
         }
     }
 

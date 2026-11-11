@@ -51,6 +51,7 @@ import type {
   SvgExportOptions,
   SvgImportOptions,
   SvgReport,
+  LossEntry,
 } from "./wire.js";
 import type {
   CanvasPointerEvent,
@@ -3210,21 +3211,10 @@ export interface DataProvidersSurface {
 // ------------------------------------------------------------ loss report
 //
 // What a source carried that the target could not keep (capability register
-// C18): one shape for every importer, exporter and mapper, mirrored by the
-// engine's `paged_model::report::{LossEntry, LossReport}`. A consumer reads
-// any producer's report with the same code.
-
-/** One kind of loss. */
-export interface LossEntry {
-  /** A stable code: an annotation type, a mapper code (`shading.sampled`). */
-  code: string;
-  /** How many times it happened. */
-  count: number;
-  /** The 0-based pages it stood on, when the source has pages. */
-  pages?: readonly number[];
-  /** Why or what, worded; empty when the consumer words the code. */
-  message: string;
-}
+// C18): one shape for every importer, exporter and mapper. `LossEntry` and
+// `LossSeverity` are the engine's `paged_loss` types as the wire carries them
+// (generated, `./wire.js`); a consumer reads any producer's report with the
+// same code. An entry without a `severity` was left out (`dropped`).
 
 /** What a conversion left behind. */
 export interface LossReport {

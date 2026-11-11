@@ -53,6 +53,7 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 import type { PageId } from "@paged-media/plugin-api";
+import { nativeTabTextFrameOps } from "@paged-media/plugin-sdk";
 
 import { BINDING_KEY, type Binding } from "./binding";
 import {
@@ -95,13 +96,6 @@ export interface LowerResult {
    *  Empty for an unstyled region. */
   styles: StyleEmission[];
 }
-
-/** The protocol-v34 batch-created sentinel: an `insertTextFrame` mints a
- *  textFrame, and a later op in the SAME batch addresses it by this
- *  placeholder id. The host resolves `$created` to the just-minted frame
- *  and the metadata gate verifies the key is this plugin's own namespace
- *  (the plugin-web insert.ts precedent). */
-const CREATED_FRAME: ElementId = { kind: "textFrame", id: "$created" };
 
 /** Build the tab/newline join of the lowered cells. Rows in IR order;
  *  within a row, cells are placed at their `col` so empty columns become
@@ -526,60 +520,44 @@ export function lowerToMutations(
   const { pageId, bounds } = placement;
   const [top, left] = bounds;
 
-  const ops: Mutation[] = [];
-
-  // (1) The frame itself.
-  ops.push({ op: "insertTextFrame", args: { pageId, bounds } });
-
-  // (2) One drawn line per grid rule, in page-local coords. The IR
-  // carries content-space offsets (relative to the region's top-left);
-  // add the frame's [top, left] origin. An h-rule runs horizontally at
+  // (1) The frame, (2) one drawn line per grid rule in page-local coords,
+  // (3) the data bars, (4) the binding on the batch-created frame. The IR
+  // carries content-space offsets (relative to the region's top-left); add
+  // the frame's [top, left] origin. An h-rule runs horizontally at
   // y = top + at, from x = left + from to x = left + to; a v-rule runs
   // vertically at x = left + at, from y = top + from to y = top + to.
-  for (const rule of content.rules.h) {
-    ops.push({
-      op: "insertLine",
-      args: {
-        pageId,
-        start: [left + rule.from, top + rule.at],
-        end: [left + rule.to, top + rule.at],
-      },
-    });
-  }
-  for (const rule of content.rules.v) {
-    ops.push({
-      op: "insertLine",
-      args: {
-        pageId,
-        start: [left + rule.at, top + rule.from],
-        end: [left + rule.at, top + rule.to],
-      },
-    });
-  }
+  const lines = [
+    ...content.rules.h.map((rule) => ({
+      start: [left + rule.from, top + rule.at] as [number, number],
+      end: [left + rule.to, top + rule.at] as [number, number],
+    })),
+    ...content.rules.v.map((rule) => ({
+      start: [left + rule.at, top + rule.from] as [number, number],
+      end: [left + rule.at, top + rule.to] as [number, number],
+    })),
+  ];
 
-  // (3) Conditional-formatting DATA BARS as drawn rects (spec §8.2 page-draw
+  // Conditional-formatting DATA BARS as drawn rects (spec §8.2 page-draw
   // geometry lane). The engine already decided each bar's content-space rect +
   // colour; we mint one swatch per distinct bar colour (first, so the per-path
   // frameFillColor refs resolve — not creating children, so they leave the
   // textFrame `$created` sentinel untouched), then one insertPath + fill ref
   // per bar. Emitted BEFORE the binding so `setPluginMetadata` stays LAST.
-  ops.push(...barSwatchOps(content, knownSwatchIds));
+  const decor: Mutation[] = [...barSwatchOps(content, knownSwatchIds)];
   for (const bar of content.databars ?? []) {
-    ops.push(...dataBarOps(bar, pageId, top, left));
+    decor.push(...dataBarOps(bar, pageId, top, left));
   }
 
-  // (4) The binding, written onto the batch-created frame via the
-  // `$created` sentinel. ONE undo removes the frame, its rules, the data
-  // bars, AND the binding (the plugin-web single-undo property). The binding
-  // targets the textFrame KIND, so the interleaved line/polygon creates do
-  // not shift its `$created`. The value is the JSON-stringified envelope.
-  ops.push({
-    op: "setPluginMetadata",
-    args: {
-      elementId: CREATED_FRAME,
-      key: BINDING_KEY,
-      value: JSON.stringify(binding),
-    },
+  // The binding targets the textFrame KIND, so the interleaved line/polygon
+  // creates do not shift its `$created`: ONE undo removes the frame, its
+  // rules, the data bars, AND the binding (the plugin-web single-undo
+  // property). The value is the JSON-stringified envelope.
+  const ops = nativeTabTextFrameOps({
+    pageId,
+    bounds,
+    lines,
+    decor,
+    metadata: { key: BINDING_KEY, value: JSON.stringify(binding) },
   });
 
   return {

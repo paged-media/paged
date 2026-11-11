@@ -74,3 +74,15 @@ paged.sheet's palette mints, paged.doc's style swatches, paged.web's bake and pa
 colours mint through it. `nativeHexBody` / `nativeHexRgb` are the kit's hex reader, now exported:
 `@paged-media/helpers`' `hexToRgb` and sheet's palette normaliser are this one function
 (`0.74.3-canary.85`).
+
+## Amendment 2 (2026-11-11): native tables and loss entries
+
+The kit gains `lowering-table.ts`, the one spelling of the native-table ops: `nativeTableInsertOp`
+(the `insertTable` args, only those given, `word` and the nesting cell passed through),
+`nativeTableCellId`, `nativeCellTextOp`, `nativeCellPropertyOp`, `nativeCellSpanOp`,
+`nativeRowHeightOp`, and `nativeTabTextFrameOps` (the tab-text fallback: the text frame, a line per grid
+rule, the module's decor, the binding on `$created`). paged.sheet's table lane and tab-text lane,
+paged.doc's tables (nested ones too) and paged.data's lowering build through it; their ops are
+unchanged. And `loss.ts`: `lossDiagnostics`, `lossDiagnosticSeverity` and `lossRank` put the shared
+`LossEntry` rows (engine ADR 1097) on the diagnostics channel, so a module words its own codes and
+nothing else (`0.74.3-canary.86`).
