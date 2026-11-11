@@ -51,8 +51,7 @@ function rig(caret = true) {
         return { kind: "mutationApplied", payload: {} };
       }) as never,
     },
-    getSelection: () =>
-      caret ? { storyId: "s1", start: 5, end: 5 } : null,
+    getSelection: () => (caret ? { storyId: "s1", start: 5, end: 5 } : null),
   };
   const commands = buildReferenceCommands(
     deps,

@@ -41,10 +41,9 @@ interface CommandsGlobal {
 const run = (page: Page, id: string, payload?: unknown) =>
   page.evaluate(
     ([i, p]) =>
-      (globalThis as unknown as CommandsGlobal).__canvas.registries.commands.invoke(
-        i as string,
-        p,
-      ),
+      (
+        globalThis as unknown as CommandsGlobal
+      ).__canvas.registries.commands.invoke(i as string, p),
     [id, payload] as const,
   );
 
@@ -52,7 +51,9 @@ const undoLen = (page: Page) =>
   page.evaluate(
     async () =>
       (
-        await (globalThis as unknown as CommandsGlobal).__canvas.client.undoLog()
+        await (
+          globalThis as unknown as CommandsGlobal
+        ).__canvas.client.undoLog()
       ).undoLen,
   );
 
@@ -81,9 +82,7 @@ test.describe("reference inserts are host commands", () => {
     expect(storyId).toBeTruthy();
     await designer.placeCaret(storyId!, 0);
     await designer.typeText("Alpha beta gamma");
-    await expect
-      .poll(() => designer.storyChars(storyId!))
-      .toBeGreaterThan(10);
+    await expect.poll(() => designer.storyChars(storyId!)).toBeGreaterThan(10);
     await designer.placeCaret(storyId!, 5);
 
     const count = async (name: string) =>
