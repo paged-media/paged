@@ -300,9 +300,6 @@ export const DECK = defineMessages("slide.deck", {
   // A ")" right after a "}" ends a message object for the strings guard,
   // which reads these calls as text: the parentheses close in a second
   // literal.
-  noFontDoor:
-    "This host cannot give the document the fonts the deck embeds ({families}" +
-    "); text set in them is drawn in a substitute.",
   fontRefused:
     "The embedded font “{family}” ({style}" +
     ") was not loaded: {reason}. Text set in it is drawn in a substitute.",

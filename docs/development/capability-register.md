@@ -162,7 +162,9 @@ Draw's TS geometry and vector-tool machines moved to `platform/shared/vector-geo
 does not take `paged-text` (it would pull the model and composer into the image wasm, and its
 1/64 pt advance rounding is not pixel-identical); the fontations stack is pinned once in the
 engine workspace (engine ADR 1058). `pptx-fonts` and `paged-fmt` now live at L2 (`engine/core/crates/pptx-fonts`, `engine/core/crates/paged-fmt`).
-Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` out of `sheet-format`.
+Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` out of `sheet-format`. Embedded-font hand-off (TS,
+2026-11-11): `@paged-media/helpers` `giveEmbeddedFonts` / `usableFaces`, used by paged.doc and paged.slide (each
+keeps only its diagnostics wording); the dead no-door path (`assets.documentFont@1` is a static SDK feature) is gone.
 
 ### Office / OOXML / ODF
 
@@ -504,7 +506,10 @@ ZIP (TS): DONE 2026-11-11. `@paged-media/helpers` `zip` / `zipAsync` (with `ocf`
 stored) and `unzip`; Data Merge's IDML export and paged.pdf's raster IDML fallback write through it (the
 fallback no longer needs JSZip). Cubic Bézier evaluation and splitting (TS): `vector-geometry` `bernstein`,
 `evalCubic`, `splitSegmentDeCasteljau`, used by the mesh grid, image warp preview and pen fitting, and slide's
-motion path. FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
+motion path. PNG encode (TS): paged.pdf's page rasters encode through helpers' `encodePng` (no canvas).
+Draw's image-trace decode (`io/raster-decode.ts`) stays on the browser's decoders: the contract has no
+decoded-pixels door yet (open). Slide comments: the typed reply, resolve and delete verbs and the panel's
+are thin calls to `comments@1`; a new slide comment is still written with its PowerPoint fields. FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
 diagnostic report shapes (10+: only `paged-pdf-annots` and the PDF bundle use `LossReport`); the
 Excel oracle runner lives in `sheet-conformance/oracle/excel`, outside `tooling/oracle/office`.
 

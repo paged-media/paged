@@ -172,3 +172,10 @@ export {
   type TextVerbValue,
   type TextVerbWrite,
 } from "./text-format.ts";
+export {
+  giveEmbeddedFonts,
+  usableFaces,
+  type DocumentFontDoor,
+  type EmbeddedFace,
+  type FontRefusal,
+} from "./embedded-fonts.ts";

@@ -21,15 +21,12 @@
 
 import { afterEach, describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
 import {
   BUILT_IN_LOCALES,
   createStrings,
   setActiveStrings,
 } from "@paged-media/strings";
 
-import type { EmbeddedFaceReport } from "../src/engine";
-import { giveDocumentEmbeddedFonts } from "../src/fonts";
 import { slidePanels } from "../src/panels";
 import { COMMANDS } from "../src/messages";
 import { t } from "@paged-media/strings";
@@ -64,26 +61,6 @@ describe("paged.slide in German", () => {
     expect(t(COMMANDS.moveSlideDown)).toBe("Folie nach unten verschieben");
     expect(t(COMMANDS.exportPptx)).toBe(
       "PowerPoint-Präsentation exportieren …",
-    );
-  });
-
-  it("says in German that the host cannot take the deck's fonts", async () => {
-    german();
-    const host = { supports: () => false } as unknown as BundleHost;
-    const face = {
-      family: "Brand Sans",
-      style: "Regular",
-      use: "editable",
-      offset: 0,
-      length: 4,
-    } as unknown as EmbeddedFaceReport;
-    const [d] = await giveDocumentEmbeddedFonts(
-      host,
-      [face],
-      new Uint8Array(4),
-    );
-    expect(d?.message).toBe(
-      "Dieser Host kann dem Dokument die Schriften, die die Präsentation einbettet, nicht geben (Brand Sans); Text in diesen Schriften wird mit einer Ersatzschrift dargestellt.",
     );
   });
 });

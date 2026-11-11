@@ -9,7 +9,6 @@
   "doc.bundle.kindDocument": "Word-Dokument",
   "doc.bundle.kindMergeField": "Seriendruckfeld",
   "doc.bundle.kindRun": "Word-Textabschnitt",
-  "doc.bundle.noFontDoor": "Dieser Host kann dem Dokument die Schriften, die es einbettet, nicht geben ({families}); Text in diesen Schriften wird mit einer Ersatzschrift dargestellt.",
   "doc.bundle.noModelField": "Das Dokumentmodell hat dafür kein Feld.",
   "doc.bundle.propertiesTitle": "Word-Eigenschaften",
   "doc.bundle.sectionBlock": "Block",

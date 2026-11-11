@@ -437,6 +437,10 @@ export class CommentsStore {
     return comment;
   }
 
+  // Replies, resolve and delete are the host's comments door (`comments@1`,
+  // engine ADR 1055), the same writes the host Comments panel makes; only a
+  // new slide comment is written here, with the PowerPoint fields it keeps.
+
   async reply(
     pageId: string,
     id: string,
@@ -446,37 +450,25 @@ export class CommentsStore {
     await this.ready();
     if (!this.forPage(pageId).some((c) => c.id === id)) return null;
     const author = this.author(name);
-    const reply: CommentReply = {
-      id: newGuid(),
-      authorId: author.id,
-      author: author.name,
+    const made = await this.host.comments.reply(id, text, {
+      id: author.id,
+      name: author.name,
       initials: author.initials,
-      created: now(),
-      text,
-    };
-    await this.apply({
-      op: "batch",
-      args: {
-        ops: [
-          {
-            op: "setPerson",
-            args: {
-              person: {
-                id: author.id,
-                name: author.name,
-                initials: author.initials,
-              },
-            },
-          },
-          {
-            op: "replyComment",
-            args: { parentId: id, comment: specOf(reply) },
-          },
-        ],
-      },
     });
+    if (!made.ok) throw new Error(`failed: ${made.reason}`);
     await this.load();
-    return reply;
+    return (
+      this.forPage(pageId)
+        .find((c) => c.id === id)
+        ?.replies.find((r) => r.id === made.commentId) ?? {
+        id: made.commentId,
+        authorId: author.id,
+        author: author.name,
+        initials: author.initials,
+        created: now(),
+        text,
+      }
+    );
   }
 
   async setResolved(
@@ -486,10 +478,8 @@ export class CommentsStore {
   ): Promise<boolean> {
     await this.ready();
     if (!this.forPage(pageId).some((c) => c.id === id)) return false;
-    await this.apply({
-      op: "resolveComment",
-      args: { commentId: id, resolved },
-    });
+    const done = await this.host.comments.resolve(id, resolved);
+    if (!done.ok) throw new Error(`failed: ${done.reason}`);
     await this.load();
     return true;
   }
@@ -499,10 +489,8 @@ export class CommentsStore {
     const c = this.forPage(pageId).find((x) => x.id === id);
     if (!c || (replyId && !c.replies.some((r) => r.id === replyId)))
       return false;
-    await this.apply({
-      op: "deleteComment",
-      args: { commentId: replyId ?? id },
-    });
+    const done = await this.host.comments.remove(replyId ?? id);
+    if (!done.ok) throw new Error(`failed: ${done.reason}`);
     await this.load();
     return true;
   }

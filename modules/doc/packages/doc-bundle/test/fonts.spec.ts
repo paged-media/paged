@@ -110,14 +110,6 @@ describe("a document's embedded fonts", () => {
     expect(out[0]!.message).toContain("over the per-face cap");
   });
 
-  it("are told as a warning where the host has no door", async () => {
-    const r = fakeHost({ door: false });
-    const out = await giveDocumentEmbeddedFonts(r.host, FACES, DATA);
-    expect(r.calls).toEqual([]);
-    expect(out).toHaveLength(1);
-    expect(out[0]!.message).toContain("Fixture Sans");
-  });
-
   it("set the lane with the engine's lines first, and no lane for none", async () => {
     const none = fakeHost({ door: true });
     await giveEngineFonts(none.host, {
