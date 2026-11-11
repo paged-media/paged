@@ -60,7 +60,6 @@ import {
   it,
   beforeAll,
   afterAll,
-  afterEach,
   beforeEach,
 } from "bun:test";
 import { waitFor } from "@paged-media/test-kit";
