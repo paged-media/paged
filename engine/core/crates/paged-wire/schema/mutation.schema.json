@@ -12350,6 +12350,92 @@
           "required": [
             "op"
           ]
+        },
+        {
+          "description": "Photoshop's Channel Mixer: each output channel (`red`, `green`,\n`blue`) is `[from red, from green, from blue, constant]` applied to\nthe input, as fractions (1 = 100 %), the result clamped.\n`adjust.channel_mixer`. A CSS colour filter (`grayscale`, `sepia`,\n`saturate`, `hue-rotate`) is one exactly (amendment 2026-11-11).",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "channelMixer"
+            },
+            "red": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "green": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "blue": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            }
+          },
+          "required": [
+            "op",
+            "red",
+            "green",
+            "blue"
+          ]
+        },
+        {
+          "description": "Replace a colour: a pixel within `tolerance` (per channel, 0..=1) of\n`from` becomes `to`, its alpha multiplied by `alpha` (0 makes the\ncolour transparent). Office's `a:clrChange` (amendment 2026-11-11).",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "colorReplace"
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "alpha": {
+              "type": "number",
+              "format": "float"
+            },
+            "tolerance": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "alpha",
+            "tolerance"
+          ]
         }
       ]
     },
