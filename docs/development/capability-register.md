@@ -5,6 +5,14 @@ serves every consumer (docs/adr/PM-0017: the built-in modules are part of the co
 A second copy is a bug unless an ADR records why (Excel and PowerPoint chart profiles are the
 example).
 
+**Differences belong at the format boundary.** Adobe and Microsoft products behave differently, and
+paged keeps those differences, but in the import and export adapters (the IDML, PSD, AI, PDF,
+DOCX, PPTX and XLSX readers and writers), which map each format onto and off the one engine model.
+The tools, the model, the maths and the panels exist once: a PowerPoint preset, a Word shape and an
+Illustrator path are edited with the same host tools; a Photoshop adjustment layer, a Word picture
+correction and a CSS filter are the same engine operations. A module keeps only its domain
+workflow (the formula engine, the slide show, Data Merge, retouching).
+
 `tooling/single-owner.json` is the machine-readable half: `bun tooling/js/single-owner.mjs`
 fails on a new copy of a capability outside its owner, and on a baseline entry whose copy is
 gone (run `--write`, so the baseline only shrinks). Closing a duplicate means moving the copy
@@ -22,16 +30,29 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 
 ## Enforced by the ratchet
 
-| Capability                     | Owner                                                                                                      | Copies outside it (baseline)                                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr` | 2 (open): `paged-gen`, `paged-store` (engine crates cannot depend on `paged-ooxml`)                               |
-| `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                              | 15 (open): every writer moved; what remains is hand-written minimal packages used as independent reader input     |
-| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                                                                            | 0 (done)                                                                                                          |
-| sRGB transfer                  | `paged-color::math`, `paged-colour-math`; `@paged-media/helpers` `srgbToLinear` / `linearToSrgb` (TS)      | 0 (done); the WGSL sources of three image kernel families are allowed (the GPU cannot call Rust)                  |
-| Blend modes                    | `paged-blend` (`compose_twin::Blend` is now `paged_blend::BlendMode`)                                      | 0 (done); the wire vocabularies `SceneBlendMode` and `web-render`'s two mirrors, and the ABR wrapper, are allowed |
-| FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Utf16` (TS); `paged_pixel::fnv1a_64` (Rust)                     | 0 (done); two Playwright `page.evaluate` bodies are allowed (the page cannot import)                              |
-| CRC-32                         | `crc32fast` (Rust), `@paged-media/helpers` `crc32` (TS)                                                    | 0 (done)                                                                                                          |
-| Base64                         | `base64` crate, `platform/shared/helpers`                                                                  | 1 (open)                                                                                                          |
+Counts as of 2026-11-11. The rules match every spelling found in the tree (Rust digit separators,
+case, `match`-form escapers); before that, several rows read "0 (done)" while copies remained.
+Copies in tests and generators count: they are baselined, and move to the owner when the code
+they test does.
+
+| Capability                     | Owner                                                                                                      | Copies outside it (baseline)                                                                                                                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr` | 7 (open): `dml-chart` (can use `paged-ooxml`); engine crates `paged-gen`, `paged-store`, `paged-svg`, `idml-export`, `paged-data-dataset`; `draw-dxf`                                                                             |
+| `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                              | 15 (open): every writer moved; what remains is hand-written minimal packages used as independent reader input                                                                                                                     |
+| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                                                                            | 1 (open): `docx-core` (lower-case table; Word's repeated letters AA, BB belong in the model)                                                                                                                                      |
+| sRGB transfer                  | `paged-color::math`, `paged-colour-math`; `@paged-media/helpers` `srgbToLinear` / `linearToSrgb` (TS)      | 19 (open): `paged-gpu` ×4, `paged-compose` ×2, `paged-model`, `paged-canvas`, `paged-export-pdf`, `paged-svg`, `paged-fidelity`, `paged-raster` dng, `paged-kernels` families ×3, image-conformance; the WGSL sources are allowed |
+| Blend modes                    | `paged-blend` (`compose_twin::Blend` is now `paged_blend::BlendMode`)                                      | 0 (done); the wire vocabularies `SceneBlendMode` and `web-render`'s two mirrors, and the ABR wrapper, are allowed. The non-separable formulas in `paged-gpu/svg_filter.rs` are a copy the enum rule does not see (open)           |
+| FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Utf16` (TS); `paged_pixel::fnv1a_64` (Rust)                     | 28 (open), most of them engine crates; two Playwright `page.evaluate` bodies are allowed                                                                                                                                          |
+| CRC-32                         | `crc32fast` (Rust), `@paged-media/helpers` `crc32` (TS)                                                    | 6 (open): `image-js` readouts, `pptx-core` transcode, `paged-gen`, three test helpers                                                                                                                                             |
+| Base64                         | `base64` crate, `platform/shared/helpers`                                                                  | 14 (open): `btoa` loops in the canvas clipboard, data assets, draw rasterize and test drivers; `web-render`'s decoder                                                                                                             |
+| Bézier kappa                   | `paged_geom::KAPPA` / `KAPPA_F32`; `@paged-media/helpers` geometry                                         | 19 (open): ellipse builders in `paged-mutate`, `idml-export`, `paged-canvas`, `paged-gpu`, `paged-model`, `paged-vector-fx`, `docx-lower`, `paged-gen`                                                                            |
+| Affine product                 | `paged_geom::affine` / `affine64`                                                                          | 3 (open): `compose_matrix` in `idml-import` and `idml-export` (×2)                                                                                                                                                                |
+| Arc to cubics                  | `paged-geom` (to add `arc_cubics`)                                                                         | 5 (open): `dml-geom`, `slide-chart`, `draw-dxf`, `paged-model` live shapes, renderer ruby                                                                                                                                         |
+| PNG encode                     | `paged_raster::encode`                                                                                     | 7 (open): `paged-canvas` snapshot, `paged-gpu` surface, `paged-introspect`; four image tests                                                                                                                                      |
+| Resample                       | `paged-resample` (premultiplied)                                                                           | 2 (open): `paged-export-pdf` image, `paged-raster` (`image::imageops` on straight alpha)                                                                                                                                          |
+| Four-point homography          | `vector-geometry` `warp/homography.ts` (TS), `paged-warp` (Rust)                                           | 3 (open): plugin-sdk `transform-box.ts`, `image-js` smart objects, an image test                                                                                                                                                  |
+| Star and polygon anchors       | `vector-geometry` `star.ts`, mirror of `paged_model::live_shape`                                           | 1 (open): `@paged-media/helpers` `star.ts`                                                                                                                                                                                        |
+| Colour input                   | host `ColorPicker` / `widgets.ColorPicker`                                                                 | 6 (open): raw `<input type="color">` in four host panels and two sheet panels                                                                                                                                                     |
 
 ## Landed (do not redo)
 
@@ -45,7 +66,7 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
   `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
   the panel's reply, edit and resolve produce. Open: starting a thread from the panel on a cell, plain notes as
-  threads, Word mentions (Word's own scripting makes none, so no marker is proven), IDML notes, the `comments@1` door. Word's `people.xml` and `commentsExtensible.xml` (exact UTC dates) are read and
+  threads, Word mentions (Word's own scripting makes none, so no marker is proven), IDML notes. The `comments@1` door is done (`plugin-sdk/src/doors-comments.ts`). Word's `people.xml` and `commentsExtensible.xml` (exact UTC dates) are read and
   written (doc ADR 622); Word opens what paged saves with no repair prompt.
 - **OOXML foundation:** one DrawingML theme reader (`paged-ooxml::drawingml::theme`) for sheet
   and doc; content-type and relationship writers (`render`, `patch`) in doc, slide and sheet
@@ -443,8 +464,9 @@ Status (draw items, one line each; updated as they land):
   diagram is open). Shapes: PARTLY DONE (doc ADR 627: non-text `wps:wsp` as anchored Rectangle frames drawn along their
   outline, every Annex D preset through `dml-geom` since doc ADR 629 and literal custom geometry, `wps:style` completing
   the look; a shape's own text wrap is open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
-  their `fsType` licence and given to the document-font door, as slide does; the shared part is
-  `paged_ooxml::fonts`). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
+  their `fsType` licence and given to the document-font door, as slide does; `paged_ooxml::fonts`
+  serves doc's and slide's importers, while `pptx-fonts` keeps a second `fsType` table and sfnt
+  sniffing, open). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
   paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
   the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's
@@ -474,8 +496,9 @@ Status (draw items, one line each; updated as they land):
 
 ### Small helpers
 
-FNV ×7, CRC-32 ×2, SHA-512 by hand (`sheet-xlsx` protection), base64 ×4; the TS equivalents;
-loss and diagnostic report shapes (9+); oracle harnesses (five runners).
+FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
+diagnostic report shapes (10+: only `paged-pdf-annots` and the PDF bundle use `LossReport`); the
+Excel oracle runner lives in `sheet-conformance/oracle/excel`, outside `tooling/oracle/office`.
 
 ## What stays in each module (L4)
 
