@@ -30,6 +30,10 @@
 //   oval       the pie widgets on the ellipse at the start and end
 //              angles (both at three o'clock on a whole ellipse, the end
 //              one on top): drag around the ellipse; Shift snaps to 15°
+//   preset     (engine ADR 1096: an Office preset in any module — a
+//              PowerPoint, Word or Excel shape) its adjust handles, yellow
+//              as in Office: drag one and the engine solves the adjust
+//              values (`frameShapePresetHandle`)
 //
 // The widgets live in the selection's own space: the pointer goes
 // through the inverse of the item's transform, so a turned or scaled
@@ -118,6 +122,48 @@ export interface LiveShapeState {
   corners?: CornerState[];
   shape?: PolygonShape;
   pie?: { start: number; end: number };
+  /** Engine ADR 1096 — a live preset's name and its adjust handles in the
+   *  item's own coordinates. */
+  preset?: PresetHandles;
+}
+
+/** A live preset as the widgets need it. */
+export interface PresetHandles {
+  name: string;
+  handles: { x: number; y: number; polar: boolean }[];
+}
+
+/** The live preset `frameShapePreset` reads (`""` when there is none). */
+export function presetHandlesOf(text: string | null): PresetHandles | null {
+  if (!text) return null;
+  try {
+    const v = JSON.parse(text) as {
+      name?: unknown;
+      handles?: { x?: unknown; y?: unknown; polar?: unknown }[];
+    };
+    if (typeof v.name !== "string") return null;
+    const handles = (v.handles ?? []).flatMap((h) =>
+      typeof h.x === "number" && typeof h.y === "number"
+        ? [{ x: h.x, y: h.y, polar: h.polar === true }]
+        : [],
+    );
+    return { name: v.name, handles };
+  } catch {
+    return null;
+  }
+}
+
+/** The write a preset handle's drag commits: the engine solves the
+ *  adjust values that put handle `index` at `at` (own coordinates). */
+export function presetHandleMutation(
+  s: LiveShapeState,
+  index: number,
+  at: Pt,
+): Mutation {
+  return setOp(s.id, "frameShapePresetHandle", {
+    type: "pathPoint",
+    value: { address: { index, role: "anchor" }, position: [at[0], at[1]] },
+  } as Value);
 }
 
 type Entry = { path: string; value: Value | null };
@@ -150,6 +196,12 @@ export function liveShapeStateOf(
     bounds: item.bounds as unknown as Box,
     transform: (item.itemTransform ?? null) as readonly number[] | null,
   };
+  // Engine ADR 1096 — a live preset (a page path, or a Word shape anchored
+  // in text, which reads as a rectangle) shows its adjust handles.
+  const preset = presetHandlesOf(textOf(entries, "frameShapePreset"));
+  if (preset && (kind === "polygon" || kind === "rectangle")) {
+    return { ...base, kind, preset };
+  }
   if (kind === "rectangle") {
     return {
       ...base,
@@ -316,6 +368,7 @@ export function cornerCycleMutation(
 }
 
 type DragKind =
+  | { kind: "preset"; index: number }
   | { kind: "corner"; index: number }
   | { kind: "sides" }
   | { kind: "inset" }
@@ -372,10 +425,20 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
     id: string;
     at: Pt;
     drag: DragKind;
-    shape: "round" | "diamond";
+    shape: "round" | "diamond" | "preset";
     cursor: string;
   }[] = [];
-  if (s.kind === "rectangle" && s.corners) {
+  if (s.preset) {
+    s.preset.handles.forEach((h, i) => {
+      widgets.push({
+        id: `preset-${i}`,
+        at: [h.x, h.y],
+        drag: { kind: "preset", index: i },
+        shape: "preset",
+        cursor: "default",
+      });
+    });
+  } else if (s.kind === "rectangle" && s.corners) {
     const box = s.bounds;
     // Too small on screen to tell four widgets apart: none.
     if (maxCornerRadius(box) > own(CORNER_MIN_OFFSET_PX * 1.5)) {
@@ -475,6 +538,11 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
       if (!moved) return;
       const shift = ev.shiftKey;
       switch (drag.kind) {
+        case "preset": {
+          last = presetHandleMutation(s, drag.index, p);
+          setPreview({ drag, p: { at: p } });
+          break;
+        }
         case "corner": {
           const r = cornerRadiusAt(s.bounds, drag.index, p);
           last = cornerRadiusMutation(s, drag.index, r, shift);
@@ -616,7 +684,16 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
               style={{ cursor: w.cursor, pointerEvents: "all" }}
               onPointerDown={onDown(w.drag)}
             />
-            {w.shape === "diamond" ? (
+            {w.shape === "preset" ? (
+              <path
+                d={`M0 ${-r - 1} L${r + 1} 0 L0 ${r + 1} L${-r - 1} 0 Z`}
+                fill="#f5c400"
+                stroke="#5c4a00"
+                strokeWidth={1}
+                pointerEvents="none"
+                data-preset-handle=""
+              />
+            ) : w.shape === "diamond" ? (
               <path
                 d={`M0 ${-r - 1} L${r + 1} 0 L0 ${r + 1} L${-r - 1} 0 Z`}
                 fill="white"
