@@ -9,7 +9,8 @@ $ paged comments review.pdf --json
       "message": "a hyperlink or destination, not a review comment",
       "pages": [
         0
-      ]
+      ],
+      "severity": "dropped"
     },
     {
       "code": "Stamp",
@@ -17,7 +18,8 @@ $ paged comments review.pdf --json
       "message": "not an annotation type paged imports as a comment (Text, FreeText, Highlight, Underline, StrikeOut, Squiggly)",
       "pages": [
         0
-      ]
+      ],
+      "severity": "dropped"
     }
   ],
   "threads": [
