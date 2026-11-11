@@ -13,6 +13,9 @@ workspace = true
 
 [dependencies]
 pptx-core.workspace = true
+# Office's automatic series colours and the label-width profiles: one
+# table for slide, doc and sheet.
+dml-chart = { path = "../../../platform/shared/dml-chart" }
 serde.workspace = true
 # The arc handle of a wedge (one owner: paged-geom).
 paged-geom = { path = "../../../engine/core/crates/paged-geom" }

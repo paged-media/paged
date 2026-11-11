@@ -20,10 +20,10 @@
 //! `#RRGGBB` the geometry paints (with the document swatch it names), and
 //! Excel's automatic series colours for a chart style.
 //!
-//! AUTOMATIC COLOURS (Excel 2013+, `c:style` 2 — the default): series `i`
-//! takes accent `i mod 6`; the second six take the accents at 60% luminance,
-//! the third six at 80% luminance + 20% offset, then 80%, then 60% + 40%,
-//! then 50%, and the cycle repeats. The other style columns (`c:style` 1–48,
+//! AUTOMATIC COLOURS (`c:style` 2 — the default): Office's one table,
+//! `dml_chart::auto` (accent `i mod 6` in tiers of linear-light shades and
+//! tints that depend on the series count, measured in PowerPoint, whose
+//! charts are Excel's chart engine). The other style columns (`c:style` 1–48,
 //! `(style − 1) mod 8`): column 0 greys, column 1 the accents, columns 2–7
 //! shades of one accent from dark to light across the series.
 
@@ -128,9 +128,9 @@ impl Theme {
                 apply_tint(self.colors[1], t.min(-0.05))
             }
             1 => {
-                const TIERS: [f64; 6] = [0.0, -0.4, 0.2, -0.2, 0.4, -0.5];
-                let accent = self.colors[4 + i % 6];
-                apply_tint(accent, TIERS[(i / 6) % TIERS.len()])
+                let mut accents = [0; 6];
+                accents.copy_from_slice(&self.colors[4..10]);
+                dml_chart::auto::automatic_rgb(&accents, i, n)
             }
             k => {
                 let accent = self.colors[4 + (k as usize - 2)];
@@ -216,8 +216,21 @@ mod tests {
         };
         assert_eq!(t.auto_color(0, 3, None).hex, "#4472C4");
         assert_eq!(t.auto_color(1, 3, None).hex, "#ED7D31");
-        assert_eq!(t.auto_color(5, 8, Some(2)).hex, "#70AD47");
-        // Series 7 is accent 1 at 60% luminance.
+        assert_eq!(t.auto_color(4, 5, Some(2)).hex, "#5B9BD5");
+        // Six or more series: a tier below the accents (a 76 % shade at
+        // eight), then one above them.
+        assert_eq!(
+            t.auto_color(5, 8, Some(2)).hex,
+            format!(
+                "#{:06X}",
+                dml_chart::auto::automatic_rgb(
+                    &[0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5, 0x70AD47],
+                    5,
+                    8
+                )
+            )
+        );
+        assert_ne!(t.auto_color(5, 8, None).hex, "#70AD47");
         assert_ne!(t.auto_color(6, 8, None).hex, "#4472C4");
     }
 

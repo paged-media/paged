@@ -154,12 +154,10 @@ pub enum ShapeGeometry {
         name: String,
         adjust: Vec<(String, i64)>,
     },
-    /// `a:custGeom`'s paths whose points are literal numbers; a path with a
-    /// guide reference or an arc is not carried ([`ShapeGeometry::Unsupported`]).
-    Custom(Vec<CustomPath>),
-    /// A custom geometry this reader does not take (a guide formula, an
-    /// `a:arcTo`): the shape is not drawn, and the lowering says so.
-    Unsupported,
+    /// `a:custGeom` as authored (adjust values, guides, paths with arcs,
+    /// handles, connection sites), read and evaluated by `dml-geom`, the
+    /// one DrawingML geometry program paged.slide and paged.sheet use too.
+    Custom(Box<dml_geom::CustomGeometry>),
 }
 
 impl Default for ShapeGeometry {
@@ -169,32 +167,6 @@ impl Default for ShapeGeometry {
             adjust: Vec::new(),
         }
     }
-}
-
-/// One `a:path` of a custom geometry, in its own `w` x `h` coordinate space.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct CustomPath {
-    pub w: i64,
-    pub h: i64,
-    /// `fill="none"`: only stroked.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub no_fill: bool,
-    /// `stroke="0"`: only filled.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub no_stroke: bool,
-    pub commands: Vec<PathCommand>,
-}
-
-/// One command of a [`CustomPath`].
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum PathCommand {
-    Move(i64, i64),
-    Line(i64, i64),
-    /// `a:quadBezTo`: control point, end point.
-    Quad([i64; 4]),
-    /// `a:cubicBezTo`: two control points, end point.
-    Cubic([i64; 6]),
-    Close,
 }
 
 /// A chart drawn by a `w:drawing` (`a:graphicData` of the chart namespace,

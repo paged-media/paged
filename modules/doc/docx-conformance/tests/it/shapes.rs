@@ -42,7 +42,6 @@ fn preset(s: &Shape) -> &str {
     match &s.geometry {
         ShapeGeometry::Preset { name, .. } => name,
         ShapeGeometry::Custom(_) => "custGeom",
-        ShapeGeometry::Unsupported => "unsupported",
     }
 }
 

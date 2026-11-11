@@ -42,9 +42,9 @@ pub use controls::{ContentControl, ContentControlKind, ListItem};
 pub mod symbols;
 pub mod theme;
 pub use objects::{
-    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, DiagramDrawing, DiagramParagraph,
-    DiagramRun, DiagramShape, DiagramText, HeightRule, Language, NestedTable, PathCommand,
-    PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox, WidthKind, WordArt,
+    BorderEdge, Borders, CellLook, ChartDrawing, DiagramDrawing, DiagramParagraph, DiagramRun,
+    DiagramShape, DiagramText, HeightRule, Language, NestedTable, PreferredWidth, Shape,
+    ShapeGeometry, TableLook, TableStyleProps, TextBox, WidthKind, WordArt,
 };
 pub use review::{
     ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,

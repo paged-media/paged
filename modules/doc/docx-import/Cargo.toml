@@ -19,5 +19,7 @@ docx-core.workspace = true
 # out).
 dml-chart = { path = "../../../platform/shared/dml-chart", features = ["serde"] }
 pptx-core.workspace = true
+# `a:custGeom` read by the shared DrawingML geometry reader.
+dml-geom = { path = "../../../platform/shared/dml-geom" }
 # The math tree the shared OMML reader returns (engine ADR 1090).
 paged-math.workspace = true

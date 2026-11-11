@@ -124,3 +124,18 @@ spaces paragraphs 10 pt apart (23.5 pt from line to line at 11 pt Calibri, 13.5 
 - **Open: no `w:pPrDefault`.** Word's 10 pt space after for a styles part without paragraph
   defaults is not applied (paged reads the absent default as 0). Word itself always writes the
   element; other writers may not.
+
+## Amendment 4 (2026-11-11): one custom-geometry reader and evaluator
+
+An authored `a:custGeom` is read by `dml_geom::read::custom_geometry` and evaluated by
+`dml_geom::custom`, the reader and evaluator paged.slide and paged.sheet use (the capability
+register's "differences at the format boundary": one DrawingML geometry program for every module).
+`docx-core`'s literal-point `CustomPath` / `PathCommand`, the importer's `read_custom` and the
+lowering's own pen are gone, and so is `ShapeGeometry::Unsupported`: guides, `a:arcTo`, adjust
+values and the path's `fill` modes are drawn as slide draws them. Doc evaluates the program in the
+shape's own EMU space (a path that names no `w` / `h`, and the `w` / `h` guides, are in EMU, as
+DrawingML defines them) and scales the outline to the box. A closed path that is not filled keeps
+its closing segment as an open contour, for presets as for authored geometry (a preset's closed
+detail path, such as a cube's or an action button's, used to lose it). The rotation and flips go
+through `dml_geom::place::orient`, the quarter-ellipse constant of the oval line end is
+`paged_geom::KAPPA_F32`.

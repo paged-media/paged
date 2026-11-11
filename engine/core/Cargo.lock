@@ -1459,6 +1459,7 @@ name = "dml-geom"
 version = "0.0.0"
 dependencies = [
  "paged-geom",
+ "paged-model",
  "paged-ooxml",
  "serde",
 ]
@@ -1505,6 +1506,7 @@ dependencies = [
 name = "docx-core"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
  "paged-math",
  "paged-model",
  "paged-ooxml",
@@ -1531,6 +1533,7 @@ name = "docx-import"
 version = "0.0.0"
 dependencies = [
  "dml-chart",
+ "dml-geom",
  "docx-core",
  "paged-math",
  "paged-ooxml",
@@ -6388,6 +6391,7 @@ name = "sheet-chart"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-chart",
  "dml-native",
  "paged-ooxml",
  "plotters",
@@ -6676,6 +6680,7 @@ dependencies = [
 name = "slide-chart"
 version = "0.0.0"
 dependencies = [
+ "dml-chart",
  "paged-geom",
  "pptx-core",
  "serde",

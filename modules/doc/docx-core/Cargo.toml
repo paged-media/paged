@@ -22,5 +22,8 @@ paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-fl
 # The DrawingML chart model with paged.slide's paints and text properties
 # (doc ADR 628): what `slide-chart` lays out, read by `dml-chart`.
 pptx-core.workspace = true
+# An authored `a:custGeom` is `dml-geom`'s geometry program (doc ADR 627,
+# amendment: one reader and evaluator for slide, doc and sheet).
+dml-geom = { path = "../../../platform/shared/dml-geom" }
 # The math tree an equation is read into (engine ADR 1090).
 paged-math = { workspace = true, features = ["serde"] }

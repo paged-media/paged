@@ -11,7 +11,7 @@
       "y": 20.0
     },
     {
-      "fill": "#4472C4",
+      "fill": "#3B64AD",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -30,7 +30,7 @@
       "y": 89.45
     },
     {
-      "fill": "#ED7D31",
+      "fill": "#D26E2A",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -49,7 +49,7 @@
       "y": 102.05
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -68,7 +68,7 @@
       "y": 114.65
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -87,7 +87,7 @@
       "y": 127.25
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -106,7 +106,7 @@
       "y": 139.85
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -125,7 +125,7 @@
       "y": 152.45
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -144,7 +144,7 @@
       "y": 165.05
     },
     {
-      "fill": "#9E480E",
+      "fill": "#F1A78A",
       "h": 7.0,
       "kind": "rect",
       "stroke": null,
@@ -163,7 +163,7 @@
       "y": 177.65
     },
     {
-      "fill": "#ED7D31",
+      "fill": "#D26E2A",
       "kind": "polygon",
       "pts": [
         [
@@ -183,7 +183,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -207,7 +207,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -231,7 +231,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -259,7 +259,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -283,7 +283,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -303,7 +303,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#ED7D31",
+      "fill": "#D26E2A",
       "kind": "polygon",
       "pts": [
         [
@@ -323,7 +323,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -347,7 +347,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -375,7 +375,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -399,7 +399,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -423,7 +423,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -443,7 +443,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -463,7 +463,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -487,7 +487,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -511,7 +511,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -535,7 +535,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -559,7 +559,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -579,7 +579,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -603,7 +603,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -627,7 +627,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -651,7 +651,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -671,7 +671,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -695,7 +695,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -719,7 +719,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -739,7 +739,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -763,7 +763,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -787,7 +787,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -811,7 +811,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -831,7 +831,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -851,7 +851,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -875,7 +875,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -895,7 +895,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -919,7 +919,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -947,7 +947,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#9E480E",
+      "fill": "#F1A78A",
       "kind": "polygon",
       "pts": [
         [
@@ -967,7 +967,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -987,7 +987,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -1011,7 +1011,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -1035,7 +1035,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -1063,7 +1063,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#9E480E",
+      "fill": "#F1A78A",
       "kind": "polygon",
       "pts": [
         [
@@ -1083,7 +1083,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#A5A5A5",
+      "fill": "#929292",
       "kind": "polygon",
       "pts": [
         [
@@ -1103,7 +1103,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#FFC000",
+      "fill": "#E2AA00",
       "kind": "polygon",
       "pts": [
         [
@@ -1127,7 +1127,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -1151,7 +1151,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#5B9BD5",
+      "fill": "#5089BC",
       "kind": "polygon",
       "pts": [
         [
@@ -1175,7 +1175,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#70AD47",
+      "fill": "#62993E",
       "kind": "polygon",
       "pts": [
         [
@@ -1199,7 +1199,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#264478",
+      "fill": "#8FA2D4",
       "kind": "polygon",
       "pts": [
         [
@@ -1223,7 +1223,7 @@
       "strokeW": 0.0
     },
     {
-      "fill": "#9E480E",
+      "fill": "#F1A78A",
       "kind": "polygon",
       "pts": [
         [

@@ -175,7 +175,7 @@
       ],
       "patterns": ["0?\\.552_?28"],
       "extensions": [".rs", ".ts", ".tsx"],
-      "baseline": ["modules/doc/docx-lower/src/shape_geom.rs"]
+      "baseline": []
     },
     {
       "name": "sha2-constants",
