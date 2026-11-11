@@ -28,7 +28,9 @@
 //   (5) a click ON an anchor is the host Scissors' cut (no insert); an
 //       open endpoint is not a cut; a rotated path is cut where the click
 //       landed on the page;
-//   (6) the live tool: a click cuts, a drag does not.
+// The cut is `@paged-media/vector-tools`' `applyScissorsAt`, the one the
+// host Scissors tool and the `scissorsAt` command use (the live tool is the
+// host's: apps/editor/packages/tools/test/click-and-axis-tools.test.ts).
 
 import {
   afterAll,
@@ -43,18 +45,35 @@ import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { evalCubic } from "@paged-media/vector-geometry";
 
-import {
-  applyScissorsAt,
-  createScissorsHandler,
-  drawBundle,
-  CUT_TOOL_IDS,
-  type ScissorsResult,
-} from "../../src";
+import { applyScissorsAt as cutAt } from "@paged-media/vector-tools";
+import type { BundleHost } from "@paged-media/plugin-api";
+
+import { drawBundle } from "../../src";
 import { packageWithSpread, pathItem } from "../fixtures/build-idml";
 import { poly, squareItem, PAGE_ID } from "../panels/panel-document";
 import { countingHost } from "../perf/counting-host";
-import { pointerAt, settle } from "../perf/pointer-stream";
 import { openHost } from "./host";
+
+/** The cut over a bundle host's document door, with the tools' 6 px pick. */
+async function applyScissorsAt(
+  host: BundleHost,
+  target: ElementId,
+  page: string,
+  point: [number, number],
+  tolerancePt = host.viewport.pxToPt(6),
+) {
+  const plan = await cutAt(
+    {
+      pathAnchors: (id) => host.document.pathAnchors(id),
+      mutate: async (m) => (await host.document.mutate(m)).applied,
+    },
+    target,
+    page,
+    point,
+    tolerancePt,
+  );
+  return plan ? { target, plan } : null;
+}
 
 const SQ = poly("sq");
 const CURVE = poly("curve");
@@ -87,13 +106,6 @@ describe("draw conformance — Scissors at any point", () => {
   beforeEach(async () => {
     await h.load(DOC());
     await h.host.selection.set([]);
-  });
-
-  it("is a keyless tool in the host's Scissors flyout", () => {
-    const tool = h.toolsContributed().find((t) => t.id === CUT_TOOL_IDS[1]);
-    expect(tool).toBeDefined();
-    expect(tool!.group).toBe("scissors");
-    expect(tool!.shortcut).toBeUndefined();
   });
 
   it("a CLOSED square clicked mid-edge OPENS there: the cut point is both ends, every edge kept", async () => {
@@ -185,7 +197,7 @@ describe("draw conformance — Scissors at any point", () => {
     const { host, work } = countingHost(h.host);
     const done = await applyScissorsAt(host, SQ, PAGE_ID, [200.5, 100.5]);
     expect(done?.plan).toEqual({ kind: "anchor", index: 1 });
-    expect(work.mutations).toEqual([{ op: "batch", ops: 1 }]);
+    expect(work.mutations).toEqual([{ op: "pathOpenAt", ops: 1 }]);
     const after = await tableOf(h, SQ);
     expect(after.anchors).toHaveLength(5);
     expect(after.anchors[0]!.anchor).toEqual([200, 100]);
@@ -227,23 +239,5 @@ describe("draw conformance — Scissors at any point", () => {
     const after = await tableOf(h, SQ);
     expect(after.anchors[0]!.anchor[0]).toBeCloseTo(150, 2);
     expect(after.anchors[0]!.anchor[1]).toBeCloseTo(100, 2);
-  });
-
-  describe("the live tool", () => {
-    it("a click on an edge cuts it; a DRAG does not", async () => {
-      let done: ScissorsResult | null | undefined;
-      const handler = createScissorsHandler(h.host, {
-        onCut: (r) => (done = r),
-      });
-      handler.onActivate(undefined as never);
-      const drag = { ...pointerAt(PAGE_ID, [150, 100]), maxDelta: 40 };
-      handler.onPointerUp(drag);
-      await settle();
-      expect(done).toBeUndefined();
-      handler.onPointerUp(pointerAt(PAGE_ID, [150, 100]));
-      await settle();
-      expect(done?.target).toEqual(SQ);
-      expect((await tableOf(h, SQ)).subpathOpen).toEqual([true]);
-    });
   });
 });

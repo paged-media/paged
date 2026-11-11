@@ -37,7 +37,7 @@ import type {
 
 import { applyKnife } from "./knife";
 import { selectionTopToBottom } from "./pathfinder-region";
-import { applyScissorsAt } from "../handlers/scissors";
+import { applyScissorsAt } from "@paged-media/vector-tools";
 import { applyShapeBuild } from "../handlers/shape-builder";
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";
@@ -121,7 +121,23 @@ export async function runScissorsAt(
   const page = (await pageOf(host, target)) ?? "";
   const tolerance =
     typeof p.tolerance === "number" && p.tolerance > 0 ? p.tolerance : 1;
-  const r = await applyScissorsAt(host, target, page, point!, tolerance);
+  const r = await applyScissorsAt(
+    {
+      pathAnchors: (id) => host.document.pathAnchors(id),
+      async mutate(m) {
+        const out = await host.document.mutate(m);
+        if (!out.applied)
+          host.log.warn(
+            `scissors: the cut was refused: ${JSON.stringify(out.error)}`,
+          );
+        return out.applied;
+      },
+    },
+    target,
+    page,
+    point!,
+    tolerance,
+  );
   if (!r) failed(`the point is on no cuttable segment of ${String(target.id)}`);
   return { cut: String(target.id) };
 }

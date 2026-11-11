@@ -229,24 +229,6 @@ describe("paged.draw tools through the gesture DSL — the anchor tools", () => 
     });
     await oneUndoStep(r, before);
   });
-
-  it("Scissors: a click on an edge cuts the closed path open there, as one undo step", async () => {
-    covers("tool:media.paged.draw.tool.scissorsAnyPoint");
-    const { r, g } = rig([A]);
-    await arm(r, g, `${T}.scissorsAnyPoint`);
-    const before = r.picture();
-    await g.click([200, 100]).settle();
-    expect(leafOps(r.leaves())).toEqual([
-      "pathPointSet",
-      "pathPointSet",
-      "pathPointInsert",
-      "pathOpenAt",
-    ]);
-    await oneUndoStep(r, before);
-    r.reset();
-    await g.click([450, 300]).settle();
-    expect(r.sent()).toEqual([]);
-  });
 });
 
 describe("paged.draw tools through the gesture DSL — drawing", () => {

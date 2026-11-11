@@ -70,8 +70,6 @@ describe("drawBundle.activate", () => {
       // The Knife — joins the host's built-in Scissors flyout, keyless
       // for the Repeat tool's reason.
       "media.paged.draw.tool.knife",
-      // Scissors at any point — the same flyout, keyless likewise.
-      "media.paged.draw.tool.scissorsAnyPoint",
       // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
       // flyouts.
       "media.paged.draw.tool.reshape",
