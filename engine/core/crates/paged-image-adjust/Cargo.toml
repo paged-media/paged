@@ -14,3 +14,4 @@ workspace = true
 paged-model = { path = "../paged-model" }
 paged-kernels = { path = "../paged-kernels" }
 paged-pixel = { path = "../paged-pixel" }
+paged-color = { path = "../paged-color" }

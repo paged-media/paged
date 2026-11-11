@@ -459,6 +459,159 @@ pub fn color_replace(a: Px, from: [f32; 3], to: [f32; 3], alpha: f32, tolerance:
     repremul(to, al * alpha)
 }
 
+/// `adjust.lut3d` over a cube of any edge: `cube` holds `size`³ RGB
+/// triples, red fastest, then green, then blue; the straight colour is
+/// looked up trilinearly, the lattice index clamped to the cube. At the
+/// kernel's edge ([`crate::families::adjust::LUT3D_EDGE`]) this is the
+/// shader term for term; the engine's filter stack evaluates a Color
+/// Lookup of any size through it (engine ADR 1037, amendment 2026-11-11).
+pub fn lut3d_cube(a: Px, cube: &[f32], size: usize) -> Px {
+    if size < 2 || cube.len() < size * size * size * 3 {
+        return a;
+    }
+    let edge = size as i32;
+    let at = |r: i32, g: i32, b: i32| -> [f32; 3] {
+        let (r, g, b) = (
+            r.clamp(0, edge - 1),
+            g.clamp(0, edge - 1),
+            b.clamp(0, edge - 1),
+        );
+        let i = (((b * edge + g) * edge + r) * 3) as usize;
+        [cube[i], cube[i + 1], cube[i + 2]]
+    };
+    let mix3 = |x: [f32; 3], y: [f32; 3], f: f32| {
+        [
+            mix1(x[0], y[0], f),
+            mix1(x[1], y[1], f),
+            mix1(x[2], y[2], f),
+        ]
+    };
+    let c = unpremul_rgb(a).map(|v| v.clamp(0.0, 1.0));
+    let t = c.map(|v| v * (edge - 1) as f32);
+    let i0 = t.map(|v| v.floor() as i32);
+    let f = [
+        t[0] - t[0].floor(),
+        t[1] - t[1].floor(),
+        t[2] - t[2].floor(),
+    ];
+    let (x, y, z) = (i0[0], i0[1], i0[2]);
+    let x00 = mix3(at(x, y, z), at(x + 1, y, z), f[0]);
+    let x10 = mix3(at(x, y + 1, z), at(x + 1, y + 1, z), f[0]);
+    let x01 = mix3(at(x, y, z + 1), at(x + 1, y, z + 1), f[0]);
+    let x11 = mix3(at(x, y + 1, z + 1), at(x + 1, y + 1, z + 1), f[0]);
+    let y0 = mix3(x00, x10, f[1]);
+    let y1 = mix3(x01, x11, f[1]);
+    repremul(mix3(y0, y1, f[2]), a.0[3])
+}
+
+/// `adjust.lut3d` at the kernel's own 9³ cube.
+pub fn lut3d(a: Px, p: &crate::families::adjust::AdjustLut3dParams) -> Px {
+    use crate::families::adjust::LUT3D_EDGE;
+    let cube: Vec<f32> = p.cube.iter().flat_map(|e| [e[0], e[1], e[2]]).collect();
+    lut3d_cube(a, &cube, LUT3D_EDGE)
+}
+
+/// The weight of `range` (0 reds, 1 yellows, 2 greens, 3 cyans, 4 blues,
+/// 5 magentas, 6 whites, 7 neutrals, 8 blacks) at a straight colour:
+/// `adjust.selective_color`'s `weight_for`.
+fn selective_weight(rgb: [f32; 3], range: u32) -> f32 {
+    let mx = rgb[0].max(rgb[1].max(rgb[2]));
+    let mn = rgb[0].min(rgb[1].min(rgb[2]));
+    let mid = rgb[0] + rgb[1] + rgb[2] - mx - mn;
+    let chroma = mx - mn;
+    match range {
+        6 => return ((mn - 0.5) * 2.0).clamp(0.0, 1.0),
+        8 => return ((0.5 - mx) * 2.0).clamp(0.0, 1.0),
+        7 => {
+            return (1.0 - chroma * 2.0).clamp(0.0, 1.0)
+                * (1.0 - (mx + mn - 1.0).abs()).clamp(0.0, 1.0)
+        }
+        _ => {}
+    }
+    if chroma <= 0.0 {
+        return 0.0;
+    }
+    let pick = |on: bool, v: f32| if on { v } else { 0.0 };
+    let w = match range {
+        0 => pick(rgb[0] >= mx, (mx - mid) / chroma),
+        2 => pick(rgb[1] >= mx, (mx - mid) / chroma),
+        4 => pick(rgb[2] >= mx, (mx - mid) / chroma),
+        1 => pick(rgb[2] <= mn, (mid - mn) / chroma),
+        3 => pick(rgb[0] <= mn, (mid - mn) / chroma),
+        5 => pick(rgb[1] <= mn, (mid - mn) / chroma),
+        _ => 0.0,
+    };
+    w.clamp(0.0, 1.0) * (chroma * 2.0).clamp(0.0, 1.0)
+}
+
+/// `adjust.selective_color`: one range's (cyan, magenta, yellow, black)
+/// change, relative or absolute, through the naive CMYK of the straight
+/// colour. Term for term the shader (engine ADR 1037, amendment
+/// 2026-11-11: the engine's filter stack evaluates Selective Color too).
+pub fn selective_color(a: Px, p: &crate::families::adjust::SelectiveColorParams) -> Px {
+    let s = a.0[3];
+    let mut rgb = [a.0[0], a.0[1], a.0[2]];
+    if s > 0.0 {
+        rgb = rgb.map(|v| v / s);
+    }
+    let rgb = rgb.map(|v| v.clamp(0.0, 1.0));
+    let w = selective_weight(rgb, p.range);
+    let k = 1.0 - rgb[0].max(rgb[1].max(rgb[2]));
+    let inv = 1.0 - k;
+    let mut cmy = [0.0f32; 3];
+    if inv > 0.0 {
+        cmy = rgb.map(|v| (inv - (v - 0.0)) / inv);
+    }
+    let cmy = cmy.map(|v| v.clamp(0.0, 1.0));
+    let delta = [p.cyan * w, p.magenta * w, p.yellow * w];
+    let (cmy2, k2) = if p.absolute == 1 {
+        (
+            [cmy[0] + delta[0], cmy[1] + delta[1], cmy[2] + delta[2]],
+            k + p.black * w,
+        )
+    } else {
+        (
+            [
+                cmy[0] + cmy[0] * delta[0],
+                cmy[1] + cmy[1] * delta[1],
+                cmy[2] + cmy[2] * delta[2],
+            ],
+            k + k * p.black * w,
+        )
+    };
+    let cmy2 = cmy2.map(|v| v.clamp(0.0, 1.0));
+    let k2 = k2.clamp(0.0, 1.0);
+    let out = cmy2.map(|v| ((1.0 - v) * (1.0 - k2)).clamp(0.0, 1.0) * s);
+    Px([out[0], out[1], out[2], a.0[3]])
+}
+
+#[cfg(test)]
+mod lookup_tests {
+    use super::*;
+    use crate::families::adjust::{AdjustLut3dParams, SelectiveColorParams};
+
+    #[test]
+    fn the_identity_cube_and_a_zero_selective_change_keep_the_colour() {
+        let px = Px([0.2, 0.5, 0.7, 1.0]);
+        let id = AdjustLut3dParams::from_fn(|r, g, b| [r, g, b]);
+        let out = lut3d(px, &id);
+        for c in 0..4 {
+            assert!((out.0[c] - px.0[c]).abs() < 1e-5, "{out:?}");
+        }
+        let zero = SelectiveColorParams::new(0, 0.0, 0.0, 0.0, 0.0, false);
+        let out = selective_color(px, &zero);
+        for c in 0..4 {
+            assert!((out.0[c] - px.0[c]).abs() < 1e-5, "{out:?}");
+        }
+        // More cyan in the reds takes red out of a red, not of a blue.
+        let red = Px([0.8, 0.2, 0.2, 1.0]);
+        let p = SelectiveColorParams::new(0, 0.5, 0.0, 0.0, 0.0, true);
+        assert!(selective_color(red, &p).0[0] < 0.7);
+        let blue = Px([0.2, 0.2, 0.8, 1.0]);
+        assert_eq!(selective_color(blue, &p).0, blue.0);
+    }
+}
+
 #[cfg(test)]
 mod color_replace_tests {
     use super::*;

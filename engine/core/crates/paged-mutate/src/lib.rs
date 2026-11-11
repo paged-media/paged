@@ -7284,7 +7284,7 @@ mod tests {
         use paged_model::RasterOp;
         let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
         let node = NodeId::Rectangle("Rectangle/r1".to_string());
-        let ops = vec![RasterOp::Exposure { ev: 1.0 }, RasterOp::Invert];
+        let ops = vec![RasterOp::exposure(1.0), RasterOp::Invert];
         let applied = p
             .apply(set_op(
                 node.clone(),

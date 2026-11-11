@@ -2757,6 +2757,7 @@ dependencies = [
  "paged-color",
  "paged-colour-math",
  "paged-geom",
+ "paged-image-adjust",
  "paged-pixel",
  "paged-psd",
  "paged-resample",
@@ -2822,6 +2823,7 @@ dependencies = [
  "paged-model",
  "paged-pixel",
  "paged-psd",
+ "paged-psd-fx",
  "paged-raster",
  "paged-resample",
  "paged-test-resources",
@@ -4507,6 +4509,7 @@ dependencies = [
 name = "paged-image-adjust"
 version = "0.0.0"
 dependencies = [
+ "paged-color",
  "paged-kernels",
  "paged-model",
  "paged-pixel",
@@ -4709,6 +4712,7 @@ dependencies = [
 name = "paged-psd-fx"
 version = "0.0.0"
 dependencies = [
+ "paged-color",
  "paged-model",
  "paged-psd",
 ]

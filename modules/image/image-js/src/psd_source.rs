@@ -72,7 +72,7 @@ pub enum KindState {
         file: usize,
         filters: Option<crate::smart::SmartFilterStack>,
     },
-    Adjustment(Box<crate::layers::Adjustment>),
+    Adjustment(Box<crate::layers::AdjustmentOps>),
     Fill(crate::layers::FillSource),
     /// A type layer (image ADR 474): its source as JSON.
     Type(String),

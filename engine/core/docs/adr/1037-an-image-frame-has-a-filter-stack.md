@@ -225,3 +225,66 @@ not own), `paged-ooxml` `drawingml/write.rs` (`blip_effects` reads back), `pptx-
 and reads back).
 
 This supersedes the Consequences' note that a pptx export loses a stack added in paged.
+
+## Amendment 2026-11-11 (2) — one adjustment model: a Photoshop adjustment layer is RasterOps
+
+paged.image's adjustment layers kept a model of their own (`image-js` `layers::kinds::Adjustment`, Photoshop's
+units, evaluated by the image module's GPU chain) beside `RasterOp`. That model is deleted: an adjustment layer
+holds engine ops, and Photoshop's encoding lives only in the PSD reader and writer.
+
+**The superset.** `RasterOp` carries every adjustment layer the image module has. Fields added to shipped ops are
+optional on the wire and not written at their defaults, so a stored stack reads and hashes as before (plugin-sdk 0.74.3-canary.87):
+
+| op | added |
+|---|---|
+| `exposure` | `offset` (−0.5..=0.5), `gamma` (0.01..=9.99): with either set, Photoshop's measured exposure table |
+| `levels` | `channels`: the red, green and blue records (`LevelsRecord`), applied before the composite one |
+| `curves` | `channels`: a curve per channel (an empty list the identity), applied before the composite; at most 256 points |
+| `hueSaturation` | `ranges` (Photoshop's six colour ranges) and `colorize` |
+| `channelMixer` | `monochrome` (every output the red row) |
+
+and new ops: `vibrance` (`adjust.vibrance`, then `adjust.saturation`), `colorBalance` (with `preserveLuminosity`),
+`photoFilter`, `selectiveColor` (nine ranges, relative or absolute), `gradientMap` (2 to 64 stops; a duotone is one
+of two), `colorLookup` (a cube of `size`³ RGB triples, red fastest, the look's `name`), `develop` (the 61 settings of
+`paged_kernels::families::develop`) and `whiteBalance` (the Adjust panel's temperature and tint gains). Every
+colour is 0..=1, every percentage a fraction, a level a fraction of 255.
+
+**One evaluator.** `paged-image-adjust` evaluates every op on the CPU. Levels, Curves and an Exposure with offset or
+gamma are Photoshop's 8-bit tables (`paged_image_adjust::tables`, moved from the image module, where they were
+measured against Photoshop-written layers: Levels within 2 levels, channel then composite; Exposure within 1), so a
+`levels` op is now its table, not `adjust.levels`' float curve (at an 8-bit input they agree within a level). The
+Develop kernels' references moved from image-conformance into it as shipped twins (`paged_image_adjust::develop`),
+and `paged_kernels::cpu` gained the twins of `adjust.lut3d` (any cube edge; at the kernel's 9 it is the shader) and
+`adjust.selective_color`. The image module's GPU fold keeps its kernels: an adjustment layer's ops are planned onto
+adjust-chain blocks and point-kernel dispatches (`AdjustmentOps::gpu_plan`), which read the same tables and the same
+parameter blocks (`paged_image_adjust::{levels_tables, curves_tables, hue_saturation_params, gradient_map_params,
+selective_color_params}`). `parity_tests::every_adjustment_kind_matches_the_engine_evaluator` holds the GPU fold to
+`paged-image-adjust` for every kind, off its defaults: within 1 level (Threshold and Posterize may fall either side
+of their cut by the f16 storage before them).
+
+**The PSD boundary.** `paged_psd_fx::adjustment::{raster_op, psd_adjustment}` maps `paged-psd`'s adjustment blocks
+onto ops and back (levels 0..=255 and a gamma ×100, percentages, a Lab or 16-bit filter colour, gradient locations
+in 4096ths); a round trip is exact for every kind (`every_photoshop_adjustment_round_trips_through_its_op`, through
+the blocks too). Two pieces of Photoshop dialog state with no effect on the pixels are written at Photoshop's
+defaults when an edited layer is written: a non-colorized Hue/Saturation's Colorize values and Brightness/Contrast's
+mean (an unedited layer is written from its own bytes, as before). Develop, Color Lookup and the Office and CSS ops
+have no Photoshop adjustment layer and take the flatten path, as before.
+
+**The image module.** `LayerKind::Adjustment` holds `AdjustmentOps { ops }`: a typed layer is one op, a layer the
+Adjust panel stacks is its chain's stages as ops in the chain's order (`of_chain`; its hue rotation is the channel
+mixer of its matrix, which is CSS's `hue-rotate()`; its curve tables are curves through every level, which
+reproduce them exactly). The Properties panel still speaks Photoshop's units, converted at the wasm boundary
+(`values` / `from_wire`). The layer manifest is version 10 (kind code 6: the ops' JSON); an older document migrates
+when it opens (a stored chain to its ops, a typed layer from its Photoshop units).
+
+**Goldens.** The image conformance suite (the Photoshop composite oracles of adjustment layers and the layered PSD
+save) passes unchanged: a typed layer's plan is the block it evaluated as before, field for field. A layer stacked
+from the Adjust panel with float Levels now evaluates them as Photoshop's table, after the chain's earlier stages
+(a block boundary), not as `adjust.levels`: within a level of the float curve at 8-bit input.
+
+Evidence: `paged-model` `image_adjust.rs` (an op written before the superset reads and writes as before; the
+superset round-trips), `paged-image-adjust` `lib.rs` (channel then composite Levels, the exposure table, per-channel
+curves, vibrance / white balance / photo filter, a lookup of any size, selective colour, develop, the gradient map),
+`paged-kernels` `cpu.rs`, `paged-psd-fx` `adjustment.rs`, `image-js` `layers/adjust_ops.rs` (the panel's units, the
+chain's migration and order), `layers/parity_tests.rs` (the GPU fold against the engine, the v3 and v9 manifests
+migrate), `image-conformance` `filters_develop.rs` (the shaders held to the moved twins).

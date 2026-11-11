@@ -343,6 +343,29 @@
       ]
     },
     {
+      "name": "photoshop-adjustment-tables",
+      "description": "evaluate Levels, Curves and an Exposure's offset and gamma as Photoshop's 8-bit tables with paged_image_adjust::tables (one table for the engine's filter stack and paged.image's adjustment layers, engine ADR 1037 amendment 2026-11-11)",
+      "owner": ["engine/core/crates/paged-image-adjust/src/tables.rs"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": [
+        "fn (levels|exposure)_table\\b",
+        "fn (levels|exposure)Table\\b",
+        "powf\\(2\\.2\\) \\* .*exp2\\(\\)"
+      ],
+      "baseline": []
+    },
+    {
+      "name": "psd-adjustment-encoding",
+      "description": "map a Photoshop adjustment layer's encoding (levels and a gamma x100, percentages, gradient locations in 4096ths) onto the engine's RasterOp and back with paged_psd_fx::adjustment; paged.image's adjustment layers hold RasterOps",
+      "owner": [
+        "engine/core/crates/paged-psd/src/adjustment.rs",
+        "engine/core/crates/paged-psd-fx/src/adjustment.rs"
+      ],
+      "extensions": [".rs"],
+      "patterns": ["gamma_x100", "location as f32 / 4096"],
+      "baseline": []
+    },
+    {
       "name": "drawingml-crop",
       "description": "map a picture's a:srcRect onto its placement and back with dml_native::crop",
       "owner": ["platform/shared/dml-native/src/crop.rs"],

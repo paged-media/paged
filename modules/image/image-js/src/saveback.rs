@@ -1156,7 +1156,7 @@ mod tests {
         let mut s = layered_stack();
         s.add_adjustment_layer(
             "",
-            crate::layers::Adjustment::default_for("vibrance").expect("kind"),
+            crate::layers::AdjustmentOps::default_for("vibrance").expect("kind"),
             None,
         );
         s.set_mode(gray.clone()).expect("mode");
@@ -1170,7 +1170,7 @@ mod tests {
         let mut s = layered_stack();
         s.add_adjustment_layer(
             "",
-            crate::layers::Adjustment::default_for("vibrance").expect("kind"),
+            crate::layers::AdjustmentOps::default_for("vibrance").expect("kind"),
             None,
         );
         s.set_depth(image_core::SampleDepth::U16).expect("depth");
@@ -1214,7 +1214,7 @@ mod tests {
     #[allow(non_snake_case)]
     fn an_unwritable_adjustment_layer_is_refused_for_the_flatten_fallback__feat__image_io_save_back(
     ) {
-        use crate::layers::Adjustment;
+        use crate::layers::AdjustmentOps as Adjustment;
         // Develop (WP5.2) has no Photoshop adjustment layer (its Camera
         // Raw Filter is a smart filter), and Color Lookup's look is a
         // profile Photoshop compiles itself: the flatten fallback.
@@ -1245,8 +1245,8 @@ mod tests {
     fn fill_and_adjustment_layers_and_blending_options_round_trip_through_a_psd__feat__image_layers_photoshop_parity(
     ) {
         use crate::layers::{
-            Adjustment, BlendIf, ColorStop, FillLayer, FillSource, GradientFill, Knockout,
-            LayerKind, LayerStack,
+            AdjustmentOps as Adjustment, BlendIf, ColorStop, FillLayer, FillSource, GradientFill,
+            Knockout, LayerKind, LayerStack,
         };
         let solid = |v: u8| std::sync::Arc::from(vec![v; 4 * 2 * 4].into_boxed_slice());
         let mut s = LayerStack::from_image(4, 2, solid(40)).expect("stack");
@@ -1279,31 +1279,33 @@ mod tests {
             }));
             l.rgba = crate::pixels::Pixels::from_rgba8(solid(120)).into();
         }
-        let mut curves = Adjustment::default_for("curves").expect("curves");
-        if let Adjustment::Curves { curves: c } = &mut curves {
-            c[0] = vec![(0, 0), (128, 150), (255, 255)];
-            c[3] = vec![(0, 20), (255, 230)];
-        }
-        let mut levels = Adjustment::default_for("levels").expect("levels");
-        if let Adjustment::Levels { records } = &mut levels {
-            records[0] = [10.0, 240.0, 1.2, 5.0, 250.0];
-            records[2] = [0.0, 200.0, 0.8, 0.0, 255.0];
-        }
+        // In the Properties panel's units (Photoshop's).
+        let wire = |kind: &str, v: &[f32]| Adjustment::from_wire(kind, v, &[], "").expect(kind);
+        let curves = wire(
+            "curves",
+            &[
+                3.0, 0.0, 0.0, 128.0, 150.0, 255.0, 255.0, 0.0, 0.0, 2.0, 0.0, 20.0, 255.0, 230.0,
+            ],
+        );
+        let id = [0.0, 255.0, 1.0, 0.0, 255.0];
+        let levels = wire(
+            "levels",
+            &[
+                [10.0, 240.0, 1.2, 5.0, 250.0],
+                id,
+                [0.0, 200.0, 0.8, 0.0, 255.0],
+                id,
+            ]
+            .concat(),
+        );
+        let mut hue = vec![0.0, 0.0, 25.0, 0.0, 30.0, -20.0, 5.0];
+        hue.extend([0.0; 18]);
         let typed = [
             curves,
             levels,
-            Adjustment::Exposure {
-                exposure: 0.5,
-                offset: -0.02,
-                gamma: 1.1,
-            },
-            Adjustment::Invert,
-            Adjustment::HueSaturation {
-                colorize: false,
-                colorize_hsl: [0.0, 25.0, 0.0],
-                master: [30.0, -20.0, 5.0],
-                ranges: [[0.0; 3]; 6],
-            },
+            wire("exposure", &[0.5, -0.02, 1.1]),
+            wire("invert", &[]),
+            wire("hueSaturation", &hue),
         ];
         for a in &typed {
             s.add_adjustment_layer("", a.clone(), None);

@@ -117,16 +117,19 @@ impl Step {
     /// plates.
     fn reach(&self) -> u32 {
         match self {
-            Step::Adjust { params, .. } => {
-                let blur = if params.blur_sigma > 0.0 {
-                    u32::from(image_kernels::families::conv::GAUSSIAN_MAX_RADIUS)
-                } else {
-                    0
-                };
-                // The sharpen's own blur: radius 5.
-                let sharpen = if params.sharpen_amount > 0.0 { 5 } else { 0 };
-                blur + sharpen
-            }
+            Step::Adjust { params, .. } => params
+                .iter()
+                .map(|params| {
+                    let blur = if params.blur_sigma > 0.0 {
+                        u32::from(image_kernels::families::conv::GAUSSIAN_MAX_RADIUS)
+                    } else {
+                        0
+                    };
+                    // The sharpen's own blur: radius 5.
+                    let sharpen = if params.sharpen_amount > 0.0 { 5 } else { 0 };
+                    blur + sharpen
+                })
+                .sum(),
             Step::Effect { fx, .. } => fx_reach(fx),
             _ => 0,
         }
@@ -135,7 +138,7 @@ impl Step {
     /// An adjustment that reads neighbours through Engine A's tiles.
     fn chain_reads_neighbours(&self) -> bool {
         matches!(self, Step::Adjust { params, .. }
-            if params.blur_sigma > 0.0 || params.sharpen_amount > 0.0)
+            if params.iter().any(|p| p.blur_sigma > 0.0 || p.sharpen_amount > 0.0))
     }
 
     /// This step cut to `win` (canvas coordinates, inside the

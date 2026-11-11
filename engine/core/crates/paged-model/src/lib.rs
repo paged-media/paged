@@ -84,7 +84,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub use image_adjust::RasterOp;
+pub use image_adjust::{GradientMapStop, LevelsRecord, RasterOp};
 pub use media::{MediaItem, MediaKind, MediaPlay, MediaSource};
 
 /// An axis-aligned bounding box in points: `top`, `left`, `bottom`, `right`.

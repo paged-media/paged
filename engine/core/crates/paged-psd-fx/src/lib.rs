@@ -53,6 +53,8 @@
 //! document's ppi). Opacities and spreads are percentages on both sides;
 //! angles are the light's direction on both sides.
 
+pub mod adjustment;
+
 use std::fmt;
 
 use paged_model::effect_stack::{

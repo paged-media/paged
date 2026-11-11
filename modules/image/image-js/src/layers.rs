@@ -143,6 +143,8 @@ const MAX_GROUP_DEPTH: usize = 8;
 // The GPU-resident fold (the composite's implementation).
 mod fold;
 // Typed adjustments, fill layers, blending options, locks, comps.
+pub mod adjust_ops;
+pub use adjust_ops::{AdjustmentOps, GpuPlan, ADJUSTMENT_KINDS};
 pub mod kinds;
 pub use kinds::*;
 pub mod type_layer;
@@ -196,11 +198,10 @@ pub const BACKGROUND_LAYER_NAME: &str = "Background";
 pub enum LayerKind {
     /// Canvas-extent pixels of its own.
     Pixels,
-    /// No pixels — ONE adjustment ([`Adjustment`], or a stored chain),
-    /// run over the backdrop beneath. Boxed because an adjustment is much
-    /// larger than a discriminant and every pixel layer would otherwise
-    /// pay for it.
-    Adjustment(Box<Adjustment>),
+    /// No pixels — engine `RasterOp`s ([`AdjustmentOps`]: one for a typed
+    /// layer, the stages of a chain the Adjust panel stacked), run over the
+    /// backdrop beneath. Boxed so a pixel layer does not pay for it.
+    Adjustment(Box<AdjustmentOps>),
     /// A SMART OBJECT: the layer's pixels are a cached RENDER of
     /// preserved source bytes at a scale, not the source itself.
     ///
@@ -737,7 +738,7 @@ impl Layer {
     }
 
     /// The adjustment when this is an adjustment layer.
-    pub fn adjustment(&self) -> Option<&Adjustment> {
+    pub fn adjustment(&self) -> Option<&AdjustmentOps> {
         match &self.kind {
             LayerKind::Adjustment(a) => Some(a),
             _ => None,
@@ -801,22 +802,6 @@ impl Layer {
         match &self.kind {
             LayerKind::Smart(s) => Some(s),
             _ => None,
-        }
-    }
-
-    /// The stored adjust CHAIN when this is a chain-shaped adjustment
-    /// layer (a typed one answers [`adjustment`](Self::adjustment)).
-    pub fn adjust_params(&self) -> Option<&AdjustParams> {
-        match &self.kind {
-            LayerKind::Adjustment(a) => match a.as_ref() {
-                Adjustment::Chain(p) => Some(p),
-                _ => None,
-            },
-            // A smart object or fill layer contributes PIXELS (its render),
-            // not a transform of the backdrop — so it has no adjust params.
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_) => {
-                None
-            }
         }
     }
 
@@ -1756,29 +1741,29 @@ impl LayerStack {
     /// non-destructive: the same `AdjustParams` the panel already builds,
     /// evaluated in the fold instead of written into a layer.
     ///
-    /// The chain is stored as its TYPED layer when it has one stage
-    /// ([`Adjustment::from_chain`]), as a chain otherwise.
+    /// The chain is stored as its stages' engine ops
+    /// ([`AdjustmentOps::of_chain`]): one stage is its typed layer.
     pub fn add_adjustment(&mut self, name: &str, params: AdjustParams) -> usize {
-        self.add_adjustment_layer(name, Adjustment::from_chain(params), None)
+        self.add_adjustment_layer(name, AdjustmentOps::of_chain(&params), None)
     }
 
-    /// Insert an adjustment layer of one typed [`Adjustment`] above the
+    /// Insert an adjustment layer of [`AdjustmentOps`] above the
     /// active layer, in the active layer's group when `group` says so
     /// (`Some(group)`), and make it active. An empty `name` takes the
     /// kind's own (Photoshop's "Levels 1").
     pub fn add_adjustment_layer(
         &mut self,
         name: &str,
-        adjustment: Adjustment,
+        adjustment: AdjustmentOps,
         group: Option<Option<u32>>,
     ) -> usize {
         let id = self.fresh_id();
         let at = self.active + 1;
         let pixels = self.transparent();
         let name = if name.is_empty() {
-            match adjustment {
-                Adjustment::Chain(_) => format!("Adjustment {id}"),
-                ref a => self.numbered(a.default_layer_name()),
+            match adjustment.kind_name() {
+                "chain" => format!("Adjustment {id}"),
+                _ => self.numbered(adjustment.default_layer_name()),
             }
         } else {
             name.to_string()
@@ -2246,12 +2231,7 @@ impl LayerStack {
         }
         match &mut layer.kind {
             LayerKind::Adjustment(a) => {
-                **a = match a.as_ref() {
-                    // A typed layer edited through the chain keeps its type
-                    // when the chain is still one of its own.
-                    Adjustment::Chain(_) => Adjustment::Chain(params),
-                    _ => Adjustment::from_chain(params),
-                };
+                **a = AdjustmentOps::of_chain(&params);
                 Ok(())
             }
             LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_) => {
@@ -2268,7 +2248,7 @@ impl LayerStack {
     pub fn set_adjustment_typed(
         &mut self,
         index: usize,
-        adjustment: Adjustment,
+        adjustment: AdjustmentOps,
     ) -> Result<(), IngestError> {
         let layer = self.layer_mut(index)?;
         layer.appearance_editable()?;
@@ -4676,255 +4656,26 @@ fn bounded_px(
         })
 }
 
-/// A PSD adjustment layer as a TYPED adjustment layer, field for field.
-/// Only what `image_psd::adjustment::Adjustment::unmodelled` lets through
-/// reaches here, so every field it reads has a counterpart; the typed
-/// layer lowers onto the adjust chain exactly as the import always did
-/// ([`Adjustment::to_chain`]: natural-spline curves, Levels and an
-/// Exposure offset/gamma as tables).
-pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> Adjustment {
-    use image_psd::adjustment::{Adjustment as Psd, FilterColor};
-    let f = |v: i16| f32::from(v);
-    let f3 = |t: &[i16; 3]| t.map(f32::from);
-    match adj {
-        Psd::Curves { curves } => Adjustment::Curves {
-            curves: std::array::from_fn(|c| curves[c].clone().unwrap_or_default()),
-        },
-        Psd::Levels { records, .. } => Adjustment::Levels {
-            records: records.map(|r| {
-                [
-                    f32::from(r.in_black),
-                    f32::from(r.in_white),
-                    f32::from(r.gamma_x100) / 100.0,
-                    f32::from(r.out_black),
-                    f32::from(r.out_white),
-                ]
-            }),
-        },
-        Psd::Exposure {
-            exposure,
-            offset,
-            gamma,
-        } => Adjustment::Exposure {
-            exposure: *exposure,
-            offset: *offset,
-            gamma: *gamma,
-        },
-        Psd::Invert => Adjustment::Invert,
-        Psd::HueSaturation {
-            colorized,
-            colorize,
-            master,
-            ranges,
-            ..
-        } => Adjustment::HueSaturation {
-            colorize: *colorized,
-            colorize_hsl: f3(colorize),
-            master: f3(master),
-            ranges: ranges.map(|r| f3(&r)),
-        },
-        Psd::BrightnessContrast {
-            brightness,
-            contrast,
-            ..
-        } => Adjustment::BrightnessContrast {
-            brightness: *brightness as f32,
-            contrast: *contrast as f32,
-        },
-        Psd::ColorBalance {
-            shadows,
-            midtones,
-            highlights,
-            ..
-        } => Adjustment::ColorBalance {
-            shadows: f3(shadows),
-            midtones: f3(midtones),
-            highlights: f3(highlights),
-        },
-        Psd::Vibrance {
-            vibrance,
-            saturation,
-        } => Adjustment::Vibrance {
-            vibrance: *vibrance as f32,
-            saturation: *saturation as f32,
-        },
-        Psd::BlackWhite { weights, .. } => Adjustment::BlackWhite {
-            weights: weights.map(|w| w as f32),
-        },
-        Psd::PhotoFilter {
-            color,
-            density,
-            preserve_luminosity,
-        } => {
-            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let color = match color {
-                FilterColor::Lab([l, a, b]) => {
-                    paged_color::lab::lab_d50_to_srgb_encoded(*l as f32, *a as f32, *b as f32)
-                        .map(q)
-                }
-                FilterColor::Rgb(c) => c.map(|v| ((u32::from(v) + 128) / 257) as u8),
-                // Declined by `unmodelled`; the warming filter's colour.
-                FilterColor::Xyz(_) => [236, 138, 0],
-            };
-            Adjustment::PhotoFilter {
-                color,
-                density: *density as f32,
-                preserve_luminosity: *preserve_luminosity,
-            }
-        }
-        Psd::ChannelMixer { rows, monochrome } => Adjustment::ChannelMixer {
-            rows: rows.map(|r| r.map(f)),
-            monochrome: *monochrome,
-        },
-        Psd::Posterize { levels } => Adjustment::Posterize {
-            levels: f32::from(*levels),
-        },
-        Psd::Threshold { level } => Adjustment::Threshold {
-            level: f32::from(*level),
-        },
-        Psd::GradientMap { stops, reverse, .. } => Adjustment::GradientMap {
-            stops: stops
-                .iter()
-                .map(|s| ColorStop {
-                    at: (s.location as f32 / 4096.0).clamp(0.0, 1.0),
-                    rgb: s.rgb16.map(|v| ((u32::from(v) + 128) / 257) as u8),
-                })
-                .collect(),
-            reverse: *reverse,
-        },
-        Psd::SelectiveColor { ranges, absolute } => Adjustment::SelectiveColor {
-            ranges: ranges.map(|r| r.map(f)),
-            absolute: *absolute,
-        },
-    }
+/// A PSD adjustment layer as the layer's ops: Photoshop's encoding is
+/// mapped at the PSD boundary (`paged_psd_fx::adjustment`, engine ADR 1037,
+/// amendment 2026-11-11). Only what
+/// `image_psd::adjustment::Adjustment::unmodelled` lets through reaches
+/// here.
+pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> AdjustmentOps {
+    AdjustmentOps::one(paged_psd_fx::adjustment::raster_op(adj))
 }
 
-/// A typed adjustment as Photoshop's adjustment (the inverse of
-/// [`psd_adjustment`]), for the layered PSD save: `None` for what
-/// Photoshop has no adjustment layer for in this form — a stored chain,
-/// Develop (a Camera Raw filter, not a layer) and Color Lookup (whose
-/// look Photoshop compiles into an embedded profile, image ADR 478).
-pub fn adjustment_to_psd(adj: &Adjustment) -> Option<image_psd::adjustment::Adjustment> {
-    use image_psd::adjustment::{
-        Adjustment as Psd, FilterColor, GradientMapStop, LevelsRecord, BLACK_WHITE_DEFAULT_TINT,
-        HUE_RANGE_DEFAULTS,
-    };
-    let i = |v: f32| v.round() as i16;
-    let i3 = |t: &[f32; 3]| t.map(i);
-    Some(match adj {
-        Adjustment::Chain(_) | Adjustment::Develop { .. } | Adjustment::ColorLookup { .. } => {
-            return None
-        }
-        Adjustment::Curves { curves } => Psd::Curves {
-            curves: std::array::from_fn(|c| (!curves[c].is_empty()).then(|| curves[c].clone())),
-        },
-        Adjustment::Levels { records } => Psd::Levels {
-            records: records.map(|r| {
-                let lv = |v: f32| v.round().clamp(0.0, 255.0) as u16;
-                LevelsRecord {
-                    in_black: lv(r[0]),
-                    in_white: lv(r[1]),
-                    out_black: lv(r[3]),
-                    out_white: lv(r[4]),
-                    gamma_x100: (r[2] * 100.0).round().clamp(10.0, 999.0) as u16,
-                }
-            }),
-            extra_records: false,
-        },
-        Adjustment::Exposure {
-            exposure,
-            offset,
-            gamma,
-        } => Psd::Exposure {
-            exposure: *exposure,
-            offset: *offset,
-            gamma: *gamma,
-        },
-        Adjustment::Invert => Psd::Invert,
-        Adjustment::HueSaturation {
-            colorize,
-            colorize_hsl,
-            master,
-            ranges,
-        } => Psd::HueSaturation {
-            colorized: *colorize,
-            colorize: i3(colorize_hsl),
-            master: i3(master),
-            ranges: ranges.map(|r| i3(&r)),
-            bounds: HUE_RANGE_DEFAULTS,
-        },
-        Adjustment::BrightnessContrast {
-            brightness,
-            contrast,
-        } => Psd::BrightnessContrast {
-            brightness: brightness.round() as i32,
-            contrast: contrast.round() as i32,
-            mean: 127,
-            lab: false,
-            legacy: false,
-            auto: false,
-        },
-        Adjustment::ColorBalance {
-            shadows,
-            midtones,
-            highlights,
-        } => Psd::ColorBalance {
-            shadows: i3(shadows),
-            midtones: i3(midtones),
-            highlights: i3(highlights),
-            preserve_luminosity: true,
-        },
-        Adjustment::Vibrance {
-            vibrance,
-            saturation,
-        } => Psd::Vibrance {
-            vibrance: vibrance.round() as i32,
-            saturation: saturation.round() as i32,
-        },
-        Adjustment::BlackWhite { weights } => Psd::BlackWhite {
-            weights: weights.map(|w| w.round() as i32),
-            tint: false,
-            tint_rgb: BLACK_WHITE_DEFAULT_TINT,
-        },
-        Adjustment::PhotoFilter {
-            color,
-            density,
-            preserve_luminosity,
-        } => {
-            // Photoshop stores the filter colour as Lab [OBS].
-            let lab = paged_color::lab::srgb_to_lab_d50(color.map(|c| f32::from(c) / 255.0));
-            Psd::PhotoFilter {
-                color: FilterColor::Lab(lab.map(|v| f64::from((v * 100.0).round()) / 100.0)),
-                density: density.round().clamp(1.0, 100.0) as u32,
-                preserve_luminosity: *preserve_luminosity,
-            }
-        }
-        Adjustment::ChannelMixer { rows, monochrome } => Psd::ChannelMixer {
-            rows: rows.map(|r| r.map(i)),
-            monochrome: *monochrome,
-        },
-        Adjustment::Posterize { levels } => Psd::Posterize {
-            levels: levels.round().clamp(2.0, 255.0) as u16,
-        },
-        Adjustment::Threshold { level } => Psd::Threshold {
-            level: level.round().clamp(1.0, 255.0) as u16,
-        },
-        Adjustment::GradientMap { stops, reverse } => Psd::gradient_map(
-            stops
-                .iter()
-                .map(|s| GradientMapStop {
-                    location: (s.at.clamp(0.0, 1.0) * 4096.0).round() as u32,
-                    midpoint: 50,
-                    rgb16: s.rgb.map(|v| u16::from(v) * 257),
-                })
-                .collect(),
-            *reverse,
-        ),
-        Adjustment::SelectiveColor { ranges, absolute } => Psd::SelectiveColor {
-            ranges: ranges.map(|r| r.map(i)),
-            absolute: *absolute,
-        },
-    })
+/// The layer's ops as Photoshop's adjustment (the inverse of
+/// [`psd_adjustment`]), for the layered PSD save: `None` for a layer of
+/// several ops (a chain the Adjust panel stacked) and for an op Photoshop
+/// has no adjustment layer of in this form — Develop (a Camera Raw filter),
+/// Color Lookup (whose look Photoshop compiles into an embedded profile,
+/// image ADR 478).
+pub fn adjustment_to_psd(adj: &AdjustmentOps) -> Option<image_psd::adjustment::Adjustment> {
+    match adj.ops.as_slice() {
+        [op] => paged_psd_fx::adjustment::psd_adjustment(op),
+        _ => None,
+    }
 }
 
 /// [`psd_adjustment`] as the adjust chain it evaluates to.
