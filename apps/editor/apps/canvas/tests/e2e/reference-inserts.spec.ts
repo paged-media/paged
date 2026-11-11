@@ -28,7 +28,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { covers } from "@paged-media/test-kit";
 
 import { Designer } from "../journey/driver/designer";
-import { clickMenuRow } from "./harness/shell-surface";
 
 interface CommandsGlobal {
   __canvas: {
@@ -70,8 +69,7 @@ test.describe("reference inserts are host commands", () => {
       "command:paged.insert.indexEntry",
       "panel:paged.cross-references",
       "panel:paged.index",
-      "menu:Type/Insert cross-reference…",
-      "menu:Type/New index entry…",
+      "command:paged.insert.endnote",
     );
     const designer = new Designer(page);
     await designer.open();
@@ -108,6 +106,7 @@ test.describe("reference inserts are host commands", () => {
           .toBeGreaterThan(had);
     };
     await step("footnote", "paged.insert.footnote", { text: "" }, "footnotes");
+    await step("endnote", "paged.insert.endnote", { text: "" }, null);
     await step("destination", "paged.insert.bookmark", { name: "Here" }, null);
     await step(
       "cross-reference",
@@ -124,14 +123,14 @@ test.describe("reference inserts are host commands", () => {
       "indexTopics",
     );
 
-    // The Type menu's form rows open the panels that carry the forms.
-    await clickMenuRow(page, "Type/Insert cross-reference…");
+    // A bare form command opens the panel that carries its form.
+    await run(page, "paged.insert.crossReference");
     await expect(
       page.locator(
         '[data-cross-references-panel="ready"] [data-cross-reference-insert]',
       ),
     ).toBeVisible();
-    await clickMenuRow(page, "Type/New index entry…");
+    await run(page, "paged.insert.indexEntry");
     await expect(
       page.locator('[data-index-panel="ready"] [data-index-entry-insert]'),
     ).toBeVisible();

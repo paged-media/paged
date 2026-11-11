@@ -329,7 +329,32 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         await stillHere();
       }
 
-      // EYEDROPPER — the same host tool everywhere; inside an image its
+      // HISTORY — Edit ▸ History lists the document's steps; a click on
+      // the one before the last goes back one step.
+      await clickMenuRow(page, "Edit/History");
+      const history = page.locator("[data-history-panel]");
+      await expect(history).toBeVisible();
+      await expect(history).toHaveAttribute("data-history-source", "document");
+      const steps = history.locator("[data-history-step]");
+      const n = await steps.count();
+      expect(n).toBeGreaterThanOrEqual(3);
+      await expect(steps.nth(n - 1)).toHaveAttribute(
+        "data-history-state",
+        "current",
+      );
+      const before = await undoLen(page);
+      await steps.nth(n - 2).click();
+      await expect.poll(() => undoLen(page)).toBe(before - 1);
+      await expect(steps.nth(n - 1)).toHaveAttribute(
+        "data-history-state",
+        "undone",
+      );
+      // The step undone was the Free Transform move.
+      await expect.poll(() => bounds(page, ref)).toEqual(start);
+      await stillHere();
+
+      // EYEDROPPER (last: its ingest makes the image the History's
+      // source) — the same host tool everywhere; inside an image its
       // target is the image (extensions ADR 1104): a click takes the
       // picture's colour into the foreground, which is the image context's
       // fill well, and writes nothing to the document.
@@ -421,30 +446,6 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         );
         await stillHere();
       }
-
-      // HISTORY — Edit ▸ History lists the document's steps; a click on
-      // the one before the last goes back one step.
-      await clickMenuRow(page, "Edit/History");
-      const history = page.locator("[data-history-panel]");
-      await expect(history).toBeVisible();
-      await expect(history).toHaveAttribute("data-history-source", "document");
-      const steps = history.locator("[data-history-step]");
-      const n = await steps.count();
-      expect(n).toBeGreaterThanOrEqual(3);
-      await expect(steps.nth(n - 1)).toHaveAttribute(
-        "data-history-state",
-        "current",
-      );
-      const before = await undoLen(page);
-      await steps.nth(n - 2).click();
-      await expect.poll(() => undoLen(page)).toBe(before - 1);
-      await expect(steps.nth(n - 1)).toHaveAttribute(
-        "data-history-state",
-        "undone",
-      );
-      // The step undone was the Free Transform move.
-      await expect.poll(() => bounds(page, ref)).toEqual(start);
-      await stillHere();
     });
   }
 });
