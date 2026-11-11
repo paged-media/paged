@@ -475,7 +475,7 @@ fn an_instance_carries_plugin_metadata_through_undo_and_the_idml_restore__feat__
     // and no leaf keeps the carrier.
     let mut written = doc.clone();
     expand_symbols_for_interchange(&mut written);
-    assert!(written.spreads[0].spread.labels.get(&id).is_none());
+    assert!(!written.spreads[0].spread.labels.contains_key(&id));
     restore_symbols_from_labels(&mut written);
     assert_eq!(label(&written), Some(mark));
     assert!(written.spreads[0].spread.labels.values().all(|v| v
