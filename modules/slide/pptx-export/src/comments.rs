@@ -73,18 +73,13 @@ pub fn is_guid(s: &str) -> bool {
 }
 
 fn fnv(seed: &str, basis: u64) -> u64 {
-    let mut h = basis;
-    for b in seed.bytes() {
-        h ^= u64::from(b);
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    }
-    h
+    paged_pixel::fnv1a_64_update(basis, seed.as_bytes())
 }
 
 /// A stable `{GUID}` for `seed` (an id that is not one: a legacy comment's,
 /// or an author known only by name).
 pub fn guid(seed: &str) -> String {
-    let a = fnv(seed, 0xcbf2_9ce4_8422_2325);
+    let a = fnv(seed, paged_pixel::FNV1A_64_OFFSET);
     let b = fnv(seed, 0x8422_2325_cbf2_9ce4);
     let h = format!("{a:016X}{b:016X}");
     format!(
@@ -99,7 +94,7 @@ pub fn guid(seed: &str) -> String {
 
 /// A short hash for a part name.
 pub fn short_hash(seed: &str) -> String {
-    format!("{:08X}", fnv(seed, 0xcbf2_9ce4_8422_2325) as u32)
+    format!("{:08X}", fnv(seed, paged_pixel::FNV1A_64_OFFSET) as u32)
 }
 
 /// The modern id an author is written with.

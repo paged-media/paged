@@ -12,6 +12,7 @@ name = "paged"
 path = "src/main.rs"
 
 [dependencies]
+paged-pixel = { path = "../paged-pixel" }
 # The document lane. `paged-canvas` brings the CPU rasterizer (its
 # default `cpu` feature) and, through it, the renderer, the PDF
 # exporter, mutate, store and colour — so this leaf crate can hold every
@@ -79,6 +80,7 @@ default = ["fetch"]
 fetch = ["dep:ureq", "dep:rustls", "dep:rustls-native-certs"]
 
 [dev-dependencies]
+crc32fast = { workspace = true }
 paged-test-resources.workspace = true
 serde_json = "1"
 sha2 = "0.11"

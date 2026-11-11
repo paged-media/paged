@@ -3163,13 +3163,7 @@ mod tests {
         }
     }
 
-    fn linear_to_srgb(c: f32) -> f32 {
-        if c <= 0.003_130_8 {
-            12.92 * c
-        } else {
-            1.055 * c.powf(1.0 / 2.4) - 0.055
-        }
-    }
+    use paged_colour_math::linear_to_srgb_f32 as linear_to_srgb;
     use paged_compose::{
         emit_rect, emit_stroke_rect, BevelDirection, BevelStyle, BevelTechnique, Color,
         DisplayList, Paint, Rect,

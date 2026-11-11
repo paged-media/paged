@@ -12,6 +12,7 @@ description = "paged.draw DXF interchange — a DXF drawing read into an SVG doc
 workspace = true
 
 [dependencies]
+paged-fmt = { path = "../../../../engine/core/crates/paged-fmt" }
 paged-geom = { path = "../../../../engine/core/crates/paged-geom" }
 dxf = { workspace = true }
 paged-svg = { workspace = true }

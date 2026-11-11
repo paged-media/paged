@@ -37,15 +37,8 @@
 //! gates this.
 
 use anyhow::{Context, Result};
-use std::io::{Cursor, Write};
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, DateTime, ZipWriter};
 
 const IDML_MIMETYPE: &[u8] = b"application/vnd.adobe.indesign-idml-package";
-
-fn fixed_timestamp() -> DateTime {
-    DateTime::from_date_and_time(1980, 1, 1, 0, 0, 0).expect("Zip epoch is a valid timestamp")
-}
 
 /// One emitted IDML mega-file. The package writer takes the bag of
 /// per-resource bytes the builders produced and stitches them into a
@@ -76,26 +69,13 @@ pub struct Sample {
 /// `XML/{BackingStory,Tags,Mapping}.xml`, `MasterSpreads/*`,
 /// `Spreads/*`, `Stories/*`.
 pub fn write_idml(sample: &Sample) -> Result<Vec<u8>> {
-    let buf = Cursor::new(Vec::<u8>::new());
-    let mut zip = ZipWriter::new(buf);
-
     // mimetype: stored, first, no extras. The trailing newline is
     // omitted on purpose — Sample-3.idml's mimetype entry is exactly
     // 43 bytes (the mimetype string itself).
-    let stored = SimpleFileOptions::default()
-        .compression_method(CompressionMethod::Stored)
-        .last_modified_time(fixed_timestamp());
-    zip.start_file("mimetype", stored)
-        .context("start mimetype entry")?;
-    zip.write_all(IDML_MIMETYPE)?;
-
-    let deflated = SimpleFileOptions::default()
-        .compression_method(CompressionMethod::Deflated)
-        .last_modified_time(fixed_timestamp());
+    let mut zip = paged_ocf::OcfZip::new(IDML_MIMETYPE).context("start mimetype entry")?;
 
     let mut emit = |path: &str, body: &[u8]| -> Result<()> {
-        zip.start_file(path, deflated).context("start file")?;
-        zip.write_all(body)?;
+        zip.deflated(path, body).context("start file")?;
         Ok(())
     };
 
@@ -119,6 +99,5 @@ pub fn write_idml(sample: &Sample) -> Result<Vec<u8>> {
         emit(&format!("Stories/Story_{id}.xml"), body)?;
     }
 
-    let buf = zip.finish().context("finish zip")?;
-    Ok(buf.into_inner())
+    zip.finish().context("finish zip")
 }

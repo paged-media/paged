@@ -57,6 +57,54 @@ pub fn fnv1a_64_update(mut h: u64, bytes: &[u8]) -> u64 {
     h
 }
 
+/// FNV-1a 64 as a [`std::fmt::Write`] sink: `write!` a value's `Debug`
+/// form straight into the hash without building the string (the display
+/// list's digest and prints, pattern tiles).
+#[derive(Debug, Clone, Copy)]
+pub struct Fnv1a64(pub u64);
+
+impl Default for Fnv1a64 {
+    fn default() -> Self {
+        Fnv1a64(FNV1A_64_OFFSET)
+    }
+}
+
+impl Fnv1a64 {
+    /// Fold `bytes` in.
+    pub fn bytes(&mut self, bytes: &[u8]) {
+        self.0 = fnv1a_64_update(self.0, bytes);
+    }
+}
+
+impl std::fmt::Write for Fnv1a64 {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.bytes(s.as_bytes());
+        Ok(())
+    }
+}
+
+/// FNV-1a 32 offset basis.
+pub const FNV1A_32_OFFSET: u32 = 0x811c_9dc5;
+
+/// FNV-1a 32 prime.
+pub const FNV1A_32_PRIME: u32 = 0x0100_0193;
+
+/// FNV-1a 32: the short ids (a font face's id, a PDF resource name, a
+/// review author's colour slot). The same hash as `fnv1a32` of
+/// `@paged-media/helpers`.
+pub fn fnv1a_32(bytes: &[u8]) -> u32 {
+    fnv1a_32_update(FNV1A_32_OFFSET, bytes)
+}
+
+/// Continue an FNV-1a 32 hash `h` over `bytes`.
+pub fn fnv1a_32_update(mut h: u32, bytes: &[u8]) -> u32 {
+    for &b in bytes {
+        h ^= b as u32;
+        h = h.wrapping_mul(FNV1A_32_PRIME);
+    }
+    h
+}
+
 impl ContentHash {
     pub fn of(bytes: &[u8]) -> Self {
         ContentHash(fnv1a_64(bytes))
@@ -79,5 +127,10 @@ mod tests {
         assert_eq!(fnv1a_64(b""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(fnv1a_64(b"a"), 0xaf63_dc4c_8601_ec8c);
         assert_eq!(fnv1a_64_update(fnv1a_64(b"ab"), b"cd"), fnv1a_64(b"abcd"));
+        assert_eq!(fnv1a_32(b""), 0x811c_9dc5);
+        assert_eq!(fnv1a_32(b"a"), 0xe40c_292c);
+        let mut w = Fnv1a64::default();
+        std::fmt::Write::write_str(&mut w, "abcd").unwrap();
+        assert_eq!(w.0, fnv1a_64(b"abcd"));
     }
 }

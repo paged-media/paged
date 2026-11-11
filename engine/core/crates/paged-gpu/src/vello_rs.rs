@@ -5855,13 +5855,7 @@ mod tests {
                 PathSegment::Close,
             ])
         };
-        let decode = |v: f32| {
-            if v <= 0.040_45 {
-                v / 12.92
-            } else {
-                ((v + 0.055) / 1.055).powf(2.4)
-            }
-        };
+        let decode = paged_colour_math::srgb_to_linear_f32;
         for translucent in [false, true] {
             let mut list = DisplayList::new();
             let clip = list.paths.push_anon(rect_path(10.3, 20.0, 109.7, 40.0));

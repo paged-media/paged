@@ -60,7 +60,7 @@ const SHAPE_W_PT: f32 = 320.0;
 const SHAPE_H_PT: f32 = 320.0;
 /// Kappa constant: control-handle length / radius for a quarter-circle
 /// cubic Bezier approximation. The renderer flattens these handles.
-const KAPPA: f32 = 0.552_284_8;
+use paged_geom::KAPPA_F32 as KAPPA;
 
 /// Body text — short words so many lines fit and the shape's per-line
 /// segment shows in each line's centre / split. Repeated enough to fill

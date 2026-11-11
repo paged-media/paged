@@ -310,20 +310,7 @@ paged.setDocumentMetadata("x-paged:media.paged.data", JSON.stringify({ v: 1, dat
 
 /// A `w × h` solid red RGB PNG, stored (uncompressed) deflate: no encoder.
 fn red_png(w: u32, h: u32) -> Vec<u8> {
-    fn crc32(data: &[u8]) -> u32 {
-        let mut crc = 0xffff_ffffu32;
-        for byte in data {
-            crc ^= u32::from(*byte);
-            for _ in 0..8 {
-                crc = if crc & 1 != 0 {
-                    (crc >> 1) ^ 0xedb8_8320
-                } else {
-                    crc >> 1
-                };
-            }
-        }
-        !crc
-    }
+    use crc32fast::hash as crc32;
     fn chunk(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
         let mut out = (body.len() as u32).to_be_bytes().to_vec();
         out.extend_from_slice(kind);

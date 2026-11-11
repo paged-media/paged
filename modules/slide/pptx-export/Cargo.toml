@@ -12,6 +12,7 @@ description = "paged.slide: write a .pptx back from the original package and the
 workspace = true
 
 [dependencies]
+paged-pixel = { path = "../../../engine/core/crates/paged-pixel" }
 paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 pptx-core.workspace = true

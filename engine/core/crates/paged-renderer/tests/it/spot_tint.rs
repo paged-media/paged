@@ -148,11 +148,7 @@ fn spot_color_at_half_tint_renders_lighter_than_full_tint() {
 
 /// sRGB-encode a linear channel the way the rasterizer does, to byte.
 fn srgb_byte(linear: f32) -> i32 {
-    let s = if linear <= 0.003_130_8 {
-        12.92 * linear
-    } else {
-        1.055 * linear.powf(1.0 / 2.4) - 0.055
-    };
+    let s = paged_color::math::linear_to_srgb(linear);
     (s.clamp(0.0, 1.0) * 255.0).round() as i32
 }
 

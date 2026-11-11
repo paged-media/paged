@@ -11,6 +11,8 @@ description = "Export re-serialization (save-back). Carry-through writer: copies
 workspace = true
 
 [dependencies]
+paged-fmt = { path = "../paged-fmt" }
+paged-pixel = { path = "../paged-pixel" }
 paged-blend = { path = "../paged-blend" }
 base64 = { workspace = true }
 idml-import = { path = "../idml-import" }

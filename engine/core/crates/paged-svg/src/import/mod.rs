@@ -403,12 +403,7 @@ fn hex(rgb: [u8; 3]) -> String {
 
 /// A short stable hash (FNV-1a) for gradient ids.
 fn fnv(s: &str) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in s.bytes() {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
+    paged_pixel::fnv1a_64(s.as_bytes())
 }
 
 /// A resolved paint for one side (fill or stroke) of a shape.

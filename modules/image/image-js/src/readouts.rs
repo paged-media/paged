@@ -294,21 +294,7 @@ fn stamp_jpeg(bytes: &[u8], ppi: f32) -> Vec<u8> {
     out
 }
 
-/// CRC-32 (ISO-HDLC, the PNG chunk checksum), bitwise.
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xFFFF_FFFFu32;
-    for &b in data {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0xEDB8_8320
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    !crc
-}
+use crc32fast::hash as crc32;
 
 #[cfg(test)]
 mod tests {

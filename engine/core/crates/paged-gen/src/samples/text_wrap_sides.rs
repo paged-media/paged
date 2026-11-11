@@ -66,7 +66,7 @@ const OBST_W: f32 = 120.0;
 const OBST_H: f32 = 100.0;
 const OBST_Y: f32 = 300.0;
 const OFFSET: f32 = 6.0;
-const KAPPA: f32 = 0.552_284_8;
+use paged_geom::KAPPA_F32 as KAPPA;
 
 /// The obstacle's outline.
 #[derive(Clone, Copy)]

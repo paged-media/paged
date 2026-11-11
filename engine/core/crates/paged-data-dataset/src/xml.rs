@@ -133,23 +133,12 @@ fn local(name: &str) -> &str {
 /// also writes a carriage return as `&#13;` since 0.42; this writer keeps the
 /// bytes it wrote before, so a value that carries one is written as it was.
 fn escape(raw: &str) -> Cow<'_, str> {
-    if !raw.contains(['<', '>', '&', '\'', '"']) {
-        return Cow::Borrowed(raw);
-    }
-    let mut out = String::with_capacity(raw.len() + 16);
-    for c in raw.chars() {
-        match c {
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '&' => out.push_str("&amp;"),
-            '\'' => out.push_str("&apos;"),
-            '"' => out.push_str("&quot;"),
-            c => out.push(c),
-        }
-    }
-    Cow::Owned(out)
+    let e = paged_fmt::xml::AttrEscape {
+        apos: true,
+        ..Default::default()
+    };
+    paged_fmt::xml::escape_attr_with(raw, e)
 }
-
 /// Read an attribute by LOCAL name, raw (never unescaped): the values we care
 /// about — `varSetName`, `varName`, `trait`, `dataSetName` — are plain
 /// identifiers, and NOT unescaping is exactly what lets an Illustrator file

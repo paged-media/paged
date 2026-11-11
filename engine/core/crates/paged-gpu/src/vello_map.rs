@@ -453,11 +453,7 @@ fn map_join(j: LineJoin) -> kurbo::Join {
 /// both lanes.
 pub(crate) fn linear_to_peniko(c: ComposeColor) -> PenikoColor {
     let to_srgb = |v: f32| -> u8 {
-        let s = if v <= 0.003_130_8 {
-            12.92 * v
-        } else {
-            1.055 * v.powf(1.0 / 2.4) - 0.055
-        };
+        let s = paged_colour_math::linear_to_srgb_f32(v);
         (s.clamp(0.0, 1.0) * 255.0).round() as u8
     };
     PenikoColor::from_rgba8(
@@ -1167,7 +1163,7 @@ mod tests {
     fn fills_flatten_curves_to_the_tolerance_and_reuse_the_polyline() {
         // A quarter circle of radius 500 units, drawn at 0.02 pt per unit
         // (10 pt) and 2 px per pt: 20 px in device space.
-        let k = 0.552_284_8 * 500.0;
+        let k = paged_geom::KAPPA_F32 * 500.0;
         let (list, id) = list_with(vec![
             MoveTo { x: 500.0, y: 0.0 },
             CubicTo {

@@ -16,6 +16,7 @@ name = "data_sources"
 workspace = true
 
 [dependencies]
+paged-pixel = { path = "../paged-pixel" }
 paged-data-core = { path = "../paged-data-core" }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }

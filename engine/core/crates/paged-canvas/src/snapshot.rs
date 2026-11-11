@@ -48,7 +48,6 @@ use thiserror::Error;
 use tsify_next::Tsify;
 
 use crate::model::CanvasModel;
-use image::{codecs::png::PngEncoder, ImageEncoder};
 #[cfg(feature = "cpu")]
 use paged_renderer::render_built_page;
 
@@ -823,14 +822,7 @@ pub fn render_snapshot_png_at_dpi(
 
 /// PNG-encode a snapshot for the `SnapshotReady` reply.
 pub fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError> {
-    let mut png_bytes = Vec::with_capacity((snap.width_px * snap.height_px) as usize);
-    PngEncoder::new(&mut png_bytes)
-        .write_image(
-            &snap.rgba,
-            snap.width_px,
-            snap.height_px,
-            image::ExtendedColorType::Rgba8,
-        )
+    let png_bytes = paged_raster::encode_rgba8_png(&snap.rgba, snap.width_px, snap.height_px)
         .map_err(|e| SnapshotError::PngEncode(e.to_string()))?;
     Ok(SnapshotPng {
         page_id: snap.page_id,

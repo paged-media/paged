@@ -18,6 +18,7 @@ workspace = true
 moxcms = ["dep:moxcms"]
 
 [dependencies]
+paged-colour-math = { path = "../paged-colour-math" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 # qcms — Mozilla's pure-Rust ICC library that ships in Firefox — is the

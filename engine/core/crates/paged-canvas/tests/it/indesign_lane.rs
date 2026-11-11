@@ -150,12 +150,7 @@ fn set(model: &mut CanvasModel, address: &str, path: &str, value: Value) {
 /// FNV-1a, 64 bit: the digest a recording keeps of the export it was made
 /// from.
 fn digest(bytes: &[u8]) -> String {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        h ^= u64::from(*b);
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("{h:016x}")
+    format!("{:016x}", paged_pixel::fnv1a_64(bytes))
 }
 
 fn recordings() -> PathBuf {

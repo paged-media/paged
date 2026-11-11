@@ -548,38 +548,6 @@ fn corner(p: (f32, f32)) -> PathAnchor {
     }
 }
 
-/// The closed four-cubic ellipse inscribed in `b` (kappa 0.5523), the
-/// shape the renderer draws for an oval.
-fn ellipse_anchors(b: Bounds) -> Vec<PathAnchor> {
-    const K: f32 = 0.552_284_8;
-    let cx = (b.left + b.right) * 0.5;
-    let cy = (b.top + b.bottom) * 0.5;
-    let rx = (b.right - b.left) * 0.5;
-    let ry = (b.bottom - b.top) * 0.5;
-    vec![
-        PathAnchor {
-            anchor: (cx, b.top),
-            left: (cx - K * rx, b.top),
-            right: (cx + K * rx, b.top),
-        },
-        PathAnchor {
-            anchor: (b.right, cy),
-            left: (b.right, cy - K * ry),
-            right: (b.right, cy + K * ry),
-        },
-        PathAnchor {
-            anchor: (cx, b.bottom),
-            left: (cx + K * rx, b.bottom),
-            right: (cx - K * rx, b.bottom),
-        },
-        PathAnchor {
-            anchor: (b.left, cy),
-            left: (b.left, cy + K * ry),
-            right: (b.left, cy - K * ry),
-        },
-    ]
-}
-
 fn element_targets(leaf: &LeafPath<'_>, origin: (f32, f32)) -> ElementTargets {
     let m = leaf
         .item_transform
@@ -596,7 +564,7 @@ fn element_targets(leaf: &LeafPath<'_>, origin: (f32, f32)) -> ElementTargets {
         SnapSource,
     ) = if leaf.oval {
         (
-            ellipse_anchors(leaf.bounds),
+            paged_geom::oval_anchors(leaf.bounds),
             vec![0],
             vec![false],
             false,

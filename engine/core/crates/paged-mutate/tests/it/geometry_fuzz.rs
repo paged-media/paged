@@ -91,7 +91,7 @@ fn rect(l: f32, t: f32, r: f32, b: f32) -> Shape {
 }
 
 fn circle(cx: f32, cy: f32, r: f32) -> Shape {
-    let k = r * 0.552_284_8;
+    let k = r * paged_geom::KAPPA_F32;
     (
         vec![
             PathAnchor {

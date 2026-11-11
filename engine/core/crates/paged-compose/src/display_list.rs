@@ -427,7 +427,7 @@ pub struct PathBuffer {
 }
 
 /// Fingerprint of an empty [`PathBuffer`].
-const PATH_PRINT_SEED: u64 = 0xcbf2_9ce4_8422_2325;
+const PATH_PRINT_SEED: u64 = paged_pixel::FNV1A_64_OFFSET;
 /// What an anonymous path contributes to the fingerprint.
 const PATH_PRINT_ANON: u64 = 0x9e37_79b9_7f4a_7c15;
 
@@ -1994,25 +1994,9 @@ impl DisplayList {
     pub fn digest(&self) -> u64 {
         use std::fmt::Write as _;
 
-        /// FNV-1a 64 fed through `fmt::Write` so Debug formatting
-        /// streams straight into the hash without building strings.
-        struct Fnv(u64);
-        impl Fnv {
-            fn bytes(&mut self, bytes: &[u8]) {
-                for b in bytes {
-                    self.0 ^= u64::from(*b);
-                    self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
-                }
-            }
-        }
-        impl std::fmt::Write for Fnv {
-            fn write_str(&mut self, s: &str) -> std::fmt::Result {
-                self.bytes(s.as_bytes());
-                Ok(())
-            }
-        }
-
-        let mut h = Fnv(0xcbf2_9ce4_8422_2325);
+        // FNV-1a 64 fed through `fmt::Write`: Debug formatting streams
+        // straight into the hash without building strings.
+        let mut h = paged_pixel::Fnv1a64::default();
         for cmd in &self.commands {
             let _ = write!(h, "c{cmd:?}");
         }

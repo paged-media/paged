@@ -420,22 +420,9 @@ impl SelectionCoverage {
     /// the pipeline folds into masked apply nodes (a different selection
     /// must never serve a stale cached tile).
     pub fn content_hash(&self) -> u64 {
-        const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-        const PRIME: u64 = 0x0000_0100_0000_01b3;
-        let mut h = OFFSET;
-        let mut eat = |b: u8| {
-            h ^= b as u64;
-            h = h.wrapping_mul(PRIME);
-        };
-        for b in self.width.to_le_bytes() {
-            eat(b);
-        }
-        for b in self.height.to_le_bytes() {
-            eat(b);
-        }
-        for &b in &self.data {
-            eat(b);
-        }
+        let mut h = image_core::fnv1a_64(&self.width.to_le_bytes());
+        h = image_core::fnv1a_64_update(h, &self.height.to_le_bytes());
+        h = image_core::fnv1a_64_update(h, &self.data);
         h
     }
 }

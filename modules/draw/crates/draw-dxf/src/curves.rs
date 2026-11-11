@@ -145,20 +145,13 @@ pub fn ellipse_arc(
     sweep: f64,
     out: &mut Vec<Seg>,
 ) -> Pt {
-    let at = |t: f64| add(centre, add(mul(major, t.cos()), mul(minor, t.sin())));
-    let tangent = |t: f64| add(mul(major, -t.sin()), mul(minor, t.cos()));
-    let pieces = ((sweep.abs() / std::f64::consts::FRAC_PI_2).ceil() as usize).max(1);
-    let step = sweep / pieces as f64;
-    let k = 4.0 / 3.0 * (step / 4.0).tan();
-    let mut t = t0;
-    for _ in 0..pieces {
-        let (p0, p3) = (at(t), at(t + step));
-        let c1 = add(p0, mul(tangent(t), k));
-        let c2 = sub(p3, mul(tangent(t + step), k));
-        out.push(Seg::Cubic(c1, c2, p3));
-        t += step;
+    let pair = |p: Pt| (p[0], p[1]);
+    let pt = |p: (f64, f64)| [p.0, p.1];
+    let (c, a, b) = (pair(centre), pair(major), pair(minor));
+    for [c1, c2, p3] in paged_geom::arc_cubics(c, a, b, t0, sweep) {
+        out.push(Seg::Cubic(pt(c1), pt(c2), pt(p3)));
     }
-    at(t0)
+    pt(paged_geom::ellipse::ellipse_point(c, a, b, t0))
 }
 
 /// A polyline segment from `p0` to `p1` with DXF bulge `bulge` (the

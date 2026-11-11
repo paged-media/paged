@@ -56,7 +56,7 @@ pub const LEADING: f32 = 12.0;
 /// Cases per page: two columns of three rows.
 pub const PER_PAGE: usize = 6;
 /// Control-handle length / radius of a quarter-circle cubic.
-const KAPPA: f32 = 0.552_284_8;
+use paged_geom::KAPPA_F32 as KAPPA;
 
 /// The outline a case's frame carries, in frame-local points.
 #[derive(Clone, Copy, PartialEq, Debug)]

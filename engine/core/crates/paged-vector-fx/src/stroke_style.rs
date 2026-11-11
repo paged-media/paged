@@ -267,7 +267,7 @@ fn art_shape(art: &BrushArt) -> Shape {
     Shape::from_anchors(&anchors, &starts, &open)
 }
 
-const KAPPA: f64 = 0.552_284_749_8;
+use paged_geom::KAPPA;
 
 fn smooth(p: (f64, f64), l: (f64, f64), r: (f64, f64)) -> Node {
     Node {

@@ -24,6 +24,7 @@ jxl-encode = ["dep:zune-jpegxl"]
 avif-encode = ["dep:ravif"]
 
 [dependencies]
+paged-resample = { path = "../paged-resample" }
 # TIFF decode and encode (features: the workspace pin).
 tiff = { workspace = true }
 # PNG, JPEG, WebP, GIF and BMP decode exactly as the renderer always did;

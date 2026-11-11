@@ -3188,21 +3188,10 @@ fn record_image_metadata(
     }
 }
 
-/// Compose two affine matrices `a ∘ b`: applying the result to a
-/// point is equivalent to applying `b` first then `a`. Matches
-/// `paged_compose::Transform::compose` so the parser and the
-/// renderer agree on composition order.
+/// Compose two affine matrices `a ∘ b` (apply `b` first, then `a`): the
+/// one product the renderer and the writer use too.
 fn compose_matrix(a: &[f32; 6], b: &[f32; 6]) -> [f32; 6] {
-    let [a1, b1, c1, d1, tx1, ty1] = *a;
-    let [a2, b2, c2, d2, tx2, ty2] = *b;
-    [
-        a1 * a2 + c1 * b2,
-        b1 * a2 + d1 * b2,
-        a1 * c2 + c1 * d2,
-        b1 * c2 + d1 * d2,
-        a1 * tx2 + c1 * ty2 + tx1,
-        b1 * tx2 + d1 * ty2 + ty1,
-    ]
+    paged_model::affine::multiply(*a, *b)
 }
 
 /// Resolve the effective `ItemTransform` for a frame nested inside

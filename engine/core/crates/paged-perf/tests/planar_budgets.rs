@@ -100,7 +100,7 @@ fn a_thousand_inputs_arrange_within_the_budget() {
 fn a_hopeless_input_is_refused_before_the_collision_pass() {
     // 600 near-identical circles: every curve's box overlaps every
     // other's, ~2.9 M pairs, past a 1 M budget — refused up front.
-    let k = 0.552_284_8_f32;
+    let k = paged_geom::KAPPA_F32;
     let inputs: Vec<(Vec<paged_model::PathAnchor>, Vec<usize>)> = (0..600)
         .map(|i| {
             let (cx, cy, r) = (300.0 + i as f32 * 0.25, 300.0, 200.0);
