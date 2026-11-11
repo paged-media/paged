@@ -74,7 +74,6 @@ const PERSISTENCE_NOTE: Record<SessionState["persistence"]["status"], string> =
     empty: M.persistenceEmpty,
     pending: M.persistencePending,
     saved: M.persistenceSaved,
-    unavailable: M.persistenceUnavailable,
   };
 
 /** A remote source's status token in words (message keys). */

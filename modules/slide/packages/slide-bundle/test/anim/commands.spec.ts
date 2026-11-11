@@ -278,6 +278,7 @@ describe("the animations' palette commands (slide ADR 714) [plugin-slide.animati
       },
       shell: { openPanel: (id: string) => opened.push(id) },
       contribute: {
+        panel: () => ({ dispose() {} }),
         command: (c: {
           id: string;
           handler: () => unknown;
@@ -298,15 +299,12 @@ describe("the animations' palette commands (slide ADR 714) [plugin-slide.animati
       throw new Error("no engine here");
     };
     const h = contributeAnimations(host, f.store, engine, {
-      panel: false,
       overlay: false,
     });
     expect([...commands.keys()]).toEqual(Object.values(ANIM_CMD));
     expect(menus.map((m) => m.path)).toEqual(ANIM_MENU.map(([p]) => p));
     commands.get(ANIM_CMD.pane)!.handler();
     expect(opened).toEqual(["media.paged.slide.panel.animations"]);
-    // Without the pane (no panel door) its command is not offered.
-    expect(commands.get(ANIM_CMD.pane)!.when!()).toBe(false);
     expect(commands.get(ANIM_CMD.painter)!.when!()).toBe(true);
     // Armed with u4; selecting u9 paints it (through the authoring the
     // handle binds).

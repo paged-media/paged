@@ -84,9 +84,9 @@ const linkButton: CSSProperties = {
 export function FormatSection(props: {
   session: WorkbookSession;
   styles: FormatSectionStyles;
-  /** Opens the Sheet properties panel when the host renders it; the rows
-   *  that panel carries then live there only. Absent = render them here. */
-  openProperties?: () => void;
+  /** Opens the Sheet properties panel; the rows that panel carries live
+   *  there only. */
+  openProperties: () => void;
 }): ReactElement {
   const { session, styles: st, openProperties } = props;
   const { t } = useStrings();
@@ -142,23 +142,21 @@ export function FormatSection(props: {
         </div>
       )}
 
-      {openProperties && (
-        <p
-          data-sheet-fmt-pointer
-          style={{ ...st.body, margin: `${space[1]} 0 0` }}
+      <p
+        data-sheet-fmt-pointer
+        style={{ ...st.body, margin: `${space[1]} 0 0` }}
+      >
+        {t(FORMAT.pointer)}{" "}
+        <button
+          type="button"
+          data-sheet-open-properties
+          onClick={openProperties}
+          style={linkButton}
         >
-          {t(FORMAT.pointer)}{" "}
-          <button
-            type="button"
-            data-sheet-open-properties
-            onClick={openProperties}
-            style={linkButton}
-          >
-            {t(FORMAT.properties)}
-          </button>
-          .
-        </p>
-      )}
+          {t(FORMAT.properties)}
+        </button>
+        .
+      </p>
 
       {/* Borders. */}
       <div style={st.row}>

@@ -19,7 +19,6 @@
   "doc.outline.allCarried": "Alles im Dokument wurde übernommen.",
   "doc.outline.basedOn": ", basiert auf {name}",
   "doc.outline.cannotRead": "{name} konnte nicht als Word-Dokument gelesen werden.",
-  "doc.outline.cannotReadBack": "Der Export schreibt die ursprüngliche .docx-Datei unverändert: Dieser Editor kann bearbeiteten Text nicht zurücklesen.",
   "doc.outline.characterStyle": "Zeichen",
   "doc.outline.diagnostics": "Meldungen ({count})",
   "doc.outline.empty": "Fügen Sie ein Word-Dokument ein, um seine Gliederung, Formate und Meldungen zu sehen.",

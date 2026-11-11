@@ -43,13 +43,11 @@ function engineBuiltin(id: string): boolean {
  * Read the document's styles for save-back: the Word styles (`tokens`,
  * from the engine) and every paragraph or character style made in paged
  * (not one of the import's `…/docx-…` styles, not the engine's own).
- * Empty on a host without the style read.
  */
 export async function readStyles(
   host: BundleHost,
   tokens: readonly string[],
 ): Promise<StyleRead[]> {
-  if (!host.supports("document.styleProperties@1")) return [];
   const wanted: Array<["paragraph" | "character", string]> = [];
   for (const t of tokens)
     wanted.push([

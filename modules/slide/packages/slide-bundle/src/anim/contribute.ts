@@ -389,7 +389,7 @@ export function contributeAnimations(
   host: BundleHost,
   store: SlidesStore,
   engine: () => Promise<SlideEngine>,
-  opts: { panel: boolean; overlay: boolean },
+  opts: { overlay: boolean },
 ): AnimHandle {
   const handles: Disposable[] = [];
   const ids = new Set<string>();
@@ -442,25 +442,23 @@ export function contributeAnimations(
           store.list().find((s) => s.pageId === pageId)?.sizePt ?? null,
       )
     : null;
-  if (opts.panel) {
-    handles.push(
-      host.contribute.panel({
-        id: ANIMATIONS_PANEL_ID,
-        title: t(ANIM.title),
-        component: makeAnimationsPanel(host, store, {
-          authoring,
-          preview: startPreview,
-          painter: arm,
-          motionPath: (pageId, effect) => void motion?.show(pageId, effect),
-        }),
-        defaultDock: "right",
-        // A star with motion lines.
-        iconSvg:
-          '<path d="M14 4l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
-          '<path d="M3 15h6M5 18.5h6M3 22h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  handles.push(
+    host.contribute.panel({
+      id: ANIMATIONS_PANEL_ID,
+      title: t(ANIM.title),
+      component: makeAnimationsPanel(host, store, {
+        authoring,
+        preview: startPreview,
+        painter: arm,
+        motionPath: (pageId, effect) => void motion?.show(pageId, effect),
       }),
-    );
-  }
+      defaultDock: "right",
+      // A star with motion lines.
+      iconSvg:
+        '<path d="M14 4l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+        '<path d="M3 15h6M5 18.5h6M3 22h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+    }),
+  );
   if (opts.overlay) {
     handles.push(
       host.contribute.overlay(previewOverlay(host, engine, store, preview)),
@@ -495,7 +493,7 @@ export function contributeAnimations(
     },
   };
   const when: Record<string, () => boolean> = {
-    [ANIM_CMD.pane]: () => !!deckSlide() && opts.panel,
+    [ANIM_CMD.pane]: () => !!deckSlide(),
     [ANIM_CMD.preview]: () => !!deckSlide()?.state.timing && opts.overlay,
     [ANIM_CMD.painter]: () => !!deckSlide() && host.selection.get().length > 0,
   };

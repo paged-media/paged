@@ -70,22 +70,18 @@ export async function drawScene(
   scale: number,
   sizePt: [number, number],
 ): Promise<SlideScene | null> {
-  if (!host.supports("render.layers@1")) return null;
   const items = plan.entries.flatMap((e) =>
     e.kind === "item" ? [e.item.id] : [],
   );
   const paraFrames = plan.entries.flatMap((e) =>
     e.kind === "paragraphs" ? [e.item.id] : [],
   );
-  const withParagraphs = host.supports("render.layers.paragraphs@1");
   const out = await host.render.layers(plan.pageId, {
     scale,
     format: "bitmap",
-    items: withParagraphs ? items : [...items, ...paraFrames],
+    items,
     hideItems: plan.hide,
-    ...(withParagraphs && paraFrames.length > 0
-      ? { paragraphs: paraFrames }
-      : {}),
+    ...(paraFrames.length > 0 ? { paragraphs: paraFrames } : {}),
   });
   if (!out) return null;
   const background = await decode(out.background);
@@ -116,7 +112,7 @@ export async function drawScene(
       continue;
     }
     const id = idOf(e.item.id);
-    if (e.kind === "paragraphs" && withParagraphs) {
+    if (e.kind === "paragraphs") {
       for (const l of paras.get(id) ?? []) {
         const image = await decode(l);
         if (!image || l.paragraph === undefined) continue;
@@ -143,10 +139,7 @@ export async function drawScene(
       image,
       region: l.region,
       target: e.target,
-      // A frame built by paragraph on a host without paragraph layers
-      // plays as the whole frame (every paragraph at the first one's
-      // build).
-      part: e.kind === "paragraphs" ? { paragraph: 0 } : e.part,
+      part: e.part,
     });
   }
   return {

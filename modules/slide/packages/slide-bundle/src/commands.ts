@@ -221,33 +221,31 @@ export function contributeSlideCommands(
   const store = deps.store;
   const deckOpen = () => store?.isDeck() ?? false;
 
-  if (host.supports("storage.parts@1")) {
-    handles.push(
-      command({
-        id: CMD.exportPptx,
-        title: t(COMMANDS.exportPptx),
-        category: CATEGORY,
-        // Without the page doors there is no synchronous view of the
-        // document, so the command stays offered and its handler decides.
-        ...(store ? { when: deckOpen } : {}),
-        handler: guarded("exportPptx", async () => {
-          if (!host.supports("shell.saveFile@1")) {
-            log("exportPptx", "this host has no file saver");
-            return;
-          }
-          // Null: not a deck; exportDeck has said why on the diagnostics.
-          const out = await deps.exportDeck();
-          if (!out) return;
-          const saved = await host.shell.saveFile({
-            suggestedName: out.fileName,
-            bytes: out.bytes,
-            mimeType: PPTX_MIME,
-          });
-          if (!saved) log("exportPptx", "the host did not save the file");
-        }),
+  handles.push(
+    command({
+      id: CMD.exportPptx,
+      title: t(COMMANDS.exportPptx),
+      category: CATEGORY,
+      // Without the page doors there is no synchronous view of the
+      // document, so the command stays offered and its handler decides.
+      ...(store ? { when: deckOpen } : {}),
+      handler: guarded("exportPptx", async () => {
+        if (!host.supports("shell.saveFile@1")) {
+          log("exportPptx", "this host has no file saver");
+          return;
+        }
+        // Null: not a deck; exportDeck has said why on the diagnostics.
+        const out = await deps.exportDeck();
+        if (!out) return;
+        const saved = await host.shell.saveFile({
+          suggestedName: out.fileName,
+          bytes: out.bytes,
+          mimeType: PPTX_MIME,
+        });
+        if (!saved) log("exportPptx", "the host did not save the file");
       }),
-    );
-  }
+    }),
+  );
 
   if (store) {
     const active = (): Slide | null =>
@@ -289,7 +287,7 @@ export function contributeSlideCommands(
       guarded(verb, async () => {
         const slide = need(verb);
         if (!slide) return;
-        if (!deps.objectModel || !host.supports("objects@1")) {
+        if (!deps.objectModel) {
           log(verb, "this host has no object model");
           return;
         }
@@ -448,24 +446,22 @@ export function contributeSlideCommands(
 
   // The keys of the slide verbs this host got, offered where the command
   // is and no text caret is active.
-  if (host.supports("contribute.keybinding@1")) {
-    const caretActive = () =>
-      host.supports("text.caret@1") && host.text.caret() !== null;
-    for (const [key, command] of SLIDE_KEYBINDINGS) {
-      const when = whens.get(command);
-      if (!when) continue;
-      handles.push(
-        host.contribute.keybinding({
-          key,
-          command,
-          when: (state) => !caretActive() && when(state),
-        }),
-      );
-    }
+  const caretActive = () =>
+    host.supports("text.caret@1") && host.text.caret() !== null;
+  for (const [key, command] of SLIDE_KEYBINDINGS) {
+    const when = whens.get(command);
+    if (!when) continue;
+    handles.push(
+      host.contribute.keybinding({
+        key,
+        command,
+        when: (state) => !caretActive() && when(state),
+      }),
+    );
   }
 
   // The Normal-view keys, scoped to the deck's document context.
-  if (deps.scopedKeys && host.supports("contribute.keybinding.scope@1")) {
+  if (deps.scopedKeys) {
     const caretActive = () =>
       host.supports("text.caret@1") && host.text.caret() !== null;
     const nothingSelected = () => {

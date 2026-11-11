@@ -243,12 +243,7 @@ async function pasteLowered(
     familiesOf(request.text_frames ?? []),
   );
   const rootId = root ? rawId(root) : null;
-  if (
-    missing.length === 0 ||
-    !rootId ||
-    outcome.appliedSeq === undefined ||
-    !host.supports("document.mutate.amend@1")
-  ) {
+  if (missing.length === 0 || !rootId || outcome.appliedSeq === undefined) {
     return { result, root, outlinedFonts: [] };
   }
   let again: PlaceResult;
@@ -438,9 +433,6 @@ export async function convertPlacedToVectors(
   id = geo.id;
   const frameId = rawId(id);
   if (!frameId) throw new Error(`failed: ${t(M.notPlaced)}`);
-  if (!host.supports("assets.images@1")) {
-    throw new Error(`failed: ${t(M.noBytes)}`);
-  }
   const asset = await host.assets.getPlacedImage(frameId).catch(() => null);
   if (!asset) throw new Error(`failed: ${t(M.noBytes)}`);
   let info: PdfInfo;

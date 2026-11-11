@@ -58,7 +58,6 @@ and the performance reading are in [`design/analysis-2026-10-05.md`](design/anal
   metadata; after that the part is not read, and the first save of a later session that opens
   the document with its values in the metadata drops it (so an undo of the move in the session
   that made it still finds the values; [ADR 410](adr/410-unreachable-source-parts-dropped-on-save.md)).
-  A host without the door keeps the part, which is not undoable.
 - **Import.** A `.html` or `.htm` file opens as a new web frame: `<style>` blocks become the
   CSS, the content of `<body>` becomes the HTML, and the sanitiser runs on it. Comments and
   the content of raw-text elements (`<script>`, `<title>`, …) are text: a `<style>` or `<body>`

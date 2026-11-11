@@ -64,7 +64,7 @@ export function activate(host: BundleHost): BundleHandle {
   return {
     dispose() {
       pdfIoSub.dispose();
-      commandsSub?.dispose();
+      commandsSub.dispose();
       convertSub.dispose();
       importVectorsSub.dispose();
     },

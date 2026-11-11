@@ -307,16 +307,10 @@ export class CommentsStore {
   private readonly authors = new Map<string, Author>();
 
   constructor(private readonly host: BundleHost) {
-    if (host.supports("document.onDidOpen@1")) {
-      this.disposers.push(
-        host.document.onDidOpen(() => void this.load()).dispose,
-      );
-    }
-    if (host.supports("document.onDidChange@1")) {
-      this.disposers.push(
-        host.document.onDidChange(() => void this.load()).dispose,
-      );
-    }
+    this.disposers.push(
+      host.document.onDidOpen(() => void this.load()).dispose,
+      host.document.onDidChange(() => void this.load()).dispose,
+    );
     void this.load();
   }
 
@@ -526,7 +520,6 @@ export class CommentsStore {
   /** Move an older deck's comments from the container part into the
    *  document; the part is emptied so this happens once. */
   private async migrate(): Promise<boolean> {
-    if (!this.host.supports("storage.parts@1")) return false;
     const old = parseFile(await this.host.parts.read(COMMENTS_PART));
     if (!old || Object.values(old.byPage).every((l) => l.length === 0))
       return false;

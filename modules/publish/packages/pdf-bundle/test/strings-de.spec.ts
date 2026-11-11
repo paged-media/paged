@@ -40,7 +40,8 @@ afterEach(() => setActiveStrings(createStrings()));
 function importCommand(): TypedCommandContribution {
   let commands: TypedCommandContribution[] = [];
   const host = {
-    supports: (cap: string) => cap === "contribute.objectModel@1",
+    // No door to open a document: the import refuses.
+    supports: () => false,
     contribute: {
       objectModel: (m: { commands: TypedCommandContribution[] }) => {
         commands = m.commands;

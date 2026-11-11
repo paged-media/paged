@@ -213,7 +213,6 @@ export async function attachMedia(
   host: BundleHost,
   slides: ShowSlide[],
 ): Promise<void> {
-  if (!host.supports("document.media@1")) return;
   const found = await pageMedia(host, await pageShapes(host));
   for (const s of slides) {
     const list = found.get(s.pageId);
@@ -309,7 +308,7 @@ export function showTypedCommands(
 export function contributeShow(
   host: BundleHost,
   deps: ShowDeps,
-  sorter: (() => Disposable | null) | null,
+  sorter: () => Disposable,
 ): ShowHandle & {
   run(id: string): Promise<boolean>;
   /** Play a custom show from its first slide. */
@@ -344,9 +343,7 @@ export function contributeShow(
     const player = deps.engine ? playerFor(deps.engine) : undefined;
     // Slide ADR 718: the show and the audience play the media; the
     // presenter console does not (one sound, from the audience).
-    const media = host.supports("document.media@1")
-      ? (id: ElementId) => host.media.read(id)
-      : undefined;
+    const media = (id: ElementId) => host.media.read(id);
     if (ctx.role === "audience") {
       const off = mountAudience(el, ctx.window, ctx.channel, frames, {
         scenes,
@@ -485,10 +482,7 @@ export function contributeShow(
   }
 
   // ---- the sorter view
-  if (sorter) {
-    const d = sorter();
-    if (d) handles.push(d);
-  }
+  handles.push(sorter());
 
   // ---- palette commands, keys, menu
   const titles: Record<string, string> = {
@@ -501,7 +495,6 @@ export function contributeShow(
   const canPresent = () =>
     deckOpen() && host.supports("shell.present@1") && !presenting();
   for (const id of Object.values(SHOW_CMD)) {
-    if (id === SHOW_CMD.slideSorter && !sorter) continue;
     ids.add(id);
     handles.push(
       host.contribute.command({
@@ -524,17 +517,15 @@ export function contributeShow(
       }),
     );
   }
-  if (host.supports("contribute.keybinding@1")) {
-    for (const [key, command] of SHOW_KEYBINDINGS) {
-      if (!ids.has(command)) continue;
-      handles.push(
-        host.contribute.keybinding({
-          key,
-          command,
-          when: () => !caretActive() && canPresent(),
-        }),
-      );
-    }
+  for (const [key, command] of SHOW_KEYBINDINGS) {
+    if (!ids.has(command)) continue;
+    handles.push(
+      host.contribute.keybinding({
+        key,
+        command,
+        when: () => !caretActive() && canPresent(),
+      }),
+    );
   }
   for (const [path, command, group, order] of SHOW_MENU) {
     if (!ids.has(command)) continue;

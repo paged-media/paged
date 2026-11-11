@@ -12,12 +12,7 @@
 // a core object, so the swatch goes in one `createSwatch` mutate before the
 // apply (a second undo step, first use only, one more call).
 
-import type {
-  BundleHost,
-  Mutation,
-  ObjectOp,
-  ObjectsSurface,
-} from "@paged-media/plugin-api";
+import type { BundleHost, Mutation, ObjectOp } from "@paged-media/plugin-api";
 
 import {
   planProperties,
@@ -43,14 +38,6 @@ export interface PropertyLaneResult {
    *  nothing of theirs landed; the caller writes them itself). */
   alongside: "applied" | "unsent";
 }
-
-/** `host.objects`, when this host announces the object model (`objects@1`). */
-export function objectsOf(host: BundleHost): ObjectsSurface | null {
-  return host.supports("objects@1") ? host.objects : null;
-}
-
-export const NO_OBJECT_MODEL =
-  "this host has no object model (host.objects, plugin-sdk 0.2.42) — property bindings cannot be written here";
 
 /**
  * Commit one apply's property writes. `hostOids` maps a binding carried by
@@ -78,11 +65,7 @@ export async function commitProperties(
   let side: ObjectOp[] = asSets.every((o) => o !== null)
     ? (asSets as ObjectOp[])
     : [];
-  const objects = objectsOf(host);
-  if (!objects) {
-    for (const a of applies) result.skipped[a.binding] = NO_OBJECT_MODEL;
-    return result;
-  }
+  const objects = host.objects;
   const writes = applies.filter((a) => a.property.outcome.outcome === "write");
   // 1. Which objects each distinct selector names today.
   const targets = new Map<string, string[]>();

@@ -52,8 +52,6 @@ export const SO = defineMessages("image.smart", {
   noSaver: "This editor cannot save files.",
   placed: "Placed {count} page item(s) as the vector smart object “{layer}”.",
   noItems: "Select page items (not the image's own frame) to place.",
-  noRender:
-    "This editor cannot draw page items for a smart object (render.snapshot@2).",
   rerasterized: "“{layer}” drawn again from its page items at {ppi} ppi.",
   gaussian: "Gaussian blur",
   // Notes from the import.
@@ -297,7 +295,6 @@ export function createSmartController(deps: SmartDeps): SmartController {
     const v = info?.vector;
     if (!info || !v || info.scale <= 1.01) return;
     const host = deps.host;
-    if (!host.supports("render.snapshot@2")) return;
     const pxPerPt = Math.min(MAX_DPI / 72, v.pxPerPt * info.scale);
     const geom = await host.document.elementGeometry(
       v.items.map((id) => ({ kind: "rectangle", id }) as never),
@@ -649,11 +646,6 @@ export function createSmartController(deps: SmartDeps): SmartController {
       const src = deps.source();
       if (!e || !src) return false;
       const host = deps.host;
-      if (!host.supports("render.snapshot@2")) {
-        deps.setStatus(t(SO.noRender));
-        deps.emit();
-        return false;
-      }
       const items = (
         ids ??
         host.selection.get().map((i) => String((i as { id?: unknown }).id ?? i))

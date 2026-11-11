@@ -302,9 +302,6 @@ export const WORKBOOK = defineMessages("sheet.workbook", {
   gridPanel: "Grid panel",
   savedInDocument:
     "The workbook is saved inside the document and travels with the .paged file.",
-  savedInBrowser:
-    "The workbook is saved in this browser and restored on reload.",
-  inMemory: "The workbook lives in memory only; open it again after a reload.",
 });
 
 /** The format & layout and names sections. */

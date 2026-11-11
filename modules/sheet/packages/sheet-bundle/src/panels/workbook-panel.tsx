@@ -233,11 +233,9 @@ export function makeWorkbookPanel(
     };
 
     // The Sheet properties panel carries number format, font, fill,
-    // alignment and iterative calculation; where the host renders it, the
-    // format section points there instead of repeating them.
-    const openProperties = host.supports("contribute.schemaPanel@1")
-      ? () => host.shell.openPanel(PROPERTIES_PANEL_ID)
-      : undefined;
+    // alignment and iterative calculation; the format section points there
+    // instead of repeating them.
+    const openProperties = () => host.shell.openPanel(PROPERTIES_PANEL_ID);
 
     const [placeMsg, setPlaceMsg] = useState<string | null>(null);
     const onPlace = () => {
@@ -1166,14 +1164,9 @@ export function makeWorkbookPanel(
         )}
 
         {/* S-08 / .paged container: be honest about where the workbook lives —
-         *  inside the .paged document (travels with the file) when host.parts
-         *  is wired, else this browser's local store, else in-memory. */}
+         *  inside the .paged document (travels with the file). */}
         <p data-sheet-honesty style={{ ...note, marginTop: space[2] }}>
-          {host.supports("storage.parts@1")
-            ? t(M.savedInDocument)
-            : host.supports("storage.blob@1")
-              ? t(M.savedInBrowser)
-              : t(M.inMemory)}
+          {t(M.savedInDocument)}
         </p>
       </div>
     );

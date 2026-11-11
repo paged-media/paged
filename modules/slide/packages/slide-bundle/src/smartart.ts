@@ -289,8 +289,7 @@ export class SmartArtStore implements Disposable {
       this.subs.push(
         this.host.selection.onDidChange((ids) => void this.refresh(ids)),
       );
-      if (this.host.supports("document.onDidChange@1"))
-        this.subs.push(this.host.document.onDidChange(again));
+      this.subs.push(this.host.document.onDidChange(again));
       again();
     }
     return () => {
