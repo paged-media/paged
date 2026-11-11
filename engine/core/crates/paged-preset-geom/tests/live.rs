@@ -18,11 +18,11 @@
 
 //! Live presets: handles, refit, connection sites, connectors.
 
-use dml_geom::live::{
+use paged_preset_geom::live::{
     drag_handle, flatten, handles, mul, part_of, refit_preset, route, sites_on_page, Anchor, Part,
     Refit, IDENTITY,
 };
-use dml_geom::{preset, preset_evaluated, preset_geometry, preset_names, Site};
+use paged_preset_geom::{preset, preset_evaluated, preset_geometry, preset_names, Site};
 
 fn anchors_of(
     name: &str,
@@ -296,8 +296,8 @@ fn connectors_run_from_site_to_site() {
         let r = route(name, &[], a, b).unwrap();
         let first = r.subpaths[0].points.first().unwrap().anchor;
         let last = r.subpaths.last().unwrap().points.last().unwrap().anchor;
-        let p0 = dml_geom::live::apply(&r.transform, first);
-        let p1 = dml_geom::live::apply(&r.transform, last);
+        let p0 = paged_preset_geom::live::apply(&r.transform, first);
+        let p1 = paged_preset_geom::live::apply(&r.transform, last);
         assert!(
             close(p0.0, 100.0, 1e-6) && close(p0.1, 50.0, 1e-6),
             "{name} {p0:?}"
@@ -323,7 +323,7 @@ fn connectors_run_from_site_to_site() {
     )
     .unwrap();
     let pts = &r.subpaths[0].points;
-    let p0 = dml_geom::live::apply(&r.transform, pts[0].anchor);
-    let p1 = dml_geom::live::apply(&r.transform, pts[1].anchor);
+    let p0 = paged_preset_geom::live::apply(&r.transform, pts[0].anchor);
+    let p1 = paged_preset_geom::live::apply(&r.transform, pts[1].anchor);
     assert!(close(p0.0, p1.0, 1e-9) && p1.1 > p0.1, "{p0:?} {p1:?}");
 }

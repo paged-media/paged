@@ -1,7 +1,8 @@
 # ADR PM-0014 — A capability lives at the lowest layer every consumer can reach
 
-- **Status:** Accepted 2026-10-24. Amended 2026-10-25 (DrawingML geometry) and 2026-11-01 by
-  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (placement by genericity alone).
+- **Status:** Accepted 2026-10-24. Amended 2026-10-25 (DrawingML geometry), 2026-11-01 by
+  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (placement by genericity alone) and
+  2026-11-11 (preset geometry is the engine's; engine ADR 1096).
 - **Amends:** [PM-0002](PM-0002-built-ins-and-extensions.md) (its consequence that merging the
   image codecs with the engine's decoders "is left for later" is decided here).
 - **Scope:** `engine/core` (model, renderer and `crates/paged-*`), `modules/*` (their Rust
@@ -129,3 +130,14 @@ built-in. The placement rule above stands and is now the only one: a capability 
 lowest layer every consumer reaches, whether or not a module is loaded, and a copy kept to avoid
 depending on a sibling is a defect. `docs/development/capability-register.md` names each
 capability's owner, and `bun tooling/js/single-owner.mjs` fails on a new copy.
+
+## Amendment — 2026-11-11: the preset program is the engine's
+
+Engine ADR 1096 makes an Office preset an engine live shape, so the engine evaluates it: a resize
+in `paged-mutate` refits it, and its adjust handles are an engine read. The amendment of
+2026-10-25 is narrowed accordingly. The preset programs, their evaluator, adjust handles,
+connection sites and the live arithmetic are a parametric shape the engine owns and move to the
+L2 crate `engine/core/crates/paged-preset-geom` (the Annex D table compiled at build time, no XML
+at run time). Their DrawingML encoding stays at the format boundary in `platform/shared/dml-geom`:
+the `a:custGeom` reader, `a:xfrm` placement and the mapping of `a:prstGeom` / `a:avLst` in the
+pptx, docx and xlsx adapters. `dml-geom` re-exports the evaluator under its old paths.

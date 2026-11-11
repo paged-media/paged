@@ -6,7 +6,7 @@ edition = "2021"
 rust-version = "1.99"
 license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
-description = "DrawingML geometry shared by paged.slide and paged.doc: the 187 ECMA-376 preset shapes and authored custom geometry evaluated to Bézier outlines, their adjust handles and connection sites, and the live-preset arithmetic (refit after a resize, an adjust handle dragged, a connector routed between two sites)."
+description = "DrawingML geometry at the format boundary, shared by paged.slide, paged.doc and paged.sheet: the a:custGeom reader, a:xfrm placement and Office's line ends. Re-exports the engine's preset geometry programs (paged-preset-geom, engine ADR 1096) under their old paths."
 
 # A member of the engine's Cargo workspace (docs/development/one-workspace.md).
 # The modules not yet moved take it as a path dependency (docs/adr/PM-0005).
@@ -22,6 +22,8 @@ paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 # The path anchor the engine's trim cuts a line under its heads with.
 paged-model = { path = "../../../engine/core/crates/paged-model" }
 paged-ooxml = { path = "../ooxml" }
+# The preset programs and their evaluator (engine ADR 1096), re-exported.
+paged-preset-geom = { path = "../../../engine/core/crates/paged-preset-geom" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

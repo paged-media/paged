@@ -1,7 +1,8 @@
 # ADR 1096 — An Office preset stays a live shape
 
-- **Status:** Proposed 2026-11-11. Not built: it waits on the owner's choice of where the geometry
-  program is evaluated (below). Extends [ADR 1047](1047-live-shapes.md).
+- **Status:** Accepted 2026-11-11 with option 2 (below); built in stages (see Build). Extends
+  [ADR 1047](1047-live-shapes.md); amends [PM-0014](../../../../docs/adr/PM-0014-capability-layering.md)
+  (its DrawingML amendment of 2026-10-25).
 - **Scope (when built):** `paged-model` (a preset live shape on a path item), `paged-mutate` (the
   refit after a resize, the adjust writes), `paged-canvas` (the reads and the handle positions),
   the importers and exporters of pptx, docx and xlsx, `platform/shared/dml-geom`, paged.slide's
@@ -63,7 +64,29 @@ DrawingML's". No engine crate depends on `platform/shared` today. Three ways out
    command line, the server, a test) could not refit a preset, and the model would depend on a
    module to stay consistent.
 
-## Decision (proposed, option 2)
+## Decision: option 2
+
+The owner's lead chose option 2 on 2026-11-11. Why not the other two:
+
+- Option 1 would make the engine's lowest layers depend on format-family code: the engine's wasm
+  would carry `paged-ooxml`'s zip and XML reader and the Annex D XML as text, only to evaluate a
+  shape, and PM-0014 would have to be inverted rather than amended.
+- Option 3 would leave the engine unable to keep its own model consistent: a resize in the command
+  line, a script or the server could not refit a preset, so "live" would depend on which host ran
+  the edit.
+- Option 2 puts the parametric shape where the engine's other live shapes are (ADR 1047): the
+  program is geometry the engine owns, like a star's inset; only its DrawingML encoding is
+  Microsoft's, and that stays at the boundary. Vector editing is then the same on an Illustrator
+  path, a PowerPoint preset or a Word shape.
+
+The crate is `paged-preset-geom` (`engine/core/crates`, L2, pure Rust): the program types
+(`CustomGeometry`, guides, paths, handles, sites), the evaluator, the live arithmetic (refit, handle
+drag, connection sites, connector routing) and the 187 presets. `build.rs` compiles
+`data/presetShapeDefinitions.xml` into a static table, so neither XML text nor an XML reader is in
+the binary. `dml-geom` keeps the DrawingML side (`read`: `a:custGeom`; `place`: `a:xfrm`; `heads`)
+and re-exports the evaluator under its old paths. `dml-geom`'s `the_table_is_annex_d` test reads
+the XML with the DrawingML reader the modules used before and asserts that every preset's program
+and text rectangle equal the table's, so every preset evaluates bit-identically.
 
 - **The model.** A path item (`Polygon`) gains `preset: Option<PresetShape>`: the preset's name,
   its adjust values as authored (`adj`, `adj1`, … with their values), the box the outline was

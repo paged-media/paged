@@ -1461,6 +1461,7 @@ dependencies = [
  "paged-geom",
  "paged-model",
  "paged-ooxml",
+ "paged-preset-geom",
  "serde",
 ]
 
@@ -4677,6 +4678,14 @@ dependencies = [
 [[package]]
 name = "paged-pixel"
 version = "0.0.0"
+
+[[package]]
+name = "paged-preset-geom"
+version = "0.0.0"
+dependencies = [
+ "paged-geom",
+ "serde",
+]
 
 [[package]]
 name = "paged-ps"

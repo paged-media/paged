@@ -1,0 +1,17 @@
+[package]
+name = "paged-preset-geom"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Parametric preset geometry the engine owns (engine ADR 1096): the 187 ECMA-376 Annex D preset programs as a build-time table, the evaluator of guide formulas and paths, adjust handles and connection sites, and the live-preset arithmetic (refit after a resize, an adjust handle dragged, a connector routed between two sites)."
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Arc splitting, the arc handle length and the f64 affine the live arithmetic uses.
+paged-geom = { path = "../paged-geom" }
+serde = { workspace = true }

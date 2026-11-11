@@ -1,10 +1,9 @@
 $schema: "../../../.moon/cache/schemas/project.json"
 
-# dml-geom: DrawingML preset and custom geometry, adjust handles, connection
-# sites and the live-preset arithmetic, shared by paged.slide and (for its
-# shapes) paged.doc (PM-0014: the lowest layer every consumer reaches). A path
-# dependency of modules/slide, which lists its sources in its own
-# rust-sources file group.
+# dml-geom: DrawingML geometry at the format boundary (the a:custGeom reader,
+# a:xfrm placement, Office's line ends), shared by paged.slide, paged.doc and
+# paged.sheet. The preset programs and their evaluator are the engine's
+# (paged-preset-geom, engine ADR 1096), re-exported here.
 language: "rust"
 layer: "library"
 stack: "systems"
@@ -12,7 +11,7 @@ tags: ["rust", "shared"]
 
 project:
   title: "platform/shared/dml-geom"
-  description: "Shared DrawingML geometry: presets, handles, connection sites, live presets."
+  description: "Shared DrawingML geometry at the format boundary: custGeom reader, placement, line ends."
 
 dependsOn:
   - id: "ooxml"

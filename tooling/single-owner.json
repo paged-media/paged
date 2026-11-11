@@ -305,6 +305,14 @@
       "baseline": []
     },
     {
+      "name": "preset-guide-formulas",
+      "description": "evaluate a DrawingML guide formula (Annex D: `*/`, `+-`, `pin`, `at2`, `cat2`, …) and preset programs with paged_preset_geom (dml_geom re-exports it), not a second evaluator",
+      "owner": ["engine/core/crates/paged-preset-geom/"],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "patterns": ["[\"']cat2[\"']\\s*(=>|:)", "case\\s+[\"']cat2[\"']"],
+      "baseline": []
+    },
+    {
       "name": "star-anchors",
       "description": "star and polygon anchors from platform/shared/vector-geometry (the mirror of paged_model::live_shape)",
       "owner": [
