@@ -184,6 +184,7 @@ fn shape(sp: &El, place: Place) -> Option<DiagramShape> {
         flip_v: x.attr_bool("flipV").unwrap_or(false),
         look: Some(Box::new(look)).filter(|l| !l.is_plain()),
         line_ends,
+        drawing: None,
     };
     let text = sp
         .children

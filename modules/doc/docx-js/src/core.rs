@@ -566,6 +566,30 @@ impl DocSession {
             )
             .map_err(|e| e.to_string())?,
         );
+        // Engine ADR 1096: a Word shape whose preset or outline changed on
+        // the canvas is written as `a:prstGeom` (still its preset) or
+        // `a:custGeom`. Its frame names its drawing through the skeleton.
+        if !structure.shapes.is_empty() {
+            let frames = docx_skeleton::body::native_body(&marked).shapes;
+            let read: Vec<docx_export::shapes::ShapeIn> = structure
+                .shapes
+                .iter()
+                .filter_map(|f| {
+                    let (_, d) = frames.iter().find(|(id, _)| *id == f.frame_id)?;
+                    Some(f.at(*d))
+                })
+                .collect();
+            skips.extend(
+                docx_export::shapes::save_shapes(
+                    &mut package,
+                    &self.main_part,
+                    &self.model,
+                    &marked,
+                    &read,
+                )
+                .map_err(|e| e.to_string())?,
+            );
+        }
         // Doc ADR 614: the text boxes placed as page items.
         skips.extend(
             docx_export::textbox::save_text_boxes(

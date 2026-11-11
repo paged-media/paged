@@ -134,6 +134,16 @@ pub struct LoweredShape {
     /// line's colour or stroked with the line (doc ADR 629).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub heads: Vec<LoweredHead>,
+    /// Engine ADR 1096 — the preset the outline is drawn from (a Word
+    /// shape's `a:prstGeom` + `a:avLst`), in the shape's own box `[0, 0, w,
+    /// h]`; `None` for a custom geometry. Live while the anchors are what it
+    /// draws: an upright shape whose line has no heads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<paged_model::live_shape::PresetShape>,
+    /// The drawing's ordinal in its part (`docx_core::Shape::drawing`):
+    /// where save-back writes the geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<u32>,
 }
 
 /// One line end of a [`LoweredShape`].

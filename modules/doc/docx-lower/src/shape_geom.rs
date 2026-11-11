@@ -125,6 +125,28 @@ fn preset(name: &str, adjust: &[(String, i64)], w: f32, h: f32) -> Option<Outlin
     )?))
 }
 
+/// Engine ADR 1096 — the engine preset a Word shape's `a:prstGeom` +
+/// `a:avLst` is, drawn for its `w` x `h` pt box at `(0, 0)` (the frame's
+/// own box, where its anchors are), mirrored by its flips. `None` for a
+/// custom geometry and a name that is no preset. A turned shape's anchors
+/// are turned about the box's centre ([`outline`]), so its preset is
+/// stored but not live (the anchors are not what it draws upright).
+pub fn preset_of(shape: &Shape, w: f32, h: f32) -> Option<paged_model::live_shape::PresetShape> {
+    let ShapeGeometry::Preset { name, adjust } = &shape.geometry else {
+        return None;
+    };
+    dml_geom::preset_geometry(name)?;
+    Some(paged_model::live_shape::PresetShape {
+        adjusts: adjust
+            .iter()
+            .map(|(n, v)| (n.clone(), format!("val {v}")))
+            .collect(),
+        flip_h: shape.flip_h,
+        flip_v: shape.flip_v,
+        ..paged_model::live_shape::PresetShape::new(name.clone(), w, h)
+    })
+}
+
 /// The outline of `shape` in a `w` x `h` pt box, or why it is not drawn.
 pub fn outline(shape: &Shape, w: f32, h: f32) -> Result<Outline, String> {
     let mut out = match &shape.geometry {
@@ -217,6 +239,58 @@ mod tests {
         let o = outline(&s, 40.0, 40.0).unwrap();
         let (x0, y0) = (o.anchors[0][0], o.anchors[0][1]);
         assert!((x0 - 40.0).abs() < 1e-3 && y0.abs() < 1e-3, "{x0} {y0}");
+    }
+
+    /// The anchors as the model holds them.
+    fn model_anchors(o: &Outline) -> Vec<paged_model::PathAnchor> {
+        o.anchors
+            .iter()
+            .map(|a| paged_model::PathAnchor {
+                anchor: (a[0], a[1]),
+                left: (a[2], a[3]),
+                right: (a[4], a[5]),
+            })
+            .collect()
+    }
+
+    /// Engine ADR 1096: an upright Word preset (flipped or not) is drawn
+    /// as the engine draws its preset, so it is live; a turned one is
+    /// stored, not live.
+    #[test]
+    fn an_upright_preset_is_the_engines_live_preset() {
+        for (name, adjust) in [
+            ("rect", vec![]),
+            ("roundRect", vec![("adj", 30000)]),
+            ("triangle", vec![("adj", 25000)]),
+            ("ellipse", vec![]),
+            ("rightArrow", vec![("adj1", 40000), ("adj2", 60000)]),
+            ("line", vec![]),
+            ("chevron", vec![]),
+        ] {
+            for (fh, fv) in [(false, false), (true, false), (false, true)] {
+                let mut s = shape(name, &adjust);
+                s.flip_h = fh;
+                s.flip_v = fv;
+                let o = outline(&s, 120.0, 45.0).unwrap();
+                let p = preset_of(&s, 120.0, 45.0).unwrap();
+                assert_eq!(p.frame, [0.0, 0.0, 120.0, 45.0]);
+                assert_eq!((p.flip_h, p.flip_v), (fh, fv));
+                assert!(
+                    paged_preset_geom::model::anchors_are(&p, &model_anchors(&o), &o.starts),
+                    "{name} {fh} {fv}"
+                );
+            }
+        }
+        let mut s = shape("roundRect", &[]);
+        s.rotation = 30 * 60_000;
+        let o = outline(&s, 100.0, 50.0).unwrap();
+        let p = preset_of(&s, 100.0, 50.0).unwrap();
+        assert!(!paged_preset_geom::model::anchors_are(
+            &p,
+            &model_anchors(&o),
+            &o.starts
+        ));
+        assert!(preset_of(&shape("notAPreset", &[]), 1.0, 1.0).is_none());
     }
 
     #[test]

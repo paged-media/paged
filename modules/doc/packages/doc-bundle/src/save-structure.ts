@@ -53,6 +53,116 @@ export interface StructureRead {
    *  placement of each in its frame (a crop), for `docx-export`'s
    *  `crop::save_crops`. */
   pictures?: PicturesRead;
+  /** Engine ADR 1096 — the Word shapes' frames as the canvas holds them
+   *  (their live preset and outline), for `docx-export`'s
+   *  `shapes::save_shapes`. */
+  shapes?: ShapeFrameRead[];
+}
+
+/** One Word shape's frame read back (docx-export `shapes::ShapeFrameIn`). */
+export interface ShapeFrameRead {
+  frameId: string;
+  /** The live preset (`frameShapePreset`'s JSON), absent when the frame
+   *  reads none (not live, or no preset). */
+  preset?: unknown;
+  anchors: [number, number, number, number, number, number][];
+  starts: number[];
+}
+
+/** The skeleton's id of every Word shape's outline frame in `ir`
+ *  (`docx_shape<n>`, or its group's `docx_shape<n>_0` when the shape has
+ *  line ends), in the order the skeleton mints them: the body's paragraphs,
+ *  then — inside a table block — its cells' paragraphs. Ids the document
+ *  does not hold read back as nothing. */
+export function shapeFrameIds(ir: LoweredDoc): string[] {
+  type Shape = { heads?: unknown[] };
+  type Para = { shapes?: Shape[] };
+  const out: string[] = [];
+  const add = (p: Para) => {
+    for (const sh of p.shapes ?? []) {
+      const id = `docx_shape${out.length}`;
+      out.push((sh.heads ?? []).length > 0 ? `${id}_0` : id);
+    }
+  };
+  const blocks = (ir as unknown as { story?: { blocks?: unknown[] } }).story
+    ?.blocks;
+  for (const b of blocks ?? []) {
+    const block = b as { kind?: string; cells?: { paragraphs?: Para[] }[] };
+    if (Array.isArray(block.cells)) {
+      for (const c of block.cells) for (const p of c.paragraphs ?? []) add(p);
+    } else add(b as Para);
+  }
+  return out;
+}
+
+/** What one property read of a shape frame says, or null without an
+ *  outline. `entries` is `ElementProperties.entries`. */
+export function shapeFrameOf(
+  frameId: string,
+  entries: readonly { path: string; value?: unknown }[],
+): ShapeFrameRead | null {
+  const value = (path: string) =>
+    entries.find((e) => e.path === path)?.value as
+      { type?: string; value?: unknown } | null | undefined;
+  const path = value("framePath");
+  const v = path?.value as
+    | {
+        anchors?: { anchor: number[]; left: number[]; right: number[] }[];
+        subpathStarts?: number[];
+      }
+    | undefined;
+  if (path?.type !== "framePath" || !v?.anchors) return null;
+  const anchors = v.anchors.map(
+    (a) =>
+      [
+        a.anchor[0],
+        a.anchor[1],
+        a.left[0],
+        a.left[1],
+        a.right[0],
+        a.right[1],
+      ] as [number, number, number, number, number, number],
+  );
+  const text = value("frameShapePreset")?.value;
+  let preset: unknown;
+  if (typeof text === "string" && text.trim() !== "") {
+    try {
+      preset = JSON.parse(text);
+    } catch {
+      preset = undefined;
+    }
+  }
+  return {
+    frameId,
+    ...(preset !== undefined ? { preset } : {}),
+    anchors,
+    starts: v.subpathStarts ?? [],
+  };
+}
+
+/** Engine ADR 1096 — every Word shape frame of `ir` read back (its live
+ *  preset and outline). A frame the document does not hold, or a host
+ *  that cannot read it, is left out: its drawing stays as it was. */
+export async function readShapeFrames(
+  host: BundleHost,
+  ir: LoweredDoc,
+): Promise<ShapeFrameRead[]> {
+  const out: ShapeFrameRead[] = [];
+  for (const id of shapeFrameIds(ir)) {
+    try {
+      const props = await host.document.elementProperties({
+        kind: "rectangle",
+        id,
+      } as never);
+      const read = props
+        ? shapeFrameOf(id, props.entries as { path: string; value?: unknown }[])
+        : null;
+      if (read) out.push(read);
+    } catch {
+      /* not this document's frame */
+    }
+  }
+  return out;
 }
 
 /** One picture of a read-back paragraph (the engine's `PictureContent`). */
@@ -186,5 +296,6 @@ export async function readStructure(
     anchors,
     textBoxes: await readTextBoxes(host, ir),
     pictures: readPictures(contents, pouredParagraphs, cells),
+    shapes: await readShapeFrames(host, ir),
   };
 }

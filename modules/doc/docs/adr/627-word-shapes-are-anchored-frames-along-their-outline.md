@@ -139,3 +139,27 @@ its closing segment as an open contour, for presets as for authored geometry (a 
 detail path, such as a cube's or an action button's, used to lose it). The rotation and flips go
 through `dml_geom::place::orient`, the quarter-ellipse constant of the oval line end is
 `paged_geom::KAPPA_F32`.
+
+## Amendment 5 (2026-11-11): a Word preset is the frame's engine preset, and it is saved
+
+Engine ADR 1096: a Word shape's `a:prstGeom` + `a:avLst` maps onto `AnchoredFrame::preset`
+(`docx_lower::shape_geom::preset_of`: the box `[0, 0, w, h]` where the frame's anchors are, the
+flips mirrored in it, the adjust values as `val N`). Rendering does not change: the field rides
+beside the anchors. An upright shape whose line has no heads is live (its anchors are what the
+engine draws); a turned shape is stored but not live, since the lowering turns its anchors; a
+line with heads is cut under them, so not live either.
+
+Save: `docx_export::shapes::save_shapes` takes what the canvas holds for each shape (its frame's
+preset and anchors, `ShapeFrameIn`, mapped to its drawing by `NativeBody::shapes`) and, for a
+shape that differs from what the lowering gave, replaces its geometry element with `a:prstGeom`
+and the preset's `a:avLst` while the anchors (turned back by the shape's rotation) are what the
+preset draws, else with `a:custGeom` of the anchors in the shape's own box. An unedited shape
+keeps its bytes; a resized one and a reshaped line with heads are refused in the ledger.
+`docx_core::Shape::drawing` is the drawing's ordinal in its part. The bundle fills
+`StructureIn::shapes` (`readShapeFrames`) from each shape frame's `framePath` and
+`frameShapePreset` (read only while live; an unread preset over unchanged anchors is
+unchanged); the host does not read the contours' open flags, so a reshaped outline takes the
+lowering's.
+
+Evidence: `docx-lower` `shape_geom::an_upright_preset_is_the_engines_live_preset`, `docx-export`
+`shapes::tests`, `docx-conformance` `shapes::presets_and_adjust_values_survive_docx_to_paged_to_docx`.

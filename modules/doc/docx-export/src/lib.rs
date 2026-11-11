@@ -36,6 +36,7 @@ pub mod notes;
 pub mod overlay;
 pub mod review;
 mod rpr;
+pub mod shapes;
 mod splice;
 pub mod structure;
 mod styles;

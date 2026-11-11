@@ -16,6 +16,11 @@ docx-core.workspace = true
 docx-lower.workspace = true
 # The one DrawingML crop mapping and picture-effect writer (dml_native::crop, ::picture).
 dml-native.workspace = true
+# Engine ADR 1096: a Word shape's preset (the model's field), whether the
+# canvas's anchors are still what it draws, and `a:custGeom` when not.
+paged-model = { path = "../../../engine/core/crates/paged-model" }
+paged-preset-geom = { path = "../../../engine/core/crates/paged-preset-geom" }
+dml-geom = { path = "../../../platform/shared/dml-geom" }
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 quick-xml = "0.41"
 serde.workspace = true

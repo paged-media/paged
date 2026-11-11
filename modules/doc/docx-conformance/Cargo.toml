@@ -31,3 +31,8 @@ serde_json.workspace = true
 paged-math.workspace = true
 # The picture filter stack the save-back tests set (engine ADR 1037).
 dml-native.workspace = true
+# Engine ADR 1096: the shapes' presets on their frames, drawn as the engine
+# draws them, and the turn the lowering gives a shape.
+paged-model.workspace = true
+paged-preset-geom = { path = "../../../engine/core/crates/paged-preset-geom" }
+dml-geom = { path = "../../../platform/shared/dml-geom" }

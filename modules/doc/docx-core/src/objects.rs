@@ -139,6 +139,12 @@ pub struct Shape {
     /// `a:ln` has a `headEnd` or `tailEnd` (arrow heads): not drawn.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub line_ends: bool,
+    /// Engine ADR 1096 — where the drawing stands in its part: the ordinal
+    /// of its `wp:inline` / `wp:anchor` among those of the part, as a
+    /// picture's ([`crate::Image::drawing`]). Save-back finds the shape's
+    /// geometry by it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<u32>,
 }
 
 fn is_zero_i32(n: &i32) -> bool {

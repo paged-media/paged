@@ -1077,6 +1077,8 @@ impl crate::Lowering {
             open: outline.open,
             fx,
             heads,
+            preset: crate::shape_geom::preset_of(sh, w, h),
+            drawing: sh.drawing,
         })
     }
 

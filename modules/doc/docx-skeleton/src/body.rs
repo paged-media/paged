@@ -104,6 +104,10 @@ pub struct NativeBody {
     /// The properties left out because the model has no field for them (the
     /// old pour's engine refused them the same way).
     pub skipped: std::collections::BTreeSet<String>,
+    /// Engine ADR 1096 — each Word shape's frame (the one carrying its
+    /// outline and preset) and its drawing's ordinal in its part: where
+    /// save-back writes the geometry the canvas reads back for that frame.
+    pub shapes: Vec<(String, u32)>,
 }
 
 impl NativeBody {
@@ -613,6 +617,8 @@ struct Minted {
     looks: LookNeeds,
     /// Properties the model has no field for, left out.
     skipped: std::collections::BTreeSet<String>,
+    /// Each shape's outline frame and its drawing's ordinal.
+    shape_drawings: Vec<(String, u32)>,
 }
 
 /// A hyperlink the body makes: its text source on a run, its URL
@@ -1180,6 +1186,9 @@ fn build_whole(
                 .collect(),
             subpath_starts: sh.starts.clone(),
             subpath_open: sh.open.clone(),
+            // Engine ADR 1096 — the Word shape's preset, in the frame's own
+            // box (where its anchors are).
+            preset: sh.preset.clone(),
             ..AnchoredFrame::default()
         };
         // The shape's look (fill, outline, opacity, effects).
@@ -1228,6 +1237,15 @@ fn build_whole(
                 children,
                 ..AnchoredFrame::default()
             };
+        }
+        if let Some(d) = sh.drawing {
+            let id = format!("docx_shape{}", minted.shapes);
+            let outline = if sh.heads.is_empty() {
+                id
+            } else {
+                format!("{id}_0")
+            };
+            minted.shape_drawings.push((outline, d));
         }
         para.anchored_frames.push(frame);
         minted.shapes += 1;
@@ -1670,6 +1688,7 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
         endnotes: minted.endnotes,
         looks: minted.looks,
         skipped: minted.skipped,
+        shapes: minted.shape_drawings,
     }
 }
 

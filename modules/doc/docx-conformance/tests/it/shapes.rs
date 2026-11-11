@@ -183,3 +183,232 @@ fn an_unedited_save_keeps_the_drawings__feat__doc_shapes() {
     let session = docx_js::DocSession::load(&bytes).expect("load");
     assert_eq!(session.save_verbatim(), bytes);
 }
+
+/// The skeleton's anchored frames of a body, by id (a shape with line ends
+/// is a group whose first child carries the outline).
+fn frames_by_id(
+    body: &docx_skeleton::body::NativeBody,
+) -> std::collections::HashMap<String, paged_model::AnchoredFrame> {
+    let mut out = std::collections::HashMap::new();
+    fn add(
+        f: &paged_model::AnchoredFrame,
+        out: &mut std::collections::HashMap<String, paged_model::AnchoredFrame>,
+    ) {
+        if let Some(id) = &f.self_id {
+            out.insert(id.clone(), f.clone());
+        }
+        for c in &f.children {
+            add(c, out);
+        }
+    }
+    for b in &body.blocks {
+        let paras: Vec<&paged_model::Paragraph> = match b {
+            docx_skeleton::body::NativeBlock::Paragraph(p)
+            | docx_skeleton::body::NativeBlock::Table(p) => vec![p],
+            docx_skeleton::body::NativeBlock::Split(ps) => ps.iter().collect(),
+            docx_skeleton::body::NativeBlock::Deferred { .. } => vec![],
+        };
+        for p in paras {
+            for f in &p.anchored_frames {
+                add(f, &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// What the canvas reads back of a shape's frame.
+fn read_back(f: &paged_model::AnchoredFrame, drawing: u32) -> docx_export::shapes::ShapeIn {
+    docx_export::shapes::ShapeIn {
+        drawing,
+        preset: f.preset.clone(),
+        anchors: f
+            .anchors
+            .iter()
+            .map(|a| {
+                [
+                    a.anchor.0, a.anchor.1, a.left.0, a.left.1, a.right.0, a.right.1,
+                ]
+            })
+            .collect(),
+        starts: f.subpath_starts.clone(),
+        open: f.subpath_open.clone(),
+    }
+}
+
+fn part_text(bytes: &[u8], name: &str) -> String {
+    use std::io::Read;
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut s = String::new();
+    z.by_name(name).unwrap().read_to_string(&mut s).unwrap();
+    s
+}
+
+/// Engine ADR 1096 — docx → paged → docx. The import maps each Word
+/// preset onto its anchored frame's engine preset (live while upright and
+/// without heads); the canvas changes an adjust value as the engine does
+/// (the preset with its new value, drawn again) and moves a point of
+/// another shape by hand; the writer writes the first as `a:prstGeom` with
+/// its new `a:avLst`, the second as `a:custGeom`, and leaves every other
+/// drawing byte for byte. The saved file reads back with the presets and
+/// adjust values the canvas held.
+#[test]
+fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
+    let bytes = shapes_docx();
+    let doc = docx_import::import_docx(&bytes).expect("import");
+    let ir = docx_lower::lower(&doc);
+    let body = docx_skeleton::body::native_body(&ir);
+    let frames = frames_by_id(&body);
+    assert_eq!(body.shapes.len(), SHAPE_CASES.len(), "{:?}", body.shapes);
+
+    // Paged: every preset is on its frame; the upright ones without heads
+    // are live (their anchors are what the engine draws).
+    let live = |f: &paged_model::AnchoredFrame| {
+        f.preset.as_ref().is_some_and(|p| {
+            paged_preset_geom::model::anchors_are(p, &f.anchors, &f.subpath_starts)
+        })
+    };
+    let frame_of = |k: usize| &frames[&body.shapes[k].0];
+    for (k, (name, _)) in SHAPE_CASES.iter().enumerate() {
+        let f = frame_of(k);
+        match *name {
+            "custGeom" => assert!(f.preset.is_none()),
+            n => assert_eq!(f.preset.as_ref().map(|p| p.name.as_str()), Some(n), "{k}"),
+        }
+    }
+    for k in [0, 1, 2, 3, 6] {
+        assert!(live(frame_of(k)), "{}", SHAPE_CASES[k].0);
+    }
+    // The turned rounded rectangle: stored, not live (the lowering turns
+    // its anchors); the arrow: its line stops under its heads.
+    assert!(!live(frame_of(4)) && !live(frame_of(7)));
+    assert_eq!(
+        frame_of(2).preset.as_ref().unwrap().adjusts,
+        vec![("adj".to_string(), "val 30000".to_string())]
+    );
+
+    // The canvas: the triangle's apex dragged to 70 % (the engine's adjust
+    // write draws the preset again), the turned rounded rectangle's corner
+    // made rounder, and the rectangle's first point moved by hand.
+    let adjusted = |k: usize, adj: (&str, &str)| {
+        let f = frame_of(k);
+        let mut p = f.preset.clone().unwrap();
+        p.adjusts = vec![(adj.0.to_string(), adj.1.to_string())];
+        let d = paged_preset_geom::model::draw(&p).unwrap();
+        let mut g = f.clone();
+        g.anchors = d.anchors;
+        g.subpath_starts = d.starts;
+        g.subpath_open = d.open;
+        g.preset = Some(p);
+        g
+    };
+    let triangle = adjusted(2, ("adj", "val 70000"));
+    let mut turned = adjusted(4, ("adj", "val 45000"));
+    {
+        // The lowering's turn of the frame stays on its anchors.
+        let r = &doc_shapes(&doc)[4];
+        let (w, h) = (
+            r.width_emu as f64 / 12_700.0,
+            r.height_emu as f64 / 12_700.0,
+        );
+        use dml_geom::place::{apply, mul, orient, translate};
+        let m = mul(
+            &translate(w / 2.0, h / 2.0),
+            &mul(&orient(90.0, false, false), &translate(-w / 2.0, -h / 2.0)),
+        );
+        for a in &mut turned.anchors {
+            for p in [&mut a.anchor, &mut a.left, &mut a.right] {
+                let (x, y) = apply(&m, (f64::from(p.0), f64::from(p.1)));
+                *p = (x as f32, y as f32);
+            }
+        }
+    }
+    let mut rect = frame_of(0).clone();
+    rect.anchors[0].anchor.0 += 10.0;
+    rect.anchors[0].left.0 += 10.0;
+    rect.anchors[0].right.0 += 10.0;
+    let mut read: Vec<docx_export::shapes::ShapeIn> = (0..SHAPE_CASES.len())
+        .map(|k| read_back(frame_of(k), body.shapes[k].1))
+        .collect();
+    read[0] = read_back(&rect, body.shapes[0].1);
+    read[2] = read_back(&triangle, body.shapes[2].1);
+    read[4] = read_back(&turned, body.shapes[4].1);
+
+    // Docx: written into the package the import read.
+    let mut pkg = paged_ooxml::OpcPackage::read(&bytes).expect("package");
+    let skips = docx_export::shapes::save_shapes(&mut pkg, "word/document.xml", &doc, &ir, &read)
+        .expect("save");
+    assert!(skips.is_empty(), "{skips:?}");
+    let saved = pkg.write().expect("write");
+    let xml = part_text(&saved, "word/document.xml");
+    assert!(xml.contains(
+        r#"<a:prstGeom prst="triangle"><a:avLst><a:gd name="adj" fmla="val 70000"/></a:avLst></a:prstGeom>"#
+    ));
+    assert!(xml.contains(
+        r#"<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 45000"/></a:avLst></a:prstGeom>"#
+    ));
+    assert!(
+        !xml.contains(r#"prst="rect""#),
+        "the rectangle is custom now"
+    );
+    // The rest is the file's own XML.
+    let before = part_text(&bytes, "word/document.xml");
+    for keep in [
+        r#"<a:prstGeom prst="ellipse"><a:avLst></a:avLst></a:prstGeom>"#,
+        r#"<a:prstGeom prst="cloudCallout"><a:avLst></a:avLst></a:prstGeom>"#,
+        r#"<a:path w="100" h="100">"#,
+    ] {
+        assert!(before.contains(keep) && xml.contains(keep), "{keep}");
+    }
+
+    // And back: the presets and adjust values the canvas held.
+    let again = docx_import::import_docx(&saved).expect("re-import");
+    let shapes = doc_shapes(&again);
+    assert_eq!(
+        shapes[2].geometry,
+        ShapeGeometry::Preset {
+            name: "triangle".into(),
+            adjust: vec![("adj".into(), 70000)]
+        }
+    );
+    assert_eq!(
+        shapes[4].geometry,
+        ShapeGeometry::Preset {
+            name: "roundRect".into(),
+            adjust: vec![("adj".into(), 45000)]
+        }
+    );
+    assert_eq!(shapes[4].rotation, 5_400_000);
+    assert!(matches!(shapes[0].geometry, ShapeGeometry::Custom(_)));
+    // The custom outline is the edited one.
+    let ir2 = docx_lower::lower(&again);
+    let drawn = lowered_shapes(&ir2);
+    let moved = drawn[0].anchors[0];
+    assert!(
+        (moved[0] - rect.anchors[0].anchor.0).abs() < 0.01
+            && (moved[1] - rect.anchors[0].anchor.1).abs() < 0.01,
+        "{moved:?}"
+    );
+    // The adjusted triangle is live again on the next open.
+    let body2 = docx_skeleton::body::native_body(&ir2);
+    let frames2 = frames_by_id(&body2);
+    assert!(live(&frames2[&body2.shapes[2].0]));
+
+    // An unedited canvas writes nothing.
+    let mut pkg = paged_ooxml::OpcPackage::read(&bytes).expect("package");
+    let unchanged: Vec<_> = (0..SHAPE_CASES.len())
+        .map(|k| read_back(frame_of(k), body.shapes[k].1))
+        .collect();
+    let skips =
+        docx_export::shapes::save_shapes(&mut pkg, "word/document.xml", &doc, &ir, &unchanged)
+            .expect("save");
+    assert!(skips.is_empty(), "{skips:?}");
+    assert_eq!(
+        part_text(&pkg.write().unwrap(), "word/document.xml"),
+        part_text(&bytes, "word/document.xml")
+    );
+}
+
+fn doc_shapes(doc: &DocxDocument) -> Vec<Shape> {
+    shapes(doc).into_iter().cloned().collect()
+}

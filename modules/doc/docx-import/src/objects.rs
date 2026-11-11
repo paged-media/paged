@@ -87,6 +87,8 @@ struct ShapeRead {
     /// The look with the `wps:style` references completed.
     look: PictureLook,
     line_ends: bool,
+    /// The drawing's ordinal in its part (engine ADR 1096 save-back).
+    ordinal: u32,
 }
 
 impl PartObjects {
@@ -127,7 +129,7 @@ fn shape_looks(part: &[u8]) -> PartRead {
         return read;
     };
     let no_rels = |_: &str| None;
-    for d in &drawings {
+    for (ordinal, d) in drawings.iter().enumerate() {
         let Some(id) = d
             .children
             .iter()
@@ -174,6 +176,7 @@ fn shape_looks(part: &[u8]) -> PartRead {
                     shape: look,
                     blip: Default::default(),
                 },
+                ordinal: ordinal as u32,
             });
         }
         // Engine ADR 1091 — the box's WordArt warp, read by the shared
@@ -505,6 +508,7 @@ pub(crate) fn drawing_shape(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Shape> 
         flip_v: read.flip_v,
         look: Some(Box::new(read.look)).filter(|l| !l.is_plain()),
         line_ends: read.line_ends,
+        drawing: Some(read.ordinal),
     })
 }
 

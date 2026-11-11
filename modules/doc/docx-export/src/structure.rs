@@ -73,6 +73,11 @@ pub struct StructureIn {
     /// placement of each in its frame (a crop).
     #[serde(default)]
     pub pictures: crate::crop::PicturesIn,
+    /// Engine ADR 1096: the Word shapes' frames as the canvas holds them
+    /// (their preset and outline), by frame id; empty from a host that does
+    /// not read them back.
+    #[serde(default)]
+    pub shapes: Vec<crate::shapes::ShapeFrameIn>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
