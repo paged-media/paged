@@ -227,7 +227,10 @@ and endnotes (the endnote story and its page), comments and tracked changes, boo
 inside a paragraph, headers and footers. They open as a prefilled skeleton when the whole body is native
 (`NATIVE_BODY.enabled`, on); no `paged-mutate` is linked into the doc wasm. Still the old pour (the whole
 document, never half): content controls, hyperlinked or reviewed fields, an endnote in a table cell. Sheet and
-data each have their own lowering. Sheet and data each have their own lowering.
+data each have their own lowering. Swatch mints (2026-11-11): one rule, the SDK lowering kit's
+`nativeSwatchMintOps` (beside `nativeGradientMintOps`; read the ids first, mint only what is absent, nothing
+when the read failed), used by sheet's palette, doc's style swatches, web's bake and data's property colours;
+the kit's `nativeHexRgb` is the one hex reader (helpers' `hexToRgb` is it).
 
 ### Charts, data, scripting, PDF
 

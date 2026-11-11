@@ -49,6 +49,12 @@ import type {
   SwatchSummary,
 } from "@paged-media/plugin-api";
 
+import {
+  nativeHexBody,
+  nativeSwatchMintOps,
+  type NativeSwatch,
+} from "@paged-media/plugin-sdk";
+
 import type { ChartGeometry, NativeFx } from "./chart";
 import type { LoweredContent, LoweredStyle, ThemeRefIr } from "./lowered";
 
@@ -85,15 +91,8 @@ export interface PaletteEntry {
  *  the same defensive guard both minting call sites already had, now
  *  shared so they cannot normalise differently. 3-digit shorthand
  *  expands per CSS (`#abc` → `AABBCC`). */
-export function normalizePaletteHex(hex: string): string | null {
-  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex.trim());
-  if (!m) return null;
-  let body = m[1];
-  if (body.length === 3) {
-    body = body[0] + body[0] + body[1] + body[1] + body[2] + body[2];
-  }
-  return body.toUpperCase();
-}
+export const normalizePaletteHex: (hex: string) => string | null =
+  nativeHexBody;
 
 /** RGB channel triple (0..255) from a canonical 6-digit hex body. */
 export function paletteRgb255(canonHex: string): [number, number, number] {
@@ -507,15 +506,12 @@ export function swatchMintOps(
   canonHexes: readonly string[],
   knownSwatchIds?: KnownSwatchIds,
 ): Mutation[] {
-  // A failed read is not "the document has none" — see the ruling above.
-  if (knownSwatchIds === null) return [];
-  const ops: Mutation[] = [];
-  for (const canonHex of canonHexes) {
-    if (knownSwatchIds?.has(paletteSwatchId(facet, canonHex))) continue;
-    const spec: SwatchSpec = paletteEntryToSpec(paletteEntry(facet, canonHex));
-    ops.push({ op: "createSwatch", args: { spec } });
-  }
-  return ops;
+  // A failed read is not "the document has none" — see the ruling above;
+  // the rule itself is the lowering kit's `nativeSwatchMintOps`.
+  return themedSwatchMintOps(
+    canonHexes.map((h) => paletteEntry(facet, h)),
+    knownSwatchIds,
+  );
 }
 
 /** The mint list for theme-following swatches (engine ADR 1056): one
@@ -525,16 +521,10 @@ export function themedSwatchMintOps(
   entries: readonly PaletteEntry[],
   knownSwatchIds?: KnownSwatchIds,
 ): Mutation[] {
-  if (knownSwatchIds === null) return [];
-  const ops: Mutation[] = [];
-  for (const entry of entries) {
-    if (knownSwatchIds?.has(entry.selfId)) continue;
-    ops.push({
-      op: "createSwatch",
-      args: { spec: paletteEntryToSpec(entry) },
-    });
-  }
-  return ops;
+  return nativeSwatchMintOps(
+    entries.map((e) => paletteEntryToSpec(e) as NativeSwatch),
+    { known: knownSwatchIds },
+  );
 }
 
 /** Project a palette entry onto core's `swatches` ROW shape. `kind`
