@@ -641,6 +641,13 @@ pub struct LoweredImage {
     /// What the engine cannot hold of the look, one line per kind.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<String>,
+    /// The picture's corrections (`a:lum`, `a:duotone`, `a:grayscl`,
+    /// `a:biLevel`, `a:hsl`, `a:clrRepl`, `a:clrChange`, `a:blur`) as the
+    /// engine's filter stack (engine ADR 1037), in blip order, through the
+    /// shared mapper slide's and sheet's pictures use. The host model sets it
+    /// on the picture's anchored frame as `frameImageAdjustments`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adjustments: Vec<dml_native::RasterOp>,
     /// For a float placed as an anchored object: its wrap, behind-text
     /// z-order and overlap (engine ADR 1050).
     #[serde(default, skip_serializing_if = "Option::is_none")]

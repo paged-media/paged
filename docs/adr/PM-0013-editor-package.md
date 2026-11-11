@@ -1,7 +1,7 @@
 # ADR PM-0013 — A fourth public package: `@paged-media/editor`
 
 - **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendments 4 and 5: the `dist/` budget is 73 MiB)
-  and 2026-11-08 (amendment 6: 74.25 MiB).
+  and 2026-11-08 (amendment 6: 74.25 MiB) and 2026-11-11 (amendment 7: 74.6 MiB).
 - **Amends:** [PM-0008](PM-0008-npm-packages-and-release.md) (three public packages since its
   amendment 3; four from here).
 - **Scope:** `apps/editor/packages/editor`, `tooling/release/*`, `.github/workflows/release.yml`
@@ -218,3 +218,15 @@ Word's charts (doc ADR 628) and SmartArt with every Annex D preset (doc ADR 629,
 on main before them and 77,460,009 bytes (73.9 MiB) with them on main of the same afternoon, which
 had grown on its own as well. The new budget keeps a margin of about 0.35 MiB, as amendment 4 kept
 about a quarter. The entry budgets stay at 16 KiB.
+
+## Amendment 7 (2026-11-11): a 74.6 MiB budget for `dist/`
+
+The budget for `dist/` goes from 74.25 to 74.6 MiB (78,223,769 bytes, from 77,856,768). Engine ADR
+1037's amendment of 2026-11-11 makes the image filter stack one evaluator (`paged-image-adjust`) that
+paged.sheet's in-frame grid and paged.image's `actions@1` `adjust` run in their own wasm, so a picture
+correction is the same operation in every module: `sheet_js_bg.wasm` grows from 5,294,828 to 5,408,042
+bytes and `image_js_bg.wasm` from 9,172,336 to 9,263,276 (CI's builds); with DrawingML's picture
+write-back in the doc and slide wasm, CI's check-dist measured `dist/` at 74.4 MiB against 74.1 MiB on
+main of the same day. The new budget keeps a margin of about 0.2 MiB. Taken by the consolidation track
+that made the change and recorded for the owner's confirmation; reverting it means dropping the
+evaluator from the sheet and image wasm. The entry budgets stay at 16 KiB.

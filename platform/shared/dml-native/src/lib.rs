@@ -50,18 +50,21 @@
 //!   picture overlay (which PowerPoint does not draw) are reported.
 //! - **Pictures** ([`Mapper::picture_at`]): `a:alphaModFix` as opacity;
 //!   `a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`, `a:clrRepl`
-//!   and (given the picture's pixel density) `a:blur` as the image
-//!   frame's filter stack (engine ADR 1037); the Office 2010 corrections
-//!   and artistic effects are already in the image Office stored; a
-//!   colour change and a tint, which have no equivalent op (the filter
-//!   stack has no colour-replace), are reported.
+//!   `a:clrChange` and (given the picture's pixel density) `a:blur` as the
+//!   image frame's filter stack (engine ADR 1037); the Office 2010
+//!   corrections and artistic effects are already in the image Office
+//!   stored; a tint, which has no equivalent op, is reported.
+//! - **Crop** ([`crop`]): `a:srcRect` as the picture's placement in its
+//!   frame, and the placement back as `a:srcRect` for the save paths.
 //! - **Fill rule** ([`Mapper::fill_rule`]): PowerPoint fills each
 //!   `a:path` even-odd; an outline where that differs from non-zero takes
 //!   the even-odd rule (engine ADR 1006).
 //! - **The inverse** ([`effects_of`], [`effects_with_stack`],
-//!   [`dash_of`]): the engine's drop shadow, effects, effect stack and
-//!   dash pattern back as the neutral IR, which
-//!   `paged_ooxml::drawingml::write` writes as DrawingML.
+//!   [`dash_of`], [`picture::effects_of`], [`crop::of_placement`]): the
+//!   engine's drop shadow, effects, effect stack, dash pattern, picture
+//!   filter stack and crop back as the neutral IR, which
+//!   `paged_ooxml::drawingml::write` writes as DrawingML
+//!   ([`picture::splice_blip`] rewrites a picture's `a:blip`).
 //!
 //! - **For a module that places items through mutations** ([`native`]):
 //!   [`native::Lowering`] runs the whole chain for a shape's or a
@@ -75,8 +78,10 @@
 
 use std::collections::BTreeMap;
 
+pub mod crop;
 pub mod native;
 pub mod pattern;
+pub mod picture;
 pub mod theme;
 
 use paged_model::effect_stack::{
@@ -973,9 +978,9 @@ impl Mapper {
     /// `a:grayscl` a black & white mixed with the luma weights Office
     /// greys by (0.3, 0.59, 0.11), `a:biLevel` a threshold, `a:hsl` a
     /// hue/saturation, `a:clrRepl` a duotone of one colour (every pixel
-    /// that colour, its alpha kept) and `a:blur` a blur, in the blip's
-    /// order. A colour change and a tint have no equivalent op and are
-    /// reported.
+    /// that colour, its alpha kept), `a:clrChange` a colour replace and
+    /// `a:blur` a blur, in the blip's order. A tint has no equivalent op
+    /// and is reported.
     pub fn picture_at(&mut self, pic: &Picture, px_per_pt: Option<f64>) -> MappedPicture {
         let unit = |c: Rgb| c.map(|v| f32::from(v) / 255.0);
         let mut out = MappedPicture {
@@ -1061,10 +1066,21 @@ impl Mapper {
                         },
                     )
                 }
-                ImageEffect::ColorChange { .. } => {
-                    self.lose("picture effect a:clrChange is not carried (no equivalent image adjustment)");
-                    continue;
-                }
+                // The file names no tolerance: the colour is matched
+                // exactly; `a:clrTo`'s alpha is the replaced pixels' (0
+                // makes the colour transparent, PowerPoint's "Set
+                // Transparent Color").
+                ImageEffect::ColorChange {
+                    from, to, to_alpha, ..
+                } => (
+                    "a:clrChange",
+                    RasterOp::ColorReplace {
+                        from: unit(*from),
+                        to: unit(*to),
+                        alpha: to_alpha.clamp(0.0, 1.0) as f32,
+                        tolerance: 0.0,
+                    },
+                ),
                 ImageEffect::Tint { .. } => {
                     self.lose(
                         "picture effect a:tint is not carried (no equivalent image adjustment)",
@@ -1194,6 +1210,7 @@ pub fn picture_adjustment_loss(op: &RasterOp) -> String {
         RasterOp::Threshold { .. } => "a:biLevel",
         RasterOp::HueSaturation { .. } => "a:hsl",
         RasterOp::Blur { .. } => "a:blur",
+        RasterOp::ColorReplace { .. } => "a:clrChange",
         _ => "a picture effect",
     };
     adjustment_loss(element, op)

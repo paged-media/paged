@@ -15,6 +15,7 @@ members = [
     "crates/paged-geom",
     "crates/paged-vector-fx",
     "crates/paged-kernels",
+    "crates/paged-image-adjust",
     "crates/paged-psd",
     "crates/paged-psd-fx",
     "crates/paged-resample",

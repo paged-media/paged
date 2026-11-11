@@ -481,6 +481,10 @@ pub(super) fn find_image_adjustments_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Vec<paged_model::RasterOp>> {
+    // Amendment 2026-11-11: an anchored picture (a Word picture) too.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.image_adjustments);
+    }
     match node {
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.image_adjustments),
         NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.image_adjustments),

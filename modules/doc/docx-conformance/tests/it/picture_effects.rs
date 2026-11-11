@@ -124,8 +124,17 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         "{:?}",
         p3.losses
     );
+    // Engine ADR 1037, amendment 2026-11-11: the greyscale is the
+    // picture's filter stack, the luma weights Office greys by.
+    let ops = serde_json::to_value(&p3.adjustments).unwrap();
+    assert_eq!(ops[0]["op"], "blackWhite", "{ops}");
+    assert_eq!(
+        [&ops[0]["reds"], &ops[0]["greens"], &ops[0]["blues"]].map(|v| v.as_f64().unwrap() as f32),
+        [0.3, 0.59, 0.11],
+        "{ops}"
+    );
     assert!(
-        p3.losses.iter().any(|l| l.contains("a:grayscl")),
+        !p3.losses.iter().any(|l| l.contains("a:grayscl")),
         "{:?}",
         p3.losses
     );
@@ -155,12 +164,8 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
     ] {
         assert!(shown.contains(kind), "{kind}: {shown}");
     }
-    assert_eq!(
-        messages
-            .iter()
-            .filter(|m| m.starts_with("picture look in 1 picture(s)") && m.contains("a:grayscl"))
-            .count(),
-        1,
+    assert!(
+        !messages.iter().any(|m| m.contains("a:grayscl")),
         "{messages:?}"
     );
 }

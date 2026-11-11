@@ -30,6 +30,7 @@ import type {
   ElementId,
   PageId,
   ProviderRecordSet,
+  RasterOp,
   DataTableInfo,
   SceneLayerSurface,
   TabularClipboard,
@@ -1028,6 +1029,14 @@ export interface WorkbookSession extends DataToolsApi {
    *  cells) and a picture's bytes. */
   pictures(): PictureInfo[];
   pictureBytes(media: string): Uint8Array | null;
+  /** Engine ADR 1037 — straight RGBA pixels through a picture's filter
+   *  stack, as the page draws it; null without an engine that can. */
+  adjustPicture?(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    ops: readonly RasterOp[],
+  ): Uint8Array | null;
   /** W2.5 — the active sheet's conditional-format rules (highest priority
    *  first); empty without a workbook. */
   cfRules(): CfRuleInfo[];
@@ -7103,6 +7112,16 @@ export function createWorkbookSession(
       if (!e?.pictureBytes) return null;
       try {
         return e.pictureBytes(media);
+      } catch {
+        return null;
+      }
+    },
+
+    adjustPicture(rgba, width, height, ops) {
+      const e = state.engine;
+      if (!e?.adjustPictureRgba) return null;
+      try {
+        return e.adjustPictureRgba(rgba, width, height, ops);
       } catch {
         return null;
       }

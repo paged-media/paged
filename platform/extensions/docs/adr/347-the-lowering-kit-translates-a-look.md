@@ -85,4 +85,4 @@ rule, the module's decor, the binding on `$created`). paged.sheet's table lane a
 paged.doc's tables (nested ones too) and paged.data's lowering build through it; their ops are
 unchanged. And `loss.ts`: `lossDiagnostics`, `lossDiagnosticSeverity` and `lossRank` put the shared
 `LossEntry` rows (engine ADR 1097) on the diagnostics channel, so a module words its own codes and
-nothing else (`0.74.3-canary.86`).
+nothing else (`0.74.3-canary.87`).

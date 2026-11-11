@@ -258,6 +258,16 @@ impl NativeFx {
     }
 }
 
+/// A picture's alpha (`a:alphaModFix`, 0–1) multiplies whatever opacity
+/// its fill gave.
+fn with_alpha(mut out: NativeFx, alpha: f64) -> NativeFx {
+    if alpha < 0.999 {
+        let base = out.opacity.map_or(1.0, |o| o as f64 / 100.0);
+        out.opacity = Some(pt(base * alpha * 100.0));
+    }
+    out
+}
+
 /// `#RRGGBB`.
 pub fn hex(rgb: [u8; 3]) -> String {
     format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2])
@@ -421,13 +431,25 @@ impl Lowering {
     /// image).
     pub fn picture(&mut self, blip: &Blip, sp: &ShapeProperties, w: f64, h: f64) -> NativeFx {
         let alpha = self.picture_alpha(blip);
-        let mut out = self.shape(sp, w, h);
-        if alpha < 0.999 {
-            // The picture's alpha multiplies whatever the fill gave.
-            let base = out.opacity.map_or(1.0, |o| o as f64 / 100.0);
-            out.opacity = Some(pt(base * alpha * 100.0));
-        }
-        out
+        let out = self.shape(sp, w, h);
+        with_alpha(out, alpha)
+    }
+
+    /// [`Self::picture`] for a lane that sets the frame's filter stack
+    /// (`frameImageAdjustments`, engine ADR 1037; paged.doc's anchored
+    /// pictures): the look, and the picture's corrections as ops instead of
+    /// losses. `px_per_pt` is the image's pixels per point as placed.
+    pub fn picture_with_filters(
+        &mut self,
+        blip: &Blip,
+        sp: &ShapeProperties,
+        w: f64,
+        h: f64,
+        px_per_pt: Option<f64>,
+    ) -> (NativeFx, Vec<RasterOp>) {
+        let (alpha, ops) = self.picture_filters(blip, px_per_pt);
+        let out = self.shape(sp, w, h);
+        (with_alpha(out, alpha), ops)
     }
 
     fn gradient(&mut self, paint: &Paint, w: f64, h: f64) -> Option<NativeGradient> {

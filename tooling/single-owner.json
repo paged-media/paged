@@ -343,6 +343,18 @@
       ]
     },
     {
+      "name": "drawingml-crop",
+      "description": "map a picture's a:srcRect onto its placement and back with dml_native::crop",
+      "owner": ["platform/shared/dml-native/src/crop.rs"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": ["1\\.0 - (l|cl) - (r|cr)\\b", "1\\.0 - (t|ct) - (b|cb)\\b"],
+      "baseline": [
+        "engine/core/crates/paged-canvas/tests/it/anchored_picture_crop.rs",
+        "modules/doc/docx-conformance/tests/it/crop_saveback.rs",
+        "modules/doc/docx-export/src/crop.rs"
+      ]
+    },
+    {
       "name": "loss-report",
       "description": "report what a conversion could not carry with paged_loss::{LossEntry, LossSeverity, LossReport} (TS: LossEntry / LossSeverity from @paged-media/plugin-api), the format's own codes as data",
       "owner": [

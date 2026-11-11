@@ -77,6 +77,10 @@ pub struct PictureIn {
     /// fills it.
     #[serde(default)]
     pub placement: Option<[f32; 6]>,
+    /// Engine ADR 1037 — the picture's filter stack as the canvas holds it
+    /// now; `None` from a host that does not read it back.
+    #[serde(default)]
+    pub adjustments: Option<Vec<dml_native::RasterOp>>,
 }
 
 /// The pictures of the read-back paragraphs: one entry per paragraph of the
@@ -124,21 +128,18 @@ pub fn crop_of_placement(
             "the picture is rotated or skewed in its frame, which a:srcRect cannot say".into(),
         );
     }
-    let disp_w = a * pixels.0 as f32;
-    let disp_h = d * pixels.1 as f32;
-    let l = -e / disp_w;
-    let t = -f / disp_h;
-    let r = 1.0 - l - w / disp_w;
-    let bt = 1.0 - t - h / disp_h;
-    if [l, t, r, bt].iter().any(|v| *v < -PAD) {
+    // The inverse of the lowering's `dml_native::crop::placement`.
+    let m = [a, b, c, d, e, f].map(f64::from);
+    let sides = dml_native::crop::of_placement(m, [0.0, 0.0, f64::from(w), f64::from(h)], pixels)
+        .ok_or("the picture is shown at no size")?;
+    if sides.iter().any(|v| *v < f64::from(-PAD)) {
         return Err(
             "the picture does not cover its frame (Word pads with a negative a:srcRect, \
              which is not carried)"
                 .into(),
         );
     }
-    let unit = |v: f32| (v.max(0.0) * 100_000.0).round() as i32;
-    let crop = (unit(l), unit(t), unit(r), unit(bt));
+    let crop = dml_native::crop::src_rect(sides.map(|v| v.max(0.0)));
     if crop.0 + crop.2 >= 100_000 || crop.1 + crop.3 >= 100_000 {
         return Err("the crop leaves no picture".into());
     }
@@ -224,6 +225,15 @@ fn model_image(model: &DocxDocument, ordinal: u32) -> Option<&Image> {
     })
 }
 
+/// Engine ADR 1037 — a drawing whose picture effects the canvas changed.
+#[derive(Debug, Clone, PartialEq)]
+struct AdjustEdit {
+    ordinal: u32,
+    ops: Vec<dml_native::RasterOp>,
+    /// The picture's own pixels per point as placed (a blur's radius).
+    px_per_pt: Option<f64>,
+}
+
 /// What the splice does to one drawing.
 #[derive(Debug, Clone, PartialEq)]
 struct CropEdit {
@@ -292,10 +302,36 @@ pub fn save_crops(
     }
 
     let mut edits: Vec<CropEdit> = Vec::new();
+    let mut adjusts: Vec<AdjustEdit> = Vec::new();
     for Pair { image, read } in &pairs {
         let Some(ordinal) = image.drawing else {
             continue;
         };
+        // Engine ADR 1037 (amendment 2026-11-11): a filter stack changed on
+        // the canvas is the blip's picture effects (`dml_native::picture`).
+        if let Some(ops) = read
+            .adjustments
+            .as_ref()
+            .filter(|o| **o != image.adjustments)
+        {
+            let px =
+                model_image(model, ordinal).and_then(|i| paged_ooxml::media::pixel_size(&i.bytes));
+            let px_per_pt = px.and_then(|px| {
+                let shown = match read.placement {
+                    Some(m) => (
+                        f64::from(m[0].abs()) * f64::from(px.0),
+                        f64::from(m[3].abs()) * f64::from(px.1),
+                    ),
+                    None => (f64::from(image.width_pt), f64::from(image.height_pt)),
+                };
+                dml_native::crop::px_per_pt(px, shown)
+            });
+            adjusts.push(AdjustEdit {
+                ordinal,
+                ops: ops.clone(),
+                px_per_pt,
+            });
+        }
         let was = image.crop.and_then(|c| c.placement);
         if same_placement(was, read.placement) {
             continue;
@@ -341,11 +377,11 @@ pub fn save_crops(
             unmatched.join(", ")
         ));
     }
-    if edits.is_empty() {
+    if edits.is_empty() && adjusts.is_empty() {
         return Ok(skips);
     }
     let bytes = pkg.require(main_part)?.to_vec();
-    let (out, mut more) = splice_crops(&bytes, &edits);
+    let (out, mut more) = splice_crops(&bytes, &edits, &adjusts);
     skips.append(&mut more);
     if out != bytes {
         pkg.set_part(main_part, out);
@@ -356,6 +392,9 @@ pub fn save_crops(
 /// Where a drawing's picture keeps its crop in the part.
 #[derive(Debug, Clone, Default)]
 struct BlipAt {
+    /// Where the `a:blip` starts (its effects are spliced over
+    /// `blip_start..blip_end`).
+    blip_start: Option<usize>,
     /// Where an `a:srcRect` goes when there is none: after the `a:blip`.
     blip_end: Option<usize>,
     /// The prefix of the DrawingML main namespace as the blip writes it
@@ -418,6 +457,7 @@ fn scan(part: &[u8]) -> Vec<BlipAt> {
                             if let Some(cur) = out.last_mut() {
                                 if uri == NS_A && local == "blip" {
                                     cur.prefix = qname_prefix(e);
+                                    cur.blip_start = Some(before);
                                     if empty {
                                         cur.blip_end = Some(after);
                                     }
@@ -520,11 +560,34 @@ fn rect_text(prefix: &str, crop: Crop) -> String {
 /// Splice `edits` into `part`: each drawing's `a:srcRect` replaced, added
 /// after its `a:blip`, or removed. An edit whose drawing is missing, whose
 /// crop is not the import's, or that has no blip is refused with a line.
-fn splice_crops(part: &[u8], edits: &[CropEdit]) -> (Vec<u8>, Vec<String>) {
+/// Each of `adjusts` rewrites its drawing's `a:blip` effects.
+fn splice_crops(part: &[u8], edits: &[CropEdit], adjusts: &[AdjustEdit]) -> (Vec<u8>, Vec<String>) {
     let drawings = scan(part);
     let mut skips = Vec::new();
     // (start, end, replacement)
     let mut holes: Vec<(usize, usize, String)> = Vec::new();
+    for a in adjusts {
+        let label = format!("picture {}", a.ordinal);
+        let at = drawings.get(a.ordinal as usize);
+        let Some((at, (s, t))) = at.and_then(|d| Some((d, (d.blip_start?, d.blip_end?)))) else {
+            skips.push(format!(
+                "{label}: picture adjustments not saved: the drawing has no a:blip"
+            ));
+            continue;
+        };
+        if at.prefix != "a:" {
+            skips.push(format!(
+                "{label}: picture adjustments not saved: the blip is not written with the a: prefix"
+            ));
+            continue;
+        }
+        let Ok(text) = std::str::from_utf8(&part[s..t]) else {
+            continue;
+        };
+        let (tag, lost) = dml_native::picture::splice_blip(text, &a.ops, a.px_per_pt);
+        skips.extend(lost.into_iter().map(|l| format!("{label}: {l}")));
+        holes.push((s, t, tag));
+    }
     for e in edits {
         let label = format!("picture {}", e.ordinal);
         let Some(at) = drawings.get(e.ordinal as usize) else {
@@ -587,10 +650,37 @@ mod tests {
     }
 
     #[test]
+    fn picture_adjustments_rewrite_the_blip_and_a_crop_lands_after_it() {
+        let src = doc("");
+        let adjust = AdjustEdit {
+            ordinal: 0,
+            ops: vec![dml_native::RasterOp::Threshold { level: 0.5 }],
+            px_per_pt: None,
+        };
+        let (out, skips) = splice_crops(
+            src.as_bytes(),
+            &[edit(None, Some((25_000, 0, 25_000, 0)))],
+            &[adjust],
+        );
+        assert!(skips.is_empty(), "{skips:?}");
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.contains(
+                "<a:blip r:embed=\"rId4\"><a:biLevel thresh=\"50000\"/></a:blip>\
+                 <a:srcRect l=\"25000\" r=\"25000\"/><a:stretch>"
+            ),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn a_missing_rectangle_is_added_after_the_blip() {
         let src = doc("");
-        let (out, skips) =
-            splice_crops(src.as_bytes(), &[edit(None, Some((25_000, 0, 25_000, 0)))]);
+        let (out, skips) = splice_crops(
+            src.as_bytes(),
+            &[edit(None, Some((25_000, 0, 25_000, 0)))],
+            &[],
+        );
         assert!(skips.is_empty(), "{skips:?}");
         let out = String::from_utf8(out).unwrap();
         assert!(out
@@ -601,7 +691,11 @@ mod tests {
     fn an_existing_rectangle_is_replaced_and_only_it() {
         let src = doc("<a:srcRect l=\"1000\" t=\"2000\"/>");
         let want = Some((1_000, 2_000, 0, 0));
-        let (out, skips) = splice_crops(src.as_bytes(), &[edit(want, Some((0, 0, 10_000, 5_000)))]);
+        let (out, skips) = splice_crops(
+            src.as_bytes(),
+            &[edit(want, Some((0, 0, 10_000, 5_000)))],
+            &[],
+        );
         assert!(skips.is_empty(), "{skips:?}");
         let out = String::from_utf8(out).unwrap();
         assert_eq!(
@@ -616,7 +710,7 @@ mod tests {
     #[test]
     fn a_crop_taken_away_removes_the_rectangle() {
         let src = doc("<a:srcRect l=\"1000\"></a:srcRect>");
-        let (out, skips) = splice_crops(src.as_bytes(), &[edit(Some((1_000, 0, 0, 0)), None)]);
+        let (out, skips) = splice_crops(src.as_bytes(), &[edit(Some((1_000, 0, 0, 0)), None)], &[]);
         assert!(skips.is_empty(), "{skips:?}");
         assert_eq!(String::from_utf8(out).unwrap(), doc(""));
     }
@@ -624,7 +718,7 @@ mod tests {
     #[test]
     fn a_rectangle_other_than_the_imports_is_refused() {
         let src = doc("<a:srcRect l=\"1000\"/>");
-        let (out, skips) = splice_crops(src.as_bytes(), &[edit(Some((9, 0, 0, 0)), None)]);
+        let (out, skips) = splice_crops(src.as_bytes(), &[edit(Some((9, 0, 0, 0)), None)], &[]);
         assert_eq!(out, src.as_bytes());
         assert_eq!(skips.len(), 1);
     }

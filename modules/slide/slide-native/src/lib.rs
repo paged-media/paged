@@ -1075,23 +1075,27 @@ impl Builder<'_> {
                     ));
                     return;
                 };
+                // The visible part of the image is (l, t)–(1-r, 1-b); stretch it
+                // over the frame (`dml_native::crop`; a negative side pads).
+                let (l, t, r, b) = *crop;
+                let sides = [l, t, r, b];
+                let frame = (it.w, it.h);
+                // A picture blur is in the image's own pixels: its pixels
+                // per point as placed.
+                let px_per_pt = dml_native::crop::px_per_pt(
+                    (pw, ph),
+                    dml_native::crop::display_size(sides, frame),
+                );
+                let Some(m) = dml_native::crop::placement(sides, frame, (pw, ph)) else {
+                    self.diagnostics
+                        .push(format!("{image_part}: a picture of no pixels, not placed"));
+                    return;
+                };
                 let sf = self.stroke(stroke.as_ref());
                 self.element(&it.id, "rectangle", &it.id);
                 sb.name(&it.id, &it.name);
                 let tr = self.transparency(it.opacity, &it.effects, None);
-                // The visible part of the image is (l, t)–(1-r, 1-b); stretch it
-                // over the frame.
-                let (l, t, r, b) = *crop;
-                let vis_w = (1.0 - l - r).max(1e-6);
-                let vis_h = (1.0 - t - b).max(1e-6);
-                let disp_w = it.w / vis_w;
-                let disp_h = it.h / vis_h;
-                let (iw, ih) = (pw as f64, ph as f64);
-                // A picture blur is in the image's own pixels: its pixels
-                // per point as placed.
-                let px_per_pt = (iw / disp_w.max(1e-6) + ih / disp_h.max(1e-6)) / 2.0;
-                let mapped = self.dml.picture_at(&pic, Some(px_per_pt));
-                let m = [disp_w / iw, 0.0, 0.0, disp_h / ih, -l * disp_w, -t * disp_h];
+                let mapped = self.dml.picture_at(&pic, px_per_pt);
                 let uri = format!(
                     "file:{}",
                     image_part.rsplit('/').next().unwrap_or(image_part)

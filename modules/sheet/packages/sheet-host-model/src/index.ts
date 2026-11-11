@@ -140,6 +140,7 @@ export {
   hitCell,
   linkAt,
   pictureBox,
+  pictureKey,
   selectionRect,
   viewportHeightPt,
   viewportWidthPt,

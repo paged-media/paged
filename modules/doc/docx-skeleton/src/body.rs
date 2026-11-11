@@ -1098,6 +1098,8 @@ fn build_whole(
             }),
             image_link: Some(img.uri.clone()),
             image_item_transform: img.crop.and_then(|c| c.placement),
+            // Engine ADR 1037 — the picture's corrections, its filter stack.
+            image_adjustments: img.adjustments.clone(),
             // Engine ADR 1050 — a float's place and wrap (doc ADR 614).
             setting: img.anchor.as_ref().map(anchored_setting),
             layout: img.layout.as_ref().map(anchored_layout).unwrap_or_default(),

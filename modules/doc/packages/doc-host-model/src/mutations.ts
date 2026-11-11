@@ -5,7 +5,12 @@
 // maps IR nodes to `host.document.mutate(...)` ops. No engine logic lives here;
 // the semantics were decided in `docx-lower` (Rust).
 
-import type { Mutation, PropertyPath, Value } from "@paged-media/plugin-api";
+import type {
+  Mutation,
+  PropertyPath,
+  RasterOp,
+  Value,
+} from "@paged-media/plugin-api";
 import {
   nativeCellPropertyOp,
   nativeCellSpanOp,
@@ -151,6 +156,27 @@ export function pictureCropOps(
   ];
 }
 
+/** The op that sets the picture corrections of the anchored frame
+ *  `$h:<handle>` (engine ADR 1037, amendment 2026-11-11: an anchored
+ *  frame holds the filter stack a free frame does). Nothing for a picture
+ *  without corrections. */
+export function pictureAdjustmentOps(
+  adjustments: readonly RasterOp[] | undefined,
+  handle: string,
+): Mutation[] {
+  if (!adjustments || adjustments.length === 0) return [];
+  return [
+    {
+      op: "setElementProperty",
+      args: {
+        elementId: { kind: "rectangle", id: `$h:${handle}` },
+        path: "frameImageAdjustments",
+        value: { type: "imageAdjustments", value: adjustments },
+      },
+    } as unknown as Mutation,
+  ];
+}
+
 /** Every picture look's gradient in `ir`, in document order. */
 function lookGradients(ir: LoweredDoc): NativeGradient[] {
   const out: NativeGradient[] = [];
@@ -225,6 +251,8 @@ interface ImageAt {
   fx?: NativeFx;
   /** Doc ADR 623 — the picture's crop, as the frame's image placement. */
   crop?: LoweredCrop;
+  /** Engine ADR 1037 — the picture's corrections, the frame's filter stack. */
+  adjustments?: RasterOp[];
   /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
   layout?: LoweredFloatLayout;
   /** Engine ADR 1050 — a text box (an anchored text frame); `uri` unused. */
@@ -588,6 +616,7 @@ function poured(
         ...(img.anchor ? { anchor: img.anchor } : {}),
         ...(img.fx ? { fx: img.fx } : {}),
         ...(img.crop?.placement ? { crop: img.crop } : {}),
+        ...(img.adjustments?.length ? { adjustments: img.adjustments } : {}),
         ...(img.layout ? { layout: img.layout } : {}),
       });
     }
@@ -842,10 +871,11 @@ export function buildTextPour(
     const frameOps = (handle: string): Mutation[] => [
       ...(look ? pictureLookOps(look, handle) : []),
       ...pictureCropOps(img.crop, handle),
+      ...pictureAdjustmentOps(img.adjustments, handle),
     ];
     if (img.anchor) {
       ops.push(anchoredFloat(insert, img.anchor, k, frameOps));
-    } else if (look || img.crop?.placement) {
+    } else if (look || img.crop?.placement || img.adjustments?.length) {
       // `bindCreated` names a frame only as a batch child: the frame and
       // its look go in one batch, as a float's do.
       const handle = `docxPicture${k}`;
@@ -1425,13 +1455,15 @@ export function buildTableCells(
             { op: "bindCreated", args: { handle } } as unknown as Mutation,
             ...anchorSets(img.anchor, handle),
             ...pictureCropOps(img.crop, handle),
+            ...pictureAdjustmentOps(img.adjustments, handle),
           );
-        } else if (img.crop?.placement) {
+        } else if (img.crop?.placement || img.adjustments?.length) {
           const handle = `docCellPicture${cell.row}_${cell.col}_${pIdx}_${ops.length}`;
           ops.push(
             insert,
             { op: "bindCreated", args: { handle } } as unknown as Mutation,
             ...pictureCropOps(img.crop, handle),
+            ...pictureAdjustmentOps(img.adjustments, handle),
           );
         } else ops.push(insert);
       }

@@ -283,6 +283,12 @@ export interface LoweredImage {
   fx?: NativeFx;
   /** What the engine cannot hold of the look, one line per kind. */
   losses?: string[];
+  /** The picture's corrections (`a:lum`, `a:duotone`, `a:grayscl`,
+   *  `a:biLevel`, `a:hsl`, `a:clrRepl`, `a:clrChange`, `a:blur`) as the
+   *  engine's filter stack (engine ADR 1037), through the shared mapper
+   *  slide's and sheet's pictures use: set on the anchored frame as
+   *  `frameImageAdjustments`, editable in the Picture panel. */
+  adjustments?: RasterOp[];
   /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
   layout?: LoweredFloatLayout;
   /** Doc ADR 623 — the picture's crop (`a:srcRect`): the fractions of the
@@ -314,6 +320,7 @@ export interface LoweredCrop {
  *  type (plugin-sdk), colours `#RRGGBB`; lengths pt; opacities 0–100. */
 import type { LossEntry } from "@paged-media/plugin-api";
 import type { NativeFx } from "@paged-media/plugin-sdk";
+import type { RasterOp } from "@paged-media/plugin-api";
 export type { NativeFx };
 
 /** A floating drawing's position and wrap, in points, Word's vocabulary. */
