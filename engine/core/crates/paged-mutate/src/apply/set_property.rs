@@ -35,6 +35,30 @@ pub(super) fn apply_set_property(
     path: PropertyPath,
     value: &Value,
 ) -> Result<AppliedOperation, OperationError> {
+    // Engine ADR 1096 — a write that moves or resizes an item refits a
+    // live preset on it and routes the connectors glued to it, in the same
+    // apply; the inverse then restores everything it touched.
+    let Some(before) = super::preset_shape::before(doc, node, path) else {
+        return apply_set_property_core(doc, node, path, value);
+    };
+    let mut applied = apply_set_property_core(doc, node, path, value)?;
+    if let Some((inverse, touched)) = super::preset_shape::follow(doc, before, &applied.inverse) {
+        applied.inverse = inverse;
+        for n in touched {
+            if !applied.invalidation.frame_geometry.contains(&n) {
+                applied.invalidation.frame_geometry.push(n);
+            }
+        }
+    }
+    Ok(applied)
+}
+
+fn apply_set_property_core(
+    doc: &mut Document,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<AppliedOperation, OperationError> {
     // Track J — path-topology ops construct their inverse on a
     // different `PropertyPath` than the forward op (Insert ↔ Remove,
     // CurveType ↔ CurveType-with-restore), so they can't share the
@@ -51,6 +75,15 @@ pub(super) fn apply_set_property(
         }
         (NodeId::Oval(id), PropertyPath::FrameShapePieStart | PropertyPath::FrameShapePieEnd) => {
             return super::live_shape::apply_pie_angle(doc, node, id, path, value);
+        }
+        // Engine ADR 1096 — presets (see `preset_shape`).
+        (
+            NodeId::Polygon(id),
+            PropertyPath::FrameShapePreset
+            | PropertyPath::FrameShapePresetAdjust
+            | PropertyPath::FrameShapePresetHandle,
+        ) => {
+            return super::preset_shape::apply_preset(doc, node, id, path, value);
         }
         // Track J fan-out — path-topology ops accept any path-bearing
         // page item kind (Polygon, TextFrame, Rectangle, GraphicLine).

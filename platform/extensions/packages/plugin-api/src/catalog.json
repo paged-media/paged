@@ -1855,6 +1855,9 @@
     "frameShapeStarInset",
     "frameShapePieStart",
     "frameShapePieEnd",
+    "frameShapePreset",
+    "frameShapePresetAdjust",
+    "frameShapePresetHandle",
     "frameFillMesh",
     "framePatternTransform",
     "frameStrokeType",
@@ -4406,6 +4409,40 @@
       "default": 360.0,
       "access": "readWrite",
       "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePreset",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePresetAdjust",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePresetHandle",
+      "type": {
+        "kind": "operation",
+        "shape": "PathPoint"
+      },
+      "wire": "pathPoint",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": false
     },
     {
       "addressKind": "frame",
@@ -19030,6 +19067,28 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePreset",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePresetAdjust",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "frame",

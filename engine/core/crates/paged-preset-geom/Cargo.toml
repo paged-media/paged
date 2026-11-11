@@ -14,4 +14,6 @@ workspace = true
 [dependencies]
 # Arc splitting, the arc handle length and the f64 affine the live arithmetic uses.
 paged-geom = { path = "../paged-geom" }
+# The model's preset live shape the `model` module draws and refits.
+paged-model = { path = "../paged-model" }
 serde = { workspace = true }

@@ -112,6 +112,7 @@ mod place_image_wire;
 mod placed_pdf_page;
 mod placeholder_wire;
 mod planar_regions_wire;
+mod presets;
 mod property_sweep;
 mod render_effect_sweep;
 mod reorder_wire;

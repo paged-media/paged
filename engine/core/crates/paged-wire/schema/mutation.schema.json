@@ -9444,6 +9444,21 @@
           "const": "frameShapePieEnd"
         },
         {
+          "description": "A path's preset (`Value::Text`): a `PresetShape` as JSON (`name`,\n`adjusts`, `frame` `[x, y, w, h]` in the item's own coordinates,\n`flipH` / `flipV`, `part`, `key`, `connector`) sets it and draws the\nanchors for it, unless they already are what it draws; `\"\"` ends it\nand keeps the path (Expand Shape). Reads the preset while it is live\n(with its adjust handles in the item's own coordinates, `handles`:\n`[{\"x\", \"y\", \"polar\", \"refs\"}]`, which a write ignores), `\"\"`\notherwise. A resize refits a live preset in the same apply; a\npoint edit ends it without a write. No IDML attribute: the outline is\nwritten, the preset rides the item's label (`paged:liveShape`).",
+          "type": "string",
+          "const": "frameShapePreset"
+        },
+        {
+          "description": "A live preset's adjust values (`Value::Text`): `[[\"adj\", \"val\n5000\"], …]` merged into the preset's own, the anchors drawn again.\nReads every adjust value of the program (its own overriding the\ndefaults).",
+          "type": "string",
+          "const": "frameShapePresetAdjust"
+        },
+        {
+          "description": "An adjust handle of a live preset dragged (`Value::PathPoint`):\nhandle `address.index` (role `anchor`) to `position`, the item's own\ncoordinates. The engine solves the adjust values within the\nhandle's range and draws the preset again. Write-only: the handles\nare read with the preset (`frameShapePreset`).",
+          "type": "string",
+          "const": "frameShapePresetHandle"
+        },
+        {
           "description": "A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or\n`auto` (from the first strong character); `\"\"` clears (inherit).\nOn a `StoryRange` or a paragraph style. Reflows.",
           "type": "string",
           "const": "paragraphDirection"

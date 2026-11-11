@@ -83,3 +83,18 @@ draws no heads (its page shapes carry one paint per shape, a head needs the line
 paged.slide maps DrawingML heads onto the engine's InDesign-shaped ends. Both wait on a per-end
 Office head in the engine model, whose geometry would move from `dml_geom::heads` into an engine
 crate on the same terms as ADR 1096's preset programs.
+
+## Amendment 2 (2026-11-11): an Office head is a line end of the model
+
+Office's heads are a kind of line end in the engine model, beside InDesign's arrowheads.
+`Polygon` and `GraphicLine` carry `start_office_head` / `end_office_head`
+(`paged_model::OfficeLineEnd`: `triangle`, `stealth`, `diamond`, `oval`, `arrow`, each with Office's
+`sm` / `med` / `lg` width and length). Where one is set the renderer draws Office's head there
+instead of the InDesign arrowhead, and cuts the line under it by Office's inset; the InDesign
+field (`start_arrow`) keeps the nearest InDesign kind (`OfficeLineEnd::nearest_arrowhead`), which
+IDML writes, and the IDML export names the Office heads among its losses. The head geometry moved
+from `dml_geom::heads` into the engine (`paged_preset_geom::heads`, with `head_at` for one end), on
+the same terms as engine ADR 1096's preset programs; `dml_geom::heads` keeps the DrawingML side,
+the mapping of `a:headEnd` / `a:tailEnd` onto the model's line end and back (`office_end`,
+`line_end`), and the calls doc's lowering makes. Both fields are `serde(default)`, absent when
+unset, so a document without them writes and hashes as before.

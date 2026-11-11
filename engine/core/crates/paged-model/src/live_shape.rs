@@ -453,7 +453,10 @@ pub fn pie_polygon(oval: &Oval) -> Option<Polygon> {
         end_arrow: crate::ArrowheadType::None,
         start_arrow_scale: 100.0,
         end_arrow_scale: 100.0,
+        start_office_head: None,
+        end_office_head: None,
         live_shape: None,
+        preset: None,
     })
 }
 
@@ -463,6 +466,138 @@ pub fn oval_outline(oval: &Oval) -> Option<Vec<PathAnchor>> {
     cut_pie(oval).map(|pie| pie_anchors(oval.bounds, pie))
 }
 
+// ------------------------------------------------------------- presets
+
+/// Engine ADR 1096 — which of a preset program's paths an item draws. A
+/// filled shape is its filled paths; the stroke-only detail paths over it
+/// (a cube's edges, a callout's leader) are a second item above it,
+/// because one item has one paint. An unfilled shape draws every path.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PresetPart {
+    /// Every path of the program.
+    #[default]
+    All,
+    /// The filled paths.
+    Fill,
+    /// The stroke-only paths over a filled shape.
+    Detail,
+}
+
+impl PresetPart {
+    fn is_all(&self) -> bool {
+        *self == PresetPart::All
+    }
+}
+
+/// One glued end of a connector: the item it is glued to (`Self`) and the
+/// index of the connection site on that item's preset (a plain box's four
+/// side midpoints for an item without one).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PresetGlue {
+    pub item: String,
+    pub site: u32,
+}
+
+/// A connector preset's glued ends (DrawingML `a:stCxn` / `a:endCxn`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PresetConnector {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<PresetGlue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<PresetGlue>,
+}
+
+/// Engine ADR 1096 — the parametric preset a path item's anchors were
+/// drawn from: a named geometry program (ECMA-376 Annex D, evaluated by
+/// `paged-preset-geom`) with its adjust values, drawn for a box.
+///
+/// The anchors stay the geometry every consumer reads, as for a live
+/// polygon (ADR 1047); the preset is LIVE while the anchors are what the
+/// program draws for `frame` (`paged_preset_geom::model::is_live`). A
+/// resize refits it (the program is drawn again for the new box, so a
+/// rounded corner keeps its radius); a point edit ends it without a
+/// write. Office's `a:prstGeom` + `a:avLst` map onto it at the format
+/// boundary; nothing here is DrawingML's encoding.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresetShape {
+    /// The program's name (`roundRect`, `rightArrow`, `bentConnector3`).
+    pub name: String,
+    /// The adjust values as authored, each a guide formula (`val 16667`),
+    /// overriding the program's defaults. Empty: the defaults.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adjusts: Vec<(String, String)>,
+    /// The box the outline is drawn for, `[x, y, w, h]` in the item's
+    /// own (anchor) coordinates.
+    pub frame: [f32; 4],
+    /// Mirrored across the box's vertical axis.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub flip_h: bool,
+    /// Mirrored across the box's horizontal axis.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub flip_v: bool,
+    /// Which of the program's paths this item draws.
+    #[serde(default, skip_serializing_if = "PresetPart::is_all")]
+    pub part: PresetPart,
+    /// The items one shape was lowered to (its filled item, its detail
+    /// item, its text frame) share a key, so a resize of one refits the
+    /// others on the same box with it. `None`: the item stands alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// A connector's glued ends: the connector is routed again between
+    /// the two sites when an item it is glued to moves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connector: Option<PresetConnector>,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+impl PresetShape {
+    /// A preset drawn for a `w` × `h` box at the origin, with the
+    /// program's own adjust values.
+    pub fn new(name: impl Into<String>, w: f32, h: f32) -> Self {
+        PresetShape {
+            name: name.into(),
+            adjusts: Vec::new(),
+            frame: [0.0, 0.0, w, h],
+            flip_h: false,
+            flip_v: false,
+            part: PresetPart::All,
+            key: None,
+            connector: None,
+        }
+    }
+
+    /// The same preset drawn for `frame` (`[x, y, w, h]`).
+    pub fn with_frame(mut self, frame: [f32; 4]) -> Self {
+        self.frame = frame;
+        self
+    }
+
+    /// The box as [`Bounds`] in the item's own coordinates.
+    pub fn bounds(&self) -> Bounds {
+        let [x, y, w, h] = self.frame;
+        Bounds {
+            top: y,
+            left: x,
+            bottom: y + h,
+            right: x + w,
+        }
+    }
+}
+
+/// Engine ADR 1096 — the text frame of a shape lowered from a preset (the
+/// program's text rectangle): the key its preset items carry
+/// ([`PresetShape::key`]). A refit of the shape scales the frame with the
+/// box when the frame shares the shape's transform.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PresetText {
+    pub key: String,
+}
+
 // --------------------------------------------------------------- label
 
 /// The IDML form of the live shapes: a label on the item (`paged:liveShape`),
@@ -470,7 +605,10 @@ pub fn oval_outline(oval: &Oval) -> Option<Vec<PathAnchor>> {
 pub mod label {
     use serde::{Deserialize, Serialize};
 
-    use super::{anchor_box, live_polygon, matches_polygon, pie_anchors, PieAngles, PolygonShape};
+    use super::{
+        anchor_box, live_polygon, matches_polygon, pie_anchors, PieAngles, PolygonShape,
+        PresetShape,
+    };
     use crate::Bounds;
 
     /// The label key.
@@ -487,12 +625,19 @@ pub mod label {
         /// wedge's, not the ellipse's.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ellipse: Option<[f32; 4]>,
+        /// Engine ADR 1096 — a path's preset. Stamped whenever the item
+        /// carries one: whether it is still live is a read of the anchors.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset: Option<PresetShape>,
     }
 
     /// Whether anything on `spread` has a live shape to stamp.
     pub fn any(spread: &crate::Spread) -> bool {
         spread.ovals.iter().any(|o| super::cut_pie(o).is_some())
-            || spread.polygons.iter().any(|p| live_polygon(p).is_some())
+            || spread
+                .polygons
+                .iter()
+                .any(|p| live_polygon(p).is_some() || p.preset.is_some())
     }
 
     /// Put every live shape on `spread` into its item's label, for an
@@ -513,9 +658,12 @@ pub mod label {
             }
         }
         for p in &spread.polygons {
-            if let (Some(id), Some(shape)) = (&p.self_id, live_polygon(p)) {
+            let Some(id) = &p.self_id else { continue };
+            let shape = live_polygon(p);
+            if shape.is_some() || p.preset.is_some() {
                 let env = Envelope {
-                    polygon: Some(shape),
+                    polygon: shape,
+                    preset: p.preset.clone(),
                     ..Default::default()
                 };
                 if let Ok(v) = serde_json::to_string(&env) {
@@ -583,6 +731,9 @@ pub mod label {
             let Some(env) = take(&p.self_id) else {
                 continue;
             };
+            if env.preset.is_some() {
+                p.preset = env.preset;
+            }
             let Some(shape) = env
                 .polygon
                 .map(|s| PolygonShape::new(s.sides, s.star_inset))

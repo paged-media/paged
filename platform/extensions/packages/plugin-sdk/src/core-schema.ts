@@ -808,6 +808,11 @@ export const CORE_PATHS: Record<
   frameShapeStarInset: V71,
   frameShapePieStart: V71,
   frameShapePieEnd: V71,
+  // The presets are protocol 78 too (engine ADR 1096): the preset and its
+  // adjust values as JSON text; a handle drag is an operation.
+  frameShapePreset: V71,
+  frameShapePresetAdjust: V71,
+  frameShapePresetHandle: OP,
   // A movie or sound frame's medium is protocol 78 (engine ADR 1027).
   frameMedia: V71,
   // Engine ADR 1007: "Within" / "Along" / "Across".

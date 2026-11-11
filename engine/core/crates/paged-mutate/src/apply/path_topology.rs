@@ -1512,6 +1512,7 @@ pub(crate) fn new_text_frame(
         corners: Default::default(),
         text_warp: None,
         shrink_to_fit: None,
+        preset_text: None,
     }
 }
 

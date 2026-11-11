@@ -70,6 +70,8 @@ paged-compose = { path = "../paged-compose" }
 paged-vector-fx = { path = "../paged-vector-fx" }
 # The one fixed-step flattener and the circle constant.
 paged-geom = { path = "../paged-geom" }
+# Office's line ends (engine ADR 1093, amendment 2): their geometry.
+paged-preset-geom = { path = "../paged-preset-geom" }
 paged-gpu = { path = "../paged-gpu", default-features = false, features = ["svg"] }
 # W3.B2 — IDML save-back, used by the `paged-inspect --roundtrip`
 # conformance hook. Lightweight (idml-import + paged-scene + zip +

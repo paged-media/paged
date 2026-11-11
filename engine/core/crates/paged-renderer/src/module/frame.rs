@@ -769,6 +769,7 @@ mod tests {
             corners: Default::default(),
             text_warp: None,
             shrink_to_fit: None,
+            preset_text: None,
         }
     }
 

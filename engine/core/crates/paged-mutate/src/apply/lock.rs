@@ -77,6 +77,9 @@ pub(super) fn moves_geometry(path: PropertyPath) -> bool {
             | P::FrameShapeStarInset
             | P::FrameShapePieStart
             | P::FrameShapePieEnd
+            | P::FrameShapePreset
+            | P::FrameShapePresetAdjust
+            | P::FrameShapePresetHandle
     )
 }
 

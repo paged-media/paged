@@ -1080,6 +1080,65 @@ fn default_arrowhead_scale() -> f32 {
     100.0
 }
 
+/// Engine ADR 1093, amendment 2 — an Office line end's shape: Office
+/// draws its own heads (DrawingML `a:headEnd` / `a:tailEnd` `type`), sized
+/// by the line's width rather than InDesign's arrowheads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OfficeHeadKind {
+    Triangle,
+    /// A triangle notched at its back (`stealth`).
+    Stealth,
+    Diamond,
+    Oval,
+    /// Two strokes meeting at the tip (`arrow`), drawn with the line.
+    Arrow,
+}
+
+/// An Office line end's width or length (`sm`, `med`, `lg`): two, three
+/// or five times the line's sizing width.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OfficeHeadSize {
+    Sm,
+    #[default]
+    Med,
+    Lg,
+}
+
+impl OfficeHeadSize {
+    fn is_med(&self) -> bool {
+        *self == OfficeHeadSize::Med
+    }
+}
+
+/// Engine ADR 1093, amendment 2 — one Office line end on an open path: the
+/// head Office draws there instead of the InDesign arrowhead
+/// ([`Polygon::start_arrow`] keeps the nearest InDesign kind for IDML).
+/// Its geometry is `paged_preset_geom::heads`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OfficeLineEnd {
+    pub kind: OfficeHeadKind,
+    #[serde(default, skip_serializing_if = "OfficeHeadSize::is_med")]
+    pub w: OfficeHeadSize,
+    #[serde(default, skip_serializing_if = "OfficeHeadSize::is_med")]
+    pub len: OfficeHeadSize,
+}
+
+impl OfficeLineEnd {
+    /// The InDesign arrowhead closest to this head, for a writer that has
+    /// no Office heads (IDML).
+    pub fn nearest_arrowhead(&self) -> ArrowheadType {
+        match self.kind {
+            OfficeHeadKind::Triangle => ArrowheadType::Triangle,
+            OfficeHeadKind::Stealth => ArrowheadType::Barbed,
+            OfficeHeadKind::Diamond => ArrowheadType::SquareSolid,
+            OfficeHeadKind::Oval => ArrowheadType::CircleSolid,
+            OfficeHeadKind::Arrow => ArrowheadType::Simple,
+        }
+    }
+}
+
 /// Ruler guide on a spread. See [`Spread::guides`].
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RulerGuide {
@@ -1890,6 +1949,12 @@ pub struct TextFrame {
     /// and state hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shrink_to_fit: Option<text_fit::ShrinkToFit>,
+    /// Engine ADR 1096 — the frame holds the text of a shape lowered from
+    /// a preset (the program's text rectangle): the key of the preset's
+    /// items and the box they were drawn for when the frame was placed. A
+    /// refit of the shape scales the frame with it. Skipped when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_text: Option<live_shape::PresetText>,
 }
 
 impl TextFrame {
@@ -1972,6 +2037,7 @@ impl TextFrame {
             corners: Default::default(),
             text_warp: None,
             shrink_to_fit: None,
+            preset_text: None,
         }
     }
 }
@@ -3113,6 +3179,14 @@ pub struct GraphicLine {
     /// the stroke weight.
     pub start_arrow_scale: f32,
     pub end_arrow_scale: f32,
+    /// Engine ADR 1093, amendment 2 — Office's head at the first anchor,
+    /// drawn instead of [`Self::start_arrow`] (which keeps the nearest
+    /// InDesign kind for IDML). `None` everywhere but Office shapes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_office_head: Option<OfficeLineEnd>,
+    /// Office's head at the last anchor; see [`Self::start_office_head`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_office_head: Option<OfficeLineEnd>,
     /// C-18 — `CornerRadius`; see [`Rectangle::corner_radius`].
     ///
     /// **Stored and round-tripped, never rendered** (documented
@@ -3194,6 +3268,8 @@ impl GraphicLine {
             end_arrow: ArrowheadType::None,
             start_arrow_scale: 100.0,
             end_arrow_scale: 100.0,
+            start_office_head: None,
+            end_office_head: None,
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
@@ -3750,6 +3826,14 @@ pub struct Polygon {
     /// C-62 — `RightArrowHeadScale` (percent, default 100).
     #[serde(default = "default_arrowhead_scale")]
     pub end_arrow_scale: f32,
+    /// Engine ADR 1093, amendment 2 — Office's head at the first anchor,
+    /// drawn instead of [`Self::start_arrow`] (which keeps the nearest
+    /// InDesign kind for IDML). `None` everywhere but Office shapes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_office_head: Option<OfficeLineEnd>,
+    /// Office's head at the last anchor; see [`Self::start_office_head`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_office_head: Option<OfficeLineEnd>,
     /// Engine ADR 1047 — the live polygon or star the anchors were made
     /// from: its side count and star inset. It is LIVE while the anchors
     /// are still what these parameters make in their own bounding box
@@ -3757,6 +3841,12 @@ pub struct Polygon {
     /// it without a write. `None` for every other path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub live_shape: Option<crate::live_shape::PolygonShape>,
+    /// Engine ADR 1096 — the parametric preset the anchors were drawn
+    /// from (an Office `a:prstGeom` at the format boundary). Live while
+    /// the anchors are what it draws for its box; a resize refits it, a
+    /// point edit ends it without a write. `None` for every other path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<crate::live_shape::PresetShape>,
 }
 
 impl Polygon {
@@ -3829,7 +3919,10 @@ impl Polygon {
             end_arrow: ArrowheadType::None,
             start_arrow_scale: 100.0,
             end_arrow_scale: 100.0,
+            start_office_head: None,
+            end_office_head: None,
             live_shape: None,
+            preset: None,
         }
     }
 }
@@ -8391,6 +8484,12 @@ pub struct AnchoredFrame {
     /// [`Rectangle::image_adjustments`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_adjustments: Vec<RasterOp>,
+    /// Engine ADR 1096 — the preset an anchored shape's `anchors` were
+    /// drawn from (a Word shape's `a:prstGeom` at the format boundary), in
+    /// the frame's own box coordinates; see [`Polygon::preset`]. `None` for
+    /// every other frame; absent from the bytes when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<live_shape::PresetShape>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands

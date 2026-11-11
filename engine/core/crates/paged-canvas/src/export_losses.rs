@@ -893,6 +893,33 @@ pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
                 ));
             }
         }
+        // Engine ADR 1093, amendment 2 — Office's heads have no IDML form:
+        // the line ends are written as InDesign's nearest arrowheads.
+        let office = |s: Option<paged_model::OfficeLineEnd>,
+                      e: Option<paged_model::OfficeLineEnd>| {
+            s.is_some() || e.is_some()
+        };
+        for (id, has) in parsed
+            .spread
+            .polygons
+            .iter()
+            .map(|p| (&p.self_id, office(p.start_office_head, p.end_office_head)))
+            .chain(
+                parsed
+                    .spread
+                    .graphic_lines
+                    .iter()
+                    .map(|l| (&l.self_id, office(l.start_office_head, l.end_office_head))),
+            )
+        {
+            if has {
+                out.push(format!(
+                    "Office line ends on `{}` have no IDML form — they are written as \
+                     InDesign's nearest arrowheads.",
+                    id.as_deref().unwrap_or("?")
+                ));
+            }
+        }
     }
     out
 }

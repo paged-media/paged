@@ -4105,6 +4105,7 @@ dependencies = [
  "paged-mutate",
  "paged-ocf",
  "paged-pixel",
+ "paged-preset-geom",
  "paged-raster",
  "paged-renderer",
  "paged-scene",
@@ -4601,6 +4602,7 @@ dependencies = [
  "paged-gen",
  "paged-geom",
  "paged-model",
+ "paged-preset-geom",
  "paged-renderer",
  "paged-scene",
  "paged-template",
@@ -4684,6 +4686,7 @@ name = "paged-preset-geom"
 version = "0.0.0"
 dependencies = [
  "paged-geom",
+ "paged-model",
  "serde",
 ]
 
@@ -4779,6 +4782,7 @@ dependencies = [
  "paged-mutate",
  "paged-pdf-page",
  "paged-pixel",
+ "paged-preset-geom",
  "paged-ps",
  "paged-psd",
  "paged-raster",

@@ -1502,6 +1502,7 @@ mod live_shape;
 mod lock;
 mod note;
 pub mod permit;
+mod preset_shape;
 pub mod review;
 mod script;
 pub mod theme;

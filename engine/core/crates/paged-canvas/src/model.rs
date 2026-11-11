@@ -9816,6 +9816,17 @@ impl CanvasModel {
                                 paged_model::live_shape::live_polygon(p).map(|s| s.star_inset),
                             )),
                         });
+                        // Engine ADR 1096 — a live preset, its handles and
+                        // its adjust values (`""` for a path that is not one).
+                        let (preset, adjusts) = preset_entries(p);
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameShapePreset,
+                            value: Some(Value::Text(preset)),
+                        });
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameShapePresetAdjust,
+                            value: Some(Value::Text(adjusts)),
+                        });
                         entries
                     }),
                 ElementId::GraphicLine(_) => spread
@@ -19346,4 +19357,26 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
             "MoveFrame is display geometry — must NOT re-paginate"
         );
     }
+}
+
+/// Engine ADR 1096 — a polygon's live preset as the reads give it: the
+/// preset with its adjust handles (own coordinates), and every adjust value
+/// of its program; both `""` when the path is no live preset.
+fn preset_entries(p: &paged_model::Polygon) -> (String, String) {
+    use paged_preset_geom::model as pm;
+    let Some(preset) = pm::live_preset(p) else {
+        return (String::new(), String::new());
+    };
+    let mut v = serde_json::to_value(preset).unwrap_or_default();
+    let handles: Vec<serde_json::Value> = pm::handles(preset)
+        .into_iter()
+        .map(
+            |h| serde_json::json!({ "x": h.pos.0, "y": h.pos.1, "polar": h.polar, "refs": h.refs }),
+        )
+        .collect();
+    v["handles"] = serde_json::Value::Array(handles);
+    (
+        v.to_string(),
+        serde_json::to_string(&pm::adjusts_resolved(preset)).unwrap_or_default(),
+    )
 }

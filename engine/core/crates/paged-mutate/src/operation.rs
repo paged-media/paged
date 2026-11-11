@@ -1770,6 +1770,29 @@ pub enum PropertyPath {
     /// An oval's pie end angle (Illustrator's Pie End Angle):
     /// `Value::Length`, `None` is 360.
     FrameShapePieEnd,
+    // ---- engine ADR 1096 — presets -----------------------------------
+    /// A path's preset (`Value::Text`): a `PresetShape` as JSON (`name`,
+    /// `adjusts`, `frame` `[x, y, w, h]` in the item's own coordinates,
+    /// `flipH` / `flipV`, `part`, `key`, `connector`) sets it and draws the
+    /// anchors for it, unless they already are what it draws; `""` ends it
+    /// and keeps the path (Expand Shape). Reads the preset while it is live
+    /// (with its adjust handles in the item's own coordinates, `handles`:
+    /// `[{"x", "y", "polar", "refs"}]`, which a write ignores), `""`
+    /// otherwise. A resize refits a live preset in the same apply; a
+    /// point edit ends it without a write. No IDML attribute: the outline is
+    /// written, the preset rides the item's label (`paged:liveShape`).
+    FrameShapePreset,
+    /// A live preset's adjust values (`Value::Text`): `[["adj", "val
+    /// 5000"], …]` merged into the preset's own, the anchors drawn again.
+    /// Reads every adjust value of the program (its own overriding the
+    /// defaults).
+    FrameShapePresetAdjust,
+    /// An adjust handle of a live preset dragged (`Value::PathPoint`):
+    /// handle `address.index` (role `anchor`) to `position`, the item's own
+    /// coordinates. The engine solves the adjust values within the
+    /// handle's range and draws the preset again. Write-only: the handles
+    /// are read with the preset (`frameShapePreset`).
+    FrameShapePresetHandle,
 
     // ---- engine ADR 1051 — direction and script slots -----------------
     /// A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or
@@ -2249,6 +2272,9 @@ impl PropertyPath {
             PropertyPath::FrameShapeStarInset => "frame.shapeStarInset",
             PropertyPath::FrameShapePieStart => "frame.shapePieStart",
             PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
+            PropertyPath::FrameShapePreset => "frame.shapePreset",
+            PropertyPath::FrameShapePresetAdjust => "frame.shapePresetAdjust",
+            PropertyPath::FrameShapePresetHandle => "frame.shapePresetHandle",
             PropertyPath::ParagraphDirection => "paragraph.direction",
             PropertyPath::CharacterDirection => "character.direction",
             PropertyPath::CharacterEastAsianFont => "character.eastAsianFont",

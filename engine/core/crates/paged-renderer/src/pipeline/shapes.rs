@@ -591,6 +591,10 @@ pub(super) struct LineEnds {
     end: paged_model::ArrowheadType,
     start_scale: f32,
     end_scale: f32,
+    /// Engine ADR 1093, amendment 2 — Office's heads, drawn instead of
+    /// the InDesign arrowheads at their end.
+    start_office: Option<paged_model::OfficeLineEnd>,
+    end_office: Option<paged_model::OfficeLineEnd>,
 }
 
 impl LineEnds {
@@ -600,6 +604,8 @@ impl LineEnds {
             end: line.end_arrow,
             start_scale: line.start_arrow_scale,
             end_scale: line.end_arrow_scale,
+            start_office: line.start_office_head,
+            end_office: line.end_office_head,
         }
     }
 
@@ -609,20 +615,98 @@ impl LineEnds {
             end: poly.end_arrow,
             start_scale: poly.start_arrow_scale,
             end_scale: poly.end_arrow_scale,
+            start_office: poly.start_office_head,
+            end_office: poly.end_office_head,
         }
     }
 
     pub(super) fn draws(&self) -> bool {
-        self.start.draws() || self.end.draws()
+        self.start.draws()
+            || self.end.draws()
+            || self.start_office.is_some()
+            || self.end_office.is_some()
     }
 
     /// How far the stroke stops short of its first and its last anchor
-    /// under these line ends (engine ADR 1093).
+    /// under these line ends (engine ADR 1093; Office's heads by
+    /// `paged_preset_geom::heads::inset`).
     fn insets(&self, stroke_width: f32, cap: Option<&str>) -> (f32, f32) {
+        let one = |office: Option<paged_model::OfficeLineEnd>, kind, scale| match office {
+            Some(e) if stroke_width > 0.0 => paged_preset_geom::heads::inset(&e, stroke_width),
+            Some(_) => 0.0,
+            None => arrowhead_inset(kind, stroke_width, scale, cap),
+        };
         (
-            arrowhead_inset(self.start, stroke_width, self.start_scale, cap),
-            arrowhead_inset(self.end, stroke_width, self.end_scale, cap),
+            one(self.start_office, self.start, self.start_scale),
+            one(self.end_office, self.end, self.end_scale),
         )
+    }
+}
+
+/// Engine ADR 1093, amendment 2 — Office's head `e` at `tip`, pointing
+/// along `dir` (outward), in the line's paint: filled, or for an `arrow`
+/// stroked as two strokes (mitred where they meet, round at their free
+/// ends, as Office draws them).
+#[allow(clippy::too_many_arguments)]
+fn emit_office_head(
+    page: &mut BuiltPage,
+    e: &paged_model::OfficeLineEnd,
+    tip: (f32, f32),
+    dir: (f32, f32),
+    stroke_width: f32,
+    paint: Paint,
+    transform: Transform,
+) {
+    use paged_compose::PathSegment::*;
+    let len = dir.0.hypot(dir.1);
+    if len < 1e-6 || stroke_width <= 0.0 {
+        return;
+    }
+    let head = paged_preset_geom::heads::head_at(e, tip, (dir.0 / len, dir.1 / len), stroke_width);
+    let Some(first) = head.anchors.first() else {
+        return;
+    };
+    let mut segs = vec![MoveTo {
+        x: first[0],
+        y: first[1],
+    }];
+    let n = head.anchors.len();
+    let steps = if head.open { n - 1 } else { n };
+    for i in 0..steps {
+        let a = head.anchors[i];
+        let b = head.anchors[(i + 1) % n];
+        segs.push(CubicTo {
+            cx1: a[4],
+            cy1: a[5],
+            cx2: b[2],
+            cy2: b[3],
+            x: b[0],
+            y: b[1],
+        });
+    }
+    if !head.open {
+        segs.push(Close);
+    }
+    let path_id = page
+        .list
+        .paths
+        .push_anon(paged_compose::PathData::new(segs));
+    if head.open {
+        let mut stroke = paged_compose::Stroke::new(stroke_width);
+        stroke.cap = paged_compose::LineCap::Round;
+        stroke.join = paged_compose::LineJoin::Miter;
+        page.list.push(paged_compose::DisplayCommand::StrokePath {
+            path_id,
+            paint,
+            stroke,
+            transform,
+        });
+    } else {
+        page.list.push(paged_compose::DisplayCommand::FillPath {
+            path_id,
+            paint,
+            transform,
+        });
     }
 }
 
@@ -692,7 +776,11 @@ pub(super) fn emit_path_line_ends(
     if n < 2 {
         return;
     }
-    if ends.start.draws() {
+    if let Some(e) = &ends.start_office {
+        let a0 = run[0].anchor;
+        let dir = path_end_outward_dir(a0, run[0].right, run[1].anchor);
+        emit_office_head(page, e, a0, dir, stroke_width, paint, transform);
+    } else if ends.start.draws() {
         let a0 = run[0].anchor;
         emit_arrowhead(
             page,
@@ -705,7 +793,11 @@ pub(super) fn emit_path_line_ends(
             transform,
         );
     }
-    if ends.end.draws() {
+    if let Some(e) = &ends.end_office {
+        let an = run[n - 1].anchor;
+        let dir = path_end_outward_dir(an, run[n - 1].left, run[n - 2].anchor);
+        emit_office_head(page, e, an, dir, stroke_width, paint, transform);
+    } else if ends.end.draws() {
         let an = run[n - 1].anchor;
         emit_arrowhead(
             page,
@@ -3104,7 +3196,38 @@ mod tests {
             end,
             start_scale: 100.0,
             end_scale: 100.0,
+            start_office: None,
+            end_office: None,
         }
+    }
+
+    /// Engine ADR 1093, amendment 2: an Office head is drawn instead of
+    /// the InDesign arrowhead at its end, and the line stops where Office
+    /// stops it under that head (`paged_preset_geom::heads::inset`).
+    #[test]
+    fn an_office_head_replaces_the_arrowhead_and_cuts_the_line() {
+        use paged_model::{OfficeHeadKind, OfficeHeadSize, OfficeLineEnd};
+        let tri = OfficeLineEnd {
+            kind: OfficeHeadKind::Triangle,
+            w: OfficeHeadSize::Med,
+            len: OfficeHeadSize::Med,
+        };
+        let mut e = ends(
+            paged_model::ArrowheadType::Triangle,
+            paged_model::ArrowheadType::None,
+        );
+        e.end_office = Some(tri);
+        assert!(e.draws());
+        // A 4 pt line: Office's triangle is 12 long, the line stops half a
+        // width short of its base, 10 back; the InDesign triangle at the
+        // start keeps its own cut.
+        let (a, b) = e.insets(4.0, None);
+        assert!((b - 10.0).abs() < 1e-4, "{b}");
+        assert!(
+            (a - super::arrowhead_inset(paged_model::ArrowheadType::Triangle, 4.0, 100.0, None))
+                .abs()
+                < 1e-6
+        );
     }
 
     /// Engine ADR 1093: the stroke stops inside its heads, at 0.6 of a

@@ -913,6 +913,10 @@ property_paths! {
         FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
         FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
         FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
+        // Engine ADR 1096 — presets; IDML has none (the outline is written, the preset rides a label).
+        FrameShapePreset => "frameShapePreset" : text(),
+        FrameShapePresetAdjust => "frameShapePresetAdjust" : text(),
+        FrameShapePresetHandle => "frameShapePresetHandle" : operation("PathPoint", Wire::PathPoint),
         // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
         // label carries it through an IDML round trip).
         FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
@@ -1652,7 +1656,10 @@ mod tests {
         // 286 -> 287: ADR 1027 — a frame's medium (movie and sound items).
         //
         // 287 -> 288: ADR 1054 — a paragraph style's PDF export tag.
-        assert_eq!(cat.settable_paths.len(), 288, "settable path count drifted");
+        //
+        // 288 -> 291: ADR 1096 — a path's preset, its adjust values and
+        // its adjust handle drag.
+        assert_eq!(cat.settable_paths.len(), 291, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings
