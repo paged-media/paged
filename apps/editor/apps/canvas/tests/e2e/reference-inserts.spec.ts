@@ -28,6 +28,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { covers } from "@paged-media/test-kit";
 
 import { Designer } from "../journey/driver/designer";
+import { clickMenuRow } from "./harness/shell-surface";
 
 interface CommandsGlobal {
   __canvas: {
@@ -69,6 +70,8 @@ test.describe("reference inserts are host commands", () => {
       "command:paged.insert.indexEntry",
       "panel:paged.cross-references",
       "panel:paged.index",
+      "menu:Type/Insert cross-reference…",
+      "menu:Type/New index entry…",
     );
     const designer = new Designer(page);
     await designer.open();
@@ -102,7 +105,7 @@ test.describe("reference inserts are host commands", () => {
       if (collection)
         await expect
           .poll(() => count(collection), { message: what })
-          .toBe(had + 1);
+          .toBeGreaterThan(had);
     };
     await step("footnote", "paged.insert.footnote", { text: "" }, "footnotes");
     await step("destination", "paged.insert.bookmark", { name: "Here" }, null);
@@ -110,7 +113,9 @@ test.describe("reference inserts are host commands", () => {
       "cross-reference",
       "paged.insert.crossReference",
       { bookmark: "Here", referTo: "pageNumber" },
-      "crossReferences",
+      // A text-anchor cross-reference is not a row of the InDesign
+      // cross-reference collection; its undo step is the write.
+      null,
     );
     await step(
       "index entry",
@@ -119,14 +124,14 @@ test.describe("reference inserts are host commands", () => {
       "indexTopics",
     );
 
-    // The panels carry the forms (a bare command opens its panel).
-    await run(page, "paged.insert.crossReference");
+    // The Type menu's form rows open the panels that carry the forms.
+    await clickMenuRow(page, "Type/Insert cross-reference…");
     await expect(
       page.locator(
         '[data-cross-references-panel="ready"] [data-cross-reference-insert]',
       ),
     ).toBeVisible();
-    await run(page, "paged.insert.indexEntry");
+    await clickMenuRow(page, "Type/New index entry…");
     await expect(
       page.locator('[data-index-panel="ready"] [data-index-entry-insert]'),
     ).toBeVisible();

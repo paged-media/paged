@@ -76,6 +76,13 @@ export function publishDevHandles(instance: EditorInstance): () => void {
           path: path as never,
           target: { kind: "selection", scope: "element" } as never,
         }),
+      // The active context's eyedropper lane (extensions ADR 1104).
+      takeEyedropperSample: (request: {
+        pageId: string;
+        point: [number, number];
+        sampleSize: number;
+        secondary: boolean;
+      }) => bindingProviders.takeEyedropperSample(request),
     },
     // A synthetic set prompt, and the persistence tier by passphrase.
     __secrets: {

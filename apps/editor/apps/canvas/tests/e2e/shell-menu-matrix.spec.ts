@@ -206,6 +206,12 @@ const HOST_MENU = [
   "Type/Character styles",
   "Type/Glyphs…",
   "Type/Text variables",
+  // The reference inserts (paged.insert.*, editor ADR 315).
+  "Type/Insert footnote",
+  "Type/Insert endnote",
+  "Type/Insert bookmark…",
+  "Type/Insert cross-reference…",
+  "Type/New index entry…",
   // The text-format verbs (paged.text.*, 1867d9152).
   "Type/Format/Bold",
   "Type/Format/Italic",
