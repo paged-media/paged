@@ -1805,7 +1805,7 @@ export interface PictureContent {
      * (`frameImageAdjustments`), always listed, so a save path tells a
      * cleared stack from a host that does not read one.
      */
-    adjustments: RasterOp[];
+    adjustments?: RasterOp[];
 }
 
 /**
