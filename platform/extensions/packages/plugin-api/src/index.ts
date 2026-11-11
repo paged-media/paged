@@ -360,6 +360,7 @@ export type {
 export type {
   AssetSurface,
   AssetKind,
+  DecodedImage,
   DocumentFontOutcome,
   FontFaceAsset,
   FontFaceFormat,

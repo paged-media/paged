@@ -363,10 +363,9 @@ document; Image Trace and Recolor Artwork remain the commands that do.
 | `media.paged.draw/recolor` | asset → asset | an SVG's solid fills and strokes reduced to `count`, moved to a harmony (`rule`, `base`, `rotate`) or mapped (`map`) |
 
 The trace runs the trace wasm in a `host.workers` worker when the host has one. Its decode is
-the platform's (`io/raster-decode.ts`), so it runs where `createImageBitmap` and
-`OffscreenCanvas` exist and refuses with the decoder's sentence elsewhere (Node, the headless
-host); a picture over `maxTracePixels` is traced downsampled. Decoding in the engine instead
-waits for `paged-raster` (PM-0014). The recolour rewrites the colours where the SVG declares
+the engine's (`host.assets.decodeImage`, extensions ADR 1105: every placed format, colour
+managed, in the editor and the headless harness); a host without the door refuses with its
+sentence, and a picture over `maxTracePixels` is decoded downsampled. The recolour rewrites the colours where the SVG declares
 them (fills, strokes, gradient stops, `style` attributes and `<style>` rules; the engine's
 `paged-svg::paint`) and keeps every other byte; an undeclared default black is left alone.
 Recolouring a raster is pixel work and is not registered.

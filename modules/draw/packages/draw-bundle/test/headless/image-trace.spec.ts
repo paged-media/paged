@@ -35,11 +35,10 @@
 //       real PDF, the page content stream is inflated, and the painted
 //       path's two subpaths are measured: same fill op, one path,
 //       opposite signed areas;
-//   (6) THE HONEST GAP, asserted rather than described: in this headless
-//       harness `host.assets.getPlacedImage` answers NULL and the realm
-//       has no image decoder, so the full command REFUSES and inserts
-//       nothing. Both are pinned so a future host that closes either gap
-//       breaks this spec loudly instead of silently.
+//   (6) THE GAPS CLOSED, asserted: in this headless harness
+//       `host.assets.getPlacedImage` serves the bytes and the engine's
+//       decoded-pixels door decodes them (extensions ADR 1105); a host
+//       without the door refuses and spawns nothing.
 //   (7) THE TRACE RUNS OFF THE CALLING THREAD when the host can spawn the
 //       worker, and on it when the host cannot — BOTH lanes, to the same
 //       result. The fallback is the real engine on this thread, as
@@ -64,7 +63,7 @@ import {
   afterEach,
   beforeEach,
 } from "bun:test";
-import { stubGlobal, unstubAllGlobals, waitFor } from "@paged-media/test-kit";
+import { waitFor } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -758,7 +757,7 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(items[0].pageId).toBe(F7_PLACED_IMAGE.pageId);
     });
 
-    it("THE HONEST GAP: the bytes now arrive, but Node cannot DECODE them — so the command still REFUSES", async () => {
+    it("THE GAP CLOSED: the bytes arrive and the ENGINE decodes them (extensions ADR 1105)", async () => {
       // `assets.images@1` is unconditionally implemented (the read is
       // engine-served through `requestPlacedAssetBytes`, not an injected
       // source) …
@@ -783,16 +782,18 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(placed!.bytes.byteLength).toBeGreaterThan(0);
       expect(placed!.width).toBeGreaterThan(0);
       expect(placed!.height).toBeGreaterThan(0);
-      // The DECODER half is a separate, still-true gap and is why the
-      // command still refuses: this realm is Node — no createImageBitmap,
-      // no OffscreenCanvas.
-      expect(rasterDecoderAvailable()).toBe(false);
-      // So the full command inserts NOTHING and says why (it never
-      // throws — the dash-command convention).
-      const before = await leafIds(h);
-      await h.host.selection.set([IMAGE]);
-      expect(await applyImageTrace(h.host)).toEqual([]);
-      expect(await leafIds(h)).toEqual(before);
+      // The DECODER half closed too (2026-11-11): the host's decoded-pixels
+      // door, the engine's decoder, serves the harness as it serves the
+      // editor — at the file's own size, or fitted when asked.
+      expect(rasterDecoderAvailable(h.host)).toBe(true);
+      const px = await h.host.assets.decodeImage!(placed!.bytes);
+      expect(px?.width).toBe(placed!.width);
+      expect(px?.height).toBe(placed!.height);
+      expect(px?.data.byteLength).toBe(placed!.width * placed!.height * 4);
+      const fitted = await h.host.assets.decodeImage!(placed!.bytes, {
+        maxDimension: 8,
+      });
+      expect(Math.max(fitted!.width, fitted!.height)).toBe(8);
     });
 
     it("a selection that is not ONE image frame is a no-op", async () => {
@@ -961,10 +962,10 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(cmd.title).toContain("ordinary artwork");
       expect(cmd.category).toBe("Image");
 
-      // Driving it through the recorded handler takes the same refusal
-      // path (no placed bytes here) and does not throw.
+      // Driving it through the recorded handler on nothing selected
+      // refuses quietly and does not throw.
       const before = await leafIds(h);
-      await h.host.selection.set([IMAGE]);
+      await h.host.selection.set([]);
       await cmd.handler({} as never, { mode: "bw" } as never);
       expect(await leafIds(h)).toEqual(before);
     });
@@ -1121,7 +1122,6 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     h.loadBundle(drawBundle);
   }, 60_000);
   afterAll(() => h?.dispose());
-  afterEach(() => unstubAllGlobals());
 
   const RING = {
     width: 48,
@@ -1372,32 +1372,6 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
   describe("the command, through both lanes", () => {
     /** Give this realm the two decoder globals, answering the fixture's
      *  own pixels — the one thing Node cannot do for the command. */
-    const stubDecoder = (): void => {
-      const size = 48;
-      stubGlobal("createImageBitmap", async () => ({
-        width: size,
-        height: size,
-        close() {},
-      }));
-      stubGlobal(
-        "OffscreenCanvas",
-        class {
-          constructor(
-            readonly width: number,
-            readonly height: number,
-          ) {}
-          getContext() {
-            return {
-              drawImage() {},
-              getImageData: () => ({
-                data: new Uint8ClampedArray(ringPixels(size)),
-              }),
-            };
-          }
-        },
-      );
-    };
-
     /** Run the command on `host`, describe what it made, and take it back. */
     const traceAndUndo = async (
       host: BundleHost,
@@ -1420,7 +1394,6 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     };
 
     it("on the calling thread (no worker backend) the command traces the ring as before", async () => {
-      stubDecoder();
       const logs: string[] = [];
       const out = await traceAndUndo(hostWith(h.host, null, logs));
       // One region, a ring: one compound element with two contours.
@@ -1429,7 +1402,6 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
     });
 
     it("in a worker the command lands the SAME artwork, and leaves no worker behind", async () => {
-      stubDecoder();
       const logs: string[] = [];
       const { workers, spawned } = standInWorkers();
       const out = await traceAndUndo(hostWith(h.host, workers, logs));
@@ -1444,16 +1416,24 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       expect(spawned[0].terminated).toBe(true);
     });
 
-    it("a realm that cannot decode never spawns a worker at all", async () => {
-      // No decoder stub: this is Node.
+    it("a host that cannot decode never spawns a worker at all", async () => {
+      // A host without the decoded-pixels door.
       const { workers, spawned } = standInWorkers();
       await h.host.selection.set([IMAGE]);
-      expect(await applyImageTrace(hostWith(h.host, workers))).toEqual([]);
+      const base = hostWith(h.host, workers);
+      const noDecoder = new Proxy(base, {
+        get(target, prop, receiver) {
+          if (prop === "supports")
+            return (f: string) =>
+              f !== "assets.decodeImage@1" && target.supports(f as never);
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+      expect(await applyImageTrace(noDecoder)).toEqual([]);
       expect(spawned).toHaveLength(0);
     });
 
     it("a refused trace still ends the worker", async () => {
-      stubDecoder();
       const { workers, spawned } = standInWorkers({
         serve: (scope) => {
           scope.onmessage = (event) => {
@@ -1576,32 +1556,6 @@ describe("draw conformance — IMAGE TRACE on a cropped / offset / scaled placem
     /** The ring's ink box in natural pixels (`ringPixels`: 8..40). */
     const INK = { from: 8, to: 40 };
 
-    const stubDecoder = (): void => {
-      stubGlobal("createImageBitmap", async () => ({
-        width: 48,
-        height: 48,
-        close() {},
-      }));
-      stubGlobal(
-        "OffscreenCanvas",
-        class {
-          constructor(
-            readonly width: number,
-            readonly height: number,
-          ) {}
-          getContext() {
-            return {
-              drawImage() {},
-              getImageData: () => ({
-                data: new Uint8ClampedArray(ringPixels(48)),
-              }),
-            };
-          }
-        },
-      );
-    };
-    afterEach(() => unstubAllGlobals());
-
     /** Trace the fixture's frame and answer the PAGE-space box of every
      *  anchor the trace made, then undo it. */
     const traceBox = async (
@@ -1619,7 +1573,6 @@ describe("draw conformance — IMAGE TRACE on a cropped / offset / scaled placem
         expect(
           links.find((l) => l.hostSelfId === "uimg")?.imageTransform,
         ).toEqual(transform.split(" ").map(Number));
-        stubDecoder();
         const logs: string[] = [];
         await h.host.selection.set([IMAGE]);
         const created = await applyImageTrace(hostWith(h.host, null, logs), {

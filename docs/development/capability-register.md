@@ -544,8 +544,8 @@ stored) and `unzip`; Data Merge's IDML export and paged.pdf's raster IDML fallba
 fallback no longer needs JSZip). Cubic Bézier evaluation and splitting (TS): `vector-geometry` `bernstein`,
 `evalCubic`, `splitSegmentDeCasteljau`, used by the mesh grid, image warp preview and pen fitting, and slide's
 motion path. PNG encode (TS): paged.pdf's page rasters encode through helpers' `encodePng` (no canvas).
-Draw's image-trace decode (`io/raster-decode.ts`) stays on the browser's decoders: the contract has no
-decoded-pixels door yet (open). Slide comments: the typed reply, resolve and delete verbs and the panel's
+Draw's image-trace decode: DONE 2026-11-11, the engine's decoder through the contract's decoded-pixels door
+(`host.assets.decodeImage`, extensions ADR 1105; canvas-wasm `decodeImageDirect`); draw's browser decode is gone. Slide comments: the typed reply, resolve and delete verbs and the panel's
 are thin calls to `comments@1`; a new slide comment is still written with its PowerPoint fields. FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
 diagnostic report shapes (10+: only `paged-pdf-annots` and the PDF bundle use `LossReport`); the
 Excel oracle runner lives in `sheet-conformance/oracle/excel`, outside `tooling/oracle/office`.

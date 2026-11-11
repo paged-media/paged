@@ -190,6 +190,10 @@ interface CanvasWorkerInstance {
   ):
     | { uri: string; width: number; height: number; encoded: Uint8Array }
     | undefined;
+  decodeImageDirect?(
+    bytes: Uint8Array,
+    maxDim: number | undefined,
+  ): { width: number; height: number; rgba: Uint8Array } | undefined;
   mutateWithBytesDirect?(
     seq: number,
     mutationJson: string,
@@ -533,6 +537,13 @@ type DirectMessage =
   | { kind: "direct"; op: "placedAssetBytes"; seq: number; elementId: string }
   | {
       kind: "direct";
+      op: "decodeImage";
+      seq: number;
+      bytes: Uint8Array;
+      maxDim: number | null;
+    }
+  | {
+      kind: "direct";
       op: "mutateWithBytes";
       seq: number;
       mutationJson: string;
@@ -768,6 +779,15 @@ function dispatchDirect(w: CanvasWorkerInstance, m: DirectMessage): void {
       scope.postMessage(
         { kind: "directBytesReply", seq: m.seq, asset },
         asset ? [asset.encoded.buffer] : [],
+      );
+      return;
+    }
+    case "decodeImage": {
+      if (!w.decodeImageDirect) return missing();
+      const asset = w.decodeImageDirect(m.bytes, m.maxDim ?? undefined) ?? null;
+      scope.postMessage(
+        { kind: "directBytesReply", seq: m.seq, asset },
+        asset ? [asset.rgba.buffer] : [],
       );
       return;
     }

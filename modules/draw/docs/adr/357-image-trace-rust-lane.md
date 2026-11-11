@@ -105,3 +105,14 @@ to the part the frame shows (`visibleRasterRect` in `packages/draw-bundle/src/co
 A null transform keeps the old stretch, which is what the renderer does for such a picture. Two
 cases remain: a placement the engine resolves at render time from a named fit or fitting crops is
 reported as null, and a rotated placement or a non-rectangular frame is cropped to a box.
+
+## Amendment (2026-11-11): the engine decodes
+
+Decoding no longer uses the browser. The bytes `host.assets.getPlacedImage` serves (or an action's
+asset) are decoded by the engine through the contract's decoded-pixels door,
+`host.assets.decodeImage` (extensions ADR 1105): every format the document can place (a PSD, a CMYK
+TIFF and WebP included), colour managed as the page shows it, shrunk to the size the tracer's caps
+allow as it decodes. `io/raster-decode.ts` asks for that size; its `createImageBitmap` /
+`OffscreenCanvas` path is gone, and so is the test realm that faked them (the headless specs decode
+with the harness's engine). The two points above about "Decoding uses the browser" and what a PSD
+does no longer hold.

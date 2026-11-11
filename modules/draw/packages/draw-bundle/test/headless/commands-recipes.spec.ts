@@ -52,7 +52,6 @@ import {
   readEngineSymbols,
   type AppearanceStack,
 } from "../../src";
-import { installPngRealm } from "./raster-realm";
 
 const C = "media.paged.draw.command";
 /** A two-layer stack for the bake and release cases. */
@@ -677,8 +676,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
 
     it("DRW-6, measured: tracing the selected ring takes one undo step to take back", async () => {
       covers("command:media.paged.draw.command.imageTrace");
-      const uninstall = installPngRealm();
-      try {
+      {
         const image = el("rectangle", F7_PLACED_IMAGE.ids.rectangle!);
         await rig.open(F7_PLACED_IMAGE.bytes(), [image]);
         const before = await rig.channel.dump();
@@ -689,20 +687,15 @@ describe("paged.draw commands — recipes (real engine)", () => {
         ).toBe(1);
         await rig.h.host.editor.client.send({ kind: "redo" });
         expect(await rig.channel.dump()).not.toBe(before);
-      } finally {
-        uninstall();
       }
     });
 
     it("DRW-6 — Image Trace is ONE undo step", async () => {
       covers("command:media.paged.draw.command.imageTrace");
-      const uninstall = installPngRealm();
-      try {
+      {
         const image = el("rectangle", F7_PLACED_IMAGE.ids.rectangle!);
         await rig.open(F7_PLACED_IMAGE.bytes(), [image]);
         await expectApplies(rig, `${C}.imageTrace`, { mode: "bw" });
-      } finally {
-        uninstall();
       }
     });
   });

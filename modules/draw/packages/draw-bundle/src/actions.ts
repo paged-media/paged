@@ -307,16 +307,14 @@ export function drawActions(host: BundleHost): ActionDefinition[] {
             await session.limits(),
             options.maxTracePixels,
           );
-          const raster = await decodeRasterBytes(
-            a.bytes,
-            budget,
-            a.mediaType || undefined,
-          ).catch((e: unknown) => {
-            throw new Error(
-              `${id}: ${e instanceof Error ? e.message : String(e)}`,
-              { cause: e },
-            );
-          });
+          const raster = await decodeRasterBytes(host, a.bytes, budget).catch(
+            (e: unknown) => {
+              throw new Error(
+                `${id}: ${e instanceof Error ? e.message : String(e)}`,
+                { cause: e },
+              );
+            },
+          );
           const result = await session.trace(
             raster.data,
             raster.width,

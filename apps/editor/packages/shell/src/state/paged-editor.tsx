@@ -214,6 +214,17 @@ export interface PagedEditor {
   ): ReturnType<CanvasClient["mutateWithBytes"]>;
 
   /**
+   * Extensions ADR 1105 — the engine's decoder over bytes
+   * (`client.decodeImageBinary`). Satisfies the optional
+   * `Api.PagedEditor.decodeImage` the plugin-sdk host routes
+   * `host.assets.decodeImage` to (`assets.decodeImage@1`).
+   */
+  decodeImage(
+    bytes: Uint8Array,
+    maxDim?: number,
+  ): ReturnType<CanvasClient["decodeImageBinary"]>;
+
+  /**
    * Engine ADR 1004 amendment — `mutateWithBytes` applied INTO the undo step
    * `appliedSeq` names (`client.amendWithBytes`). Satisfies the optional
    * `Api.PagedEditor.amendWithBytes` the plugin-sdk host routes
@@ -416,6 +427,7 @@ function PagedEditorBinder({
         read: (path) => client.readPagedPartBinary(path),
         delete: (path, caller) => client.deletePagedPart(path, caller),
       },
+      decodeImage: (bytes, maxDim) => client.decodeImageBinary(bytes, maxDim),
       mutateWithBytes: (mutation, bytes, transfer) =>
         client.mutateWithBytes(mutation, bytes, transfer),
       amendWithBytes: (appliedSeq, mutation, bytes, transfer) =>

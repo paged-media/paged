@@ -33,7 +33,7 @@ import { covers } from "@paged-media/test-kit";
 
 import { pngBytes } from "../fixtures/build-idml";
 import { ringPixels } from "../fixtures/corpus";
-import { installPngRealm } from "../headless/raster-realm";
+import { pngDecodeImage } from "../headless/png-decoder";
 import { openEl, rectEl, unitRig, type FakeElement } from "./unit-kit";
 
 const C = "media.paged.draw.command";
@@ -733,10 +733,10 @@ describe("paged.draw commands, no engine — Image Trace", () => {
 
   it("traces the selected image's own pixels into paths in one batch (DRW-6); a path sends nothing", async () => {
     covers("command:media.paged.draw.command.imageTrace");
-    const uninstall = installPngRealm();
-    try {
+    {
       const r = unitRig([image], {
         selection: [IMAGE],
+        decodeImage: pngDecodeImage,
         reply: (m) =>
           m.kind === "requestPlacedAssetBytes"
             ? {
@@ -765,8 +765,6 @@ describe("paged.draw commands, no engine — Image Trace", () => {
       const path = unitRig(doc(), { selection: [POLY] });
       await path.run(`${C}.imageTrace`, { mode: "bw" });
       expect(path.sent()).toEqual([]);
-    } finally {
-      uninstall();
     }
   }, 30_000);
 });

@@ -46,8 +46,8 @@
 // THE PIXELS come through the C-5 placed-asset door,
 // `host.assets.getPlacedImage(elementId)` (manifest
 // `capabilities.assets: ["images"]`), which serves the ORIGINAL encoded
-// file. Decoding is the platform's (`io/raster-decode.ts` — see its
-// header for why, and for what a PSD does). The trace itself is the
+// file. Decoding is the engine's, through the host's decoded-pixels door
+// (`io/raster-decode.ts`, extensions ADR 1105). The trace itself is the
 // `trace-js` wasm over `visioncortex` (`../trace-engine.ts`).
 //
 // THE HOLES are the reason this module sits next to
@@ -1062,6 +1062,9 @@ interface TraceSource {
   itemTransform: Affine | null;
   uri: string;
   bytes: Uint8Array;
+  /** The file's natural pixel size (what the decode is fitted from). */
+  width: number;
+  height: number;
   /** The frame's `links` rows (empty when the collection is unreadable):
    *  where the image's own placement is read from. */
   links: readonly LinkRow[];
@@ -1127,6 +1130,8 @@ async function traceSourceFor(
     itemTransform: (item.itemTransform ?? null) as Affine | null,
     uri: asset.uri,
     bytes: asset.bytes,
+    width: asset.width,
+    height: asset.height,
     links,
   };
 }
@@ -1169,10 +1174,10 @@ async function tracePlanOf(
 
   // Before the session, not after: opening one may spawn a worker, and
   // there is nothing to trace in a realm that cannot decode the image.
-  if (!rasterDecoderAvailable()) {
+  if (!rasterDecoderAvailable(host)) {
     host.log.warn(
-      `${label}: this realm cannot decode placed-image bytes ` +
-        `(createImageBitmap / OffscreenCanvas absent) — no-op`,
+      `${label}: this host cannot decode placed-image bytes ` +
+        `(no assets.decodeImage@1) — no-op`,
     );
     return null;
   }
@@ -1209,7 +1214,10 @@ async function tracePlanOf(
 
     let raster;
     try {
-      raster = await decodeRasterBytes(source.bytes, budget);
+      raster = await decodeRasterBytes(host, source.bytes, budget, {
+        width: source.width,
+        height: source.height,
+      });
     } catch (err) {
       host.log.warn(
         `${label}: ${err instanceof Error ? err.message : String(err)}`,

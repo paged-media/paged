@@ -16,17 +16,16 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE BROWSER'S IMAGE DECODER, for the PNGs the fixtures write.
+// A STAND-IN FOR THE ENGINE'S DECODER, for the PNGs the fixtures write.
 //
-// Image Trace gets a placed image's pixels from the realm
-// (`createImageBitmap` + `OffscreenCanvas`, `src/io/raster-decode.ts`);
-// Bun has neither, so the command stops there with an honest "this realm
-// cannot decode" and nothing past the decode can run headlessly. This
-// installs the two globals for exactly what `fixtures/build-idml.ts`'s
-// `pngBytes` writes — 8-bit RGBA, no interlace, filter type 0 on every
-// row — and refuses anything else, the way a platform refuses a format it
-// cannot read. Everything after the decode (the trace wasm, the engine,
-// the command) is the real thing.
+// Image Trace gets a placed image's pixels from the host's decoded-pixels
+// door (`host.assets.decodeImage`, the engine's decoder in the editor and
+// in the headless harness). The no-engine unit rigs have no engine, so
+// this is their `PagedEditor.decodeImage`: it reads exactly what
+// `fixtures/build-idml.ts`'s `pngBytes` writes — 8-bit RGBA, no interlace,
+// filter type 0 on every row — and refuses anything else, the way the
+// engine refuses bytes it cannot read. Everything after the decode (the
+// trace wasm, the command) is the real thing.
 
 import { inflateSync } from "node:zlib";
 
@@ -34,7 +33,6 @@ interface Bitmap {
   width: number;
   height: number;
   data: Uint8ClampedArray;
-  close(): void;
 }
 
 function decodePng(bytes: Uint8Array): Bitmap {
@@ -67,56 +65,34 @@ function decodePng(bytes: Uint8Array): Bitmap {
     if (raw[y * stride] !== 0) throw new Error("only filter type 0 here");
     out.set(raw.subarray(y * stride + 1, (y + 1) * stride), y * width * 4);
   }
-  return { width, height, data: out, close() {} };
+  return { width, height, data: out };
 }
 
-class Canvas {
-  private pixels: Uint8ClampedArray;
-  constructor(
-    readonly width: number,
-    readonly height: number,
-  ) {
-    this.pixels = new Uint8ClampedArray(width * height * 4);
+/** The fake engine decode: the PNG's pixels, shrunk (nearest
+ *  neighbour) so no side exceeds `maxDim`; null for anything else. */
+export async function pngDecodeImage(
+  bytes: Uint8Array,
+  maxDim?: number,
+): Promise<{ width: number; height: number; rgba: Uint8Array } | null> {
+  let image: Bitmap;
+  try {
+    image = decodePng(bytes);
+  } catch {
+    return null;
   }
-  getContext() {
-    return {
-      drawImage: (
-        image: Bitmap,
-        _x: number,
-        _y: number,
-        w: number,
-        h: number,
-      ) => {
-        // Nearest-neighbour resampling: the fixtures trace at full size.
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            const sx = Math.floor((x * image.width) / w);
-            const sy = Math.floor((y * image.height) / h);
-            const from = (sy * image.width + sx) * 4;
-            this.pixels.set(
-              image.data.subarray(from, from + 4),
-              (y * this.width + x) * 4,
-            );
-          }
-        }
-      },
-      getImageData: () => ({ data: this.pixels }),
-    };
-  }
-}
-
-/** Install the decoder; the returned function takes it away again. */
-export function installPngRealm(): () => void {
-  const g = globalThis as Record<string, unknown>;
-  const saved = {
-    createImageBitmap: g.createImageBitmap,
-    OffscreenCanvas: g.OffscreenCanvas,
-  };
-  g.createImageBitmap = async (blob: Blob) =>
-    decodePng(new Uint8Array(await blob.arrayBuffer()));
-  g.OffscreenCanvas = Canvas;
-  return () => {
-    g.createImageBitmap = saved.createImageBitmap;
-    g.OffscreenCanvas = saved.OffscreenCanvas;
-  };
+  const k =
+    maxDim && Math.max(image.width, image.height) > maxDim
+      ? maxDim / Math.max(image.width, image.height)
+      : 1;
+  const w = Math.max(1, Math.round(image.width * k));
+  const h = Math.max(1, Math.round(image.height * k));
+  const out = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const sx = Math.floor((x * image.width) / w);
+      const sy = Math.floor((y * image.height) / h);
+      const from = (sy * image.width + sx) * 4;
+      out.set(image.data.subarray(from, from + 4), (y * w + x) * 4);
+    }
+  return { width: w, height: h, rgba: out };
 }

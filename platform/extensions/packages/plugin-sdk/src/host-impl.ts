@@ -5535,6 +5535,32 @@ export function createBundleHost(
         return null;
       }
     },
+    async decodeImage(bytes, options) {
+      // Extensions ADR 1105 — the engine's decoder; no gate (the bundle
+      // hands in bytes it already holds), null without an engine lane.
+      const decode = getEditor().decodeImage;
+      if (typeof decode !== "function") return null;
+      const max = options?.maxDimension;
+      try {
+        const out = await decode.call(
+          getEditor(),
+          bytes,
+          max !== undefined && max > 0 ? Math.floor(max) : undefined,
+        );
+        if (!out) return null;
+        return {
+          width: out.width,
+          height: out.height,
+          data: new Uint8ClampedArray(
+            out.rgba.buffer,
+            out.rgba.byteOffset,
+            out.rgba.byteLength,
+          ),
+        };
+      } catch {
+        return null;
+      }
+    },
   };
 
   // --------------------------------------------------------- images
@@ -6508,6 +6534,10 @@ export function createBundleHost(
     // is dropped before the next document loads. Without it the face lives
     // for the engine session (ADR 328, `@1` only).
     featureSet.add("assets.documentFont@2");
+  }
+  if (typeof getEditor().decodeImage === "function") {
+    // Extensions ADR 1105 — the engine decodes bytes for a bundle.
+    featureSet.add("assets.decodeImage@1");
   }
   if (typeof getEditor().mutateWithBytes === "function") {
     // Protocol 66 — the binary commit lane. `document.mutateWithBytes`
