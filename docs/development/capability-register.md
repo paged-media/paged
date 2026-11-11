@@ -54,6 +54,7 @@ they test does.
 | Four-point homography          | `vector-geometry` `warp/homography.ts` and the plugin-sdk `transform-box.ts` (the public SDK cannot import platform/shared, and the shared packages do not load the SDK at run time: a worker or a Node test would pull the contract in), `paged-warp` (Rust) | 2 (open): `image-js` smart objects, an image test. The three solves are held to the same numbers (`vector-geometry/test/warp/homography-parity.spec.ts`, `paged-warp/tests/ts_parity.rs`)                                       |
 | Star and polygon anchors       | `vector-geometry` `star.ts` (`unitLivePolygon`, `starAnchors`, `polygonAnchors`, the star insert), mirror of `paged_model::live_shape`                                                                                                                        | 0 (done, 2026-11-11): helpers' `star.ts` is gone and the host Polygon tool draws through `unitLivePolygon`; two DOM specs that compute expected points on their own are allowed                                                 |
 | Colour input                   | panel-kit `ColorInput` (the host `ColorPicker` behind `setHostColorPicker`, a chip and popover when `compact`) / `widgets.ColorPicker`                                                                                                                        | 0 (done, 2026-11-11): the gradient editor, picture adjustments, theme and view preferences panels, sheet's border colour and data cards, and image's sections all use it                                                        |
+| PDF export loop                | plugin-sdk `exportPdfSession` (`host.documents.exportPdf`, the headless harness); the editor client's `exportPdf` beneath the contract                                                                                                                        | 0 (done, 2026-11-11): paged.publish and the draw and pdf conformance specs export through the door                                                                                                                              |
 
 ## Landed (do not redo)
 
@@ -149,8 +150,14 @@ below or beside `paged-geom`). The IDML
 renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-geom::live`, `slide-native`, draw-dxf) is `paged_geom::affine64`, product, point map and the inverse (one singularity rule, `|det| < 1e-12`), bit-identical and tested against each old copy (single-owner rule `affine-product`). The f32 inverse's arithmetic is `paged_geom::affine::invert_if` (`paged-mutate`, `idml-export`, `paged-canvas` hit test, `paged-compose`'s `Transform::inverse`); each caller keeps its own singularity test (`|det| < 1e-9`, `< 1e-12`, zero or non-finite), since unifying them would change which matrices invert (single-owner rule `affine-inverse`). Open: `slide-native`'s pattern-tile inverse, which solves the translation in another arrangement (not bit-identical, so left). The `Affine` of
 `paged-svg` and `Transform` of `paged-compose` keep their types but their product and point map call
 `paged_geom::affine`.
-Draw's TS copies of width, brush,
-along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` adopts paint v2 where the
+Draw's TS copies of brush and along-path → `paged-vector-fx` (open). Width and envelope (2026-11-11): the
+Width and Envelope Mesh tools preview in TypeScript (a pointer move cannot wait for the engine), so
+`vector-geometry`'s `widthFactorAt`, `normalizeWidthPoints` and `envelopePoint` are preview twins pinned to
+`paged_model` `WidthProfileParams` and `paged_vector_fx::envelope::envelope_point` by one engine-written
+fixture (`paged-vector-fx/tests/it/ts_twins.rs`, `vector-geometry/test/vector-fx-parity.spec.ts`).
+`appearance-bake.ts` is deleted (2026-11-11, draw ADR 354 amendment): every host has `document.appearance@1`
+(a static SDK feature), the engine bakes several fills and strokes at its IDML boundary, and draw keeps only
+the read and release of older documents' group bakes (`appearance-legacy.ts`, run by the migration on open). `dml-native` adopts paint v2 where the
 module's items are the engine's own (paged.slide, `Mapper::alpha_stops` / `pattern_swatches`): a gradient
 whose stops differ in alpha keeps it as the swatch's opacity stops (ADR 1007; no gradient feather rides
 on the item, and a gradient stroke fades too), and an opaque `a:pattFill` as a stroke's pattern swatch
@@ -222,7 +229,7 @@ ML: the first action over the ML doors is `media.paged.image/remove-background` 
 provider); `apps/ml-host` runs a user-installed matting runner (`matting` job, Amendment 2), which `mlHostProvider` serves as
 `ml.matting@1` while the host's health lists it. Tier-A matting models are open.
 Oracle scripts live in `tooling/oracle/` (one place for the InDesign,
-Illustrator, Photoshop, Word and PowerPoint runners; windowless only).
+Illustrator, Photoshop, Word, PowerPoint and Excel runners; windowless only).
 
 ### Lowering
 
@@ -454,8 +461,9 @@ Status (draw items, one line each; updated as they land):
   font object, no `/Info` title string form), with no visible gain; the tests pin the structure, not a golden. The
   profitable change is the other way round: a `pdf-writer`-based `serialize` (the crate `paged-export-pdf` already
   builds on) would drop the hand-written xref, but it is a byte change for nothing the user sees. Open, not
-  blocked. The host `ExportPdfDialog` and the bundle's `exportPdf` already share the engine's `exportPdfBegin`
-  options (`ExportPdfWireOptions`); a shared host service would only move the option defaults, so it was not made.
+  blocked. The host `ExportPdfDialog` and the bundle's `exportPdf` share the engine's `exportPdfBegin` options
+  (`ExportPdfWireOptions`), and since 2026-11-11 the bundle exports through the host's door
+  (`host.documents.exportPdf`) instead of its own session loop.
 - **Illustrator graph data:** stays carried, data ADR 565 (no chart item in the engine, opaque payload, no charts
   in doc).
 - **Barcode insert in doc and slide:** built (engine ADR 1092, editor ADR 314). The encoder was already an engine
@@ -522,8 +530,14 @@ motion path. PNG encode (TS): paged.pdf's page rasters encode through helpers' `
 Draw's image-trace decode (`io/raster-decode.ts`) stays on the browser's decoders: the contract has no
 decoded-pixels door yet (open). Slide comments: the typed reply, resolve and delete verbs and the panel's
 are thin calls to `comments@1`; a new slide comment is still written with its PowerPoint fields. FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
-diagnostic report shapes (10+: only `paged-pdf-annots` and the PDF bundle use `LossReport`); the
-Excel oracle runner lives in `sheet-conformance/oracle/excel`, outside `tooling/oracle/office`.
+diagnostic report shapes (10+: only `paged-pdf-annots` and the PDF bundle use `LossReport`). Excel oracle
+runner: DONE 2026-11-11, `tooling/oracle/office/excel` (`drive.sh`, the lanes' generators and readers); the
+recordings and divergence lists stay beside the tests that replay them (`sheet-conformance/oracle/excel`).
+PDF export loop: DONE 2026-11-11, one host door, `host.documents.exportPdf` (`documents.exportPdf@1`, editor
+ADR 219 amendment) over the SDK's `exportPdfSession`, which the headless harness's `exportDocument("pdf")` runs
+too; paged.publish's `exportPdf` and `preflight` and the draw and pdf conformance specs call it. The editor's
+Export PDF dialog keeps `CanvasClient.exportPdf` beneath the plugin contract (single-owner rule
+`pdf-export-loop`).
 
 ## What stays in each module (L4)
 

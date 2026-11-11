@@ -341,6 +341,17 @@
         "modules/image/image-conformance/tests/it/family_geom.rs",
         "modules/image/image-js/src/smart.rs"
       ]
+    },
+    {
+      "name": "pdf-export-loop",
+      "description": "drive the engine's PDF export session (begin, one exportPdfPage per page, finish, cancel on failure) with the plugin SDK's exportPdfSession, which host.documents.exportPdf and the headless harness run, or the editor client's exportPdf beneath the plugin contract",
+      "owner": [
+        "platform/extensions/packages/plugin-sdk/src/doors-pdf-export.ts",
+        "apps/editor/packages/client/src/client.ts"
+      ],
+      "extensions": [".ts", ".tsx", ".mjs"],
+      "patterns": ["kind: \"exportPdfPage\",", "send\\(\"exportPdfPage\""],
+      "baseline": []
     }
   ]
 }

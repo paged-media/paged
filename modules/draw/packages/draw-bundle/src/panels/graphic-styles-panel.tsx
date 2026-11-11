@@ -67,7 +67,7 @@ import {
   importGraphicStyles,
   mergeGraphicStylesIn,
 } from "../commands/graphic-styles-native";
-import { resolveAppearanceCarrier } from "../commands/appearance-bake";
+import { resolveAppearanceCarrier } from "../commands/appearance-legacy";
 import { usePanelReload } from "./use-panel-reload";
 import {
   About,

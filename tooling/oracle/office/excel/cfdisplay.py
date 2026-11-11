@@ -30,9 +30,9 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[2]
+REPO = HERE.parents[3] / "modules" / "sheet"  # the sheet module root
 BUILD = HERE / "build"
-RECORDED = HERE / "recorded"
+RECORDED = REPO / "sheet-conformance" / "oracle" / "excel" / "recorded"
 FIXTURE = REPO / "corpus" / "xlsx-corpus" / "20-condfmt-all.xlsx"
 NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
@@ -175,7 +175,7 @@ def read() -> None:
     if "ERR" in meta.splitlines()[0]:
         sys.exit(f"cf display lane failed: {meta[:400]}")
     out = [
-        "# Excel-recorded conditional-format display (oracle/excel/cfdisplay.py — do not hand-edit)",
+        "# Excel-recorded conditional-format display (tooling/oracle/office/excel/cfdisplay.py — do not hand-edit)",
         "# fixture: corpus/xlsx-corpus/20-condfmt-all.xlsx",
         "# cell\tshown\tfont_rgb\tinterior_rgb",
     ]

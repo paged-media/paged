@@ -30,14 +30,15 @@ import {
   it,
 } from "bun:test";
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   appearanceBakeOf,
-  appearanceMutation,
   appearanceOf,
-  bakeAppearance,
   commitAppearance,
   drawBundle,
   installAppearanceMigration,
@@ -48,7 +49,12 @@ import {
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
-const C = "media.paged.draw.command";
+/** A document an older paged.draw saved with a group-baked stack. */
+const LEGACY_BAKE = join(
+  import.meta.dir,
+  "../fixtures/legacy/appearance-bake.idml",
+);
+const CARRIER = { kind: "rectangle", id: "urect" } as ElementId;
 const RECT = {
   kind: "rectangle",
   id: F1_MULTI_SHAPE.ids.rectangle!,
@@ -80,21 +86,6 @@ describe("draw appearance on the engine's native appearance (draw ADR 367) [fram
     await h.host.selection.set([RECT]);
   });
 
-  it("Bake has nothing to bake on a native appearance, and says so", async () => {
-    // A native appearance, written as the host's Appearance panel writes it.
-    await h.host.document.mutate(
-      appearanceMutation(RECT, [{ kind: "fill", color: "Color/Black" }]),
-    );
-    const before = await kinds(h);
-    await h.objects
-      .invoke(`${C}.bakeAppearance`, { targets: [] })
-      .catch(() => null);
-    expect(await kinds(h)).toEqual(before);
-    expect(
-      appearanceBakeOf(await h.host.document.getMetadata(RECT)),
-    ).toBeNull();
-  });
-
   it("a metadata stack moves onto the native appearance in ONE undo step, once", async () => {
     await commitAppearance(
       h.host,
@@ -123,36 +114,30 @@ describe("draw appearance on the engine's native appearance (draw ADR 367) [fram
     expect(await kinds(h)).toEqual([]);
   });
 
-  it("a GROUP-BAKED stack is released and moved in the same ONE undo step", async () => {
-    await commitAppearance(
-      h.host,
-      RECT,
-      STACK,
-      await h.host.document.getMetadata(RECT),
+  it("a GROUP-BAKED stack of an older document is released and moved when it opens, in ONE undo step", async () => {
+    // A document saved while draw still baked a stack into a group of
+    // derived paths (draw ADR 354): the carrier `urect` holds the record,
+    // and the bundle's migration releases and moves it on open.
+    await h.load(new Uint8Array(readFileSync(LEGACY_BAKE)));
+    const baked = async () =>
+      appearanceBakeOf(await h.host.document.getMetadata(CARRIER)) !== null;
+    const deadline = Date.now() + 10_000;
+    while ((await baked()) && Date.now() < deadline)
+      await new Promise((r) => setTimeout(r, 20));
+    expect(await baked()).toBe(false);
+    const layers = ((await readNativeAppearance(h.host, CARRIER)) ?? []).map(
+      (l) => l.kind,
     );
-    await bakeAppearance(h.host, RECT);
-    const leavesBaked = (await h.host.document.tree()).length;
-    expect(
-      appearanceBakeOf(await h.host.document.getMetadata(RECT)),
-    ).not.toBeNull();
-    const moved = await migrateAppearanceStacks(h.host);
-    expect(moved).toMatchObject({ moved: 1, released: 1 });
-    expect(await kinds(h)).toEqual([
-      "fill",
-      "frameFill",
-      "stroke",
-      "frameStroke",
-    ]);
-    const env = await h.host.document.getMetadata(RECT);
-    expect(appearanceBakeOf(env)).toBeNull();
+    expect(layers).toContain("fill");
+    expect(layers).toContain("frameFill");
     // The baked group and its derived paths are gone.
-    const tree = await h.host.document.tree();
-    expect(JSON.stringify(tree)).not.toContain('"group"');
+    expect(JSON.stringify(await h.host.document.tree())).not.toContain(
+      '"group"',
+    );
+    // One undo step gives the older document back as it was.
     await h.host.document.undo();
-    expect(
-      appearanceBakeOf(await h.host.document.getMetadata(RECT)),
-    ).not.toBeNull();
-    expect((await h.host.document.tree()).length).toBe(leavesBaked);
+    expect(await baked()).toBe(true);
+    expect(JSON.stringify(await h.host.document.tree())).toContain('"group"');
   });
 
   it("the migration runs when a document opens", async () => {

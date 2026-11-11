@@ -160,7 +160,7 @@ import {
 } from "@paged-media/vector-geometry";
 import type { RegionFace } from "@paged-media/vector-tools";
 
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { framePathMutationFor } from "./compound-path";
 import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import {

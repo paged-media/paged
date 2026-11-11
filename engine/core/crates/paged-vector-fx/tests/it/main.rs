@@ -29,6 +29,7 @@ mod illustrator_oracle;
 mod offset_ray_collisions;
 mod properties;
 mod stroke_style;
+mod ts_twins;
 
 use paged_model::PathAnchor;
 use paged_vector_fx::Shape;

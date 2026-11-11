@@ -71,6 +71,7 @@
 
 import type {
   BundleHost,
+  ExportPdfWireOptions,
   CanvasPointerEvent,
   EnteredEditContext,
   HostHandleRouter,
@@ -118,6 +119,7 @@ import type {
   WorkerToMain,
 } from "@paged-media/plugin-api";
 
+import { exportPdfSession } from "./doors-pdf-export.js";
 import {
   createBundleHost,
   createBindingProviderRegistry,
@@ -601,9 +603,8 @@ export interface HeadlessHost {
   newBlank(widthPt: number, heightPt: number): Promise<string[]>;
   /** ADR 324 — the core EXPORT door the Node CLI (and a conformance test)
    *  calls: the active document as `.paged` (`exportPaged`), `.idml`
-   *  (`exportIdml`, `linkBase` for relative links) or PDF (the
-   *  `exportPdfBegin` → one `exportPdfPage` per page → `exportPdfFinish`
-   *  loop the editor's client drives; `pdf` is the wire's
+   *  (`exportIdml`, `linkBase` for relative links) or PDF (`exportPdfSession`, the loop
+   *  `host.documents.exportPdf` runs; `pdf` is the wire's
    *  `ExportPdfWireOptions`). Rejects with the engine's error. Plugin
    *  formats go through `exportersContributed()`. */
   exportDocument(
@@ -1649,32 +1650,11 @@ export async function createHeadlessHost(
             : `unexpected reply: ${reply.kind}`,
         );
       }
-      const fail = (reply: { kind: string; payload: any }): Error =>
-        new Error(
-          reply.kind === "exportPdfFailed"
-            ? String(reply.payload.error)
-            : `unexpected reply: ${reply.kind}`,
-        );
-      const begun = await send("exportPdfBegin", {
-        options: exportOptions.pdf ?? {},
-      });
-      if (begun.kind !== "exportPdfBegun") throw fail(begun);
-      const session = begun.payload.session as number;
-      try {
-        for (let i = 0; i < (begun.payload.pageCount as number); i++) {
-          const step = await send("exportPdfPage", { session });
-          if (step.kind !== "exportPdfProgress") throw fail(step);
-        }
-        const done = await send("exportPdfFinish", { session });
-        if (done.kind !== "pdfExported") throw fail(done);
-        return {
-          bytes: Uint8Array.from(done.payload.pdfBytes as number[]),
-          diagnostics: done.payload.diagnostics as string[],
-        };
-      } catch (err) {
-        await send("exportPdfCancel", { session }).catch(() => undefined);
-        throw err;
-      }
+      const pdf = await exportPdfSession(
+        (message) => editor.client.send(message),
+        (exportOptions.pdf ?? {}) as ExportPdfWireOptions,
+      );
+      return { bytes: pdf.bytes, diagnostics: pdf.diagnostics };
     },
     openedDocuments() {
       return opened;

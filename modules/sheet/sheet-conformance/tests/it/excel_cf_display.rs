@@ -17,7 +17,7 @@
  */
 
 //! The Excel CONDITIONAL-FORMAT display lane replayed
-//! (`oracle/excel/cfdisplay.py`): for every cell of the fixture
+//! (`tooling/oracle/office/excel/cfdisplay.py`): for every cell of the fixture
 //! `20-condfmt-all.xlsx` (one rule kind per column), what Excel 16 shows —
 //! text, font colour, interior colour — against the page lowering through
 //! the session (the evaluator in `sheet_calc::cf`, the styles through the

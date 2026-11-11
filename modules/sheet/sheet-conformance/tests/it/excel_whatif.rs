@@ -18,7 +18,7 @@
 
 //! What-if analysis against Excel (sheet ADR 517). The workbook
 //! `oracle/excel/recorded/whatif.excel.xlsx` was BUILT by Excel 16 itself
-//! (`oracle/excel/whatif.applescript` through `drive.sh`): three data tables
+//! (`tooling/oracle/office/excel/whatif.applescript` through `drive.sh`): three data tables
 //! made with What-If Analysis ▸ Data Table (one variable in a column, one
 //! in a row, two variables) on sheet DT, the same with a changed input on
 //! DT2, and three Goal Seeks on GS. The engine must reproduce Excel's data

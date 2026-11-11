@@ -168,8 +168,6 @@ const COMMANDS = [
   "media.paged.draw.command.selectRepeatInstances",
   "media.paged.draw.command.expandRepeat",
   "media.paged.draw.command.releaseRepeat",
-  "media.paged.draw.command.bakeAppearance",
-  "media.paged.draw.command.releaseAppearance",
   "media.paged.draw.command.saveGraphicStyle",
   "media.paged.draw.command.applyGraphicStyle",
   "media.paged.draw.command.redefineGraphicStyle",
@@ -965,13 +963,6 @@ test.describe("plugin surface · paged.draw", () => {
     // REORDER keeps both.
     await designer.runCommand("paged.appearance.moveLayer");
     await expect.poll(layers, { timeout: 8_000 }).toBe(2);
-
-    // BAKE has nothing to bake on a native appearance: the item count
-    // stays (the engine draws every layer; IDML export bakes them).
-    const items = await artworkCount(page);
-    await designer.runCommand("media.paged.draw.command.bakeAppearance");
-    await page.waitForTimeout(500);
-    expect(await artworkCount(page)).toBe(items);
 
     // CLEAR brings it back to the frame's own fill and stroke.
     await designer.runCommand("paged.appearance.clear");

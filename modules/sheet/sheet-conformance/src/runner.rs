@@ -24,7 +24,7 @@
 //!
 //! The setup grammar (`text:` / `bool:` / `empty` / `@Addr` / `-`) is
 //! documented on `tests/it/corpus_runner.rs`; the Excel generator
-//! (`oracle/excel/oracle_cases.py`) mirrors it.
+//! (`tooling/oracle/office/excel/oracle_cases.py`) mirrors it.
 
 use crate::CorpusCase;
 use sheet_calc::{Engine, EngineConfig, SetInput};

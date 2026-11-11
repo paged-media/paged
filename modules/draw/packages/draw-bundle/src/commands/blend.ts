@@ -187,7 +187,7 @@ import {
   type Vec2,
 } from "@paged-media/vector-geometry";
 
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { compoundPaintOf, type CompoundPaint } from "./compound-path";
 import { groupMutationFor, ungroupMutationFor } from "./group";
 import { bindMinted, mutateMinting } from "./minted";

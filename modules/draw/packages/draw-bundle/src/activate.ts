@@ -99,10 +99,7 @@ import {
   contributeShaperCommand,
   SHAPER_STROKE_COMMAND_ID,
 } from "./commands/shaper";
-import {
-  contributeAppearanceBakeCommands,
-  APPEARANCE_BAKE_COMMAND_IDS,
-} from "./commands/appearance-bake";
+
 import {
   contributeGraphicStyleCommands,
   GRAPHIC_STYLES_COMMAND_IDS,
@@ -503,13 +500,10 @@ export function activate(host: BundleHost): BundleHandle {
   // are the host's: `paged.corners.*`.
   // The appearance stack operations (Add fill / Add stroke / Clear / Remove
   // layer / Move layer) are the host's: `paged.appearance.*`.
-  // B-24 CLOSED — the GROUP BAKE: `bakeAppearance` lowers the metadata
-  // stack onto real stacked page items (one derived path per paint,
-  // sharing the source geometry, wrapped in a group with the source
-  // frame as the carrier); `releaseAppearance` is its exact inverse.
-  // See commands/appearance-bake.ts for the mutation/undo shape and the
-  // named list of what does and does not survive the lowering.
-  const appearanceBakeCommandsSub = contributeAppearanceBakeCommands(host);
+  // The group bake of draw ADR 354 (Bake / Release appearance) is gone:
+  // every host draws several fills and strokes natively
+  // (`document.appearance@1`) and IDML export bakes them; a legacy bake
+  // in an old document is released when it opens (appearance-migrate.ts).
   // Illustrator Phase 2 — GRAPHIC STYLES (save / apply / redefine /
   // break link / rename / delete). The library is a document-resident
   // container part (`host.parts`, declared in contributes.partTypes) and
@@ -711,7 +705,6 @@ export function activate(host: BundleHost): BundleHandle {
         COMPOUND_PATH_COMMAND_IDS.length +
         PATTERN_COMMAND_IDS.length +
         REPEAT_COMMAND_IDS.length +
-        APPEARANCE_BAKE_COMMAND_IDS.length +
         GRAPHIC_STYLES_COMMAND_IDS.length +
         GRAPHIC_STYLE_LIBRARY_COMMAND_IDS.length +
         SYMBOLS_COMMAND_IDS.length +
@@ -789,7 +782,6 @@ export function activate(host: BundleHost): BundleHandle {
       appearanceMigrationSub.dispose();
       graphicStyleCommandsSub.dispose();
       graphicStyleLibraryCommandsSub.dispose();
-      appearanceBakeCommandsSub.dispose();
       repeatCommandsSub.dispose();
       patternCommandsSub.dispose();
       compoundPathCommandsSub.dispose();

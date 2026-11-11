@@ -169,6 +169,101 @@ describe("host.documents — D-26 (SDK adapter)", () => {
   });
 });
 
+describe("host.documents.exportPdf — the one PDF export loop (SDK adapter)", () => {
+  /** A fake engine with a `pages`-page PDF session; page `failPage` fails. */
+  function pdfEditor(pages: number, failPage = -1) {
+    const fake = makeFakeEditor();
+    let page = 0;
+    fake.onSend("exportPdfBegin", () => ({
+      kind: "exportPdfBegun",
+      payload: { session: 3, pageCount: pages },
+    }));
+    fake.onSend("exportPdfPage", () => {
+      const i = page++;
+      return i === failPage
+        ? { kind: "exportPdfFailed", payload: { error: "page boom" } }
+        : {
+            kind: "exportPdfProgress",
+            payload: { session: 3, done: i + 1, total: pages },
+          };
+    });
+    fake.onSend("exportPdfFinish", () => ({
+      kind: "pdfExported",
+      payload: {
+        pdfBytes: [0x25, 0x50, 0x44, 0x46],
+        diagnostics: ["note"],
+        findings: [
+          { severity: "warning", code: "c", message: "m", pageIndex: 0 },
+        ],
+      },
+    }));
+    fake.onSend("exportPdfCancel", () => ({
+      kind: "exportPdfCancelled",
+      payload: { session: 3 },
+    }));
+    const kinds = () => fake.sent.map((m) => m.kind);
+    return { fake, kinds };
+  }
+  const caps = { documents: { export: true } };
+
+  it("is static, runs begin → a page per page → finish and reports progress", async () => {
+    const { fake, kinds } = pdfEditor(2);
+    const { host } = createBundleHost(() => fake.editor, manifest(caps), {
+      console: silent,
+      capabilityMode: "enforce",
+    });
+    expect(host.supports("documents.exportPdf@1")).toBe(true);
+    const progress: string[] = [];
+    const out = await host.documents.exportPdf(
+      { standard: "pdf17" },
+      { onProgress: (d, t) => void progress.push(`${d}/${t}`) },
+    );
+    expect(kinds()).toEqual([
+      "exportPdfBegin",
+      "exportPdfPage",
+      "exportPdfPage",
+      "exportPdfFinish",
+    ]);
+    expect(progress).toEqual(["0/2", "1/2", "2/2"]);
+    expect(Array.from(out.bytes)).toEqual([0x25, 0x50, 0x44, 0x46]);
+    expect(out.pageCount).toBe(2);
+    expect(out.findings).toHaveLength(1);
+    expect(out.diagnostics).toEqual(["note"]);
+  });
+
+  it("cancels the session when a page fails or the signal aborts", async () => {
+    const failing = pdfEditor(3, 1);
+    const a = createBundleHost(() => failing.fake.editor, manifest(caps), {
+      console: silent,
+    }).host;
+    await expect(a.documents.exportPdf({})).rejects.toThrow(/page boom/);
+    expect(failing.kinds().at(-1)).toBe("exportPdfCancel");
+
+    const aborted = pdfEditor(3);
+    const b = createBundleHost(() => aborted.fake.editor, manifest(caps), {
+      console: silent,
+    }).host;
+    const ctl = new AbortController();
+    ctl.abort();
+    await expect(
+      b.documents.exportPdf({}, { signal: ctl.signal }),
+    ).rejects.toThrow(/cancelled/);
+    expect(aborted.kinds()).toEqual(["exportPdfBegin", "exportPdfCancel"]);
+  });
+
+  it("is gated on capabilities.documents.export", async () => {
+    const { fake, kinds } = pdfEditor(1);
+    const { host } = createBundleHost(() => fake.editor, manifest({}), {
+      console: silent,
+      capabilityMode: "enforce",
+    });
+    await expect(host.documents.exportPdf({})).rejects.toBeInstanceOf(
+      PluginCapabilityError,
+    );
+    expect(kinds()).toEqual([]);
+  });
+});
+
 describe("host.text.measureStrings — D-27 (SDK adapter)", () => {
   const metric = (t: string, sizePt: number) => ({
     advance: t.length * sizePt * 0.6,

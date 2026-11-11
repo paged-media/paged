@@ -21,8 +21,6 @@
   "commandCategory.Transform": "Transformieren",
   "commandCategory.Transparency": "Transparenz",
   "commandCategory.Type": "Schrift",
-  "draw.appearanceBake.bake": "Aussehen: Stapel als Gruppe festschreiben",
-  "draw.appearanceBake.release": "Aussehen: Festgeschriebenen Stapel lösen",
   "draw.blend.expand": "Angleichen: Umwandeln (jede Zwischenstufe bleibt als normales Bildmaterial erhalten)",
   "draw.blend.make": "Angleichen: Aus den zwei ausgewählten Objekten erstellen (glatte Farbe / Stufen / Abstand – wird neu erstellt, wenn sich ein Schlüsselobjekt ändert, oder durch „Aktualisieren“)",
   "draw.blend.release": "Angleichen: Zurückwandeln (Zwischenstufen entfernen, Schlüsselobjekte behalten)",

@@ -201,10 +201,6 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Pattern/Release", "releasePatternField", "pattern"],
   ["Draw/Pattern/Save as pattern swatch", "savePatternSwatch", "pattern"],
 
-  // ── Appearance ──
-  ["Draw/Appearance/Bake", "bakeAppearance", "appearance-edit"],
-  ["Draw/Appearance/Release", "releaseAppearance", "appearance-edit"],
-
   // ── Graphic styles ──
   ["Draw/Graphic style/Save from selection", "saveGraphicStyle", "gs"],
   ["Draw/Graphic style/Apply", "applyGraphicStyle", "gs"],
