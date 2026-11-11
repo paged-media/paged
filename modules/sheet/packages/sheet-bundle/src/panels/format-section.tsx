@@ -33,7 +33,7 @@ import { useState, type CSSProperties, type ReactElement } from "react";
 
 import type { EdgeStyle } from "../engine";
 import type { BorderKind, SessionResult, WorkbookSession } from "../session";
-import { font, space } from "@paged-media/panel-kit";
+import { ColorInput, font, space } from "@paged-media/panel-kit";
 import { useStrings } from "@paged-media/strings";
 
 import { FORMAT, NAMES, TOKENS } from "../messages";
@@ -175,11 +175,12 @@ export function FormatSection(props: {
             </option>
           ))}
         </select>
-        <input
-          data-sheet-fmt-border-color
-          type="color"
+        <ColorInput
+          compact
+          data-sheet-fmt-border-color=""
           value={borderColor}
-          onChange={(e) => setBorderColor(e.target.value)}
+          onChange={setBorderColor}
+          ariaLabel={t(FORMAT.borderColour)}
           title={t(FORMAT.borderColour)}
         />
         {(

@@ -42,6 +42,7 @@
 // when no bundle registered it. Converting the stack into adjustment
 // layers needs a door the image module does not offer yet.
 
+import { ColorInput } from "@paged-media/panel-kit";
 import { useState } from "react";
 
 import {
@@ -410,7 +411,7 @@ function CommitInput({
 }: {
   value: string;
   label: string;
-  type: "number" | "text" | "color";
+  type: "number" | "text";
   min?: number;
   max?: number;
   step?: number;
@@ -438,10 +439,6 @@ function CommitInput({
         disabled={disabled}
         onChange={(e) => {
           setDraft(e.target.value);
-          // A colour well has no Enter: it commits as it is picked.
-          if (type === "color" && e.target.value !== value) {
-            onCommit(e.target.value);
-          }
         }}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -549,15 +546,28 @@ function OpRow({
         }
         if (f.kind === "color") {
           return (
-            <CommitInput
+            <label
               key={key}
-              dataKey={f.key}
-              label={label}
-              type="color"
-              value={toHex(op[f.key])}
-              disabled={disabled}
-              onCommit={(hex) => onChange({ ...op, [f.key]: fromHex(hex) })}
-            />
+              className="flex items-center justify-between gap-2 py-[2px]"
+            >
+              <span
+                className="text-[11px]"
+                style={{ color: "var(--pg-muted-fg)" }}
+              >
+                {label}
+              </span>
+              <ColorInput
+                compact
+                data-adjust-field={f.key}
+                ariaLabel={label}
+                value={toHex(op[f.key])}
+                disabled={disabled}
+                onChange={(hex) => {
+                  if (hex !== toHex(op[f.key]))
+                    onChange({ ...op, [f.key]: fromHex(hex) });
+                }}
+              />
+            </label>
           );
         }
         return (

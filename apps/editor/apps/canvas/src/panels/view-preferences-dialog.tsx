@@ -36,7 +36,7 @@ import {
   useViewPreferences,
   type EditorScope,
 } from "@paged-media/shell";
-import { color, radius } from "@paged-media/panel-kit";
+import { ColorInput, color, radius } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 import { formatLength, parseLengthText } from "@paged-media/ui";
 
@@ -169,13 +169,12 @@ function ViewPreferencesForm() {
             />
           </Row>
           <Row label={strings.t(M.gridColor)}>
-            <input
-              type="color"
+            <ColorInput
+              compact
               data-view-pref="gridColor"
+              ariaLabel={strings.t(M.gridColor)}
               value={prefs.gridColor}
-              onChange={(e) =>
-                setViewPreferences({ gridColor: e.target.value })
-              }
+              onChange={(hex) => setViewPreferences({ gridColor: hex })}
               style={{ ...inputStyle, padding: 0, height: 24 }}
             />
           </Row>

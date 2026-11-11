@@ -234,6 +234,7 @@ const _schemaRendererCompat: _AssertSchemaRenderer = true;
 void _schemaRendererCompat;
 import { CodeEditor } from "@paged-media/ui";
 import { HostColorPicker } from "../plugin-color-picker";
+import { setHostColorPicker } from "@paged-media/panel-kit";
 import {
   ObjectPropertyField,
   ObjectPropertyFrame,
@@ -387,6 +388,10 @@ import {
   type HostActions,
 } from "./instance";
 import { PRESETS } from "../profiles/presets";
+
+// The editor's panels and the built-ins' sections share one colour input
+// (panel-kit's `ColorInput`); in the editor it opens the host mixer.
+setHostColorPicker(HostColorPicker);
 
 // Default overlay contributions for the canvas app. Order is
 // descriptive — actual paint order is determined by the

@@ -23,6 +23,7 @@
 // (as Excel's dialogs do) and hands the answer to the session; the engine
 // decides what it means.
 
+import { ColorInput } from "@paged-media/panel-kit";
 import {
   useEffect,
   useRef,
@@ -1456,11 +1457,11 @@ export function SortCard({
               </select>
             ) : (
               <>
-                <input
-                  type="color"
-                  aria-label="Color"
+                <ColorInput
+                  compact
+                  ariaLabel="Color"
                   value={l.color}
-                  onChange={(e) => update(i, { color: e.currentTarget.value })}
+                  onChange={(hex) => update(i, { color: hex })}
                 />
                 <select
                   aria-label="Position"

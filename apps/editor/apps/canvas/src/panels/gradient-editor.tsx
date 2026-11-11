@@ -55,7 +55,7 @@ import {
   type ObjectField,
   type RampStop,
 } from "@paged-media/shell";
-import { IconButton, Segment } from "@paged-media/panel-kit";
+import { ColorInput, IconButton, Segment } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 import { KitSelect } from "@paged-media/ui";
 import type {
@@ -467,13 +467,13 @@ export function GradientEditor() {
                   <option value={INLINE}>{strings.t(M.inlineColour)}</option>
                 </select>
                 {s.color ? (
-                  <input
-                    type="color"
-                    aria-label={strings.t(M.stopInlineColour, { n: i + 1 })}
-                    data-stop-inline-colour
+                  <ColorInput
+                    compact
+                    ariaLabel={strings.t(M.stopInlineColour, { n: i + 1 })}
+                    data-stop-inline-colour=""
                     className="w-[26px] h-[26px] p-0 rounded-[6px] border border-input bg-background"
                     value={channelsHex(s.color.value)}
-                    onChange={(e) => setStopInlineAt(i, e.target.value)}
+                    onChange={(hex) => setStopInlineAt(i, hex)}
                   />
                 ) : null}
                 <input
