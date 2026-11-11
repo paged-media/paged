@@ -5819,8 +5819,8 @@ mod wasm {
 
     /// Add a TYPED adjustment layer of `kind` above the active layer, in
     /// its group: `values` empty takes Photoshop's defaults
-    /// (`Adjustment::default_for`), else they are the kind's block
-    /// (`Adjustment::values`); `cube` is a Color Lookup's. With
+    /// (`AdjustmentOps::default_for`), else they are the kind's block
+    /// (`AdjustmentOps::values`); `cube` is a Color Lookup's. With
     /// `mask_from_selection` and a selection, the selection becomes its
     /// mask (Photoshop's). Returns its index.
     #[wasm_bindgen]
@@ -5832,7 +5832,7 @@ mod wasm {
         label: &str,
         mask_from_selection: bool,
     ) -> Result<usize, JsValue> {
-        use crate::layers::Adjustment;
+        use crate::layers::AdjustmentOps as Adjustment;
         let adj = if values.is_empty() && cube.is_empty() {
             Adjustment::default_for(kind)
                 .ok_or_else(|| JsValue::from_str(&format!("unknown adjustment kind \"{kind}\"")))?
@@ -5864,7 +5864,7 @@ mod wasm {
         label: &str,
     ) -> Result<(), JsValue> {
         let adj =
-            crate::layers::Adjustment::from_wire(kind, values, cube, label).map_err(ingest_err)?;
+            crate::layers::AdjustmentOps::from_wire(kind, values, cube, label).map_err(ingest_err)?;
         recorded_edit("Adjustment", Some(format!("adjust:{index}")), move |st| {
             st.set_adjustment_typed(index, adj)
         })
