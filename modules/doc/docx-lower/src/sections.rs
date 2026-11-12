@@ -86,7 +86,7 @@
 
 use docx_core::{Section, SectionKind};
 
-use crate::ir::Diagnostic;
+use crate::ir::{diag, Diagnostic};
 
 /// What the lowering may use (see [`LowerOptions::mid_page_columns`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,7 +183,7 @@ pub fn place_sections_with(
     for (k, sec) in sections.iter().enumerate() {
         if !sec.column_widths.is_empty() && sec.columns > 1 {
             let (n, gap) = layout(sec);
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(diag::warning(
                 format!(
                     "section {} has {n} columns of unequal width: the engine's columns are \
                      equal, so they are laid out as {n} equal columns {} pt apart (Word \
@@ -307,7 +307,7 @@ fn finish_story(
     } else {
         "each multi-column section splits the story's one column into sub-columns".to_string()
     };
-    diagnostics.push(Diagnostic::info(
+    diagnostics.push(diag::info(
         format!(
             "sections {}–{} change the columns mid-page, as Word does: {how}",
             first + 1,
@@ -316,7 +316,7 @@ fn finish_story(
         3,
     ));
     if frame.count == 1 && unbalanced_last {
-        diagnostics.push(Diagnostic::info(
+        diagnostics.push(diag::info(
             format!(
                 "section {last} ends its story in sub-columns: Word fills its last page's \
                  columns in turn, the engine balances them"
@@ -330,7 +330,7 @@ fn finish_story(
             .skip(1)
             .any(|s| s.kind == SectionKind::NextColumn)
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(diag::warning(
             format!(
                 "a nextColumn section in sections {}–{} sits in a one-column story with \
                  sub-columns: its column break opens the next page",
@@ -376,7 +376,7 @@ fn join(
             None
         };
         if let Some(why) = why {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(diag::warning(
                 format!(
                     "section {} is {kind} and {change}: Word continues it on the same page; \
                      {why}, so it opens a new page",
@@ -393,7 +393,7 @@ fn join(
         // where the count or a gutter changes, and its frame columns have
         // no boundary at all, so the two share one column flow. Kept on
         // the same page (a page break would move every later line).
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(diag::warning(
             format!(
                 "section {} is continuous with the same {cols} columns as the section before \
                  it: Word balances each section's columns on its own; the engine ends a \
@@ -408,7 +408,7 @@ fn join(
     let right = twips(sec.margin_right - base.margin_right);
     if left != 0.0 || right != 0.0 {
         if cols > 1 {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(diag::warning(
                 format!(
                     "section {} is {kind} with other left/right margins in {cols} columns: \
                      Word narrows the columns mid-page; paragraph indents cannot narrow \
@@ -420,7 +420,7 @@ fn join(
             return None;
         }
         if left < 0.0 || right < 0.0 {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(diag::warning(
                 format!(
                     "section {} is {kind} with narrower left/right margins than the page \
                      it continues: Word widens the text mid-page; the text cannot leave its \
@@ -433,7 +433,7 @@ fn join(
         }
     }
     if (sec.margin_top, sec.margin_bottom) != (base.margin_top, base.margin_bottom) {
-        diagnostics.push(Diagnostic::info(
+        diagnostics.push(diag::info(
             format!(
                 "section {} is {kind} with other top/bottom margins: it continues on the \
                  same page like Word's, but its later pages keep the earlier section's \
@@ -459,6 +459,7 @@ fn join(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::LossSeverity;
 
     fn sec(kind: SectionKind, columns: u32, left: i32, right: i32) -> Section {
         Section {
@@ -488,7 +489,7 @@ mod tests {
         let (s, d) = stories(&[sec(NextPage, 1, 1440, 1440), sec(Continuous, 1, 720, 1440)]);
         assert_eq!(s, vec![0, 1]);
         assert_eq!(d.len(), 1);
-        assert_eq!(d[0].severity, "warning");
+        assert!(d[0].severity > LossSeverity::Info);
     }
 
     #[test]
@@ -564,7 +565,7 @@ mod tests {
             ]
         );
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].severity, "info");
+        assert_eq!(diags[0].severity, LossSeverity::Info);
 
         let mut diags = Vec::new();
         let old = LowerOptions {
@@ -577,7 +578,13 @@ mod tests {
         );
         assert_eq!(placed[1].frame.count, 2);
         assert!(placed.iter().all(|p| p.columns == SectionColumns::Frame));
-        assert_eq!(diags.iter().filter(|d| d.severity == "warning").count(), 2);
+        assert_eq!(
+            diags
+                .iter()
+                .filter(|d| d.severity > LossSeverity::Info)
+                .count(),
+            2
+        );
     }
 
     #[test]

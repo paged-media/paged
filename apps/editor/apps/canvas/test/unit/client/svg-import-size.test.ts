@@ -52,7 +52,7 @@ function fakeWorker() {
             kind: "svgImportPlanned",
             payload: {
               mutation: null,
-              report: { items: 0, notes: [] },
+              report: { items: 0, losses: [] },
               width: 0,
               height: 0,
               error: "the SVG draws nothing",

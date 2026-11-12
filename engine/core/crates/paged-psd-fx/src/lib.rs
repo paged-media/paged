@@ -55,8 +55,6 @@
 
 pub mod adjustment;
 
-use std::fmt;
-
 use paged_model::effect_stack::{
     ColorOverlayParams, Effect, EffectBearing, EffectEntry, EffectTarget, GradientOverlayParams,
     OutlineStrokeParams, StackError, StrokePosition,
@@ -85,20 +83,10 @@ impl Default for MapOptions {
     }
 }
 
-/// Something of the style the stack cannot say, named for a loss report.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StyleLoss {
-    /// The Photoshop effect (`"Drop Shadow"`).
-    pub effect: &'static str,
-    /// What of it is lost.
-    pub what: String,
-}
-
-impl fmt::Display for StyleLoss {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.effect, self.what)
-    }
-}
+/// Something of the style the stack cannot say: the shared loss entry
+/// (capability register C18), the Photoshop effect (`"Drop Shadow"`) as its
+/// code and what of it is lost as its message.
+pub type StyleLoss = paged_model::report::LossEntry;
 
 /// A style mapped onto the stack.
 #[derive(Debug, Clone, Default)]
@@ -177,10 +165,11 @@ impl Mapper<'_> {
     }
 
     fn lose(&mut self, effect: &'static str, what: impl Into<String>) {
-        self.out.losses.push(StyleLoss {
+        self.out.losses.push(StyleLoss::new(
             effect,
-            what: what.into(),
-        });
+            paged_model::report::LossSeverity::Dropped,
+            what,
+        ));
     }
 
     fn color(&mut self, rgb: [u8; 3]) -> String {

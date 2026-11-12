@@ -213,7 +213,7 @@ fn paged_draw_reads_the_dxf_illustrator_writes() {
     let dxf = c["parameters"]["illustrator_dxf"].as_str().unwrap();
     let import = draw_dxf::dxf_to_svg(dxf.as_bytes()).unwrap();
     // Nothing was left out: the HATCH is read.
-    assert!(import.report.notes.is_empty(), "{:?}", import.report);
+    assert!(import.report.losses.is_empty(), "{:?}", import.report);
     assert_eq!(import.layers, 1);
     assert!(import.svg.contains(r#"<g id="Ebene 1">"#), "{}", import.svg);
     // Millimetres: the 100 pt rectangle is 100 pt again.

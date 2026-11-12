@@ -67,7 +67,7 @@ function harness(selection: unknown[] = []) {
             mutation: { op: "batch", args: { ops: [] } },
             report: {
               items: 3,
-              notes: [
+              losses: [
                 {
                   code: "filter",
                   severity: "dropped",
@@ -88,7 +88,7 @@ function harness(selection: unknown[] = []) {
       },
       async exportSvg(pageId: string, ids: unknown[]) {
         calls.push(["exportSvg", pageId, ids]);
-        return { svg: "<svg/>", report: { items: 1, notes: [] } };
+        return { svg: "<svg/>", report: { items: 1, losses: [] } };
       },
       async elementGeometry(ids: unknown[]) {
         return ids.map((id) => ({ id, pageId: "p1", bounds: [0, 0, 1, 1] }));

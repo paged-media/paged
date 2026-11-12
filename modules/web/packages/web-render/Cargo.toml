@@ -62,6 +62,8 @@ perf-counters = []
 [dependencies]
 # FNV-1a (the font idempotence key): the engine's one owner, dependency-free.
 paged-pixel = { path = "../../../../engine/core/crates/paged-pixel" }
+# The shared loss report (capability register C18), dependency-free but serde.
+paged-loss = { path = "../../../../engine/core/crates/paged-loss" }
 # `data:` URL bodies (the version the lock already holds).
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }

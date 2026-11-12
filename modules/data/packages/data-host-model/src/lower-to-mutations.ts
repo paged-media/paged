@@ -34,16 +34,15 @@
 //     `insertText` the tab/newline-joined `text` this function also returns.
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
+import {
+  nativeCellTextOp,
+  nativeTabTextFrameOps,
+  nativeTableInsertOp,
+} from "@paged-media/plugin-sdk";
 
 import { BINDING_KEY } from "./binding";
 import type { LoweredTable } from "./lowered";
 import type { Placement } from "./placement";
-
-/** The batch-created sentinel: an `insertTextFrame` mints a textFrame, and a
- *  later op in the SAME batch addresses it by this placeholder id. The host
- *  resolves `$created` to the just-minted frame; the metadata gate verifies the
- *  key is this plugin's own namespace. */
-const CREATED_FRAME: ElementId = { kind: "textFrame", id: "$created" };
 
 /** Phase-1 batch + the phase-2 text to pour once the new frame's story id is
  *  known. */
@@ -65,30 +64,19 @@ export function tableToMutations(
   const { pageId, bounds } = placement;
   const [top, left] = bounds;
 
-  const ops: Mutation[] = [];
-
-  // (1) The frame itself.
-  ops.push({ op: "insertTextFrame", args: { pageId, bounds } });
-
-  // (2) One drawn line per grid rule. The IR carries content-space coordinates
-  // (offsets from the region's top-left, §9.6); add the frame's [top, left]
-  // page origin.
-  for (const rule of table.rules) {
-    ops.push({
-      op: "insertLine",
-      args: {
-        pageId,
-        start: [left + rule.x1Pt, top + rule.y1Pt],
-        end: [left + rule.x2Pt, top + rule.y2Pt],
-      },
-    });
-  }
-
-  // (3) The binding envelope, written onto the batch-created frame via the
-  // `$created` sentinel. ONE undo removes the frame, its rules, AND the binding.
-  ops.push({
-    op: "setPluginMetadata",
-    args: { elementId: CREATED_FRAME, key: BINDING_KEY, value: bindingJson },
+  // (1) The frame, (2) one drawn line per grid rule — the IR carries
+  // content-space coordinates (offsets from the region's top-left, §9.6), so
+  // add the frame's [top, left] page origin — and (3) the binding envelope
+  // on the batch-created frame. ONE undo removes the frame, its rules, AND
+  // the binding.
+  const ops = nativeTabTextFrameOps({
+    pageId,
+    bounds,
+    lines: table.rules.map((rule) => ({
+      start: [left + rule.x1Pt, top + rule.y1Pt],
+      end: [left + rule.x2Pt, top + rule.y2Pt],
+    })),
+    metadata: { key: BINDING_KEY, value: bindingJson },
   });
 
   return {
@@ -150,16 +138,12 @@ export function tableInsertMutation(
   storyId: string,
   spec: TableInsertSpec,
 ): Mutation {
-  return {
-    op: "insertTable",
-    args: {
-      storyId,
-      rows: spec.rows,
-      cols: spec.cols,
-      headerRows: spec.headerRows,
-      columnWidths: spec.columnWidths,
-    },
-  };
+  return nativeTableInsertOp(storyId, {
+    rows: spec.rows,
+    cols: spec.cols,
+    headerRows: spec.headerRows,
+    columnWidths: spec.columnWidths,
+  });
 }
 
 /** The per-cell `insertText` ops once the table's id is known (phase 3). Empty
@@ -174,10 +158,7 @@ export function tableCellInserts(
   table.rows.forEach((row, r) => {
     row.cells.forEach((text, c) => {
       if (text.length === 0) return;
-      ops.push({
-        op: "insertText",
-        args: { storyId, offset: 0, text, cell: { tableId, row: r, col: c } },
-      });
+      ops.push(nativeCellTextOp(storyId, tableId, r, c, text));
     });
   });
   return ops;

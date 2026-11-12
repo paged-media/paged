@@ -256,7 +256,7 @@
     },
     {
       "name": "arc-to-cubic",
-      "description": "approximate a circular arc with cubics (4/3·tan(θ/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
+      "description": "approximate a circular arc with cubics (4/3\u00b7tan(\u03b8/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
       "owner": ["engine/core/crates/paged-geom/"],
       "extensions": [".rs"],
       "patterns": [
@@ -376,6 +376,21 @@
         "modules/doc/docx-conformance/tests/it/crop_saveback.rs",
         "modules/doc/docx-export/src/crop.rs"
       ]
+    },
+    {
+      "name": "loss-report",
+      "description": "report what a conversion could not carry with paged_loss::{LossEntry, LossSeverity, LossReport} (TS: LossEntry / LossSeverity from @paged-media/plugin-api), the format's own codes as data",
+      "owner": [
+        "engine/core/crates/paged-loss/",
+        "platform/extensions/packages/plugin-api/src/wire.d.ts"
+      ],
+      "patterns": [
+        "^\\s*Approximated,\\s*$",
+        "\"approximated\"\\s*\\|\\s*\"dropped\"",
+        "pub struct \\w*Loss\\s*\\{"
+      ],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": []
     },
     {
       "name": "pdf-export-loop",

@@ -178,6 +178,31 @@ impl LowerReport {
             parts.join(", "),
         ))
     }
+
+    /// What the lowering dropped as the shared loss report (capability
+    /// register C18): `paint.nonSolid` and `shadow`, each counted. Empty
+    /// skips are not losses.
+    pub fn losses(&self) -> paged_loss::LossReport {
+        use paged_loss::LossLog;
+        let mut r = paged_loss::LossReport::default();
+        if self.dropped_non_solid > 0 {
+            r.note_n(
+                "paint.nonSolid",
+                paged_loss::LossSeverity::Dropped,
+                "an image-pattern or transformed-image paint is not renderable on the page",
+                self.dropped_non_solid,
+            );
+        }
+        if self.dropped_shadows > 0 {
+            r.note_n(
+                "shadow",
+                paged_loss::LossSeverity::Dropped,
+                "a shadow or blur with no page form is left out",
+                self.dropped_shadows,
+            );
+        }
+        r
+    }
 }
 
 /// The lowering result: the C-1 layer to submit + the coverage report.

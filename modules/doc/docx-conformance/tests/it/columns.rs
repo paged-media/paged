@@ -49,6 +49,7 @@
 use crate::layout::{assert_page, labels, lay_out, word_pages, Page};
 use docx_conformance::{columns_docx, COLUMNS_CASES};
 use docx_import::import_docx;
+use docx_lower::ir::LossSeverity;
 use docx_lower::ir::LoweredDoc;
 use docx_lower::sections::{SectionColumns, SectionPlacement};
 use docx_lower::LowerOptions;
@@ -147,7 +148,7 @@ fn column_changes_lower_to_span_and_split_columns__feat__plugin_doc_word_paginat
     let warnings: Vec<&str> = ir
         .diagnostics
         .iter()
-        .filter(|d| d.severity == "warning")
+        .filter(|d| d.severity > LossSeverity::Info)
         .map(|d| d.message.as_str())
         .collect();
     assert_eq!(warnings.len(), 3, "{warnings:?}");

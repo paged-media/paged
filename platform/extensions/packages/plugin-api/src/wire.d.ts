@@ -2173,7 +2173,7 @@ export type SelectionMode = "replace" | "add" | "toggle";
 /**
  * How a construct fared.
  */
-export type SvgNoteSeverity = "approximated" | "dropped";
+export type LossSeverity = "info" | "approximated" | "dropped";
 
 /**
  * How an SVG lands on the page. Every field is optional.
@@ -2634,23 +2634,31 @@ export interface ItemPolicy {
 }
 
 /**
- * One kind of loss, with how often it happened.
+ * One kind of loss.
  */
-export interface SvgNote {
+export interface LossEntry {
     /**
-     * A stable code (`\"filter\"`, `\"gradient.focal\"`, `\"text.outlined\"`,
-     * …) a caller can switch on; the codes are listed in engine ADR 1031.
+     * Stable code, in the producer\'s own vocabulary: an annotation type
+     * (`Link`, `Stamp`, `state:Marked`), a mapper code (`shading.sampled`),
+     * an SVG construct (`filter`), a Photoshop effect (`Drop Shadow`).
      */
     code: string;
-    severity: SvgNoteSeverity;
     /**
-     * What happened, in a sentence.
-     */
-    message: string;
-    /**
-     * How many times.
+     * How many times it happened.
      */
     count: number;
+    /**
+     * How it fared; `dropped` when the producer says nothing else.
+     */
+    severity?: LossSeverity;
+    /**
+     * The 0-based pages it stood on, when the source has pages.
+     */
+    pages?: number[];
+    /**
+     * Why or what, worded; empty when the consumer words the code.
+     */
+    message?: string;
 }
 
 /**
@@ -4219,9 +4227,10 @@ export interface SvgReport {
      */
     items: number;
     /**
-     * The losses, one row per code, in the order they first happened.
+     * The losses, one row per code, in the order they first happened
+     * (a `LossReport`\'s `losses`).
      */
-    notes: SvgNote[];
+    losses: LossEntry[];
 }
 
 /**
@@ -6025,8 +6034,11 @@ export interface InitOutput {
     readonly dav1d_version: () => number;
     readonly dav1d_version_api: () => number;
     readonly dav1d_set_cpu_flags_mask: (a: number) => void;
-    readonly qcms_enable_iccv4: () => void;
     readonly qcms_profile_precache_output_transform: (a: number) => void;
+    readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
+    readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
+    readonly qcms_enable_iccv4: () => void;
+    readonly qcms_profile_is_bogus: (a: number) => number;
     readonly qcms_transform_data_bgra_out_lut: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_data_bgra_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_data_rgb_out_lut: (a: number, b: number, c: number, d: number) => void;
@@ -6034,16 +6046,13 @@ export interface InitOutput {
     readonly qcms_transform_data_rgba_out_lut: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_data_rgba_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_release: (a: number) => void;
-    readonly qcms_profile_is_bogus: (a: number) => number;
     readonly qcms_white_point_sRGB: (a: number) => void;
-    readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
-    readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___js_sys_1fdef4cfb0b6ff54___Function_fn_wasm_bindgen_37b72a91dce759de___JsValue_____wasm_bindgen_37b72a91dce759de___sys__Undefined___js_sys_1fdef4cfb0b6ff54___Function_fn_wasm_bindgen_37b72a91dce759de___JsValue_____wasm_bindgen_37b72a91dce759de___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___sys__JsNullable_wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___sys__JsNullable_wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true__41: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___sys__JsNullable_wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true__42: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__41: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__42: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

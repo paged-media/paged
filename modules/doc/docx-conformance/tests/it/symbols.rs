@@ -26,6 +26,7 @@ use docx_conformance::{symbols_docx, SYMBOL_CASES};
 use docx_export::{ParagraphContentIn, RunContentIn, StoryContentIn};
 use docx_import::import_docx;
 use docx_js::DocSession;
+use docx_lower::ir::LossSeverity;
 use docx_lower::ir::{LoweredBlock, LoweredDoc, LoweredParagraph, LoweredTabStop, PropValue};
 use paged_ooxml::OpcPackage;
 
@@ -227,7 +228,7 @@ fn symbols_carry_the_character_word_names_them_by__feat__plugin_doc_read_path() 
     let warned: Vec<&str> = ir
         .diagnostics
         .iter()
-        .filter(|d| d.severity == "warning" && d.message.contains("Wingdings F0FF"))
+        .filter(|d| d.severity > LossSeverity::Info && d.message.contains("Wingdings F0FF"))
         .map(|d| d.message.as_str())
         .collect();
     assert_eq!(warned.len(), 1, "{:?}", ir.diagnostics);
@@ -236,9 +237,11 @@ fn symbols_carry_the_character_word_names_them_by__feat__plugin_doc_read_path() 
         "{warned:?}"
     );
     assert!(
-        ir.diagnostics.iter().any(|d| d.severity == "info"
-            && d.message.contains("4 from Symbol")
-            && d.message.contains("5 from Wingdings")),
+        ir.diagnostics
+            .iter()
+            .any(|d| d.severity == LossSeverity::Info
+                && d.message.contains("4 from Symbol")
+                && d.message.contains("5 from Wingdings")),
         "{:?}",
         ir.diagnostics
     );

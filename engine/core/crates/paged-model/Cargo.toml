@@ -18,6 +18,8 @@ schema = ["dep:schemars"]
 
 [dependencies]
 paged-pixel = { path = "../paged-pixel" }
+# The loss report (capability register C18), re-exported as `report`.
+paged-loss = { path = "../paged-loss" }
 serde = { workspace = true }
 # The theme swatches' colour transforms (engine ADR 1056).
 paged-colour-math = { path = "../paged-colour-math" }

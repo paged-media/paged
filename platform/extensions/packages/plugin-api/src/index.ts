@@ -38,6 +38,8 @@
 // live in the consumers' BREAKAGE_LOG.md files. Design rationale:
 // DESIGN.md at the repo root.
 
+import type { LossEntry, LossSeverity } from "./wire.js";
+
 export type {
   PluginId,
   PluginManifest,
@@ -223,7 +225,6 @@ export type {
   ProviderSchema,
   ProviderField,
   ProviderRecordSet,
-  LossEntry,
   LossReport,
   DataSurface,
   DataService,
@@ -392,11 +393,15 @@ export type {
   SvgExportOptions,
   SvgImportOptions,
   SvgImportText,
-  SvgNote,
-  SvgNoteSeverity,
   SvgReport,
   SvgTextMode,
 } from "./wire.js";
+// Capability register C18 — the one loss report shape (engine `paged_loss`).
+export type { LossEntry, LossSeverity };
+/** The rows of an `SvgReport`: the shared {@link LossEntry}. */
+export type SvgNote = LossEntry;
+/** How an SVG construct fared: the shared {@link LossSeverity}. */
+export type SvgNoteSeverity = LossSeverity;
 
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.

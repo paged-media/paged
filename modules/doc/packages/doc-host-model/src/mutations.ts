@@ -5,8 +5,19 @@
 // maps IR nodes to `host.document.mutate(...)` ops. No engine logic lives here;
 // the semantics were decided in `docx-lower` (Rust).
 
-import type { Mutation, RasterOp } from "@paged-media/plugin-api";
+import type {
+  Mutation,
+  PropertyPath,
+  RasterOp,
+  Value,
+} from "@paged-media/plugin-api";
 import {
+  nativeCellPropertyOp,
+  nativeCellSpanOp,
+  nativeCellTextOp,
+  nativeRowHeightOp,
+  nativeTableInsertOp,
+  type NativeTableSpec,
   nativeFxColors,
   nativeFxOps,
   nativeGradientId,
@@ -1096,13 +1107,13 @@ export function anchoredFloat(
  *  weight and colour, and its fill. */
 function cellLookOps(
   look: LoweredCellLook,
-  elementId: Record<string, unknown>,
+  storyId: string,
+  tableId: string,
+  row: number,
+  col: number,
 ): Mutation[] {
-  const set = (path: string, value: unknown): Mutation =>
-    ({
-      op: "setElementProperty",
-      args: { elementId, path, value },
-    }) as Mutation;
+  const set = (path: PropertyPath, value: Value): Mutation =>
+    nativeCellPropertyOp(storyId, tableId, row, col, path, value);
   const ops: Mutation[] = [];
   for (const [side, edge] of [
     ["Top", look.top],
@@ -1264,41 +1275,47 @@ function applyStyleInCell(
 export function buildTableInsert(
   table: LoweredTable,
   storyId: string,
+  nest?: Pick<NativeTableSpec, "cell" | "paragraph">,
 ): Mutation {
-  return {
-    op: "insertTable",
-    args: {
-      storyId,
-      rows: table.rows,
-      cols: table.cols,
-      headerRows: table.headerRows ?? 0,
-      footerRows: 0,
-      columnWidths: table.columnWidthsPt,
-      // A row is never shorter than Word's `w:trHeight`.
-      rowHeights: table.rowHeightsPt ?? [],
-      // Engine ADR 1025 — Word's rules: rows split across pages, autofit
-      // columns, the indent.
-      word: wordTableSpec(table),
-    },
-  } as unknown as Mutation;
+  return nativeTableInsertOp(storyId, {
+    rows: table.rows,
+    cols: table.cols,
+    headerRows: table.headerRows ?? 0,
+    footerRows: 0,
+    columnWidths: table.columnWidthsPt,
+    // A row is never shorter than Word's `w:trHeight`.
+    rowHeights: table.rowHeightsPt ?? [],
+    // Engine ADR 1025 — Word's rules: rows split across pages, autofit
+    // columns, the indent.
+    word: wordTableSpec(table),
+    ...nest,
+  });
 }
 
 /** Engine ADR 1025 — a table's Word layout (`WordTableSpec`) from what the
  *  lowering carries (`w:tblLayout`, `w:tblW`, `w:tcW`, `w:tblInd`,
  *  `w:cantSplit`). */
-export function wordTableSpec(table: LoweredTable): Record<string, unknown> {
+export function wordTableSpec(
+  table: LoweredTable,
+): NonNullable<NativeTableSpec["word"]> {
   const l = table.layout ?? {};
   const width =
     l.widthPt != null
-      ? { unit: "points", value: l.widthPt }
+      ? { unit: "points" as const, value: l.widthPt }
       : l.widthPct != null
-        ? { unit: "percent", value: l.widthPct }
+        ? { unit: "percent" as const, value: l.widthPct }
         : null;
   const cellWidths = (l.cellWidthsPt ?? []).flatMap((w, i) => {
     const c = table.cells[i];
     return w == null || !c
       ? []
-      : [{ row: c.row, col: c.col, width: { unit: "points", value: w } }];
+      : [
+          {
+            row: c.row,
+            col: c.col,
+            width: { unit: "points" as const, value: w },
+          },
+        ];
   });
   return {
     indent: l.indentPt ?? 0,
@@ -1344,22 +1361,11 @@ export function buildTableCells(
   for (const cell of table.cells) {
     const text = cellText(cell);
     if (isStyledEmptyCell(cell)) {
-      ops.push({
-        op: "insertText",
-        args: {
-          storyId,
-          offset: 0,
-          text: "",
-          cell: { tableId, row: cell.row, col: cell.col },
-        },
-      } as Mutation);
+      ops.push(nativeCellTextOp(storyId, tableId, cell.row, cell.col, ""));
     }
     if (text.length > 0) {
       const addr = { tableId, row: cell.row, col: cell.col };
-      ops.push({
-        op: "insertText",
-        args: { storyId, offset: 0, text, cell: addr },
-      } as Mutation);
+      ops.push(nativeCellTextOp(storyId, tableId, cell.row, cell.col, text));
       // v55 — style the cell's runs. `applyStyle` gained a cell qualifier, so
       // cell text no longer has to pour at the default formatting. Offsets are
       // CELL-LOCAL and contiguous, computed over the same joined text
@@ -1402,44 +1408,26 @@ export function buildTableCells(
     // what Word's line box has beyond the native cell's (docx-lower
     // `cell_insets`). Without them a native cell is the engine's zero-inset
     // default and every row comes out shorter than Word's.
-    const elementId = {
-      kind: "tableCell",
-      id: {
-        story_id: storyId,
-        table_id: tableId,
-        row: cell.row,
-        col: cell.col,
-      },
-    };
+    const set = (path: PropertyPath, value: Value): Mutation =>
+      nativeCellPropertyOp(storyId, tableId, cell.row, cell.col, path, value);
     if (cell.insetsPt) {
       const paths = [
         "cellInsetTop",
         "cellInsetLeft",
         "cellInsetBottom",
         "cellInsetRight",
-      ];
+      ] as const;
       cell.insetsPt.forEach((pt, i) => {
-        ops.push({
-          op: "setElementProperty",
-          args: {
-            elementId,
-            path: paths[i],
-            value: { type: "length", value: pt },
-          },
-        } as Mutation);
+        ops.push(set(paths[i]!, { type: "length", value: pt }));
       });
     }
     if (cell.vAlign) {
-      ops.push({
-        op: "setElementProperty",
-        args: {
-          elementId,
-          path: "cellVerticalJustification",
-          value: { type: "text", value: cell.vAlign },
-        },
-      } as Mutation);
+      ops.push(
+        set("cellVerticalJustification", { type: "text", value: cell.vAlign }),
+      );
     }
-    if (cell.look) ops.push(...cellLookOps(cell.look, elementId));
+    if (cell.look)
+      ops.push(...cellLookOps(cell.look, storyId, tableId, cell.row, cell.col));
     // Engine ADR 1050 — the cell's pictures, characters of their lines (a
     // float stands against the cell), addressed in the cell's own paragraphs
     // and characters.
@@ -1485,46 +1473,40 @@ export function buildTableCells(
     // paragraph that stands for it, filled through its handle.
     for (const [k, nested] of (cell.nested ?? []).entries()) {
       const handle = `docNested${cell.row}_${cell.col}_${k}_${ops.length}`;
-      const insert = buildTableInsert(nested.table, storyId) as unknown as {
-        op: string;
-        args: Record<string, unknown>;
-      };
       ops.push(
-        {
-          op: "insertTable",
-          args: { ...insert.args, cell: addr, paragraph: nested.paragraph },
-        } as unknown as Mutation,
+        buildTableInsert(nested.table, storyId, {
+          cell: addr,
+          paragraph: nested.paragraph,
+        }),
         { op: "bindCreated", args: { handle } } as unknown as Mutation,
         ...flattened([buildTableCells(nested.table, storyId, `$h:${handle}`)]),
       );
     }
     if (cell.rowSpan > 1 || cell.colSpan > 1) {
-      ops.push({
-        op: "setCellSpan",
-        args: {
+      ops.push(
+        nativeCellSpanOp(
           storyId,
           tableId,
-          row: cell.row,
-          col: cell.col,
-          rowSpan: cell.rowSpan,
-          columnSpan: cell.colSpan,
-        },
-      } as Mutation);
+          cell.row,
+          cell.col,
+          cell.rowSpan,
+          cell.colSpan,
+        ),
+      );
     }
   }
   // Engine ADR 1025 — rows Word holds at an exact height.
   (table.layout?.exactRows ?? []).forEach((exact, row) => {
     if (!exact) return;
-    ops.push({
-      op: "setRowHeight",
-      args: {
+    ops.push(
+      nativeRowHeightOp(
         storyId,
         tableId,
         row,
-        height: table.rowHeightsPt?.[row] ?? null,
-        autoGrow: false,
-      },
-    } as unknown as Mutation);
+        table.rowHeightsPt?.[row] ?? null,
+        false,
+      ),
+    );
   });
   return { op: "batch", args: { ops } } as Mutation;
 }

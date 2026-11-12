@@ -28,6 +28,7 @@ use docx_conformance::picture_effects_docx;
 use docx_core::Block;
 use docx_export::EditSet;
 use docx_js::DocSession;
+use docx_lower::ir::LossSeverity;
 use docx_lower::ir::{LoweredBlock, LoweredImage};
 use paged_ooxml::OpcPackage;
 
@@ -152,7 +153,7 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         .iter()
         .find(|d| d.message.contains("carry a DrawingML look"))
         .unwrap();
-    assert_eq!(look.severity, "info");
+    assert_eq!(look.severity, LossSeverity::Info);
     for kind in [
         "drop shadow",
         "glow",

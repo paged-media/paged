@@ -141,15 +141,15 @@ fn photoshop_files_map_onto_the_stack__feat__images_graphics_psd_layer_styles() 
 fn what_the_stack_cannot_say_is_reported() {
     let radial = mapped("go-radial");
     assert!(
-        radial.losses.iter().any(|l| l.what.contains("Radial")),
+        radial.losses.iter().any(|l| l.message.contains("Radial")),
         "{:?}",
         radial.losses
     );
     let glow = mapped("og-gradient");
-    assert!(glow.losses.iter().any(|l| l.effect == "Outer Glow"));
+    assert!(glow.losses.iter().any(|l| l.code == "Outer Glow"));
     let cone = mapped("bv-contour-cone");
     assert!(
-        cone.losses.iter().any(|l| l.effect == "Bevel & Emboss"),
+        cone.losses.iter().any(|l| l.code == "Bevel & Emboss"),
         "{:?}",
         cone.losses
     );

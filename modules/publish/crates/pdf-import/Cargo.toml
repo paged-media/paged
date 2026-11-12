@@ -20,6 +20,8 @@ workspace = true
 paged-pixel = { path = "../../../../engine/core/crates/paged-pixel" }
 paged-scene = { workspace = true }
 paged-model = { workspace = true }
+# The shared loss report (capability register C18).
+paged-loss = { workspace = true }
 paged-store = { workspace = true }
 paged-pdf-annots = { workspace = true }
 paged-pdf-page = { workspace = true }

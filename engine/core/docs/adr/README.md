@@ -200,6 +200,7 @@ is not written yet.
 | [1094](1094-a-page-over-200-inches-is-written-in-a-larger-user-unit.md) | A page over 200 inches is written in a larger user unit: `/UserUnit` (the smallest whole number), boxes, base CTM, marks and annotations scaled by it | Accepted 2026-11-10 |
 | [1095](1095-a-non-printing-item-is-left-out-of-pdf-export.md) | A non-printing item is left out of PDF export: `PipelineOptions::omit_nonprinting`, set by the export build, hides `Nonprinting` items as hidden ones are hidden | Accepted 2026-11-10 |
 | [1096](1096-an-office-preset-stays-a-live-shape.md) | An Office preset stays a live shape: a preset live shape on the path item (name, adjust values, box, glued connector ends), refitted by the engine, its handles through the handles door; pptx, docx and xlsx map onto and off it. Waits on where the geometry program is evaluated (recommended: an engine crate) | Proposed 2026-11-11 |
+| [1097](1097-one-loss-report.md) | One loss report: the leaf crate `paged-loss` owns `LossEntry` / `LossSeverity` / `LossReport`; every adapter (SVG, DXF, PDF vectors, PSD styles, DOCX lowering, PDF export, web lowering) maps onto it with its own codes as data; the contract's types are generated from it; the SDK's `lossDiagnostics` is the one translation onto the diagnostics channel | Accepted 2026-11-11 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

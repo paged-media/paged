@@ -2235,6 +2235,8 @@ mod tests {
         let out = lower(&scene.into_display_list());
         assert_eq!(out.report.inset_shadows, 0);
         assert_eq!(out.report.dropped_shadows, 1);
+        let losses = out.report.losses();
+        assert_eq!(losses.get("shadow").map(|l| l.count), Some(1));
     }
 
     #[test]

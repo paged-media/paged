@@ -216,7 +216,7 @@ pub fn read_page(
     if format.ai && format.has_private_data && ai::is_stand_in(page, &items) {
         return Err(ReadError::AiWithoutPdf(ai::STAND_IN));
     }
-    losses.sort_by(|a, b| a.code.cmp(b.code));
+    losses.sort_by(|a, b| a.code.cmp(&b.code));
     Ok(VectorPage {
         page_index,
         width_pt: w,

@@ -110,9 +110,24 @@ function doc(overrides: Partial<LoweredDoc> = {}): LoweredDoc {
       columns: 1,
     },
     diagnostics: [
-      { severity: "info", tier: 3, message: "2 footnotes not inlined" },
-      { severity: "error", tier: 0, message: "boom" },
-      { severity: "warning", tier: 2, message: "header not placed" },
+      {
+        code: "docx.tier3",
+        count: 1,
+        severity: "info",
+        message: "2 footnotes not inlined",
+      },
+      {
+        code: "docx.tier0",
+        count: 1,
+        severity: "dropped",
+        message: "boom",
+      },
+      {
+        code: "docx.tier2",
+        count: 1,
+        severity: "approximated",
+        message: "header not placed",
+      },
     ],
     ...overrides,
   };
@@ -144,10 +159,10 @@ describe("summarize", () => {
 });
 
 describe("sortedDiagnostics", () => {
-  it("orders error → warning → info", () => {
+  it("orders dropped → approximated → info", () => {
     expect(sortedDiagnostics(doc()).map((d) => d.severity)).toEqual([
-      "error",
-      "warning",
+      "dropped",
+      "approximated",
       "info",
     ]);
   });
