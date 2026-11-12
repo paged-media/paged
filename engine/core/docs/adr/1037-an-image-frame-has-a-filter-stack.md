@@ -233,7 +233,7 @@ units, evaluated by the image module's GPU chain) beside `RasterOp`. That model 
 holds engine ops, and Photoshop's encoding lives only in the PSD reader and writer.
 
 **The superset.** `RasterOp` carries every adjustment layer the image module has. Fields added to shipped ops are
-optional on the wire and not written at their defaults, so a stored stack reads and hashes as before (plugin-sdk 0.74.3-canary.90):
+optional on the wire and not written at their defaults, so a stored stack reads and hashes as before (plugin-sdk 0.74.3-canary.91):
 
 | op | added |
 |---|---|
