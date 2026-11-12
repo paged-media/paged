@@ -104,7 +104,7 @@ hidden layer is not placed; what a frame cannot carry is a loss: an adjustment l
 group's opacity, blend mode or mask, a vector mask, Blend If, knockout, and the blending options
 that change how a style composites. A CMYK file's ink goes through its profile (`paged-raster`'s
 colour conversion). The door: `document.placePsdLayers@1` in the extension contract (plugin-sdk
-0.74.3-canary.94), `paged place --layers` on the command line, and paged.image's Layer ▸ Place
+0.74.3-canary.95), `paged place --layers` on the command line, and paged.image's Layer ▸ Place
 Layers as Frames for the PSD it has open.
 
 ## Evidence
