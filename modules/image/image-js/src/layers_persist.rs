@@ -84,6 +84,14 @@
 //! (`workspace.rs` documents its layout). Both blocks are tagged and
 //! absent when empty, so an older manifest still reads.
 //!
+//! Version 10 (one adjustment model, engine ADR 1037 amendment
+//! 2026-11-11) adds the layer kind code 6: an adjustment layer's engine ops
+//! as their JSON (`paged_model::image_adjust::adjustments_to_json`), for a
+//! layer that is neither one typed op (code 4, its Photoshop units) nor the
+//! Adjust panel's chain (code 1, its block), which keep their codes so the
+//! object model's TypeScript codec still edits them. Every adjustment layer
+//! is ops in memory: an older manifest's MIGRATES when it opens.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -93,14 +101,14 @@ use image_gpu::SelectionCoverage;
 use image_graph::journal::TileJournal;
 
 use super::{
-    Adjustment, BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer,
+    AdjustmentOps, BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer,
     LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource, TypeLayer,
     TypeSource,
 };
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 9;
+const VERSION: u32 = 10;
 
 struct W(Vec<u8>);
 
@@ -451,6 +459,25 @@ fn read_vector_mask(
     Ok(Some(Arc::new(m)))
 }
 
+/// Whether an adjustment layer is stored as its ops' JSON (code 6): it is
+/// not exactly one op of a typed kind in Photoshop's units (code 4) nor
+/// exactly the Adjust panel's chain (code 1).
+fn needs_ops_json(a: &AdjustmentOps) -> bool {
+    if a.kind_name() != "chain" {
+        let back = AdjustmentOps::from_wire(
+            a.kind_name(),
+            &a.values(),
+            a.blob().unwrap_or(&[]),
+            a.label(),
+        );
+        return back.ok().as_ref() != Some(a);
+    }
+    match a.to_chain() {
+        Some(p) => AdjustmentOps::of_chain(&p) != *a,
+        None => true,
+    }
+}
+
 impl LayerStack {
     /// The stack as a manifest plus the buffers it refers to by slot.
     pub fn export(&self) -> (Vec<u8>, Vec<Arc<[u8]>>) {
@@ -510,8 +537,10 @@ impl LayerStack {
             w.u8(l.mask_enabled as u8);
             w.u8(match &l.kind {
                 LayerKind::Pixels => 0,
-                LayerKind::Adjustment(a) if matches!(**a, Adjustment::Chain(_)) => 1,
-                LayerKind::Adjustment(_) if version >= 4 => 4,
+                LayerKind::Adjustment(a) if version >= 10 && needs_ops_json(a) => 6,
+                LayerKind::Adjustment(a) if version >= 4 && a.kind_name() != "chain" => 4,
+                // An older version writes what it can: the chain it evaluates
+                // as (code 1).
                 LayerKind::Adjustment(_) => 1,
                 LayerKind::Smart(_) => 2,
                 LayerKind::Fill(_) if version >= 4 => 3,
@@ -591,9 +620,13 @@ impl LayerStack {
                     );
                     w.u8(u8::from(t.stale));
                 }
-                LayerKind::Adjustment(a) if version < 4 || matches!(**a, Adjustment::Chain(_)) => {
-                    // An older reader takes a typed layer as the chain it
-                    // evaluates to (a direct kind as the identity chain).
+                LayerKind::Adjustment(a) if version >= 10 && needs_ops_json(a) => {
+                    w.str(&paged_model::image_adjust::adjustments_to_json(&a.ops));
+                }
+                LayerKind::Adjustment(a) if version < 4 || a.kind_name() == "chain" => {
+                    // An older reader takes a layer as the chain it
+                    // evaluates to (a direct kind, or several blocks, as
+                    // the identity chain).
                     let block = a.to_chain().unwrap_or_default().to_wire();
                     w.u32(block.len() as u32);
                     for v in block {
@@ -948,13 +981,9 @@ impl LayerStack {
                         block.push(r.f32()?);
                     }
                     let chain = AdjustParams::from_wire(&block)?;
-                    // MIGRATION: before version 4 every adjustment layer
-                    // was a chain; one stage opens as its typed layer.
-                    LayerKind::Adjustment(Box::new(if version < 4 {
-                        Adjustment::from_chain(chain)
-                    } else {
-                        Adjustment::Chain(chain)
-                    }))
+                    // MIGRATION: a stored chain opens as its stages' ops
+                    // (one stage is its typed layer).
+                    LayerKind::Adjustment(Box::new(AdjustmentOps::of_chain(&chain)))
                 }
                 3 if version >= 4 => {
                     let kind = r.str()?;
@@ -977,9 +1006,18 @@ impl LayerStack {
                     let values = f32s(&mut r)?;
                     let blob = f32s(&mut r)?;
                     let label = r.str()?;
-                    LayerKind::Adjustment(Box::new(Adjustment::from_wire(
+                    // MIGRATION: a typed layer stored in Photoshop's units
+                    // opens as its op.
+                    LayerKind::Adjustment(Box::new(AdjustmentOps::from_wire(
                         &kind, &values, &blob, &label,
                     )?))
+                }
+                6 if version >= 10 => {
+                    let json = r.str()?;
+                    // Read leniently: the fold clamps, as the renderer does.
+                    let ops: Vec<paged_model::RasterOp> = serde_json::from_str(&json)
+                        .map_err(|e| IngestError::Decode(format!("adjustment layer ops: {e}")))?;
+                    LayerKind::Adjustment(Box::new(AdjustmentOps { ops }))
                 }
                 5 if version >= 7 => {
                     let source = TypeSource::from_json(&r.str()?).map_err(IngestError::Decode)?;
@@ -1397,7 +1435,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn a_develop_layer_round_trips__feat__image_editor_filters() {
-        use crate::layers::Adjustment;
+        use crate::layers::AdjustmentOps as Adjustment;
         let mut s = LayerStack::from_image(4, 3, px(4, 3, 10)).expect("stack");
         let mut v = image_kernels::families::develop::DevelopSettings::identity().0;
         v[0] = 25.0;

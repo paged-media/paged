@@ -434,8 +434,16 @@ pub(super) fn fold_window(
                 let acc = st.acc.take().unwrap_or_else(|| zeros(n));
                 let straight = tex_f16(&unpremultiply(&acc));
                 let sel = crate::layers::with_opacity(cov.coverage(w, h), *opacity, w, h);
-                let adjusted =
-                    crate::region_filter::adjust_f16_cpu(w, h, &straight, params, sel.as_deref());
+                let mut adjusted = straight;
+                for block in params.iter() {
+                    adjusted = crate::region_filter::adjust_f16_cpu(
+                        w,
+                        h,
+                        &adjusted,
+                        block,
+                        sel.as_deref(),
+                    );
+                }
                 st.acc = Some(premultiply(&f16_tex(&adjusted)));
             }
             Step::Direct { .. }

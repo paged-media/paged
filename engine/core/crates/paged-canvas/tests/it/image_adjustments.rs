@@ -141,7 +141,7 @@ fn the_idml_export_keeps_the_stack_in_a_label_and_reports_it__feat__images_graph
     let (mut m, id) = model();
     let clean = m.idml_export_losses();
     let ops = vec![
-        RasterOp::Exposure { ev: 0.5 },
+        RasterOp::exposure(0.5),
         RasterOp::Duotone {
             shadow: [0.1, 0.1, 0.3],
             highlight: [1.0, 0.9, 0.7],

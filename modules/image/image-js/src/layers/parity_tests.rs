@@ -28,6 +28,14 @@ use image_gpu::{GpuContext, SelectionCoverage};
 
 use super::*;
 use crate::ingest::AdjustParams;
+use paged_model::RasterOp;
+
+/// The test's one-op layers.
+fn one(op: RasterOp) -> AdjustmentOps {
+    AdjustmentOps::one(op)
+}
+
+use AdjustmentOps as Adjustment;
 
 fn device() -> Option<&'static GpuContext> {
     image_gpu::test_support::device_or_skip("layer parity")
@@ -114,17 +122,17 @@ fn a_fill_layer_renders_its_source_and_re_renders_on_edit__feat__image_layers_ph
 fn a_typed_layer_folds_like_the_chain_it_stands_for__feat__image_layers_photoshop_parity() {
     let Some(ctx) = device() else { return };
     let mut chain = grey(W, H, 60);
-    chain.add_adjustment_layer(
+    // The chain's own block, as a layer stored before the ops held it.
+    chain.add_adjustment(
         "",
-        Adjustment::Chain(AdjustParams {
+        AdjustParams {
             invert: true,
             exposure_ev: 0.0,
             ..AdjustParams::default()
-        }),
-        None,
+        },
     );
     let mut typed = grey(W, H, 60);
-    typed.add_adjustment_layer("", Adjustment::Invert, None);
+    typed.add_adjustment_layer("", one(RasterOp::Invert), None);
     assert_eq!(typed.layers()[1].name, "Invert 1");
     assert_eq!(fold(&chain, ctx)[..], fold(&typed, ctx)[..]);
     assert!(fold(&typed, ctx)
@@ -143,19 +151,19 @@ fn the_direct_adjustment_kinds_run_on_the_accumulator__feat__image_layers_photos
     let base = fold(&s, ctx);
     s.add_adjustment_layer(
         "",
-        Adjustment::GradientMap {
+        one(RasterOp::GradientMap {
             stops: vec![
-                ColorStop {
+                paged_model::GradientMapStop {
                     at: 0.0,
-                    rgb: [0, 0, 0],
+                    color: [0.0; 3],
                 },
-                ColorStop {
+                paged_model::GradientMapStop {
                     at: 1.0,
-                    rgb: [255, 0, 0],
+                    color: [1.0, 0.0, 0.0],
                 },
             ],
             reverse: false,
-        },
+        }),
         None,
     );
     let mapped = fold(&s, ctx);
@@ -352,7 +360,7 @@ fn the_merges_keep_the_picture_and_are_one_undo_step__feat__image_layers_photosh
         s.add("b");
         paint(&mut s, solid(W, H, [0, 0, 255, 255]));
         s.set_opacity(2, 0.4).expect("opacity");
-        s.add_adjustment_layer("", Adjustment::Invert, None);
+        s.add_adjustment_layer("", one(RasterOp::Invert), None);
         s.set_visible(3, false).expect("hidden");
         s
     };
@@ -571,13 +579,14 @@ fn the_parity_properties_round_trip_the_manifest__feat__image_layers_photoshop_p
     );
     s.add_adjustment_layer(
         "",
-        Adjustment::ColorLookup {
+        one(RasterOp::ColorLookup {
             name: "look".into(),
-            cube: identity_cube(),
-        },
+            size: 9,
+            cube: super::adjust_ops::identity_cube(),
+        }),
         None,
     );
-    s.add_adjustment_layer("", Adjustment::Posterize { levels: 6.0 }, None);
+    s.add_adjustment_layer("", one(RasterOp::Posterize { levels: 6.0 }), None);
     let mut bi = BlendIf::default();
     bi.channels[2].this = [10, 20, 240, 250];
     s.set_blend_if(1, Some(bi)).expect("bi");
@@ -612,17 +621,226 @@ fn the_parity_properties_round_trip_the_manifest__feat__image_layers_photoshop_p
     assert_eq!(back.comps().len(), 1);
     assert!(back.comps()[0].entries[0].pixels.is_some());
 
-    // Version 3 knew one kind of adjustment layer: the chain.
+    // Version 3 knew one kind of adjustment layer, the chain; version 4 to
+    // 9 stored a typed layer in Photoshop's units. Both open as ops.
     let mut old = grey(W, H, 10);
+    old.add_adjustment(
+        "",
+        AdjustParams {
+            invert: true,
+            exposure_ev: 0.5,
+            ..AdjustParams::default()
+        },
+    );
     old.add_adjustment_layer(
         "",
-        Adjustment::Chain(AdjustParams {
-            invert: true,
-            ..AdjustParams::default()
-        }),
+        AdjustmentOps::from_wire(
+            "levels",
+            &[[10.0, 240.0, 1.2, 5.0, 250.0]; 4].concat(),
+            &[],
+            "",
+        )
+        .expect("levels"),
         None,
     );
     let (m3, b3) = old.export_with(3);
     let migrated = LayerStack::import(&m3, &b3).expect("v3 opens");
-    assert_eq!(migrated.layers()[1].adjustment(), Some(&Adjustment::Invert));
+    assert_eq!(
+        migrated.layers()[1].adjustment().map(|a| a.ops.clone()),
+        Some(vec![RasterOp::exposure(0.5), RasterOp::Invert])
+    );
+    let (m9, b9) = old.export_with(9);
+    let migrated = LayerStack::import(&m9, &b9).expect("v9 opens");
+    assert_eq!(
+        migrated.layers()[1].adjustment(),
+        old.layers()[1].adjustment()
+    );
+    assert_eq!(
+        migrated.layers()[2].adjustment(),
+        old.layers()[2].adjustment()
+    );
+}
+
+/// ONE EVALUATOR (engine ADR 1037, amendment 2026-11-11): an adjustment
+/// layer's ops folded on the GPU (the adjust chain's kernels, the point
+/// kernels on the accumulator, Photoshop's tables) agree with the engine's
+/// CPU evaluator, `paged_image_adjust`, that draws the same ops on a page
+/// — every kind, off its defaults, over a field of hues, greys and tints.
+/// The tolerance is the f16 storage between the GPU's stages (each kernel
+/// is held to its twin by `image-conformance`'s `cpu_twins`).
+#[test]
+#[allow(non_snake_case)]
+fn every_adjustment_kind_matches_the_engine_evaluator__feat__image_layers_photoshop_parity() {
+    let Some(ctx) = device() else { return };
+    let (w, h) = (16u32, 16u32);
+    let field: Vec<u8> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            let v = |k: u32| ((k * 37 + x * 13 + y * 7) % 256) as u8;
+            if y < 4 {
+                // Greys.
+                let g = (x * 16 + y * 4) as u8;
+                [g, g, g, 255]
+            } else {
+                [v(1), v(2), v(3), 255]
+            }
+        })
+        .collect();
+    let field: Arc<[u8]> = Arc::from(field.into_boxed_slice());
+    let wire = |kind: &str, v: &[f32]| AdjustmentOps::from_wire(kind, v, &[], "").expect(kind);
+    let id5 = [0.0, 255.0, 1.0, 0.0, 255.0];
+    let mut hue = vec![1.0, 210.0, 40.0, -10.0, 15.0, -20.0, 5.0];
+    hue.extend([0.0; 18]);
+    let mut ranges = vec![0.0, 0.0, 0.0, 0.0, 15.0, -20.0, 5.0];
+    ranges.extend([10.0, 30.0, -10.0].repeat(6));
+    let mut selective = vec![0.0; 37];
+    selective[1..5].copy_from_slice(&[-20.0, 10.0, 0.0, 5.0]);
+    selective[29..33].copy_from_slice(&[0.0, 0.0, -30.0, 0.0]);
+    let mut develop = DevelopSettingsBlock::identity();
+    develop[2] = 0.4; // exposure
+    develop[3] = 20.0; // contrast
+    develop[11] = 30.0; // vibrance
+    develop[9] = 25.0; // clarity (the detail kernel)
+    let lookup = {
+        let mut cube = super::adjust_ops::identity_cube();
+        for (i, v) in cube.iter_mut().enumerate() {
+            if i % 3 == 0 {
+                *v = (*v * 0.8 + 0.1).min(1.0);
+            }
+        }
+        AdjustmentOps::from_wire("colorLookup", &[], &cube, "warm").expect("lookup")
+    };
+    let cases: Vec<(&str, AdjustmentOps)> = vec![
+        (
+            "brightnessContrast",
+            wire("brightnessContrast", &[30.0, -20.0]),
+        ),
+        (
+            "levels",
+            wire(
+                "levels",
+                &[
+                    [10.0, 240.0, 1.2, 5.0, 250.0],
+                    id5,
+                    [20.0, 220.0, 0.8, 0.0, 255.0],
+                    id5,
+                ]
+                .concat(),
+            ),
+        ),
+        (
+            "curves",
+            wire(
+                "curves",
+                &[
+                    3.0, 0.0, 0.0, 128.0, 150.0, 255.0, 255.0, 0.0, 0.0, 2.0, 0.0, 20.0, 255.0,
+                    230.0,
+                ],
+            ),
+        ),
+        ("exposure", wire("exposure", &[0.6, 0.0, 1.0])),
+        (
+            "exposure offset gamma",
+            wire("exposure", &[0.4, -0.03, 1.2]),
+        ),
+        ("vibrance", wire("vibrance", &[40.0, -15.0])),
+        ("hueSaturation colorize", wire("hueSaturation", &hue)),
+        ("hueSaturation ranges", wire("hueSaturation", &ranges)),
+        (
+            "colorBalance",
+            wire(
+                "colorBalance",
+                &[10.0, 0.0, -5.0, 0.0, 20.0, 0.0, -10.0, 0.0, 30.0],
+            ),
+        ),
+        (
+            "blackWhite",
+            wire("blackWhite", &[40.0, 60.0, 40.0, 60.0, 20.0, 80.0]),
+        ),
+        (
+            "photoFilter",
+            wire("photoFilter", &[236.0, 138.0, 0.0, 40.0, 1.0]),
+        ),
+        (
+            "channelMixer",
+            wire(
+                "channelMixer",
+                &[
+                    80.0, 20.0, 0.0, 0.0, 10.0, 70.0, 20.0, 0.0, 0.0, 10.0, 90.0, 0.0, 0.0,
+                ],
+            ),
+        ),
+        ("invert", wire("invert", &[])),
+        ("posterize", wire("posterize", &[5.0])),
+        ("threshold", wire("threshold", &[140.0])),
+        (
+            "gradientMap",
+            wire(
+                "gradientMap",
+                &[
+                    0.0, 3.0, 0.0, 20.0, 10.0, 80.0, 0.5, 200.0, 60.0, 40.0, 1.0, 250.0, 240.0,
+                    200.0,
+                ],
+            ),
+        ),
+        ("selectiveColor", wire("selectiveColor", &selective)),
+        ("colorLookup", lookup),
+        ("develop", wire("develop", &develop)),
+        (
+            "chain",
+            AdjustmentOps::of_chain(&AdjustParams {
+                exposure_ev: 0.3,
+                brightness: 0.05,
+                contrast: 1.1,
+                temp: 0.1,
+                vibrance: 0.2,
+                hue_degrees: 25.0,
+                ..AdjustParams::default()
+            }),
+        ),
+    ];
+    for (name, adj) in cases {
+        let mut s = LayerStack::from_image(w, h, field.clone()).expect("stack");
+        s.add_adjustment_layer("", adj.clone(), None);
+        let gpu = fold(&s, ctx);
+        let cpu = paged_image_adjust::apply_rgba8(&field, w, h, &adj.ops, 1.0);
+        let worst = gpu
+            .iter()
+            .zip(&cpu)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        eprintln!("{name}: max {worst} levels");
+        // Threshold and posterize cut at a level: a value at the cut (51
+        // of 255 is 0.2 exactly, 0.19995 in f16) may fall either side by
+        // the f16 storage before them.
+        let tol = if matches!(name, "threshold" | "posterize") {
+            255
+        } else {
+            2
+        };
+        assert!(
+            worst <= tol,
+            "{name}: the GPU fold is {worst} levels off the engine's evaluator"
+        );
+        if tol == 255 {
+            let off = gpu
+                .iter()
+                .zip(&cpu)
+                .filter(|(a, b)| a.abs_diff(**b) > 2)
+                .count();
+            assert!(off * 30 <= gpu.len(), "{name}: {off} channels at the cut");
+        }
+    }
+}
+
+/// The Develop block at its identity, as a `Vec` the wire takes.
+struct DevelopSettingsBlock;
+
+impl DevelopSettingsBlock {
+    fn identity() -> Vec<f32> {
+        image_kernels::families::develop::DevelopSettings::identity()
+            .0
+            .to_vec()
+    }
 }

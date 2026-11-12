@@ -1032,11 +1032,11 @@ impl Mapper {
                 ),
                 ImageEffect::Hsl { hue, sat, lum } => (
                     "a:hsl",
-                    RasterOp::HueSaturation {
-                        hue: (hue.rem_euclid(360.0)) as f32,
-                        saturation: sat.clamp(-1.0, 1.0) as f32,
-                        lightness: lum.clamp(-1.0, 1.0) as f32,
-                    },
+                    RasterOp::hue_saturation(
+                        (hue.rem_euclid(360.0)) as f32,
+                        sat.clamp(-1.0, 1.0) as f32,
+                        lum.clamp(-1.0, 1.0) as f32,
+                    ),
                 ),
                 ImageEffect::ColorReplace { rgb, alpha } => {
                     if *alpha < 0.999 {

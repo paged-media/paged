@@ -45,7 +45,9 @@ use std::sync::Arc;
 
 use image_conformance::abr_corpus::json::Json;
 use image_core::{ContentHash, Region};
-use image_js::layers::{Adjustment, ColorStop, FillSource, GradientFill, LayerStack};
+use image_js::layers::{
+    AdjustmentOps as Adjustment, ColorStop, FillSource, GradientFill, LayerStack,
+};
 use image_js::pixels::Pixels;
 use image_js::saveback::psd_write_stack;
 use image_psd::effects::{LayerStyle, Shadow, Stroke, StrokeFill};
@@ -162,11 +164,16 @@ fn inputs() -> Vec<(String, Vec<u8>)> {
     {
         let file = fixture("adjustment-layers/curves-composite.psd");
         let mut stack = open(&file);
-        let mut curves = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-        curves[0] = vec![(0, 0), (100, 60), (180, 220), (255, 255)];
-        stack
-            .set_adjustment_typed(1, Adjustment::Curves { curves })
-            .expect("edit");
+        let curves = Adjustment::from_wire(
+            "curves",
+            &[
+                4.0, 0.0, 0.0, 100.0, 60.0, 180.0, 220.0, 255.0, 255.0, 0.0, 0.0, 0.0,
+            ],
+            &[],
+            "",
+        )
+        .expect("curves");
+        stack.set_adjustment_typed(1, curves).expect("edit");
         out.push(("edited-curves.psd".into(), save(&file, &stack)));
     }
     // Fill layers and a styled pixel layer, over Photoshop's background.

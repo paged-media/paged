@@ -106,7 +106,7 @@ fn opacity_u8(o: f32) -> u8 {
 
 /// The blocks that make up an adjustment layer's adjustment, as record
 /// blocks; `None` for a kind Photoshop has no layer for.
-fn adjustment_blocks(a: &crate::layers::Adjustment) -> Option<Vec<AdditionalLayerInfo>> {
+fn adjustment_blocks(a: &crate::layers::AdjustmentOps) -> Option<Vec<AdditionalLayerInfo>> {
     let psd = crate::layers::adjustment_to_psd(a)?;
     Some(
         psd.to_blocks()
@@ -116,7 +116,7 @@ fn adjustment_blocks(a: &crate::layers::Adjustment) -> Option<Vec<AdditionalLaye
     )
 }
 
-fn unwritable(l: &Layer, a: &crate::layers::Adjustment) -> IngestError {
+fn unwritable(l: &Layer, a: &crate::layers::AdjustmentOps) -> IngestError {
     IngestError::Unsupported(format!(
         "adjustment layer \"{}\" is a {} layer, which is not written as a PSD adjustment layer \
          (Photoshop has no adjustment layer of that form)",

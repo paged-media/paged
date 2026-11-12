@@ -107,11 +107,22 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
                 hue,
                 saturation,
                 lightness,
-            } => out.push(ImageEffect::Hsl {
-                hue: f64::from(hue).rem_euclid(360.0),
-                sat: f64::from(saturation),
-                lum: f64::from(lightness),
-            }),
+                ranges,
+                colorize,
+            } => {
+                if ranges.is_some() || colorize.is_some() {
+                    lost.push(
+                        "a hue/saturation's colour ranges and colorize are not saved (a:hsl is \
+                         the master row)"
+                            .to_string(),
+                    );
+                }
+                out.push(ImageEffect::Hsl {
+                    hue: f64::from(hue).rem_euclid(360.0),
+                    sat: f64::from(saturation),
+                    lum: f64::from(lightness),
+                });
+            }
             RasterOp::ColorReplace {
                 from,
                 to,
@@ -275,11 +286,7 @@ mod tests {
                 magentas: 0.41,
             },
             RasterOp::Threshold { level: 0.4 },
-            RasterOp::HueSaturation {
-                hue: 30.0,
-                saturation: 0.25,
-                lightness: -0.1,
-            },
+            RasterOp::hue_saturation(30.0, 0.25, -0.1),
             RasterOp::ColorReplace {
                 from: [1.0, 1.0, 1.0],
                 to: [1.0, 1.0, 1.0],

@@ -11,13 +11,14 @@
 // since 5, the colour mode since 6, image ADR 479; a smart object's
 // placement, file, filters and record since 7, image ADR 482; a
 // 32-bit float layer (depth 32) and the single-image modes' table since 9,
-// image ADR 484). `writePgil(readPgil(m, b))` reproduces the
+// image ADR 484; an adjustment layer's engine ops as JSON, kind code 6,
+// since 10, engine ADR 1037 amendment 2026-11-11). `writePgil(readPgil(m, b))` reproduces the
 // engine's own export byte for byte, including the slot order — the
 // object-model spec proves that against the real wasm, so a drift in
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 9;
+export const PGIL_VERSION = 10;
 
 export interface PgilRect {
   x: number;
@@ -194,6 +195,9 @@ export interface PgilLayer {
   adjust: Float32Array | null;
   /** A typed adjustment layer (an `adjustment` with no `adjust` block). */
   typed: PgilTyped | null;
+  /** An adjustment layer stored as its engine ops (kind code 6): their
+   * JSON, a list of `RasterOp`, kept as written. */
+  ops?: string | null;
   fill: PgilFill | null;
   smart: PgilSmart | null;
   typeLayer?: PgilType | null;
@@ -515,6 +519,7 @@ export function readPgil(
     let fill: PgilFill | null = null;
     let smart: PgilSmart | null = null;
     let typeLayer: PgilType | null = null;
+    let ops: string | null = null;
     if (kindCode === 0) kind = "pixels";
     else if (kindCode === 1) {
       kind = "adjustment";
@@ -554,6 +559,9 @@ export function readPgil(
         blob: r.f32s(),
         label: r.str(),
       };
+    } else if (kindCode === 6 && version >= 10) {
+      kind = "adjustment";
+      ops = r.str();
     } else if (kindCode === 5 && version >= 7) {
       kind = "type";
       const source = r.str();
@@ -599,6 +607,7 @@ export function readPgil(
       fill,
       smart,
       typeLayer,
+      ...(ops !== null ? { ops } : {}),
       ext,
     });
   }
@@ -727,9 +736,11 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       l.kind === "pixels"
         ? 0
         : l.kind === "adjustment"
-          ? l.typed
-            ? 4
-            : 1
+          ? l.ops
+            ? 6
+            : l.typed
+              ? 4
+              : 1
           : l.kind === "smart"
             ? 2
             : l.kind === "type"
@@ -764,7 +775,9 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       w.u32(0);
       w.u8(0);
     }
-    if (l.kind === "adjustment" && l.typed) {
+    if (l.kind === "adjustment" && l.ops) {
+      w.str(l.ops);
+    } else if (l.kind === "adjustment" && l.typed) {
       w.str(l.typed.kind);
       w.f32s(l.typed.values);
       w.f32s(l.typed.blob);

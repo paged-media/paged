@@ -51,6 +51,15 @@ export type RunBreak = "line" | "paragraph";
 export type ByteBuf = number[];
 
 /**
+ * A colour stop of a [`RasterOp::GradientMap`]: where (0..=1) and which
+ * colour (RGB 0..=1).
+ */
+export interface GradientMapStop {
+    at: number;
+    color: [number, number, number];
+}
+
+/**
  * A compositing blend mode for [`SceneItem::FillPathBlend`] (C-1.4).
  * Mirrors the CSS-relevant subset of the display list\'s
  * [`BlendMode`] — `Normal` is intentionally absent (a normal fill is
@@ -2418,6 +2427,18 @@ export interface AnchorPosition {
 }
 
 /**
+ * One Levels record: input black and white, the midtone gamma (1 the
+ * identity), output black and white; levels 0..=1.
+ */
+export interface LevelsRecord {
+    inBlack: number;
+    inWhite: number;
+    gamma: number;
+    outBlack: number;
+    outWhite: number;
+}
+
+/**
  * One RGBA8 tile of a [`PixelLayer`]. `rgba` is tightly packed
  * (`width*height*4`, row-major); the tile is placed at the `(x, y)`
  * frame-content point with display size `(w, h)` points. A malformed tile
@@ -2807,9 +2828,17 @@ export interface SnapshotRun {
 }
 
 /**
- * One step of an image frame\'s filter stack (engine ADR 1037).
+ * One step of an image frame\'s filter stack (engine ADR 1037), and of an
+ * adjustment layer of paged.image (amendment 2026-11-11, \"one adjustment
+ * model\"): the superset of Photoshop\'s adjustment layers, Office\'s picture
+ * corrections and CSS\'s filter functions. Each format\'s encoding is mapped
+ * onto these ops by its reader and off them by its writer.
+ *
+ * A field added to an op after it shipped is optional on the wire: an op
+ * written before reads with its default, and an op at the default writes
+ * as before (so a stored stack hashes as before).
  */
-export type RasterOp = { op: "exposure"; ev: number } | { op: "brightnessContrast"; brightness: number; contrast: number } | { op: "levels"; inBlack: number; inWhite: number; gamma: number; outBlack: number; outWhite: number } | { op: "curves"; points: [number, number][] } | { op: "hueSaturation"; hue: number; saturation: number; lightness: number } | { op: "recolor"; hue: number; saturation: number; lightness: number } | { op: "duotone"; shadow: [number, number, number]; highlight: [number, number, number] } | { op: "blackWhite"; reds: number; yellows: number; greens: number; cyans: number; blues: number; magentas: number } | { op: "sharpen"; amount: number; radius: number } | { op: "blur"; radius: number } | { op: "posterize"; levels: number } | { op: "threshold"; level: number } | { op: "invert" } | { op: "channelMixer"; red: [number, number, number, number]; green: [number, number, number, number]; blue: [number, number, number, number] } | { op: "colorReplace"; from: [number, number, number]; to: [number, number, number]; alpha: number; tolerance: number };
+export type RasterOp = { op: "exposure"; ev: number; offset?: number; gamma?: number } | { op: "brightnessContrast"; brightness: number; contrast: number } | { op: "levels"; inBlack: number; inWhite: number; gamma: number; outBlack: number; outWhite: number; channels?: [LevelsRecord, LevelsRecord, LevelsRecord] } | { op: "curves"; points: [number, number][]; channels?: [[number, number][], [number, number][], [number, number][]] } | { op: "hueSaturation"; hue: number; saturation: number; lightness: number; ranges?: [[number, number, number], [number, number, number], [number, number, number], [number, number, number], [number, number, number], [number, number, number]]; colorize?: [number, number, number] } | { op: "recolor"; hue: number; saturation: number; lightness: number } | { op: "duotone"; shadow: [number, number, number]; highlight: [number, number, number] } | { op: "blackWhite"; reds: number; yellows: number; greens: number; cyans: number; blues: number; magentas: number } | { op: "sharpen"; amount: number; radius: number } | { op: "blur"; radius: number } | { op: "posterize"; levels: number } | { op: "threshold"; level: number } | { op: "invert" } | { op: "channelMixer"; red: [number, number, number, number]; green: [number, number, number, number]; blue: [number, number, number, number]; monochrome?: boolean } | { op: "colorReplace"; from: [number, number, number]; to: [number, number, number]; alpha: number; tolerance: number } | { op: "vibrance"; vibrance: number; saturation: number } | { op: "colorBalance"; shadows: [number, number, number]; midtones: [number, number, number]; highlights: [number, number, number]; preserveLuminosity?: boolean } | { op: "photoFilter"; color: [number, number, number]; density: number; preserveLuminosity?: boolean } | { op: "selectiveColor"; ranges: [[number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number]]; absolute?: boolean } | { op: "gradientMap"; stops: GradientMapStop[]; reverse?: boolean } | { op: "colorLookup"; name?: string; size: number; cube: number[] } | { op: "develop"; settings: number[] } | { op: "whiteBalance"; temperature: number; tint: number };
 
 /**
  * One stop of a gradient on the wire. Mirrors `GradientStopRef`.

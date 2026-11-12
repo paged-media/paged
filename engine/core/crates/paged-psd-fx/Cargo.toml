@@ -13,3 +13,4 @@ workspace = true
 [dependencies]
 paged-psd = { path = "../paged-psd" }
 paged-model = { path = "../paged-model" }
+paged-color = { path = "../paged-color" }

@@ -246,10 +246,12 @@ pub(super) enum Step {
         /// with extras is always canvas-sized (`rect: None`).
         extra: Option<Box<PixelExtra>>,
     },
-    /// Run the adjust chain over the accumulator, through the layer's
-    /// coverage scaled by its opacity.
+    /// Run the adjust-chain blocks of an adjustment layer's ops
+    /// (`AdjustmentOps::gpu_plan`), one after the other, over the
+    /// accumulator, each through the layer's coverage scaled by its opacity
+    /// (as every stage of one chain is).
     Adjust {
-        params: Box<AdjustParams>,
+        params: Box<[AdjustParams]>,
         opacity: f32,
         cov: CovKey,
     },
@@ -806,18 +808,21 @@ impl LayerStack {
                 // An adjustment layer's fill opacity is its opacity again
                 // (it has no pixels for the fill to act on separately).
                 let opacity = layer.opacity * fill;
-                match adj.to_chain() {
-                    Some(params) => steps.push(Step::Adjust {
-                        params: Box::new(params),
+                match adj.gpu_plan() {
+                    Some(super::GpuPlan::Chain(blocks)) => steps.push(Step::Adjust {
+                        params: blocks.into_boxed_slice(),
                         opacity,
                         cov,
                     }),
-                    None => steps.push(Step::Direct {
+                    Some(super::GpuPlan::Direct(ops)) => steps.push(Step::Direct {
                         layer: layer.id,
-                        ops: Arc::new(adj.direct_ops()),
+                        ops: Arc::new(ops),
                         opacity,
                         cov,
                     }),
+                    // No adjustment layer is made of ops no kernel
+                    // evaluates; one read from elsewhere is the identity.
+                    None => {}
                 }
                 continue;
             }
@@ -1426,16 +1431,13 @@ impl LayerStack {
                         Some(t) => std::mem::take(&mut reads[t.0]),
                         None => vec![0u8; (w as usize) * (h as usize) * 8],
                     };
-                    let straight = super::unpremultiply(ctx, &acc, w, h).await?;
-                    let adjusted = crate::ingest::adjust_f16(
-                        ctx,
-                        w,
-                        h,
-                        &straight,
-                        params,
-                        super::with_opacity(cov.coverage(w, h), *opacity, w, h),
-                    )
-                    .await?;
+                    let mut adjusted = super::unpremultiply(ctx, &acc, w, h).await?;
+                    let sel = super::with_opacity(cov.coverage(w, h), *opacity, w, h);
+                    for block in params.iter() {
+                        adjusted =
+                            crate::ingest::adjust_f16(ctx, w, h, &adjusted, block, sel.clone())
+                                .await?;
+                    }
                     let premul = super::premultiply(ctx, &adjusted, w, h).await?;
                     st.acc = Some(batch.upload(w, h, TexFormat::Rgba16Float, &premul));
                 }

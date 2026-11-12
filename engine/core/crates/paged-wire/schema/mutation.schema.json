@@ -12063,10 +12063,10 @@
       ]
     },
     "RasterOp": {
-      "description": "One step of an image frame's filter stack (engine ADR 1037).",
+      "description": "One step of an image frame's filter stack (engine ADR 1037), and of an\nadjustment layer of paged.image (amendment 2026-11-11, \"one adjustment\nmodel\"): the superset of Photoshop's adjustment layers, Office's picture\ncorrections and CSS's filter functions. Each format's encoding is mapped\nonto these ops by its reader and off them by its writer.\n\nA field added to an op after it shipped is optional on the wire: an op\nwritten before reads with its default, and an op at the default writes\nas before (so a stored stack hashes as before).",
       "oneOf": [
         {
-          "description": "Exposure in stops, applied to the light (a 2.2 decode): +1 doubles\nit. `adjust.exposure` on encoded input.",
+          "description": "Exposure in stops, applied to the light (a 2.2 decode): +1 doubles\nit. `adjust.exposure` on encoded input. Photoshop's `offset`\n(−0.5..=0.5, added to the light) and `gamma` (0.01..=9.99, the\nlight raised to 1/gamma) are optional; with either set the op is\nPhotoshop's measured exposure table.",
           "type": "object",
           "properties": {
             "op": {
@@ -12074,6 +12074,14 @@
               "const": "exposure"
             },
             "ev": {
+              "type": "number",
+              "format": "float"
+            },
+            "offset": {
+              "type": "number",
+              "format": "float"
+            },
+            "gamma": {
               "type": "number",
               "format": "float"
             }
@@ -12107,7 +12115,7 @@
           ]
         },
         {
-          "description": "Photoshop's Levels: input black and white points, the midtone\ngamma (1 the identity), output black and white. `adjust.levels`.",
+          "description": "Photoshop's Levels: input black and white points, the midtone\ngamma (1 the identity), output black and white — the composite\nrecord — and optionally one record per channel (`channels`: red,\ngreen, blue), applied before the composite, as Photoshop applies\nthem. Evaluated as Photoshop's 8-bit tables.",
           "type": "object",
           "properties": {
             "op": {
@@ -12133,6 +12141,17 @@
             "outWhite": {
               "type": "number",
               "format": "float"
+            },
+            "channels": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/$defs/LevelsRecord"
+              },
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "required": [
@@ -12145,7 +12164,7 @@
           ]
         },
         {
-          "description": "A tone curve through control points `[input, output]` (0..=1),\nPhotoshop's natural cubic spline, on every channel.",
+          "description": "A tone curve through control points `[input, output]` (0..=1),\nPhotoshop's natural cubic spline, on every channel; optionally a\ncurve per channel (`channels`: red, green, blue; an empty list is\nthat channel's identity), applied before the composite one. At most\n256 points: a freehand curve is the curve through every level.",
           "type": "object",
           "properties": {
             "op": {
@@ -12163,6 +12182,26 @@
                 "minItems": 2,
                 "maxItems": 2
               }
+            },
+            "channels": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "required": [
@@ -12171,7 +12210,7 @@
           ]
         },
         {
-          "description": "Hue (degrees), saturation and lightness (−1..=1) on the whole\npicture. `adjust.hue_saturation`'s master row.",
+          "description": "Hue (degrees), saturation and lightness (−1..=1) on the whole\npicture — `adjust.hue_saturation`'s master row — and optionally\nPhotoshop's six colour ranges (`ranges`: reds, yellows, greens,\ncyans, blues, magentas, each hue, saturation, lightness) and its\nColorize (`colorize`: hue 0..=360, saturation 0..=1, lightness\n−1..=1), which replaces the rest when set.",
           "type": "object",
           "properties": {
             "op": {
@@ -12189,6 +12228,35 @@
             "lightness": {
               "type": "number",
               "format": "float"
+            },
+            "ranges": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "float"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "colorize": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "required": [
@@ -12393,7 +12461,7 @@
           ]
         },
         {
-          "description": "Photoshop's Channel Mixer: each output channel (`red`, `green`,\n`blue`) is `[from red, from green, from blue, constant]` applied to\nthe input, as fractions (1 = 100 %), the result clamped.\n`adjust.channel_mixer`. A CSS colour filter (`grayscale`, `sepia`,\n`saturate`, `hue-rotate`) is one exactly (amendment 2026-11-11).",
+          "description": "Photoshop's Channel Mixer: each output channel (`red`, `green`,\n`blue`) is `[from red, from green, from blue, constant]` applied to\nthe input, as fractions (1 = 100 %), the result clamped.\n`adjust.channel_mixer`. A CSS colour filter (`grayscale`, `sepia`,\n`saturate`, `hue-rotate`) is one exactly (amendment 2026-11-11).\n`monochrome` (Photoshop's checkbox) makes every output the red row.",
           "type": "object",
           "properties": {
             "op": {
@@ -12426,6 +12494,9 @@
               },
               "minItems": 4,
               "maxItems": 4
+            },
+            "monochrome": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -12477,7 +12548,291 @@
             "alpha",
             "tolerance"
           ]
+        },
+        {
+          "description": "Photoshop's Vibrance: `vibrance` (−1..=1) raises the saturation of\nthe dull colours more than of the vivid ones, then `saturation`\n(−1..=1) scales every colour's. `adjust.vibrance`, `adjust.saturation`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "vibrance"
+            },
+            "vibrance": {
+              "type": "number",
+              "format": "float"
+            },
+            "saturation": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "vibrance",
+            "saturation"
+          ]
+        },
+        {
+          "description": "Photoshop's Color Balance: per tonal range the (cyan–red,\nmagenta–green, yellow–blue) shifts, −1..=1. `adjust.color_balance`,\nwhich keeps the luminosity; `preserve_luminosity` is carried for the\nformats that store it.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "colorBalance"
+            },
+            "shadows": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "midtones": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "highlights": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "preserveLuminosity": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "shadows",
+            "midtones",
+            "highlights"
+          ]
+        },
+        {
+          "description": "Photoshop's Photo Filter: a coloured gel (`color`, RGB 0..=1) at\n`density` (0..=1), the luminosity kept or not.\n`adjust.photo_filter`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "photoFilter"
+            },
+            "color": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "density": {
+              "type": "number",
+              "format": "float"
+            },
+            "preserveLuminosity": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "color",
+            "density"
+          ]
+        },
+        {
+          "description": "Photoshop's Selective Color: for each of nine ranges (reds, yellows,\ngreens, cyans, blues, magentas, whites, neutrals, blacks) the\n(cyan, magenta, yellow, black) change, −1..=1, relative to the\namount there or `absolute`. `adjust.selective_color`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "selectiveColor"
+            },
+            "ranges": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "float"
+                },
+                "minItems": 4,
+                "maxItems": 4
+              },
+              "minItems": 9,
+              "maxItems": 9
+            },
+            "absolute": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "ranges"
+          ]
+        },
+        {
+          "description": "Photoshop's Gradient Map: the luminance mapped through colour stops\n(two to 64, linear between them, flat beyond the ends), reversed\nwhen asked. `adjust.gradient_map`. A duotone is one with two stops.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "gradientMap"
+            },
+            "stops": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/GradientMapStop"
+              }
+            },
+            "reverse": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "stops"
+          ]
+        },
+        {
+          "description": "Photoshop's Color Lookup: a 3D colour table of `size`³ entries\n(`cube`: RGB triples 0..=1, red fastest, then green, then blue),\ninterpolated trilinearly; `name` is the look it came from.\n`adjust.lut3d`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "colorLookup"
+            },
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "cube": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          "required": [
+            "op",
+            "size",
+            "cube"
+          ]
+        },
+        {
+          "description": "The Camera Raw-class Develop adjustment: the [`DEVELOP_SETTINGS`]\nsettings of `paged_kernels::families::develop`, in Lightroom /\nCamera Raw units. `develop.tone`, then `develop.detail`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "develop"
+            },
+            "settings": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          "required": [
+            "op",
+            "settings"
+          ]
+        },
+        {
+          "description": "White balance as channel gains: red × (1 + `temperature`), green ×\n(1 + `tint`), blue × (1 − `temperature`), each −1..=1.\n`adjust.white_balance`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "whiteBalance"
+            },
+            "temperature": {
+              "type": "number",
+              "format": "float"
+            },
+            "tint": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "temperature",
+            "tint"
+          ]
         }
+      ]
+    },
+    "LevelsRecord": {
+      "description": "One Levels record: input black and white, the midtone gamma (1 the\nidentity), output black and white; levels 0..=1.",
+      "type": "object",
+      "properties": {
+        "inBlack": {
+          "type": "number",
+          "format": "float"
+        },
+        "inWhite": {
+          "type": "number",
+          "format": "float"
+        },
+        "gamma": {
+          "type": "number",
+          "format": "float"
+        },
+        "outBlack": {
+          "type": "number",
+          "format": "float"
+        },
+        "outWhite": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "inBlack",
+        "inWhite",
+        "gamma",
+        "outBlack",
+        "outWhite"
+      ]
+    },
+    "GradientMapStop": {
+      "description": "A colour stop of a [`RasterOp::GradientMap`]: where (0..=1) and which\ncolour (RGB 0..=1).",
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "number",
+          "format": "float"
+        },
+        "color": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "at",
+        "color"
       ]
     },
     "MediaItem": {

@@ -27,11 +27,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use image_core::Region;
-use image_js::layers::{Adjustment, LayerStack, ADJUSTMENT_KINDS};
+use image_js::layers::{AdjustmentOps as Adjustment, LayerStack, ADJUSTMENT_KINDS};
 use image_js::pixels::Pixels;
 use image_js::saveback::{psd_write_stack, PsdSaveBackShape};
 use image_psd::model::{ColorMode, Compression, LayerRecord};
 use image_psd::{Container, PsdFile};
+use paged_model::RasterOp;
 
 fn fixture(rel: &str) -> PsdFile {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -279,34 +280,27 @@ fn every_adjustment_kind_round_trips_through_a_layered_psd__feat__image_psd_muta
         if matches!(kind, "develop" | "colorLookup") {
             continue;
         }
-        let mut a = Adjustment::default_for(kind).expect("kind");
-        // Off the defaults where a default would hide a field.
-        match &mut a {
-            Adjustment::BrightnessContrast {
-                brightness,
-                contrast,
-            } => {
-                *brightness = 30.0;
-                *contrast = -20.0;
+        // Off the defaults where a default would hide a field (the
+        // Properties panel's units, Photoshop's).
+        let wire = |v: &[f32]| Adjustment::from_wire(kind, v, &[], "").expect(kind);
+        let a = match kind {
+            "brightnessContrast" => wire(&[30.0, -20.0]),
+            "vibrance" => wire(&[40.0, -15.0]),
+            "colorBalance" => wire(&[0.0, 0.0, 0.0, 10.0, -20.0, 30.0, 0.0, 0.0, 0.0]),
+            "channelMixer" => wire(&[
+                100.0, 0.0, 0.0, 0.0, 10.0, 70.0, 20.0, 5.0, 0.0, 0.0, 100.0, 0.0, 0.0,
+            ]),
+            "selectiveColor" => {
+                let mut v = vec![0.0; 37];
+                v[0] = 1.0;
+                v[1..5].copy_from_slice(&[10.0, -20.0, 30.0, 0.0]);
+                v[33..37].copy_from_slice(&[0.0, 0.0, 0.0, 20.0]);
+                wire(&v)
             }
-            Adjustment::Vibrance {
-                vibrance,
-                saturation,
-            } => {
-                *vibrance = 40.0;
-                *saturation = -15.0;
-            }
-            Adjustment::ColorBalance { midtones, .. } => *midtones = [10.0, -20.0, 30.0],
-            Adjustment::ChannelMixer { rows, .. } => rows[1] = [10.0, 70.0, 20.0, 5.0],
-            Adjustment::SelectiveColor { ranges, absolute } => {
-                ranges[0] = [10.0, -20.0, 30.0, 0.0];
-                ranges[8] = [0.0, 0.0, 0.0, 20.0];
-                *absolute = true;
-            }
-            Adjustment::Posterize { levels } => *levels = 6.0,
-            Adjustment::Threshold { level } => *level = 140.0,
-            _ => {}
-        }
+            "posterize" => wire(&[6.0]),
+            "threshold" => wire(&[140.0]),
+            _ => Adjustment::default_for(kind).expect("kind"),
+        };
         s.add_adjustment_layer("", a.clone(), None);
         kinds.push(a);
     }
@@ -343,16 +337,20 @@ fn every_adjustment_kind_round_trips_through_a_layered_psd__feat__image_psd_muta
         .unwrap_or_else(|| panic!("{} has no adjustment", rec.name()));
         assert_eq!(psd.unmodelled(), None, "{}", rec.name());
         let got = image_js::layers::psd_adjustment(&psd);
-        match (&got, want) {
+        match (got.ops.as_slice(), want.ops.as_slice()) {
             // Through Lab and back: within a level.
             (
-                Adjustment::PhotoFilter { color: a, .. },
-                Adjustment::PhotoFilter { color: b, .. },
-            ) => assert!(
-                a.iter().zip(b).all(|(x, y)| x.abs_diff(*y) <= 1),
-                "{a:?} {b:?}"
-            ),
-            (g, w) => assert_eq!(g, w),
+                [RasterOp::PhotoFilter { color: a, .. }],
+                [RasterOp::PhotoFilter { color: b, .. }],
+            ) => {
+                assert!(
+                    a.iter()
+                        .zip(b)
+                        .all(|(x, y)| (x - y).abs() <= 1.0 / 255.0 + 1e-6),
+                    "{a:?} {b:?}"
+                )
+            }
+            _ => assert_eq!(got, *want),
         }
     }
 }
