@@ -4008,6 +4008,20 @@
         },
         {
           "defaults": [],
+          "help": "A PSD's LAYERS as frames (engine ADR 1099): each pixel layer a frame with its pixels, blend mode, opacities and layer style, the canvas's top-left at the frame's; the frame goes",
+          "long": "layers",
+          "name": "layers",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "LAYERS"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Write the result here. The format follows the extension",
           "long": "out",
           "name": "out",
