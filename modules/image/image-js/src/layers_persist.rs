@@ -86,10 +86,11 @@
 //!
 //! Version 10 (one adjustment model, engine ADR 1037 amendment
 //! 2026-11-11) adds the layer kind code 6: an adjustment layer's engine ops
-//! as their JSON (`paged_model::image_adjust::adjustments_to_json`). An
-//! older manifest's adjustment layer MIGRATES when it opens: a stored chain
-//! (code 1) becomes its stages as ops, a typed layer (code 4) its op from
-//! the Photoshop units it was stored in.
+//! as their JSON (`paged_model::image_adjust::adjustments_to_json`), for a
+//! layer that is neither one typed op (code 4, its Photoshop units) nor the
+//! Adjust panel's chain (code 1, its block), which keep their codes so the
+//! object model's TypeScript codec still edits them. Every adjustment layer
+//! is ops in memory: an older manifest's MIGRATES when it opens.
 //!
 //! The history is not persisted: a reopened stack starts with none.
 
@@ -458,6 +459,25 @@ fn read_vector_mask(
     Ok(Some(Arc::new(m)))
 }
 
+/// Whether an adjustment layer is stored as its ops' JSON (code 6): it is
+/// not exactly one op of a typed kind in Photoshop's units (code 4) nor
+/// exactly the Adjust panel's chain (code 1).
+fn needs_ops_json(a: &AdjustmentOps) -> bool {
+    if a.kind_name() != "chain" {
+        let back = AdjustmentOps::from_wire(
+            a.kind_name(),
+            &a.values(),
+            a.blob().unwrap_or(&[]),
+            a.label(),
+        );
+        return back.ok().as_ref() != Some(a);
+    }
+    match a.to_chain() {
+        Some(p) => AdjustmentOps::of_chain(&p) != *a,
+        None => true,
+    }
+}
+
 impl LayerStack {
     /// The stack as a manifest plus the buffers it refers to by slot.
     pub fn export(&self) -> (Vec<u8>, Vec<Arc<[u8]>>) {
@@ -517,8 +537,10 @@ impl LayerStack {
             w.u8(l.mask_enabled as u8);
             w.u8(match &l.kind {
                 LayerKind::Pixels => 0,
-                LayerKind::Adjustment(_) if version >= 10 => 6,
+                LayerKind::Adjustment(a) if version >= 10 && needs_ops_json(a) => 6,
                 LayerKind::Adjustment(a) if version >= 4 && a.kind_name() != "chain" => 4,
+                // An older version writes what it can: the chain it evaluates
+                // as (code 1).
                 LayerKind::Adjustment(_) => 1,
                 LayerKind::Smart(_) => 2,
                 LayerKind::Fill(_) if version >= 4 => 3,
@@ -598,7 +620,7 @@ impl LayerStack {
                     );
                     w.u8(u8::from(t.stale));
                 }
-                LayerKind::Adjustment(a) if version >= 10 => {
+                LayerKind::Adjustment(a) if version >= 10 && needs_ops_json(a) => {
                     w.str(&paged_model::image_adjust::adjustments_to_json(&a.ops));
                 }
                 LayerKind::Adjustment(a) if version < 4 || a.kind_name() == "chain" => {

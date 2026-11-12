@@ -274,8 +274,9 @@ have no Photoshop adjustment layer and take the flatten path, as before.
 Adjust panel stacks is its chain's stages as ops in the chain's order (`of_chain`; its hue rotation is the channel
 mixer of its matrix, which is CSS's `hue-rotate()`; its curve tables are curves through every level, which
 reproduce them exactly). The Properties panel still speaks Photoshop's units, converted at the wasm boundary
-(`values` / `from_wire`). The layer manifest is version 10 (kind code 6: the ops' JSON); an older document migrates
-when it opens (a stored chain to its ops, a typed layer from its Photoshop units).
+(`values` / `from_wire`). The layer manifest is version 10: kind code 6 stores the ops' JSON where a layer is neither one typed op
+(code 4, Photoshop's units) nor exactly the panel's chain (code 1), which keep their codes so the object model's
+TypeScript codec (`pgil.ts`, which reads code 6 as kept JSON) still edits them; an older document migrates when it opens (a stored chain to its ops, a typed layer from its Photoshop units).
 
 **Goldens.** The image conformance suite (the Photoshop composite oracles of adjustment layers and the layered PSD
 save) passes unchanged: a typed layer's plan is the block it evaluated as before, field for field. A layer stacked

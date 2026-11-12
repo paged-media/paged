@@ -5863,8 +5863,8 @@ mod wasm {
         cube: &[f32],
         label: &str,
     ) -> Result<(), JsValue> {
-        let adj =
-            crate::layers::AdjustmentOps::from_wire(kind, values, cube, label).map_err(ingest_err)?;
+        let adj = crate::layers::AdjustmentOps::from_wire(kind, values, cube, label)
+            .map_err(ingest_err)?;
         recorded_edit("Adjustment", Some(format!("adjust:{index}")), move |st| {
             st.set_adjustment_typed(index, adj)
         })
