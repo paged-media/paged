@@ -118,8 +118,14 @@ rule in the record, each behind the registry gate and the conformance goldens. D
 `image_decode.rs` keeps `jpeg-decoder` for the DCT-scaled decode of oversized JPEGs (`paged-raster` has no
 DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-raster` could not read (HDR);
 `pdf-import`'s `encode::png` writes through the `png` crate, whose bytes differ from `paged-raster`'s encoder
-for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
-composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
+for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx`'s adjustment map is paged.image's PSD boundary for adjustment layers (engine ADR 1037, amendment
+2026-11-11 (2)); its layer-style map is still wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its
+merged composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist
+yet). Open (plan P3.6): paged.image renders layer styles with its own Photoshop-measured kernels (`image-kernels`
+style family, `image-js` `layers/styles.rs`), not the engine's effect stack. Routing them through the engine needs an
+engine raster evaluator of the effect stack the image wasm can call (today the effects are display-list commands drawn
+by `paged-gpu`'s Vello and vello_cpu lanes, which the image wasm does not carry), and the engine's InDesign-parameter
+effects are not Photoshop's: the layer-style goldens, measured against Photoshop, would move.
 `paged-composition-render` had no consumer and was deleted.
 CPU blurs (engine ADR 1013, amendment "Blur"): `paged_kernels::blur` owns the `u8` Gaussians and the box pass with an
 explicit `Edge` and `Round`; the effects lane's RGBA and mask Gaussians, the SVG filter's Gaussian and box pass, the
