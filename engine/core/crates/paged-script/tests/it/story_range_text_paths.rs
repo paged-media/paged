@@ -239,7 +239,10 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // control paths.
         // 287: ADR 1027 added a movie or sound frame's medium.
         // 288: ADR 1054 added a paragraph style's PDF export tag.
-        288,
+        // 294: ADR 1096 added a path's preset, its adjust values, its
+        // handle drag and a shape's text frame; ADR 1093 (amendment 2)
+        // Office's two line ends.
+        294,
         "the advertised roster changed; move the count with the decision"
     );
 }

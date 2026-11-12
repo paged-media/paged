@@ -77,6 +77,12 @@ const STRUCTURED: &[(&str, &str)] = &[
         "framePathPoint",
         "{ type: 'pathPoint', value: { address: { index: 0, role: 'anchor' }, position: [5, 5] } }",
     ),
+    // Engine ADR 1096 — an adjust handle dragged: the handle's index and
+    // where it goes.
+    (
+        "frameShapePresetHandle",
+        "{ type: 'pathPoint', value: { address: { index: 0, role: 'anchor' }, position: [5, 5] } }",
+    ),
     (
         "pathPointInsert",
         "{ type: 'pathPointInsert', value: { index: 1, anchor: { anchor: [1, 1], left: [1, 1], right: [1, 1] } } }",
