@@ -42,7 +42,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import type { FillLayer, StrokeLayer } from "../commands/appearance";
-import { stampDrawMetadata } from "../commands/appearance-bake";
+import { stampDrawMetadata } from "../commands/draw-metadata";
 import {
   GRAPHIC_STYLES_PART,
   GRAPHIC_STYLE_BASE_PATHS,

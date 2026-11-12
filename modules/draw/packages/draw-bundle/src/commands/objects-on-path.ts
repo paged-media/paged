@@ -165,7 +165,7 @@ import {
   storedTransformOf,
   type PageOrigin,
 } from "../page-origin";
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { blendSourceFrom } from "./blend";
 import { noteRecipeRebuilt } from "./recipe-steps";
 import { announceRecipeChange, linkIndex } from "../link-index";

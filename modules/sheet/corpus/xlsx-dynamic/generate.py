@@ -7,7 +7,7 @@
 #       unless noted, no cached values, fullCalcOnLoad. stdlib only,
 #       byte-stable.
 #
-#   PAGED_ORACLE_BUILD=<dir> sheet-conformance/oracle/excel/drive.sh dynamic-arrays spill-ref
+#   PAGED_ORACLE_BUILD=<dir> tooling/oracle/office/excel/drive.sh dynamic-arrays spill-ref
 #       (maintainer, macOS + Excel 16, with the inputs copied into <dir>)
 #       lets Excel compute and save each as <dir>/<name>.excel.xlsx.
 #

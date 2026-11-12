@@ -52,10 +52,8 @@ import {
   type StrokeLayer,
 } from "../commands/appearance";
 import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
-import {
-  appearanceBakeOf,
-  stampDrawMetadata,
-} from "../commands/appearance-bake";
+import { stampDrawMetadata } from "../commands/draw-metadata";
+import { appearanceBakeOf } from "../commands/appearance-legacy";
 import {
   applyGraphicStyleBatchFor,
   findGraphicStyle,

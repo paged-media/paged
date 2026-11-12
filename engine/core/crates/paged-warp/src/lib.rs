@@ -162,8 +162,20 @@ pub mod envelope;
 pub mod field;
 
 /// Puppet Warp: an as-rigid-as-possible triangle mesh bent by pins, and
-/// its raster backward field (WP5.6).
+/// its raster backward field (WP5.6). One solve for pixels and vectors.
 pub mod puppet;
+
+/// The Puppet Warp mesh of vector outlines: a constrained Delaunay
+/// triangulation of closed rings, point location, automatic pins.
+pub mod mesh;
+
+/// The vector Liquify: Illustrator's seven brush distortions over anchor
+/// tables (densify under the brush, then move the control points).
+pub mod liquify;
+
+/// The brush point maps (drag, turn, scale about a centre) the vector and
+/// the raster Liquify share.
+pub mod point_map;
 
 /// Text warps (engine ADR 1091): WordArt's preset shapes as the map the
 /// text's outlines move through.

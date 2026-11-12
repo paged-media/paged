@@ -192,7 +192,7 @@ colours.
   `patternTile`, `repeatInstance`, `opacityMask`, `textOnPath`, `imageTrace` and others),
   and every writer merges into the existing envelope. When the envelope must change in the
   same undo step as the paint it describes, the bundle puts a raw `setPluginMetadata`
-  operation into its own batch (`stampDrawMetadata` in `commands/appearance-bake.ts`)
+  operation into its own batch (`stampDrawMetadata` in `commands/draw-metadata.ts`)
   instead of calling `host.document.setMetadata`.
 - **Container parts.** Seven JSON files in the plugin's part namespace of the `.paged`
   container, read and written through `host.parts`: `graphic-styles.json`, `symbols.json`,

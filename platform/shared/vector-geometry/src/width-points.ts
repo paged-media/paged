@@ -62,7 +62,10 @@ export function normalizeWidthPoints(
 }
 
 /** The width factor at `t` (1 without points): smoothstep between two
- *  points, held before the first and after the last. */
+ *  points, held before the first and after the last. The preview twin of
+ *  `paged_model` `WidthProfileParams::factor_at` (with
+ *  `normalizeWidthPoints` its `normalized`), held to its numbers by
+ *  `test/vector-fx-parity.spec.ts`. */
 export function widthFactorAt(
   points: readonly WidthPoint[],
   t: number,

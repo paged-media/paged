@@ -67,6 +67,8 @@
 
 use std::f64::consts::PI;
 
+use crate::point_map::{drag, scale_about, turn_about};
+
 /// A displacement field on a grid (see the module note).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Field {
@@ -361,10 +363,12 @@ impl Liquify {
                     Some([(dx + m.0 - q.0) as f32, (dy + m.1 - q.1) as f32])
                 };
                 let new = match tool {
-                    LiquifyTool::ForwardWarp => from((q.0 - w * delta.0, q.1 - w * delta.1)),
+                    // Each pixel reads from where the brush's move came
+                    // from: the shared maps, with the amount turned back.
+                    LiquifyTool::ForwardWarp => from(drag(q, (-delta.0, -delta.1), w)),
                     LiquifyTool::PushLeft => {
                         let left = (delta.1, -delta.0);
-                        from((q.0 - w * left.0, q.1 - w * left.1))
+                        from(drag(q, (-left.0, -left.1), w))
                     }
                     LiquifyTool::TwirlClockwise | LiquifyTool::TwirlCounterClockwise => {
                         let sign = if tool == LiquifyTool::TwirlClockwise {
@@ -373,9 +377,7 @@ impl Liquify {
                             1.0
                         };
                         let th = sign * TWIRL_PER_DAB * rate * w;
-                        let (sn, cs) = th.sin_cos();
-                        let (vx, vy) = (q.0 - c.0, q.1 - c.1);
-                        from((c.0 + cs * vx - sn * vy, c.1 + sn * vx + cs * vy))
+                        from(turn_about(c, q, th))
                     }
                     LiquifyTool::Pucker | LiquifyTool::Bloat => {
                         let sign = if tool == LiquifyTool::Pucker {
@@ -384,7 +386,7 @@ impl Liquify {
                             -1.0
                         };
                         let k = 1.0 + sign * PUCKER_PER_DAB * rate * w;
-                        from((c.0 + (q.0 - c.0) * k, c.1 + (q.1 - c.1) * k))
+                        from(scale_about(c, q, k))
                     }
                     LiquifyTool::Reconstruct => {
                         let keep = (1.0 - rate * w) as f32;
@@ -503,6 +505,26 @@ mod tests {
         density: 0.5,
         rate: 1.0,
     };
+
+    /// Every tool's field, bit for bit: the point maps it shares with the
+    /// vector Liquify (`crate::point_map`) must not move a raster bit.
+    #[test]
+    fn every_tool_writes_the_pinned_bits() {
+        let mut fp: u64 = 0;
+        for tool in LiquifyTool::ALL {
+            let mut l = Liquify::new(120, 90, 61);
+            l.stroke(tool, &BRUSH, &[(40.0, 40.0), (63.5, 51.25), (80.0, 30.0)]);
+            l.stroke(
+                LiquifyTool::ForwardWarp,
+                &BRUSH,
+                &[(60.0, 45.0), (52.0, 47.0)],
+            );
+            for v in l.field.d.iter().flatten().chain(&l.freeze) {
+                fp = fp.rotate_left(7) ^ u64::from(v.to_bits());
+            }
+        }
+        assert_eq!(fp, 0xdfc4_863e_592a_22c0, "fingerprint {fp:#x}");
+    }
 
     #[test]
     fn a_new_field_is_the_identity_and_covers_every_pixel() {

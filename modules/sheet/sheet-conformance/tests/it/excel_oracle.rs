@@ -24,7 +24,7 @@
 //!
 //! Every formula golden under `corpus/fn-corpus/` was written into a workbook,
 //! recalculated by desktop Microsoft Excel and read back
-//! (`oracle/excel/{generate.py,drive.sh,read.py}` — a maintainer step on a Mac
+//! (`tooling/oracle/office/excel/{generate.py,drive.sh,read.py}` — a maintainer step on a Mac
 //! with Excel). The values Excel computed are committed as
 //! `oracle/excel/recorded/<family>.tsv`, so THIS lane needs no Excel and runs
 //! in CI: it replays each case through the same path as the hand-golden gate
@@ -303,7 +303,7 @@ fn excel_recordings_match_the_live_corpus__feat__sheet_fn_library() {
     );
     assert!(
         problems.is_empty(),
-        "{} recording problem(s) — re-run oracle/excel (generate.py, drive.sh, read.py):\n{}",
+        "{} recording problem(s) — re-run tooling/oracle/office/excel (generate.py, drive.sh, read.py):\n{}",
         problems.len(),
         problems.join("\n")
     );

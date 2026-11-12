@@ -61,7 +61,6 @@ import {
 
 import {
   applyAttachTextToPath,
-  commitAppearance,
   cornerStyleMutationFor,
   drawBundle,
   groupMutationFor,
@@ -71,7 +70,7 @@ import {
   writeGraphicStyleLibrary,
 } from "../../src";
 import { dashArrayOp } from "@paged-media/helpers";
-import { stampDrawMetadata } from "../../src/commands/appearance-bake";
+import { stampDrawMetadata } from "../../src/commands/draw-metadata";
 import { packageWithSpread } from "../fixtures/build-idml";
 import { openHost } from "../headless/host";
 import { exportIdml } from "./package";
@@ -829,31 +828,6 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       await ctx.fill(a, "Color/Black");
       ctx.surfaces.add("builder");
       await ctx.mutate(groupMutationFor([a, b, c]) as MutationInput, "group");
-    },
-  },
-  {
-    id: "appearance-bake",
-    row: "appearance bake (a group of stacked items)",
-    base: rectangleXml("urect", 100, 100, 300, 300),
-    async author(ctx) {
-      const rect = { kind: "rectangle", id: "urect" } as ElementId;
-      // A tinted + multiplied bottom fill, a Paper fill, and a
-      // half-transparent stroke — every per-layer modifier the bake
-      // lowers (C-19 / C-20).
-      await commitAppearance(
-        ctx.h.host,
-        rect,
-        {
-          fills: [
-            { color: "Color/Black", tint: 40, blendMode: "Multiply" },
-            { color: "Color/Paper" },
-          ],
-          strokes: [{ color: "Color/Black", weight: 6, opacity: 55 }],
-        },
-        await ctx.h.host.document.getMetadata(rect),
-      );
-      await ctx.select([rect]);
-      await ctx.command(D + "bakeAppearance");
     },
   },
   {

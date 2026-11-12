@@ -61,6 +61,7 @@ import {
   tableShapes,
 } from "./preview-shapes";
 import { serial } from "./serial";
+import { bootWarpKernel } from "../warp-kernel";
 
 const PICK_PX = 7;
 const PIN_PX = 4;
@@ -158,6 +159,7 @@ export function createPuppetWarpHandler(
       tolerance: host.viewport.pxToPt(PICK_PX),
       spacing: Math.max(1, Math.hypot(x1 - x0, y1 - y0) / density.divisions),
       maxVertices: density.maxVertices,
+      kernel: await bootWarpKernel(),
     });
     if (!machine.usable) {
       clear();

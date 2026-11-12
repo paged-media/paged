@@ -56,3 +56,15 @@ The same merge measures overset by calling `host.text.measureString` once per di
   engine never sees it, like `requestMeasureText`, which the worker also serves itself.
 - Multi-document editing (tabs, a handle per document) stays out of scope; it needs document
   ids on the wire.
+
+## Amendment — 2026-11-11: the documents door exports PDF
+
+`host.documents.exportPdf(options, hooks?)` (`documents.exportPdf@1`, static, gated on
+`capabilities.documents.export`) runs the engine's PDF export session: begin, one page per call,
+finish, the session cancelled on a failure or an abort, with `onProgress` and an `AbortSignal`. It
+answers the bytes, the page count, the structured findings and the flat diagnostics. The loop is
+the SDK's one `exportPdfSession` (`plugin-sdk/src/doors-pdf-export.ts`) over `editor.client.send`,
+so it needs no backend: every host the SDK builds has it, and the headless harness's
+`exportDocument("pdf")` runs the same loop. paged.publish's `exportPdf` and `preflight` commands
+call the door instead of repeating the loop. The editor's own Export PDF dialog keeps
+`CanvasClient.exportPdf`, the client's loop beneath the plugin contract. Contract `0.74.3-canary.87`.

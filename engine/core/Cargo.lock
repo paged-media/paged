@@ -4997,6 +4997,9 @@ dependencies = [
 [[package]]
 name = "paged-warp"
 version = "0.0.0"
+dependencies = [
+ "paged-geom",
+]
 
 [[package]]
 name = "paged-wire"
@@ -7297,6 +7300,7 @@ dependencies = [
  "draw-dxf",
  "draw-trace",
  "paged-svg",
+ "paged-warp",
  "serde_json",
  "uuid",
  "wasm-bindgen",

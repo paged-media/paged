@@ -360,9 +360,217 @@ impl System {
     }
 }
 
+/// How [`solve_with`] starts and how long it iterates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SolveOptions {
+    /// Start from the pins' best similarity (a rotation, and for Normal
+    /// and Distort a uniform scale, fitted to the pins by Procrustes)
+    /// instead of the harmonic start: a large turn is then right from the
+    /// first round, where the local/global rounds would need many to carry
+    /// it from the pins across the mesh. The vector tool's start.
+    pub similarity_start: bool,
+    /// Local/global rounds after the start.
+    pub iterations: usize,
+    /// Solve each global step EXACTLY by a banded Cholesky factor of the
+    /// free vertices' Laplacian (reverse Cuthill–McKee ordered, factored
+    /// once per call) instead of conjugate gradients. For the outline
+    /// meshes of the vector tool (hundreds of vertices) it is several
+    /// times faster and converges the rounds properly; the raster's large
+    /// grids keep conjugate gradients (and its results bit for bit).
+    pub direct: bool,
+}
+
+impl Default for SolveOptions {
+    /// The raster's: the harmonic start and [`ITERATIONS`] rounds.
+    fn default() -> Self {
+        Self {
+            similarity_start: false,
+            iterations: ITERATIONS,
+            direct: false,
+        }
+    }
+}
+
+/// The vector Puppet Warp's options: the similarity start, exact global
+/// steps and 32 rounds (an outline mesh has a few hundred vertices).
+pub const VECTOR_SOLVE: SolveOptions = SolveOptions {
+    similarity_start: true,
+    iterations: 32,
+    direct: true,
+};
+
+/// The free vertices' Laplacian `L_ff`, factored: a banded Cholesky in
+/// reverse Cuthill–McKee order.
+struct Banded {
+    /// Free vertex → its row (`usize::MAX` for a held vertex).
+    row: Vec<usize>,
+    /// Row → vertex.
+    order: Vec<usize>,
+    band: usize,
+    /// Lower band, row-major: `l[i * (band + 1) + (band - (i - j))]` is
+    /// `L[i][j]` for `i - band ≤ j ≤ i`.
+    l: Vec<f64>,
+}
+
+impl Banded {
+    fn new(sys: &System) -> Option<Self> {
+        let n = sys.adj.len();
+        let free: Vec<usize> = (0..n).filter(|&i| !sys.fixed[i]).collect();
+        let degree = |v: usize| sys.adj[v].iter().filter(|&&(u, _)| !sys.fixed[u]).count();
+        // Reverse Cuthill–McKee over the free vertices.
+        let mut seen = vec![false; n];
+        let mut order: Vec<usize> = Vec::with_capacity(free.len());
+        let mut starts = free.clone();
+        starts.sort_by_key(|&v| (degree(v), v));
+        for s in starts {
+            if seen[s] {
+                continue;
+            }
+            seen[s] = true;
+            let mut queue = std::collections::VecDeque::from([s]);
+            while let Some(v) = queue.pop_front() {
+                order.push(v);
+                let mut next: Vec<usize> = sys.adj[v]
+                    .iter()
+                    .map(|&(u, _)| u)
+                    .filter(|&u| !sys.fixed[u] && !seen[u])
+                    .collect();
+                next.sort_by_key(|&u| (degree(u), u));
+                next.dedup();
+                for u in next {
+                    if !seen[u] {
+                        seen[u] = true;
+                        queue.push_back(u);
+                    }
+                }
+            }
+        }
+        order.reverse();
+        let mut row = vec![usize::MAX; n];
+        for (r, &v) in order.iter().enumerate() {
+            row[v] = r;
+        }
+        let m = order.len();
+        let mut band = 0;
+        for &v in &order {
+            for &(u, _) in &sys.adj[v] {
+                if !sys.fixed[u] {
+                    band = band.max(row[v].abs_diff(row[u]));
+                }
+            }
+        }
+        let w = band + 1;
+        let mut l = vec![0.0; m * w];
+        for (r, &v) in order.iter().enumerate() {
+            l[r * w + band] = sys.diag(v);
+            for &(u, wt) in &sys.adj[v] {
+                if !sys.fixed[u] && row[u] < r {
+                    l[r * w + band - (r - row[u])] -= wt;
+                }
+            }
+        }
+        // In-place banded Cholesky.
+        for i in 0..m {
+            let lo = i.saturating_sub(band);
+            for j in lo..=i {
+                let mut sum = l[i * w + band - (i - j)];
+                let lo2 = lo.max(j.saturating_sub(band));
+                for k in lo2..j {
+                    sum -= l[i * w + band - (i - k)] * l[j * w + band - (j - k)];
+                }
+                if i == j {
+                    if sum <= 0.0 || !sum.is_finite() {
+                        return None;
+                    }
+                    l[i * w + band] = sum.sqrt();
+                } else {
+                    l[i * w + band - (i - j)] = sum / l[j * w + band];
+                }
+            }
+        }
+        Some(Self {
+            row,
+            order,
+            band,
+            l,
+        })
+    }
+
+    /// `x[free] = L_ff⁻¹ b[free]`; held entries are left alone.
+    #[allow(clippy::needless_range_loop)] // the band's index arithmetic
+    fn solve(&self, b: &[f64], x: &mut [f64]) {
+        let (m, w, band) = (self.order.len(), self.band + 1, self.band);
+        let mut y: Vec<f64> = self.order.iter().map(|&v| b[v]).collect();
+        for i in 0..m {
+            let mut s = y[i];
+            for k in i.saturating_sub(band)..i {
+                s -= self.l[i * w + band - (i - k)] * y[k];
+            }
+            y[i] = s / self.l[i * w + band];
+        }
+        for i in (0..m).rev() {
+            let mut s = y[i];
+            for k in i + 1..m.min(i + band + 1) {
+                s -= self.l[k * w + band - (k - i)] * y[k];
+            }
+            y[i] = s / self.l[i * w + band];
+        }
+        for (r, &v) in self.order.iter().enumerate() {
+            debug_assert_eq!(self.row[v], r);
+            x[v] = y[r];
+        }
+    }
+}
+
+/// The similarity's linear part best taking the pins' `at` onto their
+/// `to` (identity for fewer than two distinct pins).
+fn pin_similarity(pins: &[Pin], mode: PuppetMode) -> M2 {
+    let n = pins.len() as f64;
+    let identity = [[1.0, 0.0], [0.0, 1.0]];
+    if pins.len() < 2 {
+        return identity;
+    }
+    let ca = pins
+        .iter()
+        .fold([0.0, 0.0], |c, p| [c[0] + p.at[0] / n, c[1] + p.at[1] / n]);
+    let ct = pins
+        .iter()
+        .fold([0.0, 0.0], |c, p| [c[0] + p.to[0] / n, c[1] + p.to[1] / n]);
+    let (mut a, mut b, mut spread) = (0.0, 0.0, 0.0);
+    for p in pins {
+        let e = [p.at[0] - ca[0], p.at[1] - ca[1]];
+        let f = [p.to[0] - ct[0], p.to[1] - ct[1]];
+        a += f[0] * e[0] + f[1] * e[1];
+        b += f[1] * e[0] - f[0] * e[1];
+        spread += e[0] * e[0] + e[1] * e[1];
+    }
+    if spread < 1e-12 {
+        return identity;
+    }
+    let th = b.atan2(a);
+    let k = if mode == PuppetMode::Rigid {
+        1.0
+    } else {
+        a.hypot(b) / spread
+    };
+    let (sn, cs) = th.sin_cos();
+    [[k * cs, -k * sn], [k * sn, k * cs]]
+}
+
 /// Bend `mesh` so each pin's vertex lands on its `to`. Returns the bent
-/// vertex positions (the rest positions where nothing pulls).
+/// vertex positions (the rest positions where nothing pulls). The
+/// raster's solve: [`SolveOptions::default`].
 pub fn solve(mesh: &PuppetMesh, pins: &[Pin], mode: PuppetMode) -> Vec<[f64; 2]> {
+    solve_with(mesh, pins, mode, SolveOptions::default())
+}
+
+/// [`solve`] with a chosen start and number of rounds.
+pub fn solve_with(
+    mesh: &PuppetMesh,
+    pins: &[Pin],
+    mode: PuppetMode,
+    options: SolveOptions,
+) -> Vec<[f64; 2]> {
     let n = mesh.vertices.len();
     let rest = &mesh.vertices;
     let mut out = rest.clone();
@@ -414,11 +622,20 @@ pub fn solve(mesh: &PuppetMesh, pins: &[Pin], mode: PuppetMode) -> Vec<[f64; 2]>
         }
     }
     let sys = System { adj, fixed };
-    let identity: M2 = [[1.0, 0.0], [0.0, 1.0]];
-    let mut maps = vec![identity; n];
+    let banded = if options.direct {
+        Banded::new(&sys)
+    } else {
+        None
+    };
+    let first: M2 = if options.similarity_start {
+        pin_similarity(pins, mode)
+    } else {
+        [[1.0, 0.0], [0.0, 1.0]]
+    };
+    let mut maps = vec![first; n];
     let mut xs: Vec<f64> = out.iter().map(|p| p[0]).collect();
     let mut ys: Vec<f64> = out.iter().map(|p| p[1]).collect();
-    for round in 0..=ITERATIONS {
+    for round in 0..=options.iterations {
         if round > 0 {
             // LOCAL: each vertex's best map for the current positions.
             for i in 0..n {
@@ -460,11 +677,68 @@ pub fn solve(mesh: &PuppetMesh, pins: &[Pin], mode: PuppetMode) -> Vec<[f64; 2]>
                 }
             }
         }
-        sys.solve(&bx, &mut xs);
-        sys.solve(&by, &mut ys);
+        if let Some(f) = &banded {
+            f.solve(&bx, &mut xs);
+            f.solve(&by, &mut ys);
+        } else {
+            sys.solve(&bx, &mut xs);
+            sys.solve(&by, &mut ys);
+        }
     }
     for i in 0..n {
         out[i] = [xs[i], ys[i]];
+    }
+    out
+}
+
+/// A pin on a mesh vertex, as the vector Puppet Warp places them: where
+/// the vertex goes, and an optional turn (radians) about the pin.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VertexPin {
+    pub vertex: u32,
+    pub to: [f64; 2],
+    pub angle: Option<f64>,
+}
+
+/// The [`solve`] pins of `pins`: each holds its vertex (the first pin on a
+/// vertex wins); a TURNED pin also holds its anchor neighbour
+/// ([`crate::mesh::anchor_neighbour`], the longest lever) at the pin's
+/// target plus the rest offset turned by its angle — Illustrator's
+/// "rotate around a pin". Pins off the mesh are dropped.
+pub fn vertex_pins(mesh: &PuppetMesh, pins: &[VertexPin]) -> Vec<Pin> {
+    let n = mesh.vertices.len() as u32;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for p in pins {
+        if p.vertex < n && seen.insert(p.vertex) {
+            out.push(Pin {
+                at: mesh.vertices[p.vertex as usize],
+                to: p.to,
+            });
+        }
+    }
+    let nb = crate::mesh::neighbours(mesh);
+    for p in pins {
+        let Some(angle) = p.angle else { continue };
+        if p.vertex >= n {
+            continue;
+        }
+        let Some(q) = crate::mesh::anchor_neighbour(mesh, &nb, p.vertex) else {
+            continue;
+        };
+        if !seen.insert(q) {
+            continue;
+        }
+        let (r, rq) = (mesh.vertices[p.vertex as usize], mesh.vertices[q as usize]);
+        let off = [rq[0] - r[0], rq[1] - r[1]];
+        let (si, co) = angle.sin_cos();
+        out.push(Pin {
+            at: rq,
+            to: [
+                p.to[0] + co * off[0] - si * off[1],
+                p.to[1] + si * off[0] + co * off[1],
+            ],
+        });
     }
     out
 }
@@ -654,6 +928,127 @@ mod tests {
         let (dx, dy) = f.displacement(20.0, 20.0).unwrap();
         assert!((dx + 5.0).abs() < 1e-4 && dy.abs() < 1e-4, "{dx}, {dy}");
         assert!(f.displacement(2.0, 20.0).is_none());
+    }
+
+    /// The vector Puppet Warp: the same solve over a mesh of outlines.
+    mod vector {
+        use super::super::*;
+        use crate::mesh::{locate, map_located, triangulate_rings, MAX_VERTICES};
+
+        fn bar() -> PuppetMesh {
+            let r = vec![[0.0, 0.0], [200.0, 0.0], [200.0, 30.0], [0.0, 30.0]];
+            triangulate_rings(&[r], 10.0, MAX_VERTICES).mesh
+        }
+
+        fn d(a: [f64; 2], b: [f64; 2]) -> f64 {
+            (a[0] - b[0]).hypot(a[1] - b[1])
+        }
+
+        fn pin(m: &PuppetMesh, at: [f64; 2], to: [f64; 2], angle: Option<f64>) -> VertexPin {
+            VertexPin {
+                vertex: m.nearest(at).unwrap() as u32,
+                to,
+                angle,
+            }
+        }
+
+        #[test]
+        fn moving_every_pin_by_one_offset_translates_the_mesh() {
+            let m = bar();
+            let pins: Vec<VertexPin> = [[0.0, 0.0], [200.0, 30.0], [100.0, 15.0]]
+                .iter()
+                .map(|&p| {
+                    let v = m.vertices[m.nearest(p).unwrap()];
+                    pin(&m, p, [v[0] + 12.0, v[1] - 7.0], None)
+                })
+                .collect();
+            let bent = solve_with(&m, &vertex_pins(&m, &pins), PuppetMode::Rigid, VECTOR_SOLVE);
+            for (a, b) in bent.iter().zip(&m.vertices) {
+                assert!(d(*a, [b[0] + 12.0, b[1] - 7.0]) < 1e-6);
+            }
+        }
+
+        #[test]
+        fn rotating_the_pins_rotates_the_mesh_rigidly() {
+            let m = bar();
+            let (s, c) = 0.5f64.sin_cos();
+            let rot = |p: [f64; 2]| [c * p[0] - s * p[1], s * p[0] + c * p[1]];
+            let pins: Vec<VertexPin> = [[0.0, 0.0], [200.0, 30.0]]
+                .iter()
+                .map(|&p| pin(&m, p, rot(m.vertices[m.nearest(p).unwrap()]), None))
+                .collect();
+            let bent = solve_with(&m, &vertex_pins(&m, &pins), PuppetMode::Rigid, VECTOR_SOLVE);
+            for (a, b) in bent.iter().zip(&m.vertices) {
+                assert!(d(*a, rot(*b)) < 0.05, "{a:?} vs {:?}", rot(*b));
+            }
+        }
+
+        #[test]
+        fn a_turned_pin_turns_the_artwork_about_it() {
+            let m = bar();
+            let c = m.vertices[m.nearest([100.0, 15.0]).unwrap()];
+            let p = pin(&m, c, c, Some(std::f64::consts::FRAC_PI_2));
+            let held = vertex_pins(&m, &[p]);
+            assert_eq!(held.len(), 2, "the pin and its lever");
+            let bent = solve_with(&m, &held, PuppetMode::Rigid, VECTOR_SOLVE);
+            // The far end turned a quarter about the pin (y down: +90°
+            // takes +x to +y).
+            let k = m.nearest([200.0, 15.0]).unwrap();
+            let r = m.vertices[k];
+            let want = [c[0] - (r[1] - c[1]), c[1] + (r[0] - c[0])];
+            assert!(d(bent[k], want) < 1.0, "{:?} vs {want:?}", bent[k]);
+            // Without the angle one pin only translates.
+            let moved = pin(&m, c, [c[0] + 5.0, c[1]], None);
+            let bent = solve_with(
+                &m,
+                &vertex_pins(&m, &[moved]),
+                PuppetMode::Rigid,
+                VECTOR_SOLVE,
+            );
+            assert!(d(bent[k], [r[0] + 5.0, r[1]]) < 1e-3);
+        }
+
+        #[test]
+        fn a_bent_bar_stays_close_to_rigid_and_the_pins_hit() {
+            let m = bar();
+            let pins = [
+                pin(
+                    &m,
+                    [0.0, 15.0],
+                    m.vertices[m.nearest([0.0, 15.0]).unwrap()],
+                    None,
+                ),
+                pin(&m, [200.0, 15.0], [150.0, 110.0], None),
+            ];
+            let bent = solve_with(&m, &vertex_pins(&m, &pins), PuppetMode::Rigid, VECTOR_SOLVE);
+            assert!(d(bent[pins[1].vertex as usize], [150.0, 110.0]) < 1e-9);
+            let mut stretch = 0.0;
+            let mut n = 0.0;
+            for t in &m.triangles {
+                for e in 0..3 {
+                    let (i, j) = (t[e] as usize, t[(e + 1) % 3] as usize);
+                    stretch += (d(bent[i], bent[j]) / d(m.vertices[i], m.vertices[j]) - 1.0).abs();
+                    n += 1.0;
+                }
+            }
+            assert!(stretch / n < 0.1, "mean stretch {}", stretch / n);
+        }
+
+        #[test]
+        fn a_part_without_a_pin_stays_and_points_follow_the_mesh() {
+            let a = vec![[0.0, 0.0], [50.0, 0.0], [50.0, 50.0], [0.0, 50.0]];
+            let b = vec![[100.0, 0.0], [150.0, 0.0], [150.0, 50.0], [100.0, 50.0]];
+            let m = triangulate_rings(&[a, b], 10.0, MAX_VERTICES).mesh;
+            let v = m.vertices[m.nearest([25.0, 25.0]).unwrap()];
+            let p = pin(&m, v, [v[0] + 10.0, v[1]], None);
+            let bent = solve_with(&m, &vertex_pins(&m, &[p]), PuppetMode::Rigid, VECTOR_SOLVE);
+            for (q, r) in bent.iter().zip(&m.vertices) {
+                let want = if r[0] < 75.0 { [r[0] + 10.0, r[1]] } else { *r };
+                assert!(d(*q, want) < 1e-3);
+            }
+            let loc = locate(&m.vertices, &m.triangles, [10.0, 40.0]).unwrap();
+            assert!(d(map_located(&m.triangles, &bent, loc), [20.0, 40.0]) < 1e-3);
+        }
     }
 
     #[test]

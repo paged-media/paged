@@ -27,7 +27,7 @@
 //!
 //! `corpus/calc-model/cases.tsv` describes small workbooks (cells, legacy
 //! formulas, extra sheets, defined names, probed cells);
-//! `oracle/excel/calcmodel.py` wrote them into one workbook, desktop Excel
+//! `tooling/oracle/office/excel/calcmodel.py` wrote them into one workbook, desktop Excel
 //! recalculated it, and the probed cells are committed as
 //! `oracle/excel/recorded/calcmodel.tsv`. This lane rebuilds each case the way
 //! the xlsx loader would (a formula Excel stores as a dynamic array is marked
