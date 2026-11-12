@@ -268,6 +268,7 @@ fn probe_nodes() -> Vec<(Document, NodeId)> {
             story_id: s.self_id.clone(),
             start: 0,
             end: 3,
+            cell: None,
         }));
         for story in &doc.stories {
             if let Some(table_id) = story

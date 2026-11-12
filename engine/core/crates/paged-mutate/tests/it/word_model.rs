@@ -102,6 +102,7 @@ fn range(start: u32, end: u32) -> NodeId {
         story_id: "u10".into(),
         start,
         end,
+        cell: None,
     }
 }
 

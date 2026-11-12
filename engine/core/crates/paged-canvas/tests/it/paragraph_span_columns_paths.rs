@@ -66,6 +66,7 @@ fn paragraph_element(m: &CanvasModel, story: &str, idx: usize) -> ElementId {
         story_id: story.to_string(),
         start,
         end: start + len(&s.story.paragraphs[idx]),
+        cell: None,
     }
 }
 

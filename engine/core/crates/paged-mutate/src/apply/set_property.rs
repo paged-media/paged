@@ -2990,6 +2990,7 @@ pub(super) fn apply_set_property(
                 story_id,
                 start,
                 end,
+                cell,
             },
             PropertyPath::CharacterFontSize
             | PropertyPath::CharacterLeading
@@ -3056,7 +3057,16 @@ pub(super) fn apply_set_property(
                     });
                 }
             }
-            return apply_character_property(doc, story_id, *start, *end, node, path, value);
+            return apply_character_property_in(
+                doc,
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                node,
+                path,
+                value,
+            );
         }
         // SDK Phase 5 (D3 completion) — applied object style on any
         // leaf page-item kind. The cascade resolves on next rebuild;
@@ -3135,6 +3145,7 @@ pub(super) fn apply_set_property(
                 story_id,
                 start,
                 end,
+                cell,
             },
             PropertyPath::ParagraphSpaceBefore
             | PropertyPath::ParagraphSpaceAfter
@@ -3196,7 +3207,16 @@ pub(super) fn apply_set_property(
                     });
                 }
             }
-            return apply_paragraph_property(doc, story_id, *start, *end, node, path, value);
+            return apply_paragraph_property_in(
+                doc,
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                node,
+                path,
+                value,
+            );
         }
 
         // ============ W0.3 — text-frame prefs (TextFrame only) ========

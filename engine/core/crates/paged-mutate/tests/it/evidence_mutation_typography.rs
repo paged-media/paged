@@ -83,6 +83,7 @@ where
                 story_id: story_id.clone(),
                 start: 0,
                 end: 10,
+                cell: None,
             },
             path,
             value,

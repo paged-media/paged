@@ -979,10 +979,16 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
             story_id,
             start,
             end,
+            cell,
         } => NodeId::StoryRange {
             story_id: story_id.clone(),
             start: *start,
             end: *end,
+            cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                table_id: c.table_id.clone(),
+                row: c.row,
+                col: c.col,
+            }),
         },
         ElementId::Table { story_id, table_id } => NodeId::Table {
             story_id: story_id.clone(),
@@ -8543,9 +8549,10 @@ impl CanvasModel {
             story_id,
             start,
             end,
+            cell,
         } = id
         {
-            return self.story_range_properties(story_id, *start, *end, id, true);
+            return self.story_range_properties(story_id, cell.as_ref(), *start, *end, id, true);
         }
         self.element_properties(id)
     }
@@ -8565,9 +8572,10 @@ impl CanvasModel {
             story_id,
             start,
             end,
+            cell,
         } = id
         {
-            return self.story_range_properties(story_id, *start, *end, id, false);
+            return self.story_range_properties(story_id, cell.as_ref(), *start, *end, id, false);
         }
         // W3.A1 — tables / cells likewise live in stories, not spreads.
         if let ElementId::Table { story_id, table_id } = id {
@@ -10269,6 +10277,7 @@ impl CanvasModel {
     fn story_range_properties(
         &self,
         story_id: &str,
+        cell: Option<&paged_wire::TextCellAddr>,
         start: u32,
         end: u32,
         id: &crate::element_selection::ElementId,
@@ -10283,6 +10292,13 @@ impl CanvasModel {
             .iter()
             .position(|s| s.self_id == story_id)?;
         let story = &self.scene.stories[story_idx].story;
+        // Engine ADR 1098 — a cell's own text reads its own paragraphs.
+        let paragraphs: &[paged_model::Paragraph] = match cell {
+            None => &story.paragraphs,
+            Some(c) => {
+                paged_model::cell_paragraphs_in(&story.paragraphs, &c.table_id, c.col, c.row)?
+            }
+        };
 
         // Collect per-run + per-paragraph values for each path the
         // apply layer covers today. Character paths walk per-run;
@@ -10370,8 +10386,7 @@ impl CanvasModel {
         // shows the insertion point's attributes.
         let caret_paras: Option<Vec<usize>> = (start == end).then(|| {
             let mut at = 0u32;
-            let spans: Vec<(u32, u32)> = story
-                .paragraphs
+            let spans: Vec<(u32, u32)> = paragraphs
                 .iter()
                 .map(|p| {
                     let n: u32 = p.runs.iter().map(|r| r.text.chars().count() as u32).sum();
@@ -10380,7 +10395,7 @@ impl CanvasModel {
                     span
                 })
                 .collect();
-            paged_mutate::apply::caret_paragraphs(&story.paragraphs, &spans, start)
+            paged_mutate::apply::caret_paragraphs(paragraphs, &spans, start)
         });
         let (char_start, char_end) = match (&caret_paras, start) {
             (Some(_), 0) => (0, 1),
@@ -10389,7 +10404,7 @@ impl CanvasModel {
         };
 
         let mut char_offset: u32 = 0;
-        for (para_idx, para) in story.paragraphs.iter().enumerate() {
+        for (para_idx, para) in paragraphs.iter().enumerate() {
             let para_chars: u32 = para
                 .runs
                 .iter()
