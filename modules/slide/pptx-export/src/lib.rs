@@ -43,6 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use paged_ooxml::opc::OpcPackage;
 use paged_ooxml::rels::{part_dir, rels_part_name, resolve_target, Relationship, Relationships};
 use paged_ooxml::xml::{escape_attr as escape, unescape};
+use pptx_core::loss::{LossEntry, LossLog};
 use serde::Deserialize;
 
 pub mod comments;
@@ -151,11 +152,12 @@ pub struct ChartPlan {
 pub struct Exported {
     pub bytes: Vec<u8>,
     /// What the package could not carry (notes without a notes master, a
-    /// page from another deck, …).
-    pub diagnostics: Vec<String>,
-    /// What is on the slides that could not round-trip, one line each
-    /// (`slide 3: Title 1: …`).
-    pub not_exported: Vec<String>,
+    /// page from another deck, …), as the engine's loss entries (engine ADR
+    /// 1097; codes `pptx.export.*`).
+    pub diagnostics: Vec<LossEntry>,
+    /// What is on the slides that could not round-trip, one entry each
+    /// (message `slide 3: Title 1: …`).
+    pub not_exported: Vec<LossEntry>,
     /// Pictures written without the PNG they need (an SVG's fallback, a
     /// format PowerPoint does not open): element id and resolution in dpi.
     /// Render them and export again with [`ExportPlan::rasters`].
@@ -574,17 +576,20 @@ pub fn export_with(
 ) -> Result<Exported, String> {
     let pkg = OpcPackage::read(original).map_err(|e| e.to_string())?;
     let orig = read_original(&pkg, original)?;
-    let mut diagnostics = Vec::new();
-    let mut not_exported = Vec::new();
+    let mut diagnostics: Vec<LossEntry> = Vec::new();
+    let mut not_exported: Vec<LossEntry> = Vec::new();
 
     // The document's model, and what import made of the deck.
     let model = match document {
         Some(d) => match native::read(d) {
             Ok(doc) => Some(doc),
             Err(e) => {
-                diagnostics.push(format!(
-                    "the document could not be read ({e}); slides are written as the deck had them"
-                ));
+                diagnostics.dropped(
+                    "pptx.export.document",
+                    &format!(
+                        "the document could not be read ({e}); slides are written as the deck had them"
+                    ),
+                );
                 None
             }
         },
@@ -613,25 +618,34 @@ pub fn export_with(
         if known.contains(s.source_part.as_str()) || editor_made {
             slides.push(s);
         } else if s.source_part.is_empty() {
-            diagnostics.push(format!(
-                "page {}: a slide made in the editor; not exported (the export needs the document)",
-                i + 1
-            ));
+            diagnostics.dropped(
+                "pptx.export.editorSlide",
+                &format!(
+                    "page {}: a slide made in the editor; not exported (the export needs the document)",
+                    i + 1
+                ),
+            );
         } else {
-            diagnostics.push(format!(
-                "page {}: its slide ({}) is not in this deck; not exported",
-                i + 1,
-                s.source_part
-            ));
+            diagnostics.dropped(
+                "pptx.export.foreignSlide",
+                &format!(
+                    "page {}: its slide ({}) is not in this deck; not exported",
+                    i + 1,
+                    s.source_part
+                ),
+            );
         }
     }
     if model.is_none() {
         for (i, s) in slides.iter().enumerate() {
             if s.content_edited {
-                not_exported.push(format!(
-                    "slide {}: edits to what is on the slide are not exported; it is written as the deck had it",
-                    i + 1
-                ));
+                not_exported.dropped(
+                    "pptx.export.contentEdits",
+                    &format!(
+                        "slide {}: edits to what is on the slide are not exported; it is written as the deck had it",
+                        i + 1
+                    ),
+                );
             }
         }
     }
@@ -912,24 +926,30 @@ pub fn export_with(
                                         }
                                         out_parts.insert(p, b);
                                     }
-                                    not_exported.extend(out.lost);
+                                    not_exported.extend_losses(out.lost);
                                     srels = r.rels;
                                     srels_changed = true;
                                 }
                                 Err(e) => {
-                                    diagnostics.push(format!(
-                                        "slide {}: a slide made in the editor could not be written ({e}); not exported",
-                                        n + 1
-                                    ));
+                                    diagnostics.dropped(
+                                        "pptx.export.editorSlide",
+                                        &format!(
+                                            "slide {}: a slide made in the editor could not be written ({e}); not exported",
+                                            n + 1
+                                        ),
+                                    );
                                     continue;
                                 }
                             }
                         }
                         Err(e) => {
-                            diagnostics.push(format!(
-                                "slide {}: a slide made in the editor: {e}; not exported",
-                                n + 1
-                            ));
+                            diagnostics.dropped(
+                                "pptx.export.editorSlide",
+                                &format!(
+                                    "slide {}: a slide made in the editor: {e}; not exported",
+                                    n + 1
+                                ),
+                            );
                             continue;
                         }
                     }
@@ -979,17 +999,17 @@ pub fn export_with(
                                     }
                                     out_parts.insert(p, b);
                                 }
-                                not_exported.extend(out.lost);
+                                not_exported.extend_losses(out.lost);
                                 if r.changed {
                                     srels = r.rels;
                                     srels_changed = true;
                                 }
                             }
                             Ok(None) => {}
-                            Err(e) => not_exported.push(format!(
-                                "slide {}: {e}; it is written as the deck had it",
-                                n + 1
-                            )),
+                            Err(e) => not_exported.dropped(
+                                "pptx.export.slide",
+                                &format!("slide {}: {e}; it is written as the deck had it", n + 1),
+                            ),
                         }
                     }
                 }
@@ -1017,9 +1037,12 @@ pub fn export_with(
                 if want != had {
                     match set_notes_body(&notes_xml, want.as_deref().unwrap_or("")) {
                         Some(x) => notes_xml = x,
-                        None => diagnostics.push(format!(
-                            "{part}: its notes slide has no body placeholder; the notes are not written"
-                        )),
+                        None => diagnostics.dropped(
+                            "pptx.export.notes",
+                            &format!(
+                                "{part}: its notes slide has no body placeholder; the notes are not written"
+                            ),
+                        ),
                     }
                 }
                 let notes_part = if t.first {
@@ -1084,9 +1107,12 @@ pub fn export_with(
                     out_parts.insert(rels_part_name(&p), write_rels(&nrels));
                     out_parts.insert(p, new_notes_xml(want.as_deref().unwrap_or("")).into_bytes());
                 }
-                None => diagnostics.push(format!(
-                    "{part}: the deck has no notes master, so its new notes are not written"
-                )),
+                None => diagnostics.dropped(
+                    "pptx.export.notes",
+                    &format!(
+                        "{part}: the deck has no notes master, so its new notes are not written"
+                    ),
+                ),
             },
             _ => {}
         }
@@ -1189,10 +1215,13 @@ pub fn export_with(
             let names = timing::Names::new(&page_shapes, written_ids, &slide_xml);
             let (resolved, dropped) = timing::resolve(want, &names);
             for d in &dropped {
-                not_exported.push(format!(
-                    "slide {}: {d} of a shape that is no longer on the slide was dropped",
-                    n + 1
-                ));
+                not_exported.dropped(
+                    "pptx.export.timing",
+                    &format!(
+                        "slide {}: {d} of a shape that is no longer on the slide was dropped",
+                        n + 1
+                    ),
+                );
             }
             let changed = match &s.timing {
                 Some(_) => resolved != deck_timing,
@@ -1207,7 +1236,10 @@ pub fn export_with(
         if !media_timing.is_empty() {
             let mut lost = Vec::new();
             slide_xml = media::apply_timing(&slide_xml, &media_timing, &mut lost);
-            not_exported.extend(lost.into_iter().map(|l| format!("slide {}: {l}", n + 1)));
+            not_exported.extend_losses(lost.into_iter().map(|l| LossEntry {
+                message: format!("slide {}: {}", n + 1, l.message),
+                ..l
+            }));
         }
         out_parts.insert(part.clone(), slide_xml.into_bytes());
         written.push((part, t.id, t.rid.clone(), src.to_string()));
@@ -1260,8 +1292,8 @@ pub fn export_with(
         }
         added_types.extend(m.added);
         out_parts.extend(m.parts);
-        not_exported.extend(m.lost);
-        diagnostics.extend(m.diagnostics);
+        not_exported.extend_losses(m.lost);
+        diagnostics.extend_losses(m.diagnostics);
     }
 
     // Comment parts no written slide names any more go, with their
@@ -1352,10 +1384,10 @@ pub fn export_with(
         r.items.retain(|x| !dead.contains(&x.id));
         out_parts.insert(rp, write_rels(&r));
         out_parts.insert(part.clone(), sx.into_bytes());
-        not_exported.push(format!(
-            "{part}: {} link(s) to a deleted slide removed",
-            dead.len()
-        ));
+        not_exported.approximated(
+            "pptx.export.deadLinks",
+            &format!("{part}: {} link(s) to a deleted slide removed", dead.len()),
+        );
     }
 
     // presentation.xml: the slide list in document order, sections kept
@@ -1436,16 +1468,22 @@ pub fn export_with(
     // becomes the chart's embedded one.
     for c in &plan.charts {
         if pkg.part(&c.part).is_none() {
-            diagnostics.push(format!("chart {}: not in this deck; not exported", c.part));
+            diagnostics.dropped(
+                "pptx.export.chart",
+                &format!("chart {}: not in this deck; not exported", c.part),
+            );
             continue;
         }
         match write_chart(&pkg, c, &mut out_parts) {
             Ok(Some(new_part)) => media_parts.push(new_part),
             Ok(None) => {}
-            Err(e) => not_exported.push(format!(
-                "chart {}: its data is written as the deck had it ({e})",
-                c.part
-            )),
+            Err(e) => not_exported.dropped(
+                "pptx.export.chartData",
+                &format!(
+                    "chart {}: its data is written as the deck had it ({e})",
+                    c.part
+                ),
+            ),
         }
     }
 

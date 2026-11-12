@@ -198,7 +198,7 @@ fn shadings_become_gradients_or_sampled_images() {
         .report
         .unsupported
         .iter()
-        .any(|u| u == "shading type 4"));
+        .any(|u| u.message == "shading type 4"));
 }
 
 #[test]

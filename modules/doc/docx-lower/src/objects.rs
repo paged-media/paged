@@ -1357,7 +1357,7 @@ impl crate::Lowering {
 
     /// The diagnostics of wave W4a.
     pub(crate) fn w4_diagnostics(&mut self) {
-        use crate::ir::Diagnostic;
+        use crate::ir::diag;
         let w = &self.w4;
         let mut out = Vec::new();
         let pictures = w
@@ -1367,7 +1367,7 @@ impl crate::Lowering {
             .count();
         let boxes = w.plan.len() - pictures;
         if pictures + boxes > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{pictures} floating picture(s) and {boxes} text box(es) placed as page \
                      items at Word's position, with Word's text wrap (anchored in a section's \
@@ -1389,10 +1389,10 @@ impl crate::Lowering {
                     w.custom_wrapping
                 ));
             }
-            out.push(Diagnostic::info(msg, 2));
+            out.push(diag::info(msg, 2));
         }
         if w.anchored_boxes > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} text box(es) placed as anchored text frames that follow their \
                      paragraph; edits to their text are not saved back yet (the boxes \
@@ -1403,7 +1403,7 @@ impl crate::Lowering {
             ));
         }
         if w.anchored_shapes > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} shape(s) without text placed as anchored frames drawn along their \
                      outline; they follow their paragraph and round-trip unchanged",
@@ -1413,13 +1413,13 @@ impl crate::Lowering {
             ));
         }
         for reason in &w.undrawn_shapes {
-            out.push(Diagnostic::warning(
+            out.push(diag::dropped(
                 format!("shape(s) with {reason} are NOT shown; they are kept in the .docx"),
                 2,
             ));
         }
         if w.unplaced_shapes > 0 {
-            out.push(Diagnostic::warning(
+            out.push(diag::dropped(
                 format!(
                     "{} shape(s) in table cells are NOT shown; they are kept in the .docx \
                      and round-trip on save",
@@ -1429,7 +1429,7 @@ impl crate::Lowering {
             ));
         }
         if w.shape_line_ends > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} shape(s) have line ends (arrow heads) of a kind that is not drawn",
                     w.shape_line_ends
@@ -1438,7 +1438,7 @@ impl crate::Lowering {
             ));
         }
         if w.charts > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} chart(s) drawn from their cached values as anchored groups; the chart \
                      parts round-trip unchanged",
@@ -1448,7 +1448,7 @@ impl crate::Lowering {
             ));
         }
         if w.diagrams > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} SmartArt diagram(s) drawn from the layout Word saved as anchored groups; \
                      the diagram parts round-trip unchanged",
@@ -1458,7 +1458,7 @@ impl crate::Lowering {
             ));
         }
         if w.unplaced_boxes > 0 {
-            out.push(Diagnostic::warning(
+            out.push(diag::dropped(
                 format!(
                     "{} text box(es) in table cells are NOT shown; they are kept in the \
                      .docx and round-trip on save",
@@ -1468,7 +1468,7 @@ impl crate::Lowering {
             ));
         }
         if w.nested_tables > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} table(s) nested in a table cell made as native tables in their cells; \
                      edits to them are not saved back yet (they round-trip unchanged)",
@@ -1478,7 +1478,7 @@ impl crate::Lowering {
             ));
         }
         if w.conditional_styles > 0 {
-            out.push(Diagnostic::info(
+            out.push(diag::info(
                 format!(
                     "{} table(s) use a table style with conditional formatting (header row, \
                      banding, first column): only the style's whole-table borders and \

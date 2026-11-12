@@ -154,7 +154,7 @@ pub(crate) fn prepare(bytes: &[u8], options: &PipelineOptions<'_>) -> Option<Eps
         );
     }
     for what in &art.report.unsupported {
-        tracing::info!(what, "EPS feature skipped");
+        tracing::info!(code = %what.code, what = %what.message, "EPS feature skipped");
     }
     let [x0, y0, x1, y1] = art.bbox;
     let cmyk = options

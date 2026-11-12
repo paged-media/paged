@@ -417,6 +417,7 @@ impl Losses {
             .map(|(code, (count, pages, message))| Loss {
                 code,
                 count,
+                severity: paged_model::report::LossSeverity::Dropped,
                 pages: pages.into_iter().collect(),
                 message,
             })

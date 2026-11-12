@@ -383,7 +383,6 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.bucket",
       "media.paged.image.tool.gradient",
       "media.paged.image.tool.redEye",
-      "media.paged.image.tool.eyedropper",
       "media.paged.image.tool.colorSampler",
       "media.paged.image.tool.transform",
       // The Perspective Crop shares the crop slot (WP5.6).

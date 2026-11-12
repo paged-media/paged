@@ -5,8 +5,19 @@
 // maps IR nodes to `host.document.mutate(...)` ops. No engine logic lives here;
 // the semantics were decided in `docx-lower` (Rust).
 
-import type { Mutation, RasterOp } from "@paged-media/plugin-api";
+import type {
+  Mutation,
+  PropertyPath,
+  RasterOp,
+  Value,
+} from "@paged-media/plugin-api";
 import {
+  nativeCellPropertyOp,
+  nativeCellSpanOp,
+  nativeCellTextOp,
+  nativeRowHeightOp,
+  nativeTableInsertOp,
+  type NativeTableSpec,
   nativeFxColors,
   nativeFxOps,
   nativeGradientId,
@@ -34,6 +45,14 @@ import type {
   LoweredTable,
 } from "./lowered.js";
 import { ENDNOTE_MARKER, FOOTNOTE_MARKER } from "./lowered.js";
+import {
+  catalogue,
+  cellRangePropertyOp,
+  isSynthesized,
+  paragraphPlan,
+  synthesizedStylesInUse,
+  type StyleCatalogue,
+} from "./direct-format.js";
 
 /**
  * Count a string's length in Unicode scalar values (code points), matching the
@@ -86,7 +105,13 @@ export function buildStyleMutations(
       },
     } as Mutation);
   }
+  // Engine ADR 1098 — a table cell's direct formatting is set directly, so
+  // a synthesized style only a cell named is not minted.
+  const inUse = synthesizedStylesInUse(
+    ir as unknown as Parameters<typeof synthesizedStylesInUse>[0],
+  );
   for (const style of ir.styles) {
+    if (isSynthesized(style.id) && !inUse.has(style.id)) continue;
     ops.push(createStyleOp(style));
     for (const prop of style.props) {
       ops.push({
@@ -1096,13 +1121,13 @@ export function anchoredFloat(
  *  weight and colour, and its fill. */
 function cellLookOps(
   look: LoweredCellLook,
-  elementId: Record<string, unknown>,
+  storyId: string,
+  tableId: string,
+  row: number,
+  col: number,
 ): Mutation[] {
-  const set = (path: string, value: unknown): Mutation =>
-    ({
-      op: "setElementProperty",
-      args: { elementId, path, value },
-    }) as Mutation;
+  const set = (path: PropertyPath, value: Value): Mutation =>
+    nativeCellPropertyOp(storyId, tableId, row, col, path, value);
   const ops: Mutation[] = [];
   for (const [side, edge] of [
     ["Top", look.top],
@@ -1264,41 +1289,47 @@ function applyStyleInCell(
 export function buildTableInsert(
   table: LoweredTable,
   storyId: string,
+  nest?: Pick<NativeTableSpec, "cell" | "paragraph">,
 ): Mutation {
-  return {
-    op: "insertTable",
-    args: {
-      storyId,
-      rows: table.rows,
-      cols: table.cols,
-      headerRows: table.headerRows ?? 0,
-      footerRows: 0,
-      columnWidths: table.columnWidthsPt,
-      // A row is never shorter than Word's `w:trHeight`.
-      rowHeights: table.rowHeightsPt ?? [],
-      // Engine ADR 1025 — Word's rules: rows split across pages, autofit
-      // columns, the indent.
-      word: wordTableSpec(table),
-    },
-  } as unknown as Mutation;
+  return nativeTableInsertOp(storyId, {
+    rows: table.rows,
+    cols: table.cols,
+    headerRows: table.headerRows ?? 0,
+    footerRows: 0,
+    columnWidths: table.columnWidthsPt,
+    // A row is never shorter than Word's `w:trHeight`.
+    rowHeights: table.rowHeightsPt ?? [],
+    // Engine ADR 1025 — Word's rules: rows split across pages, autofit
+    // columns, the indent.
+    word: wordTableSpec(table),
+    ...nest,
+  });
 }
 
 /** Engine ADR 1025 — a table's Word layout (`WordTableSpec`) from what the
  *  lowering carries (`w:tblLayout`, `w:tblW`, `w:tcW`, `w:tblInd`,
  *  `w:cantSplit`). */
-export function wordTableSpec(table: LoweredTable): Record<string, unknown> {
+export function wordTableSpec(
+  table: LoweredTable,
+): NonNullable<NativeTableSpec["word"]> {
   const l = table.layout ?? {};
   const width =
     l.widthPt != null
-      ? { unit: "points", value: l.widthPt }
+      ? { unit: "points" as const, value: l.widthPt }
       : l.widthPct != null
-        ? { unit: "percent", value: l.widthPct }
+        ? { unit: "percent" as const, value: l.widthPct }
         : null;
   const cellWidths = (l.cellWidthsPt ?? []).flatMap((w, i) => {
     const c = table.cells[i];
     return w == null || !c
       ? []
-      : [{ row: c.row, col: c.col, width: { unit: "points", value: w } }];
+      : [
+          {
+            row: c.row,
+            col: c.col,
+            width: { unit: "points" as const, value: w },
+          },
+        ];
   });
   return {
     indent: l.indentPt ?? 0,
@@ -1309,10 +1340,8 @@ export function wordTableSpec(table: LoweredTable): Record<string, unknown> {
   };
 }
 
-/** One flattened cell's text (paragraphs joined by newline). NOTE: cell-internal
- *  paragraph/character styling is not applied — `applyStyle` carries no cell
- *  qualifier, so ranged styling can't reach cell interiors (a Tier-2 limitation);
- *  cell text is poured at the cell's default formatting. */
+/** One flattened cell's text (paragraphs joined by newline); its styling is
+ *  applied over it by cell-qualified ops ({@link buildTableCells}). */
 function cellText(cell: LoweredCell): string {
   return cell.paragraphs
     .map((p) => p.runs.map((r) => r.text).join(""))
@@ -1339,107 +1368,95 @@ export function buildTableCells(
   table: LoweredTable,
   storyId: string,
   tableId: string,
+  /** The style catalogue (`catalogue(ir.styles)`): a synthesized style is
+   *  set as its Word style plus direct properties. */
+  styles: StyleCatalogue = new Map(),
 ): Mutation {
   const ops: Mutation[] = [];
   for (const cell of table.cells) {
     const text = cellText(cell);
     if (isStyledEmptyCell(cell)) {
-      ops.push({
-        op: "insertText",
-        args: {
-          storyId,
-          offset: 0,
-          text: "",
-          cell: { tableId, row: cell.row, col: cell.col },
-        },
-      } as Mutation);
+      ops.push(nativeCellTextOp(storyId, tableId, cell.row, cell.col, ""));
     }
     if (text.length > 0) {
       const addr = { tableId, row: cell.row, col: cell.col };
-      ops.push({
-        op: "insertText",
-        args: { storyId, offset: 0, text, cell: addr },
-      } as Mutation);
-      // v55 — style the cell's runs. `applyStyle` gained a cell qualifier, so
-      // cell text no longer has to pour at the default formatting. Offsets are
-      // CELL-LOCAL and contiguous, computed over the same joined text
-      // `cellText` produced (paragraphs joined by the consumed `\n`).
+      ops.push(nativeCellTextOp(storyId, tableId, cell.row, cell.col, text));
+      // Style the cell's text: offsets are CELL-LOCAL and contiguous, over
+      // the joined text `cellText` produced (paragraphs joined by the
+      // consumed `\n`). Word's direct formatting is set as direct
+      // properties on the cell's ranges (engine ADR 1098), over the Word
+      // style the lowering's synthesized style stands on.
       let offset = 0;
-      cell.paragraphs.forEach((para, pIdx) => {
+      for (const para of cell.paragraphs) {
+        const plan = paragraphPlan(styles, para);
         const paraStart = offset;
-        for (const run of para.runs) {
+        para.runs.forEach((run, k) => {
           const runStart = offset;
           offset += codePointLen(run.text);
-          if (run.charStyleId) {
+          if (offset === runStart) return;
+          const r = plan.runs[k];
+          const style = r ? r.style : (run.charStyleId ?? null);
+          if (style) {
             ops.push(
               applyStyleInCell(
                 storyId,
                 runStart,
                 offset,
-                run.charStyleId,
+                style,
                 "character",
                 addr,
               ),
             );
           }
+          for (const prop of r?.props ?? [])
+            ops.push(
+              cellRangePropertyOp(storyId, addr, runStart, offset, prop),
+            );
+        });
+        if (offset > paraStart) {
+          if (plan.style) {
+            ops.push(
+              applyStyleInCell(
+                storyId,
+                paraStart,
+                offset,
+                plan.style,
+                "paragraph",
+                addr,
+              ),
+            );
+          }
+          for (const prop of plan.props)
+            ops.push(
+              cellRangePropertyOp(storyId, addr, paraStart, offset, prop),
+            );
         }
-        if (para.paraStyleId && offset > paraStart) {
-          ops.push(
-            applyStyleInCell(
-              storyId,
-              paraStart,
-              offset,
-              para.paraStyleId,
-              "paragraph",
-              addr,
-            ),
-          );
-        }
-        void pIdx;
-      });
+      }
     }
     // Word's cell geometry: margins, the first paragraph's space before and
     // what Word's line box has beyond the native cell's (docx-lower
     // `cell_insets`). Without them a native cell is the engine's zero-inset
     // default and every row comes out shorter than Word's.
-    const elementId = {
-      kind: "tableCell",
-      id: {
-        story_id: storyId,
-        table_id: tableId,
-        row: cell.row,
-        col: cell.col,
-      },
-    };
+    const set = (path: PropertyPath, value: Value): Mutation =>
+      nativeCellPropertyOp(storyId, tableId, cell.row, cell.col, path, value);
     if (cell.insetsPt) {
       const paths = [
         "cellInsetTop",
         "cellInsetLeft",
         "cellInsetBottom",
         "cellInsetRight",
-      ];
+      ] as const;
       cell.insetsPt.forEach((pt, i) => {
-        ops.push({
-          op: "setElementProperty",
-          args: {
-            elementId,
-            path: paths[i],
-            value: { type: "length", value: pt },
-          },
-        } as Mutation);
+        ops.push(set(paths[i]!, { type: "length", value: pt }));
       });
     }
     if (cell.vAlign) {
-      ops.push({
-        op: "setElementProperty",
-        args: {
-          elementId,
-          path: "cellVerticalJustification",
-          value: { type: "text", value: cell.vAlign },
-        },
-      } as Mutation);
+      ops.push(
+        set("cellVerticalJustification", { type: "text", value: cell.vAlign }),
+      );
     }
-    if (cell.look) ops.push(...cellLookOps(cell.look, elementId));
+    if (cell.look)
+      ops.push(...cellLookOps(cell.look, storyId, tableId, cell.row, cell.col));
     // Engine ADR 1050 — the cell's pictures, characters of their lines (a
     // float stands against the cell), addressed in the cell's own paragraphs
     // and characters.
@@ -1485,46 +1502,42 @@ export function buildTableCells(
     // paragraph that stands for it, filled through its handle.
     for (const [k, nested] of (cell.nested ?? []).entries()) {
       const handle = `docNested${cell.row}_${cell.col}_${k}_${ops.length}`;
-      const insert = buildTableInsert(nested.table, storyId) as unknown as {
-        op: string;
-        args: Record<string, unknown>;
-      };
       ops.push(
-        {
-          op: "insertTable",
-          args: { ...insert.args, cell: addr, paragraph: nested.paragraph },
-        } as unknown as Mutation,
+        buildTableInsert(nested.table, storyId, {
+          cell: addr,
+          paragraph: nested.paragraph,
+        }),
         { op: "bindCreated", args: { handle } } as unknown as Mutation,
-        ...flattened([buildTableCells(nested.table, storyId, `$h:${handle}`)]),
+        ...flattened([
+          buildTableCells(nested.table, storyId, `$h:${handle}`, styles),
+        ]),
       );
     }
     if (cell.rowSpan > 1 || cell.colSpan > 1) {
-      ops.push({
-        op: "setCellSpan",
-        args: {
+      ops.push(
+        nativeCellSpanOp(
           storyId,
           tableId,
-          row: cell.row,
-          col: cell.col,
-          rowSpan: cell.rowSpan,
-          columnSpan: cell.colSpan,
-        },
-      } as Mutation);
+          cell.row,
+          cell.col,
+          cell.rowSpan,
+          cell.colSpan,
+        ),
+      );
     }
   }
   // Engine ADR 1025 — rows Word holds at an exact height.
   (table.layout?.exactRows ?? []).forEach((exact, row) => {
     if (!exact) return;
-    ops.push({
-      op: "setRowHeight",
-      args: {
+    ops.push(
+      nativeRowHeightOp(
         storyId,
         tableId,
         row,
-        height: table.rowHeightsPt?.[row] ?? null,
-        autoGrow: false,
-      },
-    } as unknown as Mutation);
+        table.rowHeightsPt?.[row] ?? null,
+        false,
+      ),
+    );
   });
   return { op: "batch", args: { ops } } as Mutation;
 }
@@ -1588,21 +1601,31 @@ export function buildTableCellCarets(
   table: LoweredTable,
   storyId: string,
   tableId: string,
+  /** The style catalogue (see {@link buildTableCells}). */
+  styles: StyleCatalogue = new Map(),
 ): Mutation[] {
   const ops: Mutation[] = [];
   for (const cell of table.cells) {
     if (cellText(cell).length === 0 && !isStyledEmptyCell(cell)) continue;
     const addr = { tableId, row: cell.row, col: cell.col };
-    const last = new Map<number, string>();
+    const last = new Map<number, LoweredParagraph>();
     let offset = 0;
     for (const para of cell.paragraphs) {
       const paraStart = offset;
       for (const run of para.runs) offset += codePointLen(run.text);
-      if (para.paraStyleId && offset === paraStart)
-        last.set(paraStart, para.paraStyleId);
+      if (para.paraStyleId && offset === paraStart) last.set(paraStart, para);
     }
-    for (const [at, style] of last) {
-      ops.push(applyStyleInCell(storyId, at, at, style, "paragraph", addr));
+    for (const [at, para] of last) {
+      // An empty paragraph keeps a synthesized style that carries character
+      // properties (no run to carry them); otherwise its Word style and
+      // paragraph properties are set at the caret.
+      const plan = paragraphPlan(styles, para);
+      if (plan.style)
+        ops.push(
+          applyStyleInCell(storyId, at, at, plan.style, "paragraph", addr),
+        );
+      for (const prop of plan.props)
+        ops.push(cellRangePropertyOp(storyId, addr, at, at, prop));
     }
   }
   return ops;
@@ -1672,6 +1695,7 @@ export function endsEmpty(p: LoweredParagraph): boolean {
 export function buildStory(ir: LoweredDoc, storyId: string): StoryStep[] {
   return buildStoryBlocks(ir.story.blocks, storyId, {
     comments: ir.comments ?? [],
+    styles: ir.styles,
   });
 }
 
@@ -1751,9 +1775,16 @@ export function buildStoryBlocks(
     /** Doc ADR 613 — the document's comments: those whose range is in
      *  these blocks are inserted over it in a last step. */
     comments?: readonly LoweredComment[];
+    /** The document's styles (`ir.styles`): a table cell's direct
+     *  formatting is set directly over the Word style (engine ADR 1098).
+     *  Required when the blocks hold a native table; without it a cell
+     *  applies the synthesized style, which `buildStyleMutations` no longer
+     *  mints when only cells name it. */
+    styles?: readonly LoweredStyle[];
   } = {},
 ): StoryStep[] {
   const notes = opts.notes;
+  const styles = catalogue(opts.styles ?? []);
   // Doc ADR 613 — each comment's range, filled in as the text steps run.
   const commentRanges = new Map<string, { start: number; end: number }>();
   let hasReview = false;
@@ -1832,7 +1863,8 @@ export function buildStoryBlocks(
       cellChanges.push([]);
       if (buildTableCellChanges(table, storyId, "").length > 0)
         hasReview = true;
-      if (buildTableCellCarets(table, storyId, "").length > 0) hasCarets = true;
+      if (buildTableCellCarets(table, storyId, "", styles).length > 0)
+        hasCarets = true;
       const tableParagraph = last;
       const paraStyle = table.paraStyleId;
       steps.push({
@@ -1841,9 +1873,14 @@ export function buildStoryBlocks(
         textLength: fresh ? 0 : 1,
         insert: buildTableInsert(table, storyId),
         cells: (tableId) => {
-          cellCarets[slot] = buildTableCellCarets(table, storyId, tableId);
+          cellCarets[slot] = buildTableCellCarets(
+            table,
+            storyId,
+            tableId,
+            styles,
+          );
           cellChanges[slot] = buildTableCellChanges(table, storyId, tableId);
-          return buildTableCells(table, storyId, tableId);
+          return buildTableCells(table, storyId, tableId, styles);
         },
         ...(paraStyle
           ? {

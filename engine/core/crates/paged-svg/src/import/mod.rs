@@ -1322,6 +1322,7 @@ impl<'a> Lower<'a> {
                 story_id: story.clone(),
                 start: 0,
                 end: n,
+                cell: None,
             };
             if let Some(j) = line.justification {
                 self.ops
@@ -1332,6 +1333,7 @@ impl<'a> Lower<'a> {
                     story_id: story.clone(),
                     start: run.start,
                     end: run.end,
+                    cell: None,
                 };
                 let fill = run.fill.map(|c| self.swatch(c));
                 self.ops.push(set(

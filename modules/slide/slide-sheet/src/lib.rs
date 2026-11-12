@@ -958,7 +958,7 @@ impl DeckCharts {
     pub fn open(
         pkg: &paged_ooxml::OpcPackage,
         deck: &pptx_core::Presentation,
-    ) -> (DeckCharts, Vec<String>) {
+    ) -> (DeckCharts, Vec<pptx_core::loss::LossEntry>) {
         let mut out = DeckCharts {
             books: Default::default(),
             slide_drawn: BTreeSet::new(),
@@ -973,7 +973,11 @@ impl DeckCharts {
                 Ok(book) => {
                     out.books.insert(part.clone(), book);
                 }
-                Err(e) => diagnostics.push(format!("chart {part}: not live ({e})")),
+                Err(e) => diagnostics.push(pptx_core::loss::LossEntry::new(
+                    "pptx.chart.notLive",
+                    pptx_core::loss::LossSeverity::Approximated,
+                    format!("chart {part}: not live ({e})"),
+                )),
             }
         }
         (out, diagnostics)

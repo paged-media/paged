@@ -114,8 +114,7 @@
 //   REFUSED by save, apply and redefine with a diagnostic: a baked
 //   carrier paints nothing itself and its layers are real page items, so
 //   a base-paint write would put the model and the page out of step.
-//   Release first. (`bakeAppearance` refuses the mirror case the same
-//   way.)
+//   Release first (a legacy bake: draw ADR 354, released on open).
 // · ON NATIVE APPEARANCE (draw ADR 367, `document.appearance@1`, which
 //   every host of a built-in has): a style also carries the item's native
 //   fills and strokes (`layers`, engine ADR 1043), its object effect
@@ -145,11 +144,11 @@ import {
   withAppearance,
   type AppearanceStack,
 } from "./appearance";
+import { stampDrawMetadata } from "./draw-metadata";
 import {
   appearanceBakeOf,
   resolveAppearanceCarrier,
-  stampDrawMetadata,
-} from "./appearance-bake";
+} from "./appearance-legacy";
 import {
   appearanceMutation,
   layersOfValue,
@@ -785,7 +784,7 @@ export function graphicStyleBaseMutations(
  *  → the front-most-layer bake of the style's stack
  *  → one RAW `setPluginMetadata` carrying the new stack AND the link.
  *
- *  The metadata rides INSIDE the batch (the `appearance-bake.ts` stamp
+ *  The metadata rides INSIDE the batch (the `draw-metadata.ts` stamp
  *  builder) rather than through the facade's `setMetadata`, which is its
  *  own mutation and would cost a second undo step. Pure; exported so the
  *  conformance spec asserts the EXACT wire shape. */

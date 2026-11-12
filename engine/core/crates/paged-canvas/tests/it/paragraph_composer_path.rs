@@ -75,6 +75,7 @@ fn whole_story(m: &CanvasModel, story: &str) -> ElementId {
         story_id: story.to_string(),
         start: 0,
         end: chars,
+        cell: None,
     }
 }
 

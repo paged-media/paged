@@ -255,7 +255,7 @@
     },
     {
       "name": "arc-to-cubic",
-      "description": "approximate a circular arc with cubics (4/3·tan(θ/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
+      "description": "approximate a circular arc with cubics (4/3\u00b7tan(\u03b8/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
       "owner": ["engine/core/crates/paged-geom/"],
       "extensions": [".rs"],
       "patterns": [
@@ -360,6 +360,52 @@
         "modules/doc/docx-conformance/tests/it/crop_saveback.rs",
         "modules/doc/docx-export/src/crop.rs"
       ]
+    },
+    {
+      "name": "loss-report",
+      "description": "report what a conversion could not carry with paged_loss::{LossEntry, LossSeverity, LossReport} (TS: LossEntry / LossSeverity from @paged-media/plugin-api), the format's own codes as data",
+      "owner": [
+        "engine/core/crates/paged-loss/",
+        "platform/extensions/packages/plugin-api/src/wire.d.ts"
+      ],
+      "patterns": [
+        "^\\s*Approximated,\\s*$",
+        "\"approximated\"\\s*\\|\\s*\"dropped\"",
+        "pub struct \\w*Loss\\s*\\{",
+        "pub (losses|lost|unsupported|not_exported): Vec<String>,"
+      ],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": [
+        "modules/doc/docx-lower/src/ir.rs",
+        "modules/sheet/sheet-chart/src/geometry.rs",
+        "modules/sheet/sheet-chart/src/native.rs",
+        "modules/sheet/sheet-js/src/core/annotations.rs",
+        "modules/sheet/sheet-js/src/core/shapes.rs",
+        "modules/web/packages/web-render/src/effects.rs"
+      ]
+    },
+    {
+      "name": "pdf-export-loop",
+      "description": "drive the engine's PDF export session (begin, one exportPdfPage per page, finish, cancel on failure) with the plugin SDK's exportPdfSession, which host.documents.exportPdf and the headless harness run, or the editor client's exportPdf beneath the plugin contract",
+      "owner": [
+        "platform/extensions/packages/plugin-sdk/src/doors-pdf-export.ts",
+        "apps/editor/packages/client/src/client.ts"
+      ],
+      "extensions": [".ts", ".tsx", ".mjs"],
+      "patterns": ["kind: \"exportPdfPage\",", "send\\(\"exportPdfPage\""],
+      "baseline": []
+    },
+    {
+      "name": "warp-kernels",
+      "description": "Puppet Warp's outline mesh and ARAP solve and the vector Liquify step are paged-warp's (mesh, puppet::solve_with, liquify, point_map); the vector tools reach them through draw's wasm as vector-tools' WarpKernel",
+      "owner": ["engine/core/crates/paged-warp/"],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "patterns": [
+        "function (triangulateRings|liquifyStep|liquifyDensify|liquifyDisplace)\\s*\\(",
+        "class ArapSolver",
+        "fn (triangulate_rings|vertex_pins)\\s*\\("
+      ],
+      "baseline": []
     }
   ]
 }

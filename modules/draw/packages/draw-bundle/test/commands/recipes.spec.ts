@@ -33,7 +33,7 @@ import { covers } from "@paged-media/test-kit";
 
 import { pngBytes } from "../fixtures/build-idml";
 import { ringPixels } from "../fixtures/corpus";
-import { installPngRealm } from "../headless/raster-realm";
+import { pngDecodeImage } from "../headless/png-decoder";
 import { openEl, rectEl, unitRig, type FakeElement } from "./unit-kit";
 
 const C = "media.paged.draw.command";
@@ -733,10 +733,10 @@ describe("paged.draw commands, no engine — Image Trace", () => {
 
   it("traces the selected image's own pixels into paths in one batch (DRW-6); a path sends nothing", async () => {
     covers("command:media.paged.draw.command.imageTrace");
-    const uninstall = installPngRealm();
-    try {
+    {
       const r = unitRig([image], {
         selection: [IMAGE],
+        decodeImage: pngDecodeImage,
         reply: (m) =>
           m.kind === "requestPlacedAssetBytes"
             ? {
@@ -765,59 +765,6 @@ describe("paged.draw commands, no engine — Image Trace", () => {
       const path = unitRig(doc(), { selection: [POLY] });
       await path.run(`${C}.imageTrace`, { mode: "bw" });
       expect(path.sent()).toEqual([]);
-    } finally {
-      uninstall();
     }
   }, 30_000);
-});
-
-describe("paged.draw commands, no engine — the baked appearance", () => {
-  // The stack EDITS are the host's (`paged.appearance.*`, PM-0017); a stack
-  // arrives here as the plugin metadata an older document carries, which is
-  // what Bake and Release read.
-  const withStack = () =>
-    unitRig(
-      [
-        {
-          ...rectEl("polygon", "ua", [100, 100, 300, 300]),
-          meta: {
-            v: 1,
-            data: {
-              appearance: {
-                fills: [{ color: "Color/Black", tint: 100 }],
-                strokes: [{ color: "Color/Black", weight: 1 }],
-              },
-            },
-          },
-        },
-      ],
-      { selection: [A] },
-    );
-
-  it("Bake appearance inserts one path per layer and groups them in one write (DRW-5); with no stack it sends nothing", async () => {
-    covers("command:media.paged.draw.command.bakeAppearance");
-    const r = withStack();
-    await r.run(`${C}.bakeAppearance`);
-    expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "insertPath")).toBe(2);
-    expect(ops(r.leaves()).at(-1)).toBe("createGroup");
-    const bare = unitRig(doc(), { selection: [A] });
-    await bare.run(`${C}.bakeAppearance`);
-    expect(bare.sent()).toEqual([]);
-  });
-
-  it("Release appearance deletes the derived layers and gives the stack back to the frame, in one batch; an unbaked frame sends nothing", async () => {
-    covers("command:media.paged.draw.command.releaseAppearance");
-    const r = withStack();
-    await r.run(`${C}.bakeAppearance`);
-    r.fake.setSelection([A]);
-    r.reset();
-    await r.run(`${C}.releaseAppearance`);
-    expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "deleteFrame")).toBe(2);
-    expect(count(r.leaves(), "dissolveGroup")).toBe(1);
-    const bare = unitRig(doc(), { selection: [A] });
-    await bare.run(`${C}.releaseAppearance`);
-    expect(bare.sent()).toEqual([]);
-  });
 });

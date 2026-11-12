@@ -121,12 +121,6 @@ export {
   type GradientDetailWire,
   type GradientStopWire,
 } from "./raw-wire";
-// §13.2 — the on-canvas corner widget: box corners and polygon corners,
-// in the element's own space (rotated frames included).
-export {
-  createCornerRadiusHandler,
-  cornerDragMutationFor,
-} from "./handlers/corner-radius";
 // THE KNIFE — the freehand cut over the engine's planar arrangement: the
 // probe/withdraw/cut flow, its pure halves (the pieces read off the
 // faces, the one cut batch) and the gesture handler.
@@ -634,7 +628,6 @@ export {
 export {
   supportsLiveCorners,
   cornerStyleMutationFor,
-  cornerRadiiMutationFor,
   type CornerStyleToken,
 } from "./commands/live-corners";
 // Phase 9 (Tier B) — Appearance model: the stack model + bake builders +
@@ -649,41 +642,21 @@ export {
   type FillLayer,
   type StrokeLayer,
 } from "./commands/appearance";
-// B-24 CLOSED — the GROUP BAKE: the metadata stack lowered onto real
-// stacked page items (one derived path per paint, sharing the source
-// geometry, wrapped in a group with the source frame as the carrier) and
-// its exact inverse. Builders exported so the conformance spec asserts
-// the EXACT wire shapes (the no-second-copy rule).
+// paged.draw's in-batch metadata stamp, and the READ side of draw ADR
+// 354's legacy group bakes (the bake itself is gone: native appearance).
+export { DRAW_METADATA_KEY, stampDrawMetadata } from "./commands/draw-metadata";
 export {
-  APPEARANCE_BAKE_COMMAND_ID,
-  APPEARANCE_RELEASE_COMMAND_ID,
-  APPEARANCE_BAKE_COMMAND_IDS,
-  DRAW_METADATA_KEY,
-  stampDrawMetadata,
   appearanceBakeOf,
   appearanceLayerOf,
   withAppearanceBake,
-  appearanceBakeLayers,
-  bakeGeometryOf,
-  bakeInsertBatchFor,
-  bakeLayerHandle,
-  bakeLayerPaintFor,
-  bakePaintBatchFor,
-  bakeBatchFor,
   bakedLayersOf,
   releaseBatchFor,
+  releaseBakedWithStack,
   groupChildren,
   resolveAppearanceCarrier,
-  bakeAppearance,
-  releaseAppearance,
-  rebakeAppearance,
-  contributeAppearanceBakeCommands,
   type AppearanceBakeRecord,
   type AppearanceLayerMarker,
-  type BakeGeometry,
-  type BakeLayer,
-  type BakeRefusal,
-} from "./commands/appearance-bake";
+} from "./commands/appearance-legacy";
 // Engine ADR 1043 — the metadata stack's migration to the engine's native
 // appearance (the switch of the commands and panel is plan WP6.3).
 export {

@@ -69,7 +69,7 @@ describe("host.document.importSvg / exportSvg [plugin-platform.svg-doors]", () =
     expect(result.error).toBeUndefined();
     expect(result.applied).toBe(true);
     expect(result.report.items).toBeGreaterThanOrEqual(5);
-    expect(result.report.notes.map((n) => n.code)).toContain("filter");
+    expect(result.report.losses.map((n) => n.code)).toContain("filter");
     const outcome = result.outcome;
     const minted = outcome && outcome.applied ? (outcome.minted ?? []) : [];
     expect(minted.at(-1)?.element.kind).toBe("group");

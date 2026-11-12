@@ -364,6 +364,32 @@ impl ExportDiagnostic {
             ),
         }
     }
+
+    /// The finding as the shared loss entry (capability register C18): its
+    /// `code`, `message`, and how the object fared: drawn as an image or as
+    /// outlines (`approximated`), or written without what it lost
+    /// (`dropped`).
+    pub fn loss(&self) -> paged_model::report::LossEntry {
+        use paged_model::report::{LossEntry, LossSeverity};
+        let severity = match self {
+            ExportDiagnostic::FontNotEmbeddable { .. }
+            | ExportDiagnostic::EffectRasterized { .. }
+            | ExportDiagnostic::BlendModeRasterized { .. } => LossSeverity::Approximated,
+            ExportDiagnostic::ImageMissingBytes { .. } | ExportDiagnostic::EffectNotRasterized => {
+                LossSeverity::Dropped
+            }
+        };
+        LossEntry::new(self.code(), severity, self.message())
+    }
+}
+
+/// An export's findings as one loss report, one entry per code and message.
+pub fn loss_report(diagnostics: &[ExportDiagnostic]) -> paged_model::report::LossReport {
+    diagnostics
+        .iter()
+        .map(ExportDiagnostic::loss)
+        .collect::<Vec<_>>()
+        .into()
 }
 
 /// Structured preflight finding (panels.md gap 20): the raw export
@@ -722,5 +748,27 @@ mod preflight_tests {
         assert_eq!(f.page_index, None);
         assert_eq!(FindingSeverity::Warning.as_str(), "warning");
         assert_eq!(FindingSeverity::Error.as_str(), "error");
+    }
+}
+
+#[cfg(test)]
+mod loss_tests {
+    use super::*;
+    use paged_model::report::LossSeverity;
+
+    #[test]
+    fn findings_become_one_loss_report() {
+        let r = loss_report(&[
+            ExportDiagnostic::EffectRasterized { ppi: 300.0 },
+            ExportDiagnostic::ImageMissingBytes { image_index: 2 },
+            ExportDiagnostic::EffectRasterized { ppi: 300.0 },
+        ]);
+        assert_eq!(r.losses.len(), 2);
+        let fx = r.get("effect_rasterized").unwrap();
+        assert_eq!((fx.count, fx.severity), (2, LossSeverity::Approximated));
+        assert_eq!(
+            r.get("image_missing_bytes").unwrap().severity,
+            LossSeverity::Dropped
+        );
     }
 }

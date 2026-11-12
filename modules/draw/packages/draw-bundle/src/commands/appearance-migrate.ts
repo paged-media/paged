@@ -52,13 +52,13 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { appearanceOf, withAppearance } from "./appearance";
+import { stampDrawMetadata } from "./draw-metadata";
 import {
   appearanceBakeOf,
   bakedLayersOf,
   releaseBatchFor,
-  stampDrawMetadata,
   withAppearanceBake,
-} from "./appearance-bake";
+} from "./appearance-legacy";
 import {
   graphicAppearanceDigest,
   graphicStyleOverridden,

@@ -32,6 +32,7 @@ import { sha256Hex } from "@paged-media/helpers";
 import type { CommentsFile } from "./comments-model.js";
 import { liveShows, showsOfLabel } from "./custom-shows.js";
 import type { DeckPlan, ExportedDeck, SlidePlan } from "./engine.js";
+import { slideLossDiagnostics } from "./losses.js";
 import { parseLabel } from "./object-model.js";
 import { parseState, type PluginMetadataEntry } from "./slides-model.js";
 
@@ -190,9 +191,5 @@ export async function documentBytes(
 /** What an export could not carry, as the export's diagnostics: the
  *  package's own, then each thing on a slide that could not round-trip. */
 export function exportDiagnostics(out: ExportedDeck): Diagnostic[] {
-  return [...out.diagnostics, ...out.notExported].map((message) => ({
-    severity: "warning" as const,
-    message,
-    source: "pptx",
-  }));
+  return slideLossDiagnostics([...out.diagnostics, ...out.notExported]);
 }

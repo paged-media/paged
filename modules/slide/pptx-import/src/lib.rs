@@ -32,6 +32,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use paged_ooxml::{part_dir, rels_part_name, resolve_target, OpcPackage, Relationships};
+use pptx_core::loss::{LossEntry, LossLog, LossSeverity};
 use pptx_core::{
     Background, ColorMap, CustomShow, EmbeddedFont, FontSet, FrameContent, GraphicFrame, Layout,
     Master, Presentation, Section, Shape, Slide, Theme, Transition,
@@ -60,17 +61,27 @@ pub enum ImportError {
     Part { part: String, detail: String },
 }
 
+/// What the import could not carry, counted (`paged_loss::LossLog`).
+type Losses = RefCell<Vec<LossEntry>>;
+
+/// A part that does not read: dropped, under its kind's code.
+fn unreadable(diagnostics: &Losses, code: &str, e: ImportError) {
+    diagnostics
+        .borrow_mut()
+        .note(code, LossSeverity::Dropped, &e.to_string());
+}
+
 /// Per-part reading context: where relative targets resolve from, the part's
 /// relationships, and the shared diagnostics list.
 pub struct Ctx<'a> {
     part: String,
     dir: String,
     pub rels: Relationships,
-    diagnostics: &'a RefCell<Vec<String>>,
+    diagnostics: &'a Losses,
 }
 
 impl<'a> Ctx<'a> {
-    fn new(pkg: &OpcPackage, part: &str, diagnostics: &'a RefCell<Vec<String>>) -> Self {
+    fn new(pkg: &OpcPackage, part: &str, diagnostics: &'a Losses) -> Self {
         let rels = pkg
             .part(&rels_part_name(part))
             .map(Relationships::parse)
@@ -99,11 +110,15 @@ impl<'a> Ctx<'a> {
             .find(|r| r.rel_type.ends_with(suffix) && r.target_mode.as_deref() != Some("External"))
             .map(|r| self.resolve(&r.target))
     }
-    /// Record something this reader does not model.
-    pub fn note(&self, what: String) {
-        self.diagnostics
-            .borrow_mut()
-            .push(format!("{}: {what}", self.part));
+    /// Record something this reader does not model: its code
+    /// (`pptx.<area>.<what>`), its severity and the sentence, which names
+    /// the part (engine ADR 1097).
+    pub fn note(&self, code: &str, severity: LossSeverity, what: impl Into<String>) {
+        self.diagnostics.borrow_mut().note(
+            code,
+            severity,
+            &format!("{}: {}", self.part, what.into()),
+        );
     }
 }
 
@@ -161,7 +176,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
                 deck.table_styles = styles;
                 deck.default_table_style = def;
             }
-            Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+            Err(e) => unreadable(&diagnostics, "pptx.part.tableStyles", e),
         }
     }
 
@@ -170,7 +185,11 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
     if let Some(list) = pres_el.child(Ns::P, "sldMasterIdLst") {
         for m in list.children_named(Ns::P, "sldMasterId") {
             let Some(part) = m.attr_ns(Ns::R, "id").and_then(|id| ctx.target(id)) else {
-                ctx.note("a slide master relationship does not resolve".into());
+                ctx.note(
+                    "pptx.rel.master",
+                    LossSeverity::Dropped,
+                    "a slide master relationship does not resolve",
+                );
                 continue;
             };
             match master(&pkg, &part, &diagnostics) {
@@ -183,7 +202,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
                     deck.layouts.extend(layouts);
                     deck.masters.push(mst);
                 }
-                Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+                Err(e) => unreadable(&diagnostics, "pptx.part.master", e),
             }
         }
     }
@@ -192,7 +211,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
             Ok(el) => deck
                 .themes
                 .push(theme(&el, &Ctx::new(&pkg, &t, &diagnostics))),
-            Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+            Err(e) => unreadable(&diagnostics, "pptx.part.theme", e),
         }
     }
 
@@ -202,12 +221,16 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
         for s in list.children_named(Ns::P, "sldId") {
             let slide_id = s.attr_u32("id").unwrap_or(0);
             let Some(part) = s.attr_ns(Ns::R, "id").and_then(|id| ctx.target(id)) else {
-                ctx.note(format!("slide {slide_id}: relationship does not resolve"));
+                ctx.note(
+                    "pptx.rel.slide",
+                    LossSeverity::Dropped,
+                    format!("slide {slide_id}: relationship does not resolve"),
+                );
                 continue;
             };
             match slide(&pkg, &part, slide_id, &authors, &diagnostics) {
                 Ok(sl) => deck.slides.push(sl),
-                Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+                Err(e) => unreadable(&diagnostics, "pptx.part.slide", e),
             }
         }
     }
@@ -261,11 +284,11 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
                 let c = chart::chart(&el, &Ctx::new(&pkg, &part, &diagnostics));
                 deck.charts.insert(part, c);
             }
-            Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+            Err(e) => unreadable(&diagnostics, "pptx.part.chart", e),
         }
     }
 
-    deck.diagnostics = summarise(diagnostics.into_inner());
+    deck.diagnostics = diagnostics.into_inner();
     Ok(deck)
 }
 
@@ -275,7 +298,7 @@ fn link_diagrams(
     shapes: &mut [Shape],
     out: &mut BTreeMap<String, Vec<Shape>>,
     models: &mut BTreeMap<String, pptx_core::DiagramModel>,
-    diagnostics: &RefCell<Vec<String>>,
+    diagnostics: &Losses,
 ) {
     for s in shapes {
         match s {
@@ -298,7 +321,11 @@ fn link_diagrams(
                     *drawing_part = Some(target);
                 }
                 let Some(part) = drawing_part.clone() else {
-                    owner.note("a SmartArt diagram has no drawing; not drawn".into());
+                    owner.note(
+                        "pptx.smartart.noDrawing",
+                        LossSeverity::Dropped,
+                        "a SmartArt diagram has no drawing; not drawn",
+                    );
                     continue;
                 };
                 if out.contains_key(&part) {
@@ -316,7 +343,7 @@ fn link_diagrams(
                             .unwrap_or_default();
                         out.insert(part, tree);
                     }
-                    Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+                    Err(e) => unreadable(diagnostics, "pptx.part.diagram", e),
                 }
             }
             _ => {}
@@ -471,19 +498,6 @@ fn collect_charts(shapes: &[Shape], out: &mut Vec<String>) {
     }
 }
 
-/// Collapse repeated lines into "line (×n)" so a deck with 300 unmodelled
-/// effects reports one line, not 300.
-fn summarise(lines: Vec<String>) -> Vec<String> {
-    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-    for l in lines {
-        *counts.entry(l).or_default() += 1;
-    }
-    counts
-        .into_iter()
-        .map(|(l, n)| if n > 1 { format!("{l} (×{n})") } else { l })
-        .collect()
-}
-
 fn color_map(el: &El) -> ColorMap {
     ColorMap {
         entries: el
@@ -516,7 +530,7 @@ fn shapes_of(csld: &El, ctx: &Ctx) -> Vec<pptx_core::Shape> {
 fn master(
     pkg: &OpcPackage,
     part: &str,
-    diagnostics: &RefCell<Vec<String>>,
+    diagnostics: &Losses,
 ) -> Result<(Master, Vec<Layout>), ImportError> {
     let el = read_part(pkg, part)?;
     let ctx = Ctx::new(pkg, part, diagnostics);
@@ -539,7 +553,7 @@ fn master(
                     layout_parts.push(lp);
                     layouts.push(lay);
                 }
-                Err(e) => diagnostics.borrow_mut().push(e.to_string()),
+                Err(e) => unreadable(diagnostics, "pptx.part.layout", e),
             }
         }
     }
@@ -564,7 +578,7 @@ fn layout(
     pkg: &OpcPackage,
     part: &str,
     master_part: &str,
-    diagnostics: &RefCell<Vec<String>>,
+    diagnostics: &Losses,
 ) -> Result<Layout, ImportError> {
     let el = read_part(pkg, part)?;
     let ctx = Ctx::new(pkg, part, diagnostics);
@@ -593,7 +607,7 @@ fn slide(
     part: &str,
     slide_id: u32,
     authors: &comments::Authors,
-    diagnostics: &RefCell<Vec<String>>,
+    diagnostics: &Losses,
 ) -> Result<Slide, ImportError> {
     let el = read_part(pkg, part)?;
     let ctx = Ctx::new(pkg, part, diagnostics);
@@ -667,11 +681,7 @@ fn read_transition(outer: &El, t: &El) -> Transition {
     }
 }
 
-fn notes(
-    pkg: &OpcPackage,
-    part: &str,
-    diagnostics: &RefCell<Vec<String>>,
-) -> Option<pptx_core::TextBody> {
+fn notes(pkg: &OpcPackage, part: &str, diagnostics: &Losses) -> Option<pptx_core::TextBody> {
     let el = read_part(pkg, part).ok()?;
     let ctx = Ctx::new(pkg, part, diagnostics);
     let tree = el.path(&[(Ns::P, "cSld"), (Ns::P, "spTree")])?;

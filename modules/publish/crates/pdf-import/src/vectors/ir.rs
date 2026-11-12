@@ -279,10 +279,7 @@ pub struct TextItem {
     pub blend: Option<&'static str>,
 }
 
-/// One kind of loss, with how often it happened on the page.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct Loss {
-    /// Stable code (`"shading.sampled"`, …); the bundle words it.
-    pub code: &'static str,
-    pub count: u32,
-}
+/// One kind of loss, with how often it happened on the page: the shared
+/// [`paged_loss::LossEntry`] (capability register C18), the mapper's code
+/// (`"shading.sampled"`, …) as data and the wording left to the bundle.
+pub use paged_loss::LossEntry as Loss;

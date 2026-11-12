@@ -105,6 +105,13 @@ pub enum NodeId {
         story_id: String,
         start: u32,
         end: u32,
+        /// Engine ADR 1098 — the cell qualifier. `None` (absent on the
+        /// wire) ⇒ `[start, end)` is a range of the story's BODY; `Some` ⇒
+        /// a cell-local range of the named table cell's own paragraphs,
+        /// as `ApplyStyle.cell` and `InsertText.cell` address it. A cell's
+        /// text takes direct character and paragraph properties through it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cell: Option<CellAddr>,
     },
     /// W3.A1 — a `<Table>` nested inside a story paragraph. Tables are
     /// NOT in the story's character/run space (they hang off
@@ -7104,7 +7111,7 @@ pub enum Operation {
 /// v55 — a table-cell address for cell-qualified range ops. Mirrors
 /// `paged_canvas::selection::TextCellAddr` (which paged-mutate cannot depend on:
 /// paged-canvas depends on THIS crate, not the other way round).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct CellAddr {
     /// The hosting `<Table>`'s `Self` id.

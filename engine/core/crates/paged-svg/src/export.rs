@@ -881,11 +881,7 @@ impl<'a> Writer<'a> {
         let root = sub.stack.pop().expect("root");
         let body = sub.join(&root.children);
         self.defs.append(&mut sub.defs);
-        for n in sub.report.notes {
-            for _ in 0..n.count {
-                self.report.note(&n.code, n.severity, &n.message);
-            }
-        }
+        paged_loss::LossLog::extend_losses(&mut self.report.losses, sub.report.losses);
         let nl = if self.minify { "" } else { "\n" };
         self.defs.push(format!(
             "<symbol id=\"{id}\" overflow=\"visible\">{nl}{body}{nl}</symbol>"

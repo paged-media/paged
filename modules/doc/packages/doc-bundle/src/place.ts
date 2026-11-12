@@ -28,9 +28,9 @@ import { buildStory, buildStyleMutations } from "@paged-media/doc-host-model";
 import type { PlaceBatch } from "./engine.js";
 import { embeddedItemOps } from "./page-items.js";
 import { applyStyleOps, pourBatchOps, pourSteps } from "./pour.js";
+import { lossDiagnostics } from "@paged-media/plugin-sdk";
 import type {
   BundleHost,
-  Diagnostic,
   ElementId,
   Mutation,
   PageId,
@@ -243,11 +243,10 @@ export function frameColumnOps(
 
 /** Surface honest diagnostics from the lowering (ADR-007). */
 function publishDiagnostics(host: BundleHost, ir: LoweredDoc): void {
-  const diags: Diagnostic[] = ir.diagnostics.map((d) => ({
-    severity: d.severity,
-    message: `paged.doc: ${d.message}`,
-  }));
-  host.diagnostics.set(DIAGNOSTICS_KEY, diags);
+  host.diagnostics.set(
+    DIAGNOSTICS_KEY,
+    lossDiagnostics(ir.diagnostics, { prefix: "paged.doc: " }),
+  );
 }
 
 /** A part folder no other placement uses (the story id is not known until

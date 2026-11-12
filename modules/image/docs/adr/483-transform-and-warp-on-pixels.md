@@ -99,3 +99,11 @@ Directions agree for every style.
   interactive box.
 - Warp, Puppet Warp and Content-Aware Scale on a smart object (Photoshop keeps them live) are
   refused by the layer edit as every pixel edit of a smart object is.
+
+## Amendment 2026-11-11 — draw's Puppet Warp and Liquify run on this solve
+
+paged.draw's vector Puppet Warp now bends its outline mesh with this record's `puppet::solve`
+(through `solve_with`, from the pins' best similarity; the raster's options and output are
+unchanged), and its Liquify step and this Liquify's tools share the brush point maps
+(`paged_warp::point_map`). draw's TypeScript Igarashi solver is gone (draw ADR 363, amendment
+2026-11-11).

@@ -71,3 +71,18 @@ used inside cells and charts. A hex string cannot say "the document's spot colou
   record pointing at the reserved `gray125` fill now looks as Excel shows it.
 - The UI for document styles (swatch pickers, the mapping table) is built on `get_cell_visual`,
   `named_styles` and the `set_style` patch; the chart roles' `ColorRef`s follow in W4.
+
+## Amendment 2026-11-12 — a cell's text formatting is direct properties
+
+The page table no longer mints styles for what is a cell's own formatting. Before, a table
+cell's text had no direct-property door (the wire's `storyRange` named only a story's body), so
+the lowering minted a character style per distinct cell format (`CharacterStyle/paged.sheet
+<hash>`) and paragraph styles for alignment, indent and the repeat fill (`ParagraphStyle/paged.sheet
+align right`, …) and applied them. Since engine ADR 1098 the story range takes a cell, and
+`sheet-host-model`'s `cell-text-format.ts` writes each facet as `setElementProperty` on the cell's
+text (on each rich-text run's range for the character facets). A refresh rewrites every facet of a
+re-formatted cell, its value or the clear, so a cell that lost its format comes back plain. A
+document character or paragraph style the workbook names is still applied as that style, its
+extra facets direct on top. The xlsx save is unaffected: it writes from the workbook's style
+records, not from the page.
+

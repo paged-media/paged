@@ -42,12 +42,14 @@ import type {
   GestureHandler,
   ToolPreviewShape,
 } from "@paged-media/plugin-api";
-import type { LiquifyKind } from "@paged-media/vector-geometry";
 import {
   LiquifyMachine,
+  type LiquifyKind,
   type LiquifySnapshot,
   type LiquifyToolOptions,
 } from "@paged-media/vector-tools";
+
+import { bootWarpKernel } from "../warp-kernel";
 
 import {
   distortTargetsOn,
@@ -165,6 +167,9 @@ export function createLiquifyHandler(
   return {
     onActivate(paged) {
       reader.attach(paged);
+      // Boot the warp kernel (paged-warp, in the draw wasm) before the
+      // first press needs it.
+      void bootWarpKernel().catch(() => undefined);
     },
     onDeactivate(reason) {
       if (reason === "suspend") return;
@@ -183,6 +188,7 @@ export function createLiquifyHandler(
         machine = new LiquifyMachine({
           options,
           targets: targets.map((t) => t.page),
+          kernel: await bootWarpKernel(),
         });
         await sync(machine.handle({ type: "down", ...s }));
         if (kind !== "warp" && machine) {

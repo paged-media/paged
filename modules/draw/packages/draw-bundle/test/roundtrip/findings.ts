@@ -252,7 +252,6 @@ export const KNOWN: Record<string, readonly Known[]> = {
       finding: "gradientLengthDerived",
     },
   ],
-  // `appearance-bake` has none since 0.70.0: Color/Paper is declared.
   // `text-on-path` has none since 0.71.1: EndBracket is exported.
   "opacity-mask": [
     {
@@ -324,36 +323,6 @@ export const KNOWN_REIMPORT: Record<string, readonly Known[]> = {
     theirs: allCorners(option, null),
     finding: "objectStyleNotInherited" as const,
   })),
-  "appearance-bake": [
-    ...["0/1", "0/2", "0/3"].map((at) => ({
-      at,
-      field: "geometry",
-      ours: "max deviation 612.0000 pt",
-      theirs: "tolerance 0.01 pt",
-      finding: "itemTransformIsSpreadRelative" as const,
-    })),
-    {
-      at: "0/1",
-      field: "strokeWeight",
-      ours: 1,
-      theirs: null,
-      finding: "objectStyleNotInherited",
-    },
-    {
-      at: "0/2",
-      field: "strokeWeight",
-      ours: 1,
-      theirs: null,
-      finding: "objectStyleNotInherited",
-    },
-    {
-      at: "0/3",
-      field: "stroke",
-      ours: "Black",
-      theirs: "None",
-      finding: "objectStyleNotInherited",
-    },
-  ],
 };
 
 /** The cases whose InDesign re-export is committed. */

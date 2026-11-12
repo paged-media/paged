@@ -72,7 +72,11 @@ pub fn authors(pkg: &OpcPackage, pres: &Ctx) -> Authors {
             continue;
         }
         let Some(el) = parse(pkg, &pres.resolve(&r.target)) else {
-            pres.note(format!("comment authors {} could not be read", r.target));
+            pres.note(
+                "pptx.comments.authors",
+                pptx_core::loss::LossSeverity::Dropped,
+                format!("comment authors {} could not be read", r.target),
+            );
             continue;
         };
         for a in &el.children {
@@ -242,7 +246,11 @@ pub fn of_slide(pkg: &OpcPackage, slide: &Ctx, authors: &Authors) -> Vec<Comment
         for r in slide.rels.items.iter().filter(|r| r.rel_type == kind) {
             let part = slide.resolve(&r.target);
             let Some(el) = parse(pkg, &part) else {
-                slide.note(format!("its comments ({part}) could not be read"));
+                slide.note(
+                    "pptx.comments.unreadable",
+                    pptx_core::loss::LossSeverity::Dropped,
+                    format!("its comments ({part}) could not be read"),
+                );
                 continue;
             };
             if kind == REL_MODERN {

@@ -70,7 +70,11 @@ pub fn line(el: &El, ctx: &Ctx) -> Line {
 pub fn effects(el: &El, ctx: &Ctx) -> Effects {
     let fx = drawingml::effects(el, &|id| rel(ctx, id));
     for name in &fx.unknown {
-        ctx.note(format!("effect a:{name} is not carried"));
+        ctx.note(
+            "pptx.effect.unsupported",
+            pptx_core::loss::LossSeverity::Dropped,
+            format!("effect a:{name} is not carried"),
+        );
     }
     fx
 }

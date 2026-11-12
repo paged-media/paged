@@ -21,7 +21,8 @@
 //   (1) the EXACT batch-of-eight wire shape `cornerStyleMutationFor`
 //       emits per preset (four option Text writes + four radius Length
 //       writes), with None clearing the option to empty text + 0 radius;
-//   (2) the per-corner builder `cornerRadiiMutationFor`;
+//   (2) (the per-corner builder went with the Corner Radius tool: the
+//       corner widgets are the host's, editor ADR 310);
 //   (3) the preset applied at the REAL engine on the F1 rectangle — the
 //       corner option + radius round-trip through elementProperties, and
 //       undo restores the prior corners;
@@ -39,7 +40,6 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {
   drawBundle,
   cornerStyleMutationFor,
-  cornerRadiiMutationFor,
   supportsLiveCorners,
   type CornerStyleToken,
 } from "../../src";
@@ -163,33 +163,6 @@ describe("draw conformance — Live Corners (Phase 9 Tier B)", () => {
         "BeveledCorner",
         "FancyCorner",
         "None",
-      ]);
-    });
-  });
-
-  describe("cornerRadiiMutationFor — a single corner (the on-canvas-handle path)", () => {
-    it("writes one corner's option + radius in a batch", () => {
-      const m = cornerRadiiMutationFor(RECT, 2, "BeveledCorner", 8) as Extract<
-        Mutation,
-        { op: "batch" }
-      >;
-      expect(m.args.ops).toEqual([
-        {
-          op: "setElementProperty",
-          args: {
-            elementId: RECT,
-            path: "frameCornerOptionBottomRight",
-            value: { type: "text", value: "BeveledCorner" },
-          },
-        },
-        {
-          op: "setElementProperty",
-          args: {
-            elementId: RECT,
-            path: "frameCornerRadiusBottomRight",
-            value: { type: "length", value: 8 },
-          },
-        },
       ]);
     });
   });

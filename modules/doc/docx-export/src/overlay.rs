@@ -840,7 +840,13 @@ fn overlay_cells_into(
         if let Some(read) = styled {
             for (p, rp) in cell.paragraphs.iter_mut().zip(read) {
                 if !(p.runs.is_empty() && rp.runs.iter().all(|r| r.text.is_empty())) {
-                    overlay_runs(styles, &mut p.runs, &rp.runs);
+                    // Engine ADR 1098 — a cell's direct formatting is poured
+                    // as direct properties over the Word style (as a native
+                    // body's is): a run whose look is its baseline
+                    // synthesized style's is unchanged.
+                    let mut runs = rp.runs.clone();
+                    keep_baseline_looks(styles, p.para_style_id.as_deref(), &p.runs, &mut runs);
+                    overlay_runs(styles, &mut p.runs, &runs);
                 }
             }
             continue;

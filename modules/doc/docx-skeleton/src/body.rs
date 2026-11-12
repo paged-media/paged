@@ -167,7 +167,7 @@ struct Direct<'a> {
 }
 
 fn split_style<'a>(
-    styles: &'a HashMap<&str, &LoweredStyle>,
+    styles: &HashMap<&'a str, &'a LoweredStyle>,
     id: Option<&'a str>,
 ) -> Result<Direct<'a>, String> {
     let Some(id) = id else {
@@ -182,7 +182,7 @@ fn split_style<'a>(
             props: Vec::new(),
         });
     }
-    let mut chain: Vec<&LoweredStyle> = Vec::new();
+    let mut chain: Vec<&'a LoweredStyle> = Vec::new();
     let mut at = Some(id);
     let mut base = None;
     while let Some(i) = at {
@@ -196,11 +196,114 @@ fn split_style<'a>(
         if chain.len() > 16 {
             return Err(format!("{id} is based on too long a chain"));
         }
-        chain.push(s);
+        chain.push(*s);
         at = s.based_on.as_deref();
     }
     let props = chain.iter().rev().flat_map(|s| s.props.iter()).collect();
     Ok(Direct { base, props })
+}
+
+/// Style properties a text range does not take: the applied language (see
+/// [`set_run_prop`]) and a paragraph style's PDF export tag (a style's).
+const NOT_ON_A_RANGE: [&str; 2] = ["characterLanguage", "paragraphStylePdfExportTag"];
+
+/// How one table cell paragraph is formatted when its cell is written
+/// through the mutation door (engine ADR 1098: a cell-qualified story range
+/// takes direct properties). The rule is [`build_paragraph`]'s: a
+/// synthesized style is its Word style plus direct properties, a paragraph
+/// style's character properties go onto its runs under their own, and the
+/// synthesized paragraph style is kept when it has character properties and
+/// no run to carry them or a run's Word character style sets one of them.
+/// `doc-host-model` `direct-format.ts` (`paragraphPlan`) is its TypeScript
+/// twin for the pour.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CellParagraphPlan<'a> {
+    /// The paragraph style to apply, if any (a Word style, or the
+    /// synthesized one when `kept`).
+    pub style: Option<&'a str>,
+    pub kept: bool,
+    /// Paragraph properties set on the paragraph.
+    pub props: Vec<&'a StyleProp>,
+    /// Per run: its character style and direct properties; `None` for a run
+    /// whose style is applied as it is (a synthesized style missing from the
+    /// catalogue).
+    pub runs: Vec<Option<(Option<&'a str>, Vec<&'a StyleProp>)>>,
+}
+
+/// [`CellParagraphPlan`] of `p`.
+pub fn cell_paragraph_plan<'a>(
+    doc: &'a LoweredDoc,
+    p: &'a LoweredParagraph,
+) -> CellParagraphPlan<'a> {
+    let styles = catalogue(doc);
+    let on_range = |x: &&StyleProp| !NOT_ON_A_RANGE.contains(&x.path.as_str());
+    let runs: Vec<Option<Direct>> = p
+        .runs
+        .iter()
+        .map(|r| split_style(&styles, r.char_style_id.as_deref()).ok())
+        .collect();
+    let Ok(direct) = split_style(&styles, p.para_style_id.as_deref()) else {
+        return CellParagraphPlan {
+            style: p.para_style_id.as_deref(),
+            kept: true,
+            props: Vec::new(),
+            runs: runs
+                .into_iter()
+                .map(|d| d.map(|d| (d.base, d.props.into_iter().filter(on_range).collect())))
+                .collect(),
+        };
+    };
+    let chars: Vec<&StyleProp> = direct
+        .props
+        .iter()
+        .copied()
+        .filter(|x| is_char_path(&x.path) && on_range(x))
+        .collect();
+    let all_empty = p.runs.iter().all(|r| r.text.is_empty());
+    let overlaps = !chars.is_empty()
+        && runs.iter().flatten().any(|d| {
+            d.base.is_some_and(|base| {
+                let theirs = resolve_style(doc, base);
+                chars.iter().any(|c| theirs.contains_key(&c.path))
+            })
+        });
+    let kept = !chars.is_empty() && (all_empty || overlaps);
+    let under: &[&StyleProp] = if kept { &[] } else { &chars };
+    CellParagraphPlan {
+        style: if kept {
+            p.para_style_id.as_deref()
+        } else {
+            direct.base
+        },
+        kept,
+        props: if kept {
+            Vec::new()
+        } else {
+            direct
+                .props
+                .iter()
+                .copied()
+                .filter(|x| !is_char_path(&x.path) && on_range(x))
+                .collect()
+        },
+        runs: runs
+            .into_iter()
+            .map(|d| {
+                d.map(|d| {
+                    let mut props: Vec<&StyleProp> = Vec::new();
+                    for x in under
+                        .iter()
+                        .copied()
+                        .chain(d.props.into_iter().filter(on_range))
+                    {
+                        props.retain(|y| y.path != x.path);
+                        props.push(x);
+                    }
+                    (d.base, props)
+                })
+            })
+            .collect(),
+    }
 }
 
 fn len_of(v: &PropValue) -> Option<f32> {

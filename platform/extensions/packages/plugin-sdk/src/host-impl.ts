@@ -49,6 +49,8 @@ import type {
   BindingGuideEdit,
   BindingReadoutRequest,
   BindingReadoutsResult,
+  BindingEyedropperRequest,
+  BindingEyedropperResult,
   BindingWorkspaceResult,
   BindingWorkspaceView,
   BindingProvider,
@@ -209,6 +211,7 @@ import {
   type MlBackend,
 } from "./doors-ml.js";
 import { documentChangeOf } from "./document-change.js";
+import { exportPdfSession } from "./doors-pdf-export.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
 import { mapBacking } from "./testing.js";
@@ -636,6 +639,12 @@ export const HOST_FEATURES: readonly string[] = [
   // refuses the field and the path. paged.draw's Pattern Options ask it
   // before saving a pattern swatch.
   "document.patternPaint@1",
+  // The PDF export door (`host.documents.exportPdf`): the engine's export
+  // session (begin, one page per call, finish) over the editor's client,
+  // one loop for every host (`doors-pdf-export.ts`). STATIC: the session
+  // messages are the engine's since protocol 51; gated on
+  // `capabilities.documents.export`.
+  "documents.exportPdf@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1254,6 +1263,11 @@ export interface BindingProviderBackend {
   /** Rows the active providers add to a host readout surface (the Info
    *  panel), innermost claimer first. */
   readReadouts(request: BindingReadoutRequest): Promise<BindingReadoutsResult>;
+  /** Extensions ADR 1104 — a host Eyedropper sample, to the innermost
+   *  provider that declares the eyedropper lane and does not decline. */
+  takeEyedropperSample(
+    request: BindingEyedropperRequest,
+  ): Promise<BindingEyedropperResult>;
   /** Fires when the active stack changes OR a provider invalidates —
    *  the host panel's re-read signal. */
   onDidChange(listener: () => void): Disposable;
@@ -1538,6 +1552,19 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
       return {
         resolved: false,
         reason: `no active binding provider adds readouts to "${request.surface}"`,
+      };
+    },
+    async takeEyedropperSample(request) {
+      for (const { entry } of active()) {
+        if (!entry.provider.provides.eyedropper) continue;
+        if (!entry.provider.takeEyedropperSample) continue;
+        const read = await entry.provider.takeEyedropperSample(request);
+        if (read.kind === "decline") continue;
+        return { resolved: true, provider: entry.plugin, rgb: read.rgb };
+      }
+      return {
+        resolved: false,
+        reason: "no active binding provider takes the eyedropper's sample",
       };
     },
     onDidChange(listener) {
@@ -2286,6 +2313,8 @@ export function createBundleHost(
       gaps.push("provides.workspace declared without editGuide()");
     if ((p.provides.readouts?.length ?? 0) > 0 && !p.readReadouts)
       gaps.push("provides.readouts declared without readReadouts()");
+    if (p.provides.eyedropper && !p.takeEyedropperSample)
+      gaps.push("provides.eyedropper declared without takeEyedropperSample()");
     // A declaration list is a SET: a repeated entry means two intents
     // fought over one key and one lost silently. Say so instead.
     const dupes = (label: string, xs: readonly string[] | undefined) => {
@@ -2322,6 +2351,7 @@ export function createBundleHost(
       (p.provides.collections?.length ?? 0) === 0 &&
       (p.provides.ops?.length ?? 0) === 0 &&
       !p.provides.workspace &&
+      !p.provides.eyedropper &&
       (p.provides.readouts?.length ?? 0) === 0
     ) {
       gaps.push("provides declares nothing — the provider could never answer");
@@ -3795,7 +3825,7 @@ export function createBundleHost(
       // Engine ADR 1031 (protocol v77). The engine PLANS (a read) and the
       // plan's one batch goes through `mutate`, so the write gate, the
       // namespace check and the undo step are the ordinary ones.
-      const empty = { items: 0, notes: [] };
+      const empty = { items: 0, losses: [] };
       const { pageId: wanted, ...svgOptions } = options;
       try {
         const pageId = wanted ?? (await activePageId());
@@ -3841,7 +3871,7 @@ export function createBundleHost(
     async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
       // Engine ADR 1031 (protocol v77): a pure read.
       requireDocRead("document.exportSvg");
-      const empty = { items: 0, notes: [] };
+      const empty = { items: 0, losses: [] };
       const { pageId: wanted, elementIds, ...options } = request;
       try {
         const pageId = wanted ?? (await activePageId());
@@ -5513,6 +5543,32 @@ export function createBundleHost(
         return null;
       }
     },
+    async decodeImage(bytes, options) {
+      // Extensions ADR 1105 — the engine's decoder; no gate (the bundle
+      // hands in bytes it already holds), null without an engine lane.
+      const decode = getEditor().decodeImage;
+      if (typeof decode !== "function") return null;
+      const max = options?.maxDimension;
+      try {
+        const out = await decode.call(
+          getEditor(),
+          bytes,
+          max !== undefined && max > 0 ? Math.floor(max) : undefined,
+        );
+        if (!out) return null;
+        return {
+          width: out.width,
+          height: out.height,
+          data: new Uint8ClampedArray(
+            out.rgba.buffer,
+            out.rgba.byteOffset,
+            out.rgba.byteLength,
+          ),
+        };
+      } catch {
+        return null;
+      }
+    },
   };
 
   // --------------------------------------------------------- images
@@ -5914,6 +5970,20 @@ export function createBundleHost(
   // host that transfers buffers cannot detach the caller's array.
   const documentsBackend = options?.documents;
   const documents: DocumentsSurface = {
+    // The PDF export door: the engine's export session over the editor's
+    // client, no backend needed (`doors-pdf-export.ts`, the one loop).
+    async exportPdf(pdfOptions, hooks) {
+      requireDeclared(
+        hasDocuments("export"),
+        "documents.exportPdf",
+        "capabilities.documents.export must be declared",
+      );
+      return exportPdfSession(
+        (message) => getEditor().client.send(message),
+        pdfOptions,
+        hooks,
+      );
+    },
     async exportPaged() {
       requireDeclared(
         hasDocuments("export"),
@@ -6487,6 +6557,10 @@ export function createBundleHost(
     // for the engine session (ADR 328, `@1` only).
     featureSet.add("assets.documentFont@2");
   }
+  if (typeof getEditor().decodeImage === "function") {
+    // Extensions ADR 1105 — the engine decodes bytes for a bundle.
+    featureSet.add("assets.decodeImage@1");
+  }
   if (typeof getEditor().mutateWithBytes === "function") {
     // Protocol 66 — the binary commit lane. `document.mutateWithBytes`
     // always exists (it splices a `number[]` into the JSON mutate without
@@ -6556,6 +6630,9 @@ export function createBundleHost(
     // editor that wired it.
     featureSet.add("bindings.workspace@1");
     featureSet.add("bindings.readouts@1");
+    // Extensions ADR 1104 — and the eyedropper lane (the host Eyedropper
+    // hands an active context its sample).
+    featureSet.add("bindings.eyedropper@1");
   }
   if (options?.blobStore) {
     // The blob door always exists (no-store fallback); this flag means a

@@ -102,3 +102,18 @@ are the carrier's group members whose `appearanceLayer` marker names the carrier
 On a host whose engine draws native appearance (engine ADR 1043) this is the fallback lane: the
 commands write `frameAppearance`, a document's stacks — baked or not — move onto it when it opens,
 and the bake has nothing left to bake ([ADR 367](367-envelopes-and-graphic-styles-on-native-appearance.md)).
+
+## Amendment 2026-11-11 — the group bake is gone
+
+Every host has `document.appearance@1`: it is a static feature of the plugin SDK, which builds the
+editor's host, the headless harness and the CLI's. So the fallback lane has no host left, and the
+bake was a second copy of what the engine does when it writes IDML (one capability, one owner:
+the engine bakes several fills and strokes into stacked items at its IDML boundary). The Bake and
+Release appearance commands, their menu entries and `commands/appearance-bake.ts` are deleted; the
+feature ids leave through the deprecation window (`apps/editor/apps/canvas/deprecated-ids.json`,
+no replacement). What stays is the read side of documents saved while the bake existed
+(`commands/appearance-legacy.ts`): the bake record and layer marker, the carrier's derived layers,
+the release batch the migration runs on open, and the carrier of a selected layer or group. The
+in-batch metadata stamp is `commands/draw-metadata.ts`. The round-trip case `appearance-bake`
+left the InDesign lane; its IDML is `test/fixtures/legacy/appearance-bake.idml`, the older
+document the migration is tested on.

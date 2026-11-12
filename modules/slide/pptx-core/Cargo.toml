@@ -19,6 +19,8 @@ paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-fl
 # The chart model (`chart`), with this crate's paints and text properties.
 dml-chart = { path = "../../../platform/shared/dml-chart", features = ["serde"] }
 serde.workspace = true
+# The loss report (engine ADR 1097).
+paged-loss.workspace = true
 # The math tree of an equation (engine ADR 1090).
 paged-math = { workspace = true, features = ["serde"] }
 # Pictures PowerPoint cannot open, written as PNG (`transcode`, ADR 723):

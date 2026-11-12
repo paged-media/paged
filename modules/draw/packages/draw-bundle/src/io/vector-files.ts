@@ -241,7 +241,7 @@ export async function importEps(
     );
     return [frame];
   }
-  for (const note of svg.report.notes) {
+  for (const note of svg.report.losses) {
     host.log.warn(
       `${EPS_IMPORTER_ID}: ${file.name}: ${note.message} (${note.count}×)`,
     );

@@ -316,7 +316,12 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
       col: 1,
     });
     expect(textPours.every((o) => o.args.storyId === "Story/u9")).toBe(true);
-    const edges = content.args.ops.filter((o) => o.op === "setElementProperty");
+    // The cell-scoped writes (a cell's text formatting rides the batch too,
+    // as direct properties on its story range: engine ADR 1098).
+    const edges = content.args.ops.filter(
+      (o) =>
+        o.op === "setElementProperty" && o.args.elementId.kind === "tableCell",
+    );
     expect(edges).toHaveLength(2); // one per column under the h-rule at 18
     expect(
       edges.every((o) => o.args.path === "cellBottomEdgeStrokeWeight"),

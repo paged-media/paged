@@ -38,6 +38,8 @@
 // live in the consumers' BREAKAGE_LOG.md files. Design rationale:
 // DESIGN.md at the repo root.
 
+import type { LossEntry, LossSeverity } from "./wire.js";
+
 export type {
   PluginId,
   PluginManifest,
@@ -211,6 +213,8 @@ export type {
   DocumentsSurface,
   OpenDocumentOptions,
   OpenDocumentResult,
+  PdfExportHooks,
+  PdfExportResult,
   NetworkSurface,
   ConsentResult,
   DataProvidersSurface,
@@ -221,7 +225,6 @@ export type {
   ProviderSchema,
   ProviderField,
   ProviderRecordSet,
-  LossEntry,
   LossReport,
   DataSurface,
   DataService,
@@ -350,6 +353,9 @@ export type {
   BindingReadoutSection,
   BindingReadoutRequest,
   BindingReadoutsRead,
+  BindingEyedropperRequest,
+  BindingEyedropperRead,
+  BindingEyedropperResult,
   BindingWorkspaceResult,
   BindingReadoutsResult,
 } from "./binding-provider.js";
@@ -357,6 +363,7 @@ export type {
 export type {
   AssetSurface,
   AssetKind,
+  DecodedImage,
   DocumentFontOutcome,
   FontFaceAsset,
   FontFaceFormat,
@@ -390,15 +397,21 @@ export type {
   SvgExportOptions,
   SvgImportOptions,
   SvgImportText,
-  SvgNote,
-  SvgNoteSeverity,
   SvgReport,
   SvgTextMode,
 } from "./wire.js";
+// Capability register C18 — the one loss report shape (engine `paged_loss`).
+export type { LossEntry, LossSeverity };
+/** The rows of an `SvgReport`: the shared {@link LossEntry}. */
+export type SvgNote = LossEntry;
+/** How an SVG construct fared: the shared {@link LossSeverity}. */
+export type SvgNoteSeverity = LossSeverity;
 
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.
 export type { MintedElement } from "./wire.js";
+// `host.documents.exportPdf`'s options and its structured findings.
+export type { ExportPdfWireOptions, PreflightFinding } from "./wire.js";
 export type { CommentSummary } from "./wire.js";
 
 export type {

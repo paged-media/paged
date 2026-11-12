@@ -1208,6 +1208,7 @@ impl CanvasModel {
                             story_id,
                             start,
                             end,
+                            cell: None,
                         },
                 } => return read(story_id, Some((*start, *end))),
                 _ => {}
@@ -1755,6 +1756,7 @@ impl CanvasModel {
                         story_id,
                         start,
                         end,
+                        cell: None,
                     },
             } => (story_id.as_str(), Some((*start, *end))),
             _ => return Ok(None),

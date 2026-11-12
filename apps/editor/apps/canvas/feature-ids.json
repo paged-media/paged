@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 921,
+    "command": 924,
     "keybinding": 201,
-    "menu": 665,
+    "menu": 668,
     "panel": 151,
-    "tool": 125
+    "tool": 123
   },
   "features": [
     {
@@ -706,11 +706,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "command:media.paged.draw.command.bakeAppearance",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "command:media.paged.draw.command.blendSelected",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1117,11 +1112,6 @@
     },
     {
       "id": "command:media.paged.draw.command.regenerateLivePaint",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.releaseAppearance",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -4056,6 +4046,16 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.bookmark",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.crossReference",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.deletePage",
       "kind": "command",
       "owner": "editor"
@@ -4066,7 +4066,22 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.endnote",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.footnote",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.generateImage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.indexEntry",
       "kind": "command",
       "owner": "editor"
     },
@@ -5809,16 +5824,6 @@
       "id": "menu:Design/Themes",
       "kind": "menu",
       "owner": "media.paged.slide"
-    },
-    {
-      "id": "menu:Draw/Appearance/Bake",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Appearance/Release",
-      "kind": "menu",
-      "owner": "media.paged.draw"
     },
     {
       "id": "menu:Draw/Blend/Expand",
@@ -8671,6 +8676,31 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Type/Insert bookmark…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert cross-reference…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert endnote",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert footnote",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/New index entry…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Type/Paragraph styles",
       "kind": "menu",
       "owner": "editor"
@@ -9741,11 +9771,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.cornerRadius",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.crystallize",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -10007,11 +10032,6 @@
     },
     {
       "id": "tool:media.paged.image.tool.eraser",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.eyedropper",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -10384,6 +10404,12 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:media.paged.draw.command.bakeAppearance",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:media.paged.draw.command.cornersBevel",
       "replacement": "command:paged.corners.bevel",
       "deprecatedIn": "0.78.0",
@@ -10510,6 +10536,12 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:media.paged.draw.command.releaseAppearance",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:media.paged.draw.command.releaseOpacityMask",
       "replacement": "command:paged.core.releaseOpacityMask",
       "deprecatedIn": "0.78.0",
@@ -10570,8 +10602,20 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "menu:Draw/Appearance/Bake",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "menu:Draw/Appearance/Clear",
       "replacement": "menu:Object/Appearance/Clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Release",
+      "replacement": null,
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
@@ -10726,6 +10770,12 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "tool:media.paged.draw.tool.cornerRadius",
+      "replacement": "tool:paged.tool.select",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "tool:media.paged.draw.tool.eyedropper",
       "replacement": "tool:paged.tool.eyedropper",
       "deprecatedIn": "0.78.0",
@@ -10758,6 +10808,12 @@
     {
       "id": "tool:media.paged.draw.tool.star",
       "replacement": "tool:paged.tool.polygon",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.image.tool.eyedropper",
+      "replacement": "tool:paged.tool.eyedropper",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

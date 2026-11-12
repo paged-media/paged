@@ -133,6 +133,13 @@ pub enum ElementId {
         story_id: String,
         start: u32,
         end: u32,
+        /// Engine ADR 1098 — the cell qualifier (rides v78, additive;
+        /// absent ⇒ the story body). `Some` ⇒ `[start, end)` is a
+        /// cell-local range of that table cell's own paragraphs, as
+        /// `ApplyStyle.cell` addresses it: a cell's text takes direct
+        /// character and paragraph properties through it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cell: Option<TextCellAddr>,
     },
     /// W3.A1 — a `<Table>` addressed by `(story_id, table_id)`. Maps to
     /// `paged_mutate::NodeId::Table`. Backs `AppliedTableStyle` writes
@@ -455,6 +462,7 @@ mod tests {
                 story_id: "Story/u1".into(),
                 start: 0,
                 end: 6,
+                cell: None,
             },
         ];
         for id in cases {

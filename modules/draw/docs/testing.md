@@ -39,5 +39,5 @@ bun run test:dom    # the panels, with happy-dom
 ```
 
 Image Trace needs `packages/draw-bundle/wasm/` (`moon run draw:wasm`); its headless and
-unit tests decode the fixture PNG through `test/headless/raster-realm.ts`, because Bun has
-no `createImageBitmap`.
+the headless ones decode the fixture PNG with the harness's engine (`host.assets.decodeImage`);
+the no-engine unit rigs hand their host `test/headless/png-decoder.ts` as the decoder.

@@ -259,25 +259,25 @@ export {
   type TableRefreshOps,
 } from "./table-refresh";
 
+// Engine ADR 1098 — cell text formatting as direct properties on the
+// cell-qualified story range (character and paragraph facets).
 export {
+  CHARACTER_FACET_CLEARS,
+  FILL_TAB_GAP_PT,
   NO_CHARACTER_STYLE,
-  cellCharacterStyleApplies,
-  cellCharacterStyleId,
-  cellCharacterStyleMints,
-  cellCharacterStyles,
-  cellsNeedingRestyle,
-} from "./cell-character-styles";
-
-// Wave 9 — horizontal cell alignment as paragraph styles on the native table.
-export {
-  ALIGN_PARAGRAPH_STYLES,
   NO_PARAGRAPH_STYLE,
-  cellAlignApplies,
-  cellAlignMap,
-  cellAlignStyleMints,
+  PARAGRAPH_FACET_CLEARS,
+  cellCharacterFormatMap,
+  cellCharacterFormatOps,
+  cellCharacterFormats,
+  cellParagraphFormat,
+  cellParagraphFormatOps,
+  cellParagraphFormats,
   cellsNeedingRealign,
-  needsAlignStyles,
-} from "./cell-paragraph-align";
+  cellsNeedingRestyle,
+  hasCellCharacterFormats,
+  type CellTextFormat,
+} from "./cell-text-format";
 
 // W2.2 — cell rotation (cell styles) and diagonal borders (page lines).
 export {

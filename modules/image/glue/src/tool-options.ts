@@ -57,9 +57,6 @@ const M = defineMessages("image.toolOptions", {
   sampleSize: "Sample size",
   pointSample: "Point sample",
   average: "{n} by {n} average",
-  sample: "Sample",
-  currentLayer: "Current layer",
-  allLayers: "All layers",
   size: "Size",
   tolerance: "Tolerance",
   contiguous: "Contiguous",
@@ -110,7 +107,8 @@ const wand = (): ToolOptionField[] => [
   { kind: "toggle", key: "contiguous", label: t(M.contiguous) },
 ];
 
-/** WP4.10 — the Eyedropper's and Color Sampler's sample size. */
+/** WP4.10 — the Color Sampler's sample size (the host Eyedropper has its
+ *  own option of the same list). */
 const sampleSize = (): ToolOptionField => ({
   kind: "select",
   key: "sampleSize",
@@ -223,7 +221,6 @@ export function toolOptionFields(ids: {
   wand: string;
   bucket: string;
   gradient: string;
-  eyedropper?: string;
   colorSampler?: string;
   /** The brush engine's tools, by their option key. */
   paintTools?: Partial<Record<PaintToolKind, string>>;
@@ -239,22 +236,6 @@ export function toolOptionFields(ids: {
       : {}),
     ...(p.colorReplace ? { [p.colorReplace]: colorReplaceFields() } : {}),
     ...(p.magicEraser ? { [p.magicEraser]: magicEraserFields() } : {}),
-    ...(ids.eyedropper
-      ? {
-          [ids.eyedropper]: [
-            sampleSize(),
-            {
-              kind: "select" as const,
-              key: "sampleSource",
-              label: t(M.sample),
-              options: [
-                { value: "layer", label: t(M.currentLayer) },
-                { value: "all", label: t(M.allLayers) },
-              ],
-            },
-          ],
-        }
-      : {}),
     ...(ids.colorSampler ? { [ids.colorSampler]: [sampleSize()] } : {}),
     [ids.brush]: [
       size(),

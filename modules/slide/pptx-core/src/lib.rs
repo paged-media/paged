@@ -34,6 +34,7 @@
 pub mod anim;
 pub mod av;
 pub mod chart;
+pub mod loss;
 // Picture formats and sizes: one reader for doc, slide and sheet, in the
 // shared OOXML crate.
 pub use paged_ooxml::media;
@@ -92,8 +93,10 @@ pub struct Presentation {
     pub table_styles: Vec<TableStyle>,
     /// `a:tblStyleLst def`: the style new tables get.
     pub default_table_style: Option<String>,
-    /// Things the importer met and did not model, one line each.
-    pub diagnostics: Vec<String>,
+    /// Things the importer met and did not model (engine ADR 1097; an older
+    /// deck model's sentences read as [`loss::LEGACY`] entries).
+    #[serde(default, deserialize_with = "loss::read_losses")]
+    pub diagnostics: Vec<loss::LossEntry>,
 }
 
 /// A slide master (`p:sldMaster`).

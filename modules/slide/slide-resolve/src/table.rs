@@ -205,9 +205,11 @@ fn style_of(t: &pptx_core::Table, ctx: &Ctx) -> Option<TableStyle> {
         .cloned()
         .or_else(|| table_styles::builtin(id))
         .or_else(|| {
-            ctx.note(format!(
-                "table style {id} is unknown; drawn as No Style, Table Grid"
-            ));
+            ctx.note(
+                "pptx.table.styleUnknown",
+                pptx_core::loss::LossSeverity::Approximated,
+                format!("table style {id} is unknown; drawn as No Style, Table Grid"),
+            );
             table_styles::builtin(table_styles::TABLE_GRID)
         })
 }

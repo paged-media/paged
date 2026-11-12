@@ -241,15 +241,27 @@ pub fn parse_space(i: &mut Interp<'_>, o: &Obj, depth: usize) -> Result<ColorSpa
             }
         }
         "CIEBasedA" => {
-            i.report.unsupported("CIE-based colour (approximated)");
+            i.report.unsupported(
+                "eps.color.cieBased",
+                paged_loss::LossSeverity::Approximated,
+                "CIE-based colour (approximated)",
+            );
             ColorSpace::Cie(Rc::new(ColorSpace::Gray))
         }
         "CIEBasedABC" | "CIEBasedDEF" | "Lab" => {
-            i.report.unsupported("CIE-based colour (approximated)");
+            i.report.unsupported(
+                "eps.color.cieBased",
+                paged_loss::LossSeverity::Approximated,
+                "CIE-based colour (approximated)",
+            );
             ColorSpace::Cie(Rc::new(ColorSpace::Rgb))
         }
         "CIEBasedDEFG" => {
-            i.report.unsupported("CIE-based colour (approximated)");
+            i.report.unsupported(
+                "eps.color.cieBased",
+                paged_loss::LossSeverity::Approximated,
+                "CIE-based colour (approximated)",
+            );
             ColorSpace::Cie(Rc::new(ColorSpace::Cmyk))
         }
         _ => return Err(err("undefined")),

@@ -318,6 +318,7 @@ export interface LoweredCrop {
 
 /** `dml_native::native::NativeFx` (doc ADR 618): the lowering kit's own
  *  type (plugin-sdk), colours `#RRGGBB`; lengths pt; opacities 0–100. */
+import type { LossEntry } from "@paged-media/plugin-api";
 import type { NativeFx } from "@paged-media/plugin-sdk";
 import type { RasterOp } from "@paged-media/plugin-api";
 export type { NativeFx };
@@ -528,11 +529,10 @@ export interface LoweredNoteNumbering {
   pos?: string;
 }
 
-export interface Diagnostic {
-  severity: "info" | "warning" | "error";
-  message: string;
-  tier: number;
-}
+/** A construct not lowered natively (ADR-007): the shared `LossEntry`
+ *  (capability register C18), its code the fidelity tier (`docx.tier0` …
+ *  `docx.tier4`), its severity `info`, `approximated` or `dropped`. */
+export type Diagnostic = LossEntry;
 
 /** The whole Tier-0 lowering of one Word document body. */
 export interface LoweredDoc {

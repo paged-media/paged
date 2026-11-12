@@ -19,7 +19,9 @@
 //! The wasm-bindgen surface of paged.draw — JSON in and JSON out: the
 //! image trace over [`draw_trace`], and since draw ADR 364 the DXF
 //! interchange over [`draw_dxf`] and the SVG paint reader of the engine's
-//! `paged-svg` (a recolour that rewrites colours in place).
+//! `paged-svg` (a recolour that rewrites colours in place). The vector
+//! Puppet Warp and Liquify run `paged-warp` here too ([`warp`], flat
+//! `Float64Array`s rather than JSON: they cross on every pointer move).
 //!
 //! **Why JSON and not a typed binding.** The boundary is crossed ONCE per
 //! trace with a result of a few hundred KB, so a `serde_json` string is
@@ -40,6 +42,9 @@
 #![allow(clippy::unused_unit)] // wasm-bindgen's generated shims
 
 use draw_trace::{trace_rgba, TraceOptions, MAX_DIMENSION, MAX_PIXELS};
+
+/// Puppet Warp and Liquify for the vector tools (`paged-warp`).
+pub mod warp;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;

@@ -78,3 +78,12 @@ written as a `TOC` field.
 - Section breaks are break rules: a new section's own page setup and headers need the section
   stories of a reopened document.
 - F9 updates the caret's story, not only the selected field.
+
+## Amendment (2026-11-11): the inserts are the host's
+
+Insert footnote and endnote (Cmd+Alt+F, Cmd+Alt+D), Bookmark, Cross-reference and Mark Entry keep
+their Word dialogs (the References panel's sections), but the write is the editor's: they call the
+host's typed commands `paged.insert.footnote`, `endnote`, `bookmark`, `crossReference` and
+`indexEntry` (editor ADR 315), the same commands the host's Type menu and Cross-References and Index
+panels run. On a host without them (the headless harness) the same shared insert
+(`@paged-media/helpers` `insertReference`) runs through `host.text`. The ops written are unchanged.

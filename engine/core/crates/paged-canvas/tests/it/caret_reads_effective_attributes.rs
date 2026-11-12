@@ -217,6 +217,7 @@ fn the_snapshot_reports_what_the_range_itself_sets() {
             story_id: "st1".into(),
             start,
             end,
+            cell: None,
         };
         m.element_properties(&id)
             .expect("a range")

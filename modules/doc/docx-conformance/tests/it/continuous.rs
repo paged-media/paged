@@ -41,6 +41,7 @@ use crate::layout::{assert_page, label, labels, lay_out, length, resolved, word_
 use docx_conformance::{continuous_docx, CONTINUOUS_CASES};
 use docx_core::SectionKind;
 use docx_import::import_docx;
+use docx_lower::ir::LossSeverity;
 use docx_lower::ir::{LoweredBlock, LoweredDoc, PropValue};
 
 fn word_map() -> serde_json::Value {
@@ -154,7 +155,7 @@ fn continuous_sections_join_the_story_word_continues__feat__plugin_doc_word_pagi
     let warnings: Vec<&str> = ir
         .diagnostics
         .iter()
-        .filter(|d| d.severity == "warning")
+        .filter(|d| d.severity > LossSeverity::Info)
         .map(|d| d.message.as_str())
         .collect();
     assert_eq!(warnings, Vec::<&str>::new());
@@ -196,7 +197,7 @@ fn without_span_columns_a_column_change_opens_a_page__feat__plugin_doc_word_pagi
     let warnings: Vec<&str> = ir
         .diagnostics
         .iter()
-        .filter(|d| d.severity == "warning")
+        .filter(|d| d.severity > LossSeverity::Info)
         .map(|d| d.message.as_str())
         .collect();
     assert_eq!(warnings.len(), 3, "{warnings:?}");

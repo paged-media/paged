@@ -120,7 +120,10 @@ fn every_face_powerpoint_embedded_is_decoded_for_the_document() {
             faces.diagnostics
         );
         assert!(
-            !deck.diagnostics.iter().any(|d| d.contains("embedded font")),
+            !deck
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("embedded font")),
             "{name}: {:?}",
             deck.diagnostics
         );
@@ -165,10 +168,10 @@ fn a_face_licensed_for_preview_and_print_is_not_used_in_an_editable_deck() {
     let line = faces
         .diagnostics
         .iter()
-        .find(|d| d.contains("\u{201c}Lato\u{201d} (Bold Italic)"))
+        .find(|d| d.message.contains("\u{201c}Lato\u{201d} (Bold Italic)"))
         .unwrap();
-    assert!(line.contains("preview and print only"), "{line}");
-    assert!(line.contains("substitute"), "{line}");
+    assert!(line.message.contains("preview and print only"), "{line}");
+    assert!(line.message.contains("substitute"), "{line}");
 }
 
 #[test]
@@ -178,14 +181,16 @@ fn restricted_and_bitmap_only_faces_are_not_used() {
         .faces
         .iter()
         .all(|f| f.use_ == FaceUse::Restricted && f.sfnt.is_none()));
-    assert!(faces_r.diagnostics[0].contains("not licensed for embedding"));
+    assert!(faces_r.diagnostics[0]
+        .message
+        .contains("not licensed for embedding"));
     // Editable, but only its bitmaps may be embedded.
     let (_, faces_b) = read_faces(&with_fs_type(0x0208));
     assert!(faces_b
         .faces
         .iter()
         .all(|f| f.use_ == FaceUse::BitmapOnly && f.sfnt.is_none()));
-    assert!(faces_b.diagnostics[0].contains("only its bitmaps"));
+    assert!(faces_b.diagnostics[0].message.contains("only its bitmaps"));
 }
 
 #[test]
@@ -230,17 +235,23 @@ fn a_face_that_cannot_be_read_is_named_with_the_reason() {
     assert_eq!(deck.embedded_fonts.len(), 1);
     assert_eq!(faces.faces[0].use_, FaceUse::Unreadable);
     let line = &faces.diagnostics[0];
-    assert!(line.starts_with("ppt/fonts/font1.fntdata: "), "{line}");
     assert!(
-        line.contains("\u{201c}Montserrat\u{201d} (Regular) could not be read"),
+        line.message.starts_with("ppt/fonts/font1.fntdata: "),
         "{line}"
     );
-    assert!(line.contains("substitute"), "{line}");
+    assert!(
+        line.message
+            .contains("\u{201c}Montserrat\u{201d} (Regular) could not be read"),
+        "{line}"
+    );
+    assert!(line.message.contains("substitute"), "{line}");
     // Not a font at all.
     let bytes = with_embedded_font(&fixture_bytes("geometry"), "Brand", b"not a font");
     let (_, faces) = read_faces(&bytes);
     assert_eq!(faces.faces[0].use_, FaceUse::Unreadable);
-    assert!(faces.diagnostics[0].contains("not an Embedded OpenType file"));
+    assert!(faces.diagnostics[0]
+        .message
+        .contains("not an Embedded OpenType file"));
 }
 
 #[test]

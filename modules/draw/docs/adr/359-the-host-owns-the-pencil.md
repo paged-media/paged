@@ -108,3 +108,14 @@ de Casteljau insert and then `pathOpenAt`, one batch. The plan and the write are
 This bundle's "Scissors (any point)" tool and its handler are gone (the id leaves through the
 deprecation window). The star's anchors and insert moved from `helpers` to
 `@paged-media/vector-geometry`'s `star` the same day.
+
+## Amendment (2026-11-11): one corner radius
+
+The Corner Radius tool (`media.paged.draw.tool.cornerRadius`) is gone. The host's live-shape
+widgets (editor ADR 310, amended the same day) round a rectangle's and a text frame's corners one
+by one and a polygon's corners together, under the Selection tool, with the renderer's own
+inscribed-circle rule for a polygon (`@paged-media/vector-tools` `polygon-corners.ts`, the half of
+the old `corner-radius-machine.ts` the host uses; the box half duplicated the host's widget rule
+and is deleted). The id leaves through the deprecation window, with the Selection tool as its
+replacement. `cornerRadiiMutationFor`, which only the tool used, went with it.
+

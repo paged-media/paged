@@ -42,7 +42,7 @@ import {
 } from "../../src";
 import { pngBytes } from "../fixtures/build-idml";
 import { ringPixels } from "../fixtures/corpus";
-import { installPngRealm } from "../headless/raster-realm";
+import { pngDecodeImage } from "../headless/png-decoder";
 import { rectEl, unitRig, type FakeElement } from "./unit-kit";
 
 const C = "media.paged.draw.command";
@@ -282,10 +282,10 @@ describe("paged.draw commands, no engine — Image Trace options and Re-trace", 
 
   it("Re-trace refuses an image that was never traced, and replaces a trace in ONE batch", async () => {
     covers("command:media.paged.draw.command.retraceImage");
-    const uninstall = installPngRealm();
-    try {
+    {
       const r = unitRig([image], {
         selection: [IMAGE],
+        decodeImage: pngDecodeImage,
         reply: bytesReply as never,
       });
       const geometry = r.fake.editor.client.elementGeometry.bind(
@@ -318,8 +318,6 @@ describe("paged.draw commands, no engine — Image Trace options and Re-trace", 
           .filter((w) => w.args.path === "frameFillColor")
           .every((w) => (w.args.value as { value: unknown }).value === null),
       ).toBe(true);
-    } finally {
-      uninstall();
     }
   });
 });

@@ -20,7 +20,8 @@
 // Free Transform (editor ADR 295) end to end: the `e` tool on the real
 // rail, real pointer drags on the canvas, the committed geometry read back
 // from the engine, and one Cmd+Z undoing each drag — move, scale, rotate,
-// shear (both axes), free distort and perspective; the Control bar's
+// shear (both axes), free distort and perspective (the live Free Distort
+// effect); the Control bar's
 // reference grid, modes and numeric shear.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -61,7 +62,10 @@ const corners = (g: Geometry): Array<[number, number]> => {
   return [at(left, top), at(right, top), at(right, bottom), at(left, bottom)];
 };
 
-const anchorsOf = (page: Page, ref: Ref): Promise<Array<[number, number]>> =>
+/** The four corners of a path's box as its LIVE Free Distort places them
+ *  (the head `freeDistort` entry of its object effect stack, or the box
+ *  itself), on the page. The path's own anchors do not move. */
+const distortedOf = (page: Page, ref: Ref): Promise<Array<[number, number]>> =>
   page.evaluate(async (r) => {
     const c = (
       globalThis as unknown as {
@@ -71,16 +75,39 @@ const anchorsOf = (page: Page, ref: Ref): Promise<Array<[number, number]>> =>
               anchors: { anchor: [number, number] }[];
               itemTransform?: Affine | null;
             } | null>;
+            elementProperties: (id: unknown) => Promise<{
+              entries: { path: string; value: unknown }[];
+            } | null>;
           };
         };
       }
     ).__canvas;
     const p = await c.client.pathAnchors(r);
     const t = p?.itemTransform ?? [1, 0, 0, 1, 0, 0];
-    return (p?.anchors ?? []).map(({ anchor: [x, y] }) => [
-      t[0] * x + t[2] * y + t[4],
-      t[1] * x + t[3] * y + t[5],
-    ]) as Array<[number, number]>;
+    const xs = (p?.anchors ?? []).map((a) => a.anchor[0]);
+    const ys = (p?.anchors ?? []).map((a) => a.anchor[1]);
+    const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+    const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+    const props = await c.client.elementProperties(r);
+    const v = props?.entries.find((e) => e.path === "frameEffectStack")
+      ?.value as
+      | { value?: { entries?: { kind: string; corners?: number[][] }[] } }
+      | undefined;
+    const head = v?.value?.entries?.[0];
+    const unit =
+      head?.kind === "freeDistort" && head.corners
+        ? head.corners
+        : [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+          ];
+    return unit.map(([u, w]) => {
+      const x = x0 + u! * (x1 - x0);
+      const y = y0 + w! * (y1 - y0);
+      return [t[0] * x + t[2] * y + t[4], t[1] * x + t[3] * y + t[5]];
+    }) as Array<[number, number]>;
   }, ref);
 
 async function drag(
@@ -219,7 +246,7 @@ test.describe("Free Transform tool", () => {
       .toBeLessThan(1e-3);
   });
 
-  test("AC-FT-2 — Cmd on a corner distorts a path, Cmd+Alt+Shift puts it in perspective; one undo step each @feat:editor-tools.free-transform @level:gesture", async ({
+  test("AC-FT-2 — Cmd on a corner distorts a path live, Cmd+Alt+Shift puts it in perspective; one undo step each @feat:editor-tools.free-transform @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -233,10 +260,11 @@ test.describe("Free Transform tool", () => {
     ]);
     const ref: Ref = { kind: "polygon", id };
     await freeTransformOn(designer, page, ref);
-    const before = await anchorsOf(page, ref);
+    const before = await distortedOf(page, ref);
     const se = before.reduce((m, p) => (p[0] + p[1] > m[0] + m[1] ? p : m));
 
-    // FREE DISTORT — the SE corner alone moves.
+    // FREE DISTORT — the SE corner alone moves (the engine's live Free
+    // Distort: the path keeps its anchors, the effect moves the corner).
     await drag(
       page,
       [se[0], se[1]],
@@ -245,12 +273,12 @@ test.describe("Free Transform tool", () => {
     );
     await expect
       .poll(async () =>
-        (await anchorsOf(page, ref)).some(
+        (await distortedOf(page, ref)).some(
           (p) => near(p[0], se[0] + 40, 3) && near(p[1], se[1] + 30, 3),
         ),
       )
       .toBe(true);
-    const distorted = await anchorsOf(page, ref);
+    const distorted = await distortedOf(page, ref);
     const nw = before.reduce((m, p) => (p[0] + p[1] < m[0] + m[1] ? p : m));
     expect(distorted.some((p) => near(p[0], nw[0]) && near(p[1], nw[1]))).toBe(
       true,
@@ -258,7 +286,7 @@ test.describe("Free Transform tool", () => {
     await undo(page);
     await expect
       .poll(async () =>
-        (await anchorsOf(page, ref)).some(
+        (await distortedOf(page, ref)).some(
           (p) => near(p[0], se[0]) && near(p[1], se[1]),
         ),
       )
@@ -274,7 +302,7 @@ test.describe("Free Transform tool", () => {
     );
     await expect
       .poll(async () =>
-        (await anchorsOf(page, ref)).some(
+        (await distortedOf(page, ref)).some(
           (p) => near(p[0], nw[0] - 30, 3) && near(p[1], nw[1], 3),
         ),
       )
@@ -282,7 +310,7 @@ test.describe("Free Transform tool", () => {
     await undo(page);
     await expect
       .poll(async () =>
-        (await anchorsOf(page, ref)).some(
+        (await distortedOf(page, ref)).some(
           (p) => near(p[0], nw[0]) && near(p[1], nw[1]),
         ),
       )

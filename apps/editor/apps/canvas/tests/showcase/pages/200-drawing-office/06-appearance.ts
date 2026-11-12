@@ -19,15 +19,11 @@
 
 // The appearance stack + graphic styles — p81, B-Body recto.
 //
-// AN IDML FRAME HAS ONE FILL AND ONE STROKE, and this page does not
-// pretend otherwise. paged.draw's appearance is a metadata STACK on
-// the element's own envelope plus a front-most-layer bake to the
-// frame's real paint; the faithful N-layer lowering (B-24) is a GROUP
-// of stacked single-paint page items sharing the source's geometry —
-// ordinary IDML, which is why it exports. The page builds the same
-// stack twice: the LIVE twin keeps the metadata form, the second is
-// group-BAKED, and the two render alike — that likeness is the
-// exhibit.
+// AN IDML FRAME HAS ONE FILL AND ONE STROKE; the engine's native
+// appearance gives an item several (engine ADR 1043), draws them itself
+// and bakes them into stacked single-paint items when it writes IDML.
+// The page builds a stack with the host's Appearance commands. (draw's
+// own group bake, B-24, is gone: draw ADR 354 amendment.)
 //
 // GRAPHIC STYLES are the LINK, not a clipboard: three tiles share one
 // saved style, a redefine propagates through the link (overrides
@@ -38,18 +34,12 @@ import { expect } from "@playwright/test";
 
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
-import {
-  invokeWith,
-  newRefs,
-  partitionByPage,
-  settle,
-} from "../../plugin-support";
+import { invokeWith } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   corner,
   draw,
   path,
-  polygons,
   propOf,
   readDrawPart,
   spreadOffset,
@@ -90,7 +80,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, 86, right, 126],
     [
       {
-        text: "An IDML frame owns one fill and one stroke. The stack below is plugin metadata plus a bake: the left blob is LIVE (stack on the envelope, front-most layer on the frame), the right one is the same stack lowered to a carrier group of single-paint items.",
+        text: "An IDML frame owns one fill and one stroke. The blob below carries more: the engine's own appearance draws every fill and stroke, and an IDML export lowers them to stacked single-paint items InDesign reads.",
         style: STYLE.bodyFirst,
       },
     ],
@@ -150,39 +140,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     });
   };
 
-  const liveTwin = await blob(140, 210);
-  await stackOn(liveTwin);
-
-  const bakedTwin = await blob(330, 210);
-  await stackOn(bakedTwin);
-
-  // ── the B-24 group bake, verified where it landed ────────────────
-  let bakedLayers = 0;
-  const beforeBake = await polygons(ctx);
-  await doc.select("polygon", bakedTwin);
-  await draw(ctx, "bakeAppearance");
-  const bakeGrew = await settle(
-    ctx.page,
-    async () => (await polygons(ctx)).length > beforeBake.length,
-    15_000,
-  );
-  if (bakeGrew) {
-    const derived = await newRefs(ctx.page, "polygon", beforeBake);
-    const where = await partitionByPage(ctx.page, derived, pageId);
-    if (where.elsewhere.length > 0) {
-      // The read-then-reinsert seam (measured on the versos) — if it
-      // bites here too, release rather than leave stray artwork.
-      await draw(ctx, "releaseAppearance");
-      notes.push(
-        `appearance bake landed ${where.elsewhere.length} derived layer(s) off this page — released, recorded, not shown`,
-      );
-    } else {
-      bakedLayers = derived.length;
-      for (const ref of derived) elements.push(ref.id);
-    }
-  } else {
-    notes.push("appearance bake minted nothing — recorded");
-  }
+  const stacked = await blob(235, 210);
+  await stackOn(stacked);
 
   const twinCaption = await proseFrame(
     ctx,
@@ -190,10 +149,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, 286, right, 336],
     [
       {
-        text:
-          bakedLayers > 0
-            ? `Two identical blobs, each carrying +1 fill and +2 strokes over their own paint, one stroke reordered by Appearance: Reorder layer. The left is live metadata; the right was group-baked into a carrier plus ${bakedLayers} derived single-paint layers. They render alike - that is the bake's whole claim, and release restores the carrier exactly.`
-            : "Two identical blobs carrying the same appearance stack; the group bake's derived layers are recorded in the notes for this page.",
+        text: "A blob carrying +1 fill and +2 strokes over its own paint, one stroke moved down by Appearance: Move layer. One item, several paints: the engine draws them, and the save bakes them for InDesign.",
         style: STYLE.caption,
       },
     ],
@@ -309,7 +265,6 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await specLabel(ctx, page, [
       "Specimen No. 119",
       "paged.appearance addFill/addStroke/moveLayer",
-      "bakeAppearance (B-24 carrier group)",
       "saveGraphicStyle/apply/redefine/breakLink",
     ]),
   );
@@ -317,7 +272,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       page,
-      "the front-most-layer bake is NOT a composite of N fills - it lowers the top opaque layer to the frame's single fill/stroke slots; the carrier-group bake is the faithful form, at 2 undo steps because insertPath mints ids a batch cannot address in itself → Appendix A",
+      "several fills and strokes are the engine's own appearance (engine ADR 1043): drawn on canvas and in PDF, baked into stacked items only where IDML has one fill and one stroke per frame → Appendix A",
     ),
   );
 

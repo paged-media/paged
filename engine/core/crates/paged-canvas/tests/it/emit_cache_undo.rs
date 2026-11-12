@@ -404,6 +404,7 @@ fn character_property_undo_restores_display_list_no_stale_cache() {
             story_id: "u10".into(),
             start: 0,
             end: 1000,
+            cell: None,
         };
         model
             .apply_mutation(&Mutation::SetElementProperty {
@@ -459,6 +460,7 @@ fn character_ligatures_reads_default_on_and_round_trips() {
         story_id: "u10".into(),
         start: 0,
         end: 1000,
+        cell: None,
     };
 
     // Default state (no `Ligatures` attribute): reads ON.

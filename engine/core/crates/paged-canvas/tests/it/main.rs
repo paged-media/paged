@@ -24,6 +24,7 @@ mod c65_tree_plugin_metadata;
 mod c69_text_outlines;
 mod c83_gradient_axis_read;
 mod caret_reads_effective_attributes;
+mod cell_direct_properties;
 mod cell_style_undo;
 mod cell_text;
 mod clip_groups;

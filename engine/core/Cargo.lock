@@ -1575,6 +1575,7 @@ dependencies = [
  "dml-native",
  "docx-core",
  "paged-geom",
+ "paged-loss",
  "paged-math",
  "paged-model",
  "paged-ooxml",
@@ -1628,6 +1629,7 @@ dependencies = [
  "dxf",
  "paged-fmt",
  "paged-geom",
+ "paged-loss",
  "paged-svg",
  "serde",
  "serde_json",
@@ -4567,6 +4569,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-loss"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tsify-next",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "paged-math"
 version = "0.0.0"
 dependencies = [
@@ -4587,6 +4599,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "paged-colour-math",
+ "paged-loss",
  "paged-math",
  "paged-pixel",
  "schemars",
@@ -4705,6 +4718,7 @@ dependencies = [
  "image",
  "kurbo 0.11.3",
  "paged-color",
+ "paged-loss",
  "paged-raster",
  "serde_json",
  "thiserror",
@@ -4946,6 +4960,7 @@ dependencies = [
  "paged-compose",
  "paged-fmt",
  "paged-geom",
+ "paged-loss",
  "paged-mutate",
  "paged-pixel",
  "paged-wire",
@@ -5013,6 +5028,9 @@ dependencies = [
 [[package]]
 name = "paged-warp"
 version = "0.0.0"
+dependencies = [
+ "paged-geom",
+]
 
 [[package]]
 name = "paged-wire"
@@ -5114,6 +5132,7 @@ dependencies = [
  "idml-import",
  "kurbo 0.13.1",
  "paged-blend",
+ "paged-loss",
  "paged-model",
  "paged-pdf-annots",
  "paged-pdf-page",
@@ -5394,6 +5413,7 @@ dependencies = [
  "dml-geom",
  "flate2",
  "image-webp",
+ "paged-loss",
  "paged-math",
  "paged-ooxml",
  "serde",
@@ -7317,6 +7337,7 @@ dependencies = [
  "draw-dxf",
  "draw-trace",
  "paged-svg",
+ "paged-warp",
  "serde_json",
  "uuid",
  "wasm-bindgen",

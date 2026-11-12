@@ -21,6 +21,7 @@
 // placement record. No React, no host: unit-testable as plain functions.
 
 import type { Diagnostic, LoweredDoc } from "@paged-media/doc-host-model";
+import { lossRank } from "@paged-media/plugin-sdk";
 import { t } from "@paged-media/strings";
 
 import { OUTLINE } from "../messages.js";
@@ -132,15 +133,11 @@ export function summarize(ir: LoweredDoc): DocSummary {
   return { paragraphs, tables, images, hyperlinks, headings, pageLine };
 }
 
-/** Diagnostics sorted error → warning → info (the ADR-007 payload). */
+/** Diagnostics sorted left out → drawn differently → worth knowing (the
+ *  ADR-007 payload, the SDK's loss order). */
 export function sortedDiagnostics(ir: LoweredDoc): Diagnostic[] {
-  const rank: Record<Diagnostic["severity"], number> = {
-    error: 0,
-    warning: 1,
-    info: 2,
-  };
   return [...ir.diagnostics].sort(
-    (a, b) => rank[a.severity] - rank[b.severity],
+    (a, b) => lossRank(a.severity) - lossRank(b.severity),
   );
 }
 

@@ -1279,6 +1279,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-loss"
+version = "0.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "paged-pixel"
 version = "0.0.0"
 
@@ -2395,6 +2402,7 @@ dependencies = [
  "blitz-traits",
  "criterion",
  "kurbo",
+ "paged-loss",
  "paged-pixel",
  "parley",
  "peniko",

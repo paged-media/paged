@@ -90,6 +90,9 @@ pub enum NodeIdJson {
         story_id: String,
         start: u32,
         end: u32,
+        /// Engine ADR 1098 — a table cell's own text.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cell: Option<paged_mutate::operation::CellAddr>,
     },
     /// W3.A1 — a `<Table>` addressed by `(story_id, table_id)`.
     Table {
@@ -126,10 +129,12 @@ impl From<NodeId> for NodeIdJson {
                 story_id,
                 start,
                 end,
+                cell,
             } => NodeIdJson::StoryRange {
                 story_id,
                 start,
                 end,
+                cell,
             },
             NodeId::Table { story_id, table_id } => NodeIdJson::Table { story_id, table_id },
             NodeId::TableCell {
@@ -167,10 +172,12 @@ impl From<&NodeIdJson> for NodeId {
                 story_id,
                 start,
                 end,
+                cell,
             } => NodeId::StoryRange {
                 story_id: story_id.clone(),
                 start: *start,
                 end: *end,
+                cell: cell.clone(),
             },
             NodeIdJson::Table { story_id, table_id } => NodeId::Table {
                 story_id: story_id.clone(),

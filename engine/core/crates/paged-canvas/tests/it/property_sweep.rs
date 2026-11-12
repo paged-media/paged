@@ -157,6 +157,7 @@ fn targets() -> Vec<(ElementId, Option<&'static str>)> {
                 story_id: "st1".into(),
                 start: 0,
                 end: 5,
+                cell: None,
             },
             None,
         ),
@@ -192,10 +193,16 @@ fn node_of(id: &ElementId) -> NodeId {
             story_id,
             start,
             end,
+            cell,
         } => NodeId::StoryRange {
             story_id: story_id.clone(),
             start: *start,
             end: *end,
+            cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                table_id: c.table_id.clone(),
+                row: c.row,
+                col: c.col,
+            }),
         },
         ElementId::Table { story_id, table_id } => NodeId::Table {
             story_id: story_id.clone(),

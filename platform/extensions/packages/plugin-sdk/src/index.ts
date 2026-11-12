@@ -238,6 +238,24 @@ export {
   type NativeSwatch,
 } from "./lowering.js";
 export {
+  nativeCellPropertyOp,
+  nativeCellSpanOp,
+  nativeCellTextOp,
+  nativeRowHeightOp,
+  nativeTabTextFrameOps,
+  nativeTableCellId,
+  nativeTableInsertOp,
+  type NativeGridLine,
+  type NativeTabTextFrame,
+  type NativeTableSpec,
+} from "./lowering-table.js";
+export {
+  lossDiagnostics,
+  lossDiagnosticSeverity,
+  lossRank,
+  type LossDiagnosticsOptions,
+} from "./loss.js";
+export {
   createObjectRegistry,
   escapeLabelValue,
   type ObjectRegistry,

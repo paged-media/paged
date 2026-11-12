@@ -14,6 +14,8 @@ workspace = true
 [dependencies]
 paged-fmt = { path = "../../../../engine/core/crates/paged-fmt" }
 paged-geom = { path = "../../../../engine/core/crates/paged-geom" }
+# The shared loss report (capability register C18).
+paged-loss = { path = "../../../../engine/core/crates/paged-loss" }
 dxf = { workspace = true }
 paged-svg = { workspace = true }
 serde = { workspace = true }

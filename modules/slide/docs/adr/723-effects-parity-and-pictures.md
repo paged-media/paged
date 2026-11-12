@@ -146,3 +146,19 @@ stack (engine ADR 1008). Three things did not:
   format (PNG, JPEG, GIF, BMP, TIFF, WebP, TGA, QOI, ICO, PSD, SVG).
 - SSIM against PowerPoint's PDF (`scripts/fidelity-local.py --fixtures`, the engine's CPU
   renderer): see status.md, "Verified".
+
+## Amendment (2026-11-11): the painter's paint part is the host's sampled style
+
+The Format Painter's shape part (fill, line, gradient, every effect, blend modes, opacity) is now
+sampled and written by `@paged-media/helpers`' `sampled-style`, the implementation the host
+Eyedropper's object mode uses: `sampledStyleFrom` on the source outline, `applySampledStyle` on
+each target with the paths that target exposes (a target is no longer written a path it does not
+have). The look's path set and the rule that an effect switched off goes as its switch alone moved
+there with it (`isAppearancePath`, `withoutOffEffects`). Two small differences: a null fill or line
+colour on the source now clears the target's (PowerPoint's "no fill" is formatting too), and the
+host Eyedropper's object mode copies the whole look as well.
+
+The text part stays slide's: sampled-style is a page item's appearance, written with
+`setElementProperty` on the item, while a run's character and paragraph formatting lives on story
+ranges (or the live text selection, `text.format@1`); no host painter samples or writes runs, so
+there is nothing to share it with yet.

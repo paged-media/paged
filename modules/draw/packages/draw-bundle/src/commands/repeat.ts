@@ -173,7 +173,7 @@ import {
   type Vec2,
 } from "@paged-media/vector-geometry";
 
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import {
   clipGroupMutationFor,
   groupMutationFor,

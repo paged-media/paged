@@ -62,7 +62,7 @@ function logReport(
   name: string,
   report: InterchangeReport,
 ): void {
-  for (const note of report.notes) {
+  for (const note of report.losses) {
     host.log.warn(`${source}: ${name}: ${note.message} (${note.count}×)`);
   }
 }
@@ -109,7 +109,7 @@ export async function exportDxf(
   const svg = await host.document.exportSvg(
     selection.length > 0 ? { elementIds: selection } : {},
   );
-  for (const note of svg.report.notes) {
+  for (const note of svg.report.losses) {
     host.log.warn(`${DXF_EXPORTER_ID}: ${note.message} (${note.count}×)`);
   }
   if (svg.svg === null) {

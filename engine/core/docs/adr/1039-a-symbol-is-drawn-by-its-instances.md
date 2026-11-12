@@ -119,3 +119,8 @@ and replaces every labelled set of leaves with its instance, in its slot
   points an instance at another definition (Replace Symbol, its id and overrides kept);
   `deleteFrame` resolves an instance by id or `instance:` address; paged-svg writes each
   definition once as `<symbol>` and every instance as a `<use>` of it.
+- Amended 2026-11-11 (no protocol bump): `setPluginMetadata` takes a symbol instance, as it takes
+  the leaf page items, so a template field's mark (`x-paged:template`) and its grants can sit on
+  the instance a `symbolChoice` field targets; the write undoes exactly. The IDML interchange
+  carries the instance's own labels on its leaves (`paged:symbolInstanceLabels`, beside
+  `paged:symbolInstance`) and the restore gives them back to the instance.

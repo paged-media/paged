@@ -49,7 +49,7 @@ import {
   type FillLayer,
   type StrokeLayer,
 } from "./appearance";
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 
 /** One layer of the engine's appearance (`PaintLayerSpec` on the wire);
  *  the fields this module does not edit ride along untouched. */

@@ -106,7 +106,7 @@ function fakeClient(opts: { oldEngine?: boolean } = {}) {
       calls.push(["svg", pageId, ids]);
       return {
         svg: "<svg/>",
-        report: { items: 1, notes: [{ message: "x", count: 1 }] },
+        report: { items: 1, losses: [{ code: "x", message: "x", count: 1 }] },
       };
     },
     async exportPdf(options: unknown) {

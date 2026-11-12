@@ -3516,6 +3516,7 @@ pub(super) fn apply_apply_style(
         story_id: story_id.to_string(),
         start,
         end,
+        cell: cell.cloned(),
     };
     let value = Value::Text(style.to_string());
     let applied = match scope {
@@ -3540,11 +3541,11 @@ pub(super) fn apply_apply_style(
             &value,
         )?,
     };
-    // The splitter's restorations address a `StoryRange`, which has no
-    // cell: replayed as they are they land on the story's BODY paragraphs
-    // at the cell-local offsets, and the cell keeps the new style. Spell
-    // each one as the cell-addressed `ApplyStyle` it undoes instead; an
-    // empty style clears, so the prior "no style" restores too.
+    // The splitter's restorations address a cell-qualified `StoryRange`
+    // (engine ADR 1098); they are spelled as the cell-addressed
+    // `ApplyStyle` they undo, so an undo record reads as the op it
+    // reverses. An empty style clears, so the prior "no style" restores
+    // too.
     let inverse = match cell {
         Some(cell) => cell_addressed_inverse(applied.inverse, scope, cell),
         None => applied.inverse,
@@ -3585,6 +3586,7 @@ fn cell_addressed_inverse(
                     story_id,
                     start,
                     end,
+                    ..
                 },
             path: PropertyPath::AppliedParagraphStyle | PropertyPath::AppliedCharacterStyle,
             value: Value::Text(style),
@@ -3617,6 +3619,7 @@ pub(super) fn apply_insert_field(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             })
         })?;
     // v69 — a caret-unit insertion point is converted against the story as
@@ -3632,6 +3635,7 @@ pub(super) fn apply_insert_field(
                 story_id: story_id.to_string(),
                 start: content,
                 end: content,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!(
@@ -3669,6 +3673,7 @@ pub(super) fn apply_insert_field(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("offset {offset} past end of story (len {total})"),
@@ -3803,6 +3808,7 @@ fn insert_tagged_run(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("offset {offset} past end of story (len {total})"),
@@ -3906,6 +3912,7 @@ pub(super) fn apply_delete_field(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             })
         })?;
     if let FieldKind::Placeholder { plugin, key, .. } = field {
@@ -3938,6 +3945,7 @@ pub(super) fn apply_delete_field(
                                 story_id: story_id.to_string(),
                                 start: offset,
                                 end: offset + 1,
+                                cell: None,
                             },
                             path: PropertyPath::AppliedCharacterStyle,
                             reason: format!(
@@ -3959,6 +3967,7 @@ pub(super) fn apply_delete_field(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset + 1,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no field marker at offset {offset}"),
@@ -4025,6 +4034,7 @@ fn delete_placeholder_run(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no placeholder field ({plugin}, {key}) starting at offset {offset}"),
@@ -4090,6 +4100,7 @@ fn delete_variable_run(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no instance of text variable {variable_id:?} at offset {offset}"),
@@ -4149,6 +4160,7 @@ fn delete_word_field_run(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no Word field {code:?} at offset {offset}"),
@@ -4197,6 +4209,7 @@ pub(super) fn apply_set_field_value(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             })
         })?;
     let story = &mut doc.stories[story_idx].story;
@@ -4235,6 +4248,7 @@ pub(super) fn apply_set_field_value(
                 story_id: story_id.to_string(),
                 start: offset,
                 end: offset,
+                cell: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no placeholder field at offset {offset}"),

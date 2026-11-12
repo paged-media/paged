@@ -1143,7 +1143,7 @@ export interface GradientFeatherStopSpec {
  * existing `Mutation::SetElementProperty` wire shape — see
  * the editor\'s client-SDK implementation plan §3c.1 (not published).
  */
-export type ElementId = { kind: "textFrame"; id: string } | { kind: "rectangle"; id: string } | { kind: "oval"; id: string } | { kind: "polygon"; id: string } | { kind: "graphicLine"; id: string } | { kind: "group"; id: string } | { kind: "instance"; id: string } | { kind: "storyRange"; id: { story_id: string; start: number; end: number } } | { kind: "table"; id: { story_id: string; table_id: string } } | { kind: "tableCell"; id: { story_id: string; table_id: string; row: number; col: number } };
+export type ElementId = { kind: "textFrame"; id: string } | { kind: "rectangle"; id: string } | { kind: "oval"; id: string } | { kind: "polygon"; id: string } | { kind: "graphicLine"; id: string } | { kind: "group"; id: string } | { kind: "instance"; id: string } | { kind: "storyRange"; id: { story_id: string; start: number; end: number; cell?: TextCellAddr } } | { kind: "table"; id: { story_id: string; table_id: string } } | { kind: "tableCell"; id: { story_id: string; table_id: string; row: number; col: number } };
 
 /**
  * Engine ADR 1007 — a gradient stop\'s inline colour on the wire.
@@ -2064,7 +2064,7 @@ export interface ThemeSlotSwatchSpec {
  * string grammar, which is the canonical form; this enum is its typed
  * mirror on the wire.
  */
-export type Address = { kind: "doc" } | { kind: "textFrame"; id: string } | { kind: "rectangle"; id: string } | { kind: "oval"; id: string } | { kind: "polygon"; id: string } | { kind: "graphicLine"; id: string } | { kind: "group"; id: string } | { kind: "instance"; id: string } | { kind: "frame"; id: string } | { kind: "page"; id: string } | { kind: "pageNumber"; n: number } | { kind: "spread"; id: string } | { kind: "layer"; id: string } | { kind: "master"; id: string } | { kind: "story"; id: string } | { kind: "storyRange"; storyId: string; start: number; end: number } | { kind: "field"; storyId: string; offset: number } | { kind: "table"; id: string } | { kind: "cell"; tableId: string; row: number; col: number } | { kind: "style"; family: StyleFamily; id: string } | { kind: "swatch"; id: string } | { kind: "gradient"; id: string } | { kind: "colorGroup"; id: string } | { kind: "numberingList"; id: string } | { kind: "guide"; id: string } | { kind: "condition"; id: string } | { kind: "conditionSet"; id: string } | { kind: "section"; id: string } | { kind: "hyperlink"; id: string } | { kind: "textVariable"; id: string } | { kind: "onMaster"; master: string; item: Address } | { kind: "plugin"; pluginId: string; objectKind: string; id: string } | { kind: "handle"; name: string };
+export type Address = { kind: "doc" } | { kind: "textFrame"; id: string } | { kind: "rectangle"; id: string } | { kind: "oval"; id: string } | { kind: "polygon"; id: string } | { kind: "graphicLine"; id: string } | { kind: "group"; id: string } | { kind: "instance"; id: string } | { kind: "frame"; id: string } | { kind: "page"; id: string } | { kind: "pageNumber"; n: number } | { kind: "spread"; id: string } | { kind: "layer"; id: string } | { kind: "master"; id: string } | { kind: "story"; id: string } | { kind: "storyRange"; storyId: string; start: number; end: number; cell?: TextCellAddr } | { kind: "field"; storyId: string; offset: number } | { kind: "table"; id: string } | { kind: "cell"; tableId: string; row: number; col: number } | { kind: "style"; family: StyleFamily; id: string } | { kind: "swatch"; id: string } | { kind: "gradient"; id: string } | { kind: "colorGroup"; id: string } | { kind: "numberingList"; id: string } | { kind: "guide"; id: string } | { kind: "condition"; id: string } | { kind: "conditionSet"; id: string } | { kind: "section"; id: string } | { kind: "hyperlink"; id: string } | { kind: "textVariable"; id: string } | { kind: "onMaster"; master: string; item: Address } | { kind: "plugin"; pluginId: string; objectKind: string; id: string } | { kind: "handle"; name: string };
 
 /**
  * Extensions ADR 338 — a rectangle in page pt (`(0, 0)` is the page\'s
@@ -2164,7 +2164,7 @@ export type SelectionMode = "replace" | "add" | "toggle";
 /**
  * How a construct fared.
  */
-export type SvgNoteSeverity = "approximated" | "dropped";
+export type LossSeverity = "info" | "approximated" | "dropped";
 
 /**
  * How an SVG lands on the page. Every field is optional.
@@ -2613,23 +2613,31 @@ export interface ItemPolicy {
 }
 
 /**
- * One kind of loss, with how often it happened.
+ * One kind of loss.
  */
-export interface SvgNote {
+export interface LossEntry {
     /**
-     * A stable code (`\"filter\"`, `\"gradient.focal\"`, `\"text.outlined\"`,
-     * …) a caller can switch on; the codes are listed in engine ADR 1031.
+     * Stable code, in the producer\'s own vocabulary: an annotation type
+     * (`Link`, `Stamp`, `state:Marked`), a mapper code (`shading.sampled`),
+     * an SVG construct (`filter`), a Photoshop effect (`Drop Shadow`).
      */
     code: string;
-    severity: SvgNoteSeverity;
     /**
-     * What happened, in a sentence.
-     */
-    message: string;
-    /**
-     * How many times.
+     * How many times it happened.
      */
     count: number;
+    /**
+     * How it fared; `dropped` when the producer says nothing else.
+     */
+    severity?: LossSeverity;
+    /**
+     * The 0-based pages it stood on, when the source has pages.
+     */
+    pages?: number[];
+    /**
+     * Why or what, worded; empty when the consumer words the code.
+     */
+    message?: string;
 }
 
 /**
@@ -3931,7 +3939,7 @@ export type PathfinderKind = "union" | "intersect" | "subtract" | "exclude";
  * the structural containers an `InsertNode`/`MoveNode` Op can target
  * as a parent.
  */
-export type NodeId = { kind: "TextFrame"; id: string } | { kind: "Rectangle"; id: string } | { kind: "Oval"; id: string } | { kind: "Polygon"; id: string } | { kind: "GraphicLine"; id: string } | { kind: "Group"; id: string } | { kind: "Instance"; id: string } | { kind: "Spread"; id: string } | { kind: "Page"; id: string } | { kind: "Story"; id: string } | { kind: "Layer"; id: string } | { kind: "StoryRange"; id: { story_id: string; start: number; end: number } } | { kind: "Table"; id: { story_id: string; table_id: string } } | { kind: "TableCell"; id: { story_id: string; table_id: string; row: number; col: number } } | { kind: "Document"; id: string } | { kind: "TextVariable"; id: string };
+export type NodeId = { kind: "TextFrame"; id: string } | { kind: "Rectangle"; id: string } | { kind: "Oval"; id: string } | { kind: "Polygon"; id: string } | { kind: "GraphicLine"; id: string } | { kind: "Group"; id: string } | { kind: "Instance"; id: string } | { kind: "Spread"; id: string } | { kind: "Page"; id: string } | { kind: "Story"; id: string } | { kind: "Layer"; id: string } | { kind: "StoryRange"; id: { story_id: string; start: number; end: number; cell?: CellAddr } } | { kind: "Table"; id: { story_id: string; table_id: string } } | { kind: "TableCell"; id: { story_id: string; table_id: string; row: number; col: number } } | { kind: "Document"; id: string } | { kind: "TextVariable"; id: string };
 
 /**
  * Step 5 — `RequestPathAnchors` reply payload. `anchors.len()` may
@@ -4190,9 +4198,10 @@ export interface SvgReport {
      */
     items: number;
     /**
-     * The losses, one row per code, in the order they first happened.
+     * The losses, one row per code, in the order they first happened
+     * (a `LossReport`\'s `losses`).
      */
-    notes: SvgNote[];
+    losses: LossEntry[];
 }
 
 /**
@@ -5650,6 +5659,16 @@ export class CanvasWorker {
      */
     caretGeometryJson(selection_json: string): string | undefined;
     /**
+     * The decoded-pixels door: encoded image bytes (any format the
+     * engine places: PNG, JPEG, TIFF, PSD, WebP, …) decoded the way the
+     * renderer decodes a placed picture (colour converted to sRGB,
+     * straight alpha), shrunk so neither side exceeds `max_dim` when
+     * given, as `{ width, height, rgba }` with `rgba` a `Uint8Array`;
+     * `undefined` when the bytes do not decode. A pure read: no
+     * document is touched.
+     */
+    decodeImageDirect(bytes: Uint8Array, max_dim?: number | null): object | undefined;
+    /**
      * Why the GPU device was lost (a GPU-process crash, a driver
      * reset), once it has been; `undefined` while it serves or when
      * there is no presenter. Every `presentFrame` returns `false`
@@ -5943,6 +5962,7 @@ export interface InitOutput {
     readonly cameraSabLayout: () => any;
     readonly canvasworker_amendWithBytesDirect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly canvasworker_caretGeometryJson: (a: number, b: number, c: number) => [number, number];
+    readonly canvasworker_decodeImageDirect: (a: number, b: number, c: number, d: number) => any;
     readonly canvasworker_gpuLostReason: (a: number) => [number, number];
     readonly canvasworker_gpuReady: (a: number) => number;
     readonly canvasworker_handleMessage: (a: number, b: number, c: number) => [number, number];
@@ -5996,8 +6016,11 @@ export interface InitOutput {
     readonly dav1d_version: () => number;
     readonly dav1d_version_api: () => number;
     readonly dav1d_set_cpu_flags_mask: (a: number) => void;
-    readonly qcms_enable_iccv4: () => void;
     readonly qcms_profile_precache_output_transform: (a: number) => void;
+    readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
+    readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
+    readonly qcms_enable_iccv4: () => void;
+    readonly qcms_profile_is_bogus: (a: number) => number;
     readonly qcms_transform_data_bgra_out_lut: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_data_bgra_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_data_rgb_out_lut: (a: number, b: number, c: number, d: number) => void;
@@ -6005,16 +6028,13 @@ export interface InitOutput {
     readonly qcms_transform_data_rgba_out_lut: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_data_rgba_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_release: (a: number) => void;
-    readonly qcms_profile_is_bogus: (a: number) => number;
     readonly qcms_white_point_sRGB: (a: number) => void;
-    readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
-    readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___js_sys_1fdef4cfb0b6ff54___Function_fn_wasm_bindgen_37b72a91dce759de___JsValue_____wasm_bindgen_37b72a91dce759de___sys__Undefined___js_sys_1fdef4cfb0b6ff54___Function_fn_wasm_bindgen_37b72a91dce759de___JsValue_____wasm_bindgen_37b72a91dce759de___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___sys__JsNullable_wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___sys__JsNullable_wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true__41: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wasm_bindgen_37b72a91dce759de___sys__JsNullable_wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_37b72a91dce759de___JsError___true__42: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_37b72a91dce759de___convert__closures_____invoke___wgpu_3833d8d213f6c054___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__41: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__42: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

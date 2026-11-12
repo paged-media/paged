@@ -436,7 +436,7 @@ function svgTooLarge(size: number): WorkerToMain {
     kind: "svgImportPlanned",
     payload: {
       mutation: null,
-      report: { items: 0, notes: [] },
+      report: { items: 0, losses: [] },
       width: 0,
       height: 0,
       error:
@@ -1887,6 +1887,21 @@ export class CanvasClient {
     encoded: Uint8Array;
   } | null> {
     return this.postDirectBytes({ op: "placedAssetBytes", elementId });
+  }
+
+  /** Extensions ADR 1105 — `bytes` decoded by the engine as it decodes a
+   *  placed picture (straight-alpha sRGB RGBA8), no side above `maxDim`
+   *  when given; `null` when they do not decode. The bytes are copied to
+   *  the worker; the pixels come back as a transferred buffer. */
+  decodeImageBinary(
+    bytes: Uint8Array,
+    maxDim?: number,
+  ): Promise<{ width: number; height: number; rgba: Uint8Array } | null> {
+    return this.postDirectBytes({
+      op: "decodeImage",
+      bytes,
+      maxDim: maxDim ?? null,
+    });
   }
 
   /**

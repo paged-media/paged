@@ -161,14 +161,16 @@ fn apply_set_property_core(
         }
         // Plugin-metadata carrier — its inverse carries the prev
         // snapshot inside the same Value, so it short-circuits like
-        // the Track J ops. All five leaf page-item kinds, and (v70)
-        // pages: a slide's notes and transition travel with its page.
+        // the Track J ops. All five leaf page-item kinds, (v70) pages: a
+        // slide's notes and transition travel with its page, and symbol
+        // instances (a template field's mark on an instance).
         (
             NodeId::Polygon(_)
             | NodeId::TextFrame(_)
             | NodeId::Rectangle(_)
             | NodeId::GraphicLine(_)
             | NodeId::Oval(_)
+            | NodeId::Instance(_)
             | NodeId::Page(_),
             PropertyPath::PluginMetadata,
         ) => {
@@ -3031,6 +3033,7 @@ fn apply_set_property_core(
                 story_id,
                 start,
                 end,
+                cell,
             },
             PropertyPath::CharacterFontSize
             | PropertyPath::CharacterLeading
@@ -3097,7 +3100,16 @@ fn apply_set_property_core(
                     });
                 }
             }
-            return apply_character_property(doc, story_id, *start, *end, node, path, value);
+            return apply_character_property_in(
+                doc,
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                node,
+                path,
+                value,
+            );
         }
         // SDK Phase 5 (D3 completion) — applied object style on any
         // leaf page-item kind. The cascade resolves on next rebuild;
@@ -3176,6 +3188,7 @@ fn apply_set_property_core(
                 story_id,
                 start,
                 end,
+                cell,
             },
             PropertyPath::ParagraphSpaceBefore
             | PropertyPath::ParagraphSpaceAfter
@@ -3237,7 +3250,16 @@ fn apply_set_property_core(
                     });
                 }
             }
-            return apply_paragraph_property(doc, story_id, *start, *end, node, path, value);
+            return apply_paragraph_property_in(
+                doc,
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                node,
+                path,
+                value,
+            );
         }
 
         // ============ W0.3 — text-frame prefs (TextFrame only) ========

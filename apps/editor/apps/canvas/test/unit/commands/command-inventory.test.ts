@@ -56,6 +56,7 @@ import { buildBarcodeCommands } from "../../../src/barcode-commands";
 import { buildReflectCommands } from "../../../src/reflect-commands";
 import { buildCornerCommands } from "../../../src/corner-commands";
 import { buildTextFormatCommands } from "../../../src/text-format-commands";
+import { buildReferenceCommands } from "../../../src/reference-commands";
 import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
@@ -177,6 +178,7 @@ function tableIds(): string[] {
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
     ...buildTextFormatCommands(noop as never, noop, noop),
+    ...buildReferenceCommands(noop as never, noop, noop, noop),
     ...buildAppearanceCommands(noop as never, noop, noop),
     ...buildStrokeDashCommands(noop as never, noop, noop),
     ...buildInsertCommands(noop),
@@ -275,6 +277,7 @@ describe("the host command inventory", () => {
       "pathfinderCommands",
       "cornerCommands",
       "textFormatCommands",
+      "referenceCommands",
       "appearanceCommands",
       "strokeDashCommands",
       "insertCommands",

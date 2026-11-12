@@ -41,12 +41,15 @@ use std::collections::HashSet;
 
 use docx_lower::ir::{
     LoweredBlock, LoweredCell, LoweredDoc, LoweredParagraph, LoweredStyle, LoweredTable,
-    StyleCollection,
+    StyleCollection, StyleProp,
 };
 use paged_model::Paragraph;
 use serde_json::{json, Value};
 
-use crate::body::{is_synthesized, native_body, read_paragraph_props, read_run_props, NativeBlock};
+use crate::body::{
+    cell_paragraph_plan, is_synthesized, native_body, read_paragraph_props, read_run_props,
+    NativeBlock,
+};
 
 /// A finished placement.
 #[derive(Debug, Clone, Default)]
@@ -221,20 +224,39 @@ fn plain_table(t: &LoweredTable) -> Result<(), String> {
     Ok(())
 }
 
-/// The styles a table's paragraphs name: those the lowering invented are
-/// kept (a cell has no model range to carry direct formatting, so the cell
-/// text takes it from them, as the pour does).
-fn table_styles(t: &LoweredTable, out: &mut HashSet<String>) {
+/// The styles a table still names once its cells' direct formatting is set
+/// directly (engine ADR 1098, [`cell_paragraph_plan`]): the table's own
+/// paragraph style, the Word styles, and an invented style a cell keeps.
+fn table_styles(doc: &LoweredDoc, t: &LoweredTable, out: &mut HashSet<String>) {
     out.extend(t.para_style_id.iter().cloned());
     for c in &t.cells {
         for p in &c.paragraphs {
-            out.extend(p.para_style_id.iter().cloned());
-            out.extend(p.runs.iter().filter_map(|r| r.char_style_id.clone()));
+            let plan = cell_paragraph_plan(doc, p);
+            out.extend(plan.style.map(str::to_owned));
+            for (r, planned) in p.runs.iter().zip(&plan.runs) {
+                match planned {
+                    Some((base, _)) => out.extend(base.map(str::to_owned)),
+                    None => out.extend(r.char_style_id.clone()),
+                }
+            }
         }
         for n in &c.nested {
-            table_styles(&n.table, out);
+            table_styles(doc, &n.table, out);
         }
     }
+}
+
+/// One direct property on a cell's text range (engine ADR 1098).
+fn cell_set(story: &str, start: usize, end: usize, cell: &Value, p: &StyleProp) -> Value {
+    json!({
+        "op": "setElementProperty",
+        "args": {
+            "elementId": { "kind": "storyRange",
+                           "id": { "story_id": story, "start": start, "end": end, "cell": cell } },
+            "path": p.path,
+            "value": p.value,
+        }
+    })
 }
 
 fn cell_text(c: &LoweredCell) -> String {
@@ -308,7 +330,14 @@ fn insert_table(t: &LoweredTable, story: &str) -> Value {
 /// A table's cells (the pour's `buildTableCells`): text per cell with its
 /// styles, geometry, borders and fill, spans, exact row heights and the
 /// tables nested in a cell.
-fn table_cells(t: &LoweredTable, story: &str, table: &str, tag: &str, out: &mut Vec<Value>) {
+fn table_cells(
+    doc: &LoweredDoc,
+    t: &LoweredTable,
+    story: &str,
+    table: &str,
+    tag: &str,
+    out: &mut Vec<Value>,
+) {
     for (n, c) in t.cells.iter().enumerate() {
         let text = cell_text(c);
         let addr = cell_addr(table, c);
@@ -324,18 +353,36 @@ fn table_cells(t: &LoweredTable, story: &str, table: &str, tag: &str, out: &mut 
                 "op": "insertText",
                 "args": { "storyId": story, "offset": 0, "text": text, "cell": addr }
             }));
+            // Word's direct formatting as direct properties over the Word
+            // style (engine ADR 1098), as the pour sets it.
             let mut at = 0usize;
             for p in &c.paragraphs {
+                let plan = cell_paragraph_plan(doc, p);
                 let from = at;
-                for r in &p.runs {
+                for (r, planned) in p.runs.iter().zip(&plan.runs) {
                     let start = at;
                     at += r.text.chars().count();
-                    if let (Some(s), true) = (&r.char_style_id, at > start) {
+                    if at == start {
+                        continue;
+                    }
+                    let style = match planned {
+                        Some((base, _)) => *base,
+                        None => r.char_style_id.as_deref(),
+                    };
+                    if let Some(s) = style {
                         out.push(cell_style(story, start, at, s, "character", &addr));
                     }
+                    for x in planned.iter().flat_map(|(_, props)| props) {
+                        out.push(cell_set(story, start, at, &addr, x));
+                    }
                 }
-                if let (Some(s), true) = (&p.para_style_id, at > from) {
-                    out.push(cell_style(story, from, at, s, "paragraph", &addr));
+                if at > from {
+                    if let Some(s) = plan.style {
+                        out.push(cell_style(story, from, at, s, "paragraph", &addr));
+                    }
+                    for x in &plan.props {
+                        out.push(cell_set(story, from, at, &addr, x));
+                    }
                 }
             }
         }
@@ -396,7 +443,14 @@ fn table_cells(t: &LoweredTable, story: &str, table: &str, tag: &str, out: &mut 
             insert["args"]["paragraph"] = json!(nested.paragraph);
             out.push(insert);
             out.push(json!({ "op": "bindCreated", "args": { "handle": handle } }));
-            table_cells(&nested.table, story, &format!("$h:{handle}"), &handle, out);
+            table_cells(
+                doc,
+                &nested.table,
+                story,
+                &format!("$h:{handle}"),
+                &handle,
+                out,
+            );
         }
         if c.row_span > 1 || c.col_span > 1 {
             out.push(json!({
@@ -421,29 +475,41 @@ fn table_cells(t: &LoweredTable, story: &str, table: &str, tag: &str, out: &mut 
 
 /// The carets that style a table's blank cell lines, in the cell's own
 /// offsets (the pour's `buildTableCellCarets`).
-fn table_carets(t: &LoweredTable, story: &str, table: &str, out: &mut Vec<Value>) {
+fn table_carets(
+    doc: &LoweredDoc,
+    t: &LoweredTable,
+    story: &str,
+    table: &str,
+    out: &mut Vec<Value>,
+) {
     for c in &t.cells {
         let styled_empty = c.paragraphs.iter().any(|p| p.para_style_id.is_some());
         if cell_text(c).is_empty() && !styled_empty {
             continue;
         }
         let addr = cell_addr(table, c);
-        let mut last: Vec<(usize, &String)> = Vec::new();
+        let mut last: Vec<(usize, &LoweredParagraph)> = Vec::new();
         let mut at = 0usize;
         for p in &c.paragraphs {
             let from = at;
             for r in &p.runs {
                 at += r.text.chars().count();
             }
-            if let (Some(s), true) = (&p.para_style_id, at == from) {
+            if p.para_style_id.is_some() && at == from {
                 match last.iter_mut().find(|(o, _)| *o == from) {
-                    Some(e) => e.1 = s,
-                    None => last.push((from, s)),
+                    Some(e) => e.1 = p,
+                    None => last.push((from, p)),
                 }
             }
         }
-        for (o, s) in last {
-            out.push(cell_style(story, o, o, s, "paragraph", &addr));
+        for (o, p) in last {
+            let plan = cell_paragraph_plan(doc, p);
+            if let Some(s) = plan.style {
+                out.push(cell_style(story, o, o, s, "paragraph", &addr));
+            }
+            for x in &plan.props {
+                out.push(cell_set(story, o, o, &addr, x));
+            }
         }
     }
 }
@@ -624,7 +690,7 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
             }
             (LoweredBlock::Table(t), NativeBlock::Table(_)) => {
                 plain_table(t).map_err(|why| format!("block {i}: {why}"))?;
-                table_styles(t, &mut keep);
+                table_styles(doc, t, &mut keep);
                 pieces.push(Piece::Table(t));
             }
             (_, NativeBlock::Deferred { reason }) => {
@@ -822,8 +888,8 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                 body_ops.push(insert_table(t, story));
                 body_ops.push(json!({ "op": "bindCreated", "args": { "handle": handle } }));
                 let id = format!("$h:{handle}");
-                table_cells(t, story, &id, &handle, &mut body_ops);
-                table_carets(t, story, &id, &mut cell_carets);
+                table_cells(doc, t, story, &id, &handle, &mut body_ops);
+                table_carets(doc, t, story, &id, &mut cell_carets);
                 if let Some(s) = &t.para_style_id {
                     body_ops.push(apply_style(
                         story,

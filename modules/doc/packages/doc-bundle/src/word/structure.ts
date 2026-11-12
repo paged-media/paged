@@ -27,6 +27,12 @@
 // page count and date fields.
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
+import {
+  REFERENCE_INSERT_COMMANDS,
+  insertReference,
+  type ReferenceDoor,
+  type ReferenceInsert,
+} from "@paged-media/helpers";
 import type {
   BundleHost,
   SubContextHit,
@@ -245,6 +251,52 @@ async function breakAtCaret(
   return mutate(host, { op: "batch", args: { ops } });
 }
 
+/** The references door over `host.text` (a host without the editor's
+ *  `paged.insert.*` typed commands runs the same insert through it). */
+function referenceDoor(host: BundleHost): ReferenceDoor {
+  return {
+    selection: () => caret(host),
+    characterRange: async () => (await host.text.characterRange()) ?? null,
+    mutate: (m) => mutate(host, m),
+  };
+}
+
+/** The typed command's arguments for an insert. */
+function argsOf(r: ReferenceInsert): Record<string, unknown> {
+  switch (r.kind) {
+    case "footnote":
+    case "endnote":
+      return { text: r.text ?? "" };
+    case "bookmark":
+      return { name: r.name };
+    case "crossReference":
+      return { ...r.target, referTo: r.referTo ?? "text" };
+    case "indexEntry":
+      return { topic: [...r.topic] };
+  }
+}
+
+/** A reference insert at the caret through the HOST's command
+ *  (`paged.insert.*`, P2: one implementation, the editor's), or the same
+ *  shared insert over `host.text` where the host has no such command. */
+export async function insertReferenceAtCaret(
+  host: BundleHost,
+  r: ReferenceInsert,
+): Promise<Outcome> {
+  const id = REFERENCE_INSERT_COMMANDS[r.kind];
+  if (typeof host.objects?.invoke !== "function")
+    return insertReference(referenceDoor(host), r);
+  try {
+    await host.objects.invoke(id, argsOf(r));
+    return { applied: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.startsWith("unknownCommand"))
+      return { applied: false, error: message.replace(/^refused: /, "") };
+  }
+  return insertReference(referenceDoor(host), r);
+}
+
 /** A footnote or an endnote at the caret, with `text` (Word puts the caret
  *  in the new note; the engine's note is not a story the caret can enter,
  *  so its text comes from the References panel). */
@@ -253,11 +305,9 @@ export async function insertNote(
   endnote: boolean,
   text = "",
 ): Promise<Outcome> {
-  const chars = await host.text.characterRange();
-  if (!chars) return { applied: false, error: "no caret" };
-  return mutate(host, {
-    op: endnote ? "insertEndnote" : "insertFootnote",
-    args: { storyId: chars.storyId, offset: chars.end, text },
+  return insertReferenceAtCaret(host, {
+    kind: endnote ? "endnote" : "footnote",
+    text,
   });
 }
 
@@ -310,12 +360,7 @@ export async function insertBookmark(
   host: BundleHost,
   name: string,
 ): Promise<Outcome> {
-  const sel = caret(host);
-  if (!sel) return { applied: false, error: "no caret" };
-  return mutate(host, {
-    op: "insertTextAnchor",
-    args: { storyId: sel.storyId, offset: 0, contentOffset: sel.start, name },
-  });
+  return insertReferenceAtCaret(host, { kind: "bookmark", name });
 }
 
 /** A cross-reference at the caret to a bookmark, or to a paragraph (a
@@ -325,18 +370,10 @@ export async function insertCrossReference(
   target: { bookmark: string } | { storyId: string; paragraph: number },
   referTo: "text" | "pageNumber" | "aboveBelow" = "text",
 ): Promise<Outcome> {
-  const sel = caret(host);
-  if (!sel) return { applied: false, error: "no caret" };
-  return mutate(host, {
-    op: "insertCrossReference",
-    args: {
-      storyId: sel.storyId,
-      offset: 0,
-      contentOffset: sel.start,
-      target,
-      referTo,
-      hyperlink: true,
-    },
+  return insertReferenceAtCaret(host, {
+    kind: "crossReference",
+    target,
+    referTo,
   });
 }
 
@@ -345,12 +382,7 @@ export async function insertIndexEntry(
   host: BundleHost,
   topic: string[],
 ): Promise<Outcome> {
-  const sel = caret(host);
-  if (!sel) return { applied: false, error: "no caret" };
-  return mutate(host, {
-    op: "insertIndexMarker",
-    args: { storyId: sel.storyId, offset: 0, contentOffset: sel.start, topic },
-  });
+  return insertReferenceAtCaret(host, { kind: "indexEntry", topic });
 }
 
 /** Whether the document shows field codes (`documentShowFieldCodes`). */

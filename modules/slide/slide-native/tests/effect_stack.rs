@@ -39,7 +39,10 @@ fn built() -> (Document, Vec<String>) {
     let pkg = paged_ooxml::opc::OpcPackage::read(&bytes).unwrap();
     let images = |p: &str| pkg.part(p).map(|b| b.to_vec());
     let b = slide_native::build(&deck, &images, "effect-stack");
-    (b.document, b.diagnostics)
+    (
+        b.document,
+        b.diagnostics.into_iter().map(|e| e.message).collect(),
+    )
 }
 
 fn shape<'a>(doc: &'a Document, name: &str) -> &'a Polygon {

@@ -206,7 +206,7 @@ import type {
 } from "@paged-media/plugin-api";
 import { splitCompound, type AnchorTable } from "@paged-media/vector-geometry";
 
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { groupMutationFor, ungroupMutationFor } from "./group";
 import {
   compoundPaintOf,

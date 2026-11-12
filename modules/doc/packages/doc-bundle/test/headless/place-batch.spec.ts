@@ -225,8 +225,9 @@ const OPTIONAL_FIXTURES = [
 ];
 
 // Slice 2: tables (cell text and styles, spans, row heights, borders and
-// fill, nested tables). A cell holds no model range for direct formatting,
-// so the styles the lowering invented for cell text stay in the document.
+// fill, nested tables). A cell's direct formatting is set as direct
+// properties (engine ADR 1098); an invented style stays only where a cell
+// paragraph keeps it, in the batch and the pour alike.
 const TABLE_FIXTURES = [
   "table-body.docx",
   "objects-table-look.docx",

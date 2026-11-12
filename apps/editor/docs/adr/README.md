@@ -117,6 +117,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [312](312-the-appearance-panel-lists-every-fill-and-stroke.md) | The Appearance panel lists every fill and stroke: the native appearance front to back, Illustrator's add, duplicate, move and clear, one write each | Accepted 2026-10-31 |
 | [313](313-generate-image-fills-any-image-frame.md) | Generate Image fills any image frame from the host: a selected frame or a new one, one undo step, the registry's own refusals | Accepted 2026-11-01 |
 | [314](314-insert-barcode-from-the-host.md) | Insert barcode… is a host command (`paged.insert.barcode`) over the engine's `paged.barcode`, with a row in every kind of document | Accepted 2026-11-08 |
+| [315](315-reference-inserts-are-host-commands.md) | Footnotes, destinations, cross-references and index entries are host commands (`paged.insert.*`) and panel forms; paged.doc's dialogs call them | Accepted 2026-11-11 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

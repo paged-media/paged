@@ -59,7 +59,11 @@ pub fn shfill_dict(i: &mut Interp<'_>, d: &PsDict) -> R {
     let cs_obj = d.get_name("ColorSpace").ok_or(err("undefined"))?;
     let cs = Rc::new(parse_space(i, &cs_obj, 0)?);
     if !(1..=3).contains(&ty) {
-        i.report.unsupported(&format!("shading type {ty}"));
+        i.report.unsupported(
+            "eps.shading.type",
+            paged_loss::LossSeverity::Dropped,
+            &format!("shading type {ty}"),
+        );
         return Ok(());
     }
     let fobj = d.get_name("Function").ok_or(err("undefined"))?;

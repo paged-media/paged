@@ -78,6 +78,7 @@ const M = defineMessages("publish.commands", {
     "pdfx4 needs an outputIntentProfile (a registered profile name)",
   hostDeclined: "the host declined to open {name}",
   hostCannotOpen: "this host cannot open a document",
+  hostCannotExportPdf: "this host cannot export a PDF",
 });
 
 export const EXPORT_PDF_COMMAND = "media.paged.publish.exportPdf";
@@ -89,8 +90,8 @@ export const PREFLIGHT_COMMAND = "media.paged.publish.preflight";
 export const EXPORT_RESULT_TYPE = exportResult as ValueType;
 export const EXPORT_PDF_ARGS_TYPE = exportPdfArgs as ValueType;
 
-/** The engine's `exportPdfBegin` options (wire `ExportPdfWireOptions`,
- *  which plugin-api does not re-export). */
+/** The engine's PDF export options as this bundle fills them: every field
+ *  of the wire's `ExportPdfWireOptions` it sets, none optional. */
 export interface PdfWireOptions {
   standard: string | null;
   outputIntentProfile: string | null;
@@ -288,71 +289,45 @@ async function baseName(host: BundleHost): Promise<string> {
   }
 }
 
-/** Export the active document to PDF through the engine's session door
- *  (begin → one page per call → finish), cancelling on failure. */
+/** Export the active document to PDF through the host's export door
+ *  (`host.documents.exportPdf`: the engine's session, begin → one page per
+ *  call → finish, cancelled on failure). */
 export async function exportPdf(
   host: BundleHost,
   args: PdfExportArgs,
 ): Promise<ExportResult> {
   const options = pdfWireOptions(args);
-  const client = host.editor.client;
-  const begun = await client.send({
-    kind: "exportPdfBegin",
-    payload: { options },
+  if (!host.supports("documents.exportPdf@1"))
+    throw new Error(`failed: ${t(M.hostCannotExportPdf)}`);
+  const done = await host.documents.exportPdf(options).catch((err: unknown) => {
+    throw new Error(
+      `failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   });
-  if (begun.kind === "exportPdfFailed")
-    throw new Error(`failed: ${begun.payload.error}`);
-  if (begun.kind !== "exportPdfBegun")
-    throw new Error(`failed: unexpected reply ${begun.kind}`);
-  const { session, pageCount } = begun.payload;
-  try {
-    for (let i = 0; i < pageCount; i++) {
-      const r = await client.send({
-        kind: "exportPdfPage",
-        payload: { session },
-      });
-      if (r.kind === "exportPdfFailed")
-        throw new Error(`failed: ${r.payload.error}`);
-    }
-    const done = await client.send({
-      kind: "exportPdfFinish",
-      payload: { session },
-    });
-    if (done.kind === "exportPdfFailed")
-      throw new Error(`failed: ${done.payload.error}`);
-    if (done.kind !== "pdfExported")
-      throw new Error(`failed: unexpected reply ${done.kind}`);
-    const findings = done.payload.findings ?? [];
-    const diagnostics: ExportDiagnostic[] = [
-      ...findings.map((f) => ({
-        severity: severityOf(f.severity),
-        code: f.code,
-        message: f.message,
-        page: f.pageIndex == null ? 0 : f.pageIndex + 1,
+  const diagnostics: ExportDiagnostic[] = [
+    ...done.findings.map((f) => ({
+      severity: severityOf(f.severity),
+      code: f.code,
+      message: f.message,
+      page: f.pageIndex == null ? 0 : f.pageIndex + 1,
+    })),
+    // The flat list repeats findings as text; keep only what it adds.
+    ...done.diagnostics
+      .filter((d) => !done.findings.some((f) => d.includes(f.message)))
+      .map((message) => ({
+        severity: "info" as const,
+        code: "pdf",
+        message,
+        page: 0,
       })),
-      // The flat list repeats findings as text; keep only what it adds.
-      ...done.payload.diagnostics
-        .filter((d) => !findings.some((f) => d.includes(f.message)))
-        .map((message) => ({
-          severity: "info" as const,
-          code: "pdf",
-          message,
-          page: 0,
-        })),
-    ];
-    return {
-      bytes: Uint8Array.from(done.payload.pdfBytes),
-      fileName: `${await baseName(host)}.pdf`,
-      mimeType: "application/pdf",
-      pageCount,
-      diagnostics,
-    };
-  } catch (err) {
-    await client
-      .send({ kind: "exportPdfCancel", payload: { session } })
-      .catch(() => undefined);
-    throw err;
-  }
+  ];
+  return {
+    bytes: done.bytes,
+    fileName: `${await baseName(host)}.pdf`,
+    mimeType: "application/pdf",
+    pageCount: done.pageCount,
+    diagnostics,
+  };
 }
 
 /** What `preflight` answers (`schema/preflight-result.json`). */

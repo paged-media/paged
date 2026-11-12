@@ -1483,7 +1483,7 @@ pub use snippet::{
 };
 pub use symbol::{
     expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
-    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
+    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL, SYMBOL_INSTANCE_LABELS_LABEL,
 };
 mod bookmark;
 mod content_control;

@@ -205,7 +205,7 @@ describe("a deck's embedded fonts", () => {
         report.embeddedFonts.every((f) => f.use === "editable" && f.length > 0),
       ).toBe(true);
       expect(
-        report.diagnostics.filter((d) => d.includes("embedded font")),
+        report.diagnostics.filter((d) => d.message?.includes("embedded font")),
       ).toEqual([]);
 
       const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });

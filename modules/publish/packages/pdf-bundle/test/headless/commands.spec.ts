@@ -60,26 +60,10 @@ let h: HeadlessHost;
 let pdf: Uint8Array;
 let sourcePages: number;
 
-/** The engine's PDF of the loaded document (begin → pages → finish). */
+/** The engine's PDF of the loaded document, through the host's export
+ *  door (`exportPdfSession`: begin → pages → finish). */
 async function enginePdf(): Promise<Uint8Array> {
-  const send = h.host.editor.client.send.bind(h.host.editor.client);
-  const begun = await send({
-    kind: "exportPdfBegin",
-    payload: { options: {} },
-  });
-  if (begun.kind !== "exportPdfBegun") throw new Error(begun.kind);
-  for (let i = 0; i < begun.payload.pageCount; i++) {
-    await send({
-      kind: "exportPdfPage",
-      payload: { session: begun.payload.session },
-    });
-  }
-  const done = await send({
-    kind: "exportPdfFinish",
-    payload: { session: begun.payload.session },
-  });
-  if (done.kind !== "pdfExported") throw new Error(done.kind);
-  return Uint8Array.from(done.payload.pdfBytes);
+  return (await h.exportDocument("pdf")).bytes;
 }
 
 beforeEach(async () => {

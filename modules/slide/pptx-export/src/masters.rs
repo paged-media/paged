@@ -37,6 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use paged_ooxml::opc::OpcPackage;
 use paged_ooxml::rels::{part_dir, rels_part_name, resolve_target, Relationships};
 use paged_scene::Document;
+use pptx_core::loss::{LossEntry, LossLog};
 use slide_resolve::model::{Deck, MasterPage};
 
 use crate::native;
@@ -54,10 +55,10 @@ pub struct MastersOut {
     pub media: Vec<(String, Vec<u8>)>,
     /// Parts removed (a deleted layout and its relationship part).
     pub removed: BTreeSet<String>,
-    /// What could not be written, one line each.
-    pub lost: Vec<String>,
+    /// What could not be written (engine ADR 1097).
+    pub lost: Vec<LossEntry>,
     /// What the package could not carry.
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<LossEntry>,
 }
 
 fn rels(pkg: &OpcPackage, part: &str) -> Relationships {
@@ -274,15 +275,17 @@ pub fn write(
         let Some(c) = cur.master_spreads.get(&m.id) else {
             // Deleted in the document.
             if m.is_master {
-                out.lost.push(format!(
-                    "{part}: deleting a slide master is not exported; it is kept"
-                ));
+                out.lost.dropped(
+                    "pptx.export.masterDelete",
+                    &format!("{part}: deleting a slide master is not exported; it is kept"),
+                );
                 continue;
             }
             if used.contains(&part) {
-                out.lost.push(format!(
-                    "{part}: a slide still uses the deleted layout; it is kept"
-                ));
+                out.lost.dropped(
+                    "pptx.export.layoutDelete",
+                    &format!("{part}: a slide still uses the deleted layout; it is kept"),
+                );
                 continue;
             }
             out.removed.insert(part.clone());
@@ -368,15 +371,19 @@ pub fn write(
                     out.parts.insert(p, bytes);
                 }
                 out.lost
-                    .extend(w.lost.into_iter().map(|l| format!("{part}: {l}")));
+                    .extend_losses(w.lost.into_iter().map(|l| LossEntry {
+                        message: format!("{part}: {}", l.message),
+                        ..l
+                    }));
                 if r.changed {
                     *pr = r.rels;
                 }
             }
             Ok(None) => {}
-            Err(e) => out.lost.push(format!(
-                "{part}: {e}; its shapes are written as the deck had them"
-            )),
+            Err(e) => out.lost.dropped(
+                "pptx.export.masterShapes",
+                &format!("{part}: {e}; its shapes are written as the deck had them"),
+            ),
         }
         // Placeholder text styles: level 1 of the placeholder's list style.
         let base_shapes = native::page_shapes(&b.spread);
@@ -408,9 +415,10 @@ pub fn write(
                     *px = x;
                     *changed = true;
                 }
-                None => out.lost.push(format!(
-                    "{part}: the text style of placeholder {id} is not written"
-                )),
+                None => out.lost.dropped(
+                    "pptx.export.placeholderStyle",
+                    &format!("{part}: the text style of placeholder {id} is not written"),
+                ),
             }
         }
     }
@@ -419,9 +427,10 @@ pub fn write(
             continue;
         }
         if xml::root(&x).is_none() {
-            out.diagnostics.push(format!(
-                "{part}: the written part does not read; it is kept as it was"
-            ));
+            out.diagnostics.dropped(
+                "pptx.export.unreadablePart",
+                &format!("{part}: the written part does not read; it is kept as it was"),
+            );
             continue;
         }
         let rels_bytes = crate::write_rels_bytes(&r);

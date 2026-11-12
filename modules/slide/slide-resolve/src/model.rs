@@ -51,7 +51,10 @@ pub struct Deck {
     /// The deck's custom shows, by page id.
     #[serde(default)]
     pub custom_shows: Vec<CustomShowPages>,
-    pub diagnostics: Vec<String>,
+    /// What the import and the resolver could not carry (engine ADR 1097;
+    /// an older model's sentences read as `pptx.legacy` entries).
+    #[serde(default, deserialize_with = "pptx_core::loss::read_losses")]
+    pub diagnostics: Vec<pptx_core::loss::LossEntry>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -102,6 +102,27 @@ pub use selection::{ContentSelection, Side, TextCellAddr};
 pub use snap::{SnapAxis, SnapLine};
 pub use view::{ViewMode, ViewSettings};
 
+/// The decoded-pixels door (`decodeImageDirect`): `bytes` decoded the way
+/// the renderer decodes a placed picture (`paged_raster::decode_rgba8`:
+/// colour converted to sRGB, straight alpha, a PSD's composite, a TIFF's
+/// first page), no side larger than `max_dim` when given. `None` when the
+/// bytes do not decode. A bundle's image trace reads its pixels here
+/// instead of the browser's decoders.
+pub fn decode_image_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Option<(u32, u32, Vec<u8>)> {
+    let img = paged_raster::decode_rgba8(bytes, max_dim).ok()?;
+    let (w, h) = (img.width, img.height);
+    match max_dim {
+        Some(m) if m > 0 && w.max(h) > m => {
+            // The formats `decode_rgba8` reads at full size: resample to fit.
+            let k = f64::from(m) / f64::from(w.max(h));
+            let tw = ((f64::from(w) * k).round() as u32).max(1);
+            let th = ((f64::from(h) * k).round() as u32).max(1);
+            paged_raster::decode_rgba8_at(bytes, tw, th).map(|d| (tw, th, d))
+        }
+        _ => Some((w, h, img.data)),
+    }
+}
+
 /// Phase 3 Item 4 — one rect-per-line in page-local coords for a
 /// content selection range. Defined in the root so the channel
 /// (Item 6) can reference it without depending on a yet-to-land
@@ -144,3 +165,31 @@ pub use snapshot::{
 // Re-export upstream identifiers + the display-list IR so consumers
 // depend on a single root crate.
 pub use paged_renderer::{BuiltDocument, BuiltPage, CellAddr, DisplayCommand, DisplayList, PageId};
+
+#[cfg(test)]
+mod decode_door_tests {
+    #[test]
+    fn decodes_bytes_to_straight_rgba_and_fits_the_largest_side() {
+        // 4 × 2: red, red, blue, blue on both rows.
+        let mut px = Vec::new();
+        for _ in 0..2 {
+            for c in [
+                [255u8, 0, 0, 255],
+                [255, 0, 0, 255],
+                [0, 0, 255, 255],
+                [0, 0, 255, 255],
+            ] {
+                px.extend_from_slice(&c);
+            }
+        }
+        let png = paged_raster::encode_rgba8_png(&px, 4, 2).expect("encode");
+        let (w, h, data) = super::decode_image_rgba8(&png, None).expect("decode");
+        assert_eq!((w, h), (4, 2));
+        assert_eq!(&data[..4], &[255, 0, 0, 255]);
+        assert_eq!(&data[12..16], &[0, 0, 255, 255]);
+        let (w, h, data) = super::decode_image_rgba8(&png, Some(2)).expect("fit");
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(data.len(), 2 * 4);
+        assert!(super::decode_image_rgba8(b"not an image", None).is_none());
+    }
+}

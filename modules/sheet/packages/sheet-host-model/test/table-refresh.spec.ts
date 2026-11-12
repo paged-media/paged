@@ -21,8 +21,8 @@ import { describe, expect, it } from "bun:test";
 import type { LoweredContent } from "../src";
 import {
   NO_FILL_SWATCH,
-  cellAlignApplies,
-  cellCharacterStyleApplies,
+  cellCharacterFormatOps,
+  cellParagraphFormatOps,
   offsetTableRows,
   tableInsertOp,
   tableRefreshOps,
@@ -197,8 +197,8 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
     );
     const lanes = tableRefreshOps(prev, next, "S", "T", [50, 50], [50, 60]);
     const styles = [
-      ...cellCharacterStyleApplies(next, "S", "T", { includeDefault: true }),
-      ...cellAlignApplies(next, "S", "T", { includeDefault: true }),
+      ...cellCharacterFormatOps(next, "S", "T", { reset: true }),
+      ...cellParagraphFormatOps(next, "S", "T", { reset: true }),
     ];
     const ops = [...lanes.structure, ...lanes.text, ...lanes.decor, ...styles];
     const moved = offsetTableRows(ops, "T", 2);
@@ -212,7 +212,9 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
       const cell = a.cell as { row: number } | undefined;
       if (cell) return cell.row;
       const el = a.elementId as
-        { kind: string; id: { row: number } } | undefined;
+        | { kind: string; id: { row: number; cell?: { row: number } } }
+        | undefined;
+      if (el?.kind === "storyRange") return el.id.cell?.row ?? null;
       return el?.kind === "tableCell" ? el.id.row : null;
     };
     let rowOps = 0;

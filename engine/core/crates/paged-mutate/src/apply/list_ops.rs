@@ -35,6 +35,7 @@ fn targets(
         story_id: story_id.to_string(),
         start,
         end,
+        cell: None,
     };
     if start > end {
         return Err(OperationError::InvalidValue {

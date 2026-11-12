@@ -23,12 +23,13 @@
 // `test/headless/distortion-tools.spec.ts`.
 // [plugin-draw.distortion-tools]
 
-import { describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import { covers, gestures, type GestureDsl } from "@paged-media/test-kit";
 
 import { PERSPECTIVE_PART } from "../src";
+import { bootWarpKernel } from "../src/warp-kernel";
 import { rectEl, unitRig, type UnitRig } from "./commands/unit-kit";
 
 const T = "media.paged.draw.tool";
@@ -99,6 +100,12 @@ async function escapeSendsNothing(
     .settle();
   expect(r.sent(), `${tool}: Escape mid-gesture committed`).toEqual([]);
 }
+
+// Liquify and Puppet Warp run on paged-warp in the draw wasm: boot it
+// once before the gestures, so a drag does not race the first compile.
+beforeAll(async () => {
+  await bootWarpKernel();
+}, 60_000);
 
 describe("the Liquify tools through the gesture DSL [plugin-draw.distortion-tools]", () => {
   const liquify = async (

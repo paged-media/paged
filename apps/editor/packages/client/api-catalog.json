@@ -3,7 +3,7 @@
   "package": "@paged-media/client",
   "protocol": 78,
   "counts": {
-    "clientMembers": 103,
+    "clientMembers": 104,
     "wireKinds": 67,
     "exports": 92
   },
@@ -472,6 +472,12 @@
           "kind": "method",
           "signature": "placedAssetBytesBinary(elementId: string): Promise<{ uri: string; width: number; height: number; encoded: Uint8Array } | null>",
           "summary": "v66 — a frame's placed image as bytes (`encoded`), or `null` when the element holds none."
+        },
+        {
+          "name": "CanvasClient.decodeImageBinary",
+          "kind": "method",
+          "signature": "decodeImageBinary(bytes: Uint8Array, maxDim?: number): Promise<{ width: number; height: number; rgba: Uint8Array } | null>",
+          "summary": "Extensions ADR 1105 — `bytes` decoded by the engine as it decodes a placed picture (straight-alpha sRGB RGBA8), no side above `maxDim` when given; `null` when they do not decode."
         },
         {
           "name": "CanvasClient.mutateWithBytes",
@@ -1639,15 +1645,15 @@
           "summary": null
         },
         {
-          "name": "SvgNote",
+          "name": "LossEntry",
           "kind": "type",
-          "signature": "SvgNote",
+          "signature": "LossEntry",
           "summary": null
         },
         {
-          "name": "SvgNoteSeverity",
+          "name": "LossSeverity",
           "kind": "type",
-          "signature": "SvgNoteSeverity",
+          "signature": "LossSeverity",
           "summary": null
         },
         {

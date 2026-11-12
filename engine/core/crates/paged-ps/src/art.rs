@@ -173,8 +173,10 @@ pub struct Report {
     /// drawn in its place (`None`: no face was available, and the text
     /// was not drawn).
     pub substituted_fonts: Vec<(String, Option<String>)>,
-    /// Features met and skipped (e.g. a smooth shading type), each once.
-    pub unsupported: Vec<String>,
+    /// Features met and skipped or drawn approximately (e.g. a smooth
+    /// shading type), as the engine's loss entries (engine ADR 1097): codes
+    /// `eps.<area>.<what>`, counted once per code and message.
+    pub unsupported: Vec<paged_loss::LossEntry>,
     /// Operators and tokens executed.
     pub operations: u64,
     /// The bounding box came from the drawing, not a `%%BoundingBox`.
@@ -182,10 +184,8 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn unsupported(&mut self, what: &str) {
-        if !self.unsupported.iter().any(|u| u == what) {
-            self.unsupported.push(what.to_string());
-        }
+    pub fn unsupported(&mut self, code: &str, severity: paged_loss::LossSeverity, what: &str) {
+        paged_loss::LossLog::note(&mut self.unsupported, code, severity, what);
     }
 }
 

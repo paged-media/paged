@@ -42,20 +42,8 @@ use crate::operation::{
 // stands in (see `caret_paragraphs`) — the only way to name an EMPTY
 // paragraph, which occupies no characters in this contiguous space.
 
-pub(super) fn apply_paragraph_property(
-    doc: &mut Document,
-    story_id: &str,
-    start: u32,
-    end: u32,
-    node: &NodeId,
-    path: PropertyPath,
-    value: &Value,
-) -> Result<AppliedOperation, OperationError> {
-    apply_paragraph_property_in(doc, story_id, None, start, end, node, path, value)
-}
-
-/// As [`apply_paragraph_property`], but `cell` may redirect the range to a table
-/// cell's own paragraph stream (v55) instead of the story body.
+/// Write `path` on the paragraphs of `[start, end)`: the story body's, or
+/// with `cell` (v55; engine ADR 1098) that table cell's own paragraphs.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn apply_paragraph_property_in(
     doc: &mut Document,
@@ -139,6 +127,7 @@ pub(super) fn apply_paragraph_property_in(
                 story_id: story_id.to_string(),
                 start: para_start,
                 end: para_end,
+                cell: cell.cloned(),
             },
             path,
             value: prev_value,
@@ -928,6 +917,7 @@ pub(super) fn apply_paragraph_field(
                                 story_id: String::new(),
                                 start: 0,
                                 end: 0,
+                                cell: None,
                             },
                             path,
                             reason: format!("unknown Justification: {new_val:?}"),
@@ -1095,6 +1085,7 @@ pub(super) fn apply_paragraph_field(
                 story_id: String::new(),
                 start: 0,
                 end: 0,
+                cell: None,
             },
             path,
         }),
@@ -1381,6 +1372,7 @@ pub(super) fn apply_character_field_on_run(
                 story_id: String::new(),
                 start: 0,
                 end: 0,
+                cell: None,
             },
             path,
         }),

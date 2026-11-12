@@ -1252,6 +1252,7 @@ fn run_mutate_roundtrip(original: &[u8], mutation: &str) -> Result<MutateRoundtr
                         story_id,
                         start: 0,
                         end,
+                        cell: None,
                     },
                     path: PropertyPath::CharacterFontSize,
                     value: Value::Length(Some(18.0)),
