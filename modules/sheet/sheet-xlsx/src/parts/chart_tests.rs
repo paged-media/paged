@@ -453,16 +453,16 @@ fn styled_charts_lower_onto_native_items_through_the_shared_mapper__feat__sheet_
         g.prims
     );
     assert!(
-        !g.losses.iter().any(|l| l.contains("reflection")),
+        !g.losses.iter().any(|l| l.message.contains("reflection")),
         "{:?}",
         g.losses
     );
     assert!(
-        g.losses.iter().any(|l| l.contains("pattern")),
+        g.losses.iter().any(|l| l.message.contains("pattern")),
         "{:?}",
         g.losses
     );
-    assert_eq!(g.losses.iter().filter(|l| l.contains("pattern")).count(), 1);
+    assert_eq!(g.losses.iter().filter(|l| l.message.contains("pattern")).count(), 1);
 }
 
 #[test]
