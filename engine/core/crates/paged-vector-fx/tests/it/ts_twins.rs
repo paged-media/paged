@@ -25,11 +25,21 @@
 //! pinned here and in `platform/shared/vector-geometry/test/vector-fx-parity.spec.ts`,
 //! both reading `fixtures/ts_twins.json`.
 //!
+//! The arc-length walk is the third twin: `vector-geometry`'s `along-path`
+//! (`measureAnchorRun`, `pointAtFraction`), which the Width tool's preview
+//! and draw's Blend and Objects on Path recipes compute with, is held
+//! to `paged_geom::trim`'s exact arc length (`run_length`, `point_along`),
+//! the measure the engine's line ends are cut with. The twin flattens each
+//! segment into 24 chords, so the spec compares to a tolerance of 2e-3 of
+//! the run's length.
+//!
 //! `PAGED_WRITE_TS_TWINS=1 cargo test -p paged-vector-fx --test it ts_twins`
 //! writes the fixture from this crate; without it the test fails when the
 //! fixture and the crate disagree.
 
+use paged_geom::trim::{point_along, run_length};
 use paged_model::vector_effect::{WidthPoint, WidthProfileParams};
+use paged_model::PathAnchor;
 use paged_vector_fx::envelope::envelope_point;
 use serde_json::{json, Value};
 
@@ -95,6 +105,85 @@ fn net(rows: u32, columns: u32) -> Vec<[f32; 2]> {
     out
 }
 
+fn corner(x: f32, y: f32) -> PathAnchor {
+    PathAnchor {
+        anchor: (x, y),
+        left: (x, y),
+        right: (x, y),
+    }
+}
+
+fn smooth(anchor: (f32, f32), left: (f32, f32), right: (f32, f32)) -> PathAnchor {
+    PathAnchor {
+        anchor,
+        left,
+        right,
+    }
+}
+
+/// Runs to walk: straight chords, curves, a doubled anchor, closed shapes.
+fn runs() -> Vec<(&'static str, Vec<PathAnchor>, bool)> {
+    let k = 100.0 * paged_geom::KAPPA_F32;
+    vec![
+        (
+            "zigzag",
+            vec![corner(0.0, 0.0), corner(30.0, 40.0), corner(60.0, 0.0)],
+            false,
+        ),
+        (
+            "quarterCircle",
+            vec![
+                smooth((100.0, 0.0), (100.0, 0.0), (100.0, k)),
+                smooth((0.0, 100.0), (k, 100.0), (0.0, 100.0)),
+            ],
+            false,
+        ),
+        (
+            "sCurve",
+            vec![
+                smooth((0.0, 0.0), (0.0, 0.0), (40.0, -60.0)),
+                smooth((80.0, 0.0), (40.0, 60.0), (120.0, -60.0)),
+                smooth((160.0, 10.0), (130.0, 70.0), (160.0, 10.0)),
+            ],
+            false,
+        ),
+        (
+            "doubledAnchor",
+            vec![
+                corner(0.0, 0.0),
+                corner(50.0, 0.0),
+                corner(50.0, 0.0),
+                corner(50.0, 50.0),
+            ],
+            false,
+        ),
+        (
+            "circle",
+            vec![
+                smooth((100.0, 0.0), (100.0, -k), (100.0, k)),
+                smooth((0.0, 100.0), (k, 100.0), (-k, 100.0)),
+                smooth((-100.0, 0.0), (-100.0, k), (-100.0, -k)),
+                smooth((0.0, -100.0), (-k, -100.0), (k, -100.0)),
+            ],
+            true,
+        ),
+        (
+            "triangle",
+            vec![corner(0.0, 0.0), corner(90.0, 0.0), corner(45.0, 60.0)],
+            true,
+        ),
+    ]
+}
+
+/// A closed run walked as an open one: the first anchor again at its end.
+fn walked(run: &[PathAnchor], closed: bool) -> Vec<PathAnchor> {
+    let mut out = run.to_vec();
+    if closed {
+        out.push(run[0]);
+    }
+    out
+}
+
 fn build() -> Value {
     let ts: Vec<f32> = (-2..=18).map(|i| i as f32 / 16.0).collect();
     let width: Vec<Value> = profiles()
@@ -132,11 +221,33 @@ fn build() -> Value {
             json!({ "rows": rows, "columns": columns, "net": n, "samples": samples })
         })
         .collect();
+    // `point_along` answers short of the end only (the end has nothing
+    // left to trim), so the samples stop at 15/16; the twin's end is exact.
+    let along: Vec<Value> = runs()
+        .into_iter()
+        .map(|(id, run, closed)| {
+            let open = walked(&run, closed);
+            let length = run_length(&open);
+            let samples: Vec<Value> = (0..16)
+                .map(|i| {
+                    let u = i as f32 / 16.0;
+                    let (x, y) = point_along(&open, u * length).expect("short of the end");
+                    json!([u, x, y])
+                })
+                .collect();
+            let anchors: Vec<Value> = run
+                .iter()
+                .map(|a| json!({ "anchor": a.anchor, "left": a.left, "right": a.right }))
+                .collect();
+            json!({ "id": id, "closed": closed, "anchors": anchors, "length": length, "samples": samples })
+        })
+        .collect();
     json!({
         "note": "Written by paged-vector-fx tests/it/ts_twins.rs (PAGED_WRITE_TS_TWINS=1); read by vector-geometry test/vector-fx-parity.spec.ts.",
         "width": width,
         "normalized": normalized,
         "envelope": envelope,
+        "alongPath": along,
     })
 }
 

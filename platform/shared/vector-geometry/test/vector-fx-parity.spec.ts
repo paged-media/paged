@@ -24,6 +24,13 @@
 // (`paged-vector-fx/tests/it/ts_twins.rs`, which fails when the fixture is
 // stale); this spec holds the twins to them. The engine computes in `f32`
 // where its model stores `f32`, hence the tolerance.
+//
+// The arc-length walk (`along-path`: `measureAnchorRun`, `pointAtFraction`)
+// is the third twin, of `paged_geom::trim` (`run_length`, `point_along`):
+// the Width tool's preview and draw's Blend and Objects on Path recipes compute
+// with it. It flattens each segment into 24 chords where the
+// engine integrates the curve, and a chord falls short of a tight curve,
+// so it is held to 2e-3 of the run's length.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -32,8 +39,11 @@ import { describe, expect, it } from "bun:test";
 
 import {
   envelopePoint,
+  measureAnchorRun,
   normalizeWidthPoints,
+  pointAtFraction,
   widthFactorAt,
+  type AnchorTriple,
   type WidthPoint,
 } from "../src/index.ts";
 
@@ -50,6 +60,13 @@ interface Fixture {
     columns: number;
     net: [number, number][];
     samples: [number, number, number, number][];
+  }[];
+  alongPath: {
+    id: string;
+    closed: boolean;
+    anchors: AnchorTriple[];
+    length: number;
+    samples: [number, number, number][];
   }[];
 }
 
@@ -92,6 +109,23 @@ describe("the TypeScript twins of paged-vector-fx", () => {
         if (!close(gx, x) || !close(gy, y))
           throw new Error(
             `${e.rows}x${e.columns} at (${u}, ${v}): (${gx}, ${gy}) != (${x}, ${y})`,
+          );
+      }
+    }
+  });
+
+  it("along-path is paged_geom::trim's arc length", () => {
+    expect(FIXTURE.alongPath.length).toBeGreaterThan(4);
+    for (const r of FIXTURE.alongPath) {
+      const metric = measureAnchorRun(r.anchors, { close: r.closed });
+      const tol = 2e-3 * r.length;
+      if (Math.abs(metric.length - r.length) > tol)
+        throw new Error(`${r.id}: length ${metric.length} != ${r.length}`);
+      for (const [u, x, y] of r.samples) {
+        const p = pointAtFraction(metric, u).point;
+        if (Math.hypot(p[0] - x, p[1] - y) > tol)
+          throw new Error(
+            `${r.id} at u=${u}: (${p[0]}, ${p[1]}) != (${x}, ${y})`,
           );
       }
     }
