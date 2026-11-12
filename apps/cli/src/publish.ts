@@ -65,6 +65,7 @@ import { fileURLToPath } from "node:url";
 import { deflateRawSync } from "node:zlib";
 
 import { zip } from "@paged-media/helpers";
+import type { LossEntry } from "@paged-media/plugin-api";
 
 import { flagBool, flagList, flagStr, type OptionSpec } from "./args";
 import { CliError, EXIT } from "./errors";
@@ -301,7 +302,7 @@ export function reportText(name: string, report: PackageReport): string {
   const kept = report.paged ? ` (kept in ${basename(report.paged)})` : "";
   if (report.lost.length) {
     lines.push("", `Not carried by IDML: ${report.lost.length}${kept}`);
-    for (const l of report.lost) lines.push(`  ${l}`);
+    for (const l of report.lost) lines.push(`  ${l.message || l.code}`);
   }
   if (report.moduleParts.length) {
     lines.push(
@@ -336,7 +337,9 @@ export interface PackageReport {
   }>;
   fonts: FontRow[];
   inks: Array<Record<string, unknown>>;
-  lost: string[];
+  /** What the `.idml` does not carry (engine ADR 1097): one entry per loss,
+   *  its `idml.<area>.<what>` code, severity, items and sentence. */
+  lost: LossEntry[];
   pdf?: { path: string; via?: string };
 }
 
@@ -418,7 +421,7 @@ export const packageVerb: Verb = {
       kind: string;
       payload: {
         idmlBytes?: number[];
-        lost?: string[];
+        lost?: LossEntry[];
         links?: ExportedLink[];
         error?: string;
       };

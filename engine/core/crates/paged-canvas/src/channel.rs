@@ -836,7 +836,38 @@ export type WorkerToMain = WorkerToMainKind & {
 //   read of the same id answers them. Absent ⇒ the body, byte-identical
 //   to before; an older engine ignores the field and writes the body, so
 //   the editor and its worker ship as one build.
+// v78 (rider) — the IDML export's losses (engine ADR 1097):
+//   `IdmlExported.lost` is `LossEntry[]` (an `idml.<area>.<what>` code, a
+//   severity, the items and the sentence as the message; was `string[]`),
+//   and `LossEntry` gains the optional `items`. A sentence from an older
+//   worker reads as an `idml.legacy` entry; the editor and its worker ship
+//   as one build.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
+
+/// The code of an IDML export loss an older worker sent as a sentence.
+pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
+
+/// `IdmlExported.lost` in either form: entries, or a pre-rider worker's
+/// sentences (each an [`IDML_LEGACY_LOSS`] entry, dropped, the sentence its
+/// message).
+fn read_idml_losses<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Vec<paged_model::report::LossEntry>, D::Error> {
+    use paged_model::report::{LossEntry, LossSeverity};
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Either {
+        Entry(LossEntry),
+        Line(String),
+    }
+    Ok(Vec::<Either>::deserialize(d)?
+        .into_iter()
+        .map(|row| match row {
+            Either::Entry(e) => e,
+            Either::Line(line) => LossEntry::new(IDML_LEGACY_LOSS, LossSeverity::Dropped, line),
+        })
+        .collect())
+}
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -2756,16 +2787,21 @@ pub enum WorkerToMainKind {
     IdmlExported {
         #[tsify(type = "number[]")]
         idml_bytes: ByteBuf,
-        /// v58 (C-28) — paged-NATIVE constructs the IDML writer could
-        /// not carry, one human-readable line each. Empty for a
-        /// document that uses only IDML-expressible features. Today
-        /// the only entry kind is opacity masks (IDML has no such
-        /// element). The host is expected to SURFACE this — the whole
-        /// point is that a lossy save is never silent; `.paged` is
-        /// the lossless target. `#[serde(default)]` so a pre-v58
-        /// payload still deserialises.
-        #[serde(default)]
-        lost: Vec<String>,
+        /// v58 (C-28) — what the IDML package does not carry, measured
+        /// (`CanvasModel::idml_export_losses`). Empty for a document that
+        /// uses only IDML-expressible features. The host is expected to
+        /// SURFACE this — the whole point is that a lossy save is never
+        /// silent; `.paged` is the lossless target.
+        ///
+        /// v78 rider (engine ADR 1097) — one `LossEntry` per loss: a
+        /// stable `idml.<area>.<what>` code, its severity, the item it
+        /// stood on (`items`) and the sentence as the `message` (was one
+        /// sentence each). `#[serde(default)]` so a pre-v58 payload still
+        /// deserialises, and a pre-rider list of sentences reads as
+        /// `idml.legacy` entries.
+        #[serde(default, deserialize_with = "read_idml_losses")]
+        #[tsify(type = "LossEntry[]")]
+        lost: Vec<paged_model::report::LossEntry>,
         /// The files the package's image links point at — one per
         /// distinct file, populated only when the request carried a
         /// `linkBase`. The host writes `bytes` (when `hasBytes`) as
@@ -5913,21 +5949,55 @@ mod tests {
             }
             other => panic!("wrong variant: {other:?}"),
         }
-        // And a populated list rides as camelCase-free plain strings.
+        // A populated list rides as loss entries (v78 rider, engine ADR 1097).
         let msg = WorkerToMain {
             seq: Some(1),
             protocol: PROTOCOL_VERSION,
             kind: WorkerToMainKind::IdmlExported {
                 idml_bytes: ByteBuf::from(vec![80, 75]),
-                lost: vec!["opacity mask on `r1`".into()],
+                lost: vec![paged_model::report::LossEntry::new(
+                    "idml.mask.opacity",
+                    paged_model::report::LossSeverity::Dropped,
+                    "opacity mask on `r1`",
+                )
+                .on("r1")],
                 links: Vec::new(),
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(
-            json.contains("\"lost\":[\"opacity mask on `r1`\"]"),
+            json.contains(
+                "\"lost\":[{\"code\":\"idml.mask.opacity\",\"count\":1,\"severity\":\"dropped\",\
+                 \"items\":[\"r1\"],\"message\":\"opacity mask on `r1`\"}]"
+            ),
             "{json}"
         );
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match (back.kind, msg.kind) {
+            (
+                WorkerToMainKind::IdmlExported { lost: back, .. },
+                WorkerToMainKind::IdmlExported { lost, .. },
+            ) => assert_eq!(back, lost),
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    /// v78 rider (engine ADR 1097) — a pre-rider worker's `lost` sentences
+    /// still read: each is an `idml.legacy` entry, dropped, the sentence its
+    /// message.
+    #[test]
+    fn idml_exported_lost_reads_an_older_workers_sentences() {
+        let legacy = r#"{"seq":1,"protocol":78,"kind":"idmlExported","payload":{"idmlBytes":[80,75],"lost":["opacity mask on `r1`"]}}"#;
+        let msg: WorkerToMain = serde_json::from_str(legacy).expect("pre-rider payload");
+        match msg.kind {
+            WorkerToMainKind::IdmlExported { lost, .. } => {
+                assert_eq!(lost.len(), 1);
+                assert_eq!(lost[0].code, IDML_LEGACY_LOSS);
+                assert_eq!(lost[0].severity, paged_model::report::LossSeverity::Dropped);
+                assert_eq!(lost[0].message, "opacity mask on `r1`");
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
     }
 
     /// v56 (Wave B) — `ClosePath` / `JoinPaths` wire shapes. The tag is

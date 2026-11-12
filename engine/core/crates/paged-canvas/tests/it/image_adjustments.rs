@@ -139,7 +139,11 @@ fn an_op_out_of_range_is_refused__feat__images_graphics_image_filter_stack() {
 fn the_idml_export_keeps_the_stack_in_a_label_and_reports_it__feat__images_graphics_image_filter_stack(
 ) {
     let (mut m, id) = model();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let ops = vec![
         RasterOp::exposure(0.5),
         RasterOp::Duotone {
@@ -151,6 +155,7 @@ fn the_idml_export_keeps_the_stack_in_a_label_and_reports_it__feat__images_graph
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");

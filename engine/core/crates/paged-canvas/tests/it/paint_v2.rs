@@ -130,6 +130,7 @@ fn read(m: &CanvasModel, id: &ElementId, path: PropertyPath) -> Option<Value> {
 fn new_losses(m: &CanvasModel, clean: &[String]) -> Vec<String> {
     m.idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect()
 }
@@ -251,7 +252,11 @@ fn paint_v2_survives_paged__feat__color_swatches_paint_v2() {
 #[test]
 fn the_idml_export_names_what_it_cannot_carry__feat__color_swatches_paint_v2() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     // A source frame's fading fill: the patch lane does not rewrite a
     // source item's effects, so no feather reaches the file — a loss.
     edit(
@@ -354,7 +359,11 @@ fn an_inserted_frames_fading_fill_exports_as_a_gradient_feather__feat__color_swa
         PropertyPath::FrameStrokeWeight,
         Value::Length(Some(0.0)),
     );
-    let losses = m.idml_export_losses();
+    let losses: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let inserted = match &id {
         ElementId::TextFrame(s) | ElementId::Rectangle(s) => s.clone(),
         other => panic!("an inserted frame, not {other:?}"),

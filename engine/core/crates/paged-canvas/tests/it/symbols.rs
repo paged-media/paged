@@ -471,7 +471,11 @@ fn an_idml_export_writes_the_artwork_and_a_reopen_restores_the_instances__feat__
     ))
     .expect("place");
     let drawn = pixels(&m);
-    let losses = m.idml_export_losses();
+    let losses: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let symbol_lines: Vec<&String> = losses
         .iter()
         .filter(|l| l.contains("symbol instance"))

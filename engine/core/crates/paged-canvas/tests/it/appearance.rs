@@ -277,7 +277,11 @@ fn refusals_change_nothing__feat__frames_paths_native_appearance() {
 #[allow(non_snake_case)]
 fn the_appearance_survives_paged_and_idml__feat__frames_paths_native_appearance() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(&mut m, three_paints()).unwrap();
     let want = serde_json::to_string(&layers(&m)).unwrap();
 
@@ -293,6 +297,7 @@ fn the_appearance_survives_paged_and_idml__feat__frames_paths_native_appearance(
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");

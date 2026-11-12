@@ -79,7 +79,7 @@ fn an_unplaced_document_keeps_the_vertical_stack__feat__layout_model_artboards()
     assert!(
         m.idml_export_losses()
             .iter()
-            .all(|l| !l.contains("on the canvas")),
+            .all(|l| !l.message.contains("on the canvas")),
         "an unplaced document reports no placement loss"
     );
 }
@@ -163,7 +163,11 @@ fn a_placed_page_is_kept_by_paged_and_reported_by_idml__feat__layout_model_artbo
     let reloaded = load_bytes(&bytes);
     assert_eq!(origins(&reloaded)[0], (-800.0, 40.0), ".paged keeps it");
 
-    let losses = m.idml_export_losses();
+    let losses: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let line = losses
         .iter()
         .find(|l| l.contains(&format!("page `{first}`")) && l.contains("on the canvas"))

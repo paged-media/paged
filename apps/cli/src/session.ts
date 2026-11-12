@@ -27,7 +27,11 @@ import { createRequire } from "node:module";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { BundleHost, PagedBundle } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  LossEntry,
+  PagedBundle,
+} from "@paged-media/plugin-api";
 import {
   API_VERSION,
   createHeadlessHost,
@@ -121,7 +125,8 @@ export interface CliSession {
     bytes: Uint8Array;
     format: string;
     diagnostics: string[];
-    lost?: string[];
+    /** What an `.idml` does not carry (engine ADR 1097). */
+    lost?: LossEntry[];
     /** The typed exporter command that wrote it. */
     via?: string;
   }>;
@@ -131,7 +136,7 @@ export interface CliSession {
     path: string;
     format: string;
     bytes: number;
-    lost?: string[];
+    lost?: LossEntry[];
     via?: string;
   }>;
   dispose(): void;

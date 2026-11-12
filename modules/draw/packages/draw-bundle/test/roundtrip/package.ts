@@ -41,7 +41,8 @@ const clientOf = (h: HeadlessHost): RawClient =>
 
 export interface IdmlExport {
   bytes: Uint8Array;
-  /** What the engine says the IDML could not carry. */
+  /** What the engine says the IDML could not carry: each loss entry's
+   *  sentence (engine ADR 1097). */
   lost: string[];
 }
 
@@ -57,7 +58,10 @@ export async function exportIdml(h: HeadlessHost): Promise<IdmlExport> {
   }
   return {
     bytes: new Uint8Array(reply.payload.idmlBytes as number[]),
-    lost: ((reply.payload.lost as string[] | undefined) ?? []).slice(),
+    lost: (
+      (reply.payload.lost as
+        Array<{ code: string; message?: string }> | undefined) ?? []
+    ).map((l) => l.message || l.code),
   };
 }
 

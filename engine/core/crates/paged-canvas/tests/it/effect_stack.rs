@@ -344,7 +344,11 @@ fn targets_take_indesign_effects_only__feat__effects_transparency_effect_stack()
 #[allow(non_snake_case)]
 fn the_stack_survives_paged_and_idml__feat__effects_transparency_effect_stack() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let mut s = stack(&m, &rect(), "frameEffectStack");
     s.insert(0, outline_stroke());
     set(&mut m, &rect(), "frameEffectStack", s).unwrap();
@@ -364,6 +368,7 @@ fn the_stack_survives_paged_and_idml__feat__effects_transparency_effect_stack() 
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");
@@ -383,7 +388,11 @@ fn the_stack_survives_paged_and_idml__feat__effects_transparency_effect_stack() 
 #[allow(non_snake_case)]
 fn a_changed_indesign_order_is_reported__feat__effects_transparency_effect_stack() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(
         &mut m,
         &rect(),
@@ -397,6 +406,7 @@ fn a_changed_indesign_order_is_reported__feat__effects_transparency_effect_stack
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");

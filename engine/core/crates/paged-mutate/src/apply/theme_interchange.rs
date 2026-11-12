@@ -117,7 +117,8 @@ fn link_value(c: &paged_model::ColorEntry) -> Option<(String, &'static str)> {
 /// Write `doc`'s theme into [`THEME_LABEL`] (the IDML export runs this on its
 /// copy). Returns the lines for the export's loss report; empty without a
 /// theme, which leaves the document untouched.
-pub fn flatten_theme_for_interchange(doc: &mut Document) -> Vec<String> {
+pub fn flatten_theme_for_interchange(doc: &mut Document) -> Vec<paged_model::report::LossEntry> {
+    use paged_model::report::{LossEntry, LossSeverity};
     let Some(theme) = doc.theme.clone() else {
         return Vec::new();
     };
@@ -129,11 +130,12 @@ pub fn flatten_theme_for_interchange(doc: &mut Document) -> Vec<String> {
         .is_some_and(|s| s.data.len() > MAX_SOURCE_BYTES)
     {
         theme.source = None;
-        lines.push(
+        lines.push(LossEntry::new(
+            "idml.theme.sourceTooLarge",
+            LossSeverity::Dropped,
             "the theme's original part is over 64 KiB and is not kept in the IDML (the format \
-             scheme it holds is lost on a round trip through IDML)"
-                .to_string(),
-        );
+             scheme it holds is lost on a round trip through IDML)",
+        ));
     }
     let mut links = Vec::new();
     let mut unlinked = 0usize;
@@ -186,19 +188,30 @@ pub fn flatten_theme_for_interchange(doc: &mut Document) -> Vec<String> {
         THEME_LABEL.to_string(),
         serde_json::to_string(&payload).unwrap_or_default(),
     ));
-    lines.push(format!(
-        "theme \"{}\" is written as plain swatches — IDML has no theme; the link of {n_links} \
-         swatch(es) and {n_fonts} style(s) to it is kept in the document label {THEME_LABEL} \
-         and comes back when paged reopens the file",
-        payload_name(&doc.theme)
+    lines.push(LossEntry::new(
+        "idml.theme.flattened",
+        LossSeverity::Info,
+        format!(
+            "theme \"{}\" is written as plain swatches — IDML has no theme; the link of \
+             {n_links} swatch(es) and {n_fonts} style(s) to it is kept in the document label \
+             {THEME_LABEL} and comes back when paged reopens the file",
+            payload_name(&doc.theme)
+        ),
     ));
     if unlinked > 0 {
-        lines.push(format!(
-            "{unlinked} swatch(es) follow a theme slot but are not process RGB or CMYK \
-             swatches; IDML cannot keep that link"
-        ));
+        lines.push(LossEntry {
+            count: unlinked,
+            ..LossEntry::new(
+                "idml.theme.unlinkedSwatch",
+                LossSeverity::Dropped,
+                format!(
+                    "{unlinked} swatch(es) follow a theme slot but are not process RGB or CMYK \
+                     swatches; IDML cannot keep that link"
+                ),
+            )
+        });
     }
-    lines.sort();
+    lines.sort_by(|a, b| a.message.cmp(&b.message));
     lines
 }
 
@@ -358,7 +371,8 @@ mod tests {
         let mut written = doc();
         let lines = flatten_theme_for_interchange(&mut written);
         assert_eq!(lines.len(), 1);
-        assert!(lines[0].contains("1 swatch(es) and 1 style(s)"));
+        assert_eq!(lines[0].code, "idml.theme.flattened");
+        assert!(lines[0].message.contains("1 swatch(es) and 1 style(s)"));
         // A reopened IDML has the swatches and styles, without the model's
         // references.
         let mut back = Document::default();
@@ -447,12 +461,12 @@ mod tests {
         assert!(
             lines
                 .iter()
-                .any(|l| l.contains("2 swatch(es) and 1 style(s)")),
+                .any(|l| l.message.contains("2 swatch(es) and 1 style(s)")),
             "{lines:?}"
         );
-        assert!(lines
-            .iter()
-            .any(|l| l.contains("1 swatch(es) follow a theme slot but are not")));
+        assert!(lines.iter().any(|l| l.code == "idml.theme.unlinkedSwatch"
+            && l.message
+                .contains("1 swatch(es) follow a theme slot but are not")));
         let reopen = |value: Vec<f32>| {
             let mut back = Document::default();
             back.designmap.labels = written.designmap.labels.clone();

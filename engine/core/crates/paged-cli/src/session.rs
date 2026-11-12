@@ -571,7 +571,7 @@ fn handle(live: &mut Live, req: Request) -> Result<Value> {
                         WorkerToMainKind::IdmlExported { idml_bytes, lost, .. } => (idml_bytes, lost),
                         "export idml")?;
                     for line in &lost {
-                        eprintln!("lost in translation to IDML: {line}");
+                        eprintln!("lost in translation to IDML: {}", line.message);
                     }
                     bytes.into_vec()
                 }

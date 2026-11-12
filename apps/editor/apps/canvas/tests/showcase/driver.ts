@@ -1253,7 +1253,9 @@ export class ShowcaseDoc {
    * `payload.lost` — the v58/C-28 honest-loss ledger (opacity masks and
    * every other `.paged`-native construct IDML cannot carry). The
    * assembly spec asserts that list EQUALS the expected loss set, so a
-   * new silent loss fails the build instead of vanishing.
+   * new silent loss fails the build instead of vanishing. Each loss is a
+   * `LossEntry` on the wire (engine ADR 1097); the ledger here is their
+   * sentences (the code where an entry has none).
    */
   async exportIdmlWithLost(
     opts: { linkBase?: string } = {},
@@ -1268,7 +1270,7 @@ export class ShowcaseDoc {
                 kind: string;
                 payload?: {
                   idmlBytes?: number[];
-                  lost?: string[];
+                  lost?: Array<{ code: string; message?: string }>;
                   error?: string;
                   // Additive (no protocol bump): every `<Link>` the export
                   // wrote under `linkBase`, with the bytes the caller must
@@ -1303,7 +1305,7 @@ export class ShowcaseDoc {
       };
       return {
         b64: b64(reply.payload?.idmlBytes),
-        lost: reply.payload?.lost ?? [],
+        lost: (reply.payload?.lost ?? []).map((l) => l.message || l.code),
         links: (reply.payload?.links ?? []).map((l) => ({
           fileName: l.fileName ?? l.file_name ?? "",
           sourceUri: l.sourceUri ?? l.source_uri ?? "",

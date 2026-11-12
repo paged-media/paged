@@ -181,7 +181,9 @@ fn read_effects(styles: &style::properties::ComputedValues) -> Option<FxElement>
         }
         Ok(None) => {}
         Err(loss) => {
-            fx.effect.losses.push(loss);
+            fx.effect
+                .losses
+                .push(paged_loss::LossEntry::counted(loss, 1));
             any = true;
         }
     }
@@ -201,14 +203,18 @@ fn read_effects(styles: &style::properties::ComputedValues) -> Option<FxElement>
         .iter()
         .any(|m| blend_keyword_bg(*m) != "normal")
     {
-        fx.effect.losses.push("backgroundBlendMode".to_string());
+        fx.effect
+            .losses
+            .push(paged_loss::LossEntry::counted("backgroundBlendMode", 1));
         any = true;
     }
 
     match styles.clone_clip_path() {
         ClipPath::None => {}
         ClipPath::Url(_) => {
-            fx.effect.losses.push("clipPath.url".to_string());
+            fx.effect
+                .losses
+                .push(paged_loss::LossEntry::counted("clipPath.url", 1));
             any = true;
         }
         _ => {
@@ -488,7 +494,13 @@ mod tests {
             r#"<div style="mix-blend-mode:plus-lighter;background:#336699"></div>"#,
         ));
         assert!(g.blend.is_none());
-        assert_eq!(g.losses, vec!["mixBlendMode.plusLighter".to_string()]);
+        assert_eq!(
+            g.losses,
+            vec![paged_loss::LossEntry::counted(
+                "mixBlendMode.plusLighter",
+                1
+            )]
+        );
     }
 
     #[test]

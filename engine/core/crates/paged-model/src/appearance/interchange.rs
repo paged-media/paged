@@ -641,12 +641,14 @@ fn remove_refs(spread: &mut Spread, refs: &[FrameRef]) {
 /// shows the paints, and an edit there edits one of them); object effects
 /// other than the drop shadow stay on the carrier and no longer reach the
 /// extra paints; a layer's blend mode composites inside the group.
-pub fn losses(spread: &Spread) -> Vec<String> {
+pub fn losses(spread: &Spread) -> Vec<crate::report::LossEntry> {
+    use crate::report::{LossEntry, LossSeverity};
     let mut out = Vec::new();
     let mut line = |kind: &str, id: Option<&str>, layers: &[PaintLayer], effects: bool| {
         if layers.is_empty() {
             return;
         }
+        let item = id;
         let id = id.unwrap_or("?");
         let fills = layers
             .iter()
@@ -668,7 +670,11 @@ pub fn losses(spread: &Spread) -> Vec<String> {
                  reach the extra paints in InDesign.",
             );
         }
-        out.push(s);
+        let e = LossEntry::new("idml.appearance.baked", LossSeverity::Approximated, s);
+        out.push(match item {
+            Some(id) => e.on(id),
+            None => e,
+        });
     };
     for f in &spread.text_frames {
         line(
@@ -840,8 +846,11 @@ mod tests {
         let s = spread_with(layered());
         let lines = losses(&s);
         assert_eq!(lines.len(), 1);
-        assert!(lines[0].contains("`r1`"), "{}", lines[0]);
-        assert!(lines[0].contains("1 extra fill(s), 1 extra stroke(s)"));
-        assert!(lines[0].contains(KEY));
+        assert_eq!(lines[0].code, "idml.appearance.baked");
+        assert_eq!(lines[0].items, ["r1"]);
+        let line = &lines[0].message;
+        assert!(line.contains("`r1`"), "{line}");
+        assert!(line.contains("1 extra fill(s), 1 extra stroke(s)"));
+        assert!(line.contains(KEY));
     }
 }
