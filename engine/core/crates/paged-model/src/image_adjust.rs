@@ -107,6 +107,8 @@ fn is_zero(v: &f32) -> bool {
 fn is_one(v: &f32) -> bool {
     *v == 1.0
 }
+// The defaults the schema and the wire types name (the reader is `RasterOpWire`).
+#[allow(dead_code)]
 fn one() -> f32 {
     1.0
 }
@@ -116,6 +118,7 @@ fn is_false(v: &bool) -> bool {
 fn is_true(v: &bool) -> bool {
     *v
 }
+#[allow(dead_code)]
 fn yes() -> bool {
     true
 }
@@ -129,7 +132,12 @@ fn yes() -> bool {
 /// A field added to an op after it shipped is optional on the wire: an op
 /// written before reads with its default, and an op at the default writes
 /// as before (so a stored stack hashes as before).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+//
+// Read through one flat decoder (`RasterOpWire`): serde's derived reader of
+// an internally tagged enum buffers every op and instantiates a visitor per
+// op, which cost each wasm that reads ops some 200 KB once the superset
+// landed; the JSON is the same.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "wire", derive(tsify_next::Tsify))]
 #[cfg_attr(feature = "wire", tsify(into_wasm_abi, from_wasm_abi, missing_as_null))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -308,6 +316,203 @@ pub enum RasterOp {
     /// (1 + `tint`), blue × (1 − `temperature`), each −1..=1.
     /// `adjust.white_balance`.
     WhiteBalance { temperature: f32, tint: f32 },
+}
+
+/// Every field of every op, the decoder [`RasterOp`] is read through. A
+/// field two ops spell alike with different shapes (`channels`, `ranges`)
+/// is read as JSON and shaped by the op.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RasterOpWire {
+    op: String,
+    ev: Option<f32>,
+    offset: Option<f32>,
+    gamma: Option<f32>,
+    brightness: Option<f32>,
+    contrast: Option<f32>,
+    in_black: Option<f32>,
+    in_white: Option<f32>,
+    out_black: Option<f32>,
+    out_white: Option<f32>,
+    channels: Option<serde_json::Value>,
+    points: Option<Vec<[f32; 2]>>,
+    hue: Option<f32>,
+    saturation: Option<f32>,
+    lightness: Option<f32>,
+    ranges: Option<serde_json::Value>,
+    colorize: Option<[f32; 3]>,
+    shadow: Option<[f32; 3]>,
+    highlight: Option<[f32; 3]>,
+    reds: Option<f32>,
+    yellows: Option<f32>,
+    greens: Option<f32>,
+    cyans: Option<f32>,
+    blues: Option<f32>,
+    magentas: Option<f32>,
+    amount: Option<f32>,
+    radius: Option<f32>,
+    levels: Option<f32>,
+    level: Option<f32>,
+    red: Option<[f32; 4]>,
+    green: Option<[f32; 4]>,
+    blue: Option<[f32; 4]>,
+    monochrome: Option<bool>,
+    from: Option<[f32; 3]>,
+    to: Option<[f32; 3]>,
+    alpha: Option<f32>,
+    tolerance: Option<f32>,
+    vibrance: Option<f32>,
+    shadows: Option<[f32; 3]>,
+    midtones: Option<[f32; 3]>,
+    highlights: Option<[f32; 3]>,
+    preserve_luminosity: Option<bool>,
+    color: Option<[f32; 3]>,
+    density: Option<f32>,
+    absolute: Option<bool>,
+    stops: Option<Vec<GradientMapStop>>,
+    reverse: Option<bool>,
+    name: Option<String>,
+    size: Option<u32>,
+    cube: Option<Vec<f32>>,
+    settings: Option<Vec<f32>>,
+    temperature: Option<f32>,
+    tint: Option<f32>,
+}
+
+impl RasterOpWire {
+    fn into_op(self) -> Result<RasterOp, String> {
+        let op = self.op.as_str();
+        let need = |v: Option<f32>, f: &str| v.ok_or_else(|| format!("{op}: missing `{f}`"));
+        let need3 = |v: Option<[f32; 3]>, f: &str| v.ok_or_else(|| format!("{op}: missing `{f}`"));
+        let need4 = |v: Option<[f32; 4]>, f: &str| v.ok_or_else(|| format!("{op}: missing `{f}`"));
+        fn shaped<T: serde::de::DeserializeOwned>(
+            op: &str,
+            v: Option<serde_json::Value>,
+            f: &str,
+        ) -> Result<Option<T>, String> {
+            v.filter(|v| !v.is_null())
+                .map(|v| serde_json::from_value(v).map_err(|e| format!("{op}: `{f}`: {e}")))
+                .transpose()
+        }
+        Ok(match op {
+            "exposure" => RasterOp::Exposure {
+                ev: need(self.ev, "ev")?,
+                offset: self.offset.unwrap_or(0.0),
+                gamma: self.gamma.unwrap_or(1.0),
+            },
+            "brightnessContrast" => RasterOp::BrightnessContrast {
+                brightness: need(self.brightness, "brightness")?,
+                contrast: need(self.contrast, "contrast")?,
+            },
+            "levels" => RasterOp::Levels {
+                in_black: need(self.in_black, "inBlack")?,
+                in_white: need(self.in_white, "inWhite")?,
+                gamma: need(self.gamma, "gamma")?,
+                out_black: need(self.out_black, "outBlack")?,
+                out_white: need(self.out_white, "outWhite")?,
+                channels: shaped(op, self.channels, "channels")?,
+            },
+            "curves" => RasterOp::Curves {
+                points: self.points.ok_or("curves: missing `points`")?,
+                channels: shaped(op, self.channels, "channels")?,
+            },
+            "hueSaturation" => RasterOp::HueSaturation {
+                hue: need(self.hue, "hue")?,
+                saturation: need(self.saturation, "saturation")?,
+                lightness: need(self.lightness, "lightness")?,
+                ranges: shaped(op, self.ranges, "ranges")?,
+                colorize: self.colorize,
+            },
+            "recolor" => RasterOp::Recolor {
+                hue: need(self.hue, "hue")?,
+                saturation: need(self.saturation, "saturation")?,
+                lightness: need(self.lightness, "lightness")?,
+            },
+            "duotone" => RasterOp::Duotone {
+                shadow: need3(self.shadow, "shadow")?,
+                highlight: need3(self.highlight, "highlight")?,
+            },
+            "blackWhite" => RasterOp::BlackWhite {
+                reds: need(self.reds, "reds")?,
+                yellows: need(self.yellows, "yellows")?,
+                greens: need(self.greens, "greens")?,
+                cyans: need(self.cyans, "cyans")?,
+                blues: need(self.blues, "blues")?,
+                magentas: need(self.magentas, "magentas")?,
+            },
+            "sharpen" => RasterOp::Sharpen {
+                amount: need(self.amount, "amount")?,
+                radius: need(self.radius, "radius")?,
+            },
+            "blur" => RasterOp::Blur {
+                radius: need(self.radius, "radius")?,
+            },
+            "posterize" => RasterOp::Posterize {
+                levels: need(self.levels, "levels")?,
+            },
+            "threshold" => RasterOp::Threshold {
+                level: need(self.level, "level")?,
+            },
+            "invert" => RasterOp::Invert,
+            "channelMixer" => RasterOp::ChannelMixer {
+                red: need4(self.red, "red")?,
+                green: need4(self.green, "green")?,
+                blue: need4(self.blue, "blue")?,
+                monochrome: self.monochrome.unwrap_or(false),
+            },
+            "colorReplace" => RasterOp::ColorReplace {
+                from: need3(self.from, "from")?,
+                to: need3(self.to, "to")?,
+                alpha: need(self.alpha, "alpha")?,
+                tolerance: need(self.tolerance, "tolerance")?,
+            },
+            "vibrance" => RasterOp::Vibrance {
+                vibrance: need(self.vibrance, "vibrance")?,
+                saturation: need(self.saturation, "saturation")?,
+            },
+            "colorBalance" => RasterOp::ColorBalance {
+                shadows: need3(self.shadows, "shadows")?,
+                midtones: need3(self.midtones, "midtones")?,
+                highlights: need3(self.highlights, "highlights")?,
+                preserve_luminosity: self.preserve_luminosity.unwrap_or(true),
+            },
+            "photoFilter" => RasterOp::PhotoFilter {
+                color: need3(self.color, "color")?,
+                density: need(self.density, "density")?,
+                preserve_luminosity: self.preserve_luminosity.unwrap_or(true),
+            },
+            "selectiveColor" => RasterOp::SelectiveColor {
+                ranges: shaped(op, self.ranges, "ranges")?
+                    .ok_or("selectiveColor: missing `ranges`")?,
+                absolute: self.absolute.unwrap_or(false),
+            },
+            "gradientMap" => RasterOp::GradientMap {
+                stops: self.stops.ok_or("gradientMap: missing `stops`")?,
+                reverse: self.reverse.unwrap_or(false),
+            },
+            "colorLookup" => RasterOp::ColorLookup {
+                name: self.name.unwrap_or_default(),
+                size: self.size.ok_or("colorLookup: missing `size`")?,
+                cube: self.cube.ok_or("colorLookup: missing `cube`")?,
+            },
+            "develop" => RasterOp::Develop {
+                settings: self.settings.ok_or("develop: missing `settings`")?,
+            },
+            "whiteBalance" => RasterOp::WhiteBalance {
+                temperature: need(self.temperature, "temperature")?,
+                tint: need(self.tint, "tint")?,
+            },
+            other => return Err(format!("unknown op `{other}`")),
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for RasterOp {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        RasterOpWire::deserialize(d)?
+            .into_op()
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl RasterOp {
