@@ -250,11 +250,16 @@ fn a_pattern_survives_paged__feat__color_swatches_pattern_paint() {
 fn the_idml_export_keeps_the_pattern_in_a_label_and_names_the_loss__feat__color_swatches_pattern_paint(
 ) {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let id = create(&mut m);
     let new_losses = |m: &CanvasModel| -> Vec<String> {
         m.idml_export_losses()
             .into_iter()
+            .map(|l| l.message)
             .filter(|l| !clean.contains(l))
             .collect()
     };

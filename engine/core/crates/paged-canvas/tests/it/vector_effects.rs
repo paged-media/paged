@@ -337,7 +337,11 @@ fn expand_appearance_keeps_the_outline_in_one_undo_step__feat__effects_transpare
 #[allow(non_snake_case)]
 fn idml_bakes_reports_and_reimports_live__feat__effects_transparency_live_vector_effects() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(&mut m, &r1(), "frameEffectStack", vec![zig()]).unwrap();
     let bloat = EffectEntrySpec {
         amount_pct: Some(40.0),
@@ -360,6 +364,7 @@ fn idml_bakes_reports_and_reimports_live__feat__effects_transparency_live_vector
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 3, "{losses:?}");

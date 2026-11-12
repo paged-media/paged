@@ -196,14 +196,25 @@ fn the_fill_rule_is_set_drawn_and_undone__feat__frames_paths_fill_rule_even_odd(
 #[allow(non_snake_case)]
 fn the_idml_export_rewinds_or_reports__feat__frames_paths_fill_rule_even_odd() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(&mut m, "donut", "EvenOdd");
     // A donut re-winds: no loss.
-    assert_eq!(m.idml_export_losses(), clean);
+    assert_eq!(
+        m.idml_export_losses()
+            .into_iter()
+            .map(|l| l.message)
+            .collect::<Vec<_>>(),
+        clean
+    );
     set(&mut m, "star", "EvenOdd");
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");

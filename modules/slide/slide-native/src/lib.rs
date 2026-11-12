@@ -2569,11 +2569,9 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         elements: w.elements,
         diagnostics: {
             // What the engine could not hold of the deck's paint, once
-            // per kind.
+            // per kind, under the shared mapper's own `dml.*` codes.
             let mut d = w.diagnostics;
-            for l in w.dml.take_losses() {
-                d.push_loss(pptx_core::loss::mapped("pptx.paint.native", l));
-            }
+            d.extend_losses(w.dml.take_losses());
             d
         },
         media: w.media,

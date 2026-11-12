@@ -110,7 +110,13 @@ describe("a picture's DrawingML look [sheet.chart.native-effects]", () => {
         color: "#000000",
       },
     },
-    losses: ["picture effect a:tint is not carried"],
+    losses: [
+      {
+        code: "dml.picture.tint",
+        count: 1,
+        message: "picture effect a:tint is not carried",
+      },
+    ],
   };
   const withPics = { ...content, pictures: [styled, { ...styled, row: 1 }] };
 

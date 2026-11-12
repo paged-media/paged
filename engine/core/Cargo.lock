@@ -1469,6 +1469,7 @@ dependencies = [
 name = "dml-native"
 version = "0.0.0"
 dependencies = [
+ "paged-loss",
  "paged-model",
  "paged-ooxml",
  "serde",

@@ -972,8 +972,9 @@ fn subtree_leaf_ids(spread: &Spread, r: FrameRef, out: &mut Vec<String>) {
 /// line per instance, for the export's loss report. The IDML export runs
 /// this on its copy of the document; [`restore_symbols_from_labels`]
 /// undoes it on reopen.
-pub fn expand_symbols_for_interchange(doc: &mut Document) -> Vec<String> {
-    let mut lines = Vec::new();
+pub fn expand_symbols_for_interchange(doc: &mut Document) -> Vec<paged_model::report::LossEntry> {
+    use paged_model::report::{LossEntry, LossSeverity};
+    let mut lines: Vec<LossEntry> = Vec::new();
     let has_instances = doc.spreads.iter().any(|p| !p.spread.instances.is_empty());
     if doc.symbols.is_empty() && !has_instances {
         return lines;
@@ -992,11 +993,18 @@ pub fn expand_symbols_for_interchange(doc: &mut Document) -> Vec<String> {
                 let spread = &mut doc.spreads[si].spread;
                 spread.instances.remove(0);
                 unregister_frame_ref(spread, FrameRef::Instance(0), 0);
-                lines.push(format!(
-                    "symbol instance `{id}` names a symbol the document lacks (`{}`) — it draws \
-                     nothing and is not written",
-                    inst.symbol
-                ));
+                lines.push(
+                    LossEntry::new(
+                        "idml.symbol.missing",
+                        LossSeverity::Dropped,
+                        format!(
+                            "symbol instance `{id}` names a symbol the document lacks (`{}`) — \
+                             it draws nothing and is not written",
+                            inst.symbol
+                        ),
+                    )
+                    .on(id.clone()),
+                );
                 continue;
             };
             let (demand, _) = break_demand(&def, &inst);
@@ -1004,10 +1012,17 @@ pub fn expand_symbols_for_interchange(doc: &mut Document) -> Vec<String> {
             let root = match expand_instance(doc, si, 0, &ids, &story_ids) {
                 Ok(Some(r)) => r,
                 _ => {
-                    lines.push(format!(
-                        "symbol instance `{id}` of \"{}\" has no artwork to write",
-                        def.name
-                    ));
+                    lines.push(
+                        LossEntry::new(
+                            "idml.symbol.empty",
+                            LossSeverity::Dropped,
+                            format!(
+                                "symbol instance `{id}` of \"{}\" has no artwork to write",
+                                def.name
+                            ),
+                        )
+                        .on(id.clone()),
+                    );
                     continue;
                 }
             };
@@ -1039,15 +1054,29 @@ pub fn expand_symbols_for_interchange(doc: &mut Document) -> Vec<String> {
             if inst.nine_slice.or(def.nine_slice).is_some() {
                 extra.push_str("; its 9-slice scaling is drawn as a plain scale");
             }
-            lines.push(format!(
-                "symbol instance `{id}` of \"{}\" is written as its artwork — IDML has no \
-                 symbols; the link is kept in a label and comes back when paged reopens the \
-                 file{extra}",
-                def.name
-            ));
+            // The artwork is what InDesign draws; only a tint or a 9-slice
+            // scale changes the picture.
+            let severity = if extra.is_empty() {
+                LossSeverity::Info
+            } else {
+                LossSeverity::Approximated
+            };
+            lines.push(
+                LossEntry::new(
+                    "idml.symbol.expanded",
+                    severity,
+                    format!(
+                        "symbol instance `{id}` of \"{}\" is written as its artwork — IDML has \
+                         no symbols; the link is kept in a label and comes back when paged \
+                         reopens the file{extra}",
+                        def.name
+                    ),
+                )
+                .on(id.clone()),
+            );
         }
     }
-    lines.sort();
+    lines.sort_by(|a, b| a.message.cmp(&b.message));
     lines
 }
 

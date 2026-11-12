@@ -114,7 +114,13 @@ const geom = (f: NativeFx = fx): ChartGeometry => ({
     },
   ],
   losses: [
-    "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
+    {
+      code: "dml.pattern.mix",
+      count: 1,
+      severity: "approximated",
+      message:
+        "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
+    },
   ],
 });
 

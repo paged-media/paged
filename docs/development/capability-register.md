@@ -523,11 +523,15 @@ losses }`), `pdf-import` (`Loss` is `LossEntry`), `paged-psd-fx` (`StyleLoss` is
   export producer has its own `pptx.<area>.<what>` code and a severity, `pptx_core::loss`; a kept import
   report's sentences read as `pptx.legacy` entries in Rust and in the bundle's `readLosses`; the bundle
   shows them through `lossDiagnostics`) and `paged-ps` (`Report.unsupported` is `LossEntry`, codes
-  `eps.<area>.<what>`). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL diagnostic (not a
-  loss), the IDML export's `lost` lines (a wire field, `IdmlExported.lost`, so a protocol change of its
-  own), image-js `LosslessShape` (a save-back classification) and the web bundle's linter findings (not
-  losses). Single-owner rule `loss-report` (also: a `losses` / `lost` / `unsupported` / `not_exported`
-  field of `Vec<String>`; the six left are the DrawingML mapper's sentences in doc, sheet and web).
+  `eps.<area>.<what>`), the IDML export (2026-11-12, protocol v78 rider: `IdmlExported.lost` is
+  `LossEntry[]`, every producer of `idml_export_losses` names an `idml.<area>.<what>` code, a severity and
+  its item in the new optional `LossEntry.items`; paged.publish's `exportIdml` diagnostics carry each
+  entry's code, the SDK harness and the `paged` CLI's JSON carry the entries) and the DrawingML mapper
+  (2026-11-12: `dml-native`'s `Mapper` / `Lowering` losses are entries, `dml.<area>.<what>`, and with them
+  doc's, sheet's and web's lowered looks). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL
+  diagnostic (not a loss), image-js `LosslessShape` (a save-back classification) and the web bundle's
+  linter findings (not losses). Single-owner rule `loss-report` (also: a `losses` / `lost` /
+  `unsupported` / `not_exported` field of `Vec<String>`); its baseline is empty.
 
 ### W9 status (2026-11-08): PDF, scripting, data leftovers
 

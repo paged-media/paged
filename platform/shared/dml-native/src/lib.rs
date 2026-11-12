@@ -73,10 +73,13 @@
 //!   618).
 //!
 //! What the engine cannot hold is never dropped silently: it goes to
-//! [`Mapper::losses`], one line per kind of loss, for the module's
-//! diagnostics.
+//! [`Mapper::losses`], one `paged_loss` entry per kind of loss (a
+//! `dml.<area>.<what>` code, its severity and the sentence), for the
+//! module's diagnostics.
 
 use std::collections::BTreeMap;
+
+pub use paged_loss::{LossEntry, LossLog, LossSeverity};
 
 pub mod crop;
 pub mod native;
@@ -549,7 +552,7 @@ pub fn arrowhead(kind: &str) -> ArrowheadType {
 #[derive(Debug, Clone, Default)]
 pub struct Mapper {
     pub palette: Palette,
-    losses: Vec<String>,
+    losses: Vec<LossEntry>,
     /// Live theme colours (slide ADR 713): a solid paint that names a
     /// theme colour fills with that colour's swatch, and one that names
     /// none with a plain colour's, even where its value equals a theme
@@ -596,22 +599,27 @@ impl Mapper {
         self
     }
 
-    /// One line per kind of loss, in the order first met.
-    pub fn losses(&self) -> &[String] {
+    /// One entry per kind of loss (code and sentence), counted, in the
+    /// order first met.
+    pub fn losses(&self) -> &[LossEntry] {
         &self.losses
     }
 
     /// Take the losses reported so far.
-    pub fn take_losses(&mut self) -> Vec<String> {
+    pub fn take_losses(&mut self) -> Vec<LossEntry> {
         std::mem::take(&mut self.losses)
     }
 
-    /// Report a loss (once per distinct line).
-    pub fn lose(&mut self, what: impl Into<String>) {
-        let what = what.into();
-        if !self.losses.contains(&what) {
-            self.losses.push(what);
-        }
+    /// Report a loss: `code` (`dml.<area>.<what>`), how it fared and the
+    /// sentence. One entry per code and sentence, counted ([`LossLog`]).
+    pub fn lose(&mut self, code: &str, severity: LossSeverity, what: impl Into<String>) {
+        self.losses.note(code, severity, &what.into());
+    }
+
+    /// Report a loss entry as it is (merged with one of its code and
+    /// sentence).
+    pub fn lose_entry(&mut self, entry: LossEntry) {
+        self.losses.push_loss(entry);
     }
 
     /// The colour swatch of `rgb`.
@@ -638,6 +646,8 @@ impl Mapper {
                     return id;
                 }
                 self.lose(
+                    "dml.pattern.mix",
+                    LossSeverity::Approximated,
                     "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
                 );
                 self.palette.color(pp.mix().0)
@@ -656,6 +666,8 @@ impl Mapper {
     ) -> Option<pattern::PatternTile> {
         let t = pattern::tile(pp, bounds)?;
         self.lose(
+            "dml.pattern.tiles",
+            LossSeverity::Approximated,
             "pattern fill drawn as a picture of its tiles (no pattern paint on main); written back as it was",
         );
         Some(t)
@@ -681,7 +693,11 @@ impl Mapper {
             f.kind = Some(t.into());
         }
         if s.compound.as_deref() == Some("tri") {
-            self.lose("a triple line (cmpd=\"tri\") is drawn single");
+            self.lose(
+                "dml.line.triple",
+                LossSeverity::Approximated,
+                "a triple line (cmpd=\"tri\") is drawn single",
+            );
         }
         if let Some(cap) = &s.cap {
             f.cap = Some(
@@ -742,17 +758,26 @@ impl Mapper {
         if let Some(s) = &fx.outer_shadow {
             t.shadow = Some(self.drop_shadow(s.dx, s.dy, s.blur, s.rgb, s.alpha));
             if s.distortion.is_some() {
-                self.lose("a shadow's scale and skew are not carried: drawn undistorted");
+                self.lose(
+                    "dml.shadow.distorted",
+                    LossSeverity::Dropped,
+                    "a shadow's scale and skew are not carried: drawn undistorted",
+                );
             }
         } else if let Some(p) = &fx.preset_shadow {
-            self.lose(format!(
-                "preset shadow {} drawn as a plain drop shadow",
-                p.preset
-            ));
+            self.lose(
+                "dml.shadow.preset",
+                LossSeverity::Approximated,
+                format!("preset shadow {} drawn as a plain drop shadow", p.preset),
+            );
             t.shadow = Some(self.drop_shadow(p.dx, p.dy, 0.0, p.rgb, p.alpha));
         }
         if fx.outer_shadow.is_some() && fx.preset_shadow.is_some() {
-            self.lose("a preset shadow beside an outer shadow is not drawn");
+            self.lose(
+                "dml.shadow.presetBeside",
+                LossSeverity::Dropped,
+                "a preset shadow beside an outer shadow is not drawn",
+            );
         }
         if let Some(s) = &fx.inner_shadow {
             effects.inner_shadow = Some(InnerShadowParams {
@@ -805,6 +830,8 @@ impl Mapper {
         if let Some(b) = &fx.blur {
             if !b.grow {
                 self.lose(
+                    "dml.blur.grow",
+                    LossSeverity::Approximated,
                     "a:blur grow=\"0\" is drawn past the shape's edge (the engine's blur grows)",
                 );
             }
@@ -850,13 +877,21 @@ impl Mapper {
     /// extrusion, so neither is a loss.
     fn bevel(&mut self, t: &ThreeD) -> Option<BevelEmbossParams> {
         if !t.is_front() {
-            self.lose("a 3-D rotation or perspective camera is not carried: the shape is drawn seen from the front");
+            self.lose("dml.3d.camera", LossSeverity::Dropped, "a 3-D rotation or perspective camera is not carried: the shape is drawn seen from the front");
             if t.bevel_bottom.is_some() || t.extrusion > 0.0 {
-                self.lose("a bottom bevel or an extrusion seen at an angle is not drawn");
+                self.lose(
+                    "dml.3d.bevelBottom",
+                    LossSeverity::Dropped,
+                    "a bottom bevel or an extrusion seen at an angle is not drawn",
+                );
             }
         }
         if t.contour > 0.0 {
-            self.lose("a 3-D contour is not drawn");
+            self.lose(
+                "dml.3d.contour",
+                LossSeverity::Dropped,
+                "a 3-D contour is not drawn",
+            );
         }
         let top = t.bevel_top.as_ref()?;
         if top.width <= 0.0 || top.height <= 0.0 {
@@ -892,11 +927,15 @@ impl Mapper {
             // shows the shape unchanged; slide-conformance fixture
             // `effect-stack`): neither does the engine.
             Paint::Linear { .. } | Paint::Radial { .. } => {
-                self.lose("a gradient fill overlay is not carried (PowerPoint does not draw it)");
+                self.lose(
+                    "dml.overlay.gradient",
+                    LossSeverity::Dropped,
+                    "a gradient fill overlay is not carried (PowerPoint does not draw it)",
+                );
                 return None;
             }
             Paint::Pattern(pp) => {
-                self.lose("a pattern fill overlay is drawn as the mix of its two colours (no pattern paint yet)");
+                self.lose("dml.overlay.pattern", LossSeverity::Approximated, "a pattern fill overlay is drawn as the mix of its two colours (no pattern paint yet)");
                 let (rgb, alpha) = pp.mix();
                 (
                     Effect::ColorOverlay(ColorOverlayParams {
@@ -907,7 +946,11 @@ impl Mapper {
             }
             Paint::None => return None,
             Paint::Image { .. } => {
-                self.lose("a picture fill overlay is not carried");
+                self.lose(
+                    "dml.overlay.picture",
+                    LossSeverity::Dropped,
+                    "a picture fill overlay is not carried",
+                );
                 return None;
             }
         };
@@ -933,7 +976,7 @@ impl Mapper {
             && near(r.ky, 0.0)
             && near(r.start_pos, 0.0);
         if !mirrored {
-            self.lose("a reflection's direction, scale, skew or fade start are not carried: drawn as a mirror image below");
+            self.lose("dml.reflection.distorted", LossSeverity::Dropped, "a reflection's direction, scale, skew or fade start are not carried: drawn as a mirror image below");
         }
         ReflectionParams {
             distance_pt: pt(r.distance.max(0.0)),
@@ -1040,7 +1083,7 @@ impl Mapper {
                 ),
                 ImageEffect::ColorReplace { rgb, alpha } => {
                     if *alpha < 0.999 {
-                        self.lose("a:clrRepl's transparency is not carried (the colour replaces opaquely, the picture's alpha kept)");
+                        self.lose("dml.picture.clrReplAlpha", LossSeverity::Dropped, "a:clrRepl's transparency is not carried (the colour replaces opaquely, the picture's alpha kept)");
                     }
                     (
                         "a:clrRepl",
@@ -1052,12 +1095,16 @@ impl Mapper {
                 }
                 ImageEffect::Blur { radius, .. } => {
                     let Some(scale) = px_per_pt.filter(|s| s.is_finite() && *s > 0.0) else {
-                        self.lose("picture effect a:blur is not carried (the picture's pixel size is not known here)");
+                        self.lose("dml.picture.blur", LossSeverity::Dropped, "picture effect a:blur is not carried (the picture's pixel size is not known here)");
                         continue;
                     };
                     let sigma = radius * BLUR_SIGMA_PER_RADIUS * scale;
                     if sigma > 64.0 {
-                        self.lose("a picture blur wider than 64 pixels (σ) is drawn at 64");
+                        self.lose(
+                            "dml.picture.blurWide",
+                            LossSeverity::Approximated,
+                            "a picture blur wider than 64 pixels (σ) is drawn at 64",
+                        );
                     }
                     (
                         "a:blur",
@@ -1083,14 +1130,18 @@ impl Mapper {
                 ),
                 ImageEffect::Tint { .. } => {
                     self.lose(
+                        "dml.picture.tint",
+                        LossSeverity::Dropped,
                         "picture effect a:tint is not carried (no equivalent image adjustment)",
                     );
                     continue;
                 }
                 ImageEffect::Alpha(n) | ImageEffect::Other(n) => {
-                    self.lose(format!(
-                        "picture effect a:{n} is not carried (no image adjustment for it)"
-                    ));
+                    self.lose(
+                        "dml.picture.effect",
+                        LossSeverity::Dropped,
+                        format!("picture effect a:{n} is not carried (no image adjustment for it)"),
+                    );
                     continue;
                 }
             };
@@ -1162,6 +1213,8 @@ impl Mapper {
         }
         if distinct.iter().any(|&p| differs(&by_path(p))) {
             self.lose(
+                "dml.fillRule.evenOdd",
+                LossSeverity::Approximated,
                 "a geometry of several paths, one of which fills even-odd, is filled non-zero",
             );
         }
@@ -1183,7 +1236,7 @@ pub struct MappedPicture {
 impl MappedPicture {
     /// The losses of a lane that cannot hold an image filter stack: one
     /// line per adjustment ([`picture_adjustment_loss`]).
-    pub fn native_lane_losses(&self) -> Vec<String> {
+    pub fn native_lane_losses(&self) -> Vec<LossEntry> {
         self.adjustments
             .iter()
             .zip(&self.elements)
@@ -1192,17 +1245,21 @@ impl MappedPicture {
     }
 }
 
-fn adjustment_loss(element: &str, op: &RasterOp) -> String {
-    format!(
-        "{element} (picture adjustment {}) is not carried on the native lane",
-        op.name()
+fn adjustment_loss(element: &str, op: &RasterOp) -> LossEntry {
+    LossEntry::new(
+        "dml.picture.adjustment",
+        LossSeverity::Dropped,
+        format!(
+            "{element} (picture adjustment {}) is not carried on the native lane",
+            op.name()
+        ),
     )
 }
 
 /// The loss a lane that cannot hold an image filter stack (engine ADR
 /// 1037) reports for one of its ops: the DrawingML element it came from,
 /// and the op it became on the mutation lane.
-pub fn picture_adjustment_loss(op: &RasterOp) -> String {
+pub fn picture_adjustment_loss(op: &RasterOp) -> LossEntry {
     let element = match op {
         RasterOp::BrightnessContrast { .. } => "a:lum",
         RasterOp::Duotone { .. } => "a:duotone",

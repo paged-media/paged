@@ -70,6 +70,7 @@
 // exposing them headlessly (they do, via the JSON channel).
 
 import type {
+  LossEntry,
   BundleHost,
   ExportPdfWireOptions,
   CanvasPointerEvent,
@@ -610,7 +611,14 @@ export interface HeadlessHost {
   exportDocument(
     format: "paged" | "idml" | "pdf",
     options?: { pdf?: Record<string, unknown>; linkBase?: string | null },
-  ): Promise<{ bytes: Uint8Array; diagnostics: string[]; lost?: string[] }>;
+  ): Promise<{
+    bytes: Uint8Array;
+    diagnostics: string[];
+    /** What the `.idml` package does not carry, one `LossEntry` each (an
+     *  `idml.<area>.<what>` code, the items, the sentence as `message`;
+     *  engine ADR 1097). Absent for the other formats. */
+    lost?: LossEntry[];
+  }>;
   /** D-26 — every document a bundle opened through `host.documents.open`,
    *  in order (declined opens are not listed). */
   openedDocuments(): ReadonlyArray<{
@@ -1648,7 +1656,7 @@ export async function createHeadlessHost(
             bytes: Uint8Array.from(reply.payload.idmlBytes as number[]),
             diagnostics: [],
             ...(reply.payload.lost
-              ? { lost: reply.payload.lost as string[] }
+              ? { lost: reply.payload.lost as LossEntry[] }
               : {}),
           };
         }

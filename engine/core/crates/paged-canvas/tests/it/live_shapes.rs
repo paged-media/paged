@@ -325,7 +325,11 @@ fn pie_angles_cut_the_oval_and_undo__feat__plugin_draw_live_shapes() {
 fn the_idml_export_keeps_the_outline_and_the_label_lifts_the_parameters__feat__plugin_draw_live_shapes(
 ) {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(&mut m, poly("quad"), "frameShapeSides", Some(7.0)).expect("sides");
     set(&mut m, poly("quad"), "frameShapeStarInset", Some(30.0)).expect("inset");
     set(&mut m, oval("ov"), "frameShapePieStart", Some(30.0)).expect("start");
@@ -334,6 +338,7 @@ fn the_idml_export_keeps_the_outline_and_the_label_lifts_the_parameters__feat__p
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "only the pie is named: {losses:?}");

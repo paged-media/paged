@@ -216,9 +216,9 @@ pub struct ChartGeometry {
     #[serde(skip_serializing_if = "is_false")]
     pub flattened_3d: bool,
     /// What the chart's DrawingML asks for that the page items cannot
-    /// hold, one line per kind (sheet ADR 527; `dml-native`'s report).
+    /// hold, one entry per kind (sheet ADR 527; `dml-native`'s report).
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub losses: Vec<String>,
+    pub losses: Vec<crate::native::LossEntry>,
 }
 
 /// Custom error amounts of one error-bar set: (plus, minus) per point.

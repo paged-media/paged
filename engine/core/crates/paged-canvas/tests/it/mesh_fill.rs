@@ -240,11 +240,16 @@ fn a_mesh_survives_paged__feat__color_swatches_mesh_freeform_gradients() {
 fn the_idml_export_keeps_the_mesh_in_a_label_and_names_the_loss__feat__color_swatches_mesh_freeform_gradients(
 ) {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(&mut m, &rect(), Value::FillMesh(Some(mesh()))).expect("set");
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");

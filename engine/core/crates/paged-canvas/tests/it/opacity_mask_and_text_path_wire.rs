@@ -206,7 +206,11 @@ fn a_mask_survives_paged_and_is_reported_lost_on_idml() {
     // The fixture's story flows in no frame: InDesign discards such a
     // story on open (measured), so the export drops it and the ledger
     // names it — the one loss a clean copy of THIS document has.
-    let clean = model.idml_export_losses();
+    let clean: Vec<String> = model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert_eq!(clean.len(), 1, "{clean:?}");
     assert!(
         clean[0].contains("st1") && clean[0].contains("referenced by no frame"),
@@ -228,6 +232,7 @@ fn a_mask_survives_paged_and_is_reported_lost_on_idml() {
     let losses: Vec<String> = model
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "one masked item ⇒ one NEW loss line");

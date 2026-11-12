@@ -150,11 +150,16 @@ fn a_photoshop_mode_is_set_drawn_and_undone__feat__effects_transparency_blend_mo
 fn the_idml_export_writes_the_nearest_mode_and_reports__feat__effects_transparency_blend_modes_27()
 {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(&mut m, "frameBlendMode", "LinearBurn");
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 1, "{losses:?}");
@@ -174,7 +179,13 @@ fn the_idml_export_writes_the_nearest_mode_and_reports__feat__effects_transparen
     assert_ne!(r.blend_mode.as_deref(), Some("LinearBurn"));
     // A native mode is written as itself and is no loss.
     set(&mut m, "frameBlendMode", "Screen");
-    assert_eq!(m.idml_export_losses(), clean);
+    assert_eq!(
+        m.idml_export_losses()
+            .into_iter()
+            .map(|l| l.message)
+            .collect::<Vec<_>>(),
+        clean
+    );
 }
 
 #[test]

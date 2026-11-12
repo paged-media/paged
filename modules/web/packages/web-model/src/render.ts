@@ -28,6 +28,7 @@
 // Do NOT fake a SceneLayer here; an empty/placeholder layer would be the
 // exact dishonesty this seam exists to avoid.
 
+import type { LossEntry } from "@paged-media/plugin-api";
 import type { WebDiagnostic } from "./diagnose";
 import type { TemplateVars } from "./source";
 import { ENGINE_PIN, type EnginePin } from "./engine";
@@ -258,8 +259,10 @@ export interface SceneEffectGroup {
   clip?: ScenePathSeg[];
   /** What the `mask-image` layers paint (the element's alpha). */
   mask?: SceneItem[];
-  /** Effects with no native equivalent, by loss key. */
-  losses?: string[];
+  /** Effects with no native equivalent: one loss entry per key, the key
+   *  its code (`mixBlendMode.plusLighter`), counted (capability register
+   *  C18). */
+  losses?: LossEntry[];
 }
 
 /** The effect channel of one layer: its groups and the effects no painted
