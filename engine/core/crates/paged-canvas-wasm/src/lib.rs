@@ -372,6 +372,30 @@ mod wasm {
             Some(out)
         }
 
+        /// The decoded-pixels door: encoded image bytes (any format the
+        /// engine places: PNG, JPEG, TIFF, PSD, WebP, …) decoded the way the
+        /// renderer decodes a placed picture (colour converted to sRGB,
+        /// straight alpha), shrunk so neither side exceeds `max_dim` when
+        /// given, as `{ width, height, rgba }` with `rgba` a `Uint8Array`;
+        /// `undefined` when the bytes do not decode. A pure read: no
+        /// document is touched.
+        #[wasm_bindgen(js_name = decodeImageDirect)]
+        pub fn decode_image_direct(
+            &self,
+            bytes: &[u8],
+            max_dim: Option<u32>,
+        ) -> Option<js_sys::Object> {
+            let (width, height, data) = paged_canvas::decode_image_rgba8(bytes, max_dim)?;
+            let out = js_sys::Object::new();
+            let set = |k: &str, v: JsValue| {
+                let _ = js_sys::Reflect::set(&out, &JsValue::from_str(k), &v);
+            };
+            set("width", JsValue::from_f64(width as f64));
+            set("height", JsValue::from_f64(height as f64));
+            set("rgba", js_sys::Uint8Array::from(data.as_slice()).into());
+            Some(out)
+        }
+
         /// v66 — apply one wire `Mutation` (JSON; a `batch` too) whose
         /// first `replaceImageBytes` with `bytes: []` takes `bytes` — the
         /// commit lane for processed pixels without a `number[]`. Returns

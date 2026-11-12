@@ -309,6 +309,13 @@ import { buildReflectCommands, REFLECT_MENU_ITEMS } from "../reflect-commands";
 import { buildStarCommands, STAR_MENU_ITEMS } from "../star-commands";
 import { StarDialog } from "../panels/star-dialog";
 import { buildBarcodeCommands, BARCODE_MENU_ITEMS } from "../barcode-commands";
+import { referenceTypedCommands } from "@paged-media/helpers";
+import {
+  buildReferenceCommands,
+  referenceDoorOf,
+  REFERENCE_DIAGNOSTIC_SOURCE,
+  REFERENCE_MENU_ITEMS,
+} from "../reference-commands";
 import { BarcodeDialog } from "../panels/barcode-dialog";
 import { openReflectOptions, ReflectDialog } from "../panels/reflect-dialog";
 import {
@@ -722,6 +729,24 @@ function PluginBundles() {
       setMlService(scope, mlService);
       void mlService.start();
     }
+    // P2 — the reference inserts as typed commands: scripts, the CLI and
+    // paged.doc's References dialogs call `paged.insert.footnote` & co.
+    const referenceTypedCommandsHandle = objects.registry.register({
+      plugin: "paged.insert",
+      model: {
+        kinds: [],
+        commands: referenceTypedCommands(
+          referenceDoorOf({
+            client: {
+              send: (m) => pagedRef.current!.client.send(m),
+              mutate: (m) => pagedRef.current!.client.mutate(m),
+            },
+            getSelection: () =>
+              pagedRef.current?.contentSelection.contentSelection ?? null,
+          }),
+        ) as never,
+      },
+    });
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.
@@ -780,6 +805,7 @@ function PluginBundles() {
       setMlService(scope, null);
       mlService?.dispose();
       mlCommands?.dispose();
+      referenceTypedCommandsHandle.dispose();
     };
     // Mount-once by design; the ref keeps the handle live. The services
     // are the instance's, fixed for the editor's lifetime.
@@ -1534,6 +1560,18 @@ function CanvasAppIntegration() {
         ]),
       () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
     );
+    // `paged.insert.*` references — footnote, endnote, bookmark,
+    // cross-reference, index entry at the caret (P2).
+    const referenceCommands = buildReferenceCommands(
+      { client, getSelection: () => currentContentSelection() },
+      (panelId) =>
+        void registries.commands.invoke(`paged.panel.show.${panelId}`),
+      (message) =>
+        problemsSink.publish(REFERENCE_DIAGNOSTIC_SOURCE, "insert", [
+          { severity: "error", message, source: "insert" },
+        ]),
+      () => problemsSink.clear(REFERENCE_DIAGNOSTIC_SOURCE),
+    );
     // `paged.text.*` — the text-format verbs (bold, sizes, alignment, indents,
     // line spacing) on the live text selection.
     const textFormatCommands = buildTextFormatCommands(
@@ -1722,6 +1760,7 @@ function CanvasAppIntegration() {
       ...pathfinderCommands,
       ...cornerCommands,
       ...textFormatCommands,
+      ...referenceCommands,
       ...appearanceCommands,
       ...strokeDashCommands,
       ...insertCommands,
@@ -1753,6 +1792,7 @@ function CanvasAppIntegration() {
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
       ...TEXT_FORMAT_MENU_ITEMS,
+      ...REFERENCE_MENU_ITEMS,
       ...APPEARANCE_MENU_ITEMS,
       ...STROKE_DASH_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,

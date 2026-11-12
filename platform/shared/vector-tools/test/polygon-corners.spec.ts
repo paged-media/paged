@@ -19,65 +19,13 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  cornerAt,
-  cornerPreview,
-  maxRadius,
-  radiusFromDrag,
-  type Bounds,
-} from "../src/corner-radius-machine";
-
-// A 100×60 rectangle: top 10, left 20, bottom 70, right 120.
-const B: Bounds = [10, 20, 70, 120];
-
-describe("cornerAt", () => {
-  it("hits each corner within tolerance, in IDML order", () => {
-    expect(cornerAt(B, [21, 11], 4)).toBe(0); // TL
-    expect(cornerAt(B, [119, 12], 4)).toBe(1); // TR
-    expect(cornerAt(B, [118, 69], 4)).toBe(2); // BR
-    expect(cornerAt(B, [22, 68], 4)).toBe(3); // BL
-    expect(cornerAt(B, [70, 40], 4)).toBeNull(); // center — no corner
-  });
-});
-
-describe("radiusFromDrag", () => {
-  it("reads the inward drag and clamps to half the short side", () => {
-    // TL inward drag by (15, 12) → the smaller inward axis wins: 12.
-    expect(radiusFromDrag(B, 0, [35, 22])).toBe(12);
-    // Dragging past the middle clamps to min(w,h)/2 = 30.
-    expect(radiusFromDrag(B, 0, [120, 70])).toBe(30);
-    expect(maxRadius(B)).toBe(30);
-  });
-
-  it("an outward drag reads 0 (never a negative radius)", () => {
-    expect(radiusFromDrag(B, 0, [0, 0])).toBe(0);
-    // BR corner outward.
-    expect(radiusFromDrag(B, 2, [130, 80])).toBe(0);
-  });
-});
-
-describe("cornerPreview", () => {
-  it("draws the L through the corner with the radius extent on both edges", () => {
-    expect(cornerPreview(B, 0, 10)).toEqual([
-      [30, 10],
-      [20, 10],
-      [20, 20],
-    ]);
-    expect(cornerPreview(B, 2, 8)).toEqual([
-      [112, 70],
-      [120, 70],
-      [120, 62],
-    ]);
-  });
-});
-
-// ---- POLYGON corners: the renderer's inscribed-circle rule, inner space.
-import {
   polygonCornerAt,
+  polygonCornerWidgetPoint,
   polygonCornerPreview,
   polygonCorners,
   polygonRadiusFromDrag,
   polygonTangentFromDrag,
-} from "../src/corner-radius-machine";
+} from "../src/polygon-corners";
 import type { AnchorTable } from "@paged-media/vector-geometry";
 
 const pt = (x: number, y: number) => ({
@@ -149,5 +97,26 @@ describe("polygon radius from a drag", () => {
     const tl = polygonCorners(TRIANGLE)[0]!;
     expect(polygonRadiusFromDrag(tl, [500, 500])).toBeCloseTo(50, 12);
     expect(polygonRadiusFromDrag(tl, [-10, -10])).toBe(0);
+  });
+});
+
+describe("the corner's widget", () => {
+  it("sits at the arc's centre, and dragging it there reads the radius back", () => {
+    for (const c of polygonCorners(TRIANGLE)) {
+      const r = 6;
+      const w = polygonCornerWidgetPoint(c, r, 0);
+      expect(polygonRadiusFromDrag(c, w)).toBeCloseTo(r, 9);
+    }
+  });
+
+  it("keeps the minimum offset for a square corner (the box rule at 90°)", () => {
+    const tl = polygonCorners(TRIANGLE)[0]!;
+    const w = polygonCornerWidgetPoint(tl, 0, 14);
+    expect(Math.hypot(w[0], w[1])).toBeCloseTo(14, 9);
+    expect(w[0]).toBeCloseTo(w[1], 9);
+    // At 90° a radius r sits at (r, r), as the rectangle's widget does.
+    const at = polygonCornerWidgetPoint(tl, 10, 0);
+    expect(at[0]).toBeCloseTo(10, 9);
+    expect(at[1]).toBeCloseTo(10, 9);
   });
 });

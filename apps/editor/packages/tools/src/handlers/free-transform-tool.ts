@@ -47,13 +47,18 @@
 // box that stands upright shears along x, one that lies on its side along
 // y (the anchor's `shearAxis`).
 //
-// Free Distort and Perspective have no engine arm: until the engine has an
-// envelope effect (WP3.2) they are applied DESTRUCTIVELY — the box's new
-// quad maps every anchor and handle of each target's path (bilinear for
-// Free Distort, projective for Perspective), written as one `framePath`
-// per target in ONE batch, so one undo step. Text frames, placed images
-// and groups have no path of their own to rewrite and are refused, with
-// the reason shown on the canvas.
+// Free Distort and Perspective write the engine's LIVE Free Distort
+// effect (`paged-vector-fx` `free_distort`, engine ADR 1042): the box's new
+// quad is one projective map (Perspective is the same map with the partner
+// corner mirrored), and each target gets the `freeDistort` entry whose four
+// unit-square corners make that map on its own tight path box, at the head
+// of its object effect stack (an existing head entry is composed with, so
+// a second drag continues the first). The path itself is not rewritten:
+// the distortion stays editable in the Appearance panel and comes off by
+// removing the entry. One `frameEffectStack` write per target in ONE
+// batch, so one undo step. Text frames, placed images, groups and an
+// item with no area (a straight line) are refused, with the reason shown
+// on the canvas.
 
 import type {
   ElementGeometryItem,
@@ -92,6 +97,7 @@ import {
   type BoxPoint,
   type BoxQuad,
 } from "@paged-media/plugin-sdk";
+import { runBox, type AnchorTriple } from "@paged-media/vector-geometry";
 
 import { CLICK_DRAG_THRESHOLD_PX } from "./shared";
 import { runWorkerGesture, type WorkerGestureRun } from "./transform-tools";
@@ -240,39 +246,105 @@ export function distortRefusal(g: ElementGeometryItem): string | null {
   return null;
 }
 
+/** One effect-stack entry as the wire reads and writes it. */
+type StackEntry = { kind: string; enabled?: boolean; [field: string]: unknown };
+
+/** The identity corners of the live Free Distort (the unit square). */
+const UNIT_CORNERS: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [1, 0],
+  [1, 1],
+  [0, 1],
+];
+
+/** What the live distort of one target is written from: its path (own
+ *  space), its item transform and its object effect stack. */
+export interface DistortTarget {
+  id: ElementId;
+  path: Pick<PathAnchorsResult, "anchors" | "subpathStarts" | "subpathOpen">;
+  itemTransform: readonly number[] | null;
+  entries: readonly StackEntry[];
+}
+
+/** The tight box of a path in its own space (`[x, y, w, h]`), the box the
+ *  engine's `free_distort` maps (`Shape::bounds`). */
+function tightBox(
+  path: DistortTarget["path"],
+): { x: number; y: number; w: number; h: number } | null {
+  const anchors = path.anchors as unknown as AnchorTriple[];
+  const starts = path.subpathStarts.length > 0 ? path.subpathStarts : [0];
+  let box: { x: number; y: number; w: number; h: number } | null = null;
+  for (let k = 0; k < starts.length; k++) {
+    const run = anchors.slice(starts[k], starts[k + 1] ?? anchors.length);
+    const b = runBox(run, !(path.subpathOpen?.[k] ?? false));
+    if (!b) continue;
+    if (!box) {
+      box = b;
+      continue;
+    }
+    const x0 = Math.min(box.x, b.x);
+    const y0 = Math.min(box.y, b.y);
+    const x1 = Math.max(box.x + box.w, b.x + b.w);
+    const y1 = Math.max(box.y + box.h, b.y + b.h);
+    box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  return box;
+}
+
+/** The stack entries a read `frameEffectStack` value holds. */
+export function stackEntriesOf(value: unknown): StackEntry[] {
+  if (Array.isArray(value)) return value as StackEntry[];
+  const v = value as { type?: string; value?: unknown } | null | undefined;
+  const inner = v?.type === "effectStack" ? v.value : v;
+  const entries = (inner as { entries?: unknown } | null | undefined)?.entries;
+  return Array.isArray(entries) ? (entries as StackEntry[]) : [];
+}
+
 /**
- * The batch that writes a distorted box onto paths: each target's anchors
- * and handles mapped page → `map` → back into the item's own space, one
- * `framePath` per target. `map` takes page-local pt to page-local pt.
+ * The batch that writes a distorted box as each target's LIVE Free
+ * Distort: the target's current corners (its head `freeDistort` entry, or
+ * the unit square) are taken through its item transform onto the page,
+ * through `map`, and back into its own space and its tight box's unit
+ * square. `map` takes page-local pt to page-local pt and is projective,
+ * so the result is exact. Null when no target can take it (no area).
  */
-export function distortBatchFor(
-  paths: readonly PathAnchorsResult[],
+export function liveDistortBatchFor(
+  targets: readonly DistortTarget[],
   map: (p: BoxPoint) => BoxPoint,
 ): Mutation | null {
   const ops: Mutation[] = [];
-  for (const r of paths) {
-    const t = r.itemTransform ?? [1, 0, 0, 1, 0, 0];
-    const inv = invert3(affineToMatrix3(t));
-    if (!inv) return null;
-    const toInner = (p: BoxPoint): [number, number] => applyMatrix3(inv, p);
-    const through = (p: readonly [number, number]): [number, number] =>
-      toInner(map(apply(t, p[0], p[1])));
+  for (const t of targets) {
+    const box = tightBox(t.path);
+    if (!box || box.w <= 1e-9 || box.h <= 1e-9) continue;
+    const m = t.itemTransform ?? [1, 0, 0, 1, 0, 0];
+    const inv = invert3(affineToMatrix3(m));
+    if (!inv) continue;
+    const head = t.entries[0];
+    const current =
+      head?.kind === "freeDistort" && head.enabled !== false
+        ? ((head.corners as [number, number][] | undefined) ?? UNIT_CORNERS)
+        : UNIT_CORNERS;
+    const corners = current.map(([u, v]) => {
+      const page = map(apply(m, box.x + u * box.w, box.y + v * box.h));
+      const [x, y] = applyMatrix3(inv, page);
+      return [(x - box.x) / box.w, (y - box.y) / box.h] as [number, number];
+    });
+    if (!corners.every(([u, v]) => Number.isFinite(u) && Number.isFinite(v)))
+      continue;
+    const entry: StackEntry =
+      head?.kind === "freeDistort"
+        ? { ...head, enabled: true, corners }
+        : { kind: "freeDistort", enabled: true, corners };
+    const entries =
+      head?.kind === "freeDistort"
+        ? [entry, ...t.entries.slice(1)]
+        : [entry, ...t.entries];
     ops.push({
       op: "setElementProperty",
       args: {
-        elementId: r.id,
-        path: "framePath",
-        value: {
-          type: "framePath",
-          value: {
-            anchors: r.anchors.map((x) => ({
-              anchor: through(x.anchor),
-              left: through(x.left),
-              right: through(x.right),
-            })),
-            subpathStarts: [...r.subpathStarts],
-          },
-        },
+        elementId: t.id,
+        path: "frameEffectStack",
+        value: { type: "effectStack", value: { entries } },
       },
     } as Mutation);
   }
@@ -559,18 +631,36 @@ export function createFreeTransformHandler(): GestureHandler {
 
   const finishClientArm = async (p: Press) => {
     if (!paged || !p.quad) return;
-    const kind = p.op === "perspective" ? "projective" : "bilinear";
-    const map = quadMap(p.box.quad, p.quad, kind);
+    // One map for both modes: the engine's live Free Distort is projective.
+    const map = quadMap(p.box.quad, p.quad, "projective");
     if (!map) return;
-    const paths = (
+    const client = paged.client;
+    const targets = (
       await Promise.all(
-        p.box.targets.map((id) =>
-          paged!.client.pathAnchors(id).catch(() => null),
-        ),
+        p.box.targets.map(async (id): Promise<DistortTarget | null> => {
+          const path = await client.pathAnchors(id).catch(() => null);
+          if (!path) return null;
+          const props = await Promise.resolve()
+            .then(() => client.elementProperties(id))
+            .catch(() => null);
+          const stack = props?.entries.find(
+            (e) => (e.path as string) === "frameEffectStack",
+          )?.value;
+          return {
+            id,
+            path,
+            itemTransform: (path.itemTransform ?? null) as
+              readonly number[] | null,
+            entries: stackEntriesOf(stack),
+          };
+        }),
       )
-    ).filter((r): r is PathAnchorsResult => r !== null);
-    const batch = distortBatchFor(paths, map);
-    if (!batch) return;
+    ).filter((t): t is DistortTarget => t !== null);
+    const batch = liveDistortBatchFor(targets, map);
+    if (!batch) {
+      notice = `${p.op === "perspective" ? "Perspective" : "Free Distort"} cannot reshape an item with no area`;
+      return;
+    }
     await paged.client.mutate(batch).catch(() => {});
     const ids = paged.selection.elementSelection;
     const items = await paged.client

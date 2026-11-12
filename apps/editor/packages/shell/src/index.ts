@@ -766,6 +766,7 @@ export {
   type ShellGuideEdit,
   type ShellReadoutSection,
   type ShellReadoutsResult,
+  type ShellEyedropperResult,
 } from "./catalog/binding-providers";
 // Extensions ADR 340 — the geometry of an edit context's workspace.
 export {

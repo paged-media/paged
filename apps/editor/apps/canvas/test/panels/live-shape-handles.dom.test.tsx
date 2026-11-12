@@ -287,7 +287,7 @@ describe("live-shape widgets", () => {
     expect(value(props.frameShapeStarInset)).toBeCloseTo(40, 0);
   });
 
-  test("a plain path has no widgets", async () => {
+  test("an open path has no widgets", async () => {
     const h = await mount();
     const page = h.handle!.pageIds[0];
     const p = (x: number, y: number) => ({
@@ -300,7 +300,7 @@ describe("live-shape widgets", () => {
       args: {
         pageId: page,
         anchors: [p(10, 10), p(90, 30), p(50, 90)],
-        open: false,
+        open: true,
         smooth: false,
       },
     });
@@ -311,5 +311,91 @@ describe("live-shape widgets", () => {
         .querySelector("[data-live-shape-handles]")!
         .getAttribute("data-count"),
     ).toBe("0");
+  });
+
+  test("a closed polygon path: a widget in each corner; a drag rounds every corner in one step, Alt-click cycles the type", async () => {
+    const h = await mount();
+    const page = h.handle!.pageIds[0];
+    const p = (x: number, y: number) => ({
+      anchor: [x, y],
+      left: [x, y],
+      right: [x, y],
+    });
+    // A right triangle: the right angle at (100, 100).
+    const tri = await created(h, {
+      op: "insertPath",
+      args: {
+        pageId: page,
+        anchors: [p(100, 100), p(300, 100), p(100, 300)],
+        open: false,
+        smooth: false,
+      },
+    });
+    await h.select([tri]);
+    await h.settle();
+    expect(
+      h.root
+        .querySelector("[data-live-shape-handles]")!
+        .getAttribute("data-count"),
+    ).toBe("3");
+    // A square corner: the minimum 14 px in, along the bisector.
+    const [wx, wy] = at(h, "polygon-corner-0");
+    expect(wx).toBeCloseTo(100 + 14 / Math.SQRT2, 6);
+    expect(wy).toBeCloseTo(100 + 14 / Math.SQRT2, 6);
+    const mark = h.mark();
+    // To (120, 120): 20 pt along both edges, so a 20 pt radius at 90°.
+    await drag(h, "polygon-corner-0", [
+      [112, 112],
+      [120, 120],
+    ]);
+    const [m] = h.mutations(mark) as Array<{
+      op: string;
+      args: { ops: Array<{ args: { path: string; value: unknown } }> };
+    }>;
+    expect(m!.op).toBe("batch");
+    const writes = m!.args.ops.map((o) => [o.args.path, value(o.args.value)]);
+    expect(writes).toHaveLength(8);
+    for (const [path, v] of writes) {
+      if (String(path).startsWith("frameCornerOption")) {
+        expect(v).toBe("RoundedCorner");
+      } else {
+        expect(v as number).toBeCloseTo(20, 9);
+      }
+    }
+    const props = await h.props(tri);
+    expect(value(props.frameCornerRadiusTopLeft) as number).toBeCloseTo(20, 6);
+    expect(value(props.frameCornerOptionTopLeft)).toBe("RoundedCorner");
+
+    // Alt-click: the next type, on every corner, the radius kept.
+    const alt = h.mark();
+    await drag(h, "polygon-corner-1", [], { altKey: true });
+    const [cycle] = h.mutations(alt) as Array<{
+      args: { ops: Array<{ args: { path: string; value: unknown } }> };
+    }>;
+    expect(
+      cycle!.args.ops
+        .filter((o) => o.args.path.startsWith("frameCornerOption"))
+        .map((o) => value(o.args.value)),
+    ).toEqual(Array(4).fill("InverseRoundedCorner"));
+  });
+
+  test("a text frame: the rectangle's four corner widgets", async () => {
+    const h = await mount();
+    const page = h.handle!.pageIds[0];
+    const tf = await created(h, {
+      op: "insertTextFrame",
+      args: { pageId: page, bounds: [100, 100, 300, 400] },
+    });
+    await h.select([tf]);
+    await h.settle();
+    expect(
+      h.root
+        .querySelector("[data-live-shape-handles]")!
+        .getAttribute("data-count"),
+    ).toBe("4");
+    const mark = h.mark();
+    await drag(h, "corner-0", [[130, 130]]);
+    expect(h.mutations(mark)).toHaveLength(1);
+    expect(value((await h.props(tf)).frameCornerRadiusTopLeft)).toBe(30);
   });
 });

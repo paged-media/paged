@@ -1142,6 +1142,7 @@ describe("the workspace and readout lanes", () => {
     contributeBindingProvider(host, "rasterImage", provider);
     expect(host.supports("bindings.workspace@1")).toBe(true);
     expect(host.supports("bindings.readouts@1")).toBe(true);
+    expect(host.supports("bindings.eyedropper@1")).toBe(true);
     expect(HOST_FEATURES).not.toContain("bindings.workspace@1");
 
     // Inactive: nobody claims, nothing is edited.
@@ -1221,5 +1222,51 @@ describe("the workspace and readout lanes", () => {
         readReadouts: () => ({ kind: "decline" }),
       }),
     ).toThrow(/twice/);
+  });
+});
+
+// ═════════════════════════════ the eyedropper lane (extensions ADR 1104)
+
+describe("the eyedropper lane", () => {
+  it("hands the host Eyedropper's sample to the active context; a decline or no context leaves it to the page", async () => {
+    const { host, registry, enter, exit } = setup();
+    const asked: unknown[] = [];
+    contributeBindingProvider(host, "rasterImage", {
+      provides: { eyedropper: true },
+      takeEyedropperSample: (request) => {
+        asked.push(request);
+        return request.point[0] < 100
+          ? { kind: "taken", rgb: [10, 20, 30] }
+          : { kind: "decline", reason: "off the image" };
+      },
+    });
+    const at = (x: number) => ({
+      pageId: "p1",
+      point: [x, 5] as [number, number],
+      sampleSize: 3,
+      secondary: true,
+    });
+    expect((await registry.takeEyedropperSample(at(5))).resolved).toBe(false);
+    expect(asked).toEqual([]);
+    enter();
+    const took = await registry.takeEyedropperSample(at(5));
+    expect(took).toEqual({
+      resolved: true,
+      provider: expect.any(String),
+      rgb: [10, 20, 30],
+    });
+    expect(asked).toEqual([at(5)]);
+    expect((await registry.takeEyedropperSample(at(500))).resolved).toBe(false);
+    exit();
+    expect((await registry.takeEyedropperSample(at(5))).resolved).toBe(false);
+  });
+
+  it("a declared eyedropper lane without its callback is refused", () => {
+    const { host } = setup();
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { eyedropper: true },
+      }),
+    ).toThrow(/without takeEyedropperSample/);
   });
 });

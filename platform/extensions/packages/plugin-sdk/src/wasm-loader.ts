@@ -118,6 +118,12 @@ export interface HeadlessCanvasWorker {
     text: string,
     sizePt: number,
   ): { advance: number; ascender: number; descender: number } | null;
+  /** Extensions ADR 1105 — the engine's decoder over bytes. Optional so a
+   *  structural fake need not carry it. */
+  decodeImageDirect?(
+    bytes: Uint8Array,
+    maxDim: number | undefined,
+  ): { width: number; height: number; rgba: Uint8Array } | undefined;
   free(): void;
 }
 

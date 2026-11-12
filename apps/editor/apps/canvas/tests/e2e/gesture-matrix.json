@@ -526,10 +526,6 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },
     {
-      "tool": "media.paged.draw.tool.cornerRadius",
-      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
-    },
-    {
       "tool": "media.paged.draw.tool.paintbrush",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },
@@ -844,10 +840,6 @@
     {
       "tool": "media.paged.image.tool.type",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
-    },
-    {
-      "tool": "media.paged.image.tool.eyedropper",
-      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },
     {
       "tool": "media.paged.image.tool.colorSampler",

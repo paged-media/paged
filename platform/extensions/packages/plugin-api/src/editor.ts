@@ -1266,6 +1266,14 @@ export interface PagedEditor {
     bytes: Uint8Array,
     transfer?: boolean,
   ): Promise<WorkerToMain>;
+  /** Extensions ADR 1105 — the engine's decoder over bytes (canvas-wasm
+   *  `decodeImageDirect`): `{ width, height, rgba }` straight-alpha sRGB,
+   *  no side above `maxDim` when given, or null. Optional: absent on an
+   *  older host, and `host.assets.decodeImage` then answers null. */
+  decodeImage?(
+    bytes: Uint8Array,
+    maxDim?: number,
+  ): Promise<{ width: number; height: number; rgba: Uint8Array } | null>;
   /** Engine ADR 1004 amendment — {@link mutateWithBytes} applied INTO the
    *  undo step `appliedSeq` names (canvas-wasm `amendWithBytesDirect`), as
    *  the `amendMutation` message does for a JSON mutation. Optional: absent

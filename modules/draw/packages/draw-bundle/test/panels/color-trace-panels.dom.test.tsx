@@ -48,7 +48,6 @@ import {
 import { imageItem, packageWithSpread, pngBytes } from "../fixtures/build-idml";
 import { ringPixels } from "../fixtures/corpus";
 import { openHost } from "../headless/host";
-import { installPngRealm } from "../headless/raster-realm";
 import {
   mountContributed,
   settle,
@@ -100,15 +99,12 @@ async function fillOf(h: HeadlessHost, id: ElementId): Promise<unknown> {
 
 describe("the colour and trace panels", () => {
   let h: HeadlessHost;
-  let uninstall: () => void;
   beforeAll(async () => {
-    uninstall = installPngRealm();
     h = await openHost();
     h.loadBundle(drawBundle);
   });
   afterAll(() => {
     h?.dispose();
-    uninstall?.();
   });
   beforeEach(async () => {
     await h.load(doc());

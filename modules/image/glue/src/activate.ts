@@ -79,10 +79,7 @@ import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
 import { makeGradientGesture } from "./gradient-tool";
 import { makeRedEyeGesture } from "./red-eye-tool";
-import {
-  makeColorSamplerGesture,
-  makeEyedropperGesture,
-} from "./sampler-tools";
+import { makeColorSamplerGesture } from "./sampler-tools";
 import { makePatchGesture } from "./patch-tool";
 import {
   makeCafSamplingGesture,
@@ -280,7 +277,6 @@ const TOOL = defineMessages("image.tool", {
   paintBucket: "Paint bucket",
   gradient: "Gradient",
   redEye: "Red eye",
-  eyedropper: "Eyedropper",
   colorSampler: "Color sampler",
   marqueeRectangle: "Marquee (rectangle)",
   marqueeEllipse: "Marquee (ellipse)",
@@ -379,7 +375,6 @@ const MOVE_TOOL_ID = "media.paged.image.tool.move";
 const BUCKET_TOOL_ID = "media.paged.image.tool.bucket";
 const GRADIENT_TOOL_ID = "media.paged.image.tool.gradient";
 const RED_EYE_TOOL_ID = "media.paged.image.tool.redEye";
-const EYEDROPPER_TOOL_ID = "media.paged.image.tool.eyedropper";
 const COLOR_SAMPLER_TOOL_ID = "media.paged.image.tool.colorSampler";
 const DODGE_TOOL_ID = "media.paged.image.tool.dodge";
 const BURN_TOOL_ID = "media.paged.image.tool.burn";
@@ -558,7 +553,6 @@ export function activate(host: BundleHost): BundleHandle {
         wand: MAGIC_WAND_TOOL_ID,
         bucket: BUCKET_TOOL_ID,
         gradient: GRADIENT_TOOL_ID,
-        eyedropper: EYEDROPPER_TOOL_ID,
         colorSampler: COLOR_SAMPLER_TOOL_ID,
         paintTools: {
           smudge: SMUDGE_TOOL_ID,
@@ -648,27 +642,19 @@ export function activate(host: BundleHost): BundleHandle {
     gesture: () => makeRedEyeGesture(host, session),
   });
 
-  // EYEDROPPER (WP4.10) — the colour under the pointer into the
-  // foreground (Alt: background); its own slot, with the Color Sampler in
-  // its flyout (Photoshop's pairing). No key: the shortcut register is full
-  // and `i` is the host's own Eyedropper.
-  contributeImageTool(host, session, {
-    id: EYEDROPPER_TOOL_ID,
-    ...optionsFor(EYEDROPPER_TOOL_ID),
-    title: t(TOOL.eyedropper),
-    icon: "tool-eyedropper",
-    group: EYEDROPPER_TOOL_ID,
-    section: "drawType",
-    gesture: () => makeEyedropperGesture(host, session),
-  });
+  // The EYEDROPPER is the host's (`paged.tool.eyedropper`, in every
+  // context): inside the image its click goes to the colour provider
+  // (binding-provider/color-provider.ts, extensions ADR 1104), which
+  // samples the image's own pixels into the foreground (Alt: background).
   // COLOR SAMPLER — up to four fixed sampling points, read live.
   contributeImageTool(host, session, {
     id: COLOR_SAMPLER_TOOL_ID,
     ...optionsFor(COLOR_SAMPLER_TOOL_ID),
     title: t(TOOL.colorSampler),
     icon: "tool-eyedropper",
-    group: EYEDROPPER_TOOL_ID,
-    section: "drawType",
+    // In the host Eyedropper's flyout (Photoshop's pairing).
+    group: "eyedropper",
+    section: "modNav",
     gesture: () => makeColorSamplerGesture(host, session),
   });
 
@@ -2195,7 +2181,6 @@ export function activate(host: BundleHost): BundleHandle {
     [MAGIC_WAND_TOOL_ID]: "wand",
     [BUCKET_TOOL_ID]: "wand",
     [GRADIENT_TOOL_ID]: "gradient",
-    [EYEDROPPER_TOOL_ID]: "eyedropper",
     [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
     [SMUDGE_TOOL_ID]: { paint: "smudge" },
     [MIXER_TOOL_ID]: { paint: "mixer" },
@@ -2268,7 +2253,6 @@ export function activate(host: BundleHost): BundleHandle {
       BUCKET_TOOL_ID,
       GRADIENT_TOOL_ID,
       RED_EYE_TOOL_ID,
-      EYEDROPPER_TOOL_ID,
       COLOR_SAMPLER_TOOL_ID,
       DODGE_TOOL_ID,
       BURN_TOOL_ID,

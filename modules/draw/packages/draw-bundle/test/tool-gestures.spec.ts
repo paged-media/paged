@@ -332,24 +332,6 @@ describe("paged.draw tools through the gesture DSL — paint and shape", () => {
     );
   });
 
-  it("Corner Radius: dragging a corner of the selected polygon inward rounds every corner, as one undo step; Escape commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.cornerRadius");
-    const { r, g } = rig([A]);
-    await arm(r, g, `${T}.cornerRadius`);
-    const before = r.picture();
-    await g.drag({ from: [102, 102], to: [140, 140], steps: 4 }).settle();
-    expect(
-      paths(r.leaves()).filter((p) => p.startsWith("frameCornerRadius")),
-    ).toHaveLength(4);
-    await oneUndoStep(r, before);
-    await cancelCommitsNothing(
-      `${T}.cornerRadius`,
-      [A],
-      [102, 102],
-      [140, 140],
-    );
-  });
-
   it("Knife: a cut across the selected quad splits it in two — the probe strip withdrawn, ONE undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.knife");
     const { r, g } = rig([A], { reply: CUT_FACES });

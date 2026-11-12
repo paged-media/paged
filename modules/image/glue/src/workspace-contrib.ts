@@ -189,24 +189,24 @@ export function contributeWorkspace(
     id: RULER_TOOL_ID,
     title: t(TOOL.ruler),
     icon: "tool-measure",
-    group: "media.paged.image.tool.eyedropper",
-    section: "drawType",
+    group: "eyedropper",
+    section: "modNav",
     gesture: () => makeRulerGesture(host, session),
   });
   tool({
     id: COUNT_TOOL_ID,
     title: t(TOOL.count),
     icon: "tool-eyedropper",
-    group: "media.paged.image.tool.eyedropper",
-    section: "drawType",
+    group: "eyedropper",
+    section: "modNav",
     gesture: () => makeCountGesture(host, session),
   });
   tool({
     id: NOTE_TOOL_ID,
     title: t(TOOL.note),
     icon: "tool-note",
-    group: "media.paged.image.tool.eyedropper",
-    section: "drawType",
+    group: "eyedropper",
+    section: "modNav",
     gesture: () => makeNoteGesture(host, session, openPanel),
   });
   tool({

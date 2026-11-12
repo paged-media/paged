@@ -32,22 +32,9 @@ function harness(samplers: Parameters<typeof ColorSection>[0]["samplers"]) {
 }
 
 describe("the colour section's eyedropper and samplers [editor-shell.raster-color-binding]", () => {
-  it("offers the seven sample sizes and the two sources, and sets them", () => {
+  it("offers the two sources and sets them (the sample size is the host Eyedropper's option)", () => {
     const { session, view } = harness([]);
-    const size = view.container.querySelector<HTMLSelectElement>(
-      "[data-image-sample-size]",
-    )!;
-    expect([...size.options].map((o) => o.textContent)).toEqual([
-      "Point sample",
-      "3 by 3 average",
-      "5 by 5 average",
-      "11 by 11 average",
-      "31 by 31 average",
-      "51 by 51 average",
-      "101 by 101 average",
-    ]);
-    fireEvent.change(size, { target: { value: "31" } });
-    expect(session.setEyedropperOptions).toHaveBeenCalledWith({ size: 31 });
+    expect(view.container.querySelector("[data-image-sample-size]")).toBeNull();
     fireEvent.change(
       view.container.querySelector("[data-image-sample-source]")!,
       { target: { value: "layer" } },

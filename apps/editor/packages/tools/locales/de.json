@@ -1,7 +1,10 @@
 {
+  "tools.eyedropper.average": "Durchschnitt {n} × {n}",
   "tools.eyedropper.mode": "Aufnahme",
   "tools.eyedropper.object": "Objektdarstellung",
   "tools.eyedropper.pixel": "Pixelfarbe",
+  "tools.eyedropper.pointSample": "1 Pixel",
+  "tools.eyedropper.sampleSize": "Aufnahmebereich",
   "tools.gradient.freeformLines": "Freiform: Linien",
   "tools.gradient.freeformPoints": "Freiform: Punkte",
   "tools.gradient.linear": "Linear",

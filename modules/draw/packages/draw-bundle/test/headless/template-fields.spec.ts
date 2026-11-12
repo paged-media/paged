@@ -206,7 +206,8 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       await applyAttachTextToPath(h.host, { elementId: LINE, storyId: story }),
     ).not.toBeNull();
 
-    // The template: four module fields, with the grants each kind declares.
+    // The template: four module fields, with the grants each kind declares
+    // (the fourth on the symbol instance).
     const defs = {
       colour: { channel: "fill", allowed: [swatchA, swatchB] },
       style: { allowed: ["Bold", "Thin"] },
@@ -236,6 +237,15 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       `${D}.textOnPath`,
       await grantsOf(h, "textOnPath"),
       defs.caption,
+    );
+    // A symbol instance holds its field's mark like any page item.
+    await markField(
+      h,
+      { kind: "instance", id: instance } as unknown as ElementId,
+      "badge",
+      `${D}.symbolChoice`,
+      await grantsOf(h, "symbolChoice"),
+      defs.badge,
     );
     fields.colour = ref("colour", "urect", "paint", defs.colour);
     fields.style = ref("style", "upoly", "graphicStyle", defs.style);
@@ -270,6 +280,7 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       colour: `${D}.paint`,
       style: `${D}.graphicStyle`,
       caption: `${D}.textOnPath`,
+      badge: `${D}.symbolChoice`,
     });
   });
 
@@ -364,22 +375,11 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
   it("symbolChoice: the instance draws the chosen symbol, in place", async () => {
     const read = await h.objects.readTemplateField(fields.badge!);
     expect(read.value).toBe(box);
-    // An engine instance carries no plugin metadata (setPluginMetadata is
-    // not implemented for it), so it cannot hold the field's mark and its
-    // grants: a filler is refused, an author writes.
-    expect((await h.objects.writeTemplateField(fields.badge!, "Hook")).ok).toBe(
-      false,
-    );
-    expect(
-      (await send(h, "setSessionPolicy", { policy: { role: "author" } })).kind,
-    ).toBe("sessionPolicyApplied");
-    try {
-      expect(await h.objects.writeTemplateField(fields.badge!, "Hook")).toEqual(
-        { ok: true },
-      );
-    } finally {
-      await send(h, "setSessionPolicy", { policy: { role: "filler" } });
-    }
+    // The instance carries the field's mark and its grants (the engine
+    // takes plugin metadata on a symbol instance), so a filler writes.
+    expect(await h.objects.writeTemplateField(fields.badge!, "Hook")).toEqual({
+      ok: true,
+    });
     expect((await h.objects.readTemplateField(fields.badge!)).value).toBe(hook);
     // The same instance, now drawing the other symbol.
     const [state] = await readInstanceStates(h.host, [

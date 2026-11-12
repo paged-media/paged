@@ -16,28 +16,25 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// ENCODED placed-image bytes → RGBA8 pixels, using the PLATFORM's own
-// decoders.
+// ENCODED placed-image bytes → RGBA8 pixels, decoded by the ENGINE.
 //
-// WHY NOT IN THE WASM. `host.assets.getPlacedImage` (C-5 / I-04) serves
-// the ORIGINAL file — PNG / JPEG / TIFF / PSD, undecoded. Decoding those
-// is the one part of this pipeline the browser already does, natively,
-// for every format it can place: `createImageBitmap` + `OffscreenCanvas`
-// gives correct, colour-managed RGBA with no bytes added to the plugin's
-// wasm budget. Bundling a codec set into `trace-js` would duplicate what
-// the host realm already has and would still not cover PSD.
+// The tracer reads pixels through the host's decoded-pixels door,
+// `host.assets.decodeImage` (extensions ADR 1105): the bytes
+// `host.assets.getPlacedImage` serves (or an action's asset) decoded the way
+// the renderer decodes the placed picture — PNG, JPEG, TIFF, PSD, WebP, a
+// CMYK file colour converted to sRGB — so the trace sees what the page
+// shows, and paged.draw ships no decoder and leans on no browser codec.
 //
-// WHAT THAT COSTS, named: the tracer sees what the BROWSER can decode. A
-// placed PSD or a CMYK TIFF that `createImageBitmap` refuses is a
-// REFUSAL here, not a silent blank — and the refusal says which format
-// failed. paged.image's Rust codec/PSD lane is the place that gap gets
-// closed if it matters, not a second decoder here.
+// DOWNSAMPLING. The tracer's caps are hard refusals, so an over-cap photo
+// is shrunk by the engine as it decodes (`maxDimension`), to the size
+// `decodeSizeFor` picks inside BOTH caps; the factor is reported on
+// `scale`.
 //
-// REALM. `createImageBitmap` / `OffscreenCanvas` exist in the editor's
-// window realm, where first-party bundles run. They do NOT exist in Node,
-// so the headless conformance harness gets `rasterDecoderAvailable() ===
-// false` and an honest refusal rather than a stub — the trace pipeline
-// itself is driven there from synthetic pixels instead.
+// A host without the door (an older editor, the headless harness) gets an
+// honest refusal rather than a stub; the trace pipeline itself is driven
+// there from synthetic pixels instead.
+
+import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { TraceLimits } from "../trace-engine";
 
@@ -60,20 +57,16 @@ export interface DecodedRaster {
   scale: number;
 }
 
-/** Message thrown when the realm has no image decoder (Node, or a future
- *  isolate without DOM). Names the door that would be needed rather than
- *  inventing one. */
+/** Message thrown when the host has no decoded-pixels door. */
 export const RASTER_DECODER_UNAVAILABLE =
-  "this realm has no image decoder (createImageBitmap / OffscreenCanvas " +
-  "are absent) — placed-image pixels cannot be obtained here; the host " +
-  "would need a decode door on the plugin contract";
+  "this host has no image decoder (assets.decodeImage@1) — placed-image " +
+  "pixels cannot be obtained here";
 
-/** Does this realm have the two globals the decode needs? */
-export function rasterDecoderAvailable(): boolean {
+/** Can this host decode image bytes for the tracer? */
+export function rasterDecoderAvailable(host: BundleHost): boolean {
   return (
-    typeof createImageBitmap === "function" &&
-    typeof OffscreenCanvas === "function" &&
-    typeof Blob === "function"
+    host.supports("assets.decodeImage@1") &&
+    typeof host.assets.decodeImage === "function"
   );
 }
 
@@ -115,58 +108,59 @@ export function decodeSizeFor(
 }
 
 /**
- * Decode `bytes` (an original placed file) to RGBA8, DOWNSAMPLED to fit
- * `limits` when needed. Rejects — never returns a stub — when the realm
- * has no decoder or the platform refuses the format.
- *
- * The downsample rides the platform's own `drawImage` resampling, which
- * is why an over-cap photo is traceable at all: the tracer's caps are
- * hard refusals, so something has to shrink the pixels first, and this is
- * the honest place for it (the factor is reported on `scale`).
+ * Decode `bytes` (an original placed file) to RGBA8 through the engine,
+ * DOWNSAMPLED to fit `limits` when needed. `natural` is the file's pixel
+ * size when the caller knows it (a placed image does), which spares a
+ * second decode of an over-cap file. Rejects — never returns a stub — when
+ * the host has no decoder or the engine refuses the bytes.
  */
 export async function decodeRasterBytes(
+  host: BundleHost,
   bytes: Uint8Array,
   limits: TraceLimits,
-  mimeType?: string,
+  natural?: { width: number; height: number },
 ): Promise<DecodedRaster> {
-  if (!rasterDecoderAvailable()) {
+  if (!rasterDecoderAvailable(host)) {
     throw new Error(RASTER_DECODER_UNAVAILABLE);
   }
-  const view = new Uint8Array(bytes);
-  const blob = mimeType
-    ? new Blob([view], { type: mimeType })
-    : new Blob([view]);
-  let bitmap: ImageBitmap;
-  try {
-    bitmap = await createImageBitmap(blob);
-  } catch (cause) {
-    throw new Error(
-      `the platform could not decode this placed image` +
-        `${mimeType ? ` (${mimeType})` : ""} — a PSD or a CMYK TIFF is the ` +
-        `usual reason; re-place it as PNG/JPEG to trace it`,
-      { cause },
+  const decode = (maxDimension?: number) =>
+    host.assets.decodeImage!(
+      bytes,
+      maxDimension !== undefined ? { maxDimension } : undefined,
     );
+  const refused = () =>
+    new Error(
+      "the engine could not decode this placed image — its bytes are not " +
+        "an image format the document can place",
+    );
+  const fit = (w: number, h: number) => {
+    const t = decodeSizeFor(w, h, limits);
+    return t.scale < 1 ? Math.max(t.width, t.height) : undefined;
+  };
+  let sourceWidth: number;
+  let sourceHeight: number;
+  let image;
+  if (natural && natural.width > 0 && natural.height > 0) {
+    sourceWidth = natural.width;
+    sourceHeight = natural.height;
+    image = await decode(fit(sourceWidth, sourceHeight));
+  } else {
+    // Unknown size: decode inside the edge cap, then shrink further when
+    // the area cap still binds.
+    image = await decode(limits.maxDimension);
+    if (!image) throw refused();
+    sourceWidth = image.width;
+    sourceHeight = image.height;
+    const again = fit(image.width, image.height);
+    if (again !== undefined) image = await decode(again);
   }
-  try {
-    const sourceWidth = bitmap.width;
-    const sourceHeight = bitmap.height;
-    const target = decodeSizeFor(sourceWidth, sourceHeight, limits);
-    const canvas = new OffscreenCanvas(target.width, target.height);
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) {
-      throw new Error("OffscreenCanvas refused a 2d context");
-    }
-    ctx.drawImage(bitmap, 0, 0, target.width, target.height);
-    const image = ctx.getImageData(0, 0, target.width, target.height);
-    return {
-      width: target.width,
-      height: target.height,
-      data: image.data,
-      sourceWidth,
-      sourceHeight,
-      scale: target.scale,
-    };
-  } finally {
-    bitmap.close();
-  }
+  if (!image) throw refused();
+  return {
+    width: image.width,
+    height: image.height,
+    data: image.data,
+    sourceWidth,
+    sourceHeight,
+    scale: Math.min(1, image.width / sourceWidth),
+  };
 }

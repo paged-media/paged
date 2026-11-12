@@ -164,7 +164,21 @@ export interface ShellBindingProviderHost {
   setWorkspaceView?(view: ShellWorkspaceView): void;
   /** Rows the active context adds to a readout surface (the Info panel). */
   readReadouts?(request: { surface: "info" }): Promise<ShellReadoutsResult>;
+  /** Extensions ADR 1104 — a host Eyedropper sample, to the active
+   *  context that takes it (an image's foreground or background). */
+  takeEyedropperSample?(request: {
+    pageId: string;
+    point: [number, number];
+    sampleSize: number;
+    secondary: boolean;
+  }): Promise<ShellEyedropperResult>;
 }
+
+/** The answer to an Eyedropper sample: the colour a provider took
+ *  (8-bit sRGB), or `resolved: false` (the host samples the page). */
+export type ShellEyedropperResult =
+  | { resolved: true; provider: string; rgb: [number, number, number] }
+  | { resolved: false; reason: string };
 
 // ------------------------------------------------- workspace + readouts
 // Mirrors of the contract's `BindingWorkspace` family (extensions ADR

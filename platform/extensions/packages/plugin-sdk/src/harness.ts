@@ -1022,6 +1022,14 @@ function makeEngineEditor(
     };
   }
 
+  // Extensions ADR 1105 — the engine's decoder, as the editor's worker
+  // serves it (`host.assets.decodeImage`).
+  const decodeImageDirect = worker.decodeImageDirect?.bind(worker);
+  if (decodeImageDirect) {
+    editor.decodeImage = async (bytes, maxDim) =>
+      decodeImageDirect(bytes, maxDim) ?? null;
+  }
+
   return { editor, fanOut, loads };
 }
 

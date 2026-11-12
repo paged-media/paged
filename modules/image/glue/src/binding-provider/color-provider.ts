@@ -42,8 +42,18 @@
 // What it does not take: a `colorRef` of `null` ("None") — an image has
 // no transparent foreground — and a Lab value (send RGB; the host's
 // mixer resolves Lab through the document's colour management first).
+//
+// THE EYEDROPPER (extensions ADR 1104). The two wells are also the host
+// Eyedropper's target here: a Pixel-mode click inside the image hands this
+// provider the point and the tool's sample size, and the image samples its
+// own pixels (the active layer or every visible one, the colour section's
+// Sample choice) into the foreground, or with Alt the background. An armed
+// Curves eyedropper takes the click first, as it does with every tool. A
+// click off the image is declined, so the host samples the page there.
+// paged.image has no Eyedropper tool of its own any more.
 
 import type {
+  BindingEyedropperRead,
   BindingProvider,
   BindingRead,
   BindingWrite,
@@ -54,6 +64,8 @@ import type {
 import { cmykToRgb, hexToRgb } from "@paged-media/helpers";
 
 import type { Rgba01 } from "../engine";
+import { isSampleSize } from "../color-state";
+import { pageToImage, resolveFrameFit } from "../frame-fit";
 import type { ImageSession } from "../session";
 
 /** The two wells, and the colour each one is. */
@@ -138,7 +150,30 @@ export function makeColorBindingProvider(
   });
 
   const provider: BindingProvider = {
-    provides: { paths: PATHS },
+    provides: { paths: PATHS, eyedropper: true },
+
+    async takeEyedropperSample(request): Promise<BindingEyedropperRead> {
+      const state = session.state();
+      const fit = await resolveFrameFit(host, state.source, "eyedropper");
+      if (!fit || fit.pageId !== request.pageId) {
+        return { kind: "decline", reason: "not on the image" };
+      }
+      const at = pageToImage(fit, request.point);
+      const rgb = (c: Rgba01): [number, number, number] => [
+        Math.round(c[0] * 255),
+        Math.round(c[1] * 255),
+        Math.round(c[2] * 255),
+      ];
+      // An armed Curves eyedropper takes the click, as with every tool.
+      if (session.takeCurvesPick(at)) {
+        return { kind: "taken", rgb: rgb(state.colors.fg) };
+      }
+      const size = isSampleSize(request.sampleSize) ? request.sampleSize : 1;
+      const well = request.secondary ? "bg" : "fg";
+      const c = session.sampleColor(at, size, well, state.eyedropper.source);
+      if (!c) return { kind: "decline", reason: "nothing to sample there" };
+      return { kind: "taken", rgb: rgb(c) };
+    },
 
     readProperty(request): BindingRead {
       const well = COLOUR_WELLS[request.path];

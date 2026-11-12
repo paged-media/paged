@@ -94,11 +94,20 @@ export {
 } from "./gradient-stop.ts";
 export {
   applySampledStyle,
+  isAppearancePath,
   sampledStyleFrom,
+  withoutOffEffects,
   type SampledEntry,
   type SampledStyle,
   type SampledTarget,
 } from "./sampled-style.ts";
+export {
+  SAMPLE_SIZES,
+  averageRgba8,
+  isSampleSize,
+  sampleWindow,
+  type SampleSize,
+} from "./sample-window.ts";
 export {
   LIVE_CORNER_KINDS,
   cornerPresetOps,
@@ -179,3 +188,15 @@ export {
   type EmbeddedFace,
   type FontRefusal,
 } from "./embedded-fonts.ts";
+export {
+  MAX_INDEX_LEVELS,
+  REFERENCE_INSERT_COMMANDS,
+  insertReference,
+  referenceTypedCommands,
+  topicOf,
+  type CrossReferenceKind,
+  type CrossReferenceTarget,
+  type ReferenceCaret,
+  type ReferenceDoor,
+  type ReferenceInsert,
+} from "./text-references.ts";

@@ -39,7 +39,7 @@ canary added is under [Releases](#releases).
   When the document has creation defaults of its own, the engine applies them and the tools
   add nothing (`handlers/graphic-default.ts`). The brushes paint their own sweep.
 - **Other tools.** Gradient Annotator (with on-canvas gradient stops), Measure, Shape
-  Builder, Corner Radius (on rotated and transformed shapes too), Eyedropper, Lasso Select
+  Builder, Eyedropper, Lasso Select
   (by intersection, or by centre), Live Paint Bucket and Live Paint Selection, Type on a
   Path, Repeat, Knife, and Scissors at any point on a path.
 - **WP6.1 tools (keyless, in the host's flyouts).** In the Transform flyout: **Reshape**
@@ -295,17 +295,18 @@ A template can open four parts of a drawing to a filler (extensions ADR 335; cod
 | `media.paged.draw.paint`        | `{ channel, allowed?, target? }` | swatch id | `appearance.fill`, `appearance.stroke`                       |
 | `media.paged.draw.graphicStyle` | `{ allowed?, targets? }`         | style id  | `appearance.fill`, `appearance.stroke`, `appearance.opacity` |
 | `media.paged.draw.textOnPath`   | `{ path? }`                      | text      | `text.edit`                                                  |
-| `media.paged.draw.symbolChoice` | `{ allowed? }`                   | symbol id | `item.resize`, `appearance.fill`, `appearance.stroke`        |
+| `media.paged.draw.symbolChoice` | `{ allowed? }`                   | symbol id | `appearance.other`                                           |
 
 - `allowed` lists ids or names; without it every swatch, style or symbol is a choice. A
   value outside the list is refused with one sentence.
 - **paint** writes the frame's fill or stroke, or, when the item has an appearance stack,
   its top layer (the layer that bakes to the frame).
-- **symbolChoice** re-shapes the instance leaf in place (path, paint and link, one batch),
-  so the element and its field label survive. Only one-piece symbols can be chosen: a
-  rebuild would mint new elements, which a filler may not, and drop the field's label. On an
-  engine that keeps symbols the field targets an instance and writes the symbol it draws
-  (`symbolInstanceSymbol`): any symbol can be chosen, and the instance keeps its id.
+- **symbolChoice** targets an engine symbol instance and writes the symbol it draws
+  (`symbolInstanceSymbol`, which the engine counts as `appearance.other`, the field's grant):
+  any symbol can be chosen, and the instance keeps its id. The
+  instance holds the field's mark and grants itself (the engine takes `setPluginMetadata` on a
+  symbol instance since 2026-11-11, and an IDML round trip gives the instance its labels back),
+  so a filler writes the field.
 - **textOnPath** reads and writes the story on the path. A story on a path has no text frame;
   the engine decides it by the item that carries the path, so the field's `text.edit` reaches
   it (engine ADR 1000, amendment of 2026-10-23).
@@ -362,10 +363,9 @@ document; Image Trace and Recolor Artwork remain the commands that do.
 | `media.paged.draw/recolor` | asset → asset | an SVG's solid fills and strokes reduced to `count`, moved to a harmony (`rule`, `base`, `rotate`) or mapped (`map`) |
 
 The trace runs the trace wasm in a `host.workers` worker when the host has one. Its decode is
-the platform's (`io/raster-decode.ts`), so it runs where `createImageBitmap` and
-`OffscreenCanvas` exist and refuses with the decoder's sentence elsewhere (Node, the headless
-host); a picture over `maxTracePixels` is traced downsampled. Decoding in the engine instead
-waits for `paged-raster` (PM-0014). The recolour rewrites the colours where the SVG declares
+the engine's (`host.assets.decodeImage`, extensions ADR 1105: every placed format, colour
+managed, in the editor and the headless harness); a host without the door refuses with its
+sentence, and a picture over `maxTracePixels` is decoded downsampled. The recolour rewrites the colours where the SVG declares
 them (fills, strokes, gradient stops, `style` attributes and `<style>` rules; the engine's
 `paged-svg::paint`) and keeps every other byte; an undeclared default black is left alone.
 Recolouring a raster is pixel work and is not registered.

@@ -5659,6 +5659,16 @@ export class CanvasWorker {
      */
     caretGeometryJson(selection_json: string): string | undefined;
     /**
+     * The decoded-pixels door: encoded image bytes (any format the
+     * engine places: PNG, JPEG, TIFF, PSD, WebP, …) decoded the way the
+     * renderer decodes a placed picture (colour converted to sRGB,
+     * straight alpha), shrunk so neither side exceeds `max_dim` when
+     * given, as `{ width, height, rgba }` with `rgba` a `Uint8Array`;
+     * `undefined` when the bytes do not decode. A pure read: no
+     * document is touched.
+     */
+    decodeImageDirect(bytes: Uint8Array, max_dim?: number | null): object | undefined;
+    /**
      * Why the GPU device was lost (a GPU-process crash, a driver
      * reset), once it has been; `undefined` while it serves or when
      * there is no presenter. Every `presentFrame` returns `false`
@@ -5952,6 +5962,7 @@ export interface InitOutput {
     readonly cameraSabLayout: () => any;
     readonly canvasworker_amendWithBytesDirect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly canvasworker_caretGeometryJson: (a: number, b: number, c: number) => [number, number];
+    readonly canvasworker_decodeImageDirect: (a: number, b: number, c: number, d: number) => any;
     readonly canvasworker_gpuLostReason: (a: number) => [number, number];
     readonly canvasworker_gpuReady: (a: number) => number;
     readonly canvasworker_handleMessage: (a: number, b: number, c: number) => [number, number];

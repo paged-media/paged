@@ -346,10 +346,15 @@ Status (draw items, one line each; updated as they land):
   angle and point; a tool would need the host's tools to run a command.
 - Live corners: MERGED 2026-11-01. The host declares `paged.corners.*` (Rounded, Inverse rounded,
   Bevel, Fancy, None; `corner-commands.ts`) with Object > Corners entries; the eight writes are
-  one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that draw's Corner Radius
-  tool also uses. Draw's five commands and Draw > Corners menu are gone (ids left through the
+  one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that the host's polygon
+  corner widgets also use. Draw's five commands and Draw > Corners menu are gone (ids left through the
   deprecation window). The `liveCorners` metadata marker the commands stamped was never read;
   a stale one is inert (the InDesign round-trip recordings still echo it, see the case).
+- Corner radius: DONE 2026-11-11. One on-canvas corner control, the host's live-shape widgets
+  (`live-shape-handles.tsx`, editor ADR 310 amended): a rectangle's and a text frame's corners one by
+  one, any closed polygon's corners together (the renderer's rule, `@paged-media/vector-tools`
+  `polygon-corners.ts`). Draw's Corner Radius tool, handler and the box half of its machine are gone
+  (id through the deprecation window; draw ADR 359 amended).
 - Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
   `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
   payload it inserts, centred on the page. The write is one implementation in
@@ -394,14 +399,38 @@ Status (draw items, one line each; updated as they land):
 - Scissors: DONE 2026-11-11. One tool, the host's (`paged.tool.scissors`, every context): any point,
   through the path's transform (`@paged-media/vector-tools` `applyScissorsAt`, also behind draw's
   `scissorsAt` command). Draw's "Scissors (any point)" tool and handler are gone (draw ADR 359 amended).
+- Free Distort / Perspective: DONE 2026-11-11. The host's Free Transform writes the engine's live
+  Free Distort (`paged-vector-fx` `free_distort`, the head `freeDistort` entry of the object effect
+  stack; `liveDistortBatchFor`), not a rewritten path; both modes are the one projective map (the
+  bilinear Free Distort is gone). Editor ADR 295 amended.
+- Eyedropper: DONE 2026-11-11. One tool, the host's (`paged.tool.eyedropper`, every context), with a
+  Sample size option (Photoshop's point and N×N averages; the window and the premultiplied mean are
+  `@paged-media/helpers` `sampleWindow` / `averageRgba8`, which paged.image's layers use too) and a
+  target door: the binding provider's eyedropper lane (`takeEyedropperSample`, extensions ADR 1104,
+  contract canary 89). paged.image's colour provider is the first target (its foreground, Alt the
+  background, sampled from its own layers); its Eyedropper tool, gesture and options are gone (id
+  through the deprecation window) and the Color Sampler, Ruler, Count and Note sit in the host
+  Eyedropper's flyout.
+- Slide motion path: DONE 2026-11-11. The motion-path editor's presses go through the host's
+  `DirectSelectMachine` (`@paged-media/vector-tools`) over the path as an anchor table; its own
+  move-handle code is gone. The storage stays slide's (slide ADR 714 amended).
+- Reference inserts: DONE 2026-11-11. Footnotes, endnotes, destinations (Word's bookmarks),
+  cross-references and index entries are host commands (`paged.insert.*`, editor ADR 315) with Type menu
+  rows and forms in the host Cross-References and Index panels, over one shared insert
+  (`@paged-media/helpers` `insertReference`); paged.doc's Word-styled References dialogs call them
+  (doc ADR 612 amended).
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot
   exposes; Alt+click samples only. This is exactly what draw's tool sampled (typed properties; it
   never copied effects, which an earlier note here got wrong). The sampling and the write are
   shared in `platform/shared/helpers` (`sampled-style`). Draw's tool, its `shift+d` key and its
-  feature id are gone (draw ADR 359 amended). Slide's format painter was not touched: it copies
-  slide text and shape formatting, not this set.
+  feature id are gone (draw ADR 359 amended).
+- Format painter: DONE 2026-11-11. Slide's painter samples and writes a shape's look through the same
+  `sampled-style` (now the whole look: fill, line, gradient, effects, blend, opacity; an off effect as
+  its switch alone), so the host Eyedropper's object mode and the painter are one implementation. The
+  text-run part stays slide's (runs live on story ranges and `text.format@1`, which no host painter
+  writes; slide ADR 723 amended).
 - Sheet format fallback: DONE 2026-11-03. The workbook panel's Format section no longer renders a
   second copy of number format, font, fill, alignment, wrap and iterative calculation on a host
   without the Sheet properties panel (`DuplicatedFormatRows`, its presets and 43 strings are gone).
@@ -440,7 +469,8 @@ Status (draw items, one line each; updated as they land):
   on a text selection with no form field holding focus (the canvas text surface is not one: it handles only Cmd+Z,
   A, C, X and the arrows), so they never shadow the text input. A guarded binding beats an unguarded one on a
   chord, so Cmd+U underlines while text is selected and stays Smart Guides otherwise; a Word document's scoped
-  Cmd+B / I / U (rank 100) still wins inside it. Not done: slide's own format painter was not touched.
+  Cmd+B / I / U (rank 100) still wins inside it. Slide's format painter: its paint part is the host's
+  `sampled-style` since 2026-11-11 (above).
 - PDF vectors dialog: DONE 2026-11-03. File > Import > PDF or AI as Vectors… is paged.pdf's now: a
   panel (`media.paged.pdf.panel.importVectors`, `vectors/import-panel.tsx`), the command
   `media.paged.pdf.command.importVectors` and the same menu row, all contributed by the bundle. The panel
@@ -564,8 +594,8 @@ stored) and `unzip`; Data Merge's IDML export and paged.pdf's raster IDML fallba
 fallback no longer needs JSZip). Cubic Bézier evaluation and splitting (TS): `vector-geometry` `bernstein`,
 `evalCubic`, `splitSegmentDeCasteljau`, used by the mesh grid, image warp preview and pen fitting, and slide's
 motion path. PNG encode (TS): paged.pdf's page rasters encode through helpers' `encodePng` (no canvas).
-Draw's image-trace decode (`io/raster-decode.ts`) stays on the browser's decoders: the contract has no
-decoded-pixels door yet (open). Slide comments: the typed reply, resolve and delete verbs and the panel's
+Draw's image-trace decode: DONE 2026-11-11, the engine's decoder through the contract's decoded-pixels door
+(`host.assets.decodeImage`, extensions ADR 1105; canvas-wasm `decodeImageDirect`); draw's browser decode is gone. Slide comments: the typed reply, resolve and delete verbs and the panel's
 are thin calls to `comments@1`; a new slide comment is still written with its PowerPoint fields. FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
 diagnostic report shapes: one, `paged-loss` (C18 above, engine ADR 1097). Excel oracle
 runner: DONE 2026-11-11, `tooling/oracle/office/excel` (`drive.sh`, the lanes' generators and readers); the

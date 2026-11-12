@@ -20,8 +20,9 @@
 // E2E — live shapes (engine ADR 1047, editor ADR 310) in the running
 // editor: the Polygon tool draws a LIVE polygon, and the on-canvas
 // widgets of the selected shape change its sides, its star inset, an
-// oval's pie and a rectangle's corners, each in ONE undo step, through
-// the real viewport and pointer.
+// oval's pie, a rectangle's corners and a polygon's corners (the corner
+// widgets replaced paged.draw's Corner Radius tool), each in ONE undo
+// step, through the real viewport and pointer.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -217,6 +218,47 @@ test.describe("live shapes: the widgets of the selected shape", () => {
     await undo(page);
     await expect
       .poll(() => prop(page, ref, "frameCornerOptionBottomRight"))
+      .not.toBe("RoundedCorner");
+  });
+
+  test("a polygon's corner widget rounds every corner of a closed path, one undo step @feat:plugin-draw.live-shapes @level:gesture", async ({
+    page,
+  }) => {
+    const pt = (x: number, y: number) => ({
+      anchor: [x, y],
+      left: [x, y],
+      right: [x, y],
+    });
+    // A right triangle, the right angle at (120, 120).
+    const ref = await insertAndSelect(page, {
+      op: "insertPath",
+      args: {
+        pageId: "$PAGE",
+        anchors: [pt(120, 120), pt(420, 120), pt(120, 420)],
+        open: false,
+        smooth: false,
+      },
+    });
+    await expect(
+      page.locator(
+        "[data-live-shape-handles][data-live-shape-kind='polygon'][data-count='3']",
+      ),
+    ).toBeVisible();
+    const w = await widgetAt(page, "polygon-corner-0");
+    // 30 pt in along both edges of the right angle: a 30 pt radius.
+    const inside = await screenPoint(page, 150, 150);
+    await dragMouse(page, w, inside);
+    await expect
+      .poll(() => prop(page, ref, "frameCornerOptionTopLeft"))
+      .toBe("RoundedCorner");
+    const r = (await prop(page, ref, "frameCornerRadiusTopLeft")) as number;
+    expect(r).toBeGreaterThan(25);
+    expect(r).toBeLessThan(35);
+    // One radius for the polygon: all four slots, as the presets write.
+    expect(await prop(page, ref, "frameCornerRadiusBottomLeft")).toBe(r);
+    await undo(page);
+    await expect
+      .poll(() => prop(page, ref, "frameCornerOptionTopLeft"))
       .not.toBe("RoundedCorner");
   });
 });

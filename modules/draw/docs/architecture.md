@@ -22,7 +22,7 @@ and an SVG reader and writer with its own XML scanner (`svg-doc.ts`, `svg-path.t
 
 **`packages/vector-tools`** — private. Eleven tool modules that take page-local points and
 return snapshots, plans or commits: anchor editing, pen, pencil, curvature, brush, width,
-measure, shape builder, live paint, corner radius, repeat. It imports `vector-geometry` and,
+measure, shape builder, live paint, polygon corners (the host's corner widgets), repeat. It imports `vector-geometry` and,
 as types only, `@paged-media/plugin-api`. The machines' wire shapes are the contract's own
 `Mutation` variants, so a protocol change that breaks them fails the typecheck here.
 
@@ -169,8 +169,8 @@ Objects on a Path is the exception in kind: it inserts nothing and writes one
 `frameTransform` per selected object. See [ADR 356](adr/356-live-constructs-are-recipes.md).
 
 **Image trace.** `commands/image-trace.ts` fetches the placed image's original bytes with
-`host.assets.getPlacedImage`, decodes them with the browser's `createImageBitmap` and
-`OffscreenCanvas` (`io/raster-decode.ts`), downsamples to at most 1,048,576 pixels by
+`host.assets.getPlacedImage`, has the engine decode them through `host.assets.decodeImage`
+(`io/raster-decode.ts`, extensions ADR 1105) at no more than 1,048,576 pixels by
 default, and calls `traceRgba` synchronously on the calling thread. The kernel refuses
 rasters above 4096 px on a side or 4,194,304 pixels. Each region's contours are merged and
 re-wound by `makeCompoundTable` in `vector-geometry`. Two mutations follow: one creates the
