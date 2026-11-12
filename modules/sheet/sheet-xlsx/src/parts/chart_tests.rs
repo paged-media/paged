@@ -462,7 +462,13 @@ fn styled_charts_lower_onto_native_items_through_the_shared_mapper__feat__sheet_
         "{:?}",
         g.losses
     );
-    assert_eq!(g.losses.iter().filter(|l| l.message.contains("pattern")).count(), 1);
+    assert_eq!(
+        g.losses
+            .iter()
+            .filter(|l| l.message.contains("pattern"))
+            .count(),
+        1
+    );
 }
 
 #[test]
