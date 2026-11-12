@@ -281,6 +281,7 @@ export async function finishStandalone(
       buildStoryBlocks(groups[k], storyIds[k], {
         notes,
         comments: ir.comments ?? [],
+        styles: ir.styles,
       }),
     );
   }

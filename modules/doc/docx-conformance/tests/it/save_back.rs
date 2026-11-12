@@ -1798,3 +1798,143 @@ fn a_cell_emptied_with_no_styled_paragraph_is_saved_back() {
     let xml = String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap();
     assert!(!xml.contains("1.20"), "{xml}");
 }
+
+/// Engine ADR 1098 — a table cell's Word direct formatting is poured as the
+/// Word style plus direct properties on the cell's runs (no synthesized
+/// style). Read back that way, an unedited cell saves byte-identical, and a
+/// size set on the canvas in a cell is written into that run's `w:rPr`.
+#[test]
+fn a_cells_direct_formatting_read_back_as_direct_properties_saves_unchanged() {
+    use docx_conformance::cell_fields_docx;
+    use docx_export::{CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn};
+    use docx_lower::ir::{LoweredBlock, LoweredDoc, PropValue};
+
+    let source = cell_fields_docx();
+    let session = DocSession::load(&source).unwrap();
+    let base = session.lowered();
+    let story = StoryContentIn {
+        comments: Vec::new(),
+        self_id: "s".into(),
+        paragraphs: base
+            .story
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
+                    paragraph_style: p.para_style_id.clone(),
+                    runs: vec![RunContentIn {
+                        text: p.runs.iter().map(|r| r.text.as_str()).collect(),
+                        character_style: None,
+                        ..Default::default()
+                    }],
+                }),
+                LoweredBlock::Table(_) => None,
+            })
+            .collect(),
+    };
+    // A run as the cell pour leaves it: the Word style a synthesized style
+    // stands on, and the style's properties as the run's own.
+    let read_run = |d: &LoweredDoc, r: &docx_lower::ir::LoweredRun| {
+        let mut out = RunContentIn {
+            text: r.text.clone(),
+            ..Default::default()
+        };
+        let mut at = r.char_style_id.clone();
+        let mut chain = Vec::new();
+        while let Some(id) = at
+            .clone()
+            .filter(|i| i.starts_with("CharacterStyle/docx-auto-c"))
+        {
+            let s = d.styles.iter().find(|s| s.id == id).unwrap();
+            chain.push(s);
+            at = s.based_on.clone();
+        }
+        out.character_style = at;
+        for p in chain.iter().rev().flat_map(|s| s.props.iter()) {
+            match (p.path.as_str(), &p.value) {
+                ("characterFontStyle", PropValue::Text(t)) => out.font_style = Some(t.clone()),
+                ("characterFontFamily", PropValue::Text(t)) => out.font = Some(t.clone()),
+                ("characterFontSize", PropValue::Length(v)) => out.point_size = Some(*v),
+                ("characterFillColor", PropValue::ColorRef(c)) => out.fill_color = Some(c.clone()),
+                ("characterUnderline", PropValue::Bool(b)) => out.underline = Some(*b),
+                ("characterStrikethru", PropValue::Bool(b)) => out.strikethru = Some(*b),
+                (path, _) => panic!("the fixture's cell runs carry {path}"),
+            }
+        }
+        out
+    };
+    let LoweredBlock::Table(t) = &base.story.blocks[1] else {
+        panic!("block 1 is the table")
+    };
+    let mut synthesized = 0;
+    let cells: Vec<CellContentIn> =
+        t.cells
+            .iter()
+            .enumerate()
+            .map(|(k, c)| {
+                let paragraphs: Vec<ParagraphContentIn> =
+                    c.paragraphs
+                        .iter()
+                        .map(|p| ParagraphContentIn {
+                            mark_change: None,
+                            props_change: None,
+                            paragraph_style: p.para_style_id.clone(),
+                            runs: p
+                                .runs
+                                .iter()
+                                .map(|r| {
+                                    if r.char_style_id.as_deref().is_some_and(|i| {
+                                        i.starts_with("CharacterStyle/docx-auto-c")
+                                    }) {
+                                        synthesized += 1;
+                                    }
+                                    read_run(&base, r)
+                                })
+                                .collect(),
+                        })
+                        .collect();
+                CellContentIn {
+                    block: 1,
+                    cell: k,
+                    text: c
+                        .paragraphs
+                        .iter()
+                        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    paragraphs: Some(paragraphs),
+                }
+            })
+            .collect();
+    assert!(
+        synthesized > 0,
+        "the fixture has direct formatting in a cell"
+    );
+    let doc_xml = |bytes: &[u8]| {
+        let pkg = OpcPackage::read(bytes).unwrap();
+        String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
+    };
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(&story, &cells)
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    assert_eq!(doc_xml(&saved), doc_xml(&source));
+
+    // A size set on the bold run in the canvas is written into its rPr.
+    let mut edited = cells.clone();
+    let run = edited
+        .iter_mut()
+        .flat_map(|c| c.paragraphs.as_mut().unwrap().iter_mut())
+        .flat_map(|p| p.runs.iter_mut())
+        .find(|r| r.font_style.as_deref() == Some("Bold"))
+        .expect("a bold run in a cell");
+    run.point_size = Some(20.0);
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(&story, &edited)
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    assert!(xml.contains("<w:sz w:val=\"40\"/>"), "{xml}");
+}

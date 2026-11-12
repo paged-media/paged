@@ -59,7 +59,12 @@ reader) could not take the shared shape.
   byte offset the query panel points at, not a conversion loss.
 - The IDML export's `lost` lines ride the wire (`IdmlExported.lost: string[]`, protocol v58) and the
   host shows them as they are; moving them onto `LossEntry` changes that reply, so it needs a protocol
-  rider of its own. Their one producer today is the opacity mask.
+  rider of its own. They have a dozen producers, each a sentence without a code: `paged-canvas`'s
+  `export_losses` (opacity masks, fill rules, live shapes, effect stacks, vector effects,
+  appearances, image adjustments, media, blend modes, the re-parse measurement), the comments, and
+  `paged-mutate`'s symbol and theme flattening for interchange. They are read by the CLI's publish
+  report and JSON and by the SDK's headless harness. Moving them is one change of its own: a code
+  per producer, the reply, the CLI goldens.
 - The web bundle's `WebDiagnostic` is a linter's finding with a line in the source, not something a
   conversion could not carry.
 - image-js `LosslessShape` classifies a layer for save-back; it reports nothing lost.

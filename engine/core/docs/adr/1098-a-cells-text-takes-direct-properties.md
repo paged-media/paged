@@ -47,10 +47,14 @@ document styles, and every refresh had to read the catalogue before minting.
 ## Consequences
 
 - paged.sheet and paged.doc write a cell's direct formatting as direct properties and no longer
-  mint styles for it. A document style the source names (a Word style, a document's own
-  character or paragraph style) is still applied as a style.
+  mint styles for it (sheet ADR 518 and doc ADR 600 amendments). A document style the source
+  names (a Word style, a document's own character or paragraph style) is still applied as a
+  style. paged.doc still mints its synthesized `docx-auto-*` styles for what is not a cell: the
+  body blocks its native build defers to the old pour, headers, footers and text boxes, and a
+  tracked format change's "before" look, which a change names by a style.
 - IDML export writes a cell's direct properties as local overrides on its
   `CharacterStyleRange` / `ParagraphStyleRange`, as InDesign writes them; the same writer as the
   body's.
-- docx and xlsx export read the model's run and paragraph fields, which they already did for
-  the body.
+- docx export reads a cell's runs back as direct properties (the body's path) and saves an unedited
+  document byte-identical (docx-conformance `save_back`). xlsx export writes from the workbook's
+  style records, never from the engine's cell runs, so it is unchanged.

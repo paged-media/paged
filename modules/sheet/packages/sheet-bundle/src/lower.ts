@@ -85,14 +85,11 @@ import {
   tableShapeOps,
   cellRotationOps,
   needsRotationStyles,
-  cellAlignApplies,
-  cellAlignStyleMints,
+  cellCharacterFormatOps,
+  cellParagraphFormatOps,
   cellsNeedingRealign,
-  needsAlignStyles,
-  cellCharacterStyleApplies,
-  cellCharacterStyleMints,
-  cellCharacterStyles,
   cellsNeedingRestyle,
+  hasCellCharacterFormats,
   cellTextSwatchOps,
   ENGINE_DEFAULT_SIZE_PT,
   MAX_HEIGHT_PT,
@@ -495,9 +492,10 @@ function frameIdOf(id: ElementId): string | null {
  *  id, and a cell whose swatch does not exist is left UNPAINTED by the
  *  renderer. Reads happen only when there is something to mint, and a
  *  FAILED read mints nothing (`null` known-set): core refuses a duplicate
- *  `createSwatch` / `createCharacterStyle`, and the refusal would fail the
- *  whole batch — text included. Fill and text swatches never collide
- *  (their palette ids carry the facet). */
+ *  `createSwatch`, and the refusal would fail the whole batch — text
+ *  included. Fill and text swatches never collide (their palette ids carry
+ *  the facet). The cells' text formatting mints nothing: it is direct
+ *  properties on the cell's text (engine ADR 1098). */
 async function tableContentOps(
   host: BundleHost,
   content: LoweredContent,
@@ -514,35 +512,22 @@ async function tableContentOps(
     );
   }
   const wantsFills = cellFillSwatchOps(content).length > 0;
-  const wantsText = cellCharacterStyles(content).size > 0;
-  const wantsAlign = needsAlignStyles(content);
+  const wantsText = hasCellCharacterFormats(content);
   const wantsRotation = needsRotationStyles(content);
-  const [swatches, styles, paragraphs, cellStyles] = await Promise.all([
+  const [swatches, cellStyles] = await Promise.all([
     wantsFills || wantsText
       ? readKnownSwatchIds(host)
       : Promise.resolve(undefined),
-    wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
-    wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
     wantsRotation ? readKnownCellStyleIds(host) : Promise.resolve(null),
   ]);
   const fillMints = wantsFills ? cellFillSwatchOps(content, swatches) : [];
+  // Engine ADR 1098 — the cells' text formatting is direct properties on the
+  // cell-qualified story range; the text colours name swatches minted first.
   const styleOps = [
-    ...(wantsText
-      ? [
-          ...cellTextSwatchOps(content, swatches),
-          ...cellCharacterStyleMints(content, styles),
-          ...cellCharacterStyleApplies(content, storyId, tableId),
-        ]
-      : []),
+    ...(wantsText ? cellTextSwatchOps(content, swatches) : []),
+    ...cellCharacterFormatOps(content, storyId, tableId),
     // Wave 9: horizontal alignment — numbers right, centred cells centred.
-    ...(wantsAlign
-      ? [
-          ...cellAlignStyleMints(content, paragraphs),
-          ...cellAlignApplies(content, storyId, tableId, {
-            available: paragraphs === null ? new Set() : undefined,
-          }),
-        ]
-      : []),
+    ...cellParagraphFormatOps(content, storyId, tableId),
     // W2.2: rotated cells take a rotation cell style.
     ...(wantsRotation
       ? cellRotationOps(content, storyId, tableId, cellStyles)
@@ -813,21 +798,6 @@ export function tableBindingStamp(
   };
 }
 
-/** The document's paragraph-style ids, or null when the read failed. */
-async function readKnownParagraphStyleIds(
-  host: BundleHost,
-): Promise<Set<string> | null> {
-  try {
-    const rows = await host.document.collection<{ selfId: string }>(
-      "paragraphStyles",
-    );
-    return new Set(rows.map((r) => r.selfId));
-  } catch (err) {
-    host.log.warn("cell alignment: paragraph-style read failed", err);
-    return null;
-  }
-}
-
 /** Engine ADR 1056 — give the document the workbook's theme (`setTheme`, the
  *  part kept as `source`, so it stays unedited) once, before the first
  *  swatch that follows one of its slots is minted. Idempotent and never
@@ -866,21 +836,6 @@ async function readKnownCellStyleIds(
     return new Set(rows.map((r) => r.selfId));
   } catch (err) {
     host.log.warn("cell rotation: cell-style read failed", err);
-    return null;
-  }
-}
-
-/** The document's character-style ids, or null when the read failed. */
-async function readKnownCharacterStyleIds(
-  host: BundleHost,
-): Promise<Set<string> | null> {
-  try {
-    const rows = await host.document.collection<{ selfId: string }>(
-      "characterStyles",
-    );
-    return new Set(rows.map((r) => r.selfId));
-  } catch (err) {
-    host.log.warn("cell text styles: character-style read failed", err);
     return null;
   }
 }
@@ -2362,50 +2317,39 @@ async function tableRefreshLanes(
   const restyle = cellsNeedingRestyle(prev, next);
   const realign = cellsNeedingRealign(prev, next);
   const wantsFills = cellFillSwatchOps(next).length > 0;
-  const wantsText = restyle.size > 0 && cellCharacterStyles(next).size > 0;
-  const wantsAlign = realign.size > 0 && needsAlignStyles(next);
+  const wantsText = restyle.size > 0 && hasCellCharacterFormats(next);
   const wantsRotation =
     needsRotationStyles(next) &&
     JSON.stringify(prev.styles) !== JSON.stringify(next.styles);
-  const [swatches, styles, paragraphs, cellStyles] = await Promise.all([
+  const [swatches, cellStyles] = await Promise.all([
     wantsFills || wantsText
       ? readKnownSwatchIds(host)
       : Promise.resolve(undefined),
-    wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
-    wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
     wantsRotation ? readKnownCellStyleIds(host) : Promise.resolve(null),
   ]);
   const decor = [
     ...(wantsFills ? cellFillSwatchOps(next, swatches) : []),
     ...ops.decor,
   ];
+  // Engine ADR 1098 — a re-formatted cell has every facet rewritten (its
+  // value or the clear), so a cell that lost its format comes back plain.
   const style =
     restyle.size === 0
       ? []
       : [
-          ...(wantsText
-            ? [
-                ...cellTextSwatchOps(next, swatches),
-                ...cellCharacterStyleMints(next, styles),
-              ]
-            : []),
-          ...cellCharacterStyleApplies(next, storyId, tableId, {
+          ...(wantsText ? cellTextSwatchOps(next, swatches) : []),
+          ...cellCharacterFormatOps(next, storyId, tableId, {
             cells: restyle,
-            includeDefault: true,
+            reset: true,
           }),
         ];
   const align =
     realign.size === 0
       ? []
-      : [
-          ...(wantsAlign ? cellAlignStyleMints(next, paragraphs) : []),
-          ...cellAlignApplies(next, storyId, tableId, {
-            cells: realign,
-            includeDefault: true,
-            available:
-              wantsAlign && paragraphs === null ? new Set() : undefined,
-          }),
-        ];
+      : cellParagraphFormatOps(next, storyId, tableId, {
+          cells: realign,
+          reset: true,
+        });
   // Below a host header band: the workbook's row 0 is the table's row
   // `headerRows` (ops naming no row pass unchanged).
   const rotation = wantsRotation

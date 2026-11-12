@@ -97,3 +97,24 @@ still lists tables, images, lists and standalone open as future work.
 
 First-fit line breaking is now `paragraphComposer = "Word First-fit"`, the engine's own Word
 composer (engine ADR 1016), not InDesign's Single-line Composer `"HL Single"`.
+
+## Amendment 2026-11-12 (engine ADR 1098)
+
+A table cell's text takes direct properties: the `storyRange` element id carries a cell
+qualifier (engine ADR 1098). The pour (`doc-host-model` `buildTableCells`,
+`buildTableCellCarets`, `direct-format.ts`) therefore sets a cell's direct formatting the way
+the native body does (ADR 625), and the Rust placement batch (`docx-skeleton` `place.rs`) the
+same way through `body::cell_paragraph_plan`, the TypeScript plan's twin: it applies the Word style a synthesized style stands on with the
+cell-qualified `applyStyle` and sets the style's properties (its chain flattened, the
+paragraph style's character properties under the run's own) as cell-qualified
+`setElementProperty` ops. The applied language and a paragraph style's PDF export tag are left
+off a range, as the native body leaves them. A synthesized paragraph style whose character
+properties have no run to carry them (an empty paragraph) or that a run's Word character style
+would override is applied as it is, as the native body keeps it. `buildStyleMutations` mints a
+synthesized style only while something still names it: the body pour, headers, footers, text
+boxes, a tracked format change's look, a kept cell paragraph. A style only cells named is no
+longer minted. Save-back reads such a cell run as its baseline token when its look is the
+synthesized style's (`docx-export` `overlay_cells`, the body's `keep_baseline_looks`), so an
+unedited cell saves byte-identical. The body's deferred blocks still apply synthesized styles:
+their tracked format changes name the look before by a style, and the save-back's tokens follow
+them.

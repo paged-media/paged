@@ -23,7 +23,7 @@ import { describe, expect, it } from "bun:test";
 import type { SwatchSpec } from "@paged-media/plugin-api";
 
 import type { LoweredContent, LoweredStyle } from "../src/lowered";
-import { cellCharacterStyles } from "../src/cell-character-styles";
+import { cellCharacterFormats } from "../src/cell-text-format";
 import { cellFillSwatchOps, tableDecorOps } from "../src/lower-to-table";
 import { cellTextSwatchOps } from "../src/lower-to-mutations";
 import {
@@ -147,11 +147,11 @@ describe("sheet theme swatches (engine ADR 1056)", () => {
     expect(refs).toContain(themeSwatchId("cellFill", LIGHT));
   });
 
-  it("names the themed text swatch from the character style and mints it", () => {
+  it("names the themed text swatch from the cell's text format and mints it", () => {
     const c = content([
       style({ key: 1, textRgb: "#44546A", textTheme: { slot: "dk2" } }),
     ]);
-    const cs = cellCharacterStyles(c).get(1);
+    const cs = cellCharacterFormats(c).get(1);
     expect(JSON.stringify(cs?.props)).toContain(
       themeSwatchId("cellText", { slot: "dk2" }),
     );

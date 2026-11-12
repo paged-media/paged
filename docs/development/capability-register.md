@@ -68,10 +68,14 @@ they test does.
   build through it; the ops are unchanged. `insertTable`'s `word` is model properties, not a Word branch in
   a module: it maps one to one onto `paged_model::Table::word` (`WordTableLayout`: indent, autofit,
   preferred table and cell widths, rows that do not split), only doc's lowering sets it, and the renderer
-  reads it as properties (its presence turns on row splitting and autofit). The minted cell styles stay:
-  sheet's character and alignment styles (`cell-character-styles.ts`, `cell-paragraph-align.ts`) and the
-  synthesized styles doc keeps for table cells exist because a cell's text has no direct-property door
-  (`storyRange` carries no cell); they go when the wire gets one. Later: the Rust adapters build
+  reads it as properties (its presence turns on row splitting and autofit). Sheet's minted cell styles are
+  gone (2026-11-12, engine ADR 1098, sheet ADR 518 amendment): `cell-text-format.ts` writes a cell's face,
+  size, colour, alignment, indent and repeat-fill tab as direct properties on the cell-qualified
+  `storyRange`. Doc's table cells set Word's direct formatting the same way (2026-11-12, doc ADR 600
+  amendment): the Word style a synthesized `docx-auto-*` style stands on, then its properties
+  (`doc-host-model` `direct-format.ts`, the native body's rule), and a synthesized style only cells named
+  is no longer minted; the body's deferred blocks still apply them (their tracked format changes name a look
+  by a style). Later: the Rust adapters build
   `paged_model` tables directly (doc ADR 625's path) instead of lowering to ops.
 - **Consolidation pass 2, Rust (2026-11-11):** the oval outline is `paged_geom::oval_anchors`
   (`paged-mutate` re-exports it; IDML writers, snapping, the generators); `slide-resolve` and
