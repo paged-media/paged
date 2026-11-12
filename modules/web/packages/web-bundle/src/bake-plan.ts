@@ -911,7 +911,8 @@ export function planEffects(
 
   for (let gi = groups.length - 1; gi >= 0; gi -= 1) {
     const g = groups[gi];
-    for (const key of g.losses ?? []) h.defer(key);
+    for (const loss of g.losses ?? [])
+      for (let i = 0; i < loss.count; i += 1) h.defer(loss.code);
     // The direct members, in paint order: the items no child group holds,
     // and what each child group became.
     const members: { at: number; ref: BakeRef }[] = [];

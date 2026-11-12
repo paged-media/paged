@@ -639,11 +639,10 @@ export async function lowerChartToFrame(
     ...(pageOrigin ? { pageOrigin } : {}),
   };
   // Sheet ADR 527: what the chart's DrawingML asks for that the page items
-  // cannot hold (a reflection, a pattern, …), one line per kind.
+  // cannot hold (a reflection, a pattern, …), one entry per kind.
   if (geom.losses?.length) {
-    host.log.warn(
-      `lowerChart: chart ${chartIndex} drawn without: ${geom.losses.join("; ")}`,
-    );
+    const what = geom.losses.map((l) => l.message || l.code).join("; ");
+    host.log.warn(`lowerChart: chart ${chartIndex} drawn without: ${what}`);
   }
   // The binding marks the frame group as a chart of this sheet (the title /
   // chart index ride as the range slot — a chart binds to its parsed index,

@@ -268,7 +268,10 @@ fn text_and_arrowheads_are_reported__feat__sheet_xlsx_shapes() {
     // heads), so it stays live.
     assert_eq!(line.preset.as_ref().unwrap().name, "line");
     assert!(shapes[0].losses.is_empty(), "{:?}", shapes[0].losses);
-    assert!(shapes[1].losses.iter().any(|l| l.contains("text")));
+    assert!(shapes[1]
+        .losses
+        .iter()
+        .any(|l| l.code == "xlsx.shape.text" && l.message.contains("text")));
     assert!(shapes[1].items[0].start_head.is_none());
 }
 

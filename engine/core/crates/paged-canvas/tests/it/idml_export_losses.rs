@@ -216,7 +216,12 @@ fn author() -> Authored {
 #[test]
 fn the_loss_list_is_measured_against_a_reparsed_export() {
     let a = author();
-    let losses = a.model.idml_export_losses();
+    let losses: Vec<String> = a
+        .model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     for l in &losses {
         eprintln!("LOSS: {l}");
     }
@@ -262,7 +267,11 @@ fn the_loss_list_is_measured_against_a_reparsed_export() {
 #[test]
 fn an_unmutated_document_measures_no_loss() {
     let model = CanvasModel::load("doc", &fixture(), CanvasOptions::default()).expect("load");
-    let losses = model.idml_export_losses();
+    let losses: Vec<String> = model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(losses.is_empty(), "{losses:#?}");
 }
 
@@ -297,7 +306,12 @@ fn with_a_link_base_the_bytes_placed_image_is_handed_back_and_is_no_loss() {
         .idml_export_losses_with_links(Some("/Users/me/Book Links/Links"));
     assert!(losses.is_empty(), "{losses:#?}");
     // Without a base the bytes are embedded instead — no loss either.
-    let losses = a.model.idml_export_losses();
+    let losses: Vec<String> = a
+        .model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(losses.is_empty(), "{losses:#?}");
     // `export_idml` is the base-less export, byte for byte.
     assert_eq!(
@@ -361,7 +375,11 @@ fn an_orphan_story_reaches_no_part_and_one_loud_ledger_line() {
         "no reference either: {designmap}"
     );
 
-    let losses = model.idml_export_losses();
+    let losses: Vec<String> = model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert_eq!(losses.len(), 1, "{losses:#?}");
     assert!(
         losses[0].contains(&format!(
@@ -442,7 +460,11 @@ fn a_next_page_number_inserted_through_the_engine_exports_without_loss() {
             })
             .expect("field");
     }
-    let losses = model.idml_export_losses();
+    let losses: Vec<String> = model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(losses.is_empty(), "{losses:#?}");
     let part = story_part(&model.export_idml().unwrap(), &story);
     assert!(
@@ -458,7 +480,11 @@ fn a_next_page_number_inserted_through_the_engine_exports_without_loss() {
         CanvasOptions::default(),
     )
     .expect("reopen");
-    let losses = reopened.idml_export_losses();
+    let losses: Vec<String> = reopened
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(losses.is_empty(), "{losses:#?}");
 }
 
@@ -507,7 +533,11 @@ fn a_table_replaced_after_a_paged_reopen_exports_without_loss() {
         .expect("the new table");
     assert_ne!(old, new, "a different table");
 
-    let losses = model.idml_export_losses();
+    let losses: Vec<String> = model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(losses.is_empty(), "{losses:#?}");
     let part = story_part(&model.export_idml().unwrap(), &story);
     assert!(part.contains(&format!(r#"<Table Self="{new}""#)), "{part}");
@@ -539,7 +569,11 @@ fn cell_text_poured_after_a_paged_reopen_exports_without_loss() {
             }),
         })
         .expect("cell text");
-    let losses = model.idml_export_losses();
+    let losses: Vec<String> = model
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(losses.is_empty(), "{losses:#?}");
     let part = story_part(&model.export_idml().unwrap(), &story);
     assert!(
@@ -757,7 +791,11 @@ fn everyday_paragraph_edits_to_a_source_story_export_without_loss() {
                 want,
                 "{label}: the engine's own account"
             );
-            let losses = model.idml_export_losses();
+            let losses: Vec<String> = model
+                .idml_export_losses()
+                .into_iter()
+                .map(|l| l.message)
+                .collect();
             assert!(losses.is_empty(), "{label}: {losses:#?}");
             let twin = idml_import::import_idml_doc(&model.export_idml().unwrap()).unwrap();
             assert_eq!(

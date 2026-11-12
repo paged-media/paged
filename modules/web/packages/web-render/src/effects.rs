@@ -103,9 +103,10 @@ pub struct WebEffect {
     /// What the `mask-image` layers painted (the alpha the element is
     /// multiplied by), in content points.
     pub mask: Vec<WebDrawCmd>,
-    /// Effects of the element with no native equivalent, by key
-    /// (`mixBlendMode.plusLighter`, `backdropFilter`, `clipPath.url`, …).
-    pub losses: Vec<String>,
+    /// Effects of the element with no native equivalent, one loss entry per
+    /// key, the key its code (`mixBlendMode.plusLighter`, `backdropFilter`,
+    /// `clipPath.url`, …), the bake words it.
+    pub losses: Vec<paged_loss::LossEntry>,
 }
 
 /// One effect group on the wire: the items `[start, end)` of the layer it
@@ -129,7 +130,7 @@ pub struct SceneEffectGroup {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mask: Vec<SceneItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub losses: Vec<String>,
+    pub losses: Vec<paged_loss::LossEntry>,
 }
 
 /// The effect channel of one layer: its groups, and the effects the capture

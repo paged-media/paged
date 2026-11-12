@@ -130,9 +130,9 @@ pub struct PictureInfo {
     /// engine's inner image transform in the frame's own box.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<[f64; 6]>,
-    /// What the page cannot hold of its look, one line per kind.
+    /// What the page cannot hold of its look, one entry per kind.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub losses: Vec<String>,
+    pub losses: Vec<sheet_chart::native::LossEntry>,
     /// The URL its click action opens (`a:hlinkClick`, sheet ADR 531).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
@@ -272,7 +272,7 @@ pub struct PagePicture {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<[f64; 6]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub losses: Vec<String>,
+    pub losses: Vec<sheet_chart::native::LossEntry>,
     /// The URL its click action opens (sheet ADR 531).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,

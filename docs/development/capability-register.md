@@ -369,7 +369,11 @@ Status (draw items, one line each; updated as they land):
   (`live-shape-handles.tsx`, editor ADR 310 amended): a rectangle's and a text frame's corners one by
   one, any closed polygon's corners together (the renderer's rule, `@paged-media/vector-tools`
   `polygon-corners.ts`). Draw's Corner Radius tool, handler and the box half of its machine are gone
-  (id through the deprecation window; draw ADR 359 amended).
+  (id through the deprecation window; draw ADR 359 amended). 2026-11-12: the corner widgets also show
+  in path-edit mode, under Direct Selection, which every context keeps; before, a context without
+  the Selection tool (sheet, web, data, image, draw) could not reach them (editor ADR 310 amended).
+  The every-context e2e (`HPX-P2-*`) rounds, distorts, samples and inserts references in each module
+  context without leaving it.
 - Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
   `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
   payload it inserts, centred on the page. The write is one implementation in
@@ -526,11 +530,15 @@ losses }`), `pdf-import` (`Loss` is `LossEntry`), `paged-psd-fx` (`StyleLoss` is
   export producer has its own `pptx.<area>.<what>` code and a severity, `pptx_core::loss`; a kept import
   report's sentences read as `pptx.legacy` entries in Rust and in the bundle's `readLosses`; the bundle
   shows them through `lossDiagnostics`) and `paged-ps` (`Report.unsupported` is `LossEntry`, codes
-  `eps.<area>.<what>`). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL diagnostic (not a
-  loss), the IDML export's `lost` lines (a wire field, `IdmlExported.lost`, so a protocol change of its
-  own), image-js `LosslessShape` (a save-back classification) and the web bundle's linter findings (not
-  losses). Single-owner rule `loss-report` (also: a `losses` / `lost` / `unsupported` / `not_exported`
-  field of `Vec<String>`; the six left are the DrawingML mapper's sentences in doc, sheet and web).
+  `eps.<area>.<what>`), the IDML export (2026-11-12, protocol v78 rider: `IdmlExported.lost` is
+  `LossEntry[]`, every producer of `idml_export_losses` names an `idml.<area>.<what>` code, a severity and
+  its item in the new optional `LossEntry.items`; paged.publish's `exportIdml` diagnostics carry each
+  entry's code, the SDK harness and the `paged` CLI's JSON carry the entries) and the DrawingML mapper
+  (2026-11-12: `dml-native`'s `Mapper` / `Lowering` losses are entries, `dml.<area>.<what>`, and with them
+  doc's, sheet's and web's lowered looks). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL
+  diagnostic (not a loss), image-js `LosslessShape` (a save-back classification) and the web bundle's
+  linter findings (not losses). Single-owner rule `loss-report` (also: a `losses` / `lost` /
+  `unsupported` / `not_exported` field of `Vec<String>`); its baseline is empty.
 
 ### W9 status (2026-11-08): PDF, scripting, data leftovers
 

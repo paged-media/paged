@@ -198,13 +198,17 @@ impl CapturingScene {
                 Some(LayerKind::Clip(transform, path)) => {
                     effect.clip = Some(flatten_shape(path, *transform));
                 }
-                _ => effect.losses.push("clipPath.unsupported".to_string()),
+                _ => effect
+                    .losses
+                    .push(paged_loss::LossEntry::counted("clipPath.unsupported", 1)),
             }
         }
         if el.has_mask {
             // The mask is painted after the group closes; an element whose
             // mask paints nothing reports it then.
-            effect.losses.push("mask.unpainted".to_string());
+            effect
+                .losses
+                .push(paged_loss::LossEntry::counted("mask.unpainted", 1));
         }
         let idx = self.dl.commands.len();
         self.dl.push(WebDrawCmd::PushGroup(Box::new(effect)));
@@ -660,7 +664,7 @@ impl PaintScene for CapturingScene {
             match self.last_group.take() {
                 Some(i) => {
                     if let Some(WebDrawCmd::PushGroup(fx)) = self.dl.commands.get_mut(i) {
-                        fx.losses.retain(|l| l != "mask.unpainted");
+                        fx.losses.retain(|l| l.code != "mask.unpainted");
                     }
                     self.layers.push(LayerKind::MaskContent(i));
                 }

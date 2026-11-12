@@ -70,6 +70,7 @@
 
 import type {
   ElementId,
+  LossEntry,
   Mutation,
   PageId,
   PropertyPath,
@@ -218,8 +219,9 @@ export interface ChartGeometry {
   /** A 3-D chart drawn as its 2-D kind. */
   flattened3d?: boolean;
   /** What the chart's DrawingML asks for that the page items cannot hold,
-   *  one line per kind (sheet ADR 527). */
-  losses?: string[];
+   *  one entry per kind (sheet ADR 527; the shared mapper's `dml.*` codes,
+   *  `xlsx.*` for the sheet's own). */
+  losses?: LossEntry[];
 }
 
 // ── Placement + result ──────────────────────────────────────────────────────

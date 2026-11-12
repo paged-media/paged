@@ -85,7 +85,13 @@ const shape: LoweredShape = {
       color: "#000000",
     },
   },
-  losses: ["the text of a shape is not drawn on the page yet"],
+  losses: [
+    {
+      code: "xlsx.shape.text",
+      count: 1,
+      message: "the text of a shape is not drawn on the page yet",
+    },
+  ],
 };
 
 type Op = { op: string; args: Record<string, unknown> };

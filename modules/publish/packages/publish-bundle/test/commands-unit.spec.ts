@@ -26,6 +26,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type {
+  LossEntry,
   MainToWorkerKind,
   PluginManifest,
   WorkerToMain,
@@ -291,7 +292,7 @@ describe("media.paged.publish.preflight (unit)", () => {
 });
 
 const idmlEngine =
-  (lost: string[] = []) =>
+  (lost: LossEntry[] = []) =>
   (m: MainToWorkerKind): Reply | undefined =>
     m.kind === "exportIdml"
       ? {
@@ -303,7 +304,23 @@ const idmlEngine =
 describe("media.paged.publish.exportIdml (unit)", () => {
   it("asks the engine's writer, passes the link base, and reports every loss as a warning", async () => {
     covers("command:media.paged.publish.exportIdml");
-    const b = boot(idmlEngine(["a footnote's custom numbering"]));
+    const b = boot(
+      idmlEngine([
+        {
+          code: "idml.section.missing",
+          count: 1,
+          severity: "dropped",
+          items: ["u1"],
+          message: "section `u1` is missing from the exported designmap.xml",
+        },
+        {
+          code: "idml.liveShape.pie",
+          count: 1,
+          severity: "info",
+          message: "pie angles on oval `o1` are a paged-native live shape",
+        },
+      ]),
+    );
     const out = (await b.host.objects.invoke(EXPORT_IDML_COMMAND, {
       linkBase: "links/",
     })) as ExportResult;
@@ -318,8 +335,14 @@ describe("media.paged.publish.exportIdml (unit)", () => {
     expect(out.diagnostics).toEqual([
       {
         severity: "warning",
-        code: "idml.lost",
-        message: "a footnote's custom numbering",
+        code: "idml.section.missing",
+        message: "section `u1` is missing from the exported designmap.xml",
+        page: 0,
+      },
+      {
+        severity: "info",
+        code: "idml.liveShape.pie",
+        message: "pie angles on oval `o1` are a paged-native live shape",
         page: 0,
       },
     ]);
@@ -465,7 +488,16 @@ describe("media.paged.publish.importIdml (unit)", () => {
 describe("the IDML exporter and importer (unit)", () => {
   it("the exporter answers the typed command's bytes and file name, and logs each loss", async () => {
     covers("exporter:media.paged.publish.exporter.idml");
-    const b = boot(idmlEngine(["a lost thing"]));
+    const b = boot(
+      idmlEngine([
+        {
+          code: "idml.group.missing",
+          count: 1,
+          severity: "dropped",
+          message: "a lost thing",
+        },
+      ]),
+    );
     const [exporter] = b.fake.registered<{
       id: string;
       export(): Promise<{ bytes: Uint8Array; fileName: string } | null>;

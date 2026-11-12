@@ -26,14 +26,16 @@
 //! colours as `#RRGGBB` (the module mints its own swatches from them) and
 //! a gradient's start in the item's box (the module adds the box's origin
 //! in the item's inner coordinates). What the engine cannot hold is in
-//! [`Lowering::take_losses`], one line per kind.
+//! [`Lowering::take_losses`], one entry per kind.
 
 use paged_model::effect_stack::{Effect, EffectEntry};
 use paged_ooxml::drawingml::resolved::{self, Paint};
 use paged_ooxml::drawingml::{self, Blip, Fill, Rgba, ShapeProperties};
 use serde::{Deserialize, Serialize};
 
-use crate::{axis_start, feather_of, placement, pt, Mapper, RasterOp, Transparency};
+use crate::{
+    axis_start, feather_of, placement, pt, LossEntry, LossSeverity, Mapper, RasterOp, Transparency,
+};
 
 /// A gradient fill on a native item.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -290,8 +292,8 @@ impl Lowering {
         }
     }
 
-    /// One line per kind of loss, in the order first met.
-    pub fn take_losses(&mut self) -> Vec<String> {
+    /// One entry per kind of loss, counted, in the order first met.
+    pub fn take_losses(&mut self) -> Vec<LossEntry> {
         self.mapper.take_losses()
     }
 
@@ -304,15 +306,25 @@ impl Lowering {
             .map(|(rgb, _)| hex(*rgb))
     }
 
+    /// The resolver's notes (paged-ooxml words them; the code is ours):
+    /// each draws the paint another way.
     fn note_all(&mut self, notes: Vec<String>) {
         for n in notes {
-            self.mapper.lose(n);
+            let code = if n.contains("tile rectangle") {
+                "dml.gradient.tile"
+            } else if n.contains("path gradient") {
+                "dml.gradient.path"
+            } else {
+                "dml.resolve"
+            };
+            self.mapper.lose(code, LossSeverity::Approximated, n);
         }
     }
 
-    /// Report a loss (once per distinct line).
-    pub fn lose(&mut self, what: impl Into<String>) {
-        self.mapper.lose(what);
+    /// Report a loss: `code`, how it fared and the sentence (one entry
+    /// per code and sentence, counted).
+    pub fn lose(&mut self, code: &str, severity: LossSeverity, what: impl Into<String>) {
+        self.mapper.lose(code, severity, what);
     }
 
     /// A fill resolved against the scheme colours, what the resolution
@@ -332,8 +344,11 @@ impl Lowering {
         let out = resolved::effects(fx, &self.slots, &mut |n| notes.push(n));
         self.note_all(notes);
         for name in &fx.unknown {
-            self.mapper
-                .lose(format!("effect {name} is not carried (not read)"));
+            self.mapper.lose(
+                "dml.effect.unread",
+                LossSeverity::Dropped,
+                format!("effect {name} is not carried (not read)"),
+            );
         }
         out
     }
@@ -374,9 +389,11 @@ impl Lowering {
                 let id = self.mapper.paint(paint);
                 out.fill = self.hex_of(&id);
             }
-            Paint::Image { .. } => self
-                .mapper
-                .lose("a picture fill of a shape is not carried (drawn unfilled)"),
+            Paint::Image { .. } => self.mapper.lose(
+                "dml.fill.picture",
+                LossSeverity::Dropped,
+                "a picture fill of a shape is not carried (drawn unfilled)",
+            ),
             Paint::None => {}
         }
     }
@@ -407,7 +424,7 @@ impl Lowering {
         let pic = resolved::picture(blip, &self.slots);
         let mapped = self.mapper.picture(&pic);
         for l in mapped.native_lane_losses() {
-            self.mapper.lose(l);
+            self.mapper.lose_entry(l);
         }
         mapped.opacity
     }
@@ -484,6 +501,8 @@ impl Lowering {
         let color = match &s.paint {
             Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
                 self.mapper.lose(
+                    "dml.line.gradient",
+                    LossSeverity::Approximated,
                     "a gradient line is drawn in its first colour (lines take no gradient yet)",
                 );
                 stops.first().map(|st| hex(st.rgb))
@@ -492,8 +511,11 @@ impl Lowering {
         };
         let color = color?;
         if s.paint.uniform_alpha().is_some_and(|a| a < 0.999) {
-            self.mapper
-                .lose("a translucent line is drawn opaque (no stroke opacity carried yet)");
+            self.mapper.lose(
+                "dml.line.translucent",
+                LossSeverity::Approximated,
+                "a translucent line is drawn opaque (no stroke opacity carried yet)",
+            );
         }
         Some(NativeStroke {
             color,
@@ -589,8 +611,11 @@ impl Lowering {
                 n.blur_pt = Some(p.blur_pt);
             }
             Effect::GradientOverlay(_) => {
-                self.mapper
-                    .lose("a gradient fill overlay is not carried on the native lane");
+                self.mapper.lose(
+                    "dml.overlay.gradient",
+                    LossSeverity::Dropped,
+                    "a gradient fill overlay is not carried on the native lane",
+                );
                 return None;
             }
             _ if e.effect.indesign().is_some() => {}

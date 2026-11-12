@@ -122,7 +122,11 @@ fn the_theme_survives_an_idml_round_trip_as_plain_swatches_plus_a_label__feat__c
     })
     .expect_err("a document with a theme refuses");
     // The export reports the theme as written plain.
-    let losses = m.idml_export_losses();
+    let losses: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(
         losses
             .iter()
@@ -149,7 +153,10 @@ fn the_theme_survives_an_idml_round_trip_as_plain_swatches_plus_a_label__feat__c
 #[test]
 fn a_document_without_a_theme_exports_no_theme_line__feat__core_theme() {
     let m = model();
-    assert!(!m.idml_export_losses().iter().any(|l| l.contains("theme")));
+    assert!(!m
+        .idml_export_losses()
+        .iter()
+        .any(|l| l.message.contains("theme")));
 }
 
 /// `idml` with `from` replaced by `to` in every text part (an edit made

@@ -117,7 +117,7 @@ pub fn export_bytes(session: &mut Session, format: &str, pdf: &PdfOptions) -> Re
             // IDML could not carry. Printing it is the difference
             // between a silent downgrade and an informed one.
             for line in &lost {
-                eprintln!("lost in translation to IDML: {line}");
+                eprintln!("lost in translation to IDML: {}", line.message);
             }
             bytes.into_vec()
         }
