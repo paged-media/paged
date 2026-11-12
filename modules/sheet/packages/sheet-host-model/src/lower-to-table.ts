@@ -49,11 +49,13 @@
 // ZERO spreadsheet semantics (CLAUDE.md hard rule): every value here is
 // already-decided geometry/text from the Rust engine.
 
-import type {
-  ElementId,
-  Mutation,
-  PropertyPath,
-} from "@paged-media/plugin-api";
+import type { Mutation, PropertyPath } from "@paged-media/plugin-api";
+import {
+  nativeCellPropertyOp,
+  nativeCellSpanOp,
+  nativeCellTextOp,
+  nativeTableInsertOp,
+} from "@paged-media/plugin-sdk";
 
 import type { LoweredContent, Page } from "./lowered";
 import {
@@ -105,18 +107,14 @@ export function tableInsertOp(
   storyId: string,
   columnWidths: number[],
 ): Mutation {
-  return {
-    op: "insertTable",
-    args: {
-      storyId,
-      rows: content.rows.length,
-      cols: content.cols.length,
-      headerRows: Math.min(content.headerRows ?? 0, content.rows.length),
-      footerRows: 0,
-      columnWidths,
-      rowHeights: content.rows.map((r) => r.heightPt),
-    },
-  };
+  return nativeTableInsertOp(storyId, {
+    rows: content.rows.length,
+    cols: content.cols.length,
+    headerRows: Math.min(content.headerRows ?? 0, content.rows.length),
+    footerRows: 0,
+    columnWidths,
+    rowHeights: content.rows.map((r) => r.heightPt),
+  });
 }
 
 /** Phase-3 batch: pour each non-empty cell's formatted text into its table
@@ -137,15 +135,7 @@ export function tableCellOps(
     for (const cell of row.cells) {
       const c = colPos.get(cell.col);
       if (c === undefined || cell.text.length === 0) continue;
-      ops.push({
-        op: "insertText",
-        args: {
-          storyId,
-          offset: 0,
-          text: cell.text,
-          cell: { tableId, row: r, col: c },
-        },
-      });
+      ops.push(nativeCellTextOp(storyId, tableId, r, c, cell.text));
     }
   });
 
@@ -164,19 +154,6 @@ export const CELL_EDGE_STROKE_PT = 0.5;
  *  cumulative row/column boundaries. */
 const RULE_EPS = 0.01;
 
-/** A tableCell-scoped ElementId (the wire's cell-addressing door). */
-function cellId(
-  storyId: string,
-  tableId: string,
-  row: number,
-  col: number,
-): ElementId {
-  return {
-    kind: "tableCell",
-    id: { story_id: storyId, table_id: tableId, row, col },
-  };
-}
-
 /** One tableCell-scoped edge-stroke-weight override (`weight` defaults to
  *  the grid hairline; a styled border carries its own line weight). */
 function edgeOp(
@@ -187,14 +164,10 @@ function edgeOp(
   path: PropertyPath,
   weight: number = CELL_EDGE_STROKE_PT,
 ): Mutation {
-  return {
-    op: "setElementProperty",
-    args: {
-      elementId: cellId(storyId, tableId, row, col),
-      path,
-      value: { type: "length", value: weight },
-    },
-  };
+  return nativeCellPropertyOp(storyId, tableId, row, col, path, {
+    type: "length",
+    value: weight,
+  });
 }
 
 /** The xlsx vertical alignment → core's `cellVerticalJustification`
@@ -347,10 +320,7 @@ export function tableDecorOps(
       (col) => col.index >= m.col && col.index < m.col + m.colSpan,
     ).length;
     if (rowSpan <= 1 && columnSpan <= 1) continue; // degenerate span
-    ops.push({
-      op: "setCellSpan",
-      args: { storyId, tableId, row: r, col: c, rowSpan, columnSpan },
-    });
+    ops.push(nativeCellSpanOp(storyId, tableId, r, c, rowSpan, columnSpan));
   }
 
   // (2 + 3) Fills and edges. Edge ops dedupe per (row, col, edge): grid
@@ -445,24 +415,24 @@ export function tableDecorOps(
       // text keeps clear of its neighbours. Only cells with text need it.
       if (content.textInsetPt && cell.text.length > 0) {
         for (const path of ["cellInsetLeft", "cellInsetRight"] as const)
-          cellProps.push({
-            op: "setElementProperty",
-            args: {
-              elementId: cellId(storyId, tableId, r, c),
-              path,
-              value: { type: "length", value: content.textInsetPt },
-            },
-          });
+          cellProps.push(
+            nativeCellPropertyOp(storyId, tableId, r, c, path, {
+              type: "length",
+              value: content.textInsetPt,
+            }),
+          );
       }
       if (vj) {
-        cellProps.push({
-          op: "setElementProperty",
-          args: {
-            elementId: cellId(storyId, tableId, r, c),
-            path: "cellVerticalJustification",
-            value: { type: "text", value: vj },
-          },
-        });
+        cellProps.push(
+          nativeCellPropertyOp(
+            storyId,
+            tableId,
+            r,
+            c,
+            "cellVerticalJustification",
+            { type: "text", value: vj },
+          ),
+        );
       }
       if (!style) continue;
       // The colorRef is a SWATCH ID (`Graphic::resolve`), never a hex —
@@ -472,25 +442,21 @@ export function tableDecorOps(
       // workbook colour names its minted content-addressed swatch.
       const fillRef = cellFillRef(style);
       if (fillRef != null) {
-        fills.push({
-          op: "setElementProperty",
-          args: {
-            elementId: cellId(storyId, tableId, r, c),
-            path: "cellFillColor",
-            value: { type: "colorRef", value: fillRef },
-          },
-        });
+        fills.push(
+          nativeCellPropertyOp(storyId, tableId, r, c, "cellFillColor", {
+            type: "colorRef",
+            value: fillRef,
+          }),
+        );
       }
       // A document cell style the cell maps to (sheet ADR 518).
       if (style.docCellStyle) {
-        cellProps.push({
-          op: "setElementProperty",
-          args: {
-            elementId: cellId(storyId, tableId, r, c),
-            path: "appliedCellStyle",
-            value: { type: "text", value: style.docCellStyle },
-          },
-        });
+        cellProps.push(
+          nativeCellPropertyOp(storyId, tableId, r, c, "appliedCellStyle", {
+            type: "text",
+            value: style.docCellStyle,
+          }),
+        );
       }
       const present = {
         top: style.borderTop,
@@ -508,14 +474,12 @@ export function tableDecorOps(
           line?.swatch ??
           (hex != null ? paletteSwatchId("cellStroke", hex) : null);
         if (ref != null) {
-          cellProps.push({
-            op: "setElementProperty",
-            args: {
-              elementId: cellId(storyId, tableId, r, c),
-              path: colorPath,
-              value: { type: "colorRef", value: ref },
-            },
-          });
+          cellProps.push(
+            nativeCellPropertyOp(storyId, tableId, r, c, colorPath, {
+              type: "colorRef",
+              value: ref,
+            }),
+          );
         }
       }
     }

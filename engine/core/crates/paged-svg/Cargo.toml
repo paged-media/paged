@@ -26,6 +26,8 @@ import = [
     "dep:serde",
     "dep:tsify-next",
     "dep:wasm-bindgen",
+    "dep:paged-loss",
+    "paged-loss/wire",
 ]
 # Display list → SVG.
 export = [
@@ -35,10 +37,14 @@ export = [
     "dep:serde",
     "dep:tsify-next",
     "dep:wasm-bindgen",
+    "dep:paged-loss",
+    "paged-loss/wire",
 ]
 
 [dependencies]
 paged-fmt = { path = "../paged-fmt" }
+# The shared loss report (capability register C18) the SvgReport carries.
+paged-loss = { path = "../paged-loss", optional = true }
 paged-pixel = { path = "../paged-pixel" }
 paged-colour-math = { path = "../paged-colour-math" }
 # usvg resolves what an SVG means before we read it: <use>, <defs> and

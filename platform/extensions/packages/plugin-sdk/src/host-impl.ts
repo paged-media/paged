@@ -211,6 +211,7 @@ import {
   type MlBackend,
 } from "./doors-ml.js";
 import { documentChangeOf } from "./document-change.js";
+import { exportPdfSession } from "./doors-pdf-export.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
 import { mapBacking } from "./testing.js";
@@ -638,6 +639,12 @@ export const HOST_FEATURES: readonly string[] = [
   // refuses the field and the path. paged.draw's Pattern Options ask it
   // before saving a pattern swatch.
   "document.patternPaint@1",
+  // The PDF export door (`host.documents.exportPdf`): the engine's export
+  // session (begin, one page per call, finish) over the editor's client,
+  // one loop for every host (`doors-pdf-export.ts`). STATIC: the session
+  // messages are the engine's since protocol 51; gated on
+  // `capabilities.documents.export`.
+  "documents.exportPdf@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -3818,7 +3825,7 @@ export function createBundleHost(
       // Engine ADR 1031 (protocol v77). The engine PLANS (a read) and the
       // plan's one batch goes through `mutate`, so the write gate, the
       // namespace check and the undo step are the ordinary ones.
-      const empty = { items: 0, notes: [] };
+      const empty = { items: 0, losses: [] };
       const { pageId: wanted, ...svgOptions } = options;
       try {
         const pageId = wanted ?? (await activePageId());
@@ -3864,7 +3871,7 @@ export function createBundleHost(
     async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
       // Engine ADR 1031 (protocol v77): a pure read.
       requireDocRead("document.exportSvg");
-      const empty = { items: 0, notes: [] };
+      const empty = { items: 0, losses: [] };
       const { pageId: wanted, elementIds, ...options } = request;
       try {
         const pageId = wanted ?? (await activePageId());
@@ -5963,6 +5970,20 @@ export function createBundleHost(
   // host that transfers buffers cannot detach the caller's array.
   const documentsBackend = options?.documents;
   const documents: DocumentsSurface = {
+    // The PDF export door: the engine's export session over the editor's
+    // client, no backend needed (`doors-pdf-export.ts`, the one loop).
+    async exportPdf(pdfOptions, hooks) {
+      requireDeclared(
+        hasDocuments("export"),
+        "documents.exportPdf",
+        "capabilities.documents.export must be declared",
+      );
+      return exportPdfSession(
+        (message) => getEditor().client.send(message),
+        pdfOptions,
+        hooks,
+      );
+    },
     async exportPaged() {
       requireDeclared(
         hasDocuments("export"),

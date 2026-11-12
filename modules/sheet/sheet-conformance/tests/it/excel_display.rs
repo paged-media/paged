@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The Excel DISPLAY lane replayed (`oracle/excel/display.py`): what a cell
+//! The Excel DISPLAY lane replayed (`tooling/oracle/office/excel/display.py`): what a cell
 //! shows in Excel 16 — its text and its font colour — against what the
 //! lowering shows for the same value and number format. The text goes through
 //! `sheet_lower::lower_cell_display` (the path the page table and the live

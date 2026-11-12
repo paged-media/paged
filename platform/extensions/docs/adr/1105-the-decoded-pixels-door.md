@@ -43,4 +43,4 @@ bundle may call.
 - Image Trace reads a PSD, a CMYK TIFF, WebP and every other placed format, in the colours the page
   shows, and runs headlessly on the real engine.
 - A host without the door refuses the trace with a sentence naming it, as before.
-- Contract canary `0.74.3-canary.87` (with ADR 1104).
+- Contract canary `0.74.3-canary.89` (with ADR 1104).

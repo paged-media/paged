@@ -57,7 +57,7 @@ fn loss(losses: &[pdf_import::vectors::ir::Loss], code: &str) -> u32 {
     losses
         .iter()
         .find(|l| l.code == code)
-        .map_or(0, |l| l.count)
+        .map_or(0, |l| l.count as u32)
 }
 
 /// Every mesh paint on the page, depth first.

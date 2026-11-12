@@ -123,8 +123,6 @@
       "media.paged.draw.command.selectRepeatInstances",
       "media.paged.draw.command.expandRepeat",
       "media.paged.draw.command.releaseRepeat",
-      "media.paged.draw.command.bakeAppearance",
-      "media.paged.draw.command.releaseAppearance",
       "media.paged.draw.command.saveGraphicStyle",
       "media.paged.draw.command.applyGraphicStyle",
       "media.paged.draw.command.redefineGraphicStyle",
@@ -1765,38 +1763,6 @@
         {
           "id": "media.paged.draw.command.releaseCompoundPath",
           "title": "Release compound path",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.bakeAppearance",
-          "title": "Bake appearance",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.releaseAppearance",
-          "title": "Release appearance",
           "args": {
             "kind": "struct",
             "fields": {

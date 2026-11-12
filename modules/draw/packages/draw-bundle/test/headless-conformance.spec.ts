@@ -301,9 +301,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // B-24 — Bake stack to a group / Release baked stack.
-        "command",
-        "command",
         // Illustrator Phase 2 — Graphic styles (Save from selection /
         // Apply / Redefine / Break link / Rename / Delete).
         "command",

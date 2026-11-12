@@ -341,9 +341,8 @@ export {
   type ShaperRecognition,
   type ShaperOptions,
 } from "./shaper";
-// WP6.7 — the distortion tools' kernels (the future `paged-warp` crate's
-// vector half): the liquify family, the constrained puppet mesh and its
-// ARAP solve, homographies and the perspective grid.
+// WP6.7 — the distortion tools' projective kernels: homographies and the
+// perspective grid (Puppet Warp and Liquify are paged-warp's).
 export * from "./warp";
 // WP6.8 — the Symbolism tools' kernels (draw ADR 365) and 9-slice scaling.
 export * from "./symbolism";

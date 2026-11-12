@@ -28,21 +28,15 @@
 //     file with them replaced, every other byte kept (the `recolor`
 //     action, `actions.ts`).
 
+import type { LossEntry } from "@paged-media/plugin-api";
+
 import { bootDrawWasm } from "./trace-engine";
 
-/** One row of a conversion report (the shape of the engine's
- *  `SvgReport`'s notes). */
-export interface InterchangeNote {
-  code: string;
-  severity: "approximated" | "dropped";
-  message: string;
-  count: number;
-}
-
-/** What a conversion carried and what it could not. */
+/** What a conversion carried and what it could not: the shape of the
+ *  engine's `SvgReport`, its rows the shared `LossEntry`. */
 export interface InterchangeReport {
   items: number;
-  notes: InterchangeNote[];
+  losses: LossEntry[];
 }
 
 /** A DXF read into an SVG document (user units are points). */

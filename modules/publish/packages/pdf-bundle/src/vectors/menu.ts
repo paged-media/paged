@@ -60,7 +60,7 @@ export function contributeConvertMenu(host: BundleHost): Disposable {
               .filter((l) => l.code !== "colours")
               .map((l) => ({
                 severity: "info" as const,
-                message: l.message,
+                message: l.message ?? l.code,
                 source: CONVERT_COMMAND,
               })),
           );

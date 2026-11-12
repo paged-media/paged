@@ -90,7 +90,7 @@ import {
   withAppearance,
   type AppearanceStack,
 } from "./appearance";
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { batchMutationFor } from "./batch-handles";
 
 const M = defineMessages("draw.recolor", {

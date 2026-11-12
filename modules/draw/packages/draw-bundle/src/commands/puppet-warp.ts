@@ -51,6 +51,7 @@ import {
   type Pt,
 } from "./distort-shared";
 import { EDITABLE_PATH_KINDS } from "./path-rewrite";
+import { bootWarpKernel } from "../warp-kernel";
 
 const M = defineMessages("draw.puppetWarp", {
   warp: "Puppet warp the selection",
@@ -80,6 +81,7 @@ export async function applyPuppetWarp(
     targets: targets.map((t) => t.page),
     tolerance: PICK_PT,
     autoPinCount: Math.max(0, Math.round(args.autoPins)),
+    kernel: await bootWarpKernel(),
   });
   if (!machine.usable) return false;
   for (const h of args.holds) {

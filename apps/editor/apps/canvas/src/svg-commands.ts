@@ -129,8 +129,8 @@ function targetPage(paged: PagedEditor): PageId | null {
 
 /** Every loss of a report, one line each, for the Problems list. */
 export function reportLines(name: string, report: SvgReport): string[] {
-  return report.notes.map((n) =>
-    t(M.approximated, { name, message: n.message, count: n.count }),
+  return report.losses.map((n) =>
+    t(M.approximated, { name, message: n.message ?? n.code, count: n.count }),
   );
 }
 

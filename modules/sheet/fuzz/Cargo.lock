@@ -190,6 +190,7 @@ name = "dml-geom"
 version = "0.0.0"
 dependencies = [
  "paged-geom",
+ "paged-model",
  "paged-ooxml",
  "serde",
 ]
@@ -477,6 +478,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-loss"
+version = "0.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "paged-math"
 version = "0.0.0"
 dependencies = [
@@ -489,6 +497,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "paged-colour-math",
+ "paged-loss",
  "paged-math",
  "paged-pixel",
  "serde",
@@ -726,6 +735,7 @@ name = "sheet-chart"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-chart",
  "dml-native",
  "paged-ooxml",
  "plotters",

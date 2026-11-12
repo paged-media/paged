@@ -1,5 +1,5 @@
 # paged.sheet calculation-model cases, recorded against Excel by
-# sheet-conformance/oracle/excel/calcmodel.py (format documented there).
+# tooling/oracle/office/excel/calcmodel.py (format documented there).
 # id	kind	address	value
 spill-range	cell	A1	1
 spill-range	cell	A2	2

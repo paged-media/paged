@@ -36,15 +36,14 @@
 // to the frame's real attributes (the visible result when layers don't
 // blend).
 //
-// B-24 CLOSED (the GROUP BAKE, `commands/appearance-bake.ts`): the
-// faithful N-layer lowering is NOT a multi-paint frame model — that
-// would be a paged-only extension IDML cannot round-trip. It is a GROUP
-// of stacked page items, each with one paint, all sharing the source
-// geometry, which IS ordinary IDML. This module keeps the stack model,
-// the metadata carrier and the front-most-layer bake (what an UNBAKED
-// object shows and what a RELEASED object goes back to); the bake module
-// owns the group lowering, its inverse, and the honest list of what does
-// and does not survive it.
+// The faithful N-layer form is the engine's native appearance (engine ADR
+// 1043), which every host has and which the engine bakes into stacked
+// items when it writes IDML; draw's own group bake (B-24) is gone (draw
+// ADR 354, amendment 2026-11-11). This module keeps the stack model, the
+// metadata carrier and the front-most-layer bake (what an unmigrated
+// object shows and what a released legacy bake goes back to);
+// `appearance-legacy.ts` reads and releases the group bakes older
+// documents hold.
 //
 // The layer EDITORS (add fill / add stroke / clear / remove / reorder) are
 // the HOST's: `paged.appearance.*` over the engine's native appearance
@@ -59,11 +58,8 @@ import type {
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
 
-import {
-  appearanceBakeOf,
-  rebakeAppearance,
-  stampDrawMetadata,
-} from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
+import { appearanceBakeOf, releaseBakedWithStack } from "./appearance-legacy";
 import { oneBatchFor } from "./batch-handles";
 
 /** Which half of the stack an edit addresses. */
@@ -82,7 +78,7 @@ export interface FillLayer {
   /** Layer opacity 0..100. Renders on canvas, prints into a PDF export,
    *  and since C-19 the IDML write-new lane emits the
    *  `<TransparencySetting>` that carries it — so it survives a save-back
-   *  of a baked layer too (see `appearance-bake.ts`). */
+   *  of a baked layer too (a legacy bake, `appearance-legacy.ts`). */
   opacity?: number;
   /** IDML blend mode for this layer (`"Multiply"`, `"Screen"`, …). A
    *  GROUP-BAKE property: a blend mode needs the layers BELOW it to blend
@@ -209,11 +205,11 @@ export function bakeAppearanceMutations(
  *  UNBAKED target: write the metadata envelope AND bake the top layer to
  *  the frame, in ONE batch: one undo step (DRW-4).
  *
- *  BAKED target (a `data.appearanceBake` record on the envelope): the
- *  derived layers ARE what renders, so a metadata-only write would let
- *  the model and the page diverge. The edit therefore RE-BAKES — release
- *  the old layers with the new stack, then bake it again (two undo
- *  steps; see `appearance-bake.ts`).
+ *  A target a LEGACY group bake still holds (a `data.appearanceBake`
+ *  record, written before draw ADR 367; the migration releases these on
+ *  open): its derived layers are what renders, so a metadata-only write
+ *  would let the model and the page diverge. The edit releases them with
+ *  the new stack, one batch (`appearance-legacy.ts`).
  *
  *  Exported for the conformance spec. Returns the metadata outcome (the
  *  source of truth); a bake failure is logged, not thrown (the stack
@@ -225,7 +221,7 @@ export async function commitAppearance(
   prev: PluginMetadataEnvelope | null,
 ): Promise<MutationOutcome> {
   if (appearanceBakeOf(prev)) {
-    return rebakeAppearance(host, id, stack, prev);
+    return releaseBakedWithStack(host, id, stack, prev);
   }
   return commitAppearancePlans(host, [planAppearance(id, stack, prev)]);
 }

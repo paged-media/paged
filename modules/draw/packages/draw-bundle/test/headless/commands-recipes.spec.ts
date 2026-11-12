@@ -47,18 +47,9 @@ import {
   writesDuring,
   type CommandRig,
 } from "./command-kit";
-import {
-  commitAppearance,
-  readEngineSymbols,
-  type AppearanceStack,
-} from "../../src";
+import { readEngineSymbols } from "../../src";
 
 const C = "media.paged.draw.command";
-/** A two-layer stack for the bake and release cases. */
-const STACK: AppearanceStack = {
-  fills: [{ color: "Color/Black" }],
-  strokes: [{ color: "Color/Black", weight: 1 }],
-};
 const RECT = el("rectangle", "urect");
 const POLY = el("polygon", "upoly");
 const A = el("polygon", "ua");
@@ -632,37 +623,6 @@ describe("paged.draw commands — recipes (real engine)", () => {
       await expectRefuses(rig, F1(), [], `${C}.deleteGraphicStyle`, {
         styleId: "gs-404",
       });
-    });
-  });
-
-  describe("the appearance stack", () => {
-    // The stack EDITS (Add fill / Add stroke / Clear / Remove / Move) are
-    // the host's, `paged.appearance.*` (PM-0017); a stack here is written
-    // through `commitAppearance`, the model the bake reads.
-    // DRW-5 (fixed, ADR 360): the bake is one batch, its layers addressed
-    // by handle and found again by their markers.
-    it("Bake appearance refuses an empty selection", async () => {
-      covers("command:media.paged.draw.command.bakeAppearance");
-      await expectRefuses(rig, F1(), [], `${C}.bakeAppearance`);
-    });
-
-    it("DRW-5 — Bake appearance is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.bakeAppearance");
-      await rig.open(F1(), [RECT]);
-      await commitAppearance(rig.h.host, RECT, STACK, null);
-      await rig.h.host.selection.set([RECT]);
-      await expectApplies(rig, `${C}.bakeAppearance`);
-    });
-
-    it("Release appearance gives the baked stack back; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.releaseAppearance");
-      await rig.open(F1(), [RECT]);
-      await commitAppearance(rig.h.host, RECT, STACK, null);
-      await rig.h.host.selection.set([RECT]);
-      await rig.run(`${C}.bakeAppearance`);
-      await rig.h.host.selection.set([RECT]);
-      await expectApplies(rig, `${C}.releaseAppearance`);
-      await expectRefuses(rig, F1(), [], `${C}.releaseAppearance`);
     });
   });
 

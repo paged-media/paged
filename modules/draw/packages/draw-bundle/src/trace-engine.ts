@@ -270,7 +270,8 @@ export const TRACE_ENGINE_NOT_BUILT =
 
 /** The draw wasm's exports. Since draw ADR 364 the same artifact also
  *  carries the DXF interchange and the SVG paint reader
- *  (`interchange-wasm.ts` is their facade): one artifact, one boot. */
+ *  (`interchange-wasm.ts` is their facade), and the vector Puppet Warp and
+ *  Liquify kernels (`warp-kernel.ts`): one artifact, one boot. */
 export interface TraceWasmModule {
   default: (init?: unknown) => Promise<unknown>;
   initSync: (init: unknown) => unknown;
@@ -286,6 +287,32 @@ export interface TraceWasmModule {
   svgToDxf: (svg: string) => string;
   svgColors: (svg: string) => string;
   svgRecolor: (svg: string, mapJson: string) => string;
+  // The vector Puppet Warp and Liquify (paged-warp; `warp-kernel.ts` is
+  // their facade, the flat layouts are crates/trace-js `warp.rs`'s).
+  puppetMesh: (
+    rings: Float64Array,
+    spacing: number,
+    maxVertices: number,
+    autoPins: number,
+  ) => Float64Array;
+  puppetLocate: (
+    vertices: Float64Array,
+    triangles: Uint32Array,
+    points: Float64Array,
+  ) => Float64Array;
+  puppetSolve: (
+    vertices: Float64Array,
+    triangles: Uint32Array,
+    pins: Float64Array,
+    mode: number,
+    located: Float64Array,
+  ) => Float64Array;
+  liquifyStep: (
+    state: Float64Array,
+    brush: Float64Array,
+    params: Float64Array,
+    detail: number,
+  ) => Float64Array;
 }
 
 /** Load + instantiate the trace wasm, browser vs Node (wasm-boot), and run

@@ -24,7 +24,7 @@
 //! PAGED_ORACLE_BUILD=<dir> cargo nextest run -p sheet-conformance \
 //!     --run-ignored only excel_opencheck::write_the_paged_files
 //! PAGED_ORACLE_BUILD=<dir> PAGED_ORACLE_SCRIPT=opencheck.applescript \
-//!     sheet-conformance/oracle/excel/drive.sh
+//!     tooling/oracle/office/excel/drive.sh
 //! PAGED_ORACLE_BUILD=<dir> cargo nextest run -p sheet-conformance \
 //!     --run-ignored only excel_opencheck::record_what_excel_made_of_them
 //! ```

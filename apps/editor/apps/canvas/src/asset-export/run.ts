@@ -276,7 +276,7 @@ export async function exportAssets(
           asset.pageId as never,
           asset.elementIds,
         );
-        svgNotes += report.notes.length;
+        svgNotes += report.losses.length;
         files.push({
           fileName,
           bytes: new TextEncoder().encode(svg),

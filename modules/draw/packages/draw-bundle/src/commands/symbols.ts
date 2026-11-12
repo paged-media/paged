@@ -63,7 +63,7 @@ import type {
 } from "@paged-media/plugin-api";
 import { splitCompound, type AnchorTable } from "@paged-media/vector-geometry";
 
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { framePathMutationFor, type CompoundPaint } from "./compound-path";
 import { groupMutationFor } from "./group";
 import { offsetTable } from "./pattern";

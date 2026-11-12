@@ -1645,15 +1645,15 @@
           "summary": null
         },
         {
-          "name": "SvgNote",
+          "name": "LossEntry",
           "kind": "type",
-          "signature": "SvgNote",
+          "signature": "LossEntry",
           "summary": null
         },
         {
-          "name": "SvgNoteSeverity",
+          "name": "LossSeverity",
           "kind": "type",
-          "signature": "SvgNoteSeverity",
+          "signature": "LossSeverity",
           "summary": null
         },
         {

@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 926,
+    "command": 924,
     "keybinding": 201,
-    "menu": 670,
+    "menu": 668,
     "panel": 151,
     "tool": 123
   },
@@ -706,11 +706,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "command:media.paged.draw.command.bakeAppearance",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "command:media.paged.draw.command.blendSelected",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1117,11 +1112,6 @@
     },
     {
       "id": "command:media.paged.draw.command.regenerateLivePaint",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.releaseAppearance",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5836,16 +5826,6 @@
       "owner": "media.paged.slide"
     },
     {
-      "id": "menu:Draw/Appearance/Bake",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Appearance/Release",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "menu:Draw/Blend/Expand",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -10424,6 +10404,12 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:media.paged.draw.command.bakeAppearance",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:media.paged.draw.command.cornersBevel",
       "replacement": "command:paged.corners.bevel",
       "deprecatedIn": "0.78.0",
@@ -10550,6 +10536,12 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:media.paged.draw.command.releaseAppearance",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:media.paged.draw.command.releaseOpacityMask",
       "replacement": "command:paged.core.releaseOpacityMask",
       "deprecatedIn": "0.78.0",
@@ -10610,8 +10602,20 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "menu:Draw/Appearance/Bake",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "menu:Draw/Appearance/Clear",
       "replacement": "menu:Object/Appearance/Clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Release",
+      "replacement": null,
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },

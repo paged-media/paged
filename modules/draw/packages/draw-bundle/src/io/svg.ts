@@ -110,7 +110,7 @@ export async function importSvgFile(
     return { result: null, ids: [] };
   }
   const result = await host.document.importSvg(bytes, { ...options, pageId });
-  for (const note of result.report.notes) {
+  for (const note of result.report.losses) {
     host.log.warn(`${source}: ${name}: ${note.message} (${note.count}×)`);
   }
   if (!result.applied) {
@@ -173,7 +173,7 @@ export async function exportSvg(
     return null;
   }
   const result = await host.document.exportSvg({ elementIds: selection });
-  for (const note of result.report.notes) {
+  for (const note of result.report.losses) {
     host.log.warn(`${SVG_EXPORTER_ID}: ${note.message} (${note.count}×)`);
   }
   if (result.svg === null) {

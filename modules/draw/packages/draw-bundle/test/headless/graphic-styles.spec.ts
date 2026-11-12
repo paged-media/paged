@@ -843,45 +843,24 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       expect(graphicStyleOverridden(ref, read.appearance)).toBe(false);
     });
 
-    it("refuses a BAKED appearance instead of putting the model and the page out of step", async () => {
-      await reset();
-      await seedRect();
-      // Bake the rectangle's stack into the B-24 group of derived paths.
-      const baked = await commandFor(
-        h,
-        "media.paged.draw.command.bakeAppearance",
+    it("refuses a BAKED appearance instead of putting the model and the page out of step", () => {
+      // A legacy group bake (draw ADR 354) is released when its document
+      // opens; a carrier that still holds the record is refused by save,
+      // apply and redefine (`graphicStyleRefusalOf`).
+      const baked = {
+        v: 1,
+        data: {
+          appearance: STACK,
+          appearanceBake: {
+            restore: { fill: "Color/Black", stroke: null, weight: null },
+          },
+        },
+      };
+      expect(graphicStyleRefusalOf(baked)).toBe("baked");
+      expect(graphicStyleRefusalOf({ v: 1, data: { appearance: STACK } })).toBe(
+        null,
       );
-      await h.host.selection.set([RECT]);
-      await baked.handler(undefined);
-      const env = await h.host.document.getMetadata(RECT);
-      expect(graphicStyleRefusalOf(env)).toBe("baked");
-
-      // Save refuses, so the library stays empty…
-      expect(await applySaveGraphicStyle(h.host, { name: "nope" })).toBeNull();
-      expect(
-        parseGraphicStyleLibrary(await h.host.parts.read(GRAPHIC_STYLES_PART))
-          .styles,
-      ).toEqual([]);
-
-      // …and so does an apply of a style saved from somewhere else.
-      await h.host.selection.set([POLY]);
-      await applySaveGraphicStyle(h.host, { name: "from the polygon" });
-      const before = await signature(h, [RECT]);
-      await h.host.selection.set([RECT]);
-      await applyGraphicStyleToSelection(h.host, "gs-1");
-      expect(await signature(h, [RECT])).toBe(before);
-      expect(
-        graphicStyleRefOf(await h.host.document.getMetadata(RECT)),
-      ).toBeNull();
-
-      // Release, and the same apply now lands.
-      await commandFor(h, "media.paged.draw.command.releaseAppearance").handler(
-        undefined,
-      );
-      await applyGraphicStyleToSelection(h.host, "gs-1");
-      expect(
-        graphicStyleRefOf(await h.host.document.getMetadata(RECT))?.id,
-      ).toBe("gs-1");
+      expect(graphicStyleRefusalOf(null)).toBe(null);
     });
 
     it("refuses honestly on an empty selection / an unknown style", async () => {

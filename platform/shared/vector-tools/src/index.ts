@@ -307,6 +307,24 @@ export {
   type PuppetWarpOptions,
   type PuppetWarpSnapshot,
 } from "./puppet-warp-machine";
+// The kernel those two run on: paged-warp, injected (the host passes its
+// wasm), with the Liquify vocabulary and the end-of-drag refit.
+export {
+  LIQUIFY_KINDS,
+  liquifyChanged,
+  liquifyRefit,
+  liquifyStart,
+  simplifyTolerance,
+  type LiquifyBrush,
+  type LiquifyKind,
+  type LiquifyParams,
+  type LiquifyState,
+  type Located,
+  type PuppetMesh,
+  type PuppetMode,
+  type PuppetPin,
+  type WarpKernel,
+} from "./warp-kernel";
 export {
   PerspectiveGridMachine,
   PerspectiveSelectMachine,

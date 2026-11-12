@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # paged.sheet — Excel oracle lane, step 2: let the real Excel compute.
 #
-# Usage:  sheet-conformance/oracle/excel/drive.sh [family ...]
-#   then: python3 sheet-conformance/oracle/excel/read.py
-#         sheet-conformance/oracle/excel/drive.sh --entry [locale]
+# Usage:  tooling/oracle/office/excel/drive.sh [family ...]
+#   then: python3 tooling/oracle/office/excel/read.py
+#         tooling/oracle/office/excel/drive.sh --entry [locale]
 #   (the ENTRY lane: types entry_cases.py's raw texts into a fresh workbook
 #   under <locale> (default en-US) and records recorded/entry*.tsv itself)
 #

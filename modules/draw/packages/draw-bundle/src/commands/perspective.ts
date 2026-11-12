@@ -81,7 +81,7 @@ import {
 } from "../handlers/graphic-default";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { polyShape } from "../handlers/preview-shapes";
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import {
   batchMutationFor,
   bindCreatedMutationFor,

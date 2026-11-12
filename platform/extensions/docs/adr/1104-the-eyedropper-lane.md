@@ -48,7 +48,7 @@ tool had no way to hand it a sample.
 - One Eyedropper in every context; inside an image it takes the image's colours at the image's
   resolution, elsewhere it samples the page.
 - Probe `supports("bindings.eyedropper@1")`; true with a shared registry. Contract canary
-  `0.74.3-canary.87`.
+  `0.74.3-canary.89`.
 - Not carried over: paged.image's Eyedropper had no key (the host's has `i`), so nothing is lost
   there; a press that an armed Curves eyedropper took is answered as taken, so a drag after it
   samples into the foreground.

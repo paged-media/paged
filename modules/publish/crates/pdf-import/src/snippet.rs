@@ -157,9 +157,9 @@ pub fn place(bytes: &[u8], req: &PlaceRequest) -> Result<PlaceResult, PlaceError
     let mut stories: Vec<ParsedStory> = Vec::new();
     let mut palette = Palette::new();
     let mut ids = IdGen::new();
-    let mut losses: BTreeMap<&'static str, u32> = BTreeMap::new();
+    let mut losses: BTreeMap<&str, usize> = BTreeMap::new();
     for l in &page.losses {
-        *losses.entry(l.code).or_default() += l.count;
+        *losses.entry(l.code.as_str()).or_default() += l.count;
     }
     let mut roots = {
         let mut low = Lowering::new(
@@ -173,7 +173,7 @@ pub fn place(bytes: &[u8], req: &PlaceRequest) -> Result<PlaceResult, PlaceError
         let mut roots = low.items(&page.items);
         roots.extend(low.remaining_text());
         for (code, n) in &low.losses {
-            *losses.entry(code).or_default() += n;
+            *losses.entry(code).or_default() += *n as usize;
         }
         roots
     };
@@ -285,7 +285,7 @@ pub fn place(bytes: &[u8], req: &PlaceRequest) -> Result<PlaceResult, PlaceError
         counts,
         losses: losses
             .into_iter()
-            .map(|(code, count)| Loss { code, count })
+            .map(|(code, count)| Loss::counted(code, count))
             .collect(),
     })
 }

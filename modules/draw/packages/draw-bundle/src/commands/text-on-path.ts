@@ -122,7 +122,7 @@ import type {
   MutationInput,
 } from "@paged-media/plugin-api";
 
-import { stampDrawMetadata } from "./appearance-bake";
+import { stampDrawMetadata } from "./draw-metadata";
 import { linkIndex } from "../link-index";
 import { maskOrPathRefusalReason } from "./refusal";
 import { batchMutationFor } from "./batch-handles";

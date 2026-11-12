@@ -46,25 +46,12 @@ mod write;
 pub use read::{dxf_to_svg, DxfImport};
 pub use write::{svg_to_dxf, DxfExport};
 
-/// How a construct fared.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Severity {
-    /// Carried, but not exactly.
-    Approximated,
-    /// Left out.
-    Dropped,
-}
-
-/// One row of a report: a code, what happened, how often.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Note {
-    pub code: String,
-    pub severity: Severity,
-    pub message: String,
-    pub count: u32,
-}
+/// One row of a report: the shared [`paged_loss::LossEntry`] (capability
+/// register C18), DXF's codes (`entity.TEXT`, `hatch.unreadable`) as data.
+pub use paged_loss::LossEntry as Note;
+use paged_loss::LossLog;
+/// How a construct fared: the shared [`paged_loss::LossSeverity`].
+pub use paged_loss::LossSeverity as Severity;
 
 /// What a conversion carried and what it could not (the shape of the
 /// engine's `SvgReport`, so the bundle logs both alike).
@@ -73,35 +60,27 @@ pub struct Note {
 pub struct Report {
     /// Import: the shapes written. Export: the entities written.
     pub items: u32,
-    pub notes: Vec<Note>,
+    /// The losses, one row per code and message, in first-use order.
+    pub losses: Vec<Note>,
 }
 
 impl Report {
     /// Count `n` occurrences of `code`.
     pub fn note_n(&mut self, code: &str, severity: Severity, message: &str, n: u32) {
-        if let Some(note) = self.notes.iter_mut().find(|x| x.code == code) {
-            note.count += n;
-            return;
-        }
-        self.notes.push(Note {
-            code: code.to_string(),
-            severity,
-            message: message.to_string(),
-            count: n,
-        });
+        self.losses.note_n(code, severity, message, n as usize);
     }
 
     pub fn approximated(&mut self, code: &str, message: &str) {
-        self.note_n(code, Severity::Approximated, message, 1);
+        self.losses.approximated(code, message);
     }
 
     pub fn dropped(&mut self, code: &str, message: &str) {
-        self.note_n(code, Severity::Dropped, message, 1);
+        self.losses.dropped(code, message);
     }
 
     /// The row of `code`, if it happened.
     pub fn get(&self, code: &str) -> Option<&Note> {
-        self.notes.iter().find(|n| n.code == code)
+        self.losses.loss(code)
     }
 }
 

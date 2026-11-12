@@ -825,6 +825,10 @@ export type WorkerToMain = WorkerToMainKind & {
 //   ParagraphContent (markChange, propsChange) and StoryContent (comments).
 //   While documentTrackChanges is on, insertText / deleteRange and range
 //   formatting record changes. New mutations an older worker refuses.
+// v78 (rider) — one loss report (capability register C18): `SvgReport`'s
+//   rows are the shared `LossEntry` (`paged-loss`), under `losses` (was
+//   `notes` of `SvgNote`); a row's `severity` may also be `info`. The
+//   editor and its worker ship as one build.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional

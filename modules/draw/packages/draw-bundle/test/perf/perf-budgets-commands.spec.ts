@@ -82,15 +82,12 @@ import {
   applyUpdateBlend,
   applyUpdateObjectsOnPath,
   applyUpdateRepeat,
-  bakeAppearance,
   bootTraceEngine,
-  commitAppearance,
   pixelToPageAffine,
   selectSameMatches,
   symbolInstances,
   tracePlanFor,
   TRACE_DEFAULTS,
-  type AppearanceStack,
 } from "../../src";
 import { treeShapeOf } from "../headless/one-batch";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
@@ -732,7 +729,7 @@ describe("perf budgets — commands over a busy document", () => {
   });
 
   // COVERS: the before/after `document.tree()` diff in `emitBlend`,
-  // `emitRepeat`, `emitPatternField`, `bakeAppearance` and `releaseOne`
+  // `emitRepeat`, `emitPatternField` and `releaseOne`
   // (`commands/compound-path.ts`) — MAKE on plain shapes, so there is no
   // link walk in the way and the tree reads are the diff's own.
   //
@@ -834,42 +831,6 @@ describe("perf budgets — commands over a busy document", () => {
       expect(selected.map((s) => s.kind)).toEqual(["group"]);
       expect(restored).toBe(true);
       // As found: 3 — before, after, and a third to find the group.
-      expect(work.count("document.tree")).toBe(0);
-    });
-
-    it("appearance, bake a three-layer stack", async () => {
-      const stack: AppearanceStack = {
-        fills: [{ color: "Color/Black" }, { color: "Color/Paper" }],
-        strokes: [{ color: "Color/Black", weight: 2 }],
-      };
-      const carrier = w.plain[0]!;
-      const { work, undoSteps, result, added, restored } = await countedWrite(
-        w,
-        "appearance bake",
-        [carrier],
-        (host) => bakeAppearance(host, carrier),
-        // The stack is seeded uncounted: the bake is the budget, not the
-        // panel edit that precedes it.
-        async () => {
-          await commitAppearance(
-            w.h.host,
-            carrier,
-            stack,
-            await w.h.host.document.getMetadata(carrier),
-          );
-        },
-      );
-      expect(result).toHaveLength(3);
-      // ONE batch (DRW-5, ADR 360): three inserts, each named, then the
-      // 14 paint, marker, carrier and group ops by handle. The record
-      // names no layer ids, so nothing waits for a first answer.
-      expect(work.mutations).toEqual([{ op: "batch", ops: 20 }]);
-      expect(undoSteps).toBe(1);
-      // Three layers and their group, and the one step restores it.
-      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
-      expect(restored).toBe(true);
-      // What the batch minted comes off the engine's reply. As found: 2,
-      // the before/after diff.
       expect(work.count("document.tree")).toBe(0);
     });
 

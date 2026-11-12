@@ -33,10 +33,10 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[2]
+REPO = HERE.parents[3] / "modules" / "sheet"  # the sheet module root
 FORMAT_CORPUS = REPO / "corpus" / "format-corpus"
 BUILD = HERE / "build"
-RECORDED = HERE / "recorded"
+RECORDED = REPO / "sheet-conformance" / "oracle" / "excel" / "recorded"
 NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
 SKIP_FILES = {"locale-de.golden.tsv", "locale-latin.golden.tsv"}
@@ -217,7 +217,7 @@ def read() -> None:
         if len(cols) == 4:
             shown[cols[0]] = (cols[1], cols[2], cols[3])
     out = [
-        "# Excel-recorded cell display (oracle/excel/display.py — do not hand-edit)",
+        "# Excel-recorded cell display (tooling/oracle/office/excel/display.py — do not hand-edit)",
         "# id\tformat_code\tvalue\tshown\tfont_rgb\tinterior_rgb",
     ]
     missing = 0

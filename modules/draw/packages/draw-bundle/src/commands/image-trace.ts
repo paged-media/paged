@@ -160,7 +160,7 @@ import {
 } from "../trace-engine";
 import { decodeRasterBytes, rasterDecoderAvailable } from "../io/raster-decode";
 
-import { DRAW_METADATA_KEY } from "./appearance-bake";
+import { DRAW_METADATA_KEY } from "./draw-metadata";
 import { framePathMutationFor } from "./compound-path";
 import {
   pageOriginOf,

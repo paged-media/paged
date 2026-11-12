@@ -111,7 +111,7 @@ each published canary added is under [Releases](#releases).
   are put back; the save keeps each table's `<f>`. `goalSeek` sets a constant so a formula reaches
   a target (secant, then bisection over a bracket; at most 100 iterations, within 0.001), keeps
   the found value as an entry and returns the old input. Recorded from Excel 16, which built the
-  data tables and ran the seeks itself (`oracle/excel/whatif.applescript`,
+  data tables and ran the seeks itself (`tooling/oracle/office/excel/whatif.applescript`,
   `recorded/whatif.excel.xlsx`): every table result agrees on load and after an input edit, and
   every seek lands within 0.1% of Excel's value. Data tables cannot be authored yet, and a row or
   column insert does not move a data table's `ref`/`r1`/`r2`.

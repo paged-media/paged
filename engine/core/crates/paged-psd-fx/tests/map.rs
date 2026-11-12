@@ -206,7 +206,7 @@ fn outer_and_inner_glow__feat__images_graphics_psd_layer_styles() {
     // A gradient glow keeps its first colour and says so.
     assert_eq!(i.effect_color.as_deref(), Some("Color/PSD R=255 G=0 B=0"));
     assert_eq!(m.losses.len(), 1, "{:?}", m.losses);
-    assert_eq!(m.losses[0].effect, "Inner Glow");
+    assert_eq!(m.losses[0].code, "Inner Glow");
 }
 
 #[test]
@@ -239,7 +239,7 @@ fn bevel_and_emboss__feat__images_graphics_psd_layer_styles() {
     assert_eq!(b.depth_pct, Some(250.0));
     assert!(close(b.size.unwrap(), 6.0) && close(b.soften.unwrap(), 1.0));
     assert_eq!((b.angle_deg, b.altitude_deg), (Some(135.0), Some(40.0)));
-    assert!(m.losses.iter().any(|l| l.what.contains("Contour pane")));
+    assert!(m.losses.iter().any(|l| l.message.contains("Contour pane")));
 }
 
 #[test]
@@ -300,7 +300,7 @@ fn color_gradient_and_pattern_overlays__feat__images_graphics_psd_layer_styles()
     assert_eq!(c.opacity_pct, Some(80.0));
     let lines: Vec<String> = m.losses.iter().map(ToString::to_string).collect();
     assert!(
-        lines.iter().any(|l| l.starts_with("Pattern Overlay")),
+        m.losses.iter().any(|l| l.code == "Pattern Overlay"),
         "{lines:?}"
     );
     assert!(lines.iter().any(|l| l.contains("Radial")), "{lines:?}");
@@ -403,7 +403,7 @@ fn a_blend_mode_idml_has_no_name_for_is_a_loss() {
         ..LayerStyle::default()
     });
     assert_eq!(m.stack[0].blend_mode, None);
-    assert!(m.losses[0].what.contains("LinearBurn"));
+    assert!(m.losses[0].message.contains("LinearBurn"));
 }
 
 /// Applied to a page item: the InDesign kinds land in their slots, the

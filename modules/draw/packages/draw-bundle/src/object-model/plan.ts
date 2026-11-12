@@ -47,7 +47,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { withAppearance, type AppearanceStack } from "../commands/appearance";
-import { stampDrawMetadata } from "../commands/appearance-bake";
+import { stampDrawMetadata } from "../commands/draw-metadata";
 import {
   planRecipeWrites,
   RECIPE_LABEL_KEY,

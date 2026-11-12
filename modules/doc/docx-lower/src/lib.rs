@@ -50,6 +50,7 @@ pub mod sections;
 pub mod shape_geom;
 pub mod structure;
 
+use ir::diag;
 pub use sections::LowerOptions;
 use sections::{SectionColumns, SectionPlacement};
 
@@ -382,7 +383,7 @@ fn blank_line_styles(
                 .iter()
                 .map(|(i, s)| format!("{i} ({})", s.unwrap_or("no style")))
                 .collect();
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(diag::warning(
                 format!(
                     "blank lines at body blocks {} have different paragraph styles; \
                      the engine styles blank lines at one position together, so they \
@@ -425,7 +426,7 @@ fn blank_line_styles(
                         .iter()
                         .map(|(i, s)| format!("{i} ({})", s.unwrap_or("no style")))
                         .collect();
-                    diagnostics.push(Diagnostic::warning(
+                    diagnostics.push(diag::warning(
                         format!(
                             "blank lines in the table at body block {idx}, cell row {} column \
                              {}, paragraphs {} have different paragraph styles; the engine \
@@ -591,7 +592,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         }
         if starts_story(idx) && idx > 0 {
             if let Some(kind) = carry.take() {
-                ctx.diagnostics.push(Diagnostic::info(
+                ctx.diagnostics.push(diag::info(
                     format!(
                         "a {} break ends the section before body block {idx}; the next \
                          section starts a new page anyway, so the break adds nothing \
@@ -642,7 +643,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             }
             Block::Table(t) => {
                 if let Some(rule) = entry {
-                    ctx.diagnostics.push(Diagnostic::info(
+                    ctx.diagnostics.push(diag::info(
                         format!(
                             "the section at body block {idx} starts with a table, which \
                              cannot carry its {rule} start; it starts on the section's \
@@ -652,7 +653,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                     ));
                 }
                 if ctx.section_columns != SectionColumns::Frame {
-                    ctx.diagnostics.push(Diagnostic::info(
+                    ctx.diagnostics.push(diag::info(
                         format!(
                             "the table at body block {idx} is in a section that changes the \
                              columns mid-page; a table cannot span or split columns, so it \
@@ -662,7 +663,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                     ));
                 }
                 if ctx.section_indent != (0.0, 0.0) {
-                    ctx.diagnostics.push(Diagnostic::info(
+                    ctx.diagnostics.push(diag::info(
                         format!(
                             "the table at body block {idx} is in a continuous section with \
                              other left/right margins; its paragraphs keep the margins of \
@@ -682,7 +683,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     ctx.w4.scope = objects::Scope::Other;
     blank_line_styles(&blocks, &starts_story, &mut ctx.diagnostics);
     if ctx.breaks > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} page/column break(s) kept as a start-on-next-page/column rule on \
                  the following paragraph; an older editor version cannot apply that rule, \
@@ -705,7 +706,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         .filter(|i| i.crop.is_some_and(|c| c.placement.is_none()))
         .count();
     if unplaced > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{unplaced} cropped picture(s) (a:srcRect) in a format whose size is not read \
                  from its bytes: shown whole, fitted to the cropped size"
@@ -714,7 +715,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
     if ctx.pictures_at_end + ctx.pictures_alone > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} picture(s) after their paragraph's last character are placed before \
                  it, and {} picture(s) alone in an empty paragraph are placed at the start \
@@ -727,7 +728,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     }
 
     if ctx.clamped_tabs > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} right/centre/decimal tab stop(s) set past the right margin moved to \
                  the margin: Word sets the text after such a stop out in the margin, \
@@ -740,7 +741,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     }
 
     if doc.unplaced_vml > 0 {
-        ctx.diagnostics.push(Diagnostic::warning(
+        ctx.diagnostics.push(diag::dropped(
             format!(
                 "{} legacy VML drawing(s) (floating shapes, text boxes, diagrams) are \
                  not placed on the page: only an inline VML picture becomes an image. \
@@ -776,10 +777,10 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                  Word's move while unchanged"
             ));
         }
-        ctx.diagnostics.push(Diagnostic::info(msg, 3));
+        ctx.diagnostics.push(diag::info(msg, 3));
     }
     if held.hidden_runs > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} hidden run(s) not shown (Word's hidden text, as with hidden text \
                  turned off); they are kept in the .docx on save",
@@ -789,7 +790,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
     if held.content_controls > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} content control(s) kept as plain content: their text shows, the \
                  controls stay in the .docx on save, and an edit of text inside one \
@@ -813,7 +814,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                  (native URL destinations only for now)"
             ));
         }
-        ctx.diagnostics.push(Diagnostic::info(msg, 3));
+        ctx.diagnostics.push(diag::info(msg, 3));
     }
 
     // Footnotes / endnotes (ADR 034): the references, bodies and numbering
@@ -874,7 +875,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
              and the separator are the engine's), and a reference in a table cell is \
              not placed"
         ));
-        ctx.diagnostics.push(Diagnostic::info(msg, 3));
+        ctx.diagnostics.push(diag::info(msg, 3));
     }
 
     // Non-HYPERLINK FIELDS. Word computes a field's value and stores it as the
@@ -899,7 +900,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         let total = kinds.len();
         kinds.dedup();
         if total > 0 {
-            ctx.diagnostics.push(Diagnostic::info(
+            ctx.diagnostics.push(diag::info(
                 format!(
                     "{total} field result run(s) ({}) lowered as their last-computed \
                      TEXT — a frozen snapshot (in a table cell, or holding a picture or \
@@ -959,7 +960,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                 format!(" ({})", kinds.join(", "))
             }
         ));
-        ctx.diagnostics.push(Diagnostic::info(msg, 3));
+        ctx.diagnostics.push(diag::info(msg, 3));
     }
 
     // Word's blank page (measured, `fixtures/headers.word.json`): with
@@ -970,7 +971,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     if doc.even_and_odd_headers {
         for (k, s) in doc.sections.iter().enumerate().skip(1) {
             if let (Some(start), SectionKind::NextPage) = (s.page_number_start, s.kind) {
-                ctx.diagnostics.push(Diagnostic::info(
+                ctx.diagnostics.push(diag::info(
                     format!(
                         "section {} restarts its page numbering at {start} with different \
                          even and odd headers: Word inserts a blank page before it when \
@@ -987,7 +988,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     // Pictures in table cells (engine ADR 1050): characters of their lines,
     // floats standing against their cell.
     if ctx.cell_pictures > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} picture(s) in table cells shown in their cells ({} of them floating, \
                  placed against the cell without wrapping its text)",
@@ -998,7 +999,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     }
     // Drop caps (doc ADR 624): the engine's paragraph drop cap.
     if ctx.drop_caps > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} drop cap(s) shown as the engine's paragraph drop cap{}",
                 ctx.drop_caps,
@@ -1020,7 +1021,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     // per kind below.
     if ctx.looked_pictures > 0 {
         let kinds: Vec<&str> = ctx.look_kinds.iter().map(String::as_str).collect();
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} picture(s) carry a DrawingML look ({}), drawn natively on their \
                  anchored frames",
@@ -1031,14 +1032,14 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
     for (loss, n) in &ctx.look_losses {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!("picture look in {n} picture(s): {loss}"),
             3,
         ));
     }
     // Drawings that are not pictures (ADR 035 decision 8).
     for (block, n) in &ctx.other_drawings {
-        ctx.diagnostics.push(Diagnostic::warning(
+        ctx.diagnostics.push(diag::dropped(
             format!(
                 "{n} drawing(s) in body block {block} that are not pictures (a shape, \
                  text box, chart or SmartArt), or whose picture is linked or missing, \
@@ -1058,7 +1059,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             .iter()
             .map(|(f, n)| format!("{n} from {f}"))
             .collect();
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "symbol character(s) ({}) carried as their Unicode equivalents, drawn in \
                  the run's font (with fallback) rather than in the symbol font",
@@ -1068,7 +1069,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
     for (block, font, code) in &ctx.symbols_dropped {
-        ctx.diagnostics.push(Diagnostic::warning(
+        ctx.diagnostics.push(diag::dropped(
             format!(
                 "a symbol character in body block {block} ({font} {code}) has no Unicode \
                  equivalent and is not shown; the source keeps it, and an edit to its run \
@@ -1080,7 +1081,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
 
     if !ctx.unmeasured_faces.is_empty() {
         let faces: Vec<&str> = ctx.unmeasured_faces.iter().map(String::as_str).collect();
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "line spacing in face(s) Word has not been measured on ({}): their \
                  single line is taken as Calibri's/Aptos's 1.2207 em, so line \
@@ -1157,7 +1158,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     let (masters, section_masters) = structure::plan_masters(doc, &placements);
     let tocs = structure::find_tocs(doc);
     if ctx.live_fields > 0 {
-        ctx.diagnostics.push(Diagnostic::info(
+        ctx.diagnostics.push(diag::info(
             format!(
                 "{} field result run(s) kept as live Word fields (PAGE, NUMPAGES, \
                  SECTIONPAGES, PAGEREF and STYLEREF follow the layout; DATE, REF and SEQ \
@@ -1701,7 +1702,7 @@ impl Lowering {
                     });
                 }
                 StyleKind::Table | StyleKind::Numbering => {
-                    self.diagnostics.push(Diagnostic::info(
+                    self.diagnostics.push(diag::info(
                         format!(
                             "style '{}' ({:?}) is not supported yet and was skipped",
                             s.style_id, s.kind
@@ -2780,7 +2781,7 @@ impl Lowering {
             .sum();
         let block = self.current_block;
         let refuse = |why: &str| {
-            Diagnostic::info(
+            diag::info(
                 format!(
                     "the absolute-position tab(s) in body block {block} became plain tabs \
                      to the next tab stop: {why}"
@@ -3304,7 +3305,7 @@ fn valid_bases(styles: &[Style], diagnostics: &mut Vec<Diagnostic>) -> Vec<Style
             let mut s = s.clone();
             if let Some(base) = &s.based_on {
                 if kinds.get(base.as_str()) != Some(&s.kind) {
-                    diagnostics.push(Diagnostic::info(
+                    diagnostics.push(diag::info(
                         format!(
                             "style '{}' is based on '{}', which is not a {:?} style; \
                              like Word, it is laid out on the document defaults",
@@ -3497,6 +3498,7 @@ mod tests {
     #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
     use super::*;
     use docx_core::*;
+    use ir::LossSeverity;
 
     fn run(text: &str, props: RunProps) -> Run {
         Run {
@@ -4164,10 +4166,9 @@ mod tests {
         assert!(l
             .diagnostics
             .iter()
-            .any(|d| d.severity == "info" && d.message.contains("1 from Symbol")));
-        assert!(l.diagnostics.iter().any(
-            |d| d.severity == "warning" && d.message.contains("body block 0 (Wingdings F0FF)")
-        ));
+            .any(|d| d.severity == LossSeverity::Info && d.message.contains("1 from Symbol")));
+        assert!(l.diagnostics.iter().any(|d| d.severity > LossSeverity::Info
+            && d.message.contains("body block 0 (Wingdings F0FF)")));
     }
 
     fn picture_run() -> Run {
@@ -4250,11 +4251,13 @@ mod tests {
         assert_eq!(p[0].images[0].at, 6, "before the last of 7 chars");
         assert_eq!(p[1].images[0].at, 0);
         assert!(
-            l.diagnostics.iter().any(|d| d.severity == "info"
-                && d.message
-                    .contains("1 picture(s) after their paragraph's last character")
-                && d.message
-                    .contains("1 picture(s) alone in an empty paragraph")),
+            l.diagnostics
+                .iter()
+                .any(|d| d.severity == LossSeverity::Info
+                    && d.message
+                        .contains("1 picture(s) after their paragraph's last character")
+                    && d.message
+                        .contains("1 picture(s) alone in an empty paragraph")),
             "{:?}",
             l.diagnostics
         );

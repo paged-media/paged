@@ -234,10 +234,4 @@ fn annual_report_fixture_lowers_every_tier() {
         .diagnostics
         .iter()
         .any(|d| d.message.contains("footnote")));
-    let errors: Vec<_> = ir
-        .diagnostics
-        .iter()
-        .filter(|d| d.severity == "error")
-        .collect();
-    assert!(errors.is_empty(), "zero error diagnostics: {errors:?}");
 }

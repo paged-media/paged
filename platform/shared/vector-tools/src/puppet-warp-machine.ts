@@ -20,10 +20,10 @@
 // machines it lives for as long as the tool stays on the same artwork:
 // the rest mesh and the pins persist between drags, as in Illustrator.
 //
-//   construction → the MESH (vector-geometry `triangulateRings` over the
+//   construction → the MESH (the kernel's `puppetMesh` over the
 //                  flattened contours of every target — an open contour
 //                  is closed by its chord, which is the outline its fill
-//                  would have) and the AUTOMATIC pins (`autoPins`); every
+//                  would have) and the AUTOMATIC pins; every
 //                  anchor and handle of every target is LOCATED in the
 //                  rest mesh once, so a deformation maps them all
 //   down         → on a pin: select it and start dragging it (Alt: remove
@@ -32,8 +32,10 @@
 //                  else on the mesh: ADD a pin at the nearest mesh vertex
 //                  (it does not move anything) and drag it; off the mesh:
 //                  nothing
-//   move         → the dragged pin's target (or its angle); ARAP solve
-//                  (Igarashi 2005, `ArapSolver`) → the mapped tables
+//   move         → the dragged pin's target (or its angle); the
+//                  as-rigid-as-possible solve (`puppetSolve`: paged-warp's
+//                  one solve, which bends paged.image's layers too, from
+//                  the pins' best similarity) → the mapped tables
 //   up           → COMMIT the mapped tables when the drag moved something
 //                  — the host writes every target in ONE batch, one undo
 //                  step per pin drag; removing a pin re-solves and commits
@@ -41,23 +43,23 @@
 //   Delete       → remove the selected pin (re-solve, commit)
 //   Escape       → cancel the drag in progress (the pin goes back)
 //
-// The solver is rebuilt only when the PIN SET changes (add / remove /
-// first rotation of a pin): a drag sample is two back-substitutions.
+// The kernel is paged-warp's, injected (`warp-kernel.ts`): every drag
+// sample is one synchronous solve of the whole pin set.
 
 import {
-  ArapSolver,
-  autoPins,
   flattenAnchorRun,
-  locateInMesh,
-  mapLocated,
-  nearestVertex,
-  triangulateRings,
   type AnchorTable,
-  type ArapPin,
-  type TriangleMesh,
   type Vec2,
   type Vec2Mut,
 } from "@paged-media/vector-geometry";
+
+import type {
+  Located,
+  PuppetMesh,
+  PuppetMode,
+  PuppetPin,
+  WarpKernel,
+} from "./warp-kernel";
 
 export type PuppetWarpEvent =
   | { type: "down"; point: Vec2; alt?: boolean }
@@ -75,9 +77,12 @@ export interface PuppetWarpOptions {
   spacing?: number;
   /** Automatic pins on construction (default 3; 0 for none). */
   autoPinCount?: number;
-  /** Cap on mesh vertices (default 320 — the dense solve stays
-   *  interactive). */
+  /** Cap on mesh vertices (default 320 — the solve stays interactive). */
   maxVertices?: number;
+  /** How freely the mesh bends (default rigid, Illustrator's). */
+  mode?: PuppetMode;
+  /** The warp kernel (paged-warp). */
+  kernel: WarpKernel;
 }
 
 export interface PuppetPinView {
@@ -103,18 +108,30 @@ interface Pin {
   angle: number | null;
 }
 
-interface Located {
-  triangle: number;
-  weights: [number, number, number];
+/** The mesh vertex nearest `p` (−1 for none). */
+function nearestVertex(vertices: readonly Vec2[], p: Vec2): number {
+  let best = -1;
+  let bestD = Infinity;
+  vertices.forEach((v, i) => {
+    const d = Math.hypot(v[0] - p[0], v[1] - p[1]);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  return best;
 }
 
 export class PuppetWarpMachine {
-  readonly mesh: TriangleMesh;
+  readonly mesh: PuppetMesh;
   private pins: Pin[] = [];
   private selected = -1;
-  private solver: ArapSolver | null = null;
   private deformed: Vec2Mut[];
-  private readonly located: Located[][][]; // [target][anchor][anchor,left,right]
+  /** Every control point of every target, in order: [anchor, left,
+   *  right] per anchor, target after target. */
+  private readonly located: Located[];
+  /** Where the solve last put them (null: in no triangle, kept). */
+  private placed: (Vec2Mut | null)[];
   private drag:
     | {
         kind: "move";
@@ -160,29 +177,29 @@ export class PuppetWarpMachine {
       });
     }
     const diag = Number.isFinite(x0) ? Math.hypot(x1 - x0, y1 - y0) : 0;
-    this.mesh = triangulateRings(rings, {
-      spacing: opts.spacing ?? Math.max(1, diag / 24),
-      maxVertices: opts.maxVertices ?? 320,
-    });
-    this.deformed = this.mesh.vertices.map((v) => [v[0], v[1]]);
-    this.located = opts.targets.map((t) =>
-      t.anchors.map((a) =>
-        [a.anchor, a.left, a.right].map(
-          (p) =>
-            locateInMesh(this.mesh, p) ?? {
-              triangle: -1,
-              weights: [1, 0, 0] as [number, number, number],
-            },
-        ),
-      ),
+    const { mesh, autoPins } = opts.kernel.puppetMesh(
+      rings,
+      opts.spacing ?? Math.max(1, diag / 24),
+      opts.maxVertices ?? 320,
+      opts.autoPinCount ?? 3,
     );
-    for (const v of autoPins(this.mesh, opts.autoPinCount ?? 3))
+    this.mesh = mesh;
+    this.deformed = mesh.vertices.map((v) => [v[0], v[1]]);
+    const points: Vec2[] = [];
+    for (const t of opts.targets)
+      for (const a of t.anchors) points.push(a.anchor, a.left, a.right);
+    this.located =
+      mesh.triangles.length > 0
+        ? opts.kernel.puppetLocate(mesh, points)
+        : points.map(() => ({ triangle: -1, weights: [1, 0, 0] }));
+    this.placed = points.map((p) => [p[0], p[1]]);
+    for (const v of autoPins)
       this.pins.push({
         vertex: v,
-        target: [this.mesh.vertices[v]![0], this.mesh.vertices[v]![1]],
+        target: [mesh.vertices[v]![0], mesh.vertices[v]![1]],
         angle: null,
       });
-    this.rebuild();
+    this.solve();
   }
 
   /** Is there a mesh to warp (a selection with an outline)? */
@@ -195,40 +212,37 @@ export class PuppetWarpMachine {
     return this.pins.map((p) => [p.target[0], p.target[1]]);
   }
 
-  private rebuild(): void {
-    const pins: ArapPin[] = this.pins.map((p) => ({
+  /** Solve the whole pin set (paged-warp) and map every control point. */
+  private solve(): void {
+    if (!this.usable) return;
+    const pins: PuppetPin[] = this.pins.map((p) => ({
       vertex: p.vertex,
       target: p.target,
       angle: p.angle,
     }));
-    this.solver = new ArapSolver(this.mesh, pins);
-    this.solve();
-  }
-
-  private solve(): void {
-    if (!this.solver) return;
-    this.deformed = this.solver.solve(
-      this.pins.map((p) => p.target),
-      this.pins.map((p) => p.angle),
+    const out = this.opts.kernel.puppetSolve(
+      this.mesh,
+      pins,
+      this.opts.mode ?? "rigid",
+      this.located,
     );
+    this.deformed = out.vertices;
+    this.placed = out.points;
   }
 
   private mapped(): AnchorTable[] {
-    const tris = this.mesh.triangles;
-    return this.opts.targets.map((t, ti) => ({
+    let k = 0;
+    const at = (p: Vec2): Vec2Mut => {
+      const q = this.placed[k++];
+      return q ? [q[0], q[1]] : [p[0], p[1]];
+    };
+    return this.opts.targets.map((t) => ({
       ...t,
-      anchors: t.anchors.map((a, ai) => {
-        const loc = this.located[ti]![ai]!;
-        const map = (k: number, p: Vec2): Vec2Mut =>
-          loc[k]!.triangle < 0
-            ? [p[0], p[1]]
-            : mapLocated(tris, this.deformed, loc[k]!);
-        return {
-          anchor: map(0, a.anchor),
-          left: map(1, a.left),
-          right: map(2, a.right),
-        };
-      }),
+      anchors: t.anchors.map((a) => ({
+        anchor: at(a.anchor),
+        left: at(a.left),
+        right: at(a.right),
+      })),
     }));
   }
 
@@ -247,11 +261,11 @@ export class PuppetWarpMachine {
 
   /** Inside the deformed mesh? */
   private onMesh(p: Vec2): boolean {
-    const loc = locateInMesh(
+    const [loc] = this.opts.kernel.puppetLocate(
       { vertices: this.deformed, triangles: this.mesh.triangles },
-      p,
+      [p],
     );
-    return !!loc && Math.min(...loc.weights) >= -1e-6;
+    return !!loc && loc.triangle >= 0 && Math.min(...loc.weights) >= -1e-6;
   }
 
   private angleAbout(pin: number, p: Vec2): number {
@@ -262,7 +276,7 @@ export class PuppetWarpMachine {
   private removePin(i: number): PuppetWarpSnapshot {
     this.pins.splice(i, 1);
     this.selected = -1;
-    this.rebuild();
+    this.solve();
     return this.snapshot(this.mapped());
   }
 
@@ -303,7 +317,7 @@ export class PuppetWarpMachine {
           this.selected = -1;
           return this.snapshot(null);
         }
-        const v = nearestVertex(this.deformed, event.point).index;
+        const v = nearestVertex(this.deformed, event.point);
         if (v < 0) return this.snapshot(null);
         const existing = this.pins.findIndex((p) => p.vertex === v);
         if (existing >= 0) this.selected = existing;
@@ -314,7 +328,7 @@ export class PuppetWarpMachine {
             angle: null,
           });
           this.selected = this.pins.length - 1;
-          this.rebuild();
+          this.solve();
         }
         const t = this.pins[this.selected]!.target;
         this.drag = {
@@ -342,13 +356,11 @@ export class PuppetWarpMachine {
           this.solve();
         } else {
           const pin = this.pins[d.pin]!;
-          const wasFree = pin.angle === null;
           pin.angle =
             (d.from ?? 0) + this.angleAbout(d.pin, event.point) - d.start;
           d.moved = true;
-          // A pin's FIRST turn adds its lever constraint: a new pin set.
-          if (wasFree) this.rebuild();
-          else this.solve();
+          // A turned pin also holds its lever (the kernel adds it).
+          this.solve();
         }
         return this.snapshot(null);
       }
@@ -366,7 +378,7 @@ export class PuppetWarpMachine {
           if (d?.kind === "rotate") {
             this.pins[d.pin]!.angle = d.from;
             if (d.from === null) {
-              this.rebuild();
+              this.solve();
               this.drag = null;
               return this.snapshot(null);
             }
