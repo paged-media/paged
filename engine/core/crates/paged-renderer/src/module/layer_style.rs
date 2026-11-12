@@ -35,7 +35,10 @@
 use paged_compose::{DecodedImage, DisplayCommand, LayerEffect, Rect, Transform};
 use paged_layer_fx::cpu::{CpuDevice, CpuTex};
 use paged_layer_fx::plan::{Fx, FxPlan, Light, PatternTile};
-use paged_layer_fx::{paints, source_alpha, EffectStep, Frame, FxPaint, Source};
+use paged_layer_fx::{
+    paints_native as paints, source_alpha_native as source_alpha, EffectStep, Frame, FxPaint,
+    Source,
+};
 use paged_model::effect_stack::{EffectEntry, IndesignEffect, IndesignParams};
 use paged_model::{DropShadowSetting, FrameEffects, Graphic};
 
@@ -337,7 +340,7 @@ pub(crate) fn draw(
             .collect();
         let mut acc = CpuTex::new(w, h, opaque);
         for fx in &interior {
-            if let Ok(next) = paged_layer_fx::draw(&mut dev, &acc, &mut src, &step_of(fx)) {
+            if let Ok(next) = paged_layer_fx::draw_native(&mut dev, &acc, &mut src, &step_of(fx)) {
                 acc = next;
             }
         }

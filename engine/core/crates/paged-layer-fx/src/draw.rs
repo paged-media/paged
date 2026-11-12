@@ -85,10 +85,21 @@ impl Frame {
 /// What runs the kernels: paged.image's GPU batch, or [`crate::cpu`]'s
 /// scalar twins. Every texture is `frame().w × frame().h`, premultiplied
 /// RGBA (or a coverage in every channel), stored as rgba16float.
-pub trait FxDevice {
-    type Tex: Clone;
-    type Error;
+/// A texture of a device: a handle the device resolves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Tex(pub u32);
 
+/// Why a device could not run a kernel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FxError(pub String);
+
+impl std::fmt::Display for FxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+pub trait FxDevice {
     /// The textures' frame.
     fn frame(&self) -> Frame;
 
@@ -97,16 +108,83 @@ pub trait FxDevice {
     fn run(
         &mut self,
         def: &'static KernelDef,
-        inputs: &[&Self::Tex],
+        inputs: &[&Tex],
         params: &[u8],
-        mask: Option<&Self::Tex>,
-    ) -> Result<Self::Tex, Self::Error>;
+        mask: Option<&Tex>,
+    ) -> Result<Tex, FxError>;
 
     /// A texture of zeros.
-    fn zeros(&mut self) -> Self::Tex;
+    fn zeros(&mut self) -> Tex;
 
     /// A `w × h` rgba16float texture of these little-endian f16 texels.
-    fn upload(&mut self, w: u32, h: u32, f16_rgba: &[u8]) -> Self::Tex;
+    fn upload(&mut self, w: u32, h: u32, f16_rgba: &[u8]) -> Tex;
+}
+
+/// A device's own textures behind the handles: what lets the one
+/// evaluator (compiled once, over `dyn FxDevice`) run on any device.
+pub trait Textures {
+    type Native: Clone;
+    /// Hand a native texture to the device; its handle.
+    fn put(&mut self, t: Self::Native) -> Tex;
+    /// The native texture of a handle.
+    fn get(&self, t: Tex) -> &Self::Native;
+}
+
+fn put_source<D: FxDevice + Textures>(dev: &mut D, src: &Source<D::Native>) -> Source<Tex> {
+    Source {
+        alpha: dev.put(src.alpha.clone()),
+        sd: src.sd.as_ref().map(|(r, t)| (*r, dev.put(t.clone()))),
+    }
+}
+
+fn take_source<D: FxDevice + Textures>(dev: &D, s: Source<Tex>, src: &mut Source<D::Native>) {
+    src.sd = s.sd.map(|(r, t)| (r, dev.get(t).clone()));
+}
+
+/// [`draw`] over a device's own textures.
+pub fn draw_native<D: FxDevice + Textures>(
+    dev: &mut D,
+    acc: &D::Native,
+    src: &mut Source<D::Native>,
+    e: &EffectStep,
+) -> Result<D::Native, FxError> {
+    let mut s = put_source(dev, src);
+    let acc = dev.put(acc.clone());
+    let out = draw(dev, &acc, &mut s, e)?;
+    take_source(dev, s, src);
+    Ok(dev.get(out).clone())
+}
+
+/// [`paints`] over a device's own textures.
+pub fn paints_native<D: FxDevice + Textures>(
+    dev: &mut D,
+    src: &mut Source<D::Native>,
+    e: &EffectStep,
+) -> Result<Vec<FxPaint<D::Native>>, FxError> {
+    let mut s = put_source(dev, src);
+    let ps = paints(dev, &mut s, e)?;
+    take_source(dev, s, src);
+    Ok(ps
+        .into_iter()
+        .map(|p| FxPaint {
+            plate: dev.get(p.plate).clone(),
+            blend: p.blend,
+            opacity: p.opacity,
+            mask: p.mask.map(|m| dev.get(m).clone()),
+        })
+        .collect())
+}
+
+/// [`source_alpha`] over a device's own textures.
+pub fn source_alpha_native<D: FxDevice + Textures>(
+    dev: &mut D,
+    plate: &D::Native,
+    mask: Option<&D::Native>,
+) -> Result<D::Native, FxError> {
+    let plate = dev.put(plate.clone());
+    let mask = mask.map(|m| dev.put(m.clone()));
+    let out = source_alpha(dev, &plate, mask.as_ref())?;
+    Ok(dev.get(out).clone())
 }
 
 /// The blur a Photoshop effect SIZE is: two passes of a box `size` px
@@ -165,7 +243,7 @@ pub fn alpha_bounds(px: &[u8], w: u32, h: u32) -> Rect {
 /// the signed distance field once one effect asked.
 pub struct Source<T> {
     pub alpha: T,
-    sd: Option<(f32, T)>,
+    pub sd: Option<(f32, T)>,
 }
 
 impl<T> Source<T> {
@@ -176,11 +254,11 @@ impl<T> Source<T> {
 
 /// The source alpha of a layer: its premultiplied plate's alpha, through
 /// `mask` when the mask shapes the effects.
-pub fn source_alpha<D: FxDevice>(
-    dev: &mut D,
-    plate: &D::Tex,
-    mask: Option<&D::Tex>,
-) -> Result<D::Tex, D::Error> {
+pub fn source_alpha(
+    dev: &mut dyn FxDevice,
+    plate: &Tex,
+    mask: Option<&Tex>,
+) -> Result<Tex, FxError> {
     let a = dev.run(
         &BAND_BROADCAST_ALPHA,
         &[plate],
@@ -199,22 +277,22 @@ pub fn source_alpha<D: FxDevice>(
     )
 }
 
-struct Rec<'d, D: FxDevice> {
-    dev: &'d mut D,
+struct Rec<'d> {
+    dev: &'d mut dyn FxDevice,
     frame: Frame,
 }
 
-impl<D: FxDevice> Rec<'_, D> {
+impl Rec<'_> {
     fn run(
         &mut self,
         def: &'static KernelDef,
-        inputs: &[&D::Tex],
+        inputs: &[&Tex],
         params: &[u8],
-    ) -> Result<D::Tex, D::Error> {
+    ) -> Result<Tex, FxError> {
         self.dev.run(def, inputs, params, None)
     }
 
-    fn invert(&mut self, x: &D::Tex) -> Result<D::Tex, D::Error> {
+    fn invert(&mut self, x: &Tex) -> Result<Tex, FxError> {
         self.run(
             &STYLE_CONTOUR,
             &[x],
@@ -222,19 +300,19 @@ impl<D: FxDevice> Rec<'_, D> {
         )
     }
 
-    fn max(&mut self, a: &D::Tex, b: &D::Tex) -> Result<D::Tex, D::Error> {
+    fn max(&mut self, a: &Tex, b: &Tex) -> Result<Tex, FxError> {
         self.run(&MATH_MAX, &[a, b], MathMaxParams::new().as_bytes())
     }
 
     fn shift(
         &mut self,
-        x: &D::Tex,
+        x: &Tex,
         d: (f32, f32),
         invert: bool,
         outside: f32,
-    ) -> Result<D::Tex, D::Error> {
+    ) -> Result<Tex, FxError> {
         if d.0 == 0.0 && d.1 == 0.0 && !invert {
-            return Ok(x.clone());
+            return Ok(*x);
         }
         self.run(
             &STYLE_SHIFT,
@@ -243,9 +321,9 @@ impl<D: FxDevice> Rec<'_, D> {
         )
     }
 
-    fn blur(&mut self, x: &D::Tex, sigma: f32, outside: f32) -> Result<D::Tex, D::Error> {
+    fn blur(&mut self, x: &Tex, sigma: f32, outside: f32) -> Result<Tex, FxError> {
         if sigma <= 0.05 {
-            return Ok(x.clone());
+            return Ok(*x);
         }
         let p = StyleBlurParams::new(sigma, (sigma * 3.0).ceil() as u32, outside);
         let h = self.run(&STYLE_BLUR_H, &[x], p.as_bytes())?;
@@ -253,13 +331,13 @@ impl<D: FxDevice> Rec<'_, D> {
     }
 
     /// An effect's SIZE as a blur ([`size_box_radius`]).
-    fn size_blur(&mut self, x: &D::Tex, size: f32, outside: f32) -> Result<D::Tex, D::Error> {
+    fn size_blur(&mut self, x: &Tex, size: f32, outside: f32) -> Result<Tex, FxError> {
         let r = size_box_radius(size);
         if r <= 0.01 {
-            return Ok(x.clone());
+            return Ok(*x);
         }
         let p = StyleBlurParams::boxed(r, outside);
-        let mut cur = x.clone();
+        let mut cur = *x;
         for _ in 0..2 {
             let h = self.run(&STYLE_BLUR_H, &[&cur], p.as_bytes())?;
             cur = self.run(&STYLE_BLUR_V, &[&h], p.as_bytes())?;
@@ -269,7 +347,7 @@ impl<D: FxDevice> Rec<'_, D> {
 
     /// The signed distance field of coverage `cov` (`.r`), accurate to
     /// `reach` px from the edge (farther it may read as "far").
-    fn sdf(&mut self, cov: &D::Tex, reach: f32) -> Result<D::Tex, D::Error> {
+    fn sdf(&mut self, cov: &Tex, reach: f32) -> Result<Tex, FxError> {
         let mut field = self.run(
             &STYLE_JFA_SEED,
             &[cov],
@@ -302,31 +380,31 @@ impl<D: FxDevice> Rec<'_, D> {
         )
     }
 
-    fn source_sd(&mut self, src: &mut Source<D::Tex>, reach: f32) -> Result<D::Tex, D::Error> {
+    fn source_sd(&mut self, src: &mut Source<Tex>, reach: f32) -> Result<Tex, FxError> {
         if let Some((r, sd)) = &src.sd {
             if *r >= reach {
-                return Ok(sd.clone());
+                return Ok(*sd);
             }
         }
         let sd = self.sdf(&src.alpha.clone(), reach)?;
-        src.sd = Some((reach, sd.clone()));
+        src.sd = Some((reach, sd));
         Ok(sd)
     }
 
-    fn ramp(&mut self, sd: &D::Tex, p: StyleRampParams) -> Result<D::Tex, D::Error> {
+    fn ramp(&mut self, sd: &Tex, p: StyleRampParams) -> Result<Tex, FxError> {
         self.run(&STYLE_RAMP, &[sd], p.as_bytes())
     }
 
     fn contour(
         &mut self,
-        x: &D::Tex,
+        x: &Tex,
         c: &FxContour,
         lo: f32,
         hi: f32,
         invert: bool,
-    ) -> Result<D::Tex, D::Error> {
+    ) -> Result<Tex, FxError> {
         if c.is_linear() && lo == 0.0 && hi == 1.0 && !invert {
-            return Ok(x.clone());
+            return Ok(*x);
         }
         self.run(
             &STYLE_CONTOUR,
@@ -336,13 +414,13 @@ impl<D: FxDevice> Rec<'_, D> {
     }
 
     /// A coverage → the effect's premultiplied colour plate.
-    fn colorize(&mut self, cov: &D::Tex, p: StyleColorizeParams) -> Result<D::Tex, D::Error> {
+    fn colorize(&mut self, cov: &Tex, p: StyleColorizeParams) -> Result<Tex, FxError> {
         let p = p.at(self.frame.ox, self.frame.oy);
         self.run(&STYLE_COLORIZE, &[cov], p.as_bytes())
     }
 
     /// An opaque plate of one colour.
-    fn solid(&mut self, rgb: [u8; 3]) -> Result<D::Tex, D::Error> {
+    fn solid(&mut self, rgb: [u8; 3]) -> Result<Tex, FxError> {
         let c = rgb01(rgb);
         let zeros = self.dev.zeros();
         self.run(
@@ -353,7 +431,7 @@ impl<D: FxDevice> Rec<'_, D> {
     }
 
     /// The `t` ramp (black → white) of a gradient fill over `area`.
-    fn gradient_t(&mut self, g: &FxGradientFill, area: Rect) -> Result<D::Tex, D::Error> {
+    fn gradient_t(&mut self, g: &FxGradientFill, area: Rect) -> Result<Tex, FxError> {
         let zeros = self.dev.zeros();
         let (ox, oy) = (self.frame.ox, self.frame.oy);
         let (black, white) = ([0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]);
@@ -428,7 +506,7 @@ impl<D: FxDevice> Rec<'_, D> {
     }
 
     /// A gradient fill's premultiplied plate.
-    fn gradient_plate(&mut self, g: &FxGradientFill, area: Rect) -> Result<D::Tex, D::Error> {
+    fn gradient_plate(&mut self, g: &FxGradientFill, area: Rect) -> Result<Tex, FxError> {
         let t = self.gradient_t(g, area)?;
         self.colorize(
             &t,
@@ -449,7 +527,7 @@ impl<D: FxDevice> Rec<'_, D> {
         fill: &FxPatternFill,
         tile: &PatternTile,
         origin: (f32, f32),
-    ) -> Result<D::Tex, D::Error> {
+    ) -> Result<Tex, FxError> {
         // The tile's extent as the canvas cuts it, uploaded at that size
         // (the kernel reads `in1` only inside it).
         let (tw, th) = (
@@ -511,13 +589,13 @@ fn paint<T>(plate: T, blend: BlendMode, opacity: f32, mask: Option<T>) -> FxPain
 
 /// Draw one effect onto `acc`; returns the new accumulator: the effect's
 /// [`paints`], each blended in turn.
-pub fn draw<D: FxDevice>(
-    dev: &mut D,
-    acc: &D::Tex,
-    src: &mut Source<D::Tex>,
+pub fn draw(
+    dev: &mut dyn FxDevice,
+    acc: &Tex,
+    src: &mut Source<Tex>,
     e: &EffectStep,
-) -> Result<D::Tex, D::Error> {
-    let mut out = acc.clone();
+) -> Result<Tex, FxError> {
+    let mut out = *acc;
     for p in paints(dev, src, e)? {
         out = dev.run(
             blend_def(p.blend),
@@ -531,17 +609,17 @@ pub fn draw<D: FxDevice>(
 
 /// The plates one effect paints, bottom first (a bevel paints two: the
 /// highlight, then the shadow).
-pub fn paints<D: FxDevice>(
-    dev: &mut D,
-    src: &mut Source<D::Tex>,
+pub fn paints(
+    dev: &mut dyn FxDevice,
+    src: &mut Source<Tex>,
     e: &EffectStep,
-) -> Result<Vec<FxPaint<D::Tex>>, D::Error> {
+) -> Result<Vec<FxPaint<Tex>>, FxError> {
     let frame = dev.frame();
     let mut r = Rec { dev, frame };
     // The whole canvas, in canvas coordinates (the tile's origin moves
     // the gradient kernels onto it).
     let (cw, ch) = (frame.cw, frame.ch);
-    let a = src.alpha.clone();
+    let a = src.alpha;
     match &e.fx {
         Fx::DropShadow(s) => {
             let angle = if s.use_global_light {
@@ -616,7 +694,7 @@ pub fn paints<D: FxDevice>(
                         let sd = r.source_sd(src, spread + 2.0)?;
                         r.ramp(&sd, StyleRampParams::band(-4096.0, spread))?
                     } else {
-                        a.clone()
+                        a
                     };
                     r.size_blur(&grown, size - spread, 0.0)?
                 }
@@ -779,12 +857,7 @@ pub fn paints<D: FxDevice>(
 
 /// A glow's falloff through its range and contour, coloured (one colour,
 /// or the ramp across the falloff, its start at the edge) and blended.
-fn glow<D: FxDevice>(
-    r: &mut Rec<'_, D>,
-    falloff: &D::Tex,
-    g: &Glow,
-    seed: u32,
-) -> Result<Vec<FxPaint<D::Tex>>, D::Error> {
+fn glow(r: &mut Rec<'_>, falloff: &Tex, g: &Glow, seed: u32) -> Result<Vec<FxPaint<Tex>>, FxError> {
     // RANGE: the contour spans the falloff from 0 to `range` — at the
     // default 50 % a softer glow is twice its blurred shape (measured:
     // Photoshop's size-10 glow of a square is exactly that, clamped).
@@ -822,12 +895,12 @@ fn glow<D: FxDevice>(
     Ok(vec![paint(plate, g.blend, g.opacity / 100.0, None)])
 }
 
-fn bevel<D: FxDevice>(
-    r: &mut Rec<'_, D>,
-    src: &mut Source<D::Tex>,
+fn bevel(
+    r: &mut Rec<'_>,
+    src: &mut Source<Tex>,
     b: &Bevel,
     e: &EffectStep,
-) -> Result<Vec<FxPaint<D::Tex>>, D::Error> {
+) -> Result<Vec<FxPaint<Tex>>, FxError> {
     let size = b.size.max(0.5);
     let reach = if b.style == BevelStyle::StrokeEmboss {
         e.stroke_reach
@@ -840,7 +913,7 @@ fn bevel<D: FxDevice>(
     let a = if reach > 0.0 {
         r.ramp(&sd, StyleRampParams::band(-4096.0, reach))?
     } else {
-        src.alpha.clone()
+        src.alpha
     };
     let sd = if reach > 0.0 {
         r.sdf(&a, size * 2.0 + 2.0)?
@@ -907,7 +980,7 @@ fn bevel<D: FxDevice>(
         }
     };
     let region = match b.style {
-        BevelStyle::InnerBevel | BevelStyle::StrokeEmboss => Some(a.clone()),
+        BevelStyle::InnerBevel | BevelStyle::StrokeEmboss => Some(a),
         BevelStyle::OuterBevel => Some(r.invert(&a)?),
         _ => None,
     };
@@ -961,12 +1034,7 @@ fn bevel<D: FxDevice>(
         let c = rgb01(light.color);
         let p = StyleColorizeParams::solid(c, channel, 0.0, 0);
         let plate = r.colorize(&split, p)?;
-        out.push(paint(
-            plate,
-            light.blend,
-            light.opacity / 100.0,
-            region.clone(),
-        ));
+        out.push(paint(plate, light.blend, light.opacity / 100.0, region));
     }
     Ok(out)
 }

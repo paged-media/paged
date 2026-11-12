@@ -1245,15 +1245,22 @@ impl LayerStack {
                     {
                         Some(i) => i,
                         None => {
-                            let mut dev = super::styles::Gpu { ctx, batch, frame };
-                            let a = paged_layer_fx::source_alpha(&mut dev, &plate, mask.as_ref())?;
+                            let mut dev = super::styles::Gpu::new(ctx, batch, frame);
+                            let a = paged_layer_fx::source_alpha_native(
+                                &mut dev,
+                                &plate,
+                                mask.as_ref(),
+                            )
+                            .map_err(super::styles::fx_err)?;
                             sources.push((*layer, px.clone(), paged_layer_fx::Source::new(a)));
                             sources.len() - 1
                         }
                     };
                     let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
-                    let mut dev = super::styles::Gpu { ctx, batch, frame };
-                    let drawn = paged_layer_fx::draw(&mut dev, &acc, &mut sources[src].2, fx)?;
+                    let mut dev = super::styles::Gpu::new(ctx, batch, frame);
+                    let drawn =
+                        paged_layer_fx::draw_native(&mut dev, &acc, &mut sources[src].2, fx)
+                            .map_err(super::styles::fx_err)?;
                     st.acc = Some(if *interior {
                         let shape = sources[src].2.alpha.clone();
                         take_through(batch, &acc, &drawn, &shape, w, h)?
@@ -1268,8 +1275,10 @@ impl LayerStack {
                 Step::BodyClose { layer, px, cov } => {
                     let plate = cache.plate(batch, *layer, px, w, h)?;
                     let mask = cache.mask(batch, *layer, cov, w, h);
-                    let mut dev = super::styles::Gpu { ctx, batch, frame };
-                    let shape = paged_layer_fx::source_alpha(&mut dev, &plate, mask.as_ref())?;
+                    let mut dev = super::styles::Gpu::new(ctx, batch, frame);
+                    let shape =
+                        paged_layer_fx::source_alpha_native(&mut dev, &plate, mask.as_ref())
+                            .map_err(super::styles::fx_err)?;
                     let body = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
                     let kept = st.parked.pop().flatten().unwrap_or_else(|| ctx.zeros(w, h));
                     st.acc = Some(take_through(batch, &kept, &body, &shape, w, h)?);

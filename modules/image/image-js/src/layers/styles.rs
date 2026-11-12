@@ -70,7 +70,7 @@ use image_gpu::{GpuBatch, GpuContext, Resident, TexFormat};
 use image_kernels::KernelDef;
 use image_psd::effects::{GlobalLight, LayerStyle};
 use paged_layer_fx::plan::{Fx, FxPlan, Light, PatternTile};
-use paged_layer_fx::{Frame, FxDevice};
+use paged_layer_fx::{Frame, FxDevice, FxError, Tex, Textures};
 
 use super::kinds::PatternFill;
 use crate::ingest::IngestError;
@@ -95,17 +95,43 @@ pub(super) fn light(l: GlobalLight) -> Light {
     }
 }
 
-/// The fold's GPU batch as the evaluator's device.
+/// The fold's GPU batch as the evaluator's device: the batch's resident
+/// textures behind the evaluator's handles.
 pub(super) struct Gpu<'a, 'c> {
-    pub ctx: &'c GpuContext,
-    pub batch: &'a mut GpuBatch<'c>,
-    pub frame: Frame,
+    ctx: &'c GpuContext,
+    batch: &'a mut GpuBatch<'c>,
+    frame: Frame,
+    slab: Vec<Resident>,
+}
+
+impl<'a, 'c> Gpu<'a, 'c> {
+    pub fn new(ctx: &'c GpuContext, batch: &'a mut GpuBatch<'c>, frame: Frame) -> Self {
+        Gpu {
+            ctx,
+            batch,
+            frame,
+            slab: Vec::new(),
+        }
+    }
+}
+
+/// The evaluator's error as the fold's.
+pub(super) fn fx_err(e: FxError) -> IngestError {
+    IngestError::Pipeline(e.0)
+}
+
+impl Textures for Gpu<'_, '_> {
+    type Native = Resident;
+    fn put(&mut self, t: Resident) -> Tex {
+        self.slab.push(t);
+        Tex(self.slab.len() as u32 - 1)
+    }
+    fn get(&self, t: Tex) -> &Resident {
+        &self.slab[t.0 as usize]
+    }
 }
 
 impl FxDevice for Gpu<'_, '_> {
-    type Tex = Resident;
-    type Error = IngestError;
-
     fn frame(&self) -> Frame {
         self.frame
     }
@@ -113,23 +139,28 @@ impl FxDevice for Gpu<'_, '_> {
     fn run(
         &mut self,
         def: &'static KernelDef,
-        inputs: &[&Resident],
+        inputs: &[&Tex],
         params: &[u8],
-        mask: Option<&Resident>,
-    ) -> Result<Resident, IngestError> {
+        mask: Option<&Tex>,
+    ) -> Result<Tex, FxError> {
+        let ins: Vec<Resident> = inputs.iter().map(|t| self.get(**t).clone()).collect();
+        let ins: Vec<&Resident> = ins.iter().collect();
+        let mask = mask.map(|m| self.get(*m).clone());
         let out = self.batch.target(self.frame.w, self.frame.h);
         self.batch
-            .dispatch(def, inputs, params, mask, &out)
-            .map_err(gpu_err)?;
-        Ok(out)
+            .dispatch(def, &ins, params, mask.as_ref(), &out)
+            .map_err(|e| FxError(gpu_err(e).to_string()))?;
+        Ok(self.put(out))
     }
 
-    fn zeros(&mut self) -> Resident {
-        self.ctx.zeros(self.frame.w, self.frame.h)
+    fn zeros(&mut self) -> Tex {
+        let z = self.ctx.zeros(self.frame.w, self.frame.h);
+        self.put(z)
     }
 
-    fn upload(&mut self, w: u32, h: u32, f16_rgba: &[u8]) -> Resident {
-        self.batch.upload(w, h, TexFormat::Rgba16Float, f16_rgba)
+    fn upload(&mut self, w: u32, h: u32, f16_rgba: &[u8]) -> Tex {
+        let t = self.batch.upload(w, h, TexFormat::Rgba16Float, f16_rgba);
+        self.put(t)
     }
 }
 

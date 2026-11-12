@@ -52,8 +52,8 @@ use image_kernels::families::cast::{
 use image_kernels::reference_prelude::Px;
 use image_kernels::KernelDef;
 
-use paged_layer_fx::cpu::{CpuDevice, CpuTex, Unsupported};
-use paged_layer_fx::{source_alpha, Source};
+use paged_layer_fx::cpu::{CpuDevice, CpuTex};
+use paged_layer_fx::{source_alpha_native as source_alpha, FxError, Source};
 
 use super::{CovKey, Frame, Step};
 use crate::ingest::IngestError;
@@ -186,8 +186,8 @@ fn mask_tex(m: &Mask, w: u32, h: u32) -> CpuTex {
     }
 }
 
-fn style_err(e: Unsupported) -> IngestError {
-    IngestError::Unsupported(e.to_string())
+fn style_err(e: FxError) -> IngestError {
+    IngestError::Unsupported(e.0)
 }
 
 fn zeros(n: usize) -> Tex {
@@ -506,9 +506,13 @@ pub(super) fn fold_window(
                     }
                 };
                 let acc = st.acc.take().unwrap_or_else(|| zeros(n));
-                let drawn =
-                    paged_layer_fx::draw(&mut dev, &tex(&acc, w, h), &mut sources[src].2, fx)
-                        .map_err(style_err)?;
+                let drawn = paged_layer_fx::draw_native(
+                    &mut dev,
+                    &tex(&acc, w, h),
+                    &mut sources[src].2,
+                    fx,
+                )
+                .map_err(style_err)?;
                 let drawn = untex(&drawn);
                 st.acc = Some(if *interior {
                     let shape: Mask = sources[src].2.alpha.px.iter().map(|p| p[0]).collect();

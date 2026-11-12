@@ -30,7 +30,7 @@ use paged_kernels::families::compose::ComposeParams;
 use paged_kernels::families::{arithmetic, band, gen, minmax, style};
 use paged_kernels::Px;
 
-use crate::draw::{Frame, FxDevice};
+use crate::draw::{Frame, FxDevice, FxError, Tex, Textures};
 
 /// A texture: `w × h` premultiplied RGBA, row-major, every value one an
 /// rgba16float texel holds.
@@ -52,25 +52,34 @@ impl CpuTex {
     }
 }
 
-/// A kernel the CPU device has no twin for (Dissolve's compose kernel).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Unsupported(pub &'static str);
-
-impl std::fmt::Display for Unsupported {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "the kernel `{}` has no CPU twin", self.0)
-    }
-}
-
 /// The CPU device over one frame.
 pub struct CpuDevice {
     frame: Frame,
+    slab: Vec<CpuTex>,
 }
 
 impl CpuDevice {
     pub fn new(frame: Frame) -> CpuDevice {
-        CpuDevice { frame }
+        CpuDevice {
+            frame,
+            slab: Vec::new(),
+        }
     }
+}
+
+impl Textures for CpuDevice {
+    type Native = CpuTex;
+    fn put(&mut self, t: CpuTex) -> Tex {
+        self.slab.push(t);
+        Tex(self.slab.len() as u32 - 1)
+    }
+    fn get(&self, t: Tex) -> &CpuTex {
+        &self.slab[t.0 as usize]
+    }
+}
+
+fn unsupported(id: &str) -> FxError {
+    FxError(format!("the kernel `{id}` has no CPU twin"))
 }
 
 fn q(v: f32) -> f32 {
@@ -100,9 +109,6 @@ fn coords(w: u32, h: u32, f: impl Fn(u32, u32) -> [f32; 4]) -> Vec<[f32; 4]> {
 }
 
 impl FxDevice for CpuDevice {
-    type Tex = CpuTex;
-    type Error = Unsupported;
-
     fn frame(&self) -> Frame {
         self.frame
     }
@@ -110,14 +116,18 @@ impl FxDevice for CpuDevice {
     fn run(
         &mut self,
         def: &'static KernelDef,
-        inputs: &[&CpuTex],
+        inputs: &[&Tex],
         params: &[u8],
-        mask: Option<&CpuTex>,
-    ) -> Result<CpuTex, Unsupported> {
+        mask: Option<&Tex>,
+    ) -> Result<Tex, FxError> {
         use style::reference as s;
         let (w, h) = (self.frame.w, self.frame.h);
-        let a: &[[f32; 4]] = &inputs[0].px;
-        let b: Option<&[[f32; 4]]> = inputs.get(1).map(|t| t.px.as_slice());
+        let input = |i: usize| inputs.get(i).map(|t| self.get(**t).clone());
+        let first = input(0).ok_or_else(|| unsupported(def.id))?;
+        let second = input(1);
+        let mask = mask.map(|m| self.get(*m).clone());
+        let a: &[[f32; 4]] = &first.px;
+        let b: Option<&[[f32; 4]]> = second.as_ref().map(|t| t.px.as_slice());
         let out: Vec<[f32; 4]> = match def.id {
             "style.shift" => s::shift(a, w, h, &pod(params)),
             "style.blur_h" => s::blur(a, w, h, &pod(params), false),
@@ -185,7 +195,7 @@ impl FxDevice for CpuDevice {
             }
             "gen.pattern" => {
                 let p = pod(params);
-                let tile = inputs.get(1).ok_or(Unsupported("gen.pattern"))?;
+                let tile = second.as_ref().ok_or_else(|| unsupported("gen.pattern"))?;
                 coords(w, h, |x, y| {
                     gen::reference::pattern(
                         x,
@@ -199,9 +209,9 @@ impl FxDevice for CpuDevice {
                 })
             }
             id => {
-                let blend = from_kernel_id(id).ok_or(Unsupported(def.id))?;
+                let blend = from_kernel_id(id).ok_or_else(|| unsupported(def.id))?;
                 let p: ComposeParams = pod(params);
-                let b = b.ok_or(Unsupported(def.id))?;
+                let b = b.ok_or_else(|| unsupported(def.id))?;
                 a.iter()
                     .zip(b)
                     .map(|(&x, &y)| composite(Px(x), Px(y), p.opacity, blend).0)
@@ -218,29 +228,29 @@ impl FxDevice for CpuDevice {
                 .map(|((r, &x), m)| std::array::from_fn(|c| x[c] * (1.0 - m[0]) + r[c] * m[0]))
                 .collect(),
         };
-        Ok(CpuTex::new(w, h, out))
+        Ok(self.put(CpuTex::new(w, h, out)))
     }
 
-    fn zeros(&mut self) -> CpuTex {
+    fn zeros(&mut self) -> Tex {
         let (w, h) = (self.frame.w, self.frame.h);
-        CpuTex {
+        self.put(CpuTex {
             w,
             h,
             px: Arc::new(vec![[0.0; 4]; w as usize * h as usize]),
-        }
+        })
     }
 
-    fn upload(&mut self, w: u32, h: u32, f16_rgba: &[u8]) -> CpuTex {
+    fn upload(&mut self, w: u32, h: u32, f16_rgba: &[u8]) -> Tex {
         let px = f16_rgba
             .as_chunks::<8>()
             .0
             .iter()
             .map(|t| std::array::from_fn(|c| f16::from_le_bytes([t[c * 2], t[c * 2 + 1]]).to_f32()))
             .collect();
-        CpuTex {
+        self.put(CpuTex {
             w,
             h,
             px: Arc::new(px),
-        }
+        })
     }
 }

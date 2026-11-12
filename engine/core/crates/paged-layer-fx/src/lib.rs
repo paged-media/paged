@@ -45,7 +45,7 @@ pub mod lut;
 pub mod plan;
 
 pub use draw::{
-    alpha_bounds, blend_def, draw, paints, size_box_radius, source_alpha, Frame, FxDevice, FxPaint,
-    Source,
+    alpha_bounds, blend_def, draw, draw_native, paints, paints_native, size_box_radius,
+    source_alpha, source_alpha_native, Frame, FxDevice, FxError, FxPaint, Source, Tex, Textures,
 };
 pub use plan::{EffectStep, Fx, FxPlan, Light, PatternTile, Rect};
