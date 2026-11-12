@@ -14,7 +14,11 @@
 # and takes Cargo.lock and the target directory from that workspace; -p selects
 # just the mapper.
 # The steps, the pin check, wasm-opt and the size gate are the shared
-# tooling/rust/build-wasm.sh.
+# tooling/rust/build-wasm.sh. The profile is the shipped `wasm-release` (fat
+# LTO, one codegen unit), as image-js's: the default release profile left the
+# artifact 4.2 MB, over its manifest ceiling once the effect stack's
+# layer-style parameters joined the model it serialises (engine ADR 1099);
+# under wasm-release it is 3.74 MB.
 #
 # Output: packages/pdf-bundle/bin/pdf_import.js + pdf_import_bg.wasm
 # (manifest `capabilities.wasm`; gitignored build output, built by
@@ -24,6 +28,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 exec bash ../../tooling/rust/build-wasm.sh \
   --manifest-path crates/pdf-import/Cargo.toml \
-  --package pdf-import --artifact pdf_import \
+  --package pdf-import --artifact pdf_import --profile wasm-release \
   --out packages/pdf-bundle/bin \
   --ensure-target
