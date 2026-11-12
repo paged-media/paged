@@ -312,9 +312,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_43_of_86() {
-    assert_eq!(kinds_the_cli_sends().len(), 43);
-    assert_eq!(every_kind().len(), 86);
+fn the_cli_reaches_44_of_87() {
+    assert_eq!(kinds_the_cli_sends().len(), 44);
+    assert_eq!(every_kind().len(), 87);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names

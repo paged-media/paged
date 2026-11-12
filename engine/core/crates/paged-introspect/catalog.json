@@ -29655,7 +29655,9 @@
       "title": "Pattern overlay (layer style)",
       "category": "stylize",
       "indesign": false,
-      "targets": [],
+      "targets": [
+        "object"
+      ],
       "blend": true,
       "params": []
     },

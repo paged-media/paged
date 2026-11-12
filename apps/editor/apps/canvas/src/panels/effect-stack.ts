@@ -83,8 +83,18 @@ export function effectMenu(): {
 }[] {
   return CORE_EFFECT_CATEGORIES.map((category) => ({
     category,
-    kinds: CORE_EFFECT_KINDS.filter((k) => k.category === category),
+    kinds: CORE_EFFECT_KINDS.filter(
+      (k) => k.category === category && offered(k),
+    ),
   })).filter((g) => g.kinds.length > 0);
+}
+
+/** A kind the menus offer. A stack-only kind without parameters is a
+ *  layer style's pattern overlay, whose pattern the wire form cannot carry
+ *  (engine ADR 1099): a placed PSD layer's stack shows it, no menu adds an
+ *  empty one. */
+function offered(k: EffectKindDescriptor): boolean {
+  return k.indesign || k.vector === true || k.params.length > 0;
 }
 
 /** The stack path of a target. */
@@ -121,7 +131,8 @@ export function canAdd(
   kind: EffectKind,
 ): boolean {
   const k = kindOf(kind);
-  if (!k || !(k.targets as readonly string[]).includes(target)) return false;
+  if (!k || !offered(k) || !(k.targets as readonly string[]).includes(target))
+    return false;
   const held = entries.filter((e) => e.kind === kind).length;
   return k.maxPerStack === undefined || held < k.maxPerStack;
 }
