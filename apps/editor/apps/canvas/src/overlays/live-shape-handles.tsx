@@ -52,7 +52,9 @@
 // parameters are the engine's and the widgets work under the host's
 // own selection tools (Selection and Direct Selection only — another
 // tool's drag inside the shape must reach that tool) in every module's
-// edit context. Pointer events are taken on the widget itself (they stop
+// edit context. In path-edit mode (Direct Selection) only the corner
+// widgets show, as Illustrator's Live Corners do: Direct Selection is on
+// every context's rail, the Selection tool is not. Pointer events are taken on the widget itself (they stop
 // propagation), the way the overlay contributions of the bundles do.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -497,13 +499,13 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
     model.select(only);
   }, [model, only]);
 
-  if (
-    !s ||
-    !only ||
-    !selecting ||
-    pathEditMode ||
-    key !== `${s.id.kind}:${s.id.id}`
-  ) {
+  // Path-edit mode (Direct Selection, or a double-click into the path) keeps
+  // the CORNER widgets only, as Illustrator's Direct Selection shows Live
+  // Corners: Direct Selection is on the rail of every edit context (ADR
+  // 311), so a context that holds no Selection tool still reaches them.
+  // The side, star, pie and preset widgets stay the Selection tool's.
+  const cornersOnly = pathEditMode;
+  if (!s || !only || !selecting || key !== `${s.id.kind}:${s.id.id}`) {
     return <g data-live-shape-handles="" data-count={0} />;
   }
   const pr = props.pageRects.get(s.pageId);
@@ -521,15 +523,18 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
     cursor: string;
   }[] = [];
   if (s.preset) {
-    s.preset.handles.forEach((h, i) => {
-      widgets.push({
-        id: `preset-${i}`,
-        at: [h.x, h.y],
-        drag: { kind: "preset", index: i },
-        shape: "preset",
-        cursor: "default",
+    // An Office preset's adjust handles are the Selection tool's.
+    if (!cornersOnly) {
+      s.preset.handles.forEach((h, i) => {
+        widgets.push({
+          id: `preset-${i}`,
+          at: [h.x, h.y],
+          drag: { kind: "preset", index: i },
+          shape: "preset",
+          cursor: "default",
+        });
       });
-    });
+    }
   } else if (s.kind === "rectangle" && s.corners) {
     const box = s.bounds;
     // Too small on screen to tell four widgets apart: none.
@@ -564,7 +569,9 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
       });
     }
   }
-  if (s.kind === "polygon" && s.shape) {
+  if (cornersOnly) {
+    // Path-edit mode: the corner widgets above only.
+  } else if (s.kind === "polygon" && s.shape) {
     const circle = circleBoxOf(s.bounds, s.shape);
     widgets.push({
       id: "sides",

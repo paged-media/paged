@@ -366,7 +366,11 @@ Status (draw items, one line each; updated as they land):
   (`live-shape-handles.tsx`, editor ADR 310 amended): a rectangle's and a text frame's corners one by
   one, any closed polygon's corners together (the renderer's rule, `@paged-media/vector-tools`
   `polygon-corners.ts`). Draw's Corner Radius tool, handler and the box half of its machine are gone
-  (id through the deprecation window; draw ADR 359 amended).
+  (id through the deprecation window; draw ADR 359 amended). 2026-11-12: the corner widgets also show
+  in path-edit mode, under Direct Selection, which every context keeps; before, a context without
+  the Selection tool (sheet, web, data, image, draw) could not reach them (editor ADR 310 amended).
+  The every-context e2e (`HPX-P2-*`) rounds, distorts, samples and inserts references in each module
+  context without leaving it.
 - Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
   `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
   payload it inserts, centred on the page. The write is one implementation in

@@ -379,6 +379,73 @@ describe("live-shape widgets", () => {
     ).toEqual(Array(4).fill("InverseRoundedCorner"));
   });
 
+  test("under Direct Selection (path-edit mode) a live polygon keeps its corner widgets only; a drag rounds the corners in one step", async () => {
+    const h = await mount();
+    const page = h.handle!.pageIds[0];
+    // A live square (four sides), so the side and star widgets exist
+    // under the Selection tool.
+    const p = (x: number, y: number) => ({
+      anchor: [x, y],
+      left: [x, y],
+      right: [x, y],
+    });
+    const reply = await h.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertPath",
+            args: {
+              pageId: page,
+              anchors: [p(100, 100), p(300, 100), p(300, 300), p(100, 300)],
+              open: false,
+              smooth: false,
+            },
+          },
+          {
+            op: "setElementProperty",
+            args: {
+              elementId: { kind: "polygon", id: "$created" },
+              path: "frameShapeSides",
+              value: { type: "length", value: 4 },
+            },
+          },
+        ],
+      },
+    } as never);
+    const poly = (reply as { payload: { createdId: ElementId } }).payload
+      .createdId;
+    await h.select([poly]);
+    await h.settle();
+    expect(widget(h, "sides")).not.toBeNull();
+    await h.act(() => {
+      h.paged.tool.setBaseTool("paged.tool.directSelect" as never);
+      h.paged.selection.setPathEditMode(true);
+    });
+    await h.settle();
+    expect(widget(h, "sides")).toBeNull();
+    expect(widget(h, "inset")).toBeNull();
+    expect(
+      h.root
+        .querySelector("[data-live-shape-handles]")!
+        .getAttribute("data-count"),
+    ).toBe("4");
+    // The engine redrew the live square inscribed in its circle (a
+    // diamond, the first corner at twelve o'clock): drag that corner's
+    // widget 20 px further in, towards the centre.
+    const [wx, wy] = at(h, "polygon-corner-0");
+    const d = Math.hypot(200 - wx, 200 - wy);
+    const mark = h.mark();
+    await drag(h, "polygon-corner-0", [
+      [wx + ((200 - wx) * 10) / d, wy + ((200 - wy) * 10) / d],
+      [wx + ((200 - wx) * 20) / d, wy + ((200 - wy) * 20) / d],
+    ]);
+    expect(h.mutations(mark)).toHaveLength(1);
+    const props = await h.props(poly);
+    expect(value(props.frameCornerOptionTopLeft)).toBe("RoundedCorner");
+    expect(value(props.frameCornerRadiusTopLeft) as number).toBeGreaterThan(10);
+  });
+
   test("a text frame: the rectangle's four corner widgets", async () => {
     const h = await mount();
     const page = h.handle!.pageIds[0];

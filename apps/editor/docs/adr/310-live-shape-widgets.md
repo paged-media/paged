@@ -98,3 +98,22 @@ draw ADR 359 amended).
 
 The consequence above that "a polygon edited point by point … its widgets go away" now holds for
 the side and star widgets only; the corner widgets stay on any closed polygon.
+
+## Amendment (2026-11-12): the corner widgets under Direct Selection
+
+The decision above shows the widgets "outside path-edit mode", and Direct Selection always puts the
+one selected path in path-edit mode, so in practice only the Selection tool showed them. Inside an
+edit context that restricts the rail (sheet, web and data declare no tools of their own; image and
+draw declare theirs) the Selection tool is not there and picking it leaves the context, so once
+paged.draw's Corner Radius tool went those contexts had no way to round a corner.
+
+- In path-edit mode the overlay shows the **corner widgets only** (a rectangle's four, a polygon's
+  per-corner ones), as Illustrator's Direct Selection shows Live Corners. Direct Selection is one of
+  the tools every context keeps (ADR 311), so the corners are reached in every context. The side,
+  star, pie and Office preset widgets stay the Selection tool's.
+- A widget still takes the pointer itself, so a press on it never reaches Direct Selection's anchor
+  and segment gestures; it sits at least 14 px inside its corner, clear of the anchor.
+- Evidence: `apps/canvas/test/panels/live-shape-handles.dom.test.tsx` (a live square in path-edit
+  mode: four corner widgets, no side or star widget, a drag rounds every corner in one step) and
+  `apps/canvas/tests/host-panels-every-context.spec.ts` (`HPX-P2-*`: the drag in every module's
+  context, which it does not leave).
