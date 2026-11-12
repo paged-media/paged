@@ -31,6 +31,9 @@ import {
   bandLabel,
   DATE_FIELD,
   HEADER_BAR_COMMANDS,
+  insertBookmark,
+  insertCrossReference,
+  insertIndexEntry,
   resolveHeaderFooter,
   sectionOfPage,
   type WordStructure,
@@ -191,6 +194,33 @@ describe("the structure commands write one mutation at the caret", () => {
         args: { storyId: "docx_s0", offset: 11, text: "" },
       });
     }
+  });
+
+  it("on the editor the inserts are the host's commands (paged.insert.*), with the dialog's arguments", async () => {
+    const { host, mutations } = recordingHost();
+    const invoked: [string, unknown][] = [];
+    (host.objects as unknown as Record<string, unknown>).invoke = async (
+      id: string,
+      args: unknown,
+    ) => {
+      invoked.push([id, args]);
+      return { applied: true };
+    };
+    await runWordCommand(host, "footnote", { copied: null });
+    await insertBookmark(host, "Intro");
+    await insertCrossReference(host, { bookmark: "Intro" }, "pageNumber");
+    await insertIndexEntry(host, ["Main", "Sub"]);
+    expect(invoked).toEqual([
+      ["paged.insert.footnote", { text: "" }],
+      ["paged.insert.bookmark", { name: "Intro" }],
+      [
+        "paged.insert.crossReference",
+        { bookmark: "Intro", referTo: "pageNumber" },
+      ],
+      ["paged.insert.indexEntry", { topic: ["Main", "Sub"] }],
+    ]);
+    // The host wrote them: nothing went to the document from here.
+    expect(mutations).toEqual([]);
   });
 
   it("F9 updates the story's fields with the host's clock; Shift+F9 toggles codes", async () => {

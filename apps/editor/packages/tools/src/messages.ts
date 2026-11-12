@@ -41,6 +41,9 @@ export const EYEDROPPER_TOOL = defineMessages("tools.eyedropper", {
   mode: "Sample",
   pixel: "Pixel colour",
   object: "Object appearance",
+  sampleSize: "Sample size",
+  pointSample: "Point sample",
+  average: "{n} by {n} average",
 });
 
 export const GRADIENT_TOOL = defineMessages("tools.gradient", {

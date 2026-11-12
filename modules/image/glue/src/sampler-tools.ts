@@ -32,51 +32,6 @@ import {
 } from "./frame-fit";
 import type { ImageSession } from "./session";
 
-export function makeEyedropperGesture(
-  host: BundleHost,
-  session: ImageSession,
-): GestureHandler {
-  let fit: FitTransform | null = null;
-  let target: "fg" | "bg" | null = null;
-  const sample = (e: CanvasPointerEvent) => {
-    if (!fit || !e.pagePoint || !target) return;
-    const at = pageToImage(fit, e.pagePoint);
-    const { size, source } = session.state().eyedropper;
-    session.sampleColor(at, size, target, source);
-  };
-  return {
-    onActivate() {
-      void resolveFrameFit(host, session.state().source, "eyedropper").then(
-        (f) => {
-          fit = f;
-        },
-      );
-    },
-    onDeactivate() {
-      fit = null;
-      target = null;
-    },
-    onPointerDown(e: CanvasPointerEvent) {
-      if (!fit || !e.pagePoint || !session.state().source) return;
-      // An armed Curves eyedropper takes the click, as with every tool.
-      if (session.takeCurvesPick(pageToImage(fit, e.pagePoint))) return;
-      target = e.modifiers.alt ? "bg" : "fg";
-      sample(e);
-    },
-    onPointerMove(e: CanvasPointerEvent) {
-      sample(e);
-    },
-    onPointerUp() {
-      target = null;
-    },
-    onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape" || !target) return;
-      target = null;
-      e.preventDefault();
-    },
-  };
-}
-
 /** Pick radius around a sampler, in screen-ish page points. */
 const HIT_PT = 6;
 /** Marker arm length, page pt. */

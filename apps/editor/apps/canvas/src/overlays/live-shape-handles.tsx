@@ -24,8 +24,14 @@
 //              radius: drag = all four corners' radius (Shift: this one),
 //              Alt-click = this corner's next type (rounded, inverse
 //              rounded, bevel, inset, fancy)
-//   polygon    (a live one) a side widget right of its box: drag up for
-//              more sides, down for fewer; and the star widget on the
+//   text frame the rectangle's corner widgets (its corners render too)
+//   polygon    a widget inside each corner the renderer rounds (both
+//              edges straight, a closed contour), on its bisector at the
+//              arc's centre: drag = the polygon's one radius (the
+//              renderer reads one for an N-gon, so every corner follows),
+//              Alt-click = the next corner type for all of them. A live
+//              polygon also has a side widget right of its box: drag up
+//              for more sides, down for fewer; and the star widget on the
 //              first inner point: drag in or out for the star inset
 //   oval       the pie widgets on the ellipse at the start and end
 //              angles (both at three o'clock on a whole ellipse, the end
@@ -55,6 +61,7 @@ import type {
   Mutation,
   Value,
 } from "@paged-media/client";
+import { cornerPresetOps, type CornerStyleToken } from "@paged-media/helpers";
 import {
   useCanvasClient,
   useSelection,
@@ -77,12 +84,18 @@ import {
   normalizeEnd,
   normalizeStart,
   pieOutlinePath,
+  polygonCornerMaxRadius,
+  polygonCornerPreview,
+  polygonCornerWidgetPoint,
+  polygonCorners,
   polygonInCircle,
   polygonPath,
+  polygonRadiusFromDrag,
   sidesFromDrag,
   sidesWidgetPoint,
   starInsetAt,
   type Box,
+  type PolygonCorner,
   type PolygonShape,
   type Pt,
 } from "@paged-media/tools";
@@ -100,6 +113,11 @@ const WIDGET_PX = 7;
 const HIT_PX = 14;
 const CORNER_MIN_OFFSET_PX = 14;
 const SIDES_OFFSET_PX = 16;
+/** More corners than this (a dense star, a traced outline): no widgets. */
+const MAX_POLYGON_CORNER_WIDGETS = 48;
+
+/** The kinds with box corner widgets: the engine renders their corners. */
+const BOX_KINDS: ReadonlySet<string> = new Set(["rectangle", "textFrame"]);
 
 interface CornerState {
   option: string;
@@ -117,7 +135,22 @@ export interface LiveShapeState {
   transform: readonly number[] | null;
   corners?: CornerState[];
   shape?: PolygonShape;
+  /** A polygon's rounded-corner widgets: every corner the renderer
+   *  rounds, with the one option and radius (the top-left slot, which is
+   *  what the renderer reads for an N-gon). */
+  polygonCorners?: { corners: PolygonCorner[]; option: string; radius: number };
   pie?: { start: number; end: number };
+}
+
+/** The anchors `pathAnchors` reports, as far as the widgets read them. */
+export interface AnchorRead {
+  anchors: readonly {
+    anchor: readonly [number, number];
+    left: readonly [number, number];
+    right: readonly [number, number];
+  }[];
+  subpathStarts: readonly number[];
+  subpathOpen?: readonly boolean[];
 }
 
 type Entry = { path: string; value: Value | null };
@@ -137,10 +170,12 @@ function textOf(entries: readonly Entry[], path: string): string | null {
 }
 
 /** The state a shape's geometry and properties make, or null when it has
- *  no live widget (a polygon that is not a live one, another kind). */
+ *  no live widget (a polygon with no corner to round that is not a live
+ *  one, another kind). `anchors` is a polygon's path (its own space). */
 export function liveShapeStateOf(
   item: ElementGeometryItem,
   entries: readonly Entry[],
+  anchors?: AnchorRead | null,
 ): LiveShapeState | null {
   const kind = item.id.kind;
   if (!item.pageId) return null;
@@ -150,10 +185,10 @@ export function liveShapeStateOf(
     bounds: item.bounds as unknown as Box,
     transform: (item.itemTransform ?? null) as readonly number[] | null,
   };
-  if (kind === "rectangle") {
+  if (BOX_KINDS.has(kind)) {
     return {
       ...base,
-      kind,
+      kind: "rectangle",
       corners: CORNERS.map((c) => ({
         option: textOf(entries, `frameCornerOption${c.suffix}`) || "None",
         radius: lengthOf(entries, `frameCornerRadius${c.suffix}`) ?? 12,
@@ -162,14 +197,34 @@ export function liveShapeStateOf(
   }
   if (kind === "polygon") {
     const sides = lengthOf(entries, "frameShapeSides");
-    if (sides === null) return null;
+    const corners = anchors
+      ? polygonCorners({
+          anchors: anchors.anchors as never,
+          subpathStarts: [...anchors.subpathStarts],
+          subpathOpen: anchors.subpathOpen ? [...anchors.subpathOpen] : [],
+        })
+      : [];
+    if (sides === null && corners.length === 0) return null;
     return {
       ...base,
       kind,
-      shape: {
-        sides,
-        starInset: lengthOf(entries, "frameShapeStarInset") ?? 0,
-      },
+      ...(sides === null
+        ? {}
+        : {
+            shape: {
+              sides,
+              starInset: lengthOf(entries, "frameShapeStarInset") ?? 0,
+            },
+          }),
+      ...(corners.length > 0 && corners.length <= MAX_POLYGON_CORNER_WIDGETS
+        ? {
+            polygonCorners: {
+              corners,
+              option: textOf(entries, "frameCornerOptionTopLeft") || "None",
+              radius: lengthOf(entries, "frameCornerRadiusTopLeft") ?? 0,
+            },
+          }
+        : {}),
     };
   }
   if (kind === "oval") {
@@ -238,21 +293,28 @@ class LiveShapeModel {
     const id = this.selected;
     if (
       !id ||
-      (id.kind !== "rectangle" && id.kind !== "oval" && id.kind !== "polygon")
+      (!BOX_KINDS.has(id.kind) && id.kind !== "oval" && id.kind !== "polygon")
     ) {
       if (this.state) this.set(null);
       return;
     }
     try {
-      const [items, props] = await Promise.all([
+      const [items, props, anchors] = await Promise.all([
         this.client.elementGeometry([id]),
         this.client.elementProperties(id),
+        id.kind === "polygon"
+          ? this.client.pathAnchors(id).catch(() => null)
+          : Promise.resolve(null),
       ]);
       if (run !== this.run || this.dragging) return;
       const item = items[0];
       this.set(
         item && props
-          ? liveShapeStateOf(item, props.entries as unknown as Entry[])
+          ? liveShapeStateOf(
+              item,
+              props.entries as unknown as Entry[],
+              anchors as unknown as AnchorRead | null,
+            )
           : null,
       );
     } catch {
@@ -315,8 +377,38 @@ export function cornerCycleMutation(
   );
 }
 
+/** A polygon's corner drag: the one radius, written to all four slots the
+ *  way the Corners presets write it, a square corner turned round. */
+export function polygonCornerMutation(
+  s: LiveShapeState,
+  radius: number,
+): Mutation {
+  const option = s.polygonCorners?.option ?? "None";
+  const style = (
+    option === "None" ? "RoundedCorner" : option
+  ) as CornerStyleToken;
+  return {
+    op: "batch",
+    args: { ops: cornerPresetOps(s.id, style, radius) },
+  } as Mutation;
+}
+
+/** Alt-click on a polygon's corner: every corner's next type. */
+export function polygonCornerCycleMutation(s: LiveShapeState): Mutation {
+  const style = nextCornerOption(
+    s.polygonCorners?.option ?? "None",
+  ) as CornerStyleToken;
+  return {
+    op: "batch",
+    args: {
+      ops: cornerPresetOps(s.id, style, s.polygonCorners?.radius || 12),
+    },
+  } as Mutation;
+}
+
 type DragKind =
   | { kind: "corner"; index: number }
+  | { kind: "polygonCorner"; index: number }
   | { kind: "sides" }
   | { kind: "inset" }
   | { kind: "pieStart" }
@@ -390,7 +482,26 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
         });
       });
     }
-  } else if (s.kind === "polygon" && s.shape) {
+  } else if (s.kind === "polygon") {
+    const pc = s.polygonCorners;
+    if (pc) {
+      const r = pc.option === "None" ? 0 : pc.radius;
+      pc.corners.forEach((c, i) => {
+        // Too tight on screen to drag apart from the vertex: no widget.
+        if (polygonCornerMaxRadius(c) <= 0) return;
+        if (Math.min(c.inLen, c.outLen) / 2 <= own(CORNER_MIN_OFFSET_PX * 1.5))
+          return;
+        widgets.push({
+          id: `polygon-corner-${i}`,
+          at: polygonCornerWidgetPoint(c, r, own(CORNER_MIN_OFFSET_PX)),
+          drag: { kind: "polygonCorner", index: i },
+          shape: "round",
+          cursor: "default",
+        });
+      });
+    }
+  }
+  if (s.kind === "polygon" && s.shape) {
     const circle = circleBoxOf(s.bounds, s.shape);
     widgets.push({
       id: "sides",
@@ -492,6 +603,21 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
           });
           break;
         }
+        case "polygonCorner": {
+          const c = s.polygonCorners!.corners[drag.index]!;
+          const r = polygonRadiusFromDrag(c, p);
+          last = polygonCornerMutation(s, r);
+          const [a, v, b] = polygonCornerPreview(c, r);
+          setPreview({
+            drag,
+            p: {
+              d: `M${a![0]} ${a![1]} L${v![0]} ${v![1]} L${b![0]} ${b![1]}`,
+              at: polygonCornerWidgetPoint(c, r, own(CORNER_MIN_OFFSET_PX)),
+              label: `${+r.toFixed(1)} pt`,
+            },
+          });
+          break;
+        }
         case "sides": {
           const shape = s.shape!;
           const sides = sidesFromDrag(shape.sides, dyScreen / scale, scale);
@@ -560,6 +686,8 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
         void model.commit(last);
       } else if (commit && !moved && alt && drag.kind === "corner") {
         void model.commit(cornerCycleMutation(s, drag.index));
+      } else if (commit && !moved && alt && drag.kind === "polygonCorner") {
+        void model.commit(polygonCornerCycleMutation(s));
       } else {
         model.cancelDrag();
       }

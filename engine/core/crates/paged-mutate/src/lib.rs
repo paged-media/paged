@@ -79,7 +79,7 @@ pub use apply::threads::find as thread_comment;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{
     expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
-    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
+    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL, SYMBOL_INSTANCE_LABELS_LABEL,
 };
 pub use apply::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,

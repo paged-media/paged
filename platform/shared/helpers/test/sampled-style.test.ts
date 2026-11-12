@@ -18,7 +18,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { applySampledStyle, sampledStyleFrom } from "../src/index.ts";
+import {
+  applySampledStyle,
+  isAppearancePath,
+  sampledStyleFrom,
+  withoutOffEffects,
+} from "../src/index.ts";
 
 const entry = (path: string, type: string, value: unknown) => ({
   path,
@@ -26,7 +31,7 @@ const entry = (path: string, type: string, value: unknown) => ({
 });
 
 describe("sampledStyleFrom", () => {
-  it("reads fill, tint, stroke, weight and opacity; nothing relevant is null", () => {
+  it("reads fill, tint, stroke, weight and opacity, and the rest of the look; nothing relevant is null", () => {
     expect(
       sampledStyleFrom({
         entries: [
@@ -44,6 +49,7 @@ describe("sampledStyleFrom", () => {
       strokeColor: null,
       strokeWeight: 3,
       opacity: 50,
+      look: [entry("frameBlendMode", "text", "Multiply")],
     });
     expect(sampledStyleFrom({ entries: [entry("x", "text", "y")] })).toBeNull();
     expect(sampledStyleFrom(null)).toBeNull();
@@ -77,5 +83,64 @@ describe("applySampledStyle", () => {
     expect(
       applySampledStyle([{ id: "a", supports: new Set() }], style),
     ).toBeNull();
+  });
+});
+
+describe("the look", () => {
+  it("is the appearance paths: fill, line, gradient, effects, blend and opacity; not the fill rule or the geometry", () => {
+    expect(isAppearancePath("frameFillColor")).toBe(true);
+    expect(isAppearancePath("frameOuterGlowSize")).toBe(true);
+    expect(isAppearancePath("frameContentBlendMode")).toBe(true);
+    expect(isAppearancePath("frameFillRule")).toBe(false);
+    expect(isAppearancePath("frameBounds")).toBe(false);
+  });
+
+  it("takes an effect that is off as off, without its settings; null values are not sampled", () => {
+    const b = (v: boolean) => ({ type: "bool", value: v });
+    const n = (v: number) => ({ type: "length", value: v });
+    const kept = withoutOffEffects([
+      { path: "frameBevelEnabled", value: b(false) },
+      { path: "frameBevelSize", value: n(5) },
+      { path: "frameDropShadow", value: b(true) },
+      { path: "frameDropShadowSize", value: n(4) },
+      { path: "frameFeatherEnabled", value: b(false) },
+      { path: "frameFeatherWidth", value: n(5) },
+      { path: "frameFillColor", value: b(true) },
+    ]).map((e) => e.path);
+    expect(kept).toEqual([
+      "frameBevelEnabled",
+      "frameDropShadow",
+      "frameDropShadowSize",
+      "frameFeatherEnabled",
+      "frameFillColor",
+    ]);
+    const style = sampledStyleFrom({
+      entries: [
+        entry("frameBevelEnabled", "bool", false),
+        entry("frameBevelSize", "length", 5),
+        entry("frameStrokeType", "text", null),
+      ],
+    });
+    expect(style?.look?.map((e) => e.path)).toEqual(["frameBevelEnabled"]);
+  });
+
+  it("is written where each target supports it", () => {
+    const out = applySampledStyle(
+      [
+        { id: "a", supports: new Set(["frameBlendMode"]) },
+        { id: "b", supports: new Set<string>() },
+      ],
+      { look: [entry("frameBlendMode", "text", "Screen")] },
+    );
+    expect(out?.args.ops).toEqual([
+      {
+        op: "setElementProperty",
+        args: {
+          elementId: "a",
+          path: "frameBlendMode",
+          value: { type: "text", value: "Screen" },
+        },
+      },
+    ]);
   });
 });

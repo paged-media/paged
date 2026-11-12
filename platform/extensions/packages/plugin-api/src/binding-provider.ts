@@ -422,6 +422,17 @@ export interface BindingProviderScope {
    * Probe `supports("bindings.readouts@1")`.
    */
   readouts?: readonly BindingReadoutSurface[];
+  /**
+   * Extensions ADR 1104 — this provider is the host EYEDROPPER's target
+   * while its context is active: a Pixel-mode click hands it the point
+   * and the sample size, and the provider samples its own content (an
+   * image's layers, at their own resolution) and takes the colour into
+   * its colour wells (an image's foreground, or with Alt its background).
+   * Declaring it requires `takeEyedropperSample`. A decline lets the host
+   * sample the page and write the document, as it does with no context.
+   * Probe `supports("bindings.eyedropper@1")`.
+   */
+  eyedropper?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -534,6 +545,24 @@ export type BindingReadoutsRead =
   | { kind: "readouts"; sections: readonly BindingReadoutSection[] }
   | BindingDecline;
 
+/** Extensions ADR 1104 — one host Eyedropper sample offered to the
+ *  active context's provider. */
+export interface BindingEyedropperRequest {
+  pageId: string;
+  /** The click, in the page's own pt. */
+  point: [number, number];
+  /** The square the sample averages, in the provider's own pixels: 1 (a
+   *  point), 3, 5, 11, 31, 51 or 101 (the host tool's Sample size). */
+  sampleSize: number;
+  /** Alt was held: the secondary target (an image's background). */
+  secondary: boolean;
+}
+
+/** The provider's answer: the colour it took (8-bit sRGB), or a decline
+ *  (the point is not its content; the host samples the page). */
+export type BindingEyedropperRead =
+  { kind: "taken"; rgb: [number, number, number] } | BindingDecline;
+
 /**
  * The resolver a bundle registers through
  * `host.contribute.bindingProvider(contextType, provider)`.
@@ -609,6 +638,10 @@ export interface BindingProvider {
   readReadouts?(
     request: BindingReadoutRequest,
   ): BindingReadoutsRead | Promise<BindingReadoutsRead>;
+  /** Take a host Eyedropper sample. Required iff `provides.eyedropper`. */
+  takeEyedropperSample?(
+    request: BindingEyedropperRequest,
+  ): BindingEyedropperRead | Promise<BindingEyedropperRead>;
 }
 
 /**
@@ -681,6 +714,12 @@ export type BindingReadoutsResult =
       provider: string;
       sections: readonly BindingReadoutSection[];
     }
+  | { resolved: false; reason: string };
+
+/** The registry's answer to an Eyedropper sample: the provider that took
+ *  it and the colour, or `resolved: false` (the host samples the page). */
+export type BindingEyedropperResult =
+  | { resolved: true; provider: string; rgb: [number, number, number] }
   | { resolved: false; reason: string };
 
 /** The registry's answer to a collection read. `resolved: false` ⇒ the

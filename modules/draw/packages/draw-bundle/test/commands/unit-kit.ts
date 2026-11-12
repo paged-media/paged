@@ -195,6 +195,12 @@ export function unitRig(
     zoom?: number;
     /** What `collection(name)` answers (`stories`, …). */
     collections?: Partial<Record<string, readonly unknown[]>>;
+    /** The engine's decoder (`PagedEditor.decodeImage`) the rig's host
+     *  offers (`assets.decodeImage@1`); none by default. */
+    decodeImage?: (
+      bytes: Uint8Array,
+      maxDim?: number,
+    ) => Promise<{ width: number; height: number; rgba: Uint8Array } | null>;
     /** Extra scripted replies (`requestPlanarRegions`, …). */
     reply?: (message: {
       kind: string;
@@ -566,6 +572,9 @@ export function unitRig(
   const storage = new Map<string, string>();
   // The host adapter the editor's loader builds, and the bundle activated
   // on it — kept, so a test can read what the bundle published.
+  if (options.decodeImage)
+    (fake.editor as { decodeImage?: unknown }).decodeImage =
+      options.decodeImage;
   const { host } = createBundleHost(() => fake.editor, drawBundle.manifest, {
     console: {
       debug: line("debug"),

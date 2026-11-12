@@ -36,6 +36,10 @@ import { useScreenMode } from "./screen-mode-context";
 import { useOverlaySignals } from "./overlay-signals-context";
 import { useContentSelection } from "./content-selection-context";
 import { useToolSettings } from "./tool-settings-context";
+import {
+  useBindingProviderHost,
+  type ShellBindingProviderHost,
+} from "../catalog/binding-providers";
 import { useRegistryView } from "./live";
 import {
   useOptionalEditContextStack,
@@ -107,6 +111,11 @@ export interface PagedEditor {
    *  App-state keyed by tool id, NOT document mutations. Gesture
    *  handlers read it to parameterise the op they commit. */
   toolSettings: ReturnType<typeof useToolSettings>;
+
+  /** The shared binding-provider registry (ADR-023), or null when the
+   *  host wired none. A host tool asks it what the active edit context
+   *  takes (extensions ADR 1104: the Eyedropper's target). */
+  bindingProviders?: ShellBindingProviderHost | null;
 
   /** Text caret + range. */
   contentSelection: ReturnType<typeof useContentSelection>;
@@ -203,6 +212,17 @@ export interface PagedEditor {
     bytes: Uint8Array,
     transfer?: boolean,
   ): ReturnType<CanvasClient["mutateWithBytes"]>;
+
+  /**
+   * Extensions ADR 1105 — the engine's decoder over bytes
+   * (`client.decodeImageBinary`). Satisfies the optional
+   * `Api.PagedEditor.decodeImage` the plugin-sdk host routes
+   * `host.assets.decodeImage` to (`assets.decodeImage@1`).
+   */
+  decodeImage(
+    bytes: Uint8Array,
+    maxDim?: number,
+  ): ReturnType<CanvasClient["decodeImageBinary"]>;
 
   /**
    * Engine ADR 1004 amendment — `mutateWithBytes` applied INTO the undo step
@@ -342,6 +362,7 @@ function PagedEditorBinder({
   const overlaySignals = useOverlaySignals();
   const contentSelection = useContentSelection();
   const toolSettings = useToolSettings();
+  const bindingProviders = useBindingProviderHost();
   const registries = useRegistries();
   const scope = useEditorScope();
   // OPTIONAL on purpose: this binder can mount outside the stack
@@ -372,6 +393,7 @@ function PagedEditorBinder({
       overlaySignals,
       contentSelection,
       toolSettings,
+      bindingProviders,
       text: {
         measure: (family, style, str, sizePt) =>
           client.measureText(family, style, str, sizePt),
@@ -405,6 +427,7 @@ function PagedEditorBinder({
         read: (path) => client.readPagedPartBinary(path),
         delete: (path, caller) => client.deletePagedPart(path, caller),
       },
+      decodeImage: (bytes, maxDim) => client.decodeImageBinary(bytes, maxDim),
       mutateWithBytes: (mutation, bytes, transfer) =>
         client.mutateWithBytes(mutation, bytes, transfer),
       amendWithBytes: (appliedSeq, mutation, bytes, transfer) =>
@@ -433,6 +456,7 @@ function PagedEditorBinder({
       overlaySignals,
       contentSelection,
       toolSettings,
+      bindingProviders,
       editContext,
       documentContext,
       registries,

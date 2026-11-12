@@ -19,8 +19,8 @@
 // LIVE CORNER PRESETS — the eight `setElementProperty` writes that give an
 // element one corner style at one uniform radius (the four corner options
 // and the four radii of the IDML corner model). One implementation
-// (PM-0017): the editor's `paged.corners.*` commands and paged.draw's
-// Corner Radius tool both build through it.
+// (PM-0017): the editor's `paged.corners.*` commands and its polygon
+// corner widgets (`live-shape-handles.tsx`) both build through it.
 
 /** The IDML corner-option tokens the engine accepts. `None` clears the
  *  option (the apply layer reads empty text as no corner). */

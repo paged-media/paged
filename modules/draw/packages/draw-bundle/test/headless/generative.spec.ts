@@ -58,7 +58,6 @@ import {
 import { packageWithSpread } from "../fixtures/build-idml";
 import { squareItem } from "../panels/panel-document";
 import { openHost } from "./host";
-import { installPngRealm } from "./raster-realm";
 
 const P = (id: string) => ({ kind: "polygon", id }) as ElementId;
 const A = P("ga");
@@ -179,19 +178,16 @@ describe("the pure halves", () => {
 
 describe("generation in draw on the real engine (WP8.3)", () => {
   let h: HeadlessHost;
-  let uninstall: () => void;
   let prompts: string[];
   let answer: (prompt: string) => string;
   let ai: { dispose(): void } | null = null;
 
   beforeAll(async () => {
-    uninstall = installPngRealm();
     h = await openHost();
     h.loadBundle(drawBundle);
   });
   afterAll(() => {
     h?.dispose();
-    uninstall?.();
   });
   beforeEach(async () => {
     await h.load(doc());

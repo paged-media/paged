@@ -94,6 +94,17 @@ export interface PlacedImageAsset {
 }
 
 /**
+ * Extensions ADR 1105 — encoded image bytes decoded by the ENGINE, the way
+ * it decodes a placed picture: straight-alpha 8-bit sRGB, `width × height
+ * × 4` bytes in `data`.
+ */
+export interface DecodedImage {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+}
+
+/**
  * What {@link AssetSurface.registerDocumentFont} did. Never a throw (the
  * undeclared-`fonts` gate aside, as on every asset door):
  *
@@ -141,6 +152,20 @@ export interface AssetSurface {
    * engine door already bounds it to what the document holds.
    */
   getPlacedImage(elementId: string): Promise<PlacedImageAsset | null>;
+  /**
+   * Extensions ADR 1105 — the decoded-pixels door: decode `bytes` (any
+   * format the engine places: PNG, JPEG, TIFF, PSD, WebP, …) the way the
+   * renderer decodes a placed picture (colour converted to sRGB, straight
+   * alpha, a PSD's composite), shrunk so neither side exceeds
+   * `maxDimension` when given. `null` when the bytes do not decode or the
+   * host has no engine to decode with. A pure read: no capability gate,
+   * since a bundle hands in bytes it already holds. Probe
+   * `supports("assets.decodeImage@1")`.
+   */
+  decodeImage?(
+    bytes: Uint8Array,
+    options?: { maxDimension?: number },
+  ): Promise<DecodedImage | null>;
   /**
    * W-15 — the ONE write on this door: hand the engine a face (the bytes
    * the bundle ships or the user supplied) that SCENE-LAYER text — the

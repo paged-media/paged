@@ -49,7 +49,6 @@ import { imageItem, packageWithSpread, pngBytes } from "../fixtures/build-idml";
 import { ringPixels } from "../fixtures/corpus";
 import { linkIndex } from "../../src/link-index";
 import { openHost } from "./host";
-import { installPngRealm } from "./raster-realm";
 
 const IMG = { kind: "rectangle", id: "uline" } as ElementId;
 
@@ -99,15 +98,12 @@ async function prop(
 
 describe("draw conformance — IMAGE TRACE construct depth (WP6.6)", () => {
   let h: HeadlessHost;
-  let uninstall: () => void;
   beforeAll(async () => {
-    uninstall = installPngRealm();
     h = await openHost();
     h.loadBundle(drawBundle);
   });
   afterAll(() => {
     h?.dispose();
-    uninstall?.();
   });
   beforeEach(async () => {
     await h.load(doc());

@@ -936,6 +936,11 @@ pub const SYMBOLS_LABEL: &str = "paged:symbols";
 /// Engine ADR 1039 — the label each leaf of an expanded instance carries:
 /// the instance it was, so a reopen in paged restores it.
 pub const SYMBOL_INSTANCE_LABEL: &str = "paged:symbolInstance";
+/// The label each leaf of an expanded instance carries beside
+/// [`SYMBOL_INSTANCE_LABEL`] when the instance had labels of its own (a
+/// plugin's `x-paged:` metadata, a template field's mark): the instance's
+/// `(key, value)` pairs as JSON, given back to it on reopen.
+pub const SYMBOL_INSTANCE_LABELS_LABEL: &str = "paged:symbolInstanceLabels";
 
 /// The leaves of the subtree at `r` (groups expanded, pasted-in children
 /// included), by `Self`.
@@ -1008,12 +1013,24 @@ pub fn expand_symbols_for_interchange(doc: &mut Document) -> Vec<String> {
             };
             let record = serde_json::to_string(&inst).unwrap_or_default();
             let spread = &mut doc.spreads[si].spread;
+            // The instance's own labels ride its leaves too: IDML has no
+            // item to hang them on.
+            let own = spread
+                .labels
+                .remove(&id)
+                .filter(|e| !e.is_empty())
+                .map(|e| serde_json::to_string(&e).unwrap_or_default());
             let mut leaves = Vec::new();
             subtree_leaf_ids(spread, root, &mut leaves);
             for leaf in leaves {
                 let entries = spread.labels.entry(leaf).or_default();
-                entries.retain(|(k, _)| k != SYMBOL_INSTANCE_LABEL);
+                entries.retain(|(k, _)| {
+                    k != SYMBOL_INSTANCE_LABEL && k != SYMBOL_INSTANCE_LABELS_LABEL
+                });
                 entries.push((SYMBOL_INSTANCE_LABEL.to_string(), record.clone()));
+                if let Some(own) = &own {
+                    entries.push((SYMBOL_INSTANCE_LABELS_LABEL.to_string(), own.clone()));
+                }
             }
             let mut extra = String::new();
             if inst.overrides.tint.is_some() {
@@ -1085,9 +1102,18 @@ pub fn restore_symbols_from_labels(doc: &mut Document) -> usize {
                 break;
             };
             let spread = &mut doc.spreads[si].spread;
+            let mut own: Option<Vec<(String, String)>> = None;
             for leaf in &leaves {
                 if let Some(entries) = spread.labels.get_mut(leaf) {
-                    entries.retain(|(k, _)| k != SYMBOL_INSTANCE_LABEL);
+                    if own.is_none() {
+                        own = entries
+                            .iter()
+                            .find(|(k, _)| k == SYMBOL_INSTANCE_LABELS_LABEL)
+                            .and_then(|(_, v)| serde_json::from_str(v).ok());
+                    }
+                    entries.retain(|(k, _)| {
+                        k != SYMBOL_INSTANCE_LABEL && k != SYMBOL_INSTANCE_LABELS_LABEL
+                    });
                     if entries.is_empty() {
                         spread.labels.remove(leaf);
                     }
@@ -1098,6 +1124,11 @@ pub fn restore_symbols_from_labels(doc: &mut Document) -> usize {
             }
             if restore_one(doc, si, &mut inst, &leaves) {
                 restored += 1;
+                if let (Some(id), Some(own)) = (inst.self_id.clone(), own) {
+                    if !own.is_empty() {
+                        doc.spreads[si].spread.labels.insert(id, own);
+                    }
+                }
             }
         }
     }

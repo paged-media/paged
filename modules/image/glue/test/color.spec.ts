@@ -169,8 +169,6 @@ describe("the eyedropper and colour samplers [editor-shell.raster-color-binding]
   });
 
   it("the tool options feed the session; unknown sizes are ignored", () => {
-    covers("setting:media.paged.image.tool.eyedropper.sampleSize");
-    covers("setting:media.paged.image.tool.eyedropper.sampleSource");
     covers("setting:media.paged.image.tool.colorSampler.sampleSize");
     const { handle, session } = open();
     const fields = toolOptionFields({
@@ -180,10 +178,9 @@ describe("the eyedropper and colour samplers [editor-shell.raster-color-binding]
       wand: "w",
       bucket: "k",
       gradient: "g",
-      eyedropper: "i",
       colorSampler: "s",
     });
-    expect(fields.i.map((f) => f.key)).toEqual(["sampleSize", "sampleSource"]);
+    // The Eyedropper is the host's; the Color Sampler keeps its size.
     expect(fields.s.map((f) => f.key)).toEqual(["sampleSize"]);
     applyToolSettings(session, "eyedropper", {
       sampleSize: "11",

@@ -102,6 +102,7 @@ describe("the editor's built-in bundles, activated together in the headless edit
         "bindings.provider@1",
         "bindings.workspace@1",
         "bindings.readouts@1",
+        "bindings.eyedropper@1",
         "objects.shared@1",
         "tools.settings@1",
         "document.onWillSave@1",

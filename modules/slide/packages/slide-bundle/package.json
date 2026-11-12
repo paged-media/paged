@@ -27,6 +27,7 @@
     "@paged-media/panel-kit": "workspace:*",
     "@paged-media/react-live": "workspace:*",
     "@paged-media/vector-geometry": "workspace:*",
+    "@paged-media/vector-tools": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {

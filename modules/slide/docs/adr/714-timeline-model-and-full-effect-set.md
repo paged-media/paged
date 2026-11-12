@@ -136,3 +136,18 @@ The last item of wave 5: a motion path is shown and edited on the slide.
 Evidence: `slide-anim/src/path.rs` (`segments_read_back_from_what_they_write`),
 `slide-anim/src/author.rs` (`a_motion_path_edit_writes_the_path_and_its_lock`), the bundle's
 `test/anim/motion-path.spec.ts`, and the `slide-motion-path` journey.
+
+## Amendment (2026-11-11): the motion path is edited by the host's Direct Selection
+
+The editor keeps the overlay (the dotted path, the start and end markers, the handles) and the
+storage (the effect's `path` in the slide's timing, written by `pathWrite` and `edit { kind:
+"path" }`, one undo step), but its pointer handling is no longer its own. The path is an anchor
+table in slide fractions (`tableOfSegs` / `segsOfTable`: an anchor per end point, a curve's
+controls as the handles of its two ends), mapped onto the page from where the shape stands, and a
+press on an anchor, a handle or the path itself drives `@paged-media/vector-tools`'
+`DirectSelectMachine`, the machine behind the host's Direct Selection tool. Its plan is applied to
+the table (`applyPathOps`) and written back as segments. So the motion path now edits as a path
+does everywhere else: the selection holds between presses and Shift adds to it, dragging an anchor
+moves every selected anchor with its handles, a smooth anchor keeps its handles in line unless Alt
+is held, and dragging the path between anchors reshapes that segment. Double-click to add or
+delete a point is unchanged. A closed path's closing segment stays straight (PowerPoint's `Z`).

@@ -35,6 +35,8 @@
 //                       picking it does not leave; a drag inside the box
 //                       moves the frame, also through a module's frame
 //                       surface (the sheet grid) — one undo step;
+//   Eyedropper          (inside an image) the host tool's click takes the
+//                       picture's colour into the image's foreground;
 //   History             Edit ▸ History opens on the document's steps; a
 //                       click on the step before the last goes back one
 //                       step (one `undoTo`).
@@ -350,6 +352,100 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
       // The step undone was the Free Transform move.
       await expect.poll(() => bounds(page, ref)).toEqual(start);
       await stillHere();
+
+      // EYEDROPPER (last: its ingest makes the image the History's
+      // source) — the same host tool everywhere; inside an image its
+      // target is the image (extensions ADR 1104): a click takes the
+      // picture's colour into the foreground, which is the image context's
+      // fill well, and writes nothing to the document.
+      if (ctx.type === "rasterImage") {
+        // The image's pixels: ingest the frame (Adjust), then wait until
+        // the context's lane answers a sample at the point.
+        const at = [FRAME.x0 + 130, FRAME.y0 + 60] as [number, number];
+        await page.evaluate(() =>
+          (
+            globalThis as unknown as {
+              __canvas: {
+                registries: {
+                  commands: { invoke(id: string): Promise<unknown> };
+                };
+              };
+            }
+          ).__canvas.registries.commands.invoke(
+            "media.paged.image.command.adjustSelected",
+          ),
+        );
+        await expect
+          .poll(
+            () =>
+              page.evaluate(async (point) => {
+                const g = globalThis as unknown as {
+                  __canvas: { handle: { pageIds: string[] } };
+                  __bindingProviders: {
+                    takeEyedropperSample: (r: unknown) => Promise<{
+                      resolved: boolean;
+                    }>;
+                  };
+                };
+                const r = await g.__bindingProviders.takeEyedropperSample({
+                  pageId: g.__canvas.handle.pageIds[0],
+                  point,
+                  sampleSize: 1,
+                  secondary: false,
+                });
+                return r.resolved;
+              }, at),
+            { message: "the image takes a sample", timeout: 30_000 },
+          )
+          .toBe(true);
+        const slot = page.locator('[data-tool-slot="eyedropper"]').first();
+        if (
+          (await slot.getAttribute("data-tool")) === "paged.tool.eyedropper"
+        ) {
+          await slot.click();
+        } else {
+          await slot.click({ button: "right" });
+          await page
+            .locator(
+              '[data-tool-flyout="eyedropper"] [data-tool="paged.tool.eyedropper"]',
+            )
+            .click();
+        }
+        // The background well (Alt-click's target) is the stroke well.
+        const bg = () =>
+          page.evaluate(async () => {
+            const r = await (
+              globalThis as unknown as {
+                __bindingProviders: {
+                  readSelectionProperty: (path: string) => Promise<{
+                    resolved: boolean;
+                    provider?: string;
+                    read?: { value?: { value?: { value?: number[] } } };
+                  }>;
+                };
+              }
+            ).__bindingProviders.readSelectionProperty("frameStrokeColor");
+            return r.resolved
+              ? { provider: r.provider, rgb: r.read?.value?.value?.value }
+              : null;
+          });
+        const before = await undoLen(page);
+        const shown = await bg();
+        expect(shown?.provider).toBe("media.paged.image");
+        const p = await screenPoint(page, at[0], at[1]);
+        await page.keyboard.down("Alt");
+        await page.mouse.click(p.x, p.y);
+        await page.keyboard.up("Alt");
+        // Alt: the picture's colour (not the white default) is the
+        // background now.
+        await expect
+          .poll(async () => JSON.stringify((await bg())?.rgb))
+          .not.toBe(JSON.stringify(shown?.rgb));
+        expect(await undoLen(page), "sampling is not a document edit").toBe(
+          before,
+        );
+        await stillHere();
+      }
     });
   }
 });

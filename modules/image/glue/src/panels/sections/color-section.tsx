@@ -8,12 +8,10 @@ import { ColorInput } from "./color-input";
 import { GRADIENT_KINDS, type GradientKind, type Rgba01 } from "../../engine";
 import {
   fromHex,
-  SAMPLE_SIZES,
   toHex,
   type ColorPair,
   type ColorSamplerInfo,
   type EyedropperOptions,
-  type SampleSize,
 } from "../../color-state";
 import type { ImageSession } from "../../session";
 import { mono, note, row, sectionTitle } from "./styles";
@@ -37,9 +35,6 @@ const M = defineMessages("image.color", {
     "the image's colour under the pointer (a 3×3 average) as the new " +
     "foreground.",
   eyedropper: "Eyedropper",
-  sampleSize: "Sample size",
-  pointSample: "Point sample",
-  average: "{n} by {n} average",
   sample: "Sample",
   currentLayer: "Current layer",
   allLayers: "All layers",
@@ -168,25 +163,8 @@ export function ColorSection({
       {eyedropper && (
         <>
           <div style={sectionTitle}>{t(M.eyedropper)}</div>
-          <div style={row}>
-            <label htmlFor="pg-image-sample-size">{t(M.sampleSize)}</label>
-            <select
-              id="pg-image-sample-size"
-              data-image-sample-size
-              value={String(eyedropper.size)}
-              onChange={(e) =>
-                session.setEyedropperOptions({
-                  size: Number(e.target.value) as SampleSize,
-                })
-              }
-            >
-              {SAMPLE_SIZES.map((n) => (
-                <option key={n} value={String(n)}>
-                  {n === 1 ? t(M.pointSample) : t(M.average, { n })}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* The sample size is the host Eyedropper's own option; what it
+              reads inside the image (one layer or all) is the image's. */}
           <div style={row}>
             <label htmlFor="pg-image-sample-source">{t(M.sample)}</label>
             <select
