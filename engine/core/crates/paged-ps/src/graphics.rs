@@ -477,7 +477,11 @@ fn rect_path(i: &mut Interp<'_>) -> Result<Path, PsError> {
         }
         V::Str(_) => {
             i.pop()?;
-            i.report.unsupported("encoded number string rectangles");
+            i.report.unsupported(
+                "eps.path.encodedRects",
+                paged_loss::LossSeverity::Dropped,
+                "encoded number string rectangles",
+            );
             Vec::new()
         }
         _ => pop_nums(i, 4)?,
@@ -626,7 +630,11 @@ fn stroke_path(i: &mut Interp<'_>, path: Path) -> R {
         PaintKind::None => return Ok(()),
         PaintKind::Solid(p) => p,
         PaintKind::Pattern(_, under) => {
-            i.report.unsupported("stroke with a pattern");
+            i.report.unsupported(
+                "eps.paint.patternStroke",
+                paged_loss::LossSeverity::Approximated,
+                "stroke with a pattern",
+            );
             under.unwrap_or(Paint {
                 color: crate::art::Color::Gray(0.5),
                 separation: None,
@@ -773,7 +781,11 @@ fn tiles(i: &mut Interp<'_>, pat: &PsDict, pm: &Affine, under: Option<Paint>, pa
         .unwrap_or(1);
     if count as usize > MAX_TILES || count > MAX_TILES as u128 {
         // Too fine to draw cell by cell: an even grey stands in, reported.
-        i.report.unsupported("tiling pattern with too many cells");
+        i.report.unsupported(
+            "eps.pattern.tooManyCells",
+            paged_loss::LossSeverity::Approximated,
+            "tiling pattern with too many cells",
+        );
         let paint = under.unwrap_or(Paint {
             color: crate::art::Color::Gray(0.5),
             separation: None,

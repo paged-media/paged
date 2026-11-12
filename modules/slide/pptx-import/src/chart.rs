@@ -49,10 +49,14 @@ impl Props for ChartProps<'_, '_> {
         if matches!(kind, PlotKind::Other(_)) || el.local.contains("3D") {
             // Not PowerPoint's layout: paged.sheet's chart engine draws it
             // (ADR 715), a 3-D type flat.
-            self.0.note(format!(
-                "chart type {} drawn by paged.sheet's chart engine, not PowerPoint's layout",
-                el.local
-            ));
+            self.0.note(
+                "pptx.chart.sheetLayout",
+                pptx_core::loss::LossSeverity::Approximated,
+                format!(
+                    "chart type {} drawn by paged.sheet's chart engine, not PowerPoint's layout",
+                    el.local
+                ),
+            );
         }
     }
 }

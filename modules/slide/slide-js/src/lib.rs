@@ -27,6 +27,7 @@
 
 pub mod anim;
 
+use pptx_core::loss::{LossEntry, LossLog};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -89,7 +90,10 @@ pub struct Report {
     pub embedded_fonts: Vec<FaceReport>,
     /// The deck's charts and their workbooks (ADR 715).
     pub charts: Vec<ChartReport>,
-    pub diagnostics: Vec<String>,
+    /// What the import could not carry (engine ADR 1097: `paged_loss`
+    /// entries, codes `pptx.*`). A report kept by an older version holds
+    /// plain sentences; the bundle reads both.
+    pub diagnostics: Vec<LossEntry>,
 }
 
 /// One embedded face: a style of a typeface the deck embeds.
@@ -119,7 +123,7 @@ pub struct FaceReport {
 /// A deck's embedded faces as the report lists them, with their bytes.
 fn face_reports(
     faces: pptx_import::fonts::EmbeddedFaces,
-) -> (Vec<FaceReport>, Vec<u8>, Vec<String>) {
+) -> (Vec<FaceReport>, Vec<u8>, Vec<LossEntry>) {
     let mut data = Vec::new();
     let reports = faces
         .faces
@@ -174,7 +178,7 @@ pub fn embedded_fonts(bytes: &[u8]) -> Result<DeckFonts, JsError> {
     #[derive(Serialize)]
     struct Out {
         faces: Vec<FaceReport>,
-        diagnostics: Vec<String>,
+        diagnostics: Vec<LossEntry>,
     }
     Ok(DeckFonts {
         report: serde_json::to_string(&Out { faces, diagnostics })
@@ -316,15 +320,15 @@ pub fn import_all(bytes: &[u8], name: &str) -> Result<ImportedParts, String> {
         fonts: resolved.fonts.clone(),
         embedded_fonts,
         charts: chart_reports,
-        diagnostics: deck
-            .diagnostics
-            .iter()
-            .chain(&font_diagnostics)
-            .chain(&resolved.diagnostics)
-            .chain(&written.diagnostics)
-            .chain(&chart_diagnostics)
-            .cloned()
-            .collect(),
+        // The resolved deck's losses hold the import's; `LossLog` counts a
+        // repeat once per code and message.
+        diagnostics: {
+            let mut d = resolved.diagnostics.clone();
+            d.extend_losses(font_diagnostics);
+            d.extend_losses(written.diagnostics);
+            d.extend_losses(chart_diagnostics);
+            d
+        },
     };
     Ok((written.paged, report, fonts, workbooks))
 }
@@ -375,8 +379,8 @@ fn bounds(it: &slide_resolve::model::Item) -> [f64; 4] {
 #[wasm_bindgen]
 pub struct ExportedDeck {
     bytes: Vec<u8>,
-    diagnostics: Vec<String>,
-    not_exported: Vec<String>,
+    diagnostics: Vec<LossEntry>,
+    not_exported: Vec<LossEntry>,
     rasters_needed: Vec<(String, f64)>,
 }
 
@@ -387,14 +391,15 @@ impl ExportedDeck {
         self.bytes.clone()
     }
 
-    /// One message per thing the export could not carry, as JSON.
+    /// What the export could not carry, as JSON loss entries (engine ADR
+    /// 1097).
     #[wasm_bindgen(getter)]
     pub fn diagnostics(&self) -> String {
         serde_json::to_string(&self.diagnostics).unwrap_or_else(|_| "[]".into())
     }
 
-    /// What is on the slides that could not round-trip, one line each, as
-    /// JSON.
+    /// What is on the slides that could not round-trip, as JSON loss
+    /// entries.
     #[wasm_bindgen(getter, js_name = notExported)]
     pub fn not_exported(&self) -> String {
         serde_json::to_string(&self.not_exported).unwrap_or_else(|_| "[]".into())

@@ -154,7 +154,11 @@ fn parse_dict(i: &mut Interp<'_>, d: &PsDict, depth: usize) -> Result<Func, PsEr
             })
         }
         _ => {
-            i.report.unsupported("function type 4");
+            i.report.unsupported(
+                "eps.function.type4",
+                paged_loss::LossSeverity::Dropped,
+                "function type 4",
+            );
             Err(err("rangecheck"))
         }
     }

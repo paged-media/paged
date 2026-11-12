@@ -315,7 +315,7 @@ fn another_format_is_written_as_the_png_the_host_renders() {
         first
             .not_exported
             .iter()
-            .any(|n| n.contains("no PNG of it was rendered")),
+            .any(|n| n.message.contains("no PNG of it was rendered")),
         "{name}: {:?}",
         first.not_exported
     );

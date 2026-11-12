@@ -56,6 +56,7 @@ pub mod theme;
 use color::{resolve as resolve_color, ColorCtx, Rgba};
 use model::*;
 use paged_ooxml::drawingml::resolved;
+use pptx_core::loss::{LossEntry, LossLog, LossSeverity};
 
 // ─── transforms ─────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ struct Ctx<'a> {
     map: ColorMap,
     level: Level,
     next_id: &'a std::cell::Cell<u32>,
-    diagnostics: &'a std::cell::RefCell<Vec<String>>,
+    diagnostics: &'a std::cell::RefCell<Vec<LossEntry>>,
     part: &'a str,
     draw: &'a ChartDrawer<'a>,
     /// The theme's prefix in theme colour keys, when it is not the deck's
@@ -108,10 +109,21 @@ impl Ctx<'_> {
         self.next_id.set(n);
         format!("u{n:x}")
     }
-    fn note(&self, what: impl Into<String>) {
-        self.diagnostics
-            .borrow_mut()
-            .push(format!("{}: {}", self.part, what.into()));
+    /// Record what the resolver could not carry: its code
+    /// (`pptx.<area>.<what>`), severity and sentence, which names the part
+    /// (engine ADR 1097).
+    fn note(&self, code: &str, severity: LossSeverity, what: impl Into<String>) {
+        self.diagnostics.borrow_mut().note(
+            code,
+            severity,
+            &format!("{}: {}", self.part, what.into()),
+        );
+    }
+    /// A sentence of the shared DrawingML resolver (`resolved::paint`,
+    /// `stroke`, `effects`), under `code`.
+    fn note_mapped(&self, code: &str, what: String) {
+        let e = pptx_core::loss::mapped(code, format!("{}: {what}", self.part));
+        self.diagnostics.borrow_mut().push_loss(e);
     }
     fn colors(&self, placeholder: Option<Ph>) -> ColorCtx<'_> {
         let (placeholder, placeholder_key) = match placeholder {
@@ -140,7 +152,9 @@ fn style_color(ctx: &Ctx, r: &Option<pptx_core::StyleRef>) -> Option<Ph> {
 }
 
 fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Ph>) -> Paint {
-    resolved::paint(fill, &ctx.colors(ph), &mut |n| ctx.note(n))
+    resolved::paint(fill, &ctx.colors(ph), &mut |n| {
+        ctx.note_mapped("pptx.paint.resolved", n)
+    })
 }
 
 /// `a:grpFill` means "the enclosing group's fill": substitute it into the
@@ -244,7 +258,9 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
         tail: own.and_then(|l| l.tail.clone()),
     };
     let ph = style_color(ctx, &style.and_then(|s| s.line_ref.clone()));
-    resolved::stroke(&merged, &ctx.colors(ph), 9525, &mut |n| ctx.note(n))
+    resolved::stroke(&merged, &ctx.colors(ph), 9525, &mut |n| {
+        ctx.note_mapped("pptx.paint.resolved", n)
+    })
 }
 
 /// The effects a shape draws: its own `a:effectLst`, else the theme's
@@ -280,8 +296,12 @@ fn effects(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Effects
         let fx = fx.get_or_insert_with(Default::default);
         fx.three_d = Some(t);
     }
-    fx.map(|fx| resolved::effects(&fx, &ctx.colors(ph), &mut |n| ctx.note(n)))
-        .unwrap_or_default()
+    fx.map(|fx| {
+        resolved::effects(&fx, &ctx.colors(ph), &mut |n| {
+            ctx.note_mapped("pptx.effect.resolved", n)
+        })
+    })
+    .unwrap_or_default()
 }
 
 /// A shape style as an object style (slide ADR 719): its references as
@@ -723,7 +743,11 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             // its SVG, as vectors; the raster beside it is PowerPoint's
             // fallback for readers without SVG.
             let Some(part) = p.blip.svg.clone().or_else(|| p.blip.part.clone()) else {
-                ctx.note(format!("picture {:?} has no embedded image", p.nv.name));
+                ctx.note(
+                    "pptx.picture.noImage",
+                    LossSeverity::Dropped,
+                    format!("picture {:?} has no embedded image", p.nv.name),
+                );
                 return None;
             };
             // A picture placeholder may leave its box, outline and line
@@ -826,7 +850,11 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             }
             FrameContent::Chart { part } => {
                 let Some(c) = part.as_ref().and_then(|p| ctx.deck.charts.get(p)) else {
-                    ctx.note(format!("chart {:?}: part missing", f.nv.name));
+                    ctx.note(
+                        "pptx.chart.missing",
+                        LossSeverity::Dropped,
+                        format!("chart {:?}: part missing", f.nv.name),
+                    );
                     return None;
                 };
                 let x = f.xfrm.clone()?;
@@ -859,10 +887,11 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 // own coordinates (its top-left is the drawing's origin).
                 let Some(shapes) = drawing_part.as_ref().and_then(|p| ctx.deck.diagrams.get(p))
                 else {
-                    ctx.note(format!(
-                        "SmartArt {:?} has no drawing; not drawn",
-                        f.nv.name
-                    ));
+                    ctx.note(
+                        "pptx.smartart.noDrawing",
+                        LossSeverity::Dropped,
+                        format!("SmartArt {:?} has no drawing; not drawn", f.nv.name),
+                    );
                     return None;
                 };
                 let x = f.xfrm.clone()?;
@@ -900,12 +929,20 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 })
             }
             FrameContent::Other { uri } => {
-                ctx.note(format!("graphic frame {uri:?} not drawn"));
+                ctx.note(
+                    "pptx.frame.notDrawn",
+                    LossSeverity::Dropped,
+                    format!("graphic frame {uri:?} not drawn"),
+                );
                 None
             }
         },
         Shape::Unknown { name, .. } => {
-            ctx.note(format!("p:{name} not drawn"));
+            ctx.note(
+                "pptx.shape.notDrawn",
+                LossSeverity::Dropped,
+                format!("p:{name} not drawn"),
+            );
             None
         }
     }
@@ -1042,7 +1079,7 @@ fn paragraph_styles(
     deck: &Presentation,
     primary_theme: &Option<String>,
     next_id: &std::cell::Cell<u32>,
-    diagnostics: &std::cell::RefCell<Vec<String>>,
+    diagnostics: &std::cell::RefCell<Vec<LossEntry>>,
     draw: &ChartDrawer,
 ) -> Vec<ParagraphStyle> {
     let Some(master) = deck
@@ -1424,10 +1461,9 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
         collect(&s.items, &mut fonts);
     }
     out.fonts = fonts.into_iter().collect();
+    // The import's losses, then the resolver's (`LossLog` counts a repeat).
     let mut d = deck.diagnostics.clone();
-    d.extend(diagnostics.into_inner());
-    d.sort();
-    d.dedup();
+    d.extend_losses(diagnostics.into_inner());
     out.diagnostics = d;
     out
 }

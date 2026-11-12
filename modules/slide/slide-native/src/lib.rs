@@ -52,6 +52,7 @@ use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
 use slide_geom::SubPath;
 pub mod live;
 
+use pptx_core::loss::{LossEntry, LossLog};
 use slide_resolve::model::*;
 use slide_resolve::theme::{self as live_theme, Key, ThemeIr};
 
@@ -65,7 +66,7 @@ pub struct Written {
     /// (`polygon`, `rectangle`, `textFrame`, `group`) and `Self` id. A shape
     /// with both art and text names its polygon.
     pub elements: BTreeMap<String, (&'static str, String)>,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<LossEntry>,
 }
 
 /// [`Written`] before packaging: the document itself.
@@ -73,7 +74,7 @@ pub struct Built {
     pub document: Document,
     pub stories: BTreeMap<String, String>,
     pub elements: BTreeMap<String, (&'static str, String)>,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<LossEntry>,
     /// The media the deck's video and audio name (slide ADR 718), by
     /// container path (`paged/core/media/…`, engine ADR 1027).
     pub media: BTreeMap<String, Vec<u8>>,
@@ -795,7 +796,7 @@ struct Builder<'a> {
     /// Object styles from shape styles (slide ADR 719): references → id,
     /// and each one's definition.
     object_styles: Vec<(String, ObjectStyleDef)>,
-    diagnostics: Vec<String>,
+    diagnostics: Vec<LossEntry>,
     /// The media parts the video and audio pictures name, by container path.
     media: BTreeMap<String, Vec<u8>>,
     /// How the slide being built plays its media, by `spid` (slide ADR 718).
@@ -1065,14 +1066,17 @@ impl Builder<'_> {
                     effects: image_effects.clone(),
                 };
                 let Some(bytes) = (self.images)(image_part) else {
-                    self.diagnostics
-                        .push(format!("{image_part}: image bytes missing"));
+                    self.diagnostics.dropped(
+                        "pptx.picture.missing",
+                        &format!("{image_part}: image bytes missing"),
+                    );
                     return;
                 };
                 let Some((pw, ph)) = image_size(&bytes) else {
-                    self.diagnostics.push(format!(
-                        "{image_part}: not a picture format the engine reads, not placed"
-                    ));
+                    self.diagnostics.dropped(
+                        "pptx.picture.format",
+                        &format!("{image_part}: not a picture format the engine reads, not placed"),
+                    );
                     return;
                 };
                 // The visible part of the image is (l, t)–(1-r, 1-b); stretch it
@@ -1087,8 +1091,10 @@ impl Builder<'_> {
                     dml_native::crop::display_size(sides, frame),
                 );
                 let Some(m) = dml_native::crop::placement(sides, frame, (pw, ph)) else {
-                    self.diagnostics
-                        .push(format!("{image_part}: a picture of no pixels, not placed"));
+                    self.diagnostics.dropped(
+                        "pptx.picture.empty",
+                        &format!("{image_part}: a picture of no pixels, not placed"),
+                    );
                     return;
                 };
                 let sf = self.stroke(stroke.as_ref());
@@ -1171,8 +1177,10 @@ impl Builder<'_> {
             .unwrap_or("");
         let source = if let Some(part) = &m.part {
             let Some(bytes) = (self.images)(part) else {
-                self.diagnostics
-                    .push(format!("{part}: the medium is missing from the deck"));
+                self.diagnostics.dropped(
+                    "pptx.media.missing",
+                    &format!("{part}: the medium is missing from the deck"),
+                );
                 return None;
             };
             let path = paged_store::media_part_path(&bytes, ext);
@@ -1725,9 +1733,10 @@ impl Builder<'_> {
             K::Url(a.to_string())
         } else {
             if let Some(p) = &h.target_part {
-                self.diagnostics.push(format!(
-                    "a text link to {p} is not a slide of the deck; dropped"
-                ));
+                self.diagnostics.dropped(
+                    "pptx.link.target",
+                    &format!("a text link to {p} is not a slide of the deck; dropped"),
+                );
             }
             return None;
         };
@@ -2458,7 +2467,9 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             // What the engine could not hold of the deck's paint, once
             // per kind.
             let mut d = w.diagnostics;
-            d.extend(w.dml.take_losses());
+            for l in w.dml.take_losses() {
+                d.push_loss(pptx_core::loss::mapped("pptx.paint.native", l));
+            }
             d
         },
         media: w.media,

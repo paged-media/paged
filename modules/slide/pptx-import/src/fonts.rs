@@ -67,8 +67,10 @@ pub struct DeckFace {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EmbeddedFaces {
     pub faces: Vec<DeckFace>,
-    /// One line per face that is not used, naming it and why.
-    pub diagnostics: Vec<String>,
+    /// One entry per face that is not used, naming it and why
+    /// (`pptx.font.embedded`, approximated: its text is drawn in a
+    /// substitute).
+    pub diagnostics: Vec<pptx_core::loss::LossEntry>,
 }
 
 /// Decode the embedded faces `fonts` lists (the deck's
@@ -88,9 +90,13 @@ pub fn faces(pkg: &OpcPackage, fonts: &[EmbeddedFont]) -> EmbeddedFaces {
             };
             let face = face(pkg, &font.typeface, style, part);
             if let Some(why) = why_not_used(&face) {
-                out.diagnostics.push(format!(
-                    "{part}: embedded font \u{201c}{}\u{201d} ({style}) {why}; text set in it is drawn in a substitute",
-                    font.typeface
+                out.diagnostics.push(pptx_core::loss::LossEntry::new(
+                    "pptx.font.embedded",
+                    pptx_core::loss::LossSeverity::Approximated,
+                    format!(
+                        "{part}: embedded font \u{201c}{}\u{201d} ({style}) {why}; text set in it is drawn in a substitute",
+                        font.typeface
+                    ),
                 ));
             }
             out.faces.push(face);

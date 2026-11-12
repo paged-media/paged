@@ -170,7 +170,7 @@ fn notes_on_a_deck_without_a_notes_master_are_reported_not_lost_silently() {
     plan.slides[0].notes = Some("Opening & <welcome>".into());
     let out = export(&bytes, &plan).unwrap();
     assert_eq!(out.diagnostics.len(), 1, "{:?}", out.diagnostics);
-    assert!(out.diagnostics[0].contains("notes master"));
+    assert!(out.diagnostics[0].message.contains("notes master"));
 }
 
 #[test]

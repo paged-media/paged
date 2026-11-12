@@ -71,7 +71,13 @@ import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { encodeEnvelope, labelKey } from "@paged-media/helpers";
 import { t } from "@paged-media/strings";
 
-import type { ImportReport, SlideReport, Transition } from "./engine.js";
+import {
+  readImportReport,
+  type ImportReport,
+  type SlideReport,
+  type Transition,
+} from "./engine.js";
+import { lossLines } from "./losses.js";
 import type { CommentsStore } from "./comments-model.js";
 import { COMMENTS, MODEL } from "./messages.js";
 import { slideTemplateFields } from "./template-fields.js";
@@ -581,7 +587,7 @@ export function contributeSlideObjectModel(
     try {
       const bytes = await host.parts.read(REPORT_PART);
       return bytes
-        ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport)
+        ? readImportReport(JSON.parse(new TextDecoder().decode(bytes)))
         : null;
     } catch {
       return null;
@@ -1136,7 +1142,7 @@ export function contributeSlideObjectModel(
       return {
         slides: report.slides.map((s) => slideAddress(s.pageId)),
         fonts: report.fonts,
-        diagnostics: report.diagnostics,
+        diagnostics: lossLines(report.diagnostics),
       };
     },
   };

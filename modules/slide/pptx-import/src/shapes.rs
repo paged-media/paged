@@ -74,7 +74,11 @@ fn shape(el: &El, ctx: &Ctx) -> Option<Shape> {
         "graphicFrame" => Shape::Frame(graphic_frame(el, ctx)),
         "nvGrpSpPr" | "grpSpPr" | "extLst" => return None,
         other => {
-            ctx.note(format!("shape p:{other} is not modelled"));
+            ctx.note(
+                "pptx.shape.unknown",
+                pptx_core::loss::LossSeverity::Dropped,
+                format!("shape p:{other} is not modelled"),
+            );
             Shape::Unknown {
                 name: other.to_string(),
                 xfrm: el.child(Ns::P, "xfrm").map(xfrm),
@@ -328,7 +332,11 @@ fn pic_media(nv: &El, ctx: &Ctx) -> Option<PicMedia> {
         m.link = None;
     }
     if m.part.is_none() && m.link.is_none() {
-        ctx.note("a video or audio picture names no medium".to_string());
+        ctx.note(
+            "pptx.media.noMedium",
+            pptx_core::loss::LossSeverity::Dropped,
+            "a video or audio picture names no medium",
+        );
     }
     Some(m)
 }
@@ -373,7 +381,11 @@ fn graphic_frame(el: &El, ctx: &Ctx) -> GraphicFrame {
             }
         }
         _ => {
-            ctx.note(format!("graphic frame {uri:?} is not modelled"));
+            ctx.note(
+                "pptx.frame.unknown",
+                pptx_core::loss::LossSeverity::Dropped,
+                format!("graphic frame {uri:?} is not modelled"),
+            );
             FrameContent::Other { uri }
         }
     };

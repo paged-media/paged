@@ -17,6 +17,8 @@ workspace = true
 kurbo = "0.11.3"
 paged-raster = { path = "../paged-raster" }
 paged-color = { path = "../paged-color" }
+# The loss report (engine ADR 1097): what the interpreter skipped.
+paged-loss = { path = "../paged-loss" }
 # The outlines of a substitute face (a font the EPS names but does not
 # embed) and of a Type 42 font's sfnts.
 ttf-parser = "0.25"
