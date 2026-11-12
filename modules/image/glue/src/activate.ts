@@ -1731,16 +1731,14 @@ export function activate(host: BundleHost): BundleHandle {
     id: "media.paged.image.command.placeLayersAsFrames",
     title: t(CMD.placeLayersAsFrames),
     category: "Image",
-    handler: () => {
-      void placeLayersAsFrames(host, session).then((o) => {
-        if (o.kind !== "placed") {
-          host.log.info(`place layers as frames: ${o.kind}`);
-        } else if (!o.result.applied) {
-          host.log.warn(
-            `place layers as frames: ${o.result.error ?? "refused"}`,
-          );
-        }
-      });
+    handler: async () => {
+      host.shell.openPanel(PANEL_ID);
+      const o = await placeLayersAsFrames(host, session);
+      if (o.kind !== "placed") {
+        host.log.info(`place layers as frames: ${o.kind}`);
+      } else if (!o.result.applied) {
+        host.log.warn(`place layers as frames: ${o.result.error ?? "refused"}`);
+      }
     },
   });
   command({

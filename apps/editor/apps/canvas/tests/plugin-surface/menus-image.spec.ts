@@ -465,6 +465,23 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Image/Layer/Place layers as frames — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Place layers as frames");
+    covers("command:media.paged.image.command.placeLayersAsFrames");
+    await expectGreyedAndInert(bare, "Image/Layer/Place layers as frames");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Place layers as frames",
+      "media.paged.image.command.placeLayersAsFrames",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no PSD open there are no layers to place").toBe(
+      out.before,
+    );
+  });
+
   test("Image/Layer/New/Layer via copy — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/New/Layer via copy");
     await expectGreyedAndInert(bare, "Image/Layer/New/Layer via copy");

@@ -24,6 +24,8 @@ import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
+import { covers } from "@paged-media/test-kit";
+
 import { MENU_ENTRIES } from "../src/menu";
 import { placeLayersAsFrames } from "../src/place-layers";
 
@@ -47,6 +49,7 @@ describe("Place layers as frames [images-graphics.psd-layer-styles]", () => {
   });
 
   it("hands the open PSD to the host's door", async () => {
+    covers("command:media.paged.image.command.placeLayersAsFrames");
     const calls: Uint8Array[] = [];
     const psd = new Uint8Array([0x38, 0x42, 0x50, 0x53]);
     const out = await placeLayersAsFrames(hostWith(true, calls), {
