@@ -104,9 +104,12 @@ function effectKinds(root) {
     ),
   );
   // Stroke styles (brush, width profile) are the Brushes panel's, not the
-  // Effect menu's rows (the menu filters `strokeStyle` kinds out).
+  // Effect menu's rows (the menu filters `strokeStyle` kinds out), and a
+  // stack-only kind without parameters (a layer style's pattern overlay,
+  // engine ADR 1099) is offered by no menu (`effect-stack.ts` `offered`).
   return (catalog.effectKinds ?? [])
     .filter((k) => !k.strokeStyle)
+    .filter((k) => k.indesign || k.vector === true || k.params.length > 0)
     .map((k) => ({
       command: `paged.effect.add.${k.kind}`,
       path: `Object/Effects/${EFFECT_SEGMENTS[k.category] ?? k.category}/${k.title}`,

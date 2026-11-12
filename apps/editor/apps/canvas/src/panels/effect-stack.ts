@@ -93,7 +93,7 @@ export function effectMenu(): {
  *  layer style's pattern overlay, whose pattern the wire form cannot carry
  *  (engine ADR 1099): a placed PSD layer's stack shows it, no menu adds an
  *  empty one. */
-function offered(k: EffectKindDescriptor): boolean {
+export function offered(k: EffectKindDescriptor): boolean {
   return k.indesign || k.vector === true || k.params.length > 0;
 }
 
