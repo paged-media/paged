@@ -27,6 +27,8 @@ import { inflateRawSync } from "node:zlib";
 
 import { afterEach, describe, expect, it } from "bun:test";
 
+import { covers } from "@paged-media/test-kit";
+
 import type {
   BundleHost,
   ElementId,
@@ -38,7 +40,11 @@ import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { activate, keepSource } from "../../src/activate";
 import { slideEngine } from "../../src/engine";
-import { LABEL_KEY } from "../../src/object-model";
+import {
+  INSERT_SHAPE_COMMAND,
+  LABEL_KEY,
+  slideAddress,
+} from "../../src/object-model";
 import {
   hasOldLabels,
   isOldLabel,
@@ -282,5 +288,25 @@ describe("[plugin-slide.live-presets] the earlier preset labels", () => {
     expect(elbow(after)).not.toBe(elbow(before));
     expect(elbow(after)).toContain('<a:prstGeom prst="bentConnector3">');
     expect(elbow(after)).toContain('<a:stCxn id="6" idx="3"/>');
+  }, 120_000);
+});
+
+describe("[plugin-slide.live-presets] Insert ▸ Shapes", () => {
+  it("puts an engine preset on the slide that exports as a preset", async () => {
+    covers("command:media.paged.slide.insertShape");
+    const bytes = fixture("connectors");
+    const { host, exporter } = await open(bytes, "connectors");
+    const pages = await host.document.collection<{ selfId: string }>("pages");
+    const res = (await host.objects.invoke(INSERT_SHAPE_COMMAND, {
+      prst: "star5",
+      slide: slideAddress(pages[0]!.selfId),
+      x: 480,
+      y: 270,
+      w: 100,
+      h: 100,
+    })) as { shape: string };
+    expect(res.shape).toMatch(/polygon/);
+    const out = await exporter.export();
+    expect(zipPart(out!.bytes, S1)).toContain('<a:prstGeom prst="star5">');
   }, 120_000);
 });

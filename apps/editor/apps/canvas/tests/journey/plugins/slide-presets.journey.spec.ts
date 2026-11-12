@@ -165,12 +165,10 @@ test.describe("journey · paged.slide live presets", () => {
     });
     expect(outline).not.toBeNull();
     await designer.selectElement("polygon", outline!);
-    // The bundle's handle set, drawn by the host (extensions ADR 1103).
-    const handle = page
-      .locator(
-        '[data-overlay-layer="media.paged.slide/handles:adjust"] [data-preview-handle="round"]',
-      )
-      .first();
+    // The preset's adjust handle, drawn by the host's live-shape overlay
+    // for every module (engine ADR 1096): the engine reads where it is and
+    // solves the adjust value a drag sets.
+    const handle = page.locator('[data-live-handle="preset-0"] circle').first();
     await expect(handle).toBeVisible({ timeout: 15_000 });
 
     // Drag it 40 px to the right.
