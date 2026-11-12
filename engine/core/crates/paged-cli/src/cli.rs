@@ -210,6 +210,11 @@ pub enum Command {
         /// crop is expressed exactly rather than approximated by a fit.
         #[arg(long, value_name = "A,B,C,D,TX,TY")]
         transform: Option<String>,
+        /// A PSD's LAYERS as frames (engine ADR 1099): each pixel layer a
+        /// frame with its pixels, blend mode, opacities and layer style,
+        /// the canvas's top-left at the frame's; the frame goes.
+        #[arg(long)]
+        layers: bool,
         /// Write the result here. The format follows the extension.
         #[arg(short, long)]
         out: Option<PathBuf>,

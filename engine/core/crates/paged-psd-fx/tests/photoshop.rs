@@ -25,8 +25,9 @@
 #![allow(non_snake_case)]
 
 use paged_model::effect_stack::{Effect, StrokePosition};
+use paged_psd::effects::{GlowFill, LayerStyle, StrokeFill};
 use paged_psd::PsdFile;
-use paged_psd_fx::{map_layer_record, MapOptions, MappedStyle};
+use paged_psd_fx::{map_layer_record, map_layer_style, unmap_layer_style, MapOptions, MappedStyle};
 
 fn mapped(id: &str) -> MappedStyle {
     let path = format!(
@@ -137,20 +138,73 @@ fn photoshop_files_map_onto_the_stack__feat__images_graphics_psd_layer_styles() 
     assert_eq!((s.position, s.size_pt), (StrokePosition::Outside, 5.0));
 }
 
+/// Engine ADR 1099 — the map is lossless: every Photoshop-written style
+/// comes back from the stack as it went in (the descriptors it was read
+/// from aside), so paged.image can draw its styles through the engine's
+/// evaluator and still match Photoshop.
 #[test]
-fn what_the_stack_cannot_say_is_reported() {
-    let radial = mapped("go-radial");
-    assert!(
-        radial.losses.iter().any(|l| l.message.contains("Radial")),
-        "{:?}",
-        radial.losses
+fn every_photoshop_style_comes_back_from_the_stack__feat__images_graphics_psd_layer_styles() {
+    let dir = format!(
+        "{}/tests/fixtures/photoshop-layer-styles",
+        env!("CARGO_MANIFEST_DIR")
     );
-    let glow = mapped("og-gradient");
-    assert!(glow.losses.iter().any(|l| l.code == "Outer Glow"));
-    let cone = mapped("bv-contour-cone");
-    assert!(
-        cone.losses.iter().any(|l| l.code == "Bevel & Emboss"),
-        "{:?}",
-        cone.losses
-    );
+    let mut n = 0;
+    for entry in std::fs::read_dir(&dir).expect("fixtures") {
+        let path = entry.expect("entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("psd") {
+            continue;
+        }
+        let bytes = std::fs::read(&path).expect("read");
+        let file = PsdFile::parse(&bytes).expect("parse");
+        for rec in &file.layer_mask.layers {
+            let Some(style) = paged_psd::effects::layer_style(rec) else {
+                continue;
+            };
+            let m = map_layer_style(&style, &MapOptions::default());
+            assert!(m.losses.is_empty(), "{path:?}: {:?}", m.losses);
+            let (back, losses) = unmap_layer_style(&m.entries(), 1.0, &|id| m.color(id));
+            assert!(losses.is_empty(), "{path:?}: {losses:?}");
+            assert_eq!(strip(back), strip(style), "{path:?}");
+            n += 1;
+        }
+    }
+    assert!(n >= 12, "{n} styles");
+}
+
+/// The style without the descriptors it was read from.
+fn strip(mut s: LayerStyle) -> LayerStyle {
+    s.source = None;
+    for x in s.drop_shadows.iter_mut().chain(s.inner_shadows.iter_mut()) {
+        x.source = None;
+    }
+    for g in s.outer_glow.iter_mut().chain(s.inner_glow.iter_mut()) {
+        g.descriptor = None;
+        if let GlowFill::Gradient { gradient } = &mut g.fill {
+            gradient.source = None;
+        }
+    }
+    if let Some(b) = &mut s.bevel {
+        b.source = None;
+    }
+    if let Some(x) = &mut s.satin {
+        x.source = None;
+    }
+    for c in &mut s.color_overlays {
+        c.source = None;
+        c.cmyk = None;
+    }
+    for g in &mut s.gradient_overlays {
+        g.source = None;
+        g.fill.gradient.source = None;
+    }
+    if let Some(p) = &mut s.pattern_overlay {
+        p.source = None;
+    }
+    for st in &mut s.strokes {
+        st.source = None;
+        if let StrokeFill::Gradient(g) = &mut st.fill {
+            g.gradient.source = None;
+        }
+    }
+    s
 }

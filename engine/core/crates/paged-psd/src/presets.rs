@@ -197,6 +197,37 @@ pub fn read_pat(bytes: &[u8]) -> Result<PatternFile> {
     Ok(out)
 }
 
+/// The patterns a PSD carries for its styles: the payload of the
+/// document-level `Patt` / `Pat2` / `Pat3` block, a run of records each
+/// preceded by its length and padded to four bytes. A record that cannot
+/// be read is skipped with its reason; a run that breaks off ends the read.
+pub fn read_psd_patterns(payload: &[u8]) -> PatternFile {
+    let mut out = PatternFile::default();
+    let mut at = 0usize;
+    while at + 4 <= payload.len() {
+        let len = u32::from_be_bytes([
+            payload[at],
+            payload[at + 1],
+            payload[at + 2],
+            payload[at + 3],
+        ]) as usize;
+        let start = at + 4;
+        let Some(end) = start.checked_add(len).filter(|e| *e <= payload.len()) else {
+            out.skipped
+                .push("a pattern record runs past its block".into());
+            break;
+        };
+        let mut r = ByteReader::new(&payload[start..end]);
+        match read_pattern_record(&mut r) {
+            Ok(Ok(p)) => out.patterns.push(p),
+            Ok(Err(why)) => out.skipped.push(why),
+            Err(e) => out.skipped.push(e.to_string()),
+        }
+        at = start + len.div_ceil(4) * 4;
+    }
+    out
+}
+
 /// One pattern record (from its version word). The outer `Result` is a
 /// broken file; the inner one a readable record of a kind not modelled.
 fn read_pattern_record(r: &mut ByteReader) -> Result<std::result::Result<PatternPreset, String>> {

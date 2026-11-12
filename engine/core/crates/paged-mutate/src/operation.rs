@@ -2451,6 +2451,8 @@ pub enum EffectKind {
     SoftEdge,
     Noise,
     ColorAdjust,
+    // Engine ADR 1099 — a layer style's raster pattern over the shape.
+    PatternOverlay,
     // Engine ADR 1042 — the live vector effects.
     Roughen,
     ZigZag,
@@ -2474,7 +2476,7 @@ pub enum EffectKind {
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 34] = [
+    pub const ALL: [EffectKind; 35] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2492,6 +2494,7 @@ impl EffectKind {
         EffectKind::SoftEdge,
         EffectKind::Noise,
         EffectKind::ColorAdjust,
+        EffectKind::PatternOverlay,
         EffectKind::Roughen,
         EffectKind::ZigZag,
         EffectKind::PuckerBloat,
@@ -2547,6 +2550,7 @@ impl EffectKind {
             EffectKind::SoftEdge => "softEdge",
             EffectKind::Noise => "noise",
             EffectKind::ColorAdjust => "colorAdjust",
+            EffectKind::PatternOverlay => "patternOverlay",
             EffectKind::Roughen => "roughen",
             EffectKind::ZigZag => "zigZag",
             EffectKind::PuckerBloat => "puckerBloat",
@@ -2587,6 +2591,13 @@ impl EffectKind {
 /// | `softEdge` | `sizePt` |
 /// | `noise` | `amountPct`, `monochromatic` |
 /// | `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |
+/// | `patternOverlay` | — (engine ADR 1099: a layer style's; its pattern stays on the model) |
+///
+/// Engine ADR 1099 — an entry drawn by the layer-style convention keeps
+/// what this form cannot carry (the convention, a further instance's
+/// parameters, a gradient overlay's or stroke's layer-style fill, a pattern
+/// overlay's pattern) from the same occurrence of its kind on the stack it
+/// replaces.
 ///
 /// The live vector effects (engine ADR 1042) and their fields:
 ///
@@ -3002,6 +3013,7 @@ impl EffectEntrySpec {
                         size_pt: len("sizePt", self.size_pt)?.unwrap_or(d.size_pt),
                         position,
                         color: self.color.clone().filter(|c| !c.is_empty()),
+                        ..Default::default()
                     })
                 }
                 EffectKind::ColorOverlay => Effect::ColorOverlay(ColorOverlayParams {
@@ -3011,6 +3023,7 @@ impl EffectEntrySpec {
                     gradient: self.gradient.clone().filter(|c| !c.is_empty()),
                     angle_deg: finite("angleDeg", self.angle_deg)?,
                     reverse: self.reverse.unwrap_or(false),
+                    ..Default::default()
                 }),
                 EffectKind::Reflection => {
                     let d = ReflectionParams::default();
@@ -3045,6 +3058,9 @@ impl EffectEntrySpec {
                         .map(|h| h.clamp(-180.0, 180.0))
                         .unwrap_or(0.0),
                 }),
+                // Its pattern is not on the wire: a rewritten stack keeps
+                // the one the entry had (`carry_layer_style`).
+                EffectKind::PatternOverlay => Effect::PatternOverlay(Default::default()),
                 vector => self.vector_to_model(vector)?,
             },
         };
@@ -3061,6 +3077,7 @@ impl EffectEntrySpec {
             } else {
                 None
             },
+            convention: None,
             effect,
         })
     }

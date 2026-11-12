@@ -29651,6 +29651,15 @@
       ]
     },
     {
+      "kind": "patternOverlay",
+      "title": "Pattern overlay (layer style)",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [],
+      "blend": true,
+      "params": []
+    },
+    {
       "kind": "roughen",
       "title": "Roughen",
       "category": "distortAndTransform",

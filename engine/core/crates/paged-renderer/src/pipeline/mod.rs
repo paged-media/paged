@@ -63,6 +63,7 @@ mod geom;
 pub mod image_adjust;
 mod image_convert;
 mod image_decode;
+pub(crate) use image_decode::decode_image_bytes_with;
 mod images;
 mod keeps;
 mod placed_eps;

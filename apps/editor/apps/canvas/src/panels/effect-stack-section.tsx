@@ -88,6 +88,7 @@ const M = defineMessages("app.effectStack", {
   softEdge: "Soft edge",
   noise: "Noise",
   colorAdjust: "Color adjustment",
+  patternOverlay: "Pattern overlay",
   radius: "Radius",
   size: "Size",
   position: "Position",

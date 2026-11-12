@@ -552,6 +552,7 @@ mod tests {
                 blend_mode: None,
                 noise_pct: None,
                 technique: None,
+                ..Default::default()
             }),
             ..Default::default()
         });

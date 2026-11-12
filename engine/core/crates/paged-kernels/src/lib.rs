@@ -29,10 +29,16 @@
 //! The kernel macro (`family`), the ABI assembler (`abi`) and the reference
 //! prelude moved here with the first families that need them (engine ADR 1013).
 //!
-//! Pure Rust, no I/O, wasm-safe; depends on nothing in the workspace.
+//! Pure Rust, no I/O, wasm-safe; depends only on the leaf `paged-blend`
+//! (the compose twin's blend formulas, engine ADR 1034).
 
 pub mod abi;
 pub mod blur;
+/// The compose family's scalar twins: the test-only reference, and (feature
+/// `cpu`) the CPU paths of paged.image's layer fold (image ADR 480) and of
+/// the layer-style evaluator `paged-layer-fx`.
+#[cfg(any(feature = "reference", feature = "cpu"))]
+pub mod compose_twin;
 pub mod coverage;
 pub mod cpu;
 pub mod def;

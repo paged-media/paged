@@ -129,11 +129,16 @@ pub(super) fn apply_effect_stack(
             item.restore_effect_state(target, state);
         }
         None => {
-            let stack = entries
+            let mut stack = entries
                 .iter()
                 .map(EffectEntrySpec::to_model)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(refuse)?;
+            // Engine ADR 1099 — what the wire form cannot say stays.
+            paged_model::effect_stack::carry_layer_style(
+                item.effect_slots(target).stack,
+                &mut stack,
+            );
             let before = item.effect_state(target);
             if let Err(e) = item.effect_slots_mut(target).set_stack(stack) {
                 item.restore_effect_state(target, before);

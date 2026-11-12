@@ -1,6 +1,9 @@
 # ADR 1044 — A Photoshop layer style maps onto the effect stack
 
-- **Status:** Accepted 2026-10-29.
+- **Status:** Accepted 2026-10-29. Amended by [ADR 1099](1099-a-layer-style-is-drawn-by-one-evaluator.md)
+  (2026-11-12): the map is lossless both ways (the stack carries every layer-style parameter), its
+  consumers are paged.image's fold and "Place PSD layers as frames"; the losses and the "no such
+  flow" consequence below are history.
 - **Scope:** the new crate `crates/paged-psd-fx` (`map_layer_style`, `map_layer_record`,
   `apply_mapped`, `apply_layer_style`, `idml_blend`); `paged-psd` (`effects::layer_style`, the
   shared `lmfx` / `lfx2` reader, and `AdditionalLayerInfo::payload`), which the image module's

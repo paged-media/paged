@@ -508,6 +508,13 @@ pub fn describe(kind: EffectKind) -> EffectKindRow {
                 ),
             ],
         ),
+        // Engine ADR 1099 — a layer style's: its pattern stays on the
+        // model (the wire form has no fields for it), so no target offers
+        // it in an add menu; a placed PSD layer's stack carries it.
+        K::PatternOverlay => EffectKindRow {
+            targets: &[],
+            ..stack_only(kind, "Pattern overlay (layer style)", "stylize", vec![])
+        },
         K::Roughen => vector(
             kind,
             "Roughen",

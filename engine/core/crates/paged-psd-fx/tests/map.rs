@@ -34,7 +34,10 @@ use paged_psd::effects::{
 use paged_psd_fx::{apply_layer_style, map_layer_style, MapOptions, MappedStyle};
 
 /// 144 ppi: one Photoshop pixel is half a point.
-const OPTS: MapOptions = MapOptions { pt_per_px: 0.5 };
+const OPTS: MapOptions = MapOptions {
+    pt_per_px: 0.5,
+    tiles: None,
+};
 
 /// The style through Photoshop's own block: written as `lfx2` / `lmfx`,
 /// read back.
@@ -108,7 +111,7 @@ fn drop_shadow__feat__images_graphics_psd_layer_styles() {
 }
 
 #[test]
-fn a_second_drop_shadow_and_a_contour_are_losses() {
+fn a_second_drop_shadow_and_a_contour_are_kept() {
     let curved = Contour {
         name: "Cone".into(),
         points: vec![
@@ -139,11 +142,15 @@ fn a_second_drop_shadow_and_a_contour_are_losses() {
         ],
         ..LayerStyle::default()
     });
-    assert_eq!(kinds(&m), ["dropShadow"]);
-    let lines: Vec<String> = m.losses.iter().map(ToString::to_string).collect();
-    assert_eq!(lines.len(), 2, "{lines:?}");
-    assert!(lines.iter().any(|l| l.contains("Cone")));
-    assert!(lines.iter().any(|l| l.contains("second instance")));
+    // Engine ADR 1099: both, the dialog's last first (bottom-up), each
+    // with its contour.
+    assert_eq!(kinds(&m), ["dropShadow", "dropShadow"]);
+    assert!(m.losses.is_empty(), "{:?}", m.losses);
+    let Effect::DropShadow { parked: Some(top) } = &m.stack[1].effect else {
+        panic!()
+    };
+    assert_eq!(top.contour.as_ref().unwrap().name, "Cone");
+    assert!(m.stack.iter().all(|e| e.is_layer_style()));
 }
 
 #[test]
@@ -203,10 +210,11 @@ fn outer_and_inner_glow__feat__images_graphics_psd_layer_styles() {
         panic!()
     };
     assert_eq!(i.source.as_deref(), Some("CenterGlow"));
-    // A gradient glow keeps its first colour and says so.
+    // A gradient glow names its first colour and keeps the whole ramp.
     assert_eq!(i.effect_color.as_deref(), Some("Color/PSD R=255 G=0 B=0"));
-    assert_eq!(m.losses.len(), 1, "{:?}", m.losses);
-    assert_eq!(m.losses[0].code, "Inner Glow");
+    assert_eq!(i.gradient.as_ref().unwrap().color_stops.len(), 2);
+    assert_eq!((i.range_pct, i.jitter_pct), (Some(50.0), Some(0.0)));
+    assert!(m.losses.is_empty(), "{:?}", m.losses);
 }
 
 #[test]
@@ -239,7 +247,8 @@ fn bevel_and_emboss__feat__images_graphics_psd_layer_styles() {
     assert_eq!(b.depth_pct, Some(250.0));
     assert!(close(b.size.unwrap(), 6.0) && close(b.soften.unwrap(), 1.0));
     assert_eq!((b.angle_deg, b.altitude_deg), (Some(135.0), Some(40.0)));
-    assert!(m.losses.iter().any(|l| l.message.contains("Contour pane")));
+    assert!(b.contour.as_ref().is_some_and(|c| c.enabled));
+    assert!(m.losses.is_empty(), "{:?}", m.losses);
 }
 
 #[test]
@@ -283,9 +292,12 @@ fn color_gradient_and_pattern_overlays__feat__images_graphics_psd_layer_styles()
         pattern_overlay: Some(PatternOverlay::default()),
         ..LayerStyle::default()
     });
-    // Photoshop's order: pattern (lost), gradient, colour.
-    assert_eq!(kinds(&m), ["gradientOverlay", "colorOverlay"]);
-    let Effect::GradientOverlay(g) = &m.stack[0].effect else {
+    // Photoshop's order: pattern, gradient, colour.
+    assert_eq!(
+        kinds(&m),
+        ["patternOverlay", "gradientOverlay", "colorOverlay"]
+    );
+    let Effect::GradientOverlay(g) = &m.stack[1].effect else {
         panic!()
     };
     assert_eq!(g.angle_deg, Some(30.0));
@@ -295,15 +307,16 @@ fn color_gradient_and_pattern_overlays__feat__images_graphics_psd_layer_styles()
     assert_eq!(grad.stops.len(), 2);
     assert_eq!(grad.stops[1].location_pct, 100.0);
     assert_eq!(grad.stops[1].stop_color, "Color/PSD R=0 G=0 B=255");
-    let c = &m.stack[1];
+    // The whole fill, its shape included.
+    let fill = g.fill.as_ref().unwrap();
+    assert_eq!(
+        fill.shape,
+        paged_model::layer_style::FxGradientShape::Radial
+    );
+    let c = &m.stack[2];
     assert_eq!(c.blend_mode.as_deref(), Some("Screen"));
     assert_eq!(c.opacity_pct, Some(80.0));
-    let lines: Vec<String> = m.losses.iter().map(ToString::to_string).collect();
-    assert!(
-        m.losses.iter().any(|l| l.code == "Pattern Overlay"),
-        "{lines:?}"
-    );
-    assert!(lines.iter().any(|l| l.contains("Radial")), "{lines:?}");
+    assert!(m.losses.is_empty(), "{:?}", m.losses);
 }
 
 #[test]
@@ -326,14 +339,22 @@ fn stroke__feat__images_graphics_psd_layer_styles() {
         ],
         ..LayerStyle::default()
     });
+    // Bottom-up: the dialog's second stroke first.
     assert_eq!(kinds(&m), ["outlineStroke", "outlineStroke"]);
-    let Effect::OutlineStroke(s) = &m.stack[0].effect else {
+    let Effect::OutlineStroke(s) = &m.stack[1].effect else {
         panic!()
     };
     assert_eq!(s.position, StrokePosition::Center);
     assert!(close(s.size_pt, 3.0));
     assert_eq!(s.color.as_deref(), Some("Color/PSD R=200 G=0 B=0"));
-    assert_eq!(m.losses.len(), 1, "{:?}", m.losses);
+    let Effect::OutlineStroke(g) = &m.stack[0].effect else {
+        panic!()
+    };
+    assert!(matches!(
+        g.fill,
+        Some(paged_model::layer_style::FxFill::Gradient(_))
+    ));
+    assert!(m.losses.is_empty(), "{:?}", m.losses);
 }
 
 use paged_psd::effects::StrokePosition as StrokePositionPsd;
@@ -394,7 +415,7 @@ fn a_switched_off_effect_or_style_is_kept_disabled() {
 }
 
 #[test]
-fn a_blend_mode_idml_has_no_name_for_is_a_loss() {
+fn every_blend_mode_is_kept() {
     let m = map(LayerStyle {
         color_overlays: vec![ColorFill {
             blend: BlendMode::LinearBurn,
@@ -402,8 +423,8 @@ fn a_blend_mode_idml_has_no_name_for_is_a_loss() {
         }],
         ..LayerStyle::default()
     });
-    assert_eq!(m.stack[0].blend_mode, None);
-    assert!(m.losses[0].message.contains("LinearBurn"));
+    assert_eq!(m.stack[0].blend_mode.as_deref(), Some("LinearBurn"));
+    assert!(m.losses.is_empty(), "{:?}", m.losses);
 }
 
 /// Applied to a page item: the InDesign kinds land in their slots, the

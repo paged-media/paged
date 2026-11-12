@@ -115,6 +115,7 @@ mod placeholder_wire;
 mod planar_regions_wire;
 mod presets;
 mod property_sweep;
+mod psd_place_layers;
 mod render_effect_sweep;
 mod reorder_wire;
 mod resource_provider;

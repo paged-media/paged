@@ -373,6 +373,20 @@
       "baseline": []
     },
     {
+      "name": "layer-style-evaluator",
+      "description": "draw a layer style's effects (shadows, glows, satin, overlays, stroke, bevel) with paged_layer_fx (engine ADR 1099) from the effect stack, its plan and its kernel dispatches; paged.image runs it on its GPU batch and in its CPU fold, the engine renderer on the CPU device; a PSD layer style reaches it through paged_psd_fx",
+      "owner": ["engine/core/crates/paged-layer-fx/"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": [
+        "fn size_box_radius\\b",
+        "StyleRampParams::band\\(-4096",
+        "fn (contour|ramp)_lut\\b",
+        "pub fn lut\\(&self(, reverse: bool)?\\) -> \\[",
+        "0\\.45 \\* .*depth"
+      ],
+      "baseline": []
+    },
+    {
       "name": "drawingml-crop",
       "description": "map a picture's a:srcRect onto its placement and back with dml_native::crop",
       "owner": ["platform/shared/dml-native/src/crop.rs"],

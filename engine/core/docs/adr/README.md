@@ -147,7 +147,7 @@ is not written yet.
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 | [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24; note 2026-10-24 (the frame's intent, ADR 1032); note 2026-10-28 (the remaining codecs, ADR 1038) |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
-| [1008](1008-an-items-effects-are-an-ordered-stack.md) | An item's effects are an ordered stack | Accepted 2026-10-25; note 2026-10-29 (the kinds described in the catalog, editor ADR 309; Photoshop styles mapped, ADR 1044) |
+| [1008](1008-an-items-effects-are-an-ordered-stack.md) | An item's effects are an ordered stack | Accepted 2026-10-25; note 2026-10-29 (the kinds described in the catalog, editor ADR 309; Photoshop styles mapped, ADR 1044); amended by 1099 (the layer-style convention, further instances, `patternOverlay`) |
 | [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
 | [1011](1011-a-page-has-a-place-on-the-canvas.md) | A page has a place on the canvas (artboards) | Accepted 2026-10-25 |
 | [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
@@ -176,7 +176,7 @@ is not written yet.
 | [1041](1041-pattern-paint.md) | A pattern is a swatch: a tile of vector items, repeated as a cached raster and written as a PDF tiling pattern | Accepted 2026-10-29 |
 | [1042](1042-live-vector-effects-are-stack-entries.md) | Live vector effects are entries of the effect stack: the build draws the effected outline, editing keeps the source, IDML bakes it | Accepted 2026-10-29 |
 | [1043](1043-an-item-has-several-fills-and-strokes.md) | An item has several fills and strokes (native appearance), drawn as parts, baked to a group in IDML and restored from its label | Accepted 2026-10-29 |
-| [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29 |
+| [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29; amended by 1099 (lossless both ways) |
 | [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 | [1047](1047-live-shapes.md) | A polygon, a star and a pie stay live shapes: parameters on the item, the outline in IDML, the parameters in a label | Accepted 2026-10-30 |
@@ -201,6 +201,7 @@ is not written yet.
 | [1095](1095-a-non-printing-item-is-left-out-of-pdf-export.md) | A non-printing item is left out of PDF export: `PipelineOptions::omit_nonprinting`, set by the export build, hides `Nonprinting` items as hidden ones are hidden | Accepted 2026-11-10 |
 | [1096](1096-an-office-preset-stays-a-live-shape.md) | An Office preset stays a live shape: the preset programs are the engine's (`paged-preset-geom`, Annex D compiled at build time); a preset live shape on the path item (name, adjust values, box, part, key, glued connector ends), refitted and routed by the engine with exact undo, its handles in the host overlay for every module; pptx, docx and xlsx map onto and off it | Accepted 2026-11-11 |
 | [1097](1097-one-loss-report.md) | One loss report: the leaf crate `paged-loss` owns `LossEntry` / `LossSeverity` / `LossReport`; every adapter (SVG, DXF, PDF vectors, PSD styles, DOCX lowering, PDF export, web lowering) maps onto it with its own codes as data; the contract's types are generated from it; the SDK's `lossDiagnostics` is the one translation onto the diagnostics channel | Accepted 2026-11-11 |
+| [1099](1099-a-layer-style-is-drawn-by-one-evaluator.md) | A layer style is drawn by one evaluator, from the effect stack: the stack carries every layer-style parameter (optional, absent on InDesign's), `paged-layer-fx` plans and draws the effects as kernel dispatches on a device (paged.image's GPU fold, the CPU device of its CPU fold and of the engine renderer), `paged-psd-fx` maps PSD styles onto and off the stack losslessly, and a PSD's layers are placed as frames (`document.placePsdLayers@1`) | Accepted 2026-11-12 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

@@ -57,11 +57,11 @@ use image_gpu::stroke::window_is_opaque;
 use image_gpu::{GpuBatch, GpuContext};
 use image_kernels::families::cast::{CastUnpremultiplyParams, CAST_UNPREMULTIPLY};
 
-use super::super::styles::{EffectStep, Fx, StrokePart};
 use super::super::{LayerMask, LayerStack, Plate};
 use super::{diff_bbox, gpu_err, CovKey, FoldCache, FoldState, Frame, Step};
 use crate::ingest::IngestError;
 use crate::pixels::Pixels;
+use paged_layer_fx::EffectStep;
 
 /// The side of a tile when the device allows it: 2048² rgba16float is
 /// 32 MiB a texture, and a fold holds a handful at once.
@@ -84,15 +84,7 @@ fn round_up(v: u32, to: u32) -> u32 {
 /// size, the distance and the softening, which bounds every blur, shift
 /// and distance field the effect draws with).
 fn fx_reach(e: &EffectStep) -> u32 {
-    let k = (e.scale / 100.0).max(0.0);
-    let r = match &e.fx {
-        Fx::DropShadow(s) | Fx::InnerShadow(s) => 2.0 * (s.distance + s.size) * k,
-        Fx::OuterGlow(g) | Fx::InnerGlow(g) => 2.0 * g.size * k,
-        Fx::Satin(s) => 2.0 * (s.distance + s.size) * k,
-        Fx::Stroke(_, StrokePart::Outer(d) | StrokePart::Inner(d)) => 2.0 * d.max(0.0),
-        Fx::Bevel(b) => 2.0 * (2.0 * b.size + b.soften) * k + 2.0 * e.stroke_reach,
-        Fx::ColorOverlay(_) | Fx::GradientOverlay(_) | Fx::PatternOverlay(_) => 0.0,
-    };
+    let r = e.reach();
     // The distance fields' "+ 2" and a blur's rounding.
     if r > 0.0 {
         r.ceil() as u32 + 8

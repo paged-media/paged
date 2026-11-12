@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Photoshop layer styles (paged-psd's lfx2 / lmfx model) mapped onto the engine's ordered effect stack (engine ADR 1008): what the stack can say natively, the rest reported as losses. The shared effect mapper of plan C16 (PM-0014 L2)."
+description = "Photoshop at the PSD boundary: layer styles (paged-psd's lfx2 / lmfx model) mapped losslessly onto and off the engine's ordered effect stack (engine ADRs 1008, 1044, 1099), adjustment layers onto RasterOps (engine ADR 1037), and a PSD's layers lowered to page items (engine ADR 1099)."
 
 [lints]
 workspace = true
@@ -14,3 +14,7 @@ workspace = true
 paged-psd = { path = "../paged-psd" }
 paged-model = { path = "../paged-model" }
 paged-color = { path = "../paged-color" }
+# The 27 blend modes by their PSD keys and model names (engine ADR 1034).
+paged-blend = { path = "../paged-blend" }
+# A gradient swatch is named by a hash of its stops.
+paged-pixel = { path = "../paged-pixel" }

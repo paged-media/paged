@@ -1160,6 +1160,7 @@
   "app.effectStack.center": "Mitte",
   "app.effectStack.color": "Farbe",
   "app.effectStack.colorAdjust": "Farbanpassung",
+  "app.effectStack.patternOverlay": "Musterüberlagerung",
   "app.effectStack.colorOverlay": "Farbüberlagerung",
   "app.effectStack.contrast": "Kontrast",
   "app.effectStack.directionalFeather": "Direktionale weiche Kante",

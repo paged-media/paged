@@ -845,6 +845,18 @@ on an engine before 77, never a throw. paged.draw's SVG importer and
 exporter delegate to them and keep their own TypeScript reader as the
 fallback for a host without the flags.
 
+`"document.placePsdLayers@1"` (engine ADR 1099) places a PSD's layers as
+frames. `placePsdLayers(bytes, { pageId?, origin?, group? })` asks the
+engine for the placement's ONE batch (`requestPsdLayersPlace`, a read) and
+applies it through `document.mutate`: each pixel layer a frame with its
+pixels, blend mode, opacity, fill opacity (the content opacity) and layer
+style, the style as the frame's effect stack in the layer-style convention
+(drawn by the engine's layer-style evaluator, `paged-layer-fx`). The answer
+carries the frames' count and the losses (an adjustment layer, clipping, a
+vector mask, Blend If, …). It answers an outcome on an engine without the
+message, never a throw. paged.image's Layer menu offers it for the PSD it
+has open.
+
 Free page placement (engine ADR 1011) needs no flag: `placePage { page,
 originPt? }` is a new wire op, so protocol 77's handshake proves the engine
 has it. It puts a page (an artboard) at `originPt` on the canvas, absent

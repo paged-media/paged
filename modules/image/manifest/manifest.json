@@ -100,6 +100,7 @@
       "media.paged.image.command.smartEmbed",
       "media.paged.image.command.smartExportContents",
       "media.paged.image.command.smartPlacePageItems",
+      "media.paged.image.command.placeLayersAsFrames",
       "media.paged.image.command.convertForSmartFilters",
       "media.paged.image.command.definePattern",
       "media.paged.image.command.fillPattern",
@@ -2168,6 +2169,14 @@
         {
           "id": "media.paged.image.command.smartPlacePageItems",
           "title": "Place selected page items as a smart object",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.placeLayersAsFrames",
+          "title": "Place the PSD's layers as frames",
           "args": {
             "kind": "struct",
             "fields": {}

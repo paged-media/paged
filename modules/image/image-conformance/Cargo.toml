@@ -51,6 +51,9 @@ paged-color = { workspace = true }
 # The Develop kernels' CPU twins (engine ADR 1037, amendment 2026-11-11) and
 # the engine's filter-stack evaluator the adjustment layers are pinned to.
 paged-image-adjust = { path = "../../../engine/core/crates/paged-image-adjust" }
+# The layer styles cross onto the effect stack at the PSD boundary (engine
+# ADR 1099): the lossless-crossing row maps and unmaps every fixture.
+paged-psd-fx = { path = "../../../engine/core/crates/paged-psd-fx" }
 # `geom.warp_mesh`'s parity and behavioural rows build their meshes with
 # the envelope module the bundle uses (WP5.10).
 paged-warp = { workspace = true }

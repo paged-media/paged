@@ -60,6 +60,9 @@ paged-color = { path = "../paged-color" }
 # Engine ADR 1037 — the image filter stack: its one evaluator (the kernel
 # twins, the curve spline); paged-resample reduces to display size.
 paged-image-adjust = { path = "../paged-image-adjust" }
+# Engine ADR 1099 — a frame's layer-style entries, drawn by the layer-style
+# evaluator on its CPU device.
+paged-layer-fx = { path = "../paged-layer-fx", features = ["cpu"] }
 paged-pixel = { path = "../paged-pixel" }
 paged-resample = { path = "../paged-resample" }
 # A placed EPS is drawn from its PostScript (engine ADR 1033).

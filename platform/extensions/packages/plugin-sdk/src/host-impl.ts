@@ -89,6 +89,8 @@ import type {
   SvgExportRequest,
   SvgExportResult,
   SvgImportRequest,
+  PsdLayersPlaceRequest,
+  PsdLayersPlaceResult,
   SvgImportResult,
   DocumentSurface,
   EditContextContribution,
@@ -566,6 +568,12 @@ export const HOST_FEATURES: readonly string[] = [
   // and keeps its own TypeScript reader for a host without the flags.
   "document.importSvg@1",
   "document.exportSvg@1",
+  // Engine ADR 1099 (protocol v78 rider) — "Place PSD layers as frames":
+  // the engine plans, the plan's batch goes through `mutate`. STATIC like
+  // the SVG doors: an engine without the message answers an outcome
+  // (`applied: false` with the reason), never a throw. paged.image's
+  // Layer menu offers it for the PSD it has open.
+  "document.placePsdLayers@1",
   // Engine ADR 1008 — the ordered effect stack. The vendored wire and
   // catalog carry `frameEffectStack` (and the fill / stroke / content
   // twins): the whole stack as `{ type: "effectStack", value: { entries } }`,
@@ -3817,6 +3825,59 @@ export function createBundleHost(
       return reply.kind === "storyContentResult"
         ? (reply.payload.content ?? null)
         : null;
+    },
+    async placePsdLayers(
+      bytes: Uint8Array,
+      options: PsdLayersPlaceRequest = {},
+    ): Promise<PsdLayersPlaceResult> {
+      // Engine ADR 1099. The engine PLANS (a read) and the plan's one
+      // batch goes through `mutate`, so the write gate, the namespace
+      // check and the undo step are the ordinary ones.
+      const { pageId: wanted, ...placeOptions } = options;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return {
+            applied: false,
+            layers: 0,
+            losses: [],
+            error: "no page to place onto",
+          };
+        }
+        const reply = await getEditor().client.send({
+          kind: "requestPsdLayersPlace",
+          payload: { pageId, bytes: Array.from(bytes), options: placeOptions },
+        });
+        if (reply.kind !== "psdLayersPlanned") {
+          return {
+            applied: false,
+            layers: 0,
+            losses: [],
+            error: `the engine did not plan the placement (${reply.kind}); it predates engine ADR 1099`,
+          };
+        }
+        const plan = reply.payload;
+        if (!plan.mutation) {
+          return {
+            applied: false,
+            layers: 0,
+            losses: plan.losses,
+            error: plan.error ?? "the file has no layer to place",
+          };
+        }
+        const outcome = await document.mutate(plan.mutation as MutationInput);
+        return outcome.applied
+          ? { applied: true, outcome, layers: plan.layers, losses: plan.losses }
+          : {
+              applied: false,
+              outcome,
+              layers: 0,
+              losses: plan.losses,
+              error: String(outcome.error ?? "the batch was refused"),
+            };
+      } catch (error) {
+        return { applied: false, layers: 0, losses: [], error: String(error) };
+      }
     },
     async importSvg(
       bytes: Uint8Array,

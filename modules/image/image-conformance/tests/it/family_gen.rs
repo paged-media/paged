@@ -67,7 +67,7 @@ fn coord_tile(w: u32, h: u32) -> RefTile {
 // ─────────────────────────────── solid ─────────────────────────────
 
 fn solid_ref(_a: Px, _b: Px, p: &GenSolidParams) -> Px {
-    Px([p.r, p.g, p.b, p.a])
+    Px(image_kernels::families::gen::reference::solid(p))
 }
 
 #[test]
@@ -166,27 +166,11 @@ const G0: [f32; 4] = [0.1, 0.2, 0.3, 0.5];
 const G1: [f32; 4] = [0.9, 0.7, 0.5, 1.0];
 
 fn gradient_ref(a: Px, _b: Px, p: &GenLinearGradientParams) -> Px {
-    let px = (p.ox + a.0[0] as i32) as f32;
-    let py = (p.oy + a.0[1] as i32) as f32;
-    let dx = px - p.x0;
-    let dy = py - p.y0;
-    let ex = p.x1 - p.x0;
-    let ey = p.y1 - p.y0;
-    let dd = ex * ex + ey * ey;
-    let t = if dd > 0.0 {
-        ((dx * ex + dy * ey) / dd).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let c0 = Px([p.c0r, p.c0g, p.c0b, p.c0a]);
-    let c1 = Px([p.c1r, p.c1g, p.c1b, p.c1a]);
-    // WGSL mix(e1, e2, e3) = e1*(1-e3) + e2*e3.
-    Px([
-        c0.0[0] * (1.0 - t) + c1.0[0] * t,
-        c0.0[1] * (1.0 - t) + c1.0[1] * t,
-        c0.0[2] * (1.0 - t) + c1.0[2] * t,
-        c0.0[3] * (1.0 - t) + c1.0[3] * t,
-    ])
+    Px(image_kernels::families::gen::reference::linear(
+        a.0[0] as u32,
+        a.0[1] as u32,
+        p,
+    ))
 }
 
 #[test]
@@ -250,32 +234,12 @@ fn gen_linear_gradient_endpoints_and_degenerate() {
 const R0: [f32; 4] = [0.9, 0.3, 0.1, 1.0];
 const R1: [f32; 4] = [0.05, 0.4, 0.85, 0.6];
 
-fn mix4(c0: [f32; 4], c1: [f32; 4], t: f32) -> Px {
-    // WGSL mix(e1, e2, e3) = e1*(1-e3) + e2*e3.
-    Px([
-        c0[0] * (1.0 - t) + c1[0] * t,
-        c0[1] * (1.0 - t) + c1[1] * t,
-        c0[2] * (1.0 - t) + c1[2] * t,
-        c0[3] * (1.0 - t) + c1[3] * t,
-    ])
-}
-
 fn radial_ref(a: Px, _b: Px, p: &GenRadialGradientParams) -> Px {
-    let px = (p.ox + a.0[0] as i32) as f32;
-    let py = (p.oy + a.0[1] as i32) as f32;
-    let dx = px - p.cx;
-    let dy = py - p.cy;
-    let d = (dx * dx + dy * dy).sqrt();
-    let t = if p.radius > 0.0 {
-        (d / p.radius).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    mix4(
-        [p.c0r, p.c0g, p.c0b, p.c0a],
-        [p.c1r, p.c1g, p.c1b, p.c1a],
-        t,
-    )
+    Px(image_kernels::families::gen::reference::radial(
+        a.0[0] as u32,
+        a.0[1] as u32,
+        p,
+    ))
 }
 
 #[test]
@@ -340,45 +304,12 @@ fn gen_radial_gradient_center_and_degenerate() {
 // The f32 std consts are bit-identical to the WGSL literals the module
 // uses (1.5707963267948966 / 3.141592653589793 / 6.283185307179586 all
 // round to the same nearest f32).
-fn atan_poly_ref(z: f32) -> f32 {
-    let z2 = z * z;
-    z * (0.999_866 + z2 * (-0.3302995 + z2 * (0.180_141 + z2 * (-0.0851330 + z2 * 0.0208351))))
-}
-
-fn atan2_det_ref(y: f32, x: f32) -> f32 {
-    let ax = x.abs();
-    let ay = y.abs();
-    let mut base = if ax >= ay {
-        let r = if ax > 0.0 { ay / ax } else { 0.0 };
-        atan_poly_ref(r)
-    } else {
-        std::f32::consts::FRAC_PI_2 - atan_poly_ref(ax / ay)
-    };
-    if x < 0.0 {
-        base = std::f32::consts::PI - base;
-    }
-    if y < 0.0 {
-        base = -base;
-    }
-    base
-}
-
 fn angular_ref(a: Px, _b: Px, p: &GenAngularGradientParams) -> Px {
-    let px = (p.ox + a.0[0] as i32) as f32;
-    let py = (p.oy + a.0[1] as i32) as f32;
-    let dx = px - p.cx;
-    let dy = py - p.cy;
-    let ca = p.angle.cos();
-    let sa = p.angle.sin();
-    let rx = dx * ca + dy * sa;
-    let ry = dy * ca - dx * sa;
-    let theta = atan2_det_ref(ry, rx);
-    let t = ((theta + std::f32::consts::PI) / std::f32::consts::TAU).clamp(0.0, 1.0);
-    mix4(
-        [p.c0r, p.c0g, p.c0b, p.c0a],
-        [p.c1r, p.c1g, p.c1b, p.c1a],
-        t,
-    )
+    Px(image_kernels::families::gen::reference::angular(
+        a.0[0] as u32,
+        a.0[1] as u32,
+        p,
+    ))
 }
 
 #[test]
@@ -442,23 +373,11 @@ fn gen_angular_gradient_axes_and_seam() {
 // ─────────────────── breadth batch: reflected ──────────────────────
 
 fn reflected_ref(a: Px, _b: Px, p: &GenReflectedGradientParams) -> Px {
-    let px = (p.ox + a.0[0] as i32) as f32;
-    let py = (p.oy + a.0[1] as i32) as f32;
-    let dx = px - p.x0;
-    let dy = py - p.y0;
-    let ex = p.x1 - p.x0;
-    let ey = p.y1 - p.y0;
-    let dd = ex * ex + ey * ey;
-    let t = if dd > 0.0 {
-        ((dx * ex + dy * ey) / dd).abs().clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    mix4(
-        [p.c0r, p.c0g, p.c0b, p.c0a],
-        [p.c1r, p.c1g, p.c1b, p.c1a],
-        t,
-    )
+    Px(image_kernels::families::gen::reference::reflected(
+        a.0[0] as u32,
+        a.0[1] as u32,
+        p,
+    ))
 }
 
 #[test]
@@ -519,24 +438,11 @@ fn gen_reflected_gradient_mirrors_about_p0() {
 // ──────────────────── breadth batch: diamond ───────────────────────
 
 fn diamond_ref(a: Px, _b: Px, p: &GenDiamondGradientParams) -> Px {
-    let px = (p.ox + a.0[0] as i32) as f32;
-    let py = (p.oy + a.0[1] as i32) as f32;
-    let dx = px - p.cx;
-    let dy = py - p.cy;
-    let ca = p.angle.cos();
-    let sa = p.angle.sin();
-    let rx = dx * ca + dy * sa;
-    let ry = dy * ca - dx * sa;
-    let t = if p.scale > 0.0 {
-        ((rx.abs() + ry.abs()) / p.scale).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    mix4(
-        [p.c0r, p.c0g, p.c0b, p.c0a],
-        [p.c1r, p.c1g, p.c1b, p.c1a],
-        t,
-    )
+    Px(image_kernels::families::gen::reference::diamond(
+        a.0[0] as u32,
+        a.0[1] as u32,
+        p,
+    ))
 }
 
 #[test]

@@ -642,7 +642,7 @@ fn is_smart(layer: &LayerRecord) -> bool {
 }
 
 /// The record's fill opacity (`iOpa`), 255 when absent.
-fn fill_opacity(layer: &LayerRecord) -> u8 {
+pub fn fill_opacity(layer: &LayerRecord) -> u8 {
     layer
         .addl
         .iter()

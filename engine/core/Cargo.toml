@@ -19,6 +19,7 @@ members = [
     "crates/paged-image-adjust",
     "crates/paged-psd",
     "crates/paged-psd-fx",
+    "crates/paged-layer-fx",
     "crates/paged-resample",
     "crates/paged-raster",
     "crates/paged-sniff",
@@ -259,6 +260,7 @@ image-core = { path = "crates/paged-pixel", package = "paged-pixel" }
 image-psd = { path = "crates/paged-psd", package = "paged-psd" }
 paged-resample = { path = "crates/paged-resample" }
 paged-kernels = { path = "crates/paged-kernels" }
+paged-layer-fx = { path = "crates/paged-layer-fx" }
 paged-raster = { path = "crates/paged-raster" }
 paged-color = { path = "crates/paged-color" }
 paged-warp = { path = "crates/paged-warp" }

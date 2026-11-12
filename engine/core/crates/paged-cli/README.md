@@ -136,6 +136,13 @@ engine ADR 1031) as native, editable page items, fitted proportionally
 and centred in the frame's box, and the frame is removed. Its colours
 become swatches; anything the import approximates is reported.
 
+`paged place --layers <doc> <frame> file.psd` places a PSD's LAYERS
+instead (`RequestPsdLayersPlace`, engine ADR 1099): each pixel layer a
+frame at its place on the canvas, the canvas's top-left at the frame's,
+with its pixels, blend mode, opacities and layer style (drawn by the
+engine's layer-style evaluator, editable as effects); the frame is
+removed and what a frame could not carry is reported.
+
 ```js
 // build.js — beside photo.jpg and logo.svg
 const page = JSON.parse(paged.pages())[0].selfId;

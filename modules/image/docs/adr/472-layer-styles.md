@@ -1,6 +1,11 @@
 # ADR 472 — A layer style is a sequence of fold steps around the layer's pixels
 
-- **Status:** Accepted, 2026-10-25 (WP5.4).
+- **Status:** Accepted, 2026-10-25 (WP5.4). Amended 2026-11-12 by engine ADR 1099
+  (`engine/core/docs/adr/1099-a-layer-style-is-drawn-by-one-evaluator.md`): the plan and the
+  effects' dispatches moved to the engine's layer-style evaluator `paged-layer-fx` and the
+  `style.*` family to `paged-kernels`; the fold maps a layer's style onto the effect stack
+  (`paged-psd-fx`, lossless) and runs the evaluator on its GPU batch, its renders byte-identical
+  to before. The decisions below stand; their code now lives there.
 - **Scope:** the style model and its descriptor reader and writer in `paged-psd`
   (`engine/core/crates/paged-psd/src/effects.rs`, `descriptor.rs`), the `style.*` kernel family
   (`image-kernels/src/families/style.rs`, `registry/kernels.yaml`), the fold
