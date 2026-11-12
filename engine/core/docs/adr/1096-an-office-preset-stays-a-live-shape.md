@@ -133,6 +133,27 @@ and text rectangle equal the table's, so every preset evaluates bit-identically.
   `live-presets.ts` and `adjust-handles.ts` are removed; sheet's `table-shapes.ts` keeps a shape
   across a refresh instead of drawing it again.
 
+## Evidence
+
+- `paged-preset-geom`: the evaluator's and the live arithmetic's tests, moved with them; `model`
+  (draw, live, refit with the scale moved into the box, handles with flips, sites, routing, a short
+  rounded leader line still live). `dml-geom`'s `the_table_is_annex_d` holds the build-time table to
+  the XML as the DrawingML reader reads it, for all 187 presets and their text rectangles.
+- `paged-canvas/tests/it/presets.rs`: set, read with handles and undo exactly; a scale refits and
+  keeps the radius; adjust values and handle drags; a point edit and Expand Shape; a glued
+  connector routed again; IDML and `.paged` keep the preset; a Word anchored shape takes a preset
+  and a handle drag; Office heads and the text key undo exactly.
+- slide: every conformance fixture lowers byte-identically (anchors, transforms, bounds) with the
+  engine fields set; `pptx-export/tests/live.rs` drives the engine (move, resize, handle drag) and
+  still matches PowerPoint's own result; `slide-native/tests/migrate.rs` lifts old documents.
+  doc: `presets_and_adjust_values_survive_docx_to_paged_to_docx`. sheet: shapes kept across a
+  refresh, `set_shape_preset` round trip.
+- Real applications (2026-11-12): PowerPoint 16 opened the exported decks (an adjust value dragged,
+  a resized rounded rectangle, connectors re-routed) without a repair prompt and saved them again
+  with the presets and `adj = val 39259` intact; Word 16 opened the edited docx (triangle `val
+  70000`, rounded rectangle `val 45000`, a reshaped rectangle as custom geometry) without a repair
+  prompt and kept both presets and adjust values through its own save.
+
 ## Open questions
 
 - A shaded face (`darken`, `lighten` paths of ribbons, action buttons, curved arrows) is still drawn
