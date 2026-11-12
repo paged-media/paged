@@ -638,9 +638,10 @@ pub struct LoweredImage {
     /// picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<dml_native::native::NativeFx>,
-    /// What the engine cannot hold of the look, one line per kind.
+    /// What the engine cannot hold of the look, one entry per kind
+    /// (`dml.*` codes, the shared mapper's).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub losses: Vec<String>,
+    pub losses: Vec<paged_loss::LossEntry>,
     /// The picture's corrections (`a:lum`, `a:duotone`, `a:grayscl`,
     /// `a:biLevel`, `a:hsl`, `a:clrRepl`, `a:clrChange`, `a:blur`) as the
     /// engine's filter stack (engine ADR 1037), in blip order, through the

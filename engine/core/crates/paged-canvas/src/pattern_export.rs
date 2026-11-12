@@ -217,13 +217,18 @@ fn pattern_uses(scene: &Document) -> Vec<(&'static str, String, &'static str, St
 /// One line per frame whose pattern paint IDML cannot say (checked
 /// against `twin`, the export re-imported, where there is one), and one
 /// per pattern swatch no frame uses.
-pub(crate) fn pattern_losses(scene: &Document, twin: Option<&Document>) -> Vec<String> {
+pub(crate) fn pattern_losses(
+    scene: &Document,
+    twin: Option<&Document>,
+) -> Vec<paged_model::report::LossEntry> {
+    use crate::export_losses::idml_loss;
+    use paged_model::report::LossSeverity;
     if scene.palette.patterns.is_empty() {
         return Vec::new();
     }
     let uses = pattern_uses(scene);
     let twin_uses = twin.map(pattern_uses).unwrap_or_default();
-    let mut out: Vec<String> = uses
+    let mut out: Vec<paged_model::report::LossEntry> = uses
         .iter()
         .map(|(kind, id, slot, pid)| {
             let carried = twin.is_none()
@@ -235,26 +240,41 @@ pub(crate) fn pattern_losses(scene: &Document, twin: Option<&Document>) -> Vec<S
                             == scene.palette.patterns.get(pid)
                 });
             if carried {
-                format!(
-                    "the {slot} of {kind} `{id}` is the pattern swatch `{pid}`, a paged-native \
-                     paint — IDML has none, so InDesign shows a stand-in swatch; the pattern \
-                     rides in the frame's label and a paged import restores it. Save as \
-                     `.paged` to keep it everywhere."
+                idml_loss(
+                    "idml.pattern.label",
+                    LossSeverity::Approximated,
+                    Some(id),
+                    format!(
+                        "the {slot} of {kind} `{id}` is the pattern swatch `{pid}`, a \
+                         paged-native paint — IDML has none, so InDesign shows a stand-in \
+                         swatch; the pattern rides in the frame's label and a paged import \
+                         restores it. Save as `.paged` to keep it everywhere."
+                    ),
                 )
             } else {
-                format!(
-                    "the {slot} of {kind} `{id}` is the pattern swatch `{pid}`, a paged-native \
-                     paint — IDML has none, and the label meant to carry it did not survive \
-                     the export. Save as `.paged` to keep it."
+                idml_loss(
+                    "idml.pattern.lost",
+                    LossSeverity::Dropped,
+                    Some(id),
+                    format!(
+                        "the {slot} of {kind} `{id}` is the pattern swatch `{pid}`, a \
+                         paged-native paint — IDML has none, and the label meant to carry it \
+                         did not survive the export. Save as `.paged` to keep it."
+                    ),
                 )
             }
         })
         .collect();
     for pid in scene.palette.patterns.keys() {
         if pid.starts_with(PATTERN_ID_PREFIX) && !uses.iter().any(|(_, _, _, p)| p == pid) {
-            out.push(format!(
-                "the pattern swatch `{pid}` is used by no frame — IDML has no pattern swatch, \
-                 so it is not written. Save as `.paged` to keep it."
+            out.push(idml_loss(
+                "idml.pattern.unused",
+                LossSeverity::Dropped,
+                Some(pid),
+                format!(
+                    "the pattern swatch `{pid}` is used by no frame — IDML has no pattern \
+                     swatch, so it is not written. Save as `.paged` to keep it."
+                ),
             ));
         }
     }

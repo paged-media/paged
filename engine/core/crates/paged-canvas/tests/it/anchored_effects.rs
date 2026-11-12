@@ -230,7 +230,11 @@ fn a_later_edit_redraws_the_anchored_frame__feat__anchored_inline_objects_anchor
 #[allow(non_snake_case)]
 fn the_look_survives_paged_and_idml__feat__anchored_inline_objects_anchored_effects() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let mut l = look();
     l.push(set(
         PropertyPath::FrameEffectStack,
@@ -266,6 +270,7 @@ fn the_look_survives_paged_and_idml__feat__anchored_inline_objects_anchored_effe
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert!(

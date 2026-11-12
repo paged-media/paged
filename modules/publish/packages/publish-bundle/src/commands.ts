@@ -50,6 +50,7 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
+import { lossDiagnostics } from "@paged-media/plugin-sdk";
 import { defineMessages, t } from "@paged-media/strings";
 
 import exportResult from "../schema/export-result.json";
@@ -360,8 +361,9 @@ export async function preflight(
 }
 
 /** Export the active document to IDML through the engine's writer. Every
- *  loss the engine reports becomes a warning (the exporter used to drop
- *  them). */
+ *  loss the engine reports becomes a diagnostic with the loss's own
+ *  `idml.<area>.<what>` code (engine ADR 1097): a warning, or info for one
+ *  that changes nothing InDesign shows (the SDK's `lossDiagnostics`). */
 export async function exportIdmlResult(
   host: BundleHost,
   linkBase?: string,
@@ -382,12 +384,15 @@ export async function exportIdmlResult(
     fileName: `${await baseName(host)}.idml`,
     mimeType: "application/vnd.adobe.indesign-idml-package",
     pageCount: pages.length,
-    diagnostics: (reply.payload.lost ?? []).map((message) => ({
-      severity: "warning" as const,
-      code: "idml.lost",
-      message,
-      page: 0,
-    })),
+    diagnostics: (reply.payload.lost ?? []).map((loss) => {
+      const [row] = lossDiagnostics([loss]);
+      return {
+        severity: row!.severity,
+        code: loss.code,
+        message: row!.message,
+        page: 0,
+      };
+    }),
   };
 }
 

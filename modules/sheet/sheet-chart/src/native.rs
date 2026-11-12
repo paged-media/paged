@@ -42,6 +42,7 @@
 
 use dml_native::native::Lowering;
 pub use dml_native::RasterOp;
+pub use dml_native::{LossEntry, LossSeverity};
 use paged_ooxml::drawingml::{resolved::Paint, Rgba};
 
 pub use dml_native::native::{
@@ -100,8 +101,9 @@ impl NativeLowering {
         }
     }
 
-    /// One line per kind of loss, in the order first met.
-    pub fn take_losses(&mut self) -> Vec<String> {
+    /// One entry per kind of loss (`dml.*`, `xlsx.*`), counted, in the
+    /// order first met.
+    pub fn take_losses(&mut self) -> Vec<LossEntry> {
         self.lowering.take_losses()
     }
 
@@ -126,9 +128,15 @@ impl NativeLowering {
             if let Some(f) = &fx.line_fill {
                 match l.resolve_paint(f) {
                     Paint::Linear { .. } | Paint::Radial { .. } => l.lose(
+                        "dml.line.gradient",
+                        LossSeverity::Approximated,
                         "a gradient line is drawn in its first colour (lines take no gradient yet)",
                     ),
-                    Paint::Pattern(_) => l.lose("a pattern line is drawn in its foreground colour"),
+                    Paint::Pattern(_) => l.lose(
+                        "xlsx.chart.patternLine",
+                        LossSeverity::Approximated,
+                        "a pattern line is drawn in its foreground colour",
+                    ),
                     _ => {}
                 }
             }
@@ -183,8 +191,8 @@ pub struct PictureLook {
     pub fx: Option<NativeFx>,
     /// The frame's filter stack (`frameImageAdjustments`, engine ADR 1037).
     pub adjustments: Vec<RasterOp>,
-    /// What the page cannot hold of the look, one line per kind.
-    pub losses: Vec<String>,
+    /// What the page cannot hold of the look, one entry per kind.
+    pub losses: Vec<LossEntry>,
 }
 
 /// A drawing picture's native look; see [`NativeLowering::picture`].
@@ -240,7 +248,7 @@ pub fn shape_look(
     props: &paged_ooxml::drawingml::ShapeProperties,
     w: f64,
     h: f64,
-) -> (Option<NativeFx>, Vec<String>) {
+) -> (Option<NativeFx>, Vec<LossEntry>) {
     let mut n = NativeLowering::new(theme);
     let fx = n.lowering.shape(props, w, h);
     ((!fx.is_empty()).then_some(fx), n.take_losses())
@@ -414,7 +422,7 @@ mod tests {
         assert_eq!(f.effect_stack.len(), 1);
         let losses = n.take_losses();
         assert_eq!(losses.len(), 1, "{losses:?}");
-        assert!(losses[0].contains("pattern"), "{losses:?}");
+        assert!(losses[0].message.contains("pattern"), "{losses:?}");
     }
 
     #[test]
@@ -446,7 +454,7 @@ mod tests {
         let f = n.lower(&fx, (0.0, 0.0, 100.0, 10.0), false).fx.unwrap();
         assert!(f.gradient.is_none() && f.gradient_feather.is_none());
         assert_eq!(f.drop_shadow.unwrap().x_offset, 2.0);
-        assert!(n.take_losses()[0].contains("gradient line"));
+        assert!(n.take_losses()[0].message.contains("gradient line"));
     }
 
     #[test]

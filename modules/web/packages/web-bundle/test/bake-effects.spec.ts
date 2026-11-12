@@ -246,7 +246,7 @@ describe("CSS effects → native items @feat:plugin-web.css-effects", () => {
                 a: 1,
               },
             ],
-            losses: ["mixBlendMode.plusLighter"],
+            losses: [{ code: "mixBlendMode.plusLighter", count: 1 }],
           }),
         ],
         losses: { "cssEffect.inline": 2 },

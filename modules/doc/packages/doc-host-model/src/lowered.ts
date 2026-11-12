@@ -281,8 +281,9 @@ export interface LoweredImage {
    *  as `#RRGGBB`. Painted on the picture's anchored frame (doc ADR 619).
    *  Absent for a plain picture. */
   fx?: NativeFx;
-  /** What the engine cannot hold of the look, one line per kind. */
-  losses?: string[];
+  /** What the engine cannot hold of the look, one entry per kind (the
+   *  shared mapper's `dml.*` codes). */
+  losses?: LossEntry[];
   /** The picture's corrections (`a:lum`, `a:duotone`, `a:grayscl`,
    *  `a:biLevel`, `a:hsl`, `a:clrRepl`, `a:clrChange`, `a:blur`) as the
    *  engine's filter stack (engine ADR 1037), through the shared mapper

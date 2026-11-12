@@ -185,6 +185,107 @@ async function enter(page: Page, type: string, ref: Ref): Promise<void> {
   await expect.poll(() => contextType(page)).toBe(type);
 }
 
+/** A two-colour PNG, drawn in the page realm, as bytes. */
+async function placePicture(page: Page, id: string): Promise<void> {
+  const placed = await page.evaluate(async (id) => {
+    const c = (globalThis as unknown as CanvasGlobal).__canvas.client;
+    const cv = new OffscreenCanvas(160, 120);
+    const ctx = cv.getContext("2d")!;
+    ctx.fillStyle = "#2050d0";
+    ctx.fillRect(0, 0, 160, 120);
+    ctx.fillStyle = "#f0c020";
+    ctx.fillRect(80, 0, 80, 120);
+    const bytes = Array.from(
+      new Uint8Array(
+        await (await cv.convertToBlob({ type: "image/png" })).arrayBuffer(),
+      ),
+    );
+    return (
+      await c.mutate({
+        op: "replaceImageBytes",
+        args: { elementId: id, bytes },
+      })
+    ).kind;
+  }, id);
+  expect(placed).toBe("mutationApplied");
+}
+
+/** Insert a closed straight-edged path through `points` (page pt). */
+async function insertPolygon(
+  page: Page,
+  points: Array<[number, number]>,
+): Promise<Ref> {
+  const id = await page.evaluate(async (points) => {
+    const g = globalThis as unknown as CanvasGlobal & {
+      __canvas: { handle: { pageIds: string[] } };
+    };
+    const made = (await g.__canvas.client.mutate({
+      op: "insertPath",
+      args: {
+        pageId: g.__canvas.handle.pageIds[0],
+        anchors: points.map((p) => ({ anchor: p, left: p, right: p })),
+        open: false,
+        smooth: false,
+      },
+    })) as { kind: string; payload?: { createdId?: { id?: string } } };
+    return made.payload?.createdId?.id ?? "";
+  }, points);
+  expect(id).toBeTruthy();
+  return { kind: "polygon", id };
+}
+
+/** Pick `tool` from its rail slot, through the slot's flyout when another
+ *  tool is the slot's face. */
+async function pickTool(page: Page, tool: string, group: string) {
+  const slot = page.locator(`[data-tool-slot="${group}"]`).first();
+  await expect(slot, tool).toBeVisible();
+  if ((await slot.getAttribute("data-tool")) === tool) {
+    await slot.click();
+  } else {
+    await slot.click({ button: "right" });
+    const flyout = page.locator(`[data-tool-flyout="${group}"]`);
+    await expect(flyout, `${tool} in its slot's flyout`).toBeVisible();
+    await flyout.locator(`[data-tool="${tool}"]`).click();
+  }
+  await expect(
+    page.locator(`[data-tool-slot="${group}"][data-tool="${tool}"]`),
+    tool,
+  ).toHaveAttribute("data-active", "true");
+}
+
+/** A real pointer drag between two page points. */
+async function dragPage(
+  page: Page,
+  from: [number, number],
+  to: [number, number],
+  modifiers: Array<"Shift" | "Alt" | "ControlOrMeta"> = [],
+): Promise<void> {
+  const a = await screenPoint(page, from[0], from[1]);
+  const b = await screenPoint(page, to[0], to[1]);
+  for (const m of modifiers) await page.keyboard.down(m);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 6 });
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.waitForTimeout(60);
+  await page.mouse.up();
+  for (const m of [...modifiers].reverse()) await page.keyboard.up(m);
+}
+
+/** The head entry of an item's object effect stack, when it is the live
+ *  Free Distort: its unit-square corners. */
+const freeDistortOf = (page: Page, ref: Ref) =>
+  page.evaluate(async (r) => {
+    const c = (globalThis as unknown as CanvasGlobal).__canvas.client;
+    const props = await c.elementProperties(r);
+    const v = props?.entries.find((e) => e.path === "frameEffectStack")
+      ?.value as
+      | { value?: { entries?: { kind: string; corners?: number[][] }[] } }
+      | undefined;
+    const head = v?.value?.entries?.[0];
+    return head?.kind === "freeDistort" ? (head.corners ?? null) : null;
+  }, ref);
+
 /** Run `action` and expect exactly one new engine undo step. */
 async function oneStep(page: Page, what: string, action: () => Promise<void>) {
   const before = await undoLen(page);
@@ -446,6 +547,252 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         );
         await stillHere();
       }
+    });
+  }
+
+  // Consolidation P2 — one tool per capability in every context. On a
+  // closed polygon placing a picture (the context's frame), inside each
+  // context and without leaving it:
+  //
+  //   Corners       Direct Selection (on every context's rail) shows the
+  //                 polygon's corner widgets; a drag rounds every corner
+  //                 (editor ADR 310) — one undo step;
+  //   Free Distort  Free Transform, Cmd on a corner: the engine's live
+  //                 Free Distort at the head of the effect stack, the
+  //                 anchors kept (editor ADR 295) — one undo step; and
+  //   Perspective   Cmd+Alt+Shift composes onto it — one undo step;
+  //   Eyedropper    Object mode: a click on another object lends its look
+  //                 to the frame (helpers' sampled-style) — one undo step;
+  //   References    a footnote, a destination, a cross-reference and an
+  //                 index entry at a text caret, the host's commands
+  //                 (editor ADR 315) — one undo step each.
+  //
+  // The slide-only tools that moved onto host machinery have their own
+  // specs inside the slide context: the Format Painter on sampled-style
+  // (journey/plugins/slide-effects) and the motion path on the Direct
+  // Selection machine (journey/plugins/slide-motion-path).
+  for (const ctx of CONTEXTS) {
+    test(`HPX-P2-${ctx.module} — polygon corners, live Free Distort and Perspective, the Eyedropper's object mode and the reference inserts ${
+      ctx.type ? `inside ${ctx.type}` : "in a publish (IDML) document"
+    } @feat:editor-shell.shared-panels-every-context @level:gesture`, async ({
+      page,
+    }) => {
+      covers(
+        "tool:paged.tool.directSelect",
+        "tool:paged.tool.freeTransform",
+        "tool:paged.tool.eyedropper",
+        "setting:paged.tool.eyedropper.mode",
+        "command:paged.insert.footnote",
+        "command:paged.insert.bookmark",
+        "command:paged.insert.crossReference",
+        "command:paged.insert.indexEntry",
+      );
+      const designer = new Designer(page);
+      await designer.open();
+      await designer.newDocument();
+      const ref = await insertPolygon(page, [
+        [FRAME.x0, FRAME.y0],
+        [FRAME.x1, FRAME.y0],
+        [FRAME.x1, FRAME.y1],
+        [FRAME.x0, FRAME.y1],
+      ]);
+      await placePicture(page, ref.id);
+      // The Eyedropper's source: a black square with a 7 pt stroke.
+      const source = await insertPolygon(page, [
+        [400, 140],
+        [520, 140],
+        [520, 260],
+        [400, 260],
+      ]);
+      for (const [path, value] of [
+        ["frameFillColor", { type: "colorRef", value: "Color/Black" }],
+        ["frameStrokeColor", { type: "colorRef", value: "Color/Black" }],
+        ["frameStrokeWeight", { type: "length", value: 7 }],
+      ] as const) {
+        await page.evaluate(
+          (m) =>
+            (globalThis as unknown as CanvasGlobal).__canvas.client.mutate(m),
+          {
+            op: "setElementProperty",
+            args: { elementId: source, path, value },
+          },
+        );
+      }
+      // The references' story.
+      const { storyId } = await designer.addTextFrame({
+        x0: 120,
+        y0: 340,
+        x1: 440,
+        y1: 460,
+      });
+      expect(storyId).toBeTruthy();
+      await page.evaluate(
+        (m) =>
+          (globalThis as unknown as CanvasGlobal).__canvas.client.mutate(m),
+        {
+          op: "insertText",
+          args: { storyId, offset: 0, text: "Alpha beta gamma" },
+        },
+      );
+      await expect
+        .poll(() => designer.storyChars(storyId!))
+        .toBeGreaterThan(10);
+
+      await designer.selectElement(ref.kind, ref.id);
+      if (ctx.type) await enter(page, ctx.type, ref);
+      const stillHere = async () =>
+        expect(await contextType(page), "still in the context").toBe(ctx.type);
+
+      // CORNERS — Direct Selection puts the frame in path-edit mode, where
+      // the corner widgets stay. 30 pt in along both edges of the square
+      // top-left corner: a 30 pt radius on every corner.
+      await pickTool(page, "paged.tool.directSelect", "directSelect");
+      await stillHere();
+      const widget = page
+        .locator('[data-live-handle="polygon-corner-0"] circle')
+        .first();
+      await expect(
+        widget,
+        "the corner widget under Direct Selection",
+      ).toBeVisible();
+      const box = (await widget.boundingBox())!;
+      const inside = await screenPoint(page, FRAME.x0 + 30, FRAME.y0 + 30);
+      await oneStep(page, "corner radius", async () => {
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(inside.x - 8, inside.y - 8, { steps: 6 });
+        await page.mouse.move(inside.x, inside.y, { steps: 6 });
+        await page.waitForTimeout(60);
+        await page.mouse.up();
+      });
+      await expect
+        .poll(() => property(page, ref, "frameCornerOptionTopLeft"))
+        .toBe("RoundedCorner");
+      const radius = (await property(
+        page,
+        ref,
+        "frameCornerRadiusTopLeft",
+      )) as number;
+      expect(radius).toBeGreaterThan(25);
+      expect(radius).toBeLessThan(35);
+      expect(await property(page, ref, "frameCornerRadiusBottomRight")).toBe(
+        radius,
+      );
+      await stillHere();
+
+      // FREE DISTORT — Cmd on the SE corner moves that corner alone; the
+      // path keeps its anchors, the effect stack's head entry moves it.
+      await pickTool(page, "paged.tool.freeTransform", "transform");
+      await stillHere();
+      await designer.selectElement(ref.kind, ref.id);
+      expect(await freeDistortOf(page, ref)).toBeNull();
+      await oneStep(page, "free distort", async () => {
+        await dragPage(
+          page,
+          [FRAME.x1, FRAME.y1],
+          [FRAME.x1 + 40, FRAME.y1 + 30],
+          ["ControlOrMeta"],
+        );
+      });
+      const w = FRAME.x1 - FRAME.x0;
+      const h = FRAME.y1 - FRAME.y0;
+      await expect
+        .poll(
+          async () => {
+            const corners = await freeDistortOf(page, ref);
+            const se = corners?.find((p) => p[0]! > 1.05 && p[1]! > 1.05);
+            return (
+              !!se &&
+              Math.abs(se[0]! - (w + 40) / w) < 0.03 &&
+              Math.abs(se[1]! - (h + 30) / h) < 0.03
+            );
+          },
+          { message: "the SE corner is distorted" },
+        )
+        .toBe(true);
+      const distorted = JSON.stringify(await freeDistortOf(page, ref));
+      await stillHere();
+
+      // PERSPECTIVE — Cmd+Alt+Shift on the NE corner composes onto it.
+      await oneStep(page, "perspective", async () => {
+        await dragPage(
+          page,
+          [FRAME.x1, FRAME.y0],
+          [FRAME.x1 + 30, FRAME.y0 + 2],
+          ["ControlOrMeta", "Alt", "Shift"],
+        );
+      });
+      await expect
+        .poll(async () => JSON.stringify(await freeDistortOf(page, ref)))
+        .not.toBe(distorted);
+      await stillHere();
+
+      // EYEDROPPER, OBJECT MODE — the source's look onto the frame.
+      await pickTool(page, "paged.tool.eyedropper", "eyedropper");
+      const popover = page.locator(
+        '[data-tool-options="paged.tool.eyedropper"]',
+      );
+      await page.locator('[data-tool-slot="eyedropper"]').first().dblclick();
+      await popover.locator('[data-tool-option="mode"]').selectOption("object");
+      await page.mouse.click(5, 5);
+      await expect(popover).toBeHidden();
+      await stillHere();
+      await designer.selectElement(ref.kind, ref.id);
+      expect(await property(page, ref, "frameStrokeWeight")).not.toBe(7);
+      const sample = await screenPoint(page, 460, 200);
+      await oneStep(page, "eyedropper object", async () => {
+        await page.mouse.click(sample.x, sample.y);
+      });
+      await expect.poll(() => property(page, ref, "frameStrokeWeight")).toBe(7);
+      await stillHere();
+
+      // REFERENCES — the host's inserts at a caret in the story.
+      await page.evaluate(
+        (storyId) =>
+          (
+            globalThis as unknown as {
+              __canvas: { setContentSelection: (s: unknown) => void };
+            }
+          ).__canvas.setContentSelection({ storyId, start: 5, end: 5 }),
+        storyId,
+      );
+      for (const [what, id, payload] of [
+        ["footnote", "paged.insert.footnote", { text: "" }],
+        [
+          "destination",
+          "paged.insert.bookmark",
+          { name: `Here-${ctx.module}` },
+        ],
+        [
+          "cross-reference",
+          "paged.insert.crossReference",
+          { bookmark: `Here-${ctx.module}`, referTo: "pageNumber" },
+        ],
+        ["index entry", "paged.insert.indexEntry", { topic: ["Alpha"] }],
+      ] as const) {
+        await oneStep(page, what, async () => {
+          await page.evaluate(
+            ([i, p]) =>
+              (
+                globalThis as unknown as {
+                  __canvas: {
+                    registries: {
+                      commands: {
+                        invoke(id: string, payload?: unknown): Promise<unknown>;
+                      };
+                    };
+                  };
+                }
+              ).__canvas.registries.commands.invoke(i, p),
+            [id, payload] as const,
+          );
+        });
+        await stillHere();
+      }
+      expect((await designer.collection("footnotes")).length).toBe(1);
+      expect((await designer.collection("indexTopics")).length).toBeGreaterThan(
+        0,
+      );
     });
   }
 });

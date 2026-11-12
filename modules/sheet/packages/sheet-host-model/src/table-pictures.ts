@@ -144,7 +144,14 @@ export function tablePictureOps(
   return [...swatchMintOps("chart", [...hexes], knownSwatchIds), ...ops];
 }
 
-/** What the page cannot hold of `content`'s pictures, one line per kind. */
+/** What the page cannot hold of `content`'s pictures, one sentence per kind
+ *  (an entry's message, else its code). */
 export function tablePictureLosses(content: LoweredContent): string[] {
-  return [...new Set((content.pictures ?? []).flatMap((p) => p.losses ?? []))];
+  return [
+    ...new Set(
+      (content.pictures ?? []).flatMap((p) =>
+        (p.losses ?? []).map((l) => l.message || l.code),
+      ),
+    ),
+  ];
 }

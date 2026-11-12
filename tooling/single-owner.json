@@ -412,14 +412,7 @@
         "pub (losses|lost|unsupported|not_exported): Vec<String>,"
       ],
       "extensions": [".rs", ".ts", ".tsx"],
-      "baseline": [
-        "modules/doc/docx-lower/src/ir.rs",
-        "modules/sheet/sheet-chart/src/geometry.rs",
-        "modules/sheet/sheet-chart/src/native.rs",
-        "modules/sheet/sheet-js/src/core/annotations.rs",
-        "modules/sheet/sheet-js/src/core/shapes.rs",
-        "modules/web/packages/web-render/src/effects.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "pdf-export-loop",

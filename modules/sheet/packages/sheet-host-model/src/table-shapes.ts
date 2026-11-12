@@ -498,7 +498,14 @@ export function shapePresetWrite(
   }
 }
 
-/** What the page cannot hold of `content`'s shapes, one line per kind. */
+/** What the page cannot hold of `content`'s shapes, one sentence per kind
+ *  (an entry's message, else its code). */
 export function tableShapeLosses(content: LoweredContent): string[] {
-  return [...new Set((content.shapes ?? []).flatMap((s) => s.losses ?? []))];
+  return [
+    ...new Set(
+      (content.shapes ?? []).flatMap((s) =>
+        (s.losses ?? []).map((l) => l.message || l.code),
+      ),
+    ),
+  ];
 }

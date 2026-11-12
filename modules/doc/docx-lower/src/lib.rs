@@ -1451,7 +1451,7 @@ impl Lowering {
             // Not poured at all; the cell-picture diagnostic says so.
         } else {
             for l in &li.losses {
-                *self.look_losses.entry(l.clone()).or_default() += 1;
+                *self.look_losses.entry(l.message.clone()).or_default() += 1;
             }
             if !fx.is_empty() {
                 self.looked_pictures += 1;
