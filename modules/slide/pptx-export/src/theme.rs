@@ -123,7 +123,7 @@ pub fn write_themes(
     doc: &Document,
     primary: Option<&str>,
     out: &mut BTreeMap<String, Vec<u8>>,
-    diagnostics: &mut Vec<String>,
+    diagnostics: &mut Vec<pptx_core::loss::LossEntry>,
 ) {
     let Some(deck) = primary.and_then(|p| ir.theme(p)) else {
         return;
@@ -146,9 +146,13 @@ pub fn write_themes(
             Some(x) => {
                 out.insert(part.to_string(), x.into_bytes());
             }
-            None => diagnostics.push(format!(
-                "{part}: the theme has no colour or font scheme to write; written as the deck had it"
-            )),
+            None => pptx_core::loss::LossLog::dropped(
+                diagnostics,
+                "pptx.export.theme",
+                &format!(
+                    "{part}: the theme has no colour or font scheme to write; written as the deck had it"
+                ),
+            ),
         }
     }
 }

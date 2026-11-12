@@ -386,6 +386,7 @@ fn every_advertised_schema_names_the_wire_apply_takes() {
                     story_id: s.self_id.clone(),
                     start: 0,
                     end: 2,
+                    cell: None,
                 },
             ));
         }

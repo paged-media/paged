@@ -1031,7 +1031,11 @@ fn filter(i: &mut Interp<'_>) -> R {
         "NullEncode",
     ];
     if !KNOWN.contains(&name.as_str()) {
-        i.report.unsupported(&format!("filter {name}"));
+        i.report.unsupported(
+            "eps.filter",
+            paged_loss::LossSeverity::Dropped,
+            &format!("filter {name}"),
+        );
         return Err(err("undefined"));
     }
     // What the filter may produce: the rest of the memory budget, which

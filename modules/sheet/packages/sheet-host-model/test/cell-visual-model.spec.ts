@@ -8,9 +8,8 @@ import { describe, expect, it } from "bun:test";
 import type { Mutation } from "@paged-media/plugin-api";
 
 import {
-  cellAlignStyleMints,
-  cellCharacterStyleApplies,
-  cellCharacterStyleMints,
+  cellCharacterFormatOps,
+  cellParagraphFormatOps,
   cellFillSwatchOps,
   cellRotationOps,
   styleProps,
@@ -81,23 +80,33 @@ describe("document references on the page [sheet.format.cell-style]", () => {
       type: "text",
       value: "CellStyle/Total",
     });
-    expect(cellCharacterStyleMints(c, new Set())).toEqual([]);
-    expect(loose(cellCharacterStyleApplies(c, "S", "T"))[0].args.style).toBe(
-      "CharacterStyle/Strong",
-    );
+    expect(loose(cellCharacterFormatOps(c, "S", "T"))).toEqual([
+      expect.objectContaining({
+        op: "applyStyle",
+        args: expect.objectContaining({ style: "CharacterStyle/Strong" }),
+      }),
+    ]);
   });
 
-  it("bases a minted paragraph style on the document paragraph style", () => {
+  it("applies the document paragraph style with its extra facets direct on top", () => {
     const c = content({ docParaStyle: "ParagraphStyle/Body", indentPt: 6.75 });
-    const ops = loose(cellAlignStyleMints(c, new Set()));
-    expect(ops[0].args.basedOn).toBe("ParagraphStyle/Body");
-    // With nothing on top the document style applies as it is: no mint.
+    const ops = loose(cellParagraphFormatOps(c, "S", "T"));
+    expect(ops.map((o) => o.op)).toEqual(["applyStyle", "setElementProperty"]);
+    expect(ops[0].args.style).toBe("ParagraphStyle/Body");
+    expect(ops[1].args).toMatchObject({
+      path: "paragraphLeftIndent",
+      value: { type: "length", value: 6.75 },
+    });
+    // With nothing on top the document style applies as it is.
     expect(
-      cellAlignStyleMints(
-        content({ docParaStyle: "ParagraphStyle/Body" }),
-        new Set(),
-      ),
-    ).toEqual([]);
+      loose(
+        cellParagraphFormatOps(
+          content({ docParaStyle: "ParagraphStyle/Body" }),
+          "S",
+          "T",
+        ),
+      ).map((o) => o.op),
+    ).toEqual(["applyStyle"]);
   });
 
   it("carries strike, super/subscript and a document text swatch", () => {
@@ -124,7 +133,7 @@ describe("document references on the page [sheet.format.cell-style]", () => {
 });
 
 describe("rich text, rotation and diagonals [sheet.format.cell-style]", () => {
-  it("applies each run's style over its range", () => {
+  it("formats each run's range directly", () => {
     const c: LoweredContent = {
       ...content({}),
       styles: [
@@ -143,12 +152,19 @@ describe("rich text, rotation and diagonals [sheet.format.cell-style]", () => {
         { text: "x", styleKey: 1 },
       ],
     };
-    const ops = loose(cellCharacterStyleApplies(c, "S", "T"));
+    const ops = loose(cellCharacterFormatOps(c, "S", "T"));
     expect(ops).toHaveLength(1);
-    expect([ops[0].args.start, ops[0].args.end]).toEqual([0, 5]);
-    expect(loose(cellCharacterStyleMints(c, new Set()))[0].op).toBe(
-      "createCharacterStyle",
-    );
+    expect(ops[0]).toMatchObject({
+      op: "setElementProperty",
+      args: {
+        path: "characterFontStyle",
+        value: { type: "text", value: "Bold" },
+        elementId: {
+          kind: "storyRange",
+          id: { start: 0, end: 5, cell: { tableId: "T", row: 0, col: 0 } },
+        },
+      },
+    });
   });
 
   it("maps Excel rotation onto the table's quarter turns", () => {

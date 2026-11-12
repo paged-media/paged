@@ -67,7 +67,8 @@ import {
   exportPlan,
   pageFingerprints,
 } from "./deck-export.js";
-import { slideEngine, type ImportReport } from "./engine.js";
+import { readImportReport, slideEngine, type ImportReport } from "./engine.js";
+import { lossLines, slideLossDiagnostics } from "./losses.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
 import { DECK, ICONS_MSG, MASTERS, NOTES, SHAPES, SLIDES } from "./messages.js";
@@ -171,11 +172,7 @@ export function isTemplate(fileName: string): boolean {
 /** The import report as diagnostics: what was not drawn, and the fonts the
  *  deck needs (the engine substitutes any it does not have). */
 export function reportDiagnostics(report: ImportReport): Diagnostic[] {
-  const out: Diagnostic[] = report.diagnostics.map((message) => ({
-    severity: "warning" as const,
-    message,
-    source: "pptx",
-  }));
+  const out: Diagnostic[] = slideLossDiagnostics(report.diagnostics);
   if (report.fonts.length > 0) {
     out.push({
       severity: "info",
@@ -239,11 +236,7 @@ export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
   if (faces.length === 0) return;
   const refused = await giveDocumentEmbeddedFonts(host, faces, data);
   host.diagnostics.set(FONT_DIAGNOSTICS, [
-    ...diagnostics.map((message) => ({
-      severity: "warning" as const,
-      message,
-      source: "pptx",
-    })),
+    ...slideLossDiagnostics(diagnostics),
     ...refused,
   ]);
 }
@@ -363,7 +356,7 @@ export function activate(host: BundleHost): BundleHandle {
     try {
       const bytes = await host.parts.read(REPORT_PART);
       return bytes
-        ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport)
+        ? readImportReport(JSON.parse(new TextDecoder().decode(bytes)))
         : null;
     } catch {
       return null;
@@ -542,8 +535,8 @@ export function activate(host: BundleHost): BundleHandle {
     return {
       bytes: out.bytes,
       fileName: `${name}.${format}`,
-      diagnostics: [...out.diagnostics, ...out.notExported],
-      notExported: out.notExported,
+      diagnostics: lossLines([...out.diagnostics, ...out.notExported]),
+      notExported: lossLines(out.notExported),
     };
   }
 

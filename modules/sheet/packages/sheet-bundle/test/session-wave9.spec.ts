@@ -578,23 +578,27 @@ async function exportedTables(
   return out;
 }
 
-/** `row:col` → the paragraph style each table cell's text sits in, read off
- *  the exported stories (`Name="col:row"` in IDML). */
-async function cellParagraphStyles(
+/** `row:col` → the justification each table cell's paragraph carries as a
+ *  local override, read off the exported stories (`Name="col:row"` in IDML),
+ *  and whether any style the sheet would once have minted was exported. */
+async function cellJustifications(
   h: HeadlessHost,
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+): Promise<{ just: Map<string, string>; minted: boolean }> {
+  const just = new Map<string, string>();
+  let minted = false;
   for (const [name, xml] of await exportedIdmlParts(h)) {
+    if (xml.includes("paged.sheet")) minted ||= /Style\/paged\.sheet/.test(xml);
     if (!name.startsWith("Stories/")) continue;
     for (const c of xml.matchAll(
       /<Cell\b[^>]*\bName="(\d+):(\d+)"[^>]*>([\s\S]*?)<\/Cell>/g,
     )) {
-      const p =
-        /<ParagraphStyleRange\b[^>]*AppliedParagraphStyle="([^"]*)"/.exec(c[3]);
-      out.set(`${c[2]}:${c[1]}`, p?.[1] ?? "");
+      const p = /<ParagraphStyleRange\b[^>]*\bJustification="([^"]*)"/.exec(
+        c[3],
+      );
+      just.set(`${c[2]}:${c[1]}`, p?.[1] ?? "");
     }
   }
-  return out;
+  return { just, minted };
 }
 
 describe.skipIf(!ENGINE_BUILT)(
@@ -628,20 +632,24 @@ describe.skipIf(!ENGINE_BUILT)(
       session.setRange("A1:B3");
       expect(await session.lowerSelection()).not.toBeNull();
       await settle();
-      const RIGHT = "ParagraphStyle/paged.sheet align right";
-      let styles = await cellParagraphStyles(h);
-      expect(styles.get("0:1")).toBe(RIGHT);
-      expect(styles.get("2:1")).toBe(RIGHT);
-      expect(styles.get("0:0")).not.toBe(RIGHT);
+      // Engine ADR 1098: the alignment is the cell paragraph's own
+      // justification; no paragraph style is minted for it.
+      const RIGHT = "RightAlign";
+      let read = await cellJustifications(h);
+      expect(read.just.get("0:1")).toBe(RIGHT);
+      expect(read.just.get("2:1")).toBe(RIGHT);
+      expect(read.just.get("0:0")).not.toBe(RIGHT);
+      expect(read.minted).toBe(false);
 
       session.editCell(0, 0, 0, "42"); // text → number
       session.editCell(0, 1, 1, "label"); // number → text
       await session.refreshPlacements();
       await settle();
-      styles = await cellParagraphStyles(h);
-      expect(styles.get("0:0")).toBe(RIGHT);
-      expect(styles.get("1:1")).not.toBe(RIGHT);
-      expect(styles.get("2:1")).toBe(RIGHT);
+      read = await cellJustifications(h);
+      expect(read.just.get("0:0")).toBe(RIGHT);
+      expect(read.just.get("1:1")).not.toBe(RIGHT);
+      expect(read.just.get("2:1")).toBe(RIGHT);
+      expect(read.minted).toBe(false);
     });
   },
 );

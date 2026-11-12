@@ -287,7 +287,10 @@ describe.skipIf(!built)(
       expect(
         ops(mutations).some(
           (o) =>
-            o.op === "setStyleProperty" && o.args.path === "characterUnderline",
+            // The cell's own text, directly (engine ADR 1098).
+            o.op === "setElementProperty" &&
+            o.args.path === "characterUnderline" &&
+            JSON.stringify(o.args.elementId).includes('"cell"'),
         ),
       ).toBe(true);
       session.dispose();

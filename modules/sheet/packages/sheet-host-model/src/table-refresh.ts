@@ -516,6 +516,21 @@ export function offsetTableRows(
       }
       case "setElementProperty": {
         const el = op.args.elementId;
+        // Engine ADR 1098 — a cell's own text: the cell rides the range.
+        if (el.kind === "storyRange") {
+          const cell = el.id.cell;
+          if (!cell || cell.tableId !== tableId) return op;
+          return {
+            ...op,
+            args: {
+              ...op.args,
+              elementId: {
+                ...el,
+                id: { ...el.id, cell: { ...cell, row: cell.row + by } },
+              },
+            },
+          };
+        }
         if (el.kind !== "tableCell" || el.id.table_id !== tableId) return op;
         return {
           ...op,

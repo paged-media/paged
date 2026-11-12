@@ -1,6 +1,7 @@
 # ADR 1097 — One loss report
 
 - **Status:** Accepted 2026-11-11.
+- **Amended:** 2026-11-12 (paged.slide, `paged-ps`).
 - **Scope:** the leaf crate `paged-loss`; `paged-model` (`report` re-exports it); the adapters
   `paged-svg`, `draw-dxf`, `pdf-import` (place as vectors), `paged-psd-fx`, `docx-lower`,
   `paged-pdf-annots`, `paged-export-pdf`, `web-render`; the extension contract
@@ -56,12 +57,52 @@ reader) could not take the shared shape.
 
 - `paged-data-store`'s `Diagnostic { kind, message, offset }` is a failed SQL statement with the
   byte offset the query panel points at, not a conversion loss.
-- paged.slide's import and export diagnostics stay strings for now: about forty producers in
-  `pptx-import`, `pptx-export` and `slide-resolve` write free sentences without a code, and an
-  import report kept in a document holds them as strings, which an older report must still read.
-  Moving them needs a code per producer and a reader that takes both.
-- The IDML export's `lost` lines, `paged-ps`'s `Report.unsupported` and the web bundle's
-  `WebDiagnostic` (a linter's finding with a line) are left as they are.
+- The IDML export's `lost` lines ride the wire (`IdmlExported.lost: string[]`, protocol v58) and the
+  host shows them as they are; moving them onto `LossEntry` changes that reply, so it needs a protocol
+  rider of its own. They have a dozen producers, each a sentence without a code: `paged-canvas`'s
+  `export_losses` (opacity masks, fill rules, live shapes, effect stacks, vector effects,
+  appearances, image adjustments, media, blend modes, the re-parse measurement), the comments, and
+  `paged-mutate`'s symbol and theme flattening for interchange. They are read by the CLI's publish
+  report and JSON and by the SDK's headless harness. Moving them is one change of its own: a code
+  per producer, the reply, the CLI goldens.
+- The web bundle's `WebDiagnostic` is a linter's finding with a line in the source, not something a
+  conversion could not carry.
+- image-js `LosslessShape` classifies a layer for save-back; it reports nothing lost.
+
+## Amendment 2026-11-12: paged.slide and paged-ps
+
+paged.slide's import and export diagnostics and `paged-ps`'s `Report.unsupported` are loss entries now.
+
+1. **paged.slide.** `pptx_core::loss` re-exports the shape. Every producer names its own code,
+   `pptx.<area>.<what>`, and a severity; the sentence stays the message and names the part or slide.
+   `LossLog` does the counting that `summarise` (`line (×n)`) did. The import's
+   `Presentation::diagnostics`, the resolved deck's, the native writer's `Built`/`Written`, the
+   embedded faces', the live charts' and the export's `Exported { diagnostics, not_exported }` are all
+   `Vec<LossEntry>`.
+
+   | Area     | Codes (severity)                                                                                    |
+   | -------- | --------------------------------------------------------------------------------------------------- |
+   | parts    | `pptx.part.{tableStyles,master,theme,slide,chart,diagram,layout}`, `pptx.rel.{master,slide}` (dropped) |
+   | shapes   | `pptx.shape.unknown`, `pptx.shape.notDrawn`, `pptx.frame.unknown`, `pptx.frame.notDrawn`, `pptx.smartart.noDrawing` (dropped) |
+   | look     | `pptx.effect.unsupported` (dropped); `pptx.paint.resolved`, `pptx.effect.resolved`, `pptx.paint.native` (dropped when the sentence says "not carried" / "not drawn", else approximated); `pptx.table.styleUnknown` (approximated) |
+   | pictures | `pptx.picture.{noImage,missing,format,empty}`, `pptx.media.{noMedium,missing}`, `pptx.link.target` (dropped) |
+   | charts   | `pptx.chart.sheetLayout`, `pptx.chart.notLive` (approximated), `pptx.chart.missing` (dropped)        |
+   | comments | `pptx.comments.{authors,unreadable}` (dropped)                                                       |
+   | fonts    | `pptx.font.embedded` (approximated: drawn in a substitute)                                          |
+   | export   | `pptx.export.{document,editorSlide,foreignSlide,contentEdits,slide,notes,timing,mediaTiming,chart,chartData,theme,unreadablePart,masterDelete,layoutDelete,masterShapes,placeholderStyle,shape,smartartText,properties,link,pictureFrame,media,tableGrid,copy,group}` (dropped); `pptx.export.{text,mediaPlay,deadLinks}` and `pptx.export.media` for a medium written as a picture (approximated); `pptx.export.picture` (as `look`) |
+
+2. **Older reports read.** A document keeps its import report as a container part
+   (`import/report.json`); one written before the codes holds sentences. `pptx_core::loss::read_losses`
+   (serde) and the bundle's `readLosses` read either form: a sentence becomes a `pptx.legacy` entry,
+   dropped, its `(×n)` suffix the count. The bundle puts the losses on the diagnostics channel through
+   `lossDiagnostics`; its typed `importPptx` / `exportPptx` results stay one line each, worded the same
+   way. slide-js is the bundle's own wasm, so nothing of this is on the engine's wire.
+3. **`paged-ps`.** `Report.unsupported` is `Vec<LossEntry>`: `eps.<area>.<what>` (a shading or image
+   type, a filter, a Type 0 or Type 3 font, a pattern stroke or mask drawn grey, CIE colour drawn
+   approximately), counted once per code and message.
+4. **Ratchet.** The `loss-report` rule also fails on a new `losses` / `lost` / `unsupported` /
+   `not_exported` field of `Vec<String>`; its baseline holds the DrawingML mapper's sentences in doc,
+   sheet and web, which go with `dml-native`'s `take_losses`.
 
 ## Consequences
 

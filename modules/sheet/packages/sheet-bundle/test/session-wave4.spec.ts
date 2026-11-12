@@ -246,26 +246,36 @@ describe.skipIf(!built)(
       session.dispose();
     });
 
-    it("the placed table's cell text carries the workbook's fonts (character styles)", async () => {
+    it("the placed table's cell text carries the workbook's fonts (direct properties)", async () => {
       const { host, mutations } = fakeDoc();
       const session = createWorkbookSession(host);
       await session.import(corpus("03-styles.xlsx"), "03-styles.xlsx");
       session.setRange("A1:D6");
       expect(await session.lowerSelection()).not.toBeNull();
       const all = ops(mutations);
-      expect(all.some((m) => m.op === "createCharacterStyle")).toBe(true);
-      const applied = all.filter((m) => m.op === "applyStyle") as Array<{
-        args: { cell?: unknown; scope: string };
-      }>;
-      // Every apply is cell-qualified; the character styles carry the fonts
-      // (Wave 9 adds paragraph-scope applies for the cells' alignment).
-      expect(applied.some((m) => m.args.scope === "character")).toBe(true);
+      // Engine ADR 1098: no style is minted for a cell's direct formatting.
       expect(
-        applied.every(
+        all.some(
           (m) =>
-            m.args.cell && ["character", "paragraph"].includes(m.args.scope),
+            m.op === "createCharacterStyle" || m.op === "createParagraphStyle",
         ),
-      ).toBe(true);
+      ).toBe(false);
+      const direct = all.filter(
+        (m) =>
+          m.op === "setElementProperty" &&
+          (m.args as { elementId: { kind: string } }).elementId.kind ===
+            "storyRange",
+      ) as Array<{
+        args: {
+          path: string;
+          elementId: { id: { cell?: { tableId: string } } };
+        };
+      }>;
+      // Every write is cell-qualified; the fonts are character facets.
+      expect(direct.some((m) => m.args.path.startsWith("character"))).toBe(
+        true,
+      );
+      expect(direct.every((m) => m.args.elementId.id.cell)).toBe(true);
       session.dispose();
     });
 

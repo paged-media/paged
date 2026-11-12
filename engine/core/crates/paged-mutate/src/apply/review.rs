@@ -863,11 +863,12 @@ pub(crate) fn format_scope(doc: &Document, op: &Operation) -> Option<FormatScope
                     story_id,
                     start,
                     end,
+                    cell,
                 },
             ..
         } => Some(FormatScope {
             story_id: story_id.clone(),
-            cell: None,
+            cell: cell.clone(),
             start: *start,
             end: *end,
             paragraph: None,

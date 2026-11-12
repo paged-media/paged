@@ -28,6 +28,7 @@
 //! effect. A media part is written byte for byte as the document holds it.
 
 use paged_model::{MediaItem, MediaKind, MediaPlay, MediaSource};
+use pptx_core::loss::{LossEntry, LossLog};
 
 /// `a:videoFile`'s relationship.
 pub const REL_VIDEO: &str =
@@ -151,7 +152,7 @@ pub struct TimingEdit {
 /// timing has none. A new medium that starts with the slide or on a click
 /// gets its `mediacall` effect when the slide has no timing of its own;
 /// one that cannot is reported in `lost`.
-pub fn apply_timing(xml: &str, edits: &[TimingEdit], lost: &mut Vec<String>) -> String {
+pub fn apply_timing(xml: &str, edits: &[TimingEdit], lost: &mut Vec<LossEntry>) -> String {
     let mut out = xml.to_string();
     for e in edits {
         let node = media_node(e.spid, &e.media, 100 + e.spid * 2);
@@ -173,16 +174,22 @@ pub fn apply_timing(xml: &str, edits: &[TimingEdit], lost: &mut Vec<String>) -> 
                 Some(at) => {
                     out.insert_str(at, &node);
                     if e.new && e.media.play == MediaPlay::Auto {
-                        lost.push(format!(
-                            "a {} that plays automatically on a slide with animations plays when it is clicked",
-                            kind_word(e.media.kind)
-                        ));
+                        lost.approximated(
+                            "pptx.export.mediaPlay",
+                            &format!(
+                                "a {} that plays automatically on a slide with animations plays when it is clicked",
+                                kind_word(e.media.kind)
+                            ),
+                        );
                     }
                 }
-                None => lost.push(format!(
-                    "the timing of a {} could not be written",
-                    kind_word(e.media.kind)
-                )),
+                None => lost.dropped(
+                    "pptx.export.mediaTiming",
+                    &format!(
+                        "the timing of a {} could not be written",
+                        kind_word(e.media.kind)
+                    ),
+                ),
             },
         }
     }

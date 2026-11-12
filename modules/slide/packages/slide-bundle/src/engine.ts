@@ -27,6 +27,7 @@
 // realm, browser or Node; until it is built the dynamic import rejects and
 // boot says so.
 
+import type { LossEntry } from "@paged-media/plugin-api";
 import { bytesToBase64 } from "@paged-media/helpers";
 import {
   wasmBindgenModule,
@@ -43,6 +44,7 @@ import type {
   Timing,
   TimingEdit,
 } from "./anim/model.js";
+import { readLosses } from "./losses.js";
 
 const ENGINE_NOT_BUILT =
   "paged.slide engine wasm not built: run scripts/build-wasm.sh";
@@ -184,7 +186,9 @@ export interface ImportReport {
   embeddedFonts: EmbeddedFaceReport[];
   /** Absent in a report kept by an older version. */
   charts?: ChartReport[];
-  diagnostics: string[];
+  /** What the import could not carry (engine ADR 1097). A report kept by
+   *  an older version holds sentences: read it through `readImportReport`. */
+  diagnostics: LossEntry[];
 }
 
 export interface Imported {
@@ -201,7 +205,7 @@ export interface Imported {
 /** A deck's embedded faces, decoded without importing it. */
 export interface DeckFonts {
   faces: EmbeddedFaceReport[];
-  diagnostics: string[];
+  diagnostics: LossEntry[];
   data: Uint8Array;
 }
 
@@ -277,10 +281,10 @@ export interface PictureInfo {
 /** A written deck and what it could not carry (slide-js `ExportedDeck`). */
 export interface ExportedDeck {
   bytes: Uint8Array;
-  /** What the package could not carry. */
-  diagnostics: string[];
-  /** What is on the slides that could not round-trip, one line each. */
-  notExported: string[];
+  /** What the package could not carry (engine ADR 1097). */
+  diagnostics: LossEntry[];
+  /** What is on the slides that could not round-trip. */
+  notExported: LossEntry[];
   /** Pictures written without the PNG they need; render them and export
    *  again with them in `DeckPlan.rasters`. */
   rastersNeeded: RasterNeed[];
@@ -462,6 +466,13 @@ export async function liveCharts(pptx: Uint8Array): Promise<LiveCharts> {
   return new mod.LiveCharts(pptx);
 }
 
+/** An import report as JSON, in either form of its losses (an older
+ *  version kept sentences; `losses.ts`). */
+export function readImportReport(raw: unknown): ImportReport {
+  const r = raw as ImportReport;
+  return { ...r, diagnostics: readLosses(r.diagnostics) };
+}
+
 export async function slideEngine(): Promise<SlideEngine> {
   return new SlideEngine(await loadModule());
 }
@@ -481,7 +492,7 @@ export class SlideEngine {
     try {
       return {
         paged: out.paged,
-        report: JSON.parse(out.report) as ImportReport,
+        report: readImportReport(JSON.parse(out.report)),
         fonts: out.fonts,
         workbooks: out.workbooks ?? new Uint8Array(),
       };
@@ -499,7 +510,7 @@ export class SlideEngine {
         DeckFonts,
         "data"
       >;
-      return { faces, diagnostics, data: out.data };
+      return { faces, diagnostics: readLosses(diagnostics), data: out.data };
     } finally {
       out.free();
     }
@@ -639,8 +650,8 @@ export class SlideEngine {
     try {
       return {
         bytes: out.bytes,
-        diagnostics: JSON.parse(out.diagnostics) as string[],
-        notExported: JSON.parse(out.notExported) as string[],
+        diagnostics: readLosses(JSON.parse(out.diagnostics)),
+        notExported: readLosses(JSON.parse(out.notExported)),
         rastersNeeded: JSON.parse(out.rastersNeeded ?? "[]") as RasterNeed[],
       };
     } finally {

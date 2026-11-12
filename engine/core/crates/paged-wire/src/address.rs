@@ -36,6 +36,7 @@
 //! page:<id>       page:#<n>   (n-th body page, 1-based, document order)
 //! spread:<id>  layer:<id>  master:<id>  story:<id>
 //! storyRange:<storyId>@<start>..<end>    alias: story:<storyId>@<start>..<end>, storyrange:
+//! storyRange:<storyId>@<tableId>/<row>,<col>@<start>..<end>   a table cell's own text
 //! field:<storyId>@<offset>               a field anchored at a story character offset
 //! table:<tableId>                        the table's Self, unique per document
 //! cell:<tableId>/<row>,<col>             zero-based
@@ -54,7 +55,8 @@
 //!   the id, exactly as `ElementId::parse` has always read it.
 //! - `%` escapes only where an id must stop at a delimiter: the `@` ending
 //!   a story id in `storyRange:`/`field:`, the `/` ending a table id in
-//!   `cell:` and the plugin id / kind in `plugin:`, and the ` > ` ending
+//!   `cell:` (and the `@` or `/` ending one in a cell's `storyRange:`) and
+//!   the plugin id / kind in `plugin:`, and the ` > ` ending
 //!   the master in a master-scoped item. The formatter escapes exactly
 //!   those (and `%` itself) in exactly those places.
 //! - An address is a SESSION handle. InDesign renumbers every `Self` on
@@ -160,11 +162,16 @@ pub enum Address {
     Story {
         id: String,
     },
+    /// `storyRange:<storyId>@<start>..<end>`, or a cell's own text,
+    /// `storyRange:<storyId>@<tableId>/<row>,<col>@<start>..<end>`
+    /// (engine ADR 1098).
     #[serde(rename_all = "camelCase")]
     StoryRange {
         story_id: String,
         start: u32,
         end: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cell: Option<crate::TextCellAddr>,
     },
     /// A text field anchored at a story character offset.
     #[serde(rename_all = "camelCase")]
@@ -568,6 +575,21 @@ fn dec(s: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|_| s.to_string())
 }
 
+/// The cell part of a cell's story range, `<tableId>/<row>,<col>`
+/// (engine ADR 1098); `None` when `s` is not one.
+fn cell_part(s: &str) -> Option<crate::TextCellAddr> {
+    let (table, rc) = s.rsplit_once('/')?;
+    let (r, c) = rc.split_once(',')?;
+    if table.is_empty() {
+        return None;
+    }
+    Some(crate::TextCellAddr {
+        table_id: dec(table),
+        row: r.parse().ok()?,
+        col: c.parse().ok()?,
+    })
+}
+
 fn parse_u32(s: &str, at: usize, what: &str) -> Result<u32, GrammarError> {
     s.parse()
         .map_err(|_| GrammarError::new(at, format!("{what} {s:?} is not a number")))
@@ -746,14 +768,24 @@ impl Address {
                 let range_required = kind != "story";
                 match rest.rsplit_once('@') {
                     Some((story, range)) if range_required || range.contains("..") => {
+                        // A cell's own text names the cell between the
+                        // story and the range (engine ADR 1098).
+                        let (story, cell) = match story.rsplit_once('@') {
+                            Some((s, c)) if !s.is_empty() && cell_part(c).is_some() => {
+                                (s, cell_part(c))
+                            }
+                            _ => (story, None),
+                        };
                         if story.is_empty() {
                             return Err(GrammarError::new(at, "a story range needs a story id"));
                         }
-                        let (start, end) = parse_range(range, at + story.len() + 1)?;
+                        let range_at = at + rest.len() - range.len();
+                        let (start, end) = parse_range(range, range_at)?;
                         Address::StoryRange {
                             story_id: dec(story),
                             start,
                             end,
+                            cell,
                         }
                     }
                     _ if range_required => {
@@ -865,10 +897,12 @@ impl Address {
                 story_id,
                 start,
                 end,
+                cell,
             } => ElementId::StoryRange {
                 story_id: story_id.clone(),
                 start: *start,
                 end: *end,
+                cell: cell.clone(),
             },
             _ => return None,
         })
@@ -892,10 +926,12 @@ impl From<ElementId> for Address {
                 story_id,
                 start,
                 end,
+                cell,
             } => Address::StoryRange {
                 story_id,
                 start,
                 end,
+                cell,
             },
             ElementId::Table { table_id, .. } => Address::Table { id: table_id },
             ElementId::TableCell {
@@ -947,7 +983,21 @@ impl std::fmt::Display for Address {
                 story_id,
                 start,
                 end,
+                cell: None,
             } => write!(f, "{p}:{}@{start}..{end}", enc(story_id, "@")),
+            Address::StoryRange {
+                story_id,
+                start,
+                end,
+                cell: Some(c),
+            } => write!(
+                f,
+                "{p}:{}@{}/{},{}@{start}..{end}",
+                enc(story_id, "@"),
+                enc(&c.table_id, "@/"),
+                c.row,
+                c.col
+            ),
             Address::Field { story_id, offset } => {
                 write!(f, "{p}:{}@{offset}", enc(story_id, "@"))
             }
@@ -1013,7 +1063,8 @@ mod tests {
             Address::StoryRange {
                 story_id: "Story/u1".into(),
                 start: 3,
-                end: 9
+                end: 9,
+                cell: None,
             }
         );
         assert_eq!(
@@ -1108,6 +1159,7 @@ mod tests {
             story_id: "odd@id%".into(),
             start: 1,
             end: 2,
+            cell: None,
         };
         assert_eq!(r.to_string(), "storyRange:odd%40id%25@1..2");
         assert_eq!(a(&r.to_string()), r);
@@ -1118,6 +1170,42 @@ mod tests {
         };
         assert_eq!(c.to_string(), "cell:t%2F1/0,0");
         assert_eq!(a(&c.to_string()), c);
+    }
+
+    #[test]
+    fn a_cells_own_text_names_its_cell_between_story_and_range() {
+        let cell = |table_id: &str| {
+            Some(crate::TextCellAddr {
+                table_id: table_id.into(),
+                row: 2,
+                col: 1,
+            })
+        };
+        let r = Address::StoryRange {
+            story_id: "Story/u1".into(),
+            start: 0,
+            end: 5,
+            cell: cell("t1"),
+        };
+        assert_eq!(r.to_string(), "storyRange:Story/u1@t1/2,1@0..5");
+        assert_eq!(a("storyRange:Story/u1@t1/2,1@0..5"), r);
+        let odd = Address::StoryRange {
+            story_id: "s@1".into(),
+            start: 3,
+            end: 4,
+            cell: cell("t/@1"),
+        };
+        assert_eq!(odd.to_string(), "storyRange:s%401@t%2F%401/2,1@3..4");
+        assert_eq!(a(&odd.to_string()), odd);
+        // No document is needed: the story rides the address.
+        let id = r.to_element_id().expect("an element id");
+        assert_eq!(Address::from(id), r);
+        // The body form is unchanged and carries no cell.
+        let body = a("storyRange:Story/u1@0..5");
+        assert_eq!(
+            serde_json::to_value(&body).unwrap(),
+            serde_json::json!({"kind":"storyRange","storyId":"Story/u1","start":0,"end":5})
+        );
     }
 
     #[test]
@@ -1133,6 +1221,7 @@ mod tests {
                 story_id: "Story/u1".into(),
                 start: 0,
                 end: 6,
+                cell: None,
             },
         ];
         for id in ids {
@@ -1232,8 +1321,25 @@ mod tests {
                     story_id,
                     start,
                     end: start + len,
+                    cell: None,
                 }
             }),
+            (
+                any_escaped(),
+                0u32..10_000,
+                1u32..10_000,
+                any_escaped(),
+                any::<u32>(),
+                any::<u32>()
+            )
+                .prop_map(|(story_id, start, len, table_id, row, col)| {
+                    Address::StoryRange {
+                        story_id,
+                        start,
+                        end: start + len,
+                        cell: Some(crate::TextCellAddr { table_id, row, col }),
+                    }
+                }),
             (any_escaped(), any::<u32>())
                 .prop_map(|(story_id, offset)| Address::Field { story_id, offset }),
             (any_escaped(), any::<u32>(), any::<u32>())

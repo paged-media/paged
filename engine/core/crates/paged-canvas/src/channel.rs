@@ -829,6 +829,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //   rows are the shared `LossEntry` (`paged-loss`), under `losses` (was
 //   `notes` of `SvgNote`); a row's `severity` may also be `info`. The
 //   editor and its worker ship as one build.
+// v78 (rider) — a cell's own text (engine ADR 1098): the `storyRange`
+//   element id takes an optional `cell` (`TextCellAddr`), as `applyStyle`
+//   and `insertText` already do, so `setElementProperty` writes direct
+//   character and paragraph properties into a table cell and a property
+//   read of the same id answers them. Absent ⇒ the body, byte-identical
+//   to before; an older engine ignores the field and writes the body, so
+//   the editor and its worker ship as one build.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional

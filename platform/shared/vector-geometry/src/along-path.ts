@@ -59,6 +59,15 @@
 // · A STRAIGHT segment (both inner handles collapsed onto their
 //   anchors) is emitted as ONE chord, not 24 — exact, and it makes the
 //   default straight-line blend spine exactly a lerp.
+//
+// ------------------------------------------------------ the engine's
+// The engine measures a path along its curve with `paged_geom::trim`
+// (`run_length`, `point_along`: kurbo's arc length, the cut of a line
+// under its heads). This kernel is that measure's TypeScript twin: the
+// Width tool's preview and the two recipes above cannot wait for an
+// engine round trip on a drag. One engine-written fixture pins them
+// (`paged-vector-fx/tests/it/ts_twins.rs`,
+// `test/vector-fx-parity.spec.ts`), to 2e-3 of a run's length.
 
 import type { AnchorTriple, Vec2 } from "./types";
 

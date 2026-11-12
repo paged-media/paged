@@ -836,6 +836,7 @@ fn the_schema_refuses_what_it_does_not_describe() {
             story_id: t.story.clone(),
             start: 0,
             end: 3,
+            cell: None,
         },
     };
     let refuse = |m: &mut CanvasModel, address: &VirtualTarget, path: &str, value: Value| {
@@ -1401,6 +1402,7 @@ fn content_reads_writes_and_undoes_as_one_step() {
             story_id: t.story.clone(),
             start: 0,
             end: 5,
+            cell: None,
         },
     };
     assert_eq!(m.get_property(&range, "content"), text("Hello"));

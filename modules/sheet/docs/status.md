@@ -253,9 +253,10 @@ each published canary added is under [Releases](#releases).
   paints the 18 patterns, gradients, diagonals, rotated and stacked text, indent, shrink-to-fit,
   strike-through, super- and subscript, double underlines and rich-text runs (each run in its
   own font); the page table names a document swatch instead of minting one, applies the
-  document character and cell styles as they are and bases its paragraph styles on the
-  document paragraph style, sets strike-through and super/subscript, applies each rich-text
-  run's character style over its range, turns rotated cells by a rotation cell style (the
+  document character, paragraph and cell styles as they are, writes the cells' own text
+  formatting (face, size, colour, strike-through, super/subscript, alignment, indent, the
+  repeat-fill tab) as direct properties on the cell's text and each rich-text run's range
+  (engine ADR 1098; no style is minted for it), turns rotated cells by a rotation cell style (the
   table's quarter turns: 45–135° turn, smaller angles stay upright), stacks text one character
   per line, and draws diagonals as page lines. Not on the page: a pattern shows as the blend of
   its colours and a gradient as its mean colour, dashed and double borders as solid lines of

@@ -225,6 +225,7 @@ fn a_paragraph_carries_its_own_hyphenation_zone() {
                 story_id: story_id.clone(),
                 start: 0,
                 end: 10,
+                cell: None,
             },
             path: PropertyPath::ParagraphHyphenationZone,
             value: Value::Length(Some(12.0)),

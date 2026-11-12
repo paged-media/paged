@@ -341,7 +341,9 @@ fn an_effect_on_a_deleted_shape_is_dropped_and_reported() {
         let out = export_with(&bytes, &plan, Some(&paged)).unwrap();
         keep(&out.bytes, "timing-deleted-shape");
         assert_eq!(out.not_exported.len(), 1, "{:?}", out.not_exported);
-        assert!(out.not_exported[0].contains("no longer on the slide"));
+        assert!(out.not_exported[0]
+            .message
+            .contains("no longer on the slide"));
         let back = timing_of(&out.bytes, BUILDS_PART).unwrap();
         let got = spids(&back);
         assert!(!got.contains("4"), "{got:?}");

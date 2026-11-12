@@ -45,20 +45,8 @@ use crate::operation::{
 // today's editor-binding-flow can target catalog-bound writes that
 // already snap to run boundaries.
 
-pub(super) fn apply_character_property(
-    doc: &mut Document,
-    story_id: &str,
-    start: u32,
-    end: u32,
-    node: &NodeId,
-    path: PropertyPath,
-    value: &Value,
-) -> Result<AppliedOperation, OperationError> {
-    apply_character_property_in(doc, story_id, None, start, end, node, path, value)
-}
-
-/// As [`apply_character_property`], but `cell` may redirect the range to a table
-/// cell's own paragraph stream (v55) instead of the story body.
+/// Write `path` on the characters of `[start, end)`: the story body's, or
+/// with `cell` (v55; engine ADR 1098) that table cell's own paragraphs.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn apply_character_property_in(
     doc: &mut Document,
@@ -163,6 +151,7 @@ pub(super) fn apply_character_property_in(
                             story_id: story_id.to_string(),
                             start: run_start,
                             end: run_end,
+                            cell: cell.cloned(),
                         },
                         path,
                         value: prev_value,
@@ -182,6 +171,7 @@ pub(super) fn apply_character_property_in(
                             story_id: story_id.to_string(),
                             start: mid_start,
                             end: mid_end,
+                            cell: cell.cloned(),
                         },
                         path,
                         value: prev_value,
@@ -201,6 +191,7 @@ pub(super) fn apply_character_property_in(
                             story_id: story_id.to_string(),
                             start: mid_start,
                             end: mid_end,
+                            cell: cell.cloned(),
                         },
                         path,
                         value: prev_value,
@@ -221,6 +212,7 @@ pub(super) fn apply_character_property_in(
                             story_id: story_id.to_string(),
                             start: mid_start,
                             end: mid_end,
+                            cell: cell.cloned(),
                         },
                         path,
                         value: prev_value,

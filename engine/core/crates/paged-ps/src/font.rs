@@ -234,7 +234,11 @@ fn show_glyph(
             if mode != Mode::Draw {
                 i.suppress += 1;
                 if mode == Mode::Charpath {
-                    i.report.unsupported("charpath of a Type 3 font");
+                    i.report.unsupported(
+                        "eps.font.type3Charpath",
+                        paged_loss::LossSeverity::Dropped,
+                        "charpath of a Type 3 font",
+                    );
                 }
             }
             i.push(Obj::dict(font.clone()))?;
@@ -259,7 +263,11 @@ fn show_glyph(
             Ok((d.x, d.y))
         }
         0 => {
-            i.report.unsupported("composite (Type 0) font");
+            i.report.unsupported(
+                "eps.font.type0",
+                paged_loss::LossSeverity::Dropped,
+                "composite (Type 0) font",
+            );
             Ok((0.0, 0.0))
         }
         _ => {
@@ -372,7 +380,11 @@ fn type1_outline(
     match crate::type1::run(&prog, &subrs, &lookup) {
         Ok(g) => Ok(Some((g.path, g.width))),
         Err(_) => {
-            i.report.unsupported("malformed Type 1 charstring");
+            i.report.unsupported(
+                "eps.font.type1Charstring",
+                paged_loss::LossSeverity::Dropped,
+                "malformed Type 1 charstring",
+            );
             Ok(None)
         }
     }
@@ -547,7 +559,11 @@ fn positioned_show(i: &mut Interp<'_>, kind: u8) -> R {
     let v: Vec<f64> = match &nums.v {
         V::Array(a) => a.items().iter().filter_map(Obj::as_num).collect(),
         _ => {
-            i.report.unsupported("encoded number string positions");
+            i.report.unsupported(
+                "eps.text.encodedPositions",
+                paged_loss::LossSeverity::Approximated,
+                "encoded number string positions",
+            );
             return show(i, &s, Mode::Draw, &mut |_, _| (0.0, 0.0), None);
         }
     };

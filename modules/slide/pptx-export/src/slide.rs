@@ -32,6 +32,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use paged_model::Spread;
 use paged_ooxml::rels::{part_dir, Relationship, Relationships};
 use paged_scene::Document;
+use pptx_core::loss::{LossEntry, LossLog, LossSeverity};
 use pptx_core::{Presentation, Shape, Xfrm, EMU_PER_PT};
 use serde_json::Value;
 use slide_resolve::model::{Item, ItemKind};
@@ -254,7 +255,7 @@ pub struct Out {
     /// Other new parts: (part, bytes, content type), their relationship
     /// parts with no content type.
     pub parts: Vec<NewPart>,
-    pub lost: Vec<String>,
+    pub lost: Vec<LossEntry>,
     /// The `cNvPr id` each shape written under a new id got (a shape made
     /// in the editor, a copy on the same slide), by its elements' `Self`
     /// ids, its group's and its shape key (slide ADR 714: animation targets
@@ -577,7 +578,7 @@ struct Writer<'a, 'j> {
     sh: &'a Shared<'a>,
     job: &'j Job<'a>,
     rels: RefCell<&'j mut Rels>,
-    lost: RefCell<Vec<String>>,
+    lost: RefCell<Vec<LossEntry>>,
     media: RefCell<Vec<(String, Vec<u8>)>>,
     parts: RefCell<Vec<NewPart>>,
     orig: BTreeMap<String, Orig<'a>>,
@@ -824,13 +825,24 @@ pub fn check_well_formed(xml: &str) -> Result<(), String> {
 }
 
 impl<'a> Writer<'a, '_> {
-    fn note(&self, name: &str, what: impl Into<String>) {
+    /// Record what this slide's export could not carry: its code
+    /// (`pptx.export.<what>`), severity and sentence (engine ADR 1097).
+    fn note(&self, code: &str, severity: LossSeverity, name: &str, what: impl Into<String>) {
         let name = if name.is_empty() { "a shape" } else { name };
-        self.lost.borrow_mut().push(format!(
-            "slide {}: {name}: {}",
-            self.job.slide_no,
-            what.into()
-        ));
+        self.lost.borrow_mut().note(
+            code,
+            severity,
+            &format!("slide {}: {name}: {}", self.job.slide_no, what.into()),
+        );
+    }
+    /// A sentence of the DrawingML picture writer (`dml_native`), under
+    /// `code` (its severity from what it says).
+    fn note_mapped(&self, code: &str, name: &str, what: String) {
+        let name = if name.is_empty() { "a shape" } else { name };
+        let line = format!("slide {}: {name}: {what}", self.job.slide_no);
+        self.lost
+            .borrow_mut()
+            .push_loss(pptx_core::loss::mapped(code, line));
     }
 
     fn fresh_id(&self) -> u32 {
@@ -933,7 +945,12 @@ impl<'a> Writer<'a, '_> {
             Ok(s) => s,
             Err(e) => {
                 let name = c.name.clone().unwrap_or_default();
-                self.note(&name, format!("{e}; written as the deck had it"));
+                self.note(
+                    "pptx.export.shape",
+                    LossSeverity::Dropped,
+                    &name,
+                    format!("{e}; written as the deck had it"),
+                );
                 if copy {
                     String::new()
                 } else {
@@ -1131,6 +1148,8 @@ impl<'a> Writer<'a, '_> {
             if tb == tc {
                 if serde_json::to_value(pb).ok() != serde_json::to_value(pc).ok() {
                     self.note(
+                        "pptx.export.smartartText",
+                        LossSeverity::Dropped,
                         name,
                         "a text format change inside the SmartArt is not exported",
                     );
@@ -1475,6 +1494,8 @@ impl<'a> Writer<'a, '_> {
         }
         if !other.is_empty() {
             self.note(
+                "pptx.export.properties",
+                LossSeverity::Dropped,
                 name,
                 format!(
                     "{} not exported",
@@ -1603,7 +1624,7 @@ impl<'a> Writer<'a, '_> {
         lost.sort();
         lost.dedup();
         for l in lost {
-            self.note(name, l);
+            self.note("pptx.export.text", LossSeverity::Approximated, name, l);
         }
         s
     }
@@ -1640,7 +1661,12 @@ impl<'a> Writer<'a, '_> {
                     ))
                 }
                 None => {
-                    self.note("a text link", "its slide is not in the deck; dropped");
+                    self.note(
+                        "pptx.export.link",
+                        LossSeverity::Dropped,
+                        "a text link",
+                        "its slide is not in the deck; dropped",
+                    );
                     None
                 }
             },
@@ -1824,7 +1850,12 @@ impl<'a> Writer<'a, '_> {
     ) -> Result<String, String> {
         let (d, reshaped) = self.delta(b, c, ctx)?;
         if reshaped {
-            self.note(name, "a reshaped picture frame is not exported");
+            self.note(
+                "pptx.export.pictureFrame",
+                LossSeverity::Dropped,
+                name,
+                "a reshaped picture frame is not exported",
+            );
         }
         if let Some((_, nx)) = self.new_place(o, &d, ctx, false)? {
             x = set_sppr(
@@ -1875,7 +1906,7 @@ impl<'a> Writer<'a, '_> {
             let (tag, lost) =
                 dml_native::picture::splice_blip(blip.text(&x), &adjustments_of(ec), px_per_pt(ec));
             for l in lost {
-                self.note(name, l);
+                self.note_mapped("pptx.export.picture", name, l);
             }
             x = xml::splice(&x, blip.start, blip.end, &tag);
         }
@@ -1907,7 +1938,12 @@ impl<'a> Writer<'a, '_> {
                             });
                     }
                 }
-                _ => self.note(name, "a changed medium is not exported"),
+                _ => self.note(
+                    "pptx.export.media",
+                    LossSeverity::Dropped,
+                    name,
+                    "a changed medium is not exported",
+                ),
             }
         }
         let other: Vec<String> = keys
@@ -1920,7 +1956,12 @@ impl<'a> Writer<'a, '_> {
             })
             .collect();
         if !other.is_empty() {
-            self.note(name, format!("{} not exported", other.join(", ")));
+            self.note(
+                "pptx.export.properties",
+                LossSeverity::Dropped,
+                name,
+                format!("{} not exported", other.join(", ")),
+            );
         }
         Ok(x)
     }
@@ -1944,6 +1985,8 @@ impl<'a> Writer<'a, '_> {
             MediaSource::Part { path } => {
                 let Some(bytes) = self.sh.doc_media.get(path) else {
                     self.note(
+                        "pptx.export.media",
+                        LossSeverity::Approximated,
                         name,
                         "its medium is not in the document; written as a picture",
                     );
@@ -2179,6 +2222,8 @@ impl<'a> Writer<'a, '_> {
         };
         if rows(&vb) != rows(&vc) || cols(&vb) != cols(&vc) || spans(&cb) != spans(&cc) {
             self.note(
+                "pptx.export.tableGrid",
+                LossSeverity::Dropped,
                 name,
                 "added, removed or merged table rows and columns are not exported",
             );
@@ -2310,6 +2355,8 @@ impl<'a> Writer<'a, '_> {
         }
         if !other.is_empty() {
             self.note(
+                "pptx.export.properties",
+                LossSeverity::Dropped,
                 name,
                 format!(
                     "{} not exported",
@@ -2324,7 +2371,12 @@ impl<'a> Writer<'a, '_> {
     fn generate(&self, c: &NShape, ctx: &Ctx) -> String {
         let name = c.name.clone().unwrap_or_default();
         if let Some(f) = &c.label.frame {
-            self.note(&name, format!("a copied {f} is not exported"));
+            self.note(
+                "pptx.export.copy",
+                LossSeverity::Dropped,
+                &name,
+                format!("a copied {f} is not exported"),
+            );
             return String::new();
         }
         if c.group.is_some() {
@@ -2339,7 +2391,12 @@ impl<'a> Writer<'a, '_> {
             }
             match self.generate_elem(e, c, ctx) {
                 Ok(s) => out.push_str(&s),
-                Err(err) => self.note(&name, format!("{err}; not exported")),
+                Err(err) => self.note(
+                    "pptx.export.shape",
+                    LossSeverity::Dropped,
+                    &name,
+                    format!("{err}; not exported"),
+                ),
             }
         }
         out
@@ -2376,7 +2433,12 @@ impl<'a> Writer<'a, '_> {
             h: bb.3 - bb.1,
         };
         let Some(gx) = ctx.space.xfrm_of(&placed) else {
-            self.note(&name, "its group cannot hold it; not exported");
+            self.note(
+                "pptx.export.group",
+                LossSeverity::Dropped,
+                &name,
+                "its group cannot hold it; not exported",
+            );
             return String::new();
         };
         let gx = Xfrm {
@@ -2494,7 +2556,7 @@ impl<'a> Writer<'a, '_> {
                         px_per_pt(e),
                     );
                     for l in lost {
-                        self.note(&name, l);
+                        self.note_mapped("pptx.export.picture", &name, l);
                     }
                     tag
                 };

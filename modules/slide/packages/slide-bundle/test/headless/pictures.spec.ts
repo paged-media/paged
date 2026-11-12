@@ -363,7 +363,9 @@ describe("pictures in every format (slide W4)", () => {
       );
       // It reads back as a picture.
       const back = (await slideEngine()).importPptx(out!.bytes, "back");
-      expect(back.report.diagnostics.join("\n")).not.toContain("not placed");
+      expect(
+        back.report.diagnostics.map((d) => d.message).join("\n"),
+      ).not.toContain("not placed");
     }, 120_000);
   }
 

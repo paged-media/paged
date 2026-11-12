@@ -111,7 +111,11 @@ fn image(i: &mut Interp<'_>) -> R {
             .and_then(|o| o.as_int())
             .unwrap_or(1);
         if ty != 1 && ty != 4 {
-            i.report.unsupported(&format!("image type {ty}"));
+            i.report.unsupported(
+                "eps.image.type",
+                paged_loss::LossSeverity::Dropped,
+                &format!("image type {ty}"),
+            );
             return Err(err("rangecheck"));
         }
         let cs = i.gs.cs.clone();
@@ -204,7 +208,11 @@ fn imagemask(i: &mut Interp<'_>) -> R {
         crate::color::PaintKind::Solid(p) => p,
         crate::color::PaintKind::Pattern(_, Some(p)) => p,
         crate::color::PaintKind::Pattern(_, None) => {
-            i.report.unsupported("imagemask with a pattern");
+            i.report.unsupported(
+                "eps.image.patternMask",
+                paged_loss::LossSeverity::Approximated,
+                "imagemask with a pattern",
+            );
             crate::art::Paint {
                 color: Color::Gray(0.5),
                 separation: None,
