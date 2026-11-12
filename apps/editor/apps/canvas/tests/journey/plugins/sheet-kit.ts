@@ -235,11 +235,15 @@ export async function exitSheet(page: Page): Promise<void> {
 }
 
 /** One native table as the document holds it. `rows[r][c]` is the cell's
- *  text; `cellAttrs` and `charStyles` carry the raw IDML for style checks. */
+ *  text; `cellAttrs`, `runAttrs` and `charStyles` carry the raw IDML for
+ *  style checks. */
 export interface PlacedTable {
   storyFile: string;
   rows: string[][];
   cellAttrs: Map<string, string>;
+  /** Each `CharacterStyleRange`'s attributes: the cell's direct formatting
+   *  (engine ADR 1098) is written there as local overrides. */
+  runAttrs: Map<string, string[]>;
   charStyles: Map<string, string[]>;
 }
 
@@ -274,6 +278,7 @@ export function parsePlacedTables(idml: Buffer): PlacedDocument {
       const rows: string[][] = [];
       const cellAttrs = new Map<string, string>();
       const charStyles = new Map<string, string[]>();
+      const runAttrs = new Map<string, string[]>();
       for (const c of t[1].matchAll(/<Cell\b([^>]*)>([\s\S]*?)<\/Cell>/g)) {
         // IDML names a cell "column:row".
         const [col, row] = (attr(c[1], "Name") ?? "0:0").split(":").map(Number);
@@ -282,14 +287,18 @@ export function parsePlacedTables(idml: Buffer): PlacedDocument {
           .join("");
         (rows[row] ??= [])[col] = text;
         cellAttrs.set(`${row},${col}`, c[1]);
+        const ranges = [
+          ...c[2].matchAll(/<CharacterStyleRange\b([^>]*)>/g),
+        ].map((m) => m[1]);
+        runAttrs.set(`${row},${col}`, ranges);
         charStyles.set(
           `${row},${col}`,
-          [...c[2].matchAll(/<CharacterStyleRange\b([^>]*)>/g)]
-            .map((m) => attr(m[1], "AppliedCharacterStyle"))
+          ranges
+            .map((r) => attr(r, "AppliedCharacterStyle"))
             .filter((s): s is string => !!s),
         );
       }
-      tables.push({ storyFile: name, rows, cellAttrs, charStyles });
+      tables.push({ storyFile: name, rows, cellAttrs, runAttrs, charStyles });
     }
   }
   return {
@@ -344,14 +353,17 @@ export function cellFill(
   return tag ? attr(tag, "ColorValue") : ref;
 }
 
-/** Whether a cell's text runs are set in a bold face (through the character
- *  style the lowering minted). */
+/** Whether a cell's text runs are set in a bold face: directly (the
+ *  lowering writes a cell's format as local overrides, engine ADR 1098) or
+ *  through a document character style. */
 export function cellIsBold(
   doc: PlacedDocument,
   table: PlacedTable,
   row: number,
   col: number,
 ): boolean {
+  const direct = table.runAttrs.get(`${row},${col}`) ?? [];
+  if (direct.some((r) => /bold/i.test(attr(r, "FontStyle") ?? ""))) return true;
   const styles = table.charStyles.get(`${row},${col}`) ?? [];
   return styles.some((s) => {
     const tag = doc.styles.match(
