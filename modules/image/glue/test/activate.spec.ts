@@ -279,6 +279,7 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.smartExportContents",
       "media.paged.image.command.smartPlacePageItems",
       "media.paged.image.command.convertForSmartFilters",
+      "media.paged.image.command.placeLayersAsFrames",
       "media.paged.image.command.definePattern",
       "media.paged.image.command.fillPattern",
       "media.paged.image.command.shapeBlur",

@@ -2175,16 +2175,16 @@
           }
         },
         {
-          "id": "media.paged.image.command.placeLayersAsFrames",
-          "title": "Place the PSD's layers as frames",
+          "id": "media.paged.image.command.convertForSmartFilters",
+          "title": "Convert for smart filters",
           "args": {
             "kind": "struct",
             "fields": {}
           }
         },
         {
-          "id": "media.paged.image.command.convertForSmartFilters",
-          "title": "Convert for smart filters",
+          "id": "media.paged.image.command.placeLayersAsFrames",
+          "title": "Place the PSD's layers as frames",
           "args": {
             "kind": "struct",
             "fields": {}
