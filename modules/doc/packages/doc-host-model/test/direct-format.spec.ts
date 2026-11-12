@@ -16,25 +16,47 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Engine ADR 1098 — a table cell's Word direct formatting is set as direct
-// properties on the cell's text (a cell-qualified `storyRange`), over the
-// Word style the lowering's synthesized `docx-auto-*` style stands on, and a
-// synthesized style only a cell named is no longer minted.
+// Doc ADR 600, amendment 2026-11-12b — the pour sets Word's direct
+// formatting the way `docx-js` tells it (`direct` looks, the native body's
+// rule, decided in Rust: `docx_skeleton::direct`): the Word style a
+// synthesized `docx-auto-*` style stands on, applied, and its properties set
+// on the range (engine ADR 1098), in the body, a blank line (a caret naming
+// its paragraph), a table's own paragraph, a cell, and a tracked change's look
+// before. Only the synthesized styles a look still applies are minted. The
+// rule itself is tested in Rust (`docx-skeleton/tests/direct.rs`).
 
 import { describe, expect, it } from "bun:test";
 
 import {
+  buildStoryBlocks,
   buildStyleMutations,
   buildTableCellCarets,
   buildTableCells,
-  catalogue,
-  synthesizedStylesInUse,
+  type LoweredBlock,
   type LoweredDoc,
   type LoweredStyle,
   type LoweredTable,
+  type StoryStep,
 } from "../src/index.ts";
 
 type Op = { op: string; args: Record<string, unknown> };
+
+const center = {
+  path: "paragraphJustification",
+  value: { type: "text" as const, value: "CenterAlign" },
+};
+const size14 = {
+  path: "characterFontSize",
+  value: { type: "length" as const, value: 14 },
+};
+const red = {
+  path: "characterFillColor",
+  value: { type: "colorRef" as const, value: "Color/docx-C00000" },
+};
+const spaceAfter = {
+  path: "paragraphSpaceAfter",
+  value: { type: "length" as const, value: 0 },
+};
 
 const styles: LoweredStyle[] = [
   {
@@ -44,37 +66,17 @@ const styles: LoweredStyle[] = [
     props: [],
   },
   {
-    id: "CharacterStyle/docx-Strong",
-    name: "Strong",
-    collection: "character",
-    props: [
-      { path: "characterFontStyle", value: { type: "text", value: "Bold" } },
-    ],
-  },
-  {
     id: "ParagraphStyle/docx-auto-p1",
     name: "docx direct format 1",
     collection: "paragraph",
     basedOn: "ParagraphStyle/docx-Normal",
-    props: [
-      {
-        path: "paragraphJustification",
-        value: { type: "text", value: "CenterAlign" },
-      },
-      { path: "characterLanguage", value: { type: "text", value: "en" } },
-    ],
+    props: [center],
   },
   {
     id: "CharacterStyle/docx-auto-c1",
     name: "docx direct format 1",
     collection: "character",
-    props: [
-      { path: "characterFontSize", value: { type: "length", value: 14 } },
-      {
-        path: "characterFillColor",
-        value: { type: "colorRef", value: "Color/docx-C00000" },
-      },
-    ],
+    props: [size14, red],
   },
   {
     id: "ParagraphStyle/docx-auto-p2",
@@ -83,20 +85,14 @@ const styles: LoweredStyle[] = [
     basedOn: "ParagraphStyle/docx-Normal",
     props: [{ path: "characterFontSize", value: { type: "length", value: 9 } }],
   },
-  {
-    id: "CharacterStyle/docx-auto-c2",
-    name: "docx direct format 2",
-    collection: "character",
-    props: [
-      { path: "characterUnderline", value: { type: "bool", value: true } },
-    ],
-  },
 ];
 
 const table: LoweredTable = {
   rows: 1,
   cols: 2,
   columnWidthsPt: [100, 100],
+  paraStyleId: "ParagraphStyle/docx-auto-p1",
+  direct: { style: "ParagraphStyle/docx-Normal", props: [center] },
   cells: [
     {
       row: 0,
@@ -106,9 +102,14 @@ const table: LoweredTable = {
       paragraphs: [
         {
           paraStyleId: "ParagraphStyle/docx-auto-p1",
+          direct: { style: "ParagraphStyle/docx-Normal", props: [center] },
           runs: [
-            { text: "Tot", charStyleId: "CharacterStyle/docx-auto-c1" },
-            { text: "al" },
+            {
+              text: "Tot",
+              charStyleId: "CharacterStyle/docx-auto-c1",
+              direct: { style: null, props: [size14, red] },
+            },
+            { text: "al", direct: { style: null } },
           ],
           sourceIndex: 0,
         },
@@ -121,7 +122,9 @@ const table: LoweredTable = {
       colSpan: 1,
       paragraphs: [
         {
+          // Kept: its character properties have no run to carry them.
           paraStyleId: "ParagraphStyle/docx-auto-p2",
+          direct: { style: "ParagraphStyle/docx-auto-p2" },
           runs: [],
           sourceIndex: 1,
         },
@@ -143,21 +146,36 @@ const sets = (ops: Op[]) =>
         (o.args.value as { value: unknown }).value,
       ];
     });
+const applied = (ops: Op[]) =>
+  ops
+    .filter((o) => o.op === "applyStyle")
+    .map((o) => [o.args.start, o.args.end, o.args.style]);
 
-describe("a cell's direct formatting @feat:plugin-doc.read-path", () => {
-  it("is the Word style plus direct properties on the cell's ranges", () => {
-    const ops = opsOf(buildTableCells(table, "s", "t1", catalogue(styles)));
-    const applied = ops
-      .filter((o) => o.op === "applyStyle")
-      .map((o) => [o.args.start, o.args.end, o.args.style]);
-    // No synthesized style is applied to the text cell.
-    expect(applied).toEqual([[0, 5, "ParagraphStyle/docx-Normal"]]);
+function run(steps: StoryStep[]): Op[] {
+  const out: Op[] = [];
+  let text = 0;
+  let style = 0;
+  for (const step of steps) {
+    if (step.kind === "text") {
+      out.push(...(step.mutations(text, style) as unknown as Op[]));
+      text += step.byteLength;
+      style += step.length;
+    } else {
+      out.push(step.insert as unknown as Op);
+      out.push(...opsOf(step.cells("Table/t1")));
+      if (step.style) out.push(...(step.style(style) as unknown as Op[]));
+      text += step.textLength;
+    }
+  }
+  return out;
+}
+
+describe("the pour sets the looks docx-js decided @feat:plugin-doc.read-path", () => {
+  it("a cell: the Word style plus direct properties on the cell's ranges", () => {
+    const ops = opsOf(buildTableCells(table, "s", "t1"));
+    expect(applied(ops)).toEqual([[0, 5, "ParagraphStyle/docx-Normal"]]);
     expect(
-      sets(ops).filter(
-        (s) =>
-          typeof s[2] === "string" &&
-          /^(character|paragraph)/.test(s[2] as string),
-      ),
+      sets(ops).filter((s) => /^(character|paragraph)/.test(String(s[2]))),
     ).toEqual([
       [0, 3, "characterFontSize", 14],
       [0, 3, "characterFillColor", "Color/docx-C00000"],
@@ -168,43 +186,138 @@ describe("a cell's direct formatting @feat:plugin-doc.read-path", () => {
     expect(cell.id.cell).toEqual({ tableId: "t1", row: 0, col: 0 });
   });
 
-  it("keeps a synthesized paragraph style whose character properties have no run", () => {
-    const carets = buildTableCellCarets(
-      table,
-      "s",
-      "t1",
-      catalogue(styles),
-    ) as unknown as Op[];
+  it("a cell's blank line keeps the style docx-js kept", () => {
+    const carets = buildTableCellCarets(table, "s", "t1") as unknown as Op[];
     expect(carets.map((o) => o.args.style)).toEqual([
       "ParagraphStyle/docx-auto-p2",
     ]);
   });
 
-  it("mints only the synthesized styles something still names", () => {
+  it("the body, a blank line and a table's paragraph: carets name their paragraph", () => {
+    const blocks: LoweredBlock[] = [
+      {
+        kind: "paragraph",
+        paraStyleId: "ParagraphStyle/docx-auto-p1",
+        direct: { style: "ParagraphStyle/docx-Normal", props: [center] },
+        runs: [
+          {
+            text: "Hi",
+            charStyleId: "CharacterStyle/docx-auto-c1",
+            direct: { style: null, props: [size14] },
+          },
+        ],
+        sourceIndex: 0,
+      },
+      {
+        kind: "paragraph",
+        paraStyleId: "ParagraphStyle/docx-auto-p3",
+        direct: { style: "ParagraphStyle/docx-Normal", props: [spaceAfter] },
+        runs: [],
+        sourceIndex: 1,
+      },
+      { kind: "table", ...table },
+    ];
+    const ops = run(buildStoryBlocks(blocks, "s"));
+    const body = ops.filter(
+      (o) =>
+        (o.op === "applyStyle" || o.op === "setElementProperty") &&
+        !(
+          o.args.cell ||
+          (o.args.elementId as { id?: { cell?: unknown } })?.id?.cell
+        ),
+    );
+    const shown = body.map((o) =>
+      o.op === "applyStyle"
+        ? ["style", o.args.start, o.args.end, o.args.style, o.args.paragraph]
+        : [
+            "set",
+            ...((id) => [id.start, id.end, id.paragraph])(
+              (o.args.elementId as { id: Record<string, unknown> }).id,
+            ),
+            o.args.path,
+          ],
+    );
+    expect(shown).toContainEqual([
+      "style",
+      0,
+      2,
+      "ParagraphStyle/docx-Normal",
+      undefined,
+    ]);
+    expect(shown).toContainEqual(["set", 0, 2, undefined, "characterFontSize"]);
+    expect(shown).toContainEqual([
+      "set",
+      0,
+      2,
+      undefined,
+      "paragraphJustification",
+    ]);
+    // The blank line (paragraph 1) and the table's paragraph (2), named.
+    expect(shown).toContainEqual([
+      "style",
+      2,
+      2,
+      "ParagraphStyle/docx-Normal",
+      1,
+    ]);
+    expect(shown).toContainEqual(["set", 2, 2, 1, "paragraphSpaceAfter"]);
+    expect(shown).toContainEqual([
+      "style",
+      2,
+      2,
+      "ParagraphStyle/docx-Normal",
+      2,
+    ]);
+    expect(shown).toContainEqual(["set", 2, 2, 2, "paragraphJustification"]);
+    expect(shown.some((s) => String(s[3]).includes("docx-auto"))).toBe(false);
+  });
+
+  it("a tracked format change's look before is its style and properties", () => {
+    const blocks: LoweredBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [
+          {
+            text: "Bold",
+            charStyleId: "CharacterStyle/docx-auto-c1",
+            direct: { style: null, props: [size14, red] },
+            formatChange: {
+              change: { id: "docx-r1", kind: "format", author: "A" },
+              beforeCharStyleId: "CharacterStyle/docx-auto-c9",
+            },
+            beforeDirect: {
+              style: "CharacterStyle/docx-Strong",
+              props: [size14],
+            },
+          },
+        ],
+        sourceIndex: 0,
+      },
+    ];
+    const ops = run(buildStoryBlocks(blocks, "s"));
+    const record = ops.find((o) => o.op === "recordChange")!;
+    expect(record.args.change).toEqual({
+      kind: "format",
+      id: "docx-r1",
+      author: "A",
+      beforeCharacterStyle: "CharacterStyle/docx-Strong",
+      beforeCharacterProperties: [size14],
+    });
+  });
+
+  it("mints only the synthesized styles docx-js says a look still applies", () => {
     const doc = {
       styles,
       swatches: [],
-      story: {
-        blocks: [
-          { kind: "table", ...table },
-          {
-            kind: "paragraph",
-            runs: [{ text: "x", charStyleId: "CharacterStyle/docx-auto-c2" }],
-            sourceIndex: 2,
-          },
-        ],
-      },
+      story: { blocks: [{ kind: "table", ...table }] },
+      mintedStyles: ["ParagraphStyle/docx-auto-p2"],
     } as unknown as LoweredDoc;
-    expect([...synthesizedStylesInUse(doc as never)].sort()).toEqual([
-      "CharacterStyle/docx-auto-c2",
-      "ParagraphStyle/docx-auto-p2",
-    ]);
     const created = (buildStyleMutations(doc) as unknown as Op[])
       .filter((o) => o.op.startsWith("create"))
       .map((o) => o.args.selfId);
-    expect(created).not.toContain("CharacterStyle/docx-auto-c1");
-    expect(created).not.toContain("ParagraphStyle/docx-auto-p1");
-    expect(created).toContain("ParagraphStyle/docx-auto-p2");
-    expect(created).toContain("CharacterStyle/docx-Strong");
+    expect(created).toEqual([
+      "ParagraphStyle/docx-Normal",
+      "ParagraphStyle/docx-auto-p2",
+    ]);
   });
 });

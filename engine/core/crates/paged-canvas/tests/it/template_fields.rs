@@ -265,6 +265,7 @@ fn a_replaced_text_keeps_its_style() {
             start: 0,
             end: 9,
             cell: None,
+            paragraph: None,
         },
         path: paged_mutate::PropertyPath::CharacterFontStyle,
         value: paged_mutate::Value::Text("Bold".into()),

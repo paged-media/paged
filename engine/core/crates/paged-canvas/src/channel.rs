@@ -847,6 +847,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //   and `LossEntry` gains the optional `items`. A sentence from an older
 //   worker reads as an `idml.legacy` entry; the editor and its worker ship
 //   as one build.
+// v78 (rider) — engine ADR 1098, amendment: a caret `storyRange` may name
+//   its paragraph (`paragraph`), as `applyStyle` does, so a blank line and a
+//   table's own paragraph take direct properties; `recordChange`'s spec
+//   takes the look before as properties (`beforeCharacterProperties`,
+//   `beforeParagraphProperties`). Additive; absent ⇒ as before.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// The code of an IDML export loss an older worker sent as a sentence.

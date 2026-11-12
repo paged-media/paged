@@ -3517,6 +3517,7 @@ pub(super) fn apply_apply_style(
         start,
         end,
         cell: cell.cloned(),
+        paragraph: None,
     };
     let value = Value::Text(style.to_string());
     let applied = match scope {
@@ -3536,6 +3537,7 @@ pub(super) fn apply_apply_style(
             cell,
             start,
             end,
+            None,
             &node,
             PropertyPath::AppliedParagraphStyle,
             &value,
@@ -3620,6 +3622,7 @@ pub(super) fn apply_insert_field(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             })
         })?;
     // v69 — a caret-unit insertion point is converted against the story as
@@ -3636,6 +3639,7 @@ pub(super) fn apply_insert_field(
                 start: content,
                 end: content,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!(
@@ -3674,6 +3678,7 @@ pub(super) fn apply_insert_field(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("offset {offset} past end of story (len {total})"),
@@ -3809,6 +3814,7 @@ fn insert_tagged_run(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("offset {offset} past end of story (len {total})"),
@@ -3913,6 +3919,7 @@ pub(super) fn apply_delete_field(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             })
         })?;
     if let FieldKind::Placeholder { plugin, key, .. } = field {
@@ -3946,6 +3953,7 @@ pub(super) fn apply_delete_field(
                                 start: offset,
                                 end: offset + 1,
                                 cell: None,
+                                paragraph: None,
                             },
                             path: PropertyPath::AppliedCharacterStyle,
                             reason: format!(
@@ -3968,6 +3976,7 @@ pub(super) fn apply_delete_field(
                 start: offset,
                 end: offset + 1,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no field marker at offset {offset}"),
@@ -4035,6 +4044,7 @@ fn delete_placeholder_run(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no placeholder field ({plugin}, {key}) starting at offset {offset}"),
@@ -4101,6 +4111,7 @@ fn delete_variable_run(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no instance of text variable {variable_id:?} at offset {offset}"),
@@ -4161,6 +4172,7 @@ fn delete_word_field_run(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no Word field {code:?} at offset {offset}"),
@@ -4210,6 +4222,7 @@ pub(super) fn apply_set_field_value(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             })
         })?;
     let story = &mut doc.stories[story_idx].story;
@@ -4249,6 +4262,7 @@ pub(super) fn apply_set_field_value(
                 start: offset,
                 end: offset,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::AppliedCharacterStyle,
             reason: format!("no placeholder field at offset {offset}"),

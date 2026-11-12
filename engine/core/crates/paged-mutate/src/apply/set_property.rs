@@ -3034,6 +3034,7 @@ fn apply_set_property_core(
                 start,
                 end,
                 cell,
+                ..
             },
             PropertyPath::CharacterFontSize
             | PropertyPath::CharacterLeading
@@ -3189,6 +3190,7 @@ fn apply_set_property_core(
                 start,
                 end,
                 cell,
+                paragraph,
             },
             PropertyPath::ParagraphSpaceBefore
             | PropertyPath::ParagraphSpaceAfter
@@ -3256,6 +3258,7 @@ fn apply_set_property_core(
                 cell.as_ref(),
                 *start,
                 *end,
+                *paragraph,
                 node,
                 path,
                 value,

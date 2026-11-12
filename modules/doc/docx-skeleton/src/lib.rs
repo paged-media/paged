@@ -47,6 +47,7 @@
 
 pub mod body;
 pub mod catalog;
+pub mod direct;
 pub mod endnote;
 pub mod items;
 pub mod look;

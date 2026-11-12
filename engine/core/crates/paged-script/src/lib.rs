@@ -3962,8 +3962,10 @@ fn str_arg(args: &[JsValue], i: usize, ctx: &mut Context) -> JsResult<String> {
 }
 
 /// `paged.recordChange(storyId, start, end, { kind, id?, author?, date?,
-/// beforeCharacterStyle?, beforeParagraphStyle? }, paragraph?)` — record a
-/// tracked change over story chars (engine ADR 1040).
+/// beforeCharacterStyle?, beforeParagraphStyle?, beforeCharacterProperties?,
+/// beforeParagraphProperties? }, paragraph?)` — record a tracked change over
+/// story chars (engine ADR 1040; the look before as properties, ADR 1098
+/// amendment).
 fn paged_record_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let story_id = str_arg(args, 0, ctx)?;
     let start = args.get_or_undefined(1).to_number(ctx)? as u32;

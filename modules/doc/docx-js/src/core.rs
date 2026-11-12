@@ -138,9 +138,13 @@ impl DocSession {
         docx_skeleton::story_ids_with(&self.model, self.options)
     }
 
-    /// The lowering as a JSON string (the wasm boundary form).
+    /// The lowering as a JSON string (the wasm boundary form), with the
+    /// looks the pour sets (doc ADR 600, amendment 2026-11-12b:
+    /// `docx_skeleton::direct::annotate`).
     pub fn lowered_json(&self) -> String {
-        serde_json::to_string(&self.lowered()).unwrap_or_else(|_| "null".to_string())
+        let mut ir = self.lowered();
+        docx_skeleton::direct::annotate(&mut ir);
+        serde_json::to_string(&ir).unwrap_or_else(|_| "null".to_string())
     }
 
     /// The parsed semantic model (exposed for tests / debugging).

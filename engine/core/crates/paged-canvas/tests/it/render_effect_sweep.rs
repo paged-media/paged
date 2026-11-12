@@ -3864,6 +3864,8 @@ fn style_cases(c: &mut Vec<Case>) {
             date: None,
             before_character_style: None,
             before_paragraph_style: None,
+            before_character_properties: None,
+            before_paragraph_properties: None,
         }
     }
     fn sweep_comment(id: &str) -> paged_mutate::CommentSpec {

@@ -135,7 +135,10 @@ export async function pourSteps(
         }
         // Doc ADR 614 — the table's paragraph's style (its alignment).
         if (step.style) {
-          const styled = await host.document.mutate(step.style(styleOffset));
+          const styled = await host.document.mutate({
+            op: "batch",
+            args: { ops: step.style(styleOffset) },
+          } as Mutation);
           if (!styled.applied) {
             host.log.warn(
               `paged.doc: the engine refused a table's alignment: ${JSON.stringify(styled.error)}`,
@@ -183,7 +186,7 @@ export function pourBatchOps(
       if ((cells as { op: string }).op === "batch")
         ops.push(...(cells as { args: { ops: Mutation[] } }).args.ops);
       else ops.push(cells);
-      if (step.style) ops.push(step.style(styleOffset));
+      if (step.style) ops.push(...step.style(styleOffset));
       textOffset += step.textLength;
     }
   }

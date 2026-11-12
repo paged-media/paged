@@ -97,6 +97,27 @@ pub struct LoweredDoc {
     /// Floating pictures and text boxes placed as page items (doc ADR 614).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub page_items: Vec<LoweredPageItem>,
+    /// Doc ADR 600, amendment 2026-11-12b — the synthesized styles the pour
+    /// still applies (a paragraph that keeps one, a look a style missing
+    /// from the catalogue names) and those they stand on. Set with the
+    /// `direct` looks (`docx_skeleton::direct::annotate`); absent, the pour
+    /// mints every style.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minted_styles: Option<Vec<String>>,
+}
+
+/// Doc ADR 600, amendment 2026-11-12b — a look as the pour sets it: the
+/// style it applies (the Word style a synthesized one stands on, or the
+/// synthesized style itself where it is kept) and the direct properties it
+/// sets over it (`setElementProperty` on the range, engine ADR 1098). The
+/// rule is the native body's (`docx_skeleton::body::paragraph_plan`); the
+/// pour reads it and computes nothing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredDirect {
+    pub style: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub props: Vec<StyleProp>,
 }
 
 /// Doc ADR 613 — one tracked change as the engine records it
@@ -442,6 +463,10 @@ pub struct LoweredTable {
     /// What the engine does not lay out yet (doc ADR 614).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layout: Option<LoweredTableLayout>,
+    /// Doc ADR 600, amendment 2026-11-12b — the table paragraph's look as
+    /// the pour sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<LoweredDirect>,
 }
 
 /// One table cell, addressed by its resolved grid position.
@@ -561,6 +586,14 @@ pub struct LoweredParagraph {
     /// them; the pour has no door for one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub equations: Vec<LoweredEquation>,
+    /// Doc ADR 600, amendment 2026-11-12b — the paragraph's look as the pour
+    /// sets it (`para_style_id` stays the lowering's token).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<LoweredDirect>,
+    /// The look before its tracked property change (`props_change`), as
+    /// direct properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_direct: Option<LoweredDirect>,
 }
 
 /// An equation of a paragraph: the character offset of its place (past the
@@ -599,6 +632,9 @@ pub struct LoweredSegment {
     pub at: u32,
     /// Full `ParagraphStyle/…` token applied over this segment.
     pub para_style_id: Option<String>,
+    /// Doc ADR 600, amendment 2026-11-12b — its look as the pour sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<LoweredDirect>,
 }
 
 /// An image lowered to an anchored-frame placement.
@@ -788,6 +824,14 @@ pub struct LoweredRun {
     /// ADR 1052), as the engine's JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control: Option<docx_core::ContentControl>,
+    /// Doc ADR 600, amendment 2026-11-12b — the run's look as the pour sets
+    /// it (`char_style_id` stays the lowering's token).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<LoweredDirect>,
+    /// The look before its tracked format change (`format_change`), as
+    /// direct properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_direct: Option<LoweredDirect>,
 }
 
 /// Page geometry for the first section, in points.

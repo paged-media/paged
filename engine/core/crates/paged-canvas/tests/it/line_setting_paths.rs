@@ -74,6 +74,7 @@ fn range(case: u32, start: u32, end: u32) -> ElementId {
         start,
         end,
         cell: None,
+        paragraph: None,
     }
 }
 

@@ -118,3 +118,49 @@ synthesized style's (`docx-export` `overlay_cells`, the body's `keep_baseline_lo
 unedited cell saves byte-identical. The body's deferred blocks still apply synthesized styles:
 their tracked format changes name the look before by a style, and the save-back's tokens follow
 them.
+
+## Amendment 2026-11-12b: no invented style anywhere the pour writes
+
+The amendment above left the lowering's synthesized `docx-auto-*` styles in the places the
+TypeScript pour still wrote: the body of a document the native builder does not take whole,
+headers and footers, text boxes, and a tracked change's look before. They are gone from all of
+them, and the pour no longer holds a rule of its own:
+
+- **One rule, in Rust.** `docx-skeleton` `body::paragraph_plan` is the rule the native body
+  (`build_whole`, through the shared `keeps_paragraph_style`), the placement batch and the pour
+  follow: a synthesized style is the Word style it stands on plus direct properties, a paragraph
+  style's character properties go onto its runs under their own, and the synthesized paragraph style
+  is kept only where the model cannot carry its character properties (an empty paragraph, a run whose
+  Word character style sets the same path). `docx-js` `lowered_json` hands the pour the IR with that
+  plan written into it (`docx_skeleton::direct::annotate`): a `direct` look (style and properties) on
+  every paragraph, break part, run and table paragraph, a `beforeDirect` look on a tracked change,
+  and `mintedStyles`, the synthesized styles a look still applies. `doc-host-model` applies them as
+  they are (`lookOf`); its TypeScript twin of the rule (`direct-format.ts`: `paragraphPlan`,
+  `splitStyle`, `synthesizedStylesInUse`) is deleted. The IR's own tokens (`paraStyleId`,
+  `charStyleId`) are unchanged, so the object model and save-back read what they read before.
+- **Where a range cannot reach.** A blank line and a table's own paragraph take their direct
+  properties through a caret that names its paragraph (engine ADR 1098, amendment), as their style
+  already did (`applyStyle.paragraph`). The placement batch uses the same caret, so it no longer
+  refuses "direct formatting on an empty paragraph", and a table's alignment is the Word style plus
+  `paragraphJustification` there too.
+- **Tracked looks.** A format change's and a paragraph-property change's look before are
+  `recordChange`'s `beforeCharacterStyle` / `beforeParagraphStyle` plus
+  `beforeCharacterProperties` / `beforeParagraphProperties` (engine ADR 1098, amendment): the Word
+  style and the direct formatting Word's `w:rPrChange` / `w:pPrChange` hold, what the native body
+  builds into `FormatChange::before`.
+- **Fields and note markers** take their run's look over the field's range and around the marker,
+  as the style did; the marker keeps the engine's own reference look.
+- **What is still kept**, the native body's cases and no others: a paragraph whose paragraph
+  style's character properties have no run (an empty paragraph) or would override a run's Word
+  character style; a paragraph a break splits into parts with other character properties (the
+  native body defers those; the pour keeps the parts' styles); a tracked paragraph look with
+  character properties; and a look whose synthesized style is missing from the catalogue.
+
+Save-back is unchanged: it already read direct properties back for the native body (the overlay's
+`keep_baseline_looks`: a run whose look is its baseline synthesized style's is unchanged, so an
+unedited document saves byte-identical) and for headers and footers through the same overlay; an
+edited run writes its direct properties. Evidence: `docx-skeleton/tests/direct.rs` (over the
+conformance fixtures, a paragraph and a table cell built from the annotations equal the native
+body's; blank lines, breaks, tables, both tracked looks and `mintedStyles` by hand),
+`doc-host-model/test/direct-format.spec.ts` (the pour writes what it is told, carets name their
+paragraph), the headless suite on both open paths (`native-body.spec.ts`, `PAGED_DOC_NATIVE=0`).

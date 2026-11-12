@@ -164,7 +164,8 @@ pub enum Address {
     },
     /// `storyRange:<storyId>@<start>..<end>`, or a cell's own text,
     /// `storyRange:<storyId>@<tableId>/<row>,<col>@<start>..<end>`
-    /// (engine ADR 1098).
+    /// (engine ADR 1098); a caret that names its paragraph ends in
+    /// `#<paragraph>` (`storyRange:Story/u1@4..4#2`).
     #[serde(rename_all = "camelCase")]
     StoryRange {
         story_id: String,
@@ -172,6 +173,8 @@ pub enum Address {
         end: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cell: Option<crate::TextCellAddr>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        paragraph: Option<u32>,
     },
     /// A text field anchored at a story character offset.
     #[serde(rename_all = "camelCase")]
@@ -780,12 +783,21 @@ impl Address {
                             return Err(GrammarError::new(at, "a story range needs a story id"));
                         }
                         let range_at = at + rest.len() - range.len();
+                        // A caret that names its paragraph (engine ADR
+                        // 1098, amendment): `<start>..<end>#<paragraph>`.
+                        let (range, paragraph) = match range.split_once('#') {
+                            Some((r, p)) => {
+                                (r, Some(parse_u32(p, range_at + r.len() + 1, "paragraph")?))
+                            }
+                            None => (range, None),
+                        };
                         let (start, end) = parse_range(range, range_at)?;
                         Address::StoryRange {
                             story_id: dec(story),
                             start,
                             end,
                             cell,
+                            paragraph,
                         }
                     }
                     _ if range_required => {
@@ -898,11 +910,13 @@ impl Address {
                 start,
                 end,
                 cell,
+                paragraph,
             } => ElementId::StoryRange {
                 story_id: story_id.clone(),
                 start: *start,
                 end: *end,
                 cell: cell.clone(),
+                paragraph: *paragraph,
             },
             _ => return None,
         })
@@ -927,11 +941,13 @@ impl From<ElementId> for Address {
                 start,
                 end,
                 cell,
+                paragraph,
             } => Address::StoryRange {
                 story_id,
                 start,
                 end,
                 cell,
+                paragraph,
             },
             ElementId::Table { table_id, .. } => Address::Table { id: table_id },
             ElementId::TableCell {
@@ -984,20 +1000,28 @@ impl std::fmt::Display for Address {
                 start,
                 end,
                 cell: None,
-            } => write!(f, "{p}:{}@{start}..{end}", enc(story_id, "@")),
+                paragraph,
+            } => {
+                write!(f, "{p}:{}@{start}..{end}", enc(story_id, "@"))?;
+                paragraph.map_or(Ok(()), |i| write!(f, "#{i}"))
+            }
             Address::StoryRange {
                 story_id,
                 start,
                 end,
                 cell: Some(c),
-            } => write!(
-                f,
-                "{p}:{}@{}/{},{}@{start}..{end}",
-                enc(story_id, "@"),
-                enc(&c.table_id, "@/"),
-                c.row,
-                c.col
-            ),
+                paragraph,
+            } => {
+                write!(
+                    f,
+                    "{p}:{}@{}/{},{}@{start}..{end}",
+                    enc(story_id, "@"),
+                    enc(&c.table_id, "@/"),
+                    c.row,
+                    c.col
+                )?;
+                paragraph.map_or(Ok(()), |i| write!(f, "#{i}"))
+            }
             Address::Field { story_id, offset } => {
                 write!(f, "{p}:{}@{offset}", enc(story_id, "@"))
             }
@@ -1065,6 +1089,7 @@ mod tests {
                 start: 3,
                 end: 9,
                 cell: None,
+                paragraph: None,
             }
         );
         assert_eq!(
@@ -1160,6 +1185,7 @@ mod tests {
             start: 1,
             end: 2,
             cell: None,
+            paragraph: None,
         };
         assert_eq!(r.to_string(), "storyRange:odd%40id%25@1..2");
         assert_eq!(a(&r.to_string()), r);
@@ -1186,6 +1212,7 @@ mod tests {
             start: 0,
             end: 5,
             cell: cell("t1"),
+            paragraph: None,
         };
         assert_eq!(r.to_string(), "storyRange:Story/u1@t1/2,1@0..5");
         assert_eq!(a("storyRange:Story/u1@t1/2,1@0..5"), r);
@@ -1194,6 +1221,7 @@ mod tests {
             start: 3,
             end: 4,
             cell: cell("t/@1"),
+            paragraph: None,
         };
         assert_eq!(odd.to_string(), "storyRange:s%401@t%2F%401/2,1@3..4");
         assert_eq!(a(&odd.to_string()), odd);
@@ -1222,6 +1250,7 @@ mod tests {
                 start: 0,
                 end: 6,
                 cell: None,
+                paragraph: None,
             },
         ];
         for id in ids {
@@ -1322,6 +1351,7 @@ mod tests {
                     start,
                     end: start + len,
                     cell: None,
+                    paragraph: None,
                 }
             }),
             (
@@ -1338,6 +1368,7 @@ mod tests {
                         start,
                         end: start + len,
                         cell: Some(crate::TextCellAddr { table_id, row, col }),
+                        paragraph: None,
                     }
                 }),
             (any_escaped(), any::<u32>())

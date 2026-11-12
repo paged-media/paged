@@ -92,6 +92,7 @@ fn load_missing_lora() -> (CanvasModel, String) {
             start: 0,
             end: 5,
             cell: None,
+            paragraph: None,
         },
         path: paged_mutate::PropertyPath::CharacterFontFamily,
         value: paged_mutate::Value::Text("Lora".into()),

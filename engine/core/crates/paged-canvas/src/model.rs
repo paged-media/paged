@@ -981,6 +981,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
             start,
             end,
             cell,
+            paragraph,
         } => NodeId::StoryRange {
             story_id: story_id.clone(),
             start: *start,
@@ -990,6 +991,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
                 row: c.row,
                 col: c.col,
             }),
+            paragraph: *paragraph,
         },
         ElementId::Table { story_id, table_id } => NodeId::Table {
             story_id: story_id.clone(),
@@ -8586,9 +8588,18 @@ impl CanvasModel {
             start,
             end,
             cell,
+            paragraph,
         } = id
         {
-            return self.story_range_properties(story_id, cell.as_ref(), *start, *end, id, true);
+            return self.story_range_properties(
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                *paragraph,
+                id,
+                true,
+            );
         }
         self.element_properties(id)
     }
@@ -8609,9 +8620,18 @@ impl CanvasModel {
             start,
             end,
             cell,
+            paragraph,
         } = id
         {
-            return self.story_range_properties(story_id, cell.as_ref(), *start, *end, id, false);
+            return self.story_range_properties(
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                *paragraph,
+                id,
+                false,
+            );
         }
         // W3.A1 — tables / cells likewise live in stories, not spreads.
         if let ElementId::Table { story_id, table_id } = id {
@@ -10351,6 +10371,7 @@ impl CanvasModel {
         cell: Option<&paged_wire::TextCellAddr>,
         start: u32,
         end: u32,
+        paragraph: Option<u32>,
         id: &crate::element_selection::ElementId,
         effective: bool,
     ) -> Option<crate::channel::ElementProperties> {
@@ -10455,7 +10476,15 @@ impl CanvasModel {
         // the paragraph the mutation layer's caret rule names, and the
         // character before it (the first one at offset 0), as InDesign
         // shows the insertion point's attributes.
+        // A caret that names its paragraph reads that one (engine ADR 1098,
+        // amendment).
+        let named = paragraph
+            .filter(|&p| start == end && (p as usize) < paragraphs.len())
+            .map(|p| p as usize);
         let caret_paras: Option<Vec<usize>> = (start == end).then(|| {
+            if let Some(p) = named {
+                return vec![p];
+            }
             let mut at = 0u32;
             let spans: Vec<(u32, u32)> = paragraphs
                 .iter()

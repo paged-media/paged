@@ -7587,6 +7587,15 @@
                       "type": "null"
                     }
                   ]
+                },
+                "paragraph": {
+                  "description": "Engine ADR 1098, amendment — the paragraph a caret names\n(`start == end`): a paragraph path writes and reads exactly\nparagraph `i` of the stream, as `applyStyle`'s `paragraph` (v65)\nstyles it. Absent ⇒ the caret's offset decides, as before.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0
                 }
               },
               "required": [
@@ -13739,7 +13748,7 @@
           "default": null
         },
         "beforeCharacterStyle": {
-          "description": "`format`: the run's applied character style before the change (its\nother properties are taken as they are now).",
+          "description": "`format`: the run's applied character style before the change (its\nother properties are taken as they are now, unless\n`before_character_properties` describes them).",
           "type": [
             "string",
             "null"
@@ -13753,6 +13762,26 @@
             "null"
           ],
           "default": null
+        },
+        "beforeCharacterProperties": {
+          "description": "Engine ADR 1098, amendment — `format`: the run's direct character\nproperties before the change. Present, the look before is\n`before_character_style` and these properties alone (a look a\nformat records in full, as Word's `w:rPrChange` does), not the run's\nproperties now.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/LookProperty"
+          }
+        },
+        "beforeParagraphProperties": {
+          "description": "`paraProps`: the paragraph's direct properties before the change,\nas `before_character_properties` for a paragraph.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/LookProperty"
+          }
         }
       },
       "required": [
@@ -13792,6 +13821,22 @@
           "type": "string",
           "const": "deleteMark"
         }
+      ]
+    },
+    "LookProperty": {
+      "description": "Engine ADR 1098, amendment — one direct property of a look a tracked\nchange records ([`ChangeSpec`]): the path and value `SetProperty` on a\nstory range takes.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/PropertyPath"
+        },
+        "value": {
+          "$ref": "#/$defs/Value"
+        }
+      },
+      "required": [
+        "path",
+        "value"
       ]
     },
     "CommentSpec": {

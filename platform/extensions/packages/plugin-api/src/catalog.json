@@ -1241,7 +1241,7 @@
     },
     {
       "name": "paged.recordChange",
-      "params": "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)",
+      "params": "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?, beforeCharacterProperties?, beforeParagraphProperties?}, paragraph?)",
       "returns": "bool",
       "kind": "author",
       "summary": "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."

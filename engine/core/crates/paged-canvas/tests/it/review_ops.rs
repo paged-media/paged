@@ -310,6 +310,8 @@ fn an_importer_records_changes_with_their_ids__feat__doc_word_track_changes() {
         date: Some("2026-01-02T03:04:05Z".into()),
         before_character_style: None,
         before_paragraph_style: Some("ParagraphStyle/Before".into()),
+        before_character_properties: None,
+        before_paragraph_properties: None,
     };
     m.apply_mutation(&Mutation::Batch {
         ops: vec![

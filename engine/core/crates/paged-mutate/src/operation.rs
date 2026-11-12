@@ -112,6 +112,14 @@ pub enum NodeId {
         /// text takes direct character and paragraph properties through it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cell: Option<CellAddr>,
+        /// Engine ADR 1098, amendment — the paragraph a CARET names.
+        /// `Some(i)` with `start == end` makes a paragraph path write
+        /// exactly paragraph `i` of the stream (the body, or `cell`'s own),
+        /// as `ApplyStyle.paragraph` (v65) does: consecutive empty
+        /// paragraphs share one contiguous offset, and a table's own
+        /// paragraph has none. Ignored on a range and by character paths.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        paragraph: Option<u32>,
     },
     /// W3.A1 — a `<Table>` nested inside a story paragraph. Tables are
     /// NOT in the story's character/run space (they hang off
@@ -7353,12 +7361,36 @@ pub struct ChangeSpec {
     #[serde(default)]
     pub date: Option<String>,
     /// `format`: the run's applied character style before the change (its
-    /// other properties are taken as they are now).
+    /// other properties are taken as they are now, unless
+    /// `before_character_properties` describes them).
     #[serde(default)]
     pub before_character_style: Option<String>,
     /// `paraProps`: the paragraph's applied style before the change.
     #[serde(default)]
     pub before_paragraph_style: Option<String>,
+    /// Engine ADR 1098, amendment — `format`: the run's direct character
+    /// properties before the change. Present, the look before is
+    /// `before_character_style` and these properties alone (a look a
+    /// format records in full, as Word's `w:rPrChange` does), not the run's
+    /// properties now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_character_properties: Option<Vec<LookProperty>>,
+    /// `paraProps`: the paragraph's direct properties before the change,
+    /// as `before_character_properties` for a paragraph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_paragraph_properties: Option<Vec<LookProperty>>,
+}
+
+/// Engine ADR 1098, amendment — one direct property of a look a tracked
+/// change records ([`ChangeSpec`]): the path and value `SetProperty` on a
+/// story range takes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct LookProperty {
+    pub path: PropertyPath,
+    pub value: Value,
 }
 
 /// Engine ADR 1020 — one comment of a thread on the wire. `parentId` makes

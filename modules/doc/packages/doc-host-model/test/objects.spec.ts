@@ -150,16 +150,18 @@ describe("a table's Word look @feat:plugin-doc.read-path", () => {
     const step = steps.find((s) => s.kind === "table");
     expect(step?.kind).toBe("table");
     if (step?.kind !== "table") return;
-    expect(step.style?.(7)).toEqual({
-      op: "applyStyle",
-      args: {
-        storyId: "docx_s0",
-        start: 7,
-        end: 7,
-        style: "ParagraphStyle/docx-auto-p9",
-        scope: "paragraph",
-        paragraph: 1,
+    expect(step.style?.(7)).toEqual([
+      {
+        op: "applyStyle",
+        args: {
+          storyId: "docx_s0",
+          start: 7,
+          end: 7,
+          style: "ParagraphStyle/docx-auto-p9",
+          scope: "paragraph",
+          paragraph: 1,
+        },
       },
-    });
+    ]);
   });
 });

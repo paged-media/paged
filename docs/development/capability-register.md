@@ -72,11 +72,14 @@ they test does.
   reads it as properties (its presence turns on row splitting and autofit). Sheet's minted cell styles are
   gone (2026-11-12, engine ADR 1098, sheet ADR 518 amendment): `cell-text-format.ts` writes a cell's face,
   size, colour, alignment, indent and repeat-fill tab as direct properties on the cell-qualified
-  `storyRange`. Doc's table cells set Word's direct formatting the same way (2026-11-12, doc ADR 600
-  amendment): the Word style a synthesized `docx-auto-*` style stands on, then its properties
-  (`doc-host-model` `direct-format.ts`, the native body's rule), and a synthesized style only cells named
-  is no longer minted; the body's deferred blocks still apply them (their tracked format changes name a look
-  by a style). Later: the Rust adapters build
+  `storyRange`. Doc sets Word's direct formatting the same way everywhere it writes through the mutation
+  door (2026-11-12, doc ADR 600 amendments): the Word style a synthesized `docx-auto-*` style stands on,
+  then its properties. One rule, `docx_skeleton::body::paragraph_plan` (the native body, the placement
+  batch and the pour); the pour reads it as `direct` looks `docx-js` writes into the IR
+  (`docx_skeleton::direct`), and its TypeScript twin (`direct-format.ts`) is deleted. Blank lines and a
+  table's own paragraph take them through a caret that names its paragraph, a tracked change's look before
+  through `recordChange`'s before-properties (engine ADR 1098 amendment); a synthesized style is minted only
+  where the native body keeps one. Later: the Rust adapters build
   `paged_model` tables directly (doc ADR 625's path) instead of lowering to ops.
 - **Consolidation pass 2, Rust (2026-11-11):** the oval outline is `paged_geom::oval_anchors`
   (`paged-mutate` re-exports it; IDML writers, snapping, the generators); `slide-resolve` and

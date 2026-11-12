@@ -30,6 +30,17 @@ export interface StyleProp {
 
 export type StyleCollection = "paragraph" | "character";
 
+/** Doc ADR 600, amendment 2026-11-12b — a look as the pour sets it: the
+ *  style it applies (the Word style a synthesized `docx-auto-*` one stands
+ *  on, or the synthesized style itself where the native rule keeps it) and
+ *  the direct properties it sets over it (`setElementProperty` on the range,
+ *  engine ADR 1098). Written by `docx-js` (`docx_skeleton::direct`), which
+ *  holds the rule; the pour reads it and decides nothing. */
+export interface LoweredDirect {
+  style: string | null;
+  props?: StyleProp[];
+}
+
 /** A native style to create + populate. */
 export interface LoweredStyle {
   /** Full token, e.g. `ParagraphStyle/docx-Heading1`. */
@@ -104,6 +115,12 @@ export interface LoweredRun {
    *  engine's JSON shape (`paged_model::ContentControl`, engine ADR 1052):
    *  the pour sets it on the run's range (`characterContentControl`). */
   control?: LoweredContentControl | null;
+  /** Doc ADR 600 — the run's look as the pour sets it (`charStyleId` stays
+   *  the lowering's token). Absent: `charStyleId` as it is. */
+  direct?: LoweredDirect | null;
+  /** The look before its tracked format change, as direct properties.
+   *  Absent: `formatChange.beforeCharStyleId` as it is. */
+  beforeDirect?: LoweredDirect | null;
 }
 
 /** Doc ADR 614 — an inline content control (its `id` and `kind` are what the
@@ -215,6 +232,12 @@ export interface LoweredParagraph {
    *  characters stand over `lines` lines (the engine's paragraph drop cap,
    *  set on the paragraph itself: the engine refuses it on a style). */
   dropCap?: LoweredDropCap;
+  /** Doc ADR 600 — the paragraph's look as the pour sets it (`paraStyleId`
+   *  stays the lowering's token). Absent: `paraStyleId` as it is. */
+  direct?: LoweredDirect | null;
+  /** The look before its tracked property change, as direct properties.
+   *  Absent: `propsChange.beforeParaStyleId` as it is. */
+  beforeDirect?: LoweredDirect | null;
 }
 
 /** A paragraph's drop cap (doc ADR 624). */
@@ -256,6 +279,8 @@ export interface LoweredSegment {
   /** Contiguous char offset into the paragraph's run text where it starts. */
   at: number;
   paraStyleId?: string | null;
+  /** Doc ADR 600 — its look as the pour sets it. */
+  direct?: LoweredDirect | null;
 }
 
 /** An image lowered to an anchored-frame placement. */
@@ -394,6 +419,8 @@ export interface LoweredTable {
   paraStyleId?: string | null;
   /** Doc ADR 614 — what the engine does not lay out yet, carried. */
   layout?: LoweredTableLayout;
+  /** Doc ADR 600 — the table paragraph's look as the pour sets it. */
+  direct?: LoweredDirect | null;
 }
 
 /** One table cell, addressed by its resolved grid position. */
@@ -576,6 +603,9 @@ export interface LoweredDoc {
   trackChanges?: boolean;
   /** Doc ADR 614 — floating pictures and text boxes placed as page items. */
   pageItems?: LoweredPageItem[];
+  /** Doc ADR 600 — the synthesized styles the pour still applies (and those
+   *  they stand on). Absent: every style is minted. */
+  mintedStyles?: string[];
 }
 
 /** Doc ADR 614 — a float's anchored-object settings, the engine's names. */

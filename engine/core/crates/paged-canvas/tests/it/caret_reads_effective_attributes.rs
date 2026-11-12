@@ -218,6 +218,7 @@ fn the_snapshot_reports_what_the_range_itself_sets() {
             start,
             end,
             cell: None,
+            paragraph: None,
         };
         m.element_properties(&id)
             .expect("a range")
