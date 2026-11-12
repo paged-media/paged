@@ -1323,6 +1323,7 @@ impl<'a> Lower<'a> {
                 start: 0,
                 end: n,
                 cell: None,
+                paragraph: None,
             };
             if let Some(j) = line.justification {
                 self.ops
@@ -1334,6 +1335,7 @@ impl<'a> Lower<'a> {
                     start: run.start,
                     end: run.end,
                     cell: None,
+                    paragraph: None,
                 };
                 let fill = run.fill.map(|c| self.swatch(c));
                 self.ops.push(set(

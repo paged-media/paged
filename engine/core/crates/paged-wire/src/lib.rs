@@ -140,6 +140,12 @@ pub enum ElementId {
         /// character and paragraph properties through it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cell: Option<TextCellAddr>,
+        /// Engine ADR 1098, amendment — the paragraph a caret names
+        /// (`start == end`): a paragraph path writes and reads exactly
+        /// paragraph `i` of the stream, as `applyStyle`'s `paragraph` (v65)
+        /// styles it. Absent ⇒ the caret's offset decides, as before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        paragraph: Option<u32>,
     },
     /// W3.A1 — a `<Table>` addressed by `(story_id, table_id)`. Maps to
     /// `paged_mutate::NodeId::Table`. Backs `AppliedTableStyle` writes
@@ -463,6 +469,7 @@ mod tests {
                 start: 0,
                 end: 6,
                 cell: None,
+                paragraph: None,
             },
         ];
         for id in cases {

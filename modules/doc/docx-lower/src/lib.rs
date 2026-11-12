@@ -1242,6 +1242,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         comments: lower_comments(doc),
         track_changes: doc.track_revisions,
         page_items,
+        minted_styles: None,
     }
 }
 
@@ -2057,6 +2058,7 @@ impl Lowering {
                         whole.clone(),
                         seg,
                     )),
+                    direct: None,
                 });
             }
             para_style_id = Some(self.synthesize(
@@ -2266,6 +2268,8 @@ impl Lowering {
                 diagrams,
                 drop_cap,
                 equations,
+                before_direct: None,
+                direct: None,
             },
             tail,
         )
@@ -2390,6 +2394,8 @@ impl Lowering {
                 .iter()
                 .map(|id| docx_core::review::comment_token(*id))
                 .collect(),
+            before_direct: None,
+            direct: None,
         }
     }
 
@@ -2511,6 +2517,7 @@ impl Lowering {
                 0
             },
             flow: Vec::new(),
+            direct: None,
         }
     }
 

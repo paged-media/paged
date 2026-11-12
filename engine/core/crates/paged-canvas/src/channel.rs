@@ -836,6 +836,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //   read of the same id answers them. Absent ⇒ the body, byte-identical
 //   to before; an older engine ignores the field and writes the body, so
 //   the editor and its worker ship as one build.
+// v78 (rider) — engine ADR 1098, amendment: a caret `storyRange` may name
+//   its paragraph (`paragraph`), as `applyStyle` does, so a blank line and a
+//   table's own paragraph take direct properties; `recordChange`'s spec
+//   takes the look before as properties (`beforeCharacterProperties`,
+//   `beforeParagraphProperties`). Additive; absent ⇒ as before.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional

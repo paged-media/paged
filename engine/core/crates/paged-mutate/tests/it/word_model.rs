@@ -103,6 +103,7 @@ fn range(start: u32, end: u32) -> NodeId {
         start,
         end,
         cell: None,
+        paragraph: None,
     }
 }
 

@@ -52,9 +52,39 @@ document styles, and every refresh had to read the catalogue before minting.
   style. paged.doc still mints its synthesized `docx-auto-*` styles for what is not a cell: the
   body blocks its native build defers to the old pour, headers, footers and text boxes, and a
   tracked format change's "before" look, which a change names by a style.
+  (Superseded by the amendment below: those are direct properties too.)
 - IDML export writes a cell's direct properties as local overrides on its
   `CharacterStyleRange` / `ParagraphStyleRange`, as InDesign writes them; the same writer as the
   body's.
 - docx export reads a cell's runs back as direct properties (the body's path) and saves an unedited
   document byte-identical (docx-conformance `save_back`). xlsx export writes from the workbook's
   style records, never from the engine's cell runs, so it is unchanged.
+
+## Amendment (2026-11-12): a caret names its paragraph; a tracked look is properties
+
+Two places still needed a style where a module had direct formatting to write:
+
+- **A blank line and a table's own paragraph.** A caret (`start == end`) writes the paragraph the
+  contiguous offset falls in; consecutive empty paragraphs share one offset, so a caret wrote all
+  of them (and refused when they differed), and a table's paragraph, which holds no character, was
+  not reachable at all. `applyStyle` solved this in v65 with a paragraph index, so a style could
+  name one; a direct property could not. `ElementId::StoryRange` and `NodeId::StoryRange` gain
+  `paragraph: Option<u32>` (absent on the wire when `None`, so every address is byte-identical to
+  before): with `start == end` a paragraph path writes, reads and undoes exactly paragraph `i` of
+  the stream (the body, or `cell`'s own), as `applyStyle.paragraph` does. A range and character
+  paths ignore it. The address grammar ends such a caret in `#<paragraph>`
+  (`storyRange:Story/u1@4..4#2`).
+- **A tracked change's look before.** `recordChange`'s `ChangeSpec` named the look before a
+  format or paragraph-property change by a style alone and took the other properties from the run
+  as it is now, so an importer whose source keeps that look as direct formatting (Word's
+  `w:rPrChange`, `w:pPrChange`) had to mint a style for it. `before_character_properties` and
+  `before_paragraph_properties` (`LookProperty { path, value }`, the pair `SetProperty` takes) make
+  the look before the named style and those properties alone, written through the same field
+  setters as a range write; absent, the old meaning holds.
+
+Protocol: a rider on v78, additive; the editor and its worker ship as one build. Evidence:
+`paged-canvas/tests/it/caret_names_its_paragraph.rs` (two blank lines at one offset take their own
+spacing, the read answers the named paragraph, undo and redo are exact, an index past the story is
+refused, the grammar round-trips, and both tracked looks are recorded as style plus properties).
+paged.doc's pour and placement batch use both, so no `docx-auto-*` style is minted for a blank line,
+a table's alignment or a tracked look (doc ADR 600, amendment 2026-11-12b).

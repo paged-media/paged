@@ -183,6 +183,7 @@ fn only_hides_the_text_of_frames_it_leaves_out__feat__plugin_platform_render_sna
         start: 0,
         end: 0,
         cell: None,
+        paragraph: None,
     }]);
     let frames: Vec<ElementId> = m
         .scene()

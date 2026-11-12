@@ -127,6 +127,8 @@ fn spec(kind: ChangeSpecKind, author: &Option<String>, date: &Option<String>) ->
         date: date.clone(),
         before_character_style: None,
         before_paragraph_style: None,
+        before_character_properties: None,
+        before_paragraph_properties: None,
     }
 }
 

@@ -39,20 +39,82 @@ import type {
   LoweredCellLook,
   LoweredContentControl,
   LoweredCrop,
+  LoweredDirect,
   LoweredDoc,
   LoweredParagraph,
   LoweredStyle,
   LoweredTable,
+  StyleProp,
 } from "./lowered.js";
 import { ENDNOTE_MARKER, FOOTNOTE_MARKER } from "./lowered.js";
-import {
-  catalogue,
-  cellRangePropertyOp,
-  isSynthesized,
-  paragraphPlan,
-  synthesizedStylesInUse,
-  type StyleCatalogue,
-} from "./direct-format.js";
+
+/** Whether `id` names a style the lowering synthesized for Word's direct
+ *  formatting (`docx-auto-*`). */
+export function isSynthesized(id: string | null | undefined): boolean {
+  return (
+    !!id &&
+    (id.startsWith("ParagraphStyle/docx-auto-p") ||
+      id.startsWith("CharacterStyle/docx-auto-c"))
+  );
+}
+
+/** A look the pour sets: a style to apply and direct properties over it. */
+export interface Look {
+  style: string | null;
+  props: StyleProp[];
+}
+
+/** Doc ADR 600, amendment 2026-11-12b — the look of a paragraph, run, break
+ *  part or table paragraph as the pour sets it: the `direct` look `docx-js`
+ *  wrote (the native body's rule: the Word style a synthesized style stands
+ *  on plus its properties, or the synthesized style where it is kept), else
+ *  the lowering's token as it is. The pour decides nothing itself. */
+export function lookOf(
+  token: string | null | undefined,
+  direct: LoweredDirect | null | undefined,
+): Look {
+  if (direct) return { style: direct.style ?? null, props: direct.props ?? [] };
+  return { style: token ?? null, props: [] };
+}
+
+function hasLook(l: Look): boolean {
+  return l.style !== null || l.props.length > 0;
+}
+
+/** One direct property on a story range (`setElementProperty`, engine ADR
+ *  1098): the body's, or a table cell's own text (`cell`); a caret
+ *  (`start === end`) may name its paragraph (`paragraph`, ADR 1098
+ *  amendment), which a blank line and a table's own paragraph need. */
+export function rangePropertyOp(
+  storyId: string,
+  start: number,
+  end: number,
+  prop: StyleProp,
+  at: {
+    cell?: { tableId: string; row: number; col: number };
+    paragraph?: number;
+  } = {},
+): Mutation {
+  return {
+    op: "setElementProperty",
+    args: {
+      elementId: {
+        kind: "storyRange",
+        id: {
+          story_id: storyId,
+          start,
+          end,
+          ...(at.cell ? { cell: at.cell } : {}),
+          ...(at.paragraph !== undefined && start === end
+            ? { paragraph: at.paragraph }
+            : {}),
+        },
+      },
+      path: prop.path as PropertyPath,
+      value: prop.value as Value,
+    },
+  } as unknown as Mutation;
+}
 
 /**
  * Count a string's length in Unicode scalar values (code points), matching the
@@ -105,13 +167,11 @@ export function buildStyleMutations(
       },
     } as Mutation);
   }
-  // Engine ADR 1098 — a table cell's direct formatting is set directly, so
-  // a synthesized style only a cell named is not minted.
-  const inUse = synthesizedStylesInUse(
-    ir as unknown as Parameters<typeof synthesizedStylesInUse>[0],
-  );
+  // Doc ADR 600 — direct formatting is set directly (the looks `docx-js`
+  // wrote), so only the synthesized styles a look still applies are minted.
+  const minted = ir.mintedStyles ? new Set(ir.mintedStyles) : null;
   for (const style of ir.styles) {
-    if (isSynthesized(style.id) && !inUse.has(style.id)) continue;
+    if (minted && isSynthesized(style.id) && !minted.has(style.id)) continue;
     ops.push(createStyleOp(style));
     for (const prop of style.props) {
       ops.push({
@@ -243,7 +303,10 @@ function createStyleOp(style: LoweredStyle): Mutation {
 interface Range {
   start: number;
   end: number;
-  style: string;
+  /** The style applied over the range, if any. */
+  style: string | null;
+  /** Direct properties set over it (doc ADR 600). */
+  props: StyleProp[];
   scope: "paragraph" | "character";
   /** The native paragraph a CARET range names (core wire v65, RFI C-53):
    *  its 0-based index in the story. Only set on carets, and only when the
@@ -450,11 +513,12 @@ function poured(
           atomics.push(field);
           fieldStyle = null;
           // The field takes its first run's look.
-          if (run.charStyleId) {
+          const look = lookOf(run.charStyleId, run.direct);
+          if (hasLook(look)) {
             fieldStyle = {
               start: runStart,
               end: offset + chars.length,
-              style: run.charStyleId,
+              ...look,
               scope: "character",
             };
             ranges.push(fieldStyle);
@@ -470,7 +534,8 @@ function poured(
       }
       local += chars.length;
       offset += chars.length;
-      if (run.charStyleId && !atomic) {
+      const runLook = lookOf(run.charStyleId, run.direct);
+      if (hasLook(runLook) && !atomic) {
         // A note reference's marker keeps the engine's own look (its
         // reference style); the text around it takes the run's.
         let from = runStart;
@@ -480,7 +545,7 @@ function poured(
               ranges.push({
                 start: from,
                 end: runStart + i,
-                style: run.charStyleId!,
+                ...runLook,
                 scope: "character",
               });
             }
@@ -491,7 +556,7 @@ function poured(
           ranges.push({
             start: from,
             end: offset,
-            style: run.charStyleId,
+            ...runLook,
             scope: "character",
           });
         }
@@ -533,7 +598,10 @@ function poured(
             start: runStart,
             end: offset,
             change: run.formatChange.change,
-            before: run.formatChange.beforeCharStyleId ?? undefined,
+            before: lookBefore(
+              run.formatChange.beforeCharStyleId,
+              run.beforeDirect,
+            ),
           });
         }
         for (const id of run.comments ?? []) {
@@ -559,13 +627,14 @@ function poured(
     const segIndex = (k: number) =>
       firstIndex + segs.slice(0, k + 1).filter((s) => splits(s.at)).length;
     const firstEnd = segs.length > 0 ? paraStart + segs[0].at : offset;
-    if (para.paraStyleId) {
+    const paraLook = lookOf(para.paraStyleId, para.direct);
+    if (hasLook(paraLook)) {
       ranges.push(
         addressed(
           {
             start: paraStart,
             end: firstEnd,
-            style: para.paraStyleId,
+            ...paraLook,
             scope: "paragraph",
           },
           firstIndex,
@@ -582,10 +651,11 @@ function poured(
     segs.forEach((seg, k) => {
       const start = paraStart + seg.at;
       const end = k + 1 < segs.length ? paraStart + segs[k + 1].at : offset;
-      if (seg.paraStyleId) {
+      const segLook = lookOf(seg.paraStyleId, seg.direct);
+      if (hasLook(segLook)) {
         ranges.push(
           addressed(
-            { start, end, style: seg.paraStyleId, scope: "paragraph" },
+            { start, end, ...segLook, scope: "paragraph" },
             segIndex(k),
           ),
         );
@@ -600,7 +670,10 @@ function poured(
           end: paraStart,
           paragraph: paraBase + firstIndex,
           change: para.propsChange.change,
-          before: para.propsChange.beforeParaStyleId ?? undefined,
+          before: lookBefore(
+            para.propsChange.beforeParaStyleId,
+            para.beforeDirect,
+          ),
         });
       }
       if (para.markChange) {
@@ -683,9 +756,21 @@ interface ChangeAt {
   end: number;
   paragraph?: number;
   change: LoweredChange;
-  /** A format change's character style before, or a property change's
-   *  paragraph style before. */
-  before?: string;
+  /** A format change's look before, or a property change's (doc ADR 600:
+   *  a style and, from a `beforeDirect` look, the direct properties). */
+  before?: { style: string | null; props?: StyleProp[] };
+}
+
+/** The look before a tracked change: the `beforeDirect` look `docx-js`
+ *  wrote (its style and, in full, its direct properties), else the
+ *  lowering's token as it is (the engine then takes the other properties
+ *  as they are now). */
+function lookBefore(
+  token: string | null | undefined,
+  direct: LoweredDirect | null | undefined,
+): ChangeAt["before"] {
+  if (direct) return { style: direct.style ?? null, props: direct.props ?? [] };
+  return token ? { style: token } : undefined;
 }
 
 /** Doc ADR 613 — the `recordChange` that marks one change. */
@@ -708,11 +793,17 @@ function recordChangeOp(
         id: c.change.id,
         ...(c.change.author ? { author: c.change.author } : {}),
         ...(c.change.date ? { date: c.change.date } : {}),
-        ...(kind === "format" && c.before
-          ? { beforeCharacterStyle: c.before }
+        ...(kind === "format" && c.before?.style
+          ? { beforeCharacterStyle: c.before.style }
           : {}),
-        ...(kind === "paraProps" && c.before
-          ? { beforeParagraphStyle: c.before }
+        ...(kind === "format" && c.before?.props
+          ? { beforeCharacterProperties: c.before.props }
+          : {}),
+        ...(kind === "paraProps" && c.before?.style
+          ? { beforeParagraphStyle: c.before.style }
+          : {}),
+        ...(kind === "paraProps" && c.before?.props
+          ? { beforeParagraphProperties: c.before.props }
           : {}),
       },
     },
@@ -839,21 +930,41 @@ export function buildTextPour(
   for (const a of body.atomics) {
     ops.push(atomicOp(storyId, a, textBase + lead, opts.paraBase, opts.notes));
   }
+  // Styles first, then the direct properties over them (doc ADR 600); a
+  // blank line's caret styles it and sets its properties, named by its
+  // paragraph (engine ADR 1098, amendment).
+  const props: Mutation[] = [];
   for (const r of ranges.filter((r) => r.scope === "paragraph")) {
-    const op = applyStyleOp(
-      storyId,
-      r.start,
-      r.end,
-      r.style,
-      "paragraph",
-      r.paragraph,
+    const own: Mutation[] = [];
+    if (r.style)
+      own.push(
+        applyStyleOp(
+          storyId,
+          r.start,
+          r.end,
+          r.style,
+          "paragraph",
+          r.paragraph,
+        ),
+      );
+    const set = r.props.map((p) =>
+      rangePropertyOp(storyId, r.start, r.end, p, { paragraph: r.paragraph }),
     );
-    if (isCaret(r)) carets.push(op);
-    if (!(isCaret(r) && opts.deferCarets)) ops.push(op);
+    if (isCaret(r)) {
+      carets.push(...own, ...set);
+      if (!opts.deferCarets) ops.push(...own, ...set);
+    } else {
+      ops.push(...own);
+      props.push(...set);
+    }
   }
   for (const r of ranges.filter((r) => r.scope === "character")) {
-    ops.push(applyStyleOp(storyId, r.start, r.end, r.style, "character"));
+    if (r.style)
+      ops.push(applyStyleOp(storyId, r.start, r.end, r.style, "character"));
+    for (const p of r.props)
+      props.push(rangePropertyOp(storyId, r.start, r.end, p));
   }
+  ops.push(...props);
   for (const [k, img] of images.entries()) {
     if (img.box) {
       ops.push(textBoxOps(img, storyId, k));
@@ -1356,7 +1467,8 @@ function cellText(cell: LoweredCell): string {
  *  style. */
 function isStyledEmptyCell(cell: LoweredCell): boolean {
   return (
-    cellText(cell).length === 0 && cell.paragraphs.some((p) => p.paraStyleId)
+    cellText(cell).length === 0 &&
+    cell.paragraphs.some((p) => hasLook(lookOf(p.paraStyleId, p.direct)))
   );
 }
 
@@ -1368,9 +1480,6 @@ export function buildTableCells(
   table: LoweredTable,
   storyId: string,
   tableId: string,
-  /** The style catalogue (`catalogue(ir.styles)`): a synthesized style is
-   *  set as its Word style plus direct properties. */
-  styles: StyleCatalogue = new Map(),
 ): Mutation {
   const ops: Mutation[] = [];
   for (const cell of table.cells) {
@@ -1388,47 +1497,46 @@ export function buildTableCells(
       // style the lowering's synthesized style stands on.
       let offset = 0;
       for (const para of cell.paragraphs) {
-        const plan = paragraphPlan(styles, para);
         const paraStart = offset;
-        para.runs.forEach((run, k) => {
+        for (const run of para.runs) {
           const runStart = offset;
           offset += codePointLen(run.text);
-          if (offset === runStart) return;
-          const r = plan.runs[k];
-          const style = r ? r.style : (run.charStyleId ?? null);
-          if (style) {
+          if (offset === runStart) continue;
+          const look = lookOf(run.charStyleId, run.direct);
+          if (look.style) {
             ops.push(
               applyStyleInCell(
                 storyId,
                 runStart,
                 offset,
-                style,
+                look.style,
                 "character",
                 addr,
               ),
             );
           }
-          for (const prop of r?.props ?? [])
+          for (const prop of look.props)
             ops.push(
-              cellRangePropertyOp(storyId, addr, runStart, offset, prop),
+              rangePropertyOp(storyId, runStart, offset, prop, { cell: addr }),
             );
-        });
+        }
         if (offset > paraStart) {
-          if (plan.style) {
+          const look = lookOf(para.paraStyleId, para.direct);
+          if (look.style) {
             ops.push(
               applyStyleInCell(
                 storyId,
                 paraStart,
                 offset,
-                plan.style,
+                look.style,
                 "paragraph",
                 addr,
               ),
             );
           }
-          for (const prop of plan.props)
+          for (const prop of look.props)
             ops.push(
-              cellRangePropertyOp(storyId, addr, paraStart, offset, prop),
+              rangePropertyOp(storyId, paraStart, offset, prop, { cell: addr }),
             );
         }
       }
@@ -1508,9 +1616,7 @@ export function buildTableCells(
           paragraph: nested.paragraph,
         }),
         { op: "bindCreated", args: { handle } } as unknown as Mutation,
-        ...flattened([
-          buildTableCells(nested.table, storyId, `$h:${handle}`, styles),
-        ]),
+        ...flattened([buildTableCells(nested.table, storyId, `$h:${handle}`)]),
       );
     }
     if (cell.rowSpan > 1 || cell.colSpan > 1) {
@@ -1575,7 +1681,10 @@ export function buildTableCellChanges(
                 start: runStart,
                 end: offset,
                 change: run.formatChange.change,
-                before: run.formatChange.beforeCharStyleId ?? undefined,
+                before: lookBefore(
+                  run.formatChange.beforeCharStyleId,
+                  run.beforeDirect,
+                ),
               },
               addr,
             ),
@@ -1601,8 +1710,6 @@ export function buildTableCellCarets(
   table: LoweredTable,
   storyId: string,
   tableId: string,
-  /** The style catalogue (see {@link buildTableCells}). */
-  styles: StyleCatalogue = new Map(),
 ): Mutation[] {
   const ops: Mutation[] = [];
   for (const cell of table.cells) {
@@ -1613,19 +1720,22 @@ export function buildTableCellCarets(
     for (const para of cell.paragraphs) {
       const paraStart = offset;
       for (const run of para.runs) offset += codePointLen(run.text);
-      if (para.paraStyleId && offset === paraStart) last.set(paraStart, para);
+      if (
+        hasLook(lookOf(para.paraStyleId, para.direct)) &&
+        offset === paraStart
+      )
+        last.set(paraStart, para);
     }
     for (const [at, para] of last) {
-      // An empty paragraph keeps a synthesized style that carries character
-      // properties (no run to carry them); otherwise its Word style and
-      // paragraph properties are set at the caret.
-      const plan = paragraphPlan(styles, para);
-      if (plan.style)
+      // Its look (a synthesized style with character properties is kept:
+      // no run carries them), at the caret.
+      const look = lookOf(para.paraStyleId, para.direct);
+      if (look.style)
         ops.push(
-          applyStyleInCell(storyId, at, at, plan.style, "paragraph", addr),
+          applyStyleInCell(storyId, at, at, look.style, "paragraph", addr),
         );
-      for (const prop of plan.props)
-        ops.push(cellRangePropertyOp(storyId, addr, at, at, prop));
+      for (const prop of look.props)
+        ops.push(rangePropertyOp(storyId, at, at, prop, { cell: addr }));
     }
   }
   return ops;
@@ -1659,10 +1769,10 @@ export type StoryStep =
       textLength: number;
       insert: Mutation;
       cells: (tableId: string) => Mutation;
-      /** Doc ADR 614 — the style of the table's own paragraph (Word's
-       *  `w:jc` aligns the table), applied after the cells at the table's
-       *  contiguous offset `styleBase`. */
-      style?: (styleBase: number) => Mutation;
+      /** Doc ADR 614 — the look of the table's own paragraph (Word's
+       *  `w:jc` aligns the table): its style and direct properties, applied
+       *  after the cells at the table's contiguous offset `styleBase`. */
+      style?: (styleBase: number) => Mutation[];
     };
 
 /**
@@ -1695,7 +1805,6 @@ export function endsEmpty(p: LoweredParagraph): boolean {
 export function buildStory(ir: LoweredDoc, storyId: string): StoryStep[] {
   return buildStoryBlocks(ir.story.blocks, storyId, {
     comments: ir.comments ?? [],
-    styles: ir.styles,
   });
 }
 
@@ -1775,16 +1884,9 @@ export function buildStoryBlocks(
     /** Doc ADR 613 — the document's comments: those whose range is in
      *  these blocks are inserted over it in a last step. */
     comments?: readonly LoweredComment[];
-    /** The document's styles (`ir.styles`): a table cell's direct
-     *  formatting is set directly over the Word style (engine ADR 1098).
-     *  Required when the blocks hold a native table; without it a cell
-     *  applies the synthesized style, which `buildStyleMutations` no longer
-     *  mints when only cells name it. */
-    styles?: readonly LoweredStyle[];
   } = {},
 ): StoryStep[] {
   const notes = opts.notes;
-  const styles = catalogue(opts.styles ?? []);
   // Doc ADR 613 — each comment's range, filled in as the text steps run.
   const commentRanges = new Map<string, { start: number; end: number }>();
   let hasReview = false;
@@ -1863,36 +1965,40 @@ export function buildStoryBlocks(
       cellChanges.push([]);
       if (buildTableCellChanges(table, storyId, "").length > 0)
         hasReview = true;
-      if (buildTableCellCarets(table, storyId, "", styles).length > 0)
-        hasCarets = true;
+      if (buildTableCellCarets(table, storyId, "").length > 0) hasCarets = true;
       const tableParagraph = last;
-      const paraStyle = table.paraStyleId;
+      const paraLook = lookOf(table.paraStyleId, table.direct);
       steps.push({
         kind: "table",
         breakBefore,
         textLength: fresh ? 0 : 1,
         insert: buildTableInsert(table, storyId),
         cells: (tableId) => {
-          cellCarets[slot] = buildTableCellCarets(
-            table,
-            storyId,
-            tableId,
-            styles,
-          );
+          cellCarets[slot] = buildTableCellCarets(table, storyId, tableId);
           cellChanges[slot] = buildTableCellChanges(table, storyId, tableId);
-          return buildTableCells(table, storyId, tableId, styles);
+          return buildTableCells(table, storyId, tableId);
         },
-        ...(paraStyle
+        ...(hasLook(paraLook)
           ? {
-              style: (styleBase: number) =>
-                applyStyleOp(
-                  storyId,
-                  styleBase,
-                  styleBase,
-                  paraStyle,
-                  "paragraph",
-                  tableParagraph,
+              style: (styleBase: number) => [
+                ...(paraLook.style
+                  ? [
+                      applyStyleOp(
+                        storyId,
+                        styleBase,
+                        styleBase,
+                        paraLook.style,
+                        "paragraph",
+                        tableParagraph,
+                      ),
+                    ]
+                  : []),
+                ...paraLook.props.map((p) =>
+                  rangePropertyOp(storyId, styleBase, styleBase, p, {
+                    paragraph: tableParagraph,
+                  }),
                 ),
+              ],
             }
           : {}),
       });

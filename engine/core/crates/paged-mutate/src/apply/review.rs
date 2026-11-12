@@ -368,10 +368,30 @@ pub(super) fn apply_record_change(
                     let run = &mut para.runs[ri];
                     if spec.kind == ChangeSpecKind::Format {
                         if run.format_change.is_none() {
-                            let mut before = run.props_snapshot();
-                            if let Some(style) = &spec.before_character_style {
-                                before.character_style = Some(style.clone());
-                            }
+                            let before = match &spec.before_character_properties {
+                                // Engine ADR 1098, amendment — the look
+                                // before in full: its style and these
+                                // properties alone.
+                                Some(props) => {
+                                    let mut b = paged_model::CharacterRun {
+                                        character_style: spec.before_character_style.clone(),
+                                        ..paged_model::CharacterRun::default()
+                                    };
+                                    for p in props {
+                                        super::paragraph::apply_character_field_on_run(
+                                            &mut b, p.path, &p.value,
+                                        )?;
+                                    }
+                                    b
+                                }
+                                None => {
+                                    let mut b = run.props_snapshot();
+                                    if let Some(style) = &spec.before_character_style {
+                                        b.character_style = Some(style.clone());
+                                    }
+                                    b
+                                }
+                            };
                             run.format_change = Some(FormatChange {
                                 change: change.clone(),
                                 before: Box::new(before),
@@ -386,10 +406,25 @@ pub(super) fn apply_record_change(
         ChangeSpecKind::ParaProps => {
             let para = &mut paragraphs[first];
             if para.props_change.is_none() {
-                let mut before = para.props_snapshot();
-                if let Some(style) = &spec.before_paragraph_style {
-                    before.paragraph_style = Some(style.clone());
-                }
+                let before = match &spec.before_paragraph_properties {
+                    Some(props) => {
+                        let mut b = paged_model::Paragraph {
+                            paragraph_style: spec.before_paragraph_style.clone(),
+                            ..paged_model::Paragraph::default()
+                        };
+                        for p in props {
+                            super::paragraph::apply_paragraph_field(&mut b, p.path, &p.value)?;
+                        }
+                        b
+                    }
+                    None => {
+                        let mut b = para.props_snapshot();
+                        if let Some(style) = &spec.before_paragraph_style {
+                            b.paragraph_style = Some(style.clone());
+                        }
+                        b
+                    }
+                };
                 para.props_change = Some(ParaPropsChange {
                     change: change.clone(),
                     before: Box::new(before),
@@ -864,6 +899,7 @@ pub(crate) fn format_scope(doc: &Document, op: &Operation) -> Option<FormatScope
                     start,
                     end,
                     cell,
+                    paragraph,
                 },
             ..
         } => Some(FormatScope {
@@ -871,7 +907,7 @@ pub(crate) fn format_scope(doc: &Document, op: &Operation) -> Option<FormatScope
             cell: cell.clone(),
             start: *start,
             end: *end,
-            paragraph: None,
+            paragraph: paragraph.filter(|_| start == end),
         }),
         Operation::ApplyStyle {
             story_id,

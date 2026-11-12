@@ -425,11 +425,13 @@ fn substitute_address(s: &str, scope: &HandleScope) -> Result<Option<String>, St
             start,
             end,
             cell,
+            paragraph,
         } if is_reference(story_id) => Address::StoryRange {
             story_id: story(story_id)?,
             start: *start,
             end: *end,
             cell: cell.clone(),
+            paragraph: *paragraph,
         },
         Address::Field { story_id, offset } if is_reference(story_id) => Address::Field {
             story_id: story(story_id)?,
