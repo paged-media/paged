@@ -24,13 +24,13 @@
 //! the body drew it (the first `Image` of the run), on the picture's own
 //! pixel grid, or — a frame without one — its outline's coverage at two
 //! pixels per point. The grid is padded by how far the effects reach, the
-//! evaluator plans the entries and draws each effect's plates, and each
-//! plate becomes an RGBA image in its own effect layer (its blend mode and
-//! opacity): the exterior effects under the run, the interior ones over
-//! it — confined to the layer's shape, as Photoshop closes a styled
-//! layer's body — and the top ones (the bevel) over everything. The
-//! plates are rasters, so every lane (both rasterisers, PDF) draws them as
-//! it draws a picture.
+//! evaluator plans the entries and draws them: the exterior effects and
+//! the top ones (the bevel) as RGBA plates in their own effect layers (blend
+//! mode, opacity) under and over the run; the interior ones as Photoshop's
+//! BODY — at fill 100 % blended onto the layer made opaque, the result
+//! replacing the picture through the layer's shape; below it, as plates over
+//! the picture through the shape. Everything is a raster, so every lane
+//! (both rasterisers, PDF) draws it as it draws a picture.
 
 use paged_compose::{DecodedImage, DisplayCommand, LayerEffect, Rect, Transform};
 use paged_layer_fx::cpu::{CpuDevice, CpuTex};
@@ -94,6 +94,9 @@ pub(crate) struct Drawn {
 /// grid `w × h` whose pixel `(x, y)` lands on the page at
 /// `to_page.apply(x, y)`.
 struct Layer {
+    /// The picture's `Image` command in the page's list, when the layer is
+    /// a picture.
+    command: Option<usize>,
     w: u32,
     h: u32,
     rgba: Vec<[f32; 4]>,
@@ -103,13 +106,18 @@ struct Layer {
 
 /// The picture the run draws, decoded, with its pixel-to-page transform.
 fn picture(page: &BuiltPage, run: std::ops::Range<usize>) -> Option<Layer> {
-    let (id, transform) = page.list.commands[run].iter().find_map(|c| match c {
-        DisplayCommand::Image {
-            image_id,
-            transform,
-        } => Some((*image_id, *transform)),
-        _ => None,
-    })?;
+    let start = run.start;
+    let (at, id, transform) =
+        page.list.commands[run]
+            .iter()
+            .enumerate()
+            .find_map(|(i, c)| match c {
+                DisplayCommand::Image {
+                    image_id,
+                    transform,
+                } => Some((start + i, *image_id, *transform)),
+                _ => None,
+            })?;
     let img = page.list.image(id)?;
     let decoded;
     let (w, h, rgba): (u32, u32, &[u8]) = if img.rgba.is_empty() {
@@ -125,12 +133,13 @@ fn picture(page: &BuiltPage, run: std::ops::Range<usize>) -> Option<Layer> {
     if w == 0 || h == 0 || rgba.len() != w as usize * h as usize * 4 {
         return None;
     }
-    // The transform maps the source pixmap's pixel grid onto the page.
+    // The command's transform maps the picture's UNIT square onto the
+    // page; a pixel of the decoded grid is `1/w × 1/h` of it.
     let to_page = transform.compose(&Transform([
-        img.width as f32 / w as f32,
+        1.0 / w as f32,
         0.0,
         0.0,
-        img.height as f32 / h as f32,
+        1.0 / h as f32,
         0.0,
         0.0,
     ]));
@@ -155,6 +164,7 @@ fn picture(page: &BuiltPage, run: std::ops::Range<usize>) -> Option<Layer> {
         })
         .collect();
     Some(Layer {
+        command: Some(at),
         w,
         h,
         rgba: texels,
@@ -179,6 +189,7 @@ fn outline(page: &BuiltPage, geom: &super::effect_stack::StackGeometry) -> Optio
         .collect();
     let s = 1.0 / grid.scale;
     Some(Layer {
+        command: None,
         w: grid.width_px,
         h: grid.height_px,
         rgba,
@@ -202,10 +213,17 @@ pub(crate) fn draw(
     seed: u32,
 ) -> Option<Drawn> {
     let layer = picture(page, run).or_else(|| outline(page, geom))?;
+    // A layer style's colours are sRGB swatches: their values as they
+    // are; another space through the document's colour settings (whose
+    // paint is in the rasteriser's working space, so it is encoded back).
     let color = |id: Option<&str>| -> [u8; 3] {
-        let paint = id
-            .and_then(|id| palette.resolve(id))
-            .and_then(|e| crate::pipeline::color_entry_to_paint(e, color_ctx));
+        let entry = id.and_then(|id| palette.resolve(id));
+        if let Some(e) =
+            entry.filter(|e| e.space == paged_model::ColorSpace::Rgb && e.value.len() == 3)
+        {
+            return [0, 1, 2].map(|i| e.value[i].round().clamp(0.0, 255.0) as u8);
+        }
+        let paint = entry.and_then(|e| crate::pipeline::color_entry_to_paint(e, color_ctx));
         match paint {
             Some(paged_compose::Paint::Solid(c)) => {
                 [c.r, c.g, c.b].map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
@@ -279,6 +297,77 @@ pub(crate) fn draw(
         under: Vec::new(),
         over: Vec::new(),
     };
+    let step_of = |fx: &Fx| EffectStep {
+        pattern: fx.pattern().and_then(|p| p.tile.as_ref()).map(|t| {
+            std::sync::Arc::new(PatternTile {
+                width: t.width,
+                height: t.height,
+                rgba: t.rgba.clone().into(),
+            })
+        }),
+        fx: fx.clone(),
+        light,
+        bounds,
+        seed,
+        fill,
+        stroke_reach: plan.stroke_reach,
+    };
+    // THE BODY. At fill 100 % a layer's interior effects blend onto the
+    // layer itself (made opaque), and the result shows through the layer's
+    // shape — Photoshop's body: the picture is replaced by that result, so
+    // an anti-aliased edge mixes the effects with the backdrop exactly as
+    // Photoshop's does. Below 100 % the body involves the backdrop, which a
+    // display list cannot read here: the interior plates are drawn over
+    // the picture through the layer's shape instead.
+    let interior: Vec<&Fx> = plan.interior.iter().chain(&plan.interior_top).collect();
+    let body = layer
+        .command
+        .filter(|_| fill >= 1.0 && !interior.is_empty());
+    if let Some(at) = body {
+        let opaque: Vec<[f32; 4]> = plate
+            .px
+            .iter()
+            .map(|c| {
+                if c[3] > 0.0 {
+                    [c[0] / c[3], c[1] / c[3], c[2] / c[3], 1.0]
+                } else {
+                    [0.0, 0.0, 0.0, 1.0]
+                }
+            })
+            .collect();
+        let mut acc = CpuTex::new(w, h, opaque);
+        for fx in &interior {
+            if let Ok(next) = paged_layer_fx::draw(&mut dev, &acc, &mut src, &step_of(fx)) {
+                acc = next;
+            }
+        }
+        let mut rgba = Vec::with_capacity(layer.w as usize * layer.h as usize * 4);
+        for y in pad..pad + layer.h {
+            for x in pad..pad + layer.w {
+                let i = (y * w + x) as usize;
+                let c = acc.px[i];
+                let a = c[3].max(1e-6);
+                let q = |v: f32| ((v / a).clamp(0.0, 1.0) * 255.0).round() as u8;
+                rgba.extend_from_slice(&[
+                    q(c[0]),
+                    q(c[1]),
+                    q(c[2]),
+                    (shape[i] * 255.0).round() as u8,
+                ]);
+            }
+        }
+        let id = page.list.push_image(DecodedImage {
+            width: layer.w,
+            height: layer.h,
+            encoded: bytes::Bytes::new(),
+            rgba: bytes::Bytes::from(rgba),
+            icc: None,
+            rendering: None,
+        });
+        if let Some(DisplayCommand::Image { image_id, .. }) = page.list.commands.get_mut(at) {
+            *image_id = id;
+        }
+    }
     let places: [(&Vec<Fx>, bool, bool); 4] = [
         (&plan.exterior, false, false),
         (&plan.interior, true, true),
@@ -286,6 +375,9 @@ pub(crate) fn draw(
         (&plan.top, true, false),
     ];
     for (list, over, clip) in places {
+        if body.is_some() && clip {
+            continue;
+        }
         for fx in list {
             let step = EffectStep {
                 pattern: fx.pattern().and_then(|p| p.tile.as_ref()).map(|t| {
@@ -370,9 +462,10 @@ fn plate_commands(
             opacity: p.opacity,
             transform: Transform::IDENTITY,
         },
+        // An `Image` maps its unit square: the plate's `w × h` pixels.
         DisplayCommand::Image {
             image_id: id,
-            transform: to_page,
+            transform: to_page.compose(&Transform([w as f32, 0.0, 0.0, h as f32, 0.0, 0.0])),
         },
         DisplayCommand::PopLayer(Transform::IDENTITY),
     ]

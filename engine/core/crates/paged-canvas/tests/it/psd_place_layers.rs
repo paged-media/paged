@@ -104,20 +104,25 @@ fn distance(page: &(u32, Vec<u8>), theirs: &[u8], w: u32, h: u32) -> (u8, f64) {
 }
 
 /// (file, max levels, mean levels × 100) — the engine's page against
-/// Photoshop's composite, measured 2026-11-12 with a level of slack.
+/// Photoshop's composite, held to the SAME table paged.image's fold is held
+/// to for these files (`image-conformance`'s `psd_layer_styles::EXPECT`).
+/// Measured 2026-11-12: bv-contour-cone 154/2.17, bv-inner-smooth 40/0.38,
+/// co-fill0 2/0.01, ds-basic 2/0.05, go-linear 2/0.01, go-radial 1/0.01,
+/// ig-edge 3/0.13, is-basic 2/0.02, og-gradient 8/0.36, og-softer 3/0.09,
+/// sa-plain 2/0.03, st-outside-square 32/0.08.
 const EXPECT: &[(&str, u8, u32)] = &[
-    ("bv-contour-cone", 160, 290),
-    ("bv-inner-smooth", 46, 70),
-    ("co-fill0", 4, 20),
-    ("ds-basic", 4, 25),
-    ("go-linear", 4, 25),
-    ("go-radial", 4, 25),
-    ("ig-edge", 6, 40),
-    ("is-basic", 4, 25),
-    ("og-gradient", 13, 65),
-    ("og-softer", 4, 30),
-    ("sa-plain", 4, 30),
-    ("st-outside-square", 36, 35),
+    ("bv-contour-cone", 157, 281),
+    ("bv-inner-smooth", 43, 59),
+    ("co-fill0", 3, 15),
+    ("ds-basic", 3, 18),
+    ("go-linear", 3, 17),
+    ("go-radial", 3, 17),
+    ("ig-edge", 4, 31),
+    ("is-basic", 3, 17),
+    ("og-gradient", 11, 56),
+    ("og-softer", 3, 22),
+    ("sa-plain", 3, 20),
+    ("st-outside-square", 34, 25),
 ];
 
 #[test]
@@ -131,6 +136,19 @@ fn placed_psd_layers_draw_their_styles_as_photoshop_does__feat__images_graphics_
         let file = paged_psd::PsdFile::parse(&fixture(id)).expect("parse");
         let theirs = file.composite_rgba8().expect("composite");
         let img = pixels(&m, &page);
+        if let Some(dir) = std::env::var_os("PAGED_PSD_PLACE_DUMP") {
+            let dir = std::path::PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).ok();
+            let h = (img.1.len() / 4) as u32 / img.0;
+            if let Ok(png) = paged_raster::encode_rgba8_png(&img.1, img.0, h) {
+                std::fs::write(dir.join(format!("{id}.page.png")), png).ok();
+            }
+            if let Ok(png) =
+                paged_raster::encode_rgba8_png(&theirs.rgba, theirs.width, theirs.height)
+            {
+                std::fs::write(dir.join(format!("{id}.photoshop.png")), png).ok();
+            }
+        }
         let (max, mean) = distance(&img, &theirs.rgba, theirs.width, theirs.height);
         let mean100 = (mean * 100.0).round() as u32;
         report.push(format!("    (\"{id}\", {max}, {mean100}),"));

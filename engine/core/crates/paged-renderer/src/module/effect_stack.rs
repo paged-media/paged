@@ -359,8 +359,31 @@ pub(crate) fn apply(
             fill,
             seed,
         ) {
-            run.front(page, drawn.under);
-            run.back(page, drawn.over);
+            // A fill opacity below 100 % is the content target's group
+            // around the picture; a layer style's effects are not faded by
+            // it (Photoshop's fill opacity spares them), so they go outside
+            // that group, under and over it.
+            let content_group = fill < 1.0
+                && lo == run_start + 1
+                && source.frame.opacity.is_none_or(|o| o >= 100.0)
+                && matches!(
+                    page.list.commands.get(run_start),
+                    Some(DisplayCommand::BeginBlendGroup { opacity, .. })
+                        if (opacity - fill).abs() < 1e-4
+                );
+            if content_group {
+                let n = drawn.under.len();
+                Run::put(page, run_start, drawn.under);
+                run.lo += n;
+                run.body_end += n;
+                run.hi += n;
+                run.front += n;
+                let end = page.list.commands.len();
+                Run::put(page, end, drawn.over);
+            } else {
+                run.front(page, drawn.under);
+                run.back(page, drawn.over);
+            }
         }
     }
     for e in stack {

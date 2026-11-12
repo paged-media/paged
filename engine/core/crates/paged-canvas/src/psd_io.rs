@@ -122,7 +122,7 @@ impl CanvasModel {
         };
         let icc = paged_psd::PsdFile::parse(bytes).ok().and_then(|f| {
             f.resources
-                .data(paged_psd::model::RES_ICC_PROFILE)
+                .data(paged_psd::model::resources::RES_ICC_PROFILE)
                 .map(<[u8]>::to_vec)
         });
         let ink = ink_to_rgba8(icc.as_deref());
@@ -148,11 +148,7 @@ impl CanvasModel {
         let mut swatches = std::collections::HashSet::new();
         let mut gradients = std::collections::HashSet::new();
         for (n, layer) in placed.layers.iter().enumerate() {
-            let png = match paged_raster::encode::encode_rgba8_png(
-                &layer.rgba,
-                layer.width,
-                layer.height,
-            ) {
+            let png = match paged_raster::encode_rgba8_png(&layer.rgba, layer.width, layer.height) {
                 Ok(p) => p,
                 Err(e) => {
                     losses.push(LossEntry::new(

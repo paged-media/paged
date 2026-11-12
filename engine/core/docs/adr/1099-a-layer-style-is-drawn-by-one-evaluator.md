@@ -75,11 +75,15 @@ twins ship under `paged-kernels`' `cpu` feature. Two devices run the same dispat
 layer-style entries draws no InDesign effect itself (`StackMode::Ordered`); `module::layer_style`
 takes the frame's ALPHA — its picture as the body drew it, on the picture's own pixel grid (a frame
 without one: its outline's coverage at two pixels per point) — pads it by how far the effects reach,
-plans the entries and draws each effect's plates on the CPU device. Each plate is an RGBA image in
-its own effect layer with its blend mode and opacity: exterior plates under the frame's run,
-interior ones over it confined to the layer's shape (as Photoshop closes a styled layer's body), top
-ones over everything. Every lane draws them as it draws a picture. The page's light is the
-document's (`TransparencyPreference`), the fill opacity the frame's content opacity.
+plans the entries and draws each effect on the CPU device. Exterior and top effects (shadows,
+outer glow, a stroke's outer part; bevel and emboss) become RGBA plates, each in its own effect
+layer with its blend mode and opacity, under the frame's run and over it. The interior effects are
+Photoshop's BODY: at fill 100 % they blend onto the layer made opaque and the result replaces the
+picture, shown through the layer's shape (so an anti-aliased edge mixes them with the backdrop as
+Photoshop's does); below 100 % (the frame's content opacity) the body would read the backdrop, so
+their plates go over the picture through the shape, outside the content group, which fill opacity
+does not fade in Photoshop either. Every lane draws them as it draws a picture. The page's light is
+the document's (`TransparencyPreference`).
 
 **The PSD boundary maps both ways, losslessly.** `paged_psd_fx::map_layer_style` maps every effect
 (each instance, bottom-up: of several the dialog's last first) with every parameter;
@@ -121,8 +125,10 @@ Layers as Frames for the PSD it has open.
   opacity stops (moved from `paged-psd`).
 - `crates/paged-canvas/tests/it/psd_place_layers.rs`: twelve Photoshop files placed as frames and
   drawn by the engine's page renderer (pictures and styles through `vello_cpu`), each against
-  Photoshop's merged composite of the same file; the placed frame carries its style as layer-style
-  effects with Photoshop's contour and light, one undo step.
+  Photoshop's merged composite of the same file and held to the same table paged.image's fold is
+  (a drop shadow within 2 levels and a mean of 0.05, overlays within 2, the contour bevel 154 against
+  the table's 157); the placed frame carries its style as layer-style effects with Photoshop's
+  contour and light, one undo step.
 - `platform/extensions/packages/plugin-sdk/test/psd-layers-door.spec.ts`: the door against the
   real engine and against one without it; `modules/image/glue/test/place-layers.spec.ts`: the menu
   command.
