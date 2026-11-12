@@ -988,7 +988,7 @@ impl crate::Lowering {
     ) -> Option<crate::ir::LoweredShape> {
         let w = emu_to_pt(sh.width_emu);
         let h = emu_to_pt(sh.height_emu);
-        let mut outline = match crate::shape_geom::outline(sh, w, h) {
+        let outline = match crate::shape_geom::outline(sh, w, h) {
             Ok(o) => o,
             Err(reason) => {
                 if !self.w4.undrawn_shapes.contains(&reason) {
@@ -1000,62 +1000,28 @@ impl crate::Lowering {
         let (anchor, layout, at) =
             self.anchored_place(sh.float.as_ref(), sh.width_emu, sh.height_emu, at);
         self.w4.anchored_shapes += 1;
-        // Doc ADR 629 — the line ends, in the line's colour.
+        // Doc ADR 629, engine ADR 1093 (amendment 3) — the line ends are the
+        // frame's Office heads: the engine draws them in the line's paint
+        // and stops the line under them.
         let line = sh.look.as_ref().and_then(|l| l.shape.line.as_ref());
-        let heads = match line {
-            Some(line) if line.head.is_some() || line.tail.is_some() => {
-                let width = line.width.map_or(0.75, emu_to_pt);
-                let (heads, undrawn) = crate::shape_geom::heads(
-                    &outline,
-                    line.head.as_ref(),
-                    line.tail.as_ref(),
-                    width,
-                );
-                if !undrawn.is_empty() {
-                    self.w4.shape_line_ends += 1;
-                }
-                // The line stops inside its heads (amendment 1); the heads
-                // were placed on its ends above.
-                crate::shape_geom::cut_under_heads(
-                    &mut outline,
-                    line.head.as_ref(),
-                    line.tail.as_ref(),
-                    width,
-                );
-                // An `arrow`'s strokes: solid, mitred where they meet,
-                // round at their free ends, as Office draws them.
-                let bare = paged_ooxml::drawingml::Line {
-                    head: None,
-                    tail: None,
-                    dash: None,
-                    custom_dash: Vec::new(),
-                    cap: Some("rnd".into()),
-                    join: Some("miter".into()),
-                    ..line.clone()
-                };
-                heads
-                    .into_iter()
-                    .map(|hd| {
-                        let sp = paged_ooxml::drawingml::ShapeProperties {
-                            fill: if hd.open { None } else { line.fill.clone() },
-                            line: hd.open.then(|| bare.clone()),
-                            ..Default::default()
-                        };
-                        let mut mapper = dml_native::native::Lowering::new(self.dml_slots.to_vec());
-                        let fx = mapper.shape(&sp, w as f64, h as f64);
-                        for c in fx.colors() {
-                            self.swatch_for(c.trim_start_matches('#'));
-                        }
-                        crate::ir::LoweredHead {
-                            anchors: hd.anchors,
-                            open: hd.open,
-                            fx: (!fx.is_empty()).then_some(fx),
-                        }
-                    })
-                    .collect()
+        let mut undrawn = false;
+        let mut end = |e: Option<&paged_ooxml::drawingml::LineEnd>| match e
+            .map(dml_geom::heads::office_end)
+        {
+            Some(Ok(o)) => o,
+            Some(Err(_)) => {
+                undrawn = true;
+                None
             }
-            _ => Vec::new(),
+            None => None,
         };
+        let (start_head, end_head) = match line {
+            Some(line) => (end(line.head.as_ref()), end(line.tail.as_ref())),
+            None => (None, None),
+        };
+        if undrawn {
+            self.w4.shape_line_ends += 1;
+        }
         let fx = sh.look.as_ref().and_then(|look| {
             let mut mapper = dml_native::native::Lowering::new(self.dml_slots.to_vec());
             let fx = mapper.picture(&look.blip, &look.shape, w as f64, h as f64);
@@ -1076,7 +1042,8 @@ impl crate::Lowering {
             starts: outline.starts,
             open: outline.open,
             fx,
-            heads,
+            start_head,
+            end_head,
             preset: crate::shape_geom::preset_of(sh, w, h),
             drawing: sh.drawing,
         })

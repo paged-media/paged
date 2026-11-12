@@ -346,6 +346,88 @@ fn write(
     Ok(before)
 }
 
+/// Engine ADR 1096 (amendment 1) — a Word shape's anchored frame resized
+/// (`frameBounds` on the frame's `Rectangle` id). The frame's box is its
+/// own (the text flow places it), so the write takes the new size and keeps
+/// the box's top left; the outline follows in the same apply, as a page
+/// path's does: a live preset is drawn again for the box scaled with it (a
+/// rounded corner keeps its radius), any other outline is scaled with the
+/// box. Undone exactly by the raw restore.
+pub(super) fn apply_anchored_bounds(
+    doc: &mut Document,
+    node: &NodeId,
+    value: &Value,
+) -> Result<AppliedOperation, OperationError> {
+    let path = PropertyPath::FrameBounds;
+    let [top, left, bottom, right] = super::helpers::expect_bounds(path, value)?;
+    let (w2, h2) = (right - left, bottom - top);
+    if !(w2.is_finite() && h2.is_finite()) || w2 <= 0.0 || h2 <= 0.0 {
+        return Err(OperationError::InvalidValue {
+            node: node.clone(),
+            path,
+            reason: "an anchored frame's box has a positive finite size".into(),
+        });
+    }
+    let frame = super::helpers::find_anchored_frame_mut(doc, node.self_id())
+        .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    let before = frame.snapshot();
+    let live = frame.live();
+    let old = frame.bounds.unwrap_or(Bounds {
+        top: 0.0,
+        left: 0.0,
+        bottom: h2,
+        right: w2,
+    });
+    let (w, h) = (old.right - old.left, old.bottom - old.top);
+    let (sx, sy) = (
+        if w > 0.0 { w2 / w } else { 1.0 },
+        if h > 0.0 { h2 / h } else { 1.0 },
+    );
+    frame.bounds = Some(Bounds {
+        top: old.top,
+        left: old.left,
+        bottom: old.top + h2,
+        right: old.left + w2,
+    });
+    let scale = |q: (f32, f32)| {
+        (
+            old.left + (q.0 - old.left) * sx,
+            old.top + (q.1 - old.top) * sy,
+        )
+    };
+    match live {
+        Some(mut p) => {
+            let [x, y, pw, ph] = p.frame;
+            let (nx, ny) = scale((x, y));
+            p.frame = [nx, ny, pw * sx, ph * sy];
+            if let Some(d) = pm::draw(&p) {
+                frame.set_drawn(d);
+                frame.set_preset(Some(p));
+            }
+        }
+        None => {
+            for a in &mut frame.anchors {
+                a.anchor = scale(a.anchor);
+                a.left = scale(a.left);
+                a.right = scale(a.right);
+            }
+        }
+    }
+    Ok(AppliedOperation {
+        op: Operation::SetProperty {
+            node: node.clone(),
+            path,
+            value: value.clone(),
+        },
+        inverse: restore_on(node.clone(), &before),
+        invalidation: InvalidationHint {
+            frame_geometry: vec![node.clone()],
+            text_reflow: vec![node.clone()],
+            ..Default::default()
+        },
+    })
+}
+
 // ─── follow ─────────────────────────────────────────────────────────
 
 /// The writes after which an item's presets and the connectors glued to
@@ -634,8 +716,9 @@ pub(super) fn follow(
 // ─── the side fields: a shape's text frame, Office's line ends ──────
 
 /// `frameShapePresetText` on a TextFrame and the two Office line-end
-/// paths on a Polygon or a GraphicLine: plain field writes whose inverse
-/// is the value they replaced.
+/// paths on a Polygon, a GraphicLine or a Word shape's anchored frame (its
+/// `Rectangle` id): plain field writes whose inverse is the value they
+/// replaced.
 pub(super) fn apply_side_field(
     doc: &mut Document,
     node: &NodeId,
@@ -693,6 +776,20 @@ pub(super) fn apply_side_field(
                 &mut p.start_office_head
             } else {
                 &mut p.end_office_head
+            };
+            show(std::mem::replace(slot, next))
+        }
+        // Engine ADR 1093 (amendment 3) — a Word shape's anchored frame.
+        (
+            NodeId::Rectangle(id),
+            PropertyPath::FrameStrokeStartOfficeHead | PropertyPath::FrameStrokeEndOfficeHead,
+        ) => {
+            let next = head(text)?;
+            let f = super::helpers::find_anchored_frame_mut(doc, id).ok_or_else(missing)?;
+            let slot = if start {
+                &mut f.start_office_head
+            } else {
+                &mut f.end_office_head
             };
             show(std::mem::replace(slot, next))
         }

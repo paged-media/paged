@@ -442,6 +442,92 @@ pub fn route(p: &PresetShape, start: Site, end: Site) -> Option<Routed> {
     })
 }
 
+/// How one contour of a live preset is filled: a path's `fill` in the
+/// program (ECMA-376 `a:path@fill`). A shaded face (a cube's sides, a
+/// can's lid, a ribbon's fold) is the shape's own fill, darkened or
+/// lightened; `None` is a stroke-only detail contour, never filled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContourFill {
+    Norm,
+    None,
+    Darken,
+    DarkenLess,
+    Lighten,
+    LightenLess,
+}
+
+impl ContourFill {
+    fn of(s: &SubPath) -> ContourFill {
+        if !s.filled {
+            return ContourFill::None;
+        }
+        match s.fill_mode.as_deref() {
+            Some("darken") => ContourFill::Darken,
+            Some("darkenLess") => ContourFill::DarkenLess,
+            Some("lighten") => ContourFill::Lighten,
+            Some("lightenLess") => ContourFill::LightenLess,
+            _ => ContourFill::Norm,
+        }
+    }
+
+    /// Whether the contour is the shape's fill darkened or lightened.
+    pub fn is_shaded(self) -> bool {
+        !matches!(self, ContourFill::Norm | ContourFill::None)
+    }
+
+    /// One sRGB-encoded channel (0..=1) of the shape's fill as this
+    /// contour paints it. PowerPoint 16 draws `darken` as 60 % of each
+    /// channel, `darkenLess` 80 %, `lighten` 40 % of the way to white,
+    /// `lightenLess` 20 % (measured on seven fills; engine ADR 1096,
+    /// amendment 1).
+    pub fn shade_srgb(self, c: f32) -> f32 {
+        match self {
+            ContourFill::Darken => c * 0.6,
+            ContourFill::DarkenLess => c * 0.8,
+            ContourFill::Lighten => c + (1.0 - c) * 0.4,
+            ContourFill::LightenLess => c + (1.0 - c) * 0.2,
+            ContourFill::Norm | ContourFill::None => c,
+        }
+    }
+}
+
+/// One contour of a live preset as its program paints it: how it is
+/// filled and the program path (`a:path`) it belongs to (a path's contours
+/// fill together, under the even-odd rule).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContourPaint {
+    pub fill: ContourFill,
+    pub path: usize,
+}
+
+/// Engine ADR 1096 (amendment 1) — the per-contour paint of a path item
+/// whose anchors are its preset's (`anchors`, `starts` as the item holds
+/// them), one entry per contour; `None` when the preset is not live or
+/// every contour is plainly filled (or none is filled at all), so the item
+/// paints as any path does. One item holds a shape's filled paths, shaded
+/// faces included, and the renderer paints each face with its shade.
+pub fn contour_paints(
+    p: &PresetShape,
+    anchors: &[PathAnchor],
+    starts: &[usize],
+) -> Option<Vec<ContourPaint>> {
+    if !anchors_are(p, anchors, starts) {
+        return None;
+    }
+    let paints: Vec<ContourPaint> = subpaths_in_box(p)?
+        .iter()
+        .filter(|s| !s.points.is_empty())
+        .map(|s| ContourPaint {
+            fill: ContourFill::of(s),
+            path: s.path,
+        })
+        .collect();
+    let shaded = paints.iter().any(|c| c.fill.is_shaded());
+    let filled = paints.iter().any(|c| c.fill != ContourFill::None);
+    let unfilled = paints.iter().any(|c| c.fill == ContourFill::None);
+    (shaded || (filled && unfilled)).then_some(paints)
+}
+
 /// Where a connector's two ends are in its container: its first and
 /// last anchor through its transform.
 pub fn connector_ends(poly: &Polygon) -> Option<((f64, f64), (f64, f64))> {
@@ -583,6 +669,48 @@ mod tests {
         assert!(s
             .iter()
             .any(|s| (s.pos.0 - 115.0).abs() < 1e-9 && (s.pos.1 - 30.0).abs() < 1e-9));
+    }
+
+    #[test]
+    fn a_cubes_faces_paint_with_their_shades_while_live() {
+        let p = PresetShape {
+            part: PresetPart::Fill,
+            ..PresetShape::new("cube", 100.0, 100.0)
+        };
+        let mut poly = poly_of(p.clone(), None);
+        let paints = contour_paints(&p, &poly.anchors, &poly.subpath_starts).unwrap();
+        let fills: Vec<(ContourFill, usize)> = paints.iter().map(|c| (c.fill, c.path)).collect();
+        assert_eq!(
+            fills,
+            vec![
+                (ContourFill::Norm, 0),
+                (ContourFill::DarkenLess, 1),
+                (ContourFill::LightenLess, 2),
+            ]
+        );
+        // PowerPoint's 200 → 160 (darkenLess) and 200 → 222 (lighten).
+        assert!((ContourFill::DarkenLess.shade_srgb(200.0 / 255.0) * 255.0 - 160.0).abs() < 1e-3);
+        assert!((ContourFill::Lighten.shade_srgb(200.0 / 255.0) * 255.0 - 222.0).abs() < 1e-3);
+        // A plain rectangle paints as any path.
+        let r = PresetShape::new("rect", 10.0, 10.0);
+        let rp = poly_of(r.clone(), None);
+        assert_eq!(contour_paints(&r, &rp.anchors, &rp.subpath_starts), None);
+        // Reshaped: no longer the preset's faces.
+        poly.anchors[0].anchor.0 += 5.0;
+        assert_eq!(
+            contour_paints(&p, &poly.anchors, &poly.subpath_starts),
+            None
+        );
+    }
+
+    #[test]
+    fn a_whole_can_leaves_its_rim_unfilled() {
+        let p = PresetShape::new("can", 60.0, 100.0);
+        let poly = poly_of(p.clone(), None);
+        let paints = contour_paints(&p, &poly.anchors, &poly.subpath_starts).unwrap();
+        assert_eq!(paints[0].fill, ContourFill::Norm);
+        assert_eq!(paints[1].fill, ContourFill::Lighten);
+        assert!(paints[2..].iter().all(|c| c.fill == ContourFill::None));
     }
 
     #[test]

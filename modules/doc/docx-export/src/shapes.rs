@@ -32,10 +32,12 @@
 //!   flipped back into the shape's own box, otherwise (a path edited by
 //!   hand).
 //!
+//! A shape whose box changed size (engine ADR 1096, amendment 1: the canvas
+//! resized its anchored frame and refitted its outline) writes its new size
+//! too, as `wp:extent` and `a:xfrm/a:ext` (its place keeps its top left).
 //! A shape the canvas holds as the import drew it is not written: its XML
-//! stays byte for byte. A shape whose box changed size is refused with a
-//! line in the ledger (its extent and position are not written yet), as is
-//! one whose geometry element is not where the import read it.
+//! stays byte for byte. One whose geometry or size elements are not where
+//! the import read them is refused with a line in the ledger.
 
 use docx_core::{Block, DocxDocument, Shape, ShapeGeometry};
 use docx_lower::ir::{LoweredBlock, LoweredDoc, LoweredShape};
@@ -69,11 +71,14 @@ pub struct ShapeIn {
     pub starts: Vec<usize>,
     #[serde(default)]
     pub open: Vec<bool>,
+    /// The frame's box `[w, h]` in pt as the canvas holds it; `None` when
+    /// the host does not say (the size is the import's).
+    #[serde(default)]
+    pub size: Option<[f32; 2]>,
 }
 
 /// A Word shape's frame as the canvas holds it, by the frame's id (the
-/// skeleton's `docx_shape<n>`, or `docx_shape<n>_0` for a shape with line
-/// ends): the host's read-back, turned into a [`ShapeIn`] by the frame's
+/// skeleton's `docx_shape<n>`): the host's read-back, turned into a [`ShapeIn`] by the frame's
 /// entry in `NativeBody::shapes`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +93,9 @@ pub struct ShapeFrameIn {
     /// lowering's flags are taken while the contours are the same).
     #[serde(default)]
     pub open: Vec<bool>,
+    /// The frame's box `[w, h]` (`frameBounds`); `None` when not read.
+    #[serde(default)]
+    pub size: Option<[f32; 2]>,
 }
 
 impl ShapeFrameIn {
@@ -99,15 +107,24 @@ impl ShapeFrameIn {
             anchors: self.anchors.clone(),
             starts: self.starts.clone(),
             open: self.open.clone(),
+            size: self.size,
         }
     }
 }
 
-/// What a changed shape is written as.
+/// What a changed shape's geometry is written as.
 #[derive(Debug, Clone, PartialEq)]
 enum Geometry {
     Preset(PresetShape),
     Custom(String),
+}
+
+/// What a changed shape writes: its geometry when that changed, its box
+/// `(w, h)` in pt when that did.
+#[derive(Debug, Clone, PartialEq)]
+struct Plan {
+    geometry: Option<Geometry>,
+    size: Option<(f32, f32)>,
 }
 
 /// The import's shape of drawing `ordinal`, in a body paragraph or a table
@@ -227,19 +244,37 @@ fn model_anchors(anchors: &[[f32; 6]]) -> Vec<PathAnchor> {
         .collect()
 }
 
-/// What `read` asks to write for `shape` (box `w` x `h` pt), `Ok(None)`
-/// when the canvas holds it as the lowering gave it (`given`).
+/// Whether two presets are one program with the same adjust values and
+/// flips (their boxes may differ).
+fn same_program(a: &PresetShape, b: &PresetShape) -> bool {
+    a.name == b.name && a.adjusts == b.adjusts && a.flip_h == b.flip_h && a.flip_v == b.flip_v
+}
+
+/// What `read` asks to write for `shape` (box `w` x `h` pt as imported),
+/// `Ok(None)` when the canvas holds it as the lowering gave it (`given`).
 fn plan(
     shape: &Shape,
     given: &LoweredShape,
     read: &ShapeIn,
     w: f32,
     h: f32,
-) -> Result<Option<Geometry>, String> {
-    // The host reads a preset back only while it is live (a turned shape's
-    // or a line's cut under its heads reads none): unread is unchanged.
+) -> Result<Option<Plan>, String> {
+    // The box the canvas holds now: as read, else the live preset's.
+    let (nw, nh) = match (read.size, &read.preset) {
+        (Some([sw, sh]), _) => (sw, sh),
+        (None, Some(p)) => (p.frame[2], p.frame[3]),
+        (None, None) => (w, h),
+    };
+    if !(nw.is_finite() && nh.is_finite()) || nw <= 0.0 || nh <= 0.0 {
+        return Err("the shape's box has no size".into());
+    }
+    let resized = (nw - w).abs() > SAME || (nh - h).abs() > SAME;
+    let size = resized.then_some((nw, nh));
+    // The host reads a preset back only while it is live (a turned
+    // shape's reads none): unread is unchanged.
     if same_anchors(&given.anchors, &read.anchors)
         && (read.preset.is_none() || same_preset(given.preset.as_ref(), read.preset.as_ref()))
+        && !resized
     {
         return Ok(None);
     }
@@ -247,12 +282,12 @@ fn plan(
         return Err("the shape has no outline".into());
     }
     if let Some(p) = &read.preset {
-        if (p.frame[2] - w).abs() > SAME || (p.frame[3] - h).abs() > SAME {
-            return Err("the shape was resized; its new size is not written yet".into());
+        if (p.frame[2] - nw).abs() > SAME || (p.frame[3] - nh).abs() > SAME {
+            return Err("the shape's preset is not drawn for its box".into());
         }
         // The lowering turns the outline about the box's centre; the
         // preset draws it upright (its flips are its own).
-        let back = dml_geom::place::invert(&placement(shape, w, h, false))
+        let back = dml_geom::place::invert(&placement(shape, nw, nh, false))
             .ok_or("the shape's turn cannot be undone")?;
         let upright = mapped(&read.anchors, &back);
         let starts = if read.starts.is_empty() {
@@ -266,16 +301,17 @@ fn plan(
             || (shape.rotation != 0
                 && paged_preset_geom::model::anchors_are(p, &model_anchors(&read.anchors), &starts))
         {
-            return Ok(Some(Geometry::Preset(p.clone())));
+            // Only resized: the geometry Word holds still says it.
+            let unchanged = given.preset.as_ref().is_some_and(|g| same_program(g, p));
+            return Ok(Some(Plan {
+                geometry: (!unchanged).then(|| Geometry::Preset(p.clone())),
+                size,
+            }));
         }
-    }
-    if !given.heads.is_empty() {
-        // Its anchors stop under the heads, which Word draws again.
-        return Err("a reshaped line with arrowheads is not written yet".into());
     }
     // Reshaped: the anchors in the shape's own box, before its flips and
     // turn (which `a:xfrm` keeps saying).
-    let back = dml_geom::place::invert(&placement(shape, w, h, true))
+    let back = dml_geom::place::invert(&placement(shape, nw, nh, true))
         .ok_or("the shape's turn cannot be undone")?;
     let own = mapped(&read.anchors, &back);
     let mut starts = read.starts.clone();
@@ -308,11 +344,14 @@ fn plan(
             (pts, !open.get(k).copied().unwrap_or(false))
         })
         .collect();
-    Ok(Some(Geometry::Custom(dml_geom::place::cust_geom(
-        &contours,
-        f64::from(w),
-        f64::from(h),
-    ))))
+    Ok(Some(Plan {
+        geometry: Some(Geometry::Custom(dml_geom::place::cust_geom(
+            &contours,
+            f64::from(nw),
+            f64::from(nh),
+        ))),
+        size,
+    }))
 }
 
 /// `a:prstGeom` for `p`, with its adjust values.
@@ -337,7 +376,7 @@ fn prst_geom(p: &PresetShape) -> String {
     )
 }
 
-/// Where a drawing's shape keeps its geometry in the part.
+/// Where a drawing's shape keeps its geometry and its size in the part.
 #[derive(Debug, Clone, Default)]
 struct GeomAt {
     /// The geometry element's byte range and local name.
@@ -345,6 +384,10 @@ struct GeomAt {
     local: String,
     /// It is written with the `a:` prefix (the writers above write that).
     a_prefix: bool,
+    /// The drawing's `wp:extent` and the shape's `a:xfrm/a:ext`, each an
+    /// empty element: its byte range and qualified name.
+    extent: Option<(usize, usize, String)>,
+    ext: Option<(usize, usize, String)>,
 }
 
 /// Every top-level `wp:inline` / `wp:anchor` of `part` in document order
@@ -382,6 +425,29 @@ fn scan(part: &[u8]) -> Vec<GeomAt> {
                         path.clear();
                     }
                 } else {
+                    let qname = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                    // wp:anchor > wp:extent (the drawing's size)
+                    if path.is_empty() && uri == NS_WP && local == "extent" && empty {
+                        if let Some(cur) = out.last_mut() {
+                            cur.extent.get_or_insert((before, after, qname.clone()));
+                        }
+                    }
+                    // … > wps:spPr > a:xfrm > a:ext (the shape's size)
+                    if path.len() == 5
+                        && path[2].0 == NS_WPS
+                        && path[2].1 == "wsp"
+                        && path[3].0 == NS_WPS
+                        && path[3].1 == "spPr"
+                        && path[4].0 == NS_A
+                        && path[4].1 == "xfrm"
+                        && uri == NS_A
+                        && local == "ext"
+                        && empty
+                    {
+                        if let Some(cur) = out.last_mut() {
+                            cur.ext.get_or_insert((before, after, qname));
+                        }
+                    }
                     // wp:anchor > a:graphic > a:graphicData > wps:wsp >
                     // wps:spPr > a:prstGeom | a:custGeom
                     let at_geom = path.len() == 4
@@ -446,7 +512,7 @@ pub fn save_shapes(
     read: &[ShapeIn],
 ) -> Result<Vec<String>, OoxmlError> {
     let mut skips = Vec::new();
-    let mut edits: Vec<(u32, &'static str, Geometry)> = Vec::new();
+    let mut edits: Vec<(u32, &'static str, Plan)> = Vec::new();
     for r in read {
         let label = format!("drawing {}", r.drawing);
         let (Some(shape), Some(given)) = (
@@ -477,30 +543,52 @@ pub fn save_shapes(
     let bytes = pkg.require(main_part)?.to_vec();
     let at = scan(&bytes);
     let mut cuts: Vec<(usize, usize, String)> = Vec::new();
-    for (ordinal, was, g) in edits {
+    for (ordinal, was, plan) in edits {
         let label = format!("drawing {ordinal}");
-        let Some(GeomAt {
-            range: Some((s, e)),
-            local,
-            a_prefix,
-        }) = at.get(ordinal as usize).cloned()
-        else {
-            skips.push(format!(
-                "{label}: shape edit refused: its geometry is not where the import read it"
-            ));
-            continue;
-        };
-        if local != was || !a_prefix {
-            skips.push(format!(
-                "{label}: shape edit refused: its geometry is not what the import read"
-            ));
-            continue;
+        let found = at.get(ordinal as usize).cloned().unwrap_or_default();
+        let mut mine = Vec::new();
+        if let Some(g) = plan.geometry {
+            let GeomAt {
+                range: Some((s, e)),
+                local,
+                a_prefix,
+                ..
+            } = found.clone()
+            else {
+                skips.push(format!(
+                    "{label}: shape edit refused: its geometry is not where the import read it"
+                ));
+                continue;
+            };
+            if local != was || !a_prefix {
+                skips.push(format!(
+                    "{label}: shape edit refused: its geometry is not what the import read"
+                ));
+                continue;
+            }
+            let xml = match g {
+                Geometry::Preset(p) => prst_geom(&p),
+                Geometry::Custom(c) => c,
+            };
+            mine.push((s, e, xml));
         }
-        let xml = match g {
-            Geometry::Preset(p) => prst_geom(&p),
-            Geometry::Custom(c) => c,
-        };
-        cuts.push((s, e, xml));
+        if let Some((w, h)) = plan.size {
+            let (Some(extent), Some(ext)) = (found.extent, found.ext) else {
+                skips.push(format!(
+                    "{label}: shape edit refused: its size is not where the import read it"
+                ));
+                continue;
+            };
+            let emu = |v: f32| (f64::from(v) * 12_700.0).round() as i64;
+            for (s, e, name) in [extent, ext] {
+                mine.push((
+                    s,
+                    e,
+                    format!(r#"<{name} cx="{}" cy="{}"/>"#, emu(w), emu(h)),
+                ));
+            }
+        }
+        cuts.extend(mine);
     }
     if cuts.is_empty() {
         return Ok(skips);
@@ -546,8 +634,26 @@ mod tests {
         }
     }
 
-    fn plan_of(s: &Shape, read: &ShapeIn) -> Result<Option<Geometry>, String> {
+    fn plan_of(s: &Shape, read: &ShapeIn) -> Result<Option<Plan>, String> {
         plan(s, &given(s), read, 100.0, 50.0)
+    }
+
+    fn geometry(g: Geometry) -> Result<Option<Plan>, String> {
+        Ok(Some(Plan {
+            geometry: Some(g),
+            size: None,
+        }))
+    }
+
+    fn flat(d: &paged_preset_geom::model::Drawn) -> Vec<[f32; 6]> {
+        d.anchors
+            .iter()
+            .map(|a| {
+                [
+                    a.anchor.0, a.anchor.1, a.left.0, a.left.1, a.right.0, a.right.1,
+                ]
+            })
+            .collect()
     }
 
     fn read_of(s: &Shape) -> ShapeIn {
@@ -558,6 +664,7 @@ mod tests {
             anchors: o.anchors,
             starts: o.starts,
             open: o.open,
+            size: None,
         }
     }
 
@@ -588,7 +695,7 @@ mod tests {
             })
             .collect();
         read.preset = Some(p.clone());
-        assert_eq!(plan_of(&s, &read), Ok(Some(Geometry::Preset(p.clone()))));
+        assert_eq!(plan_of(&s, &read), geometry(Geometry::Preset(p.clone())));
         assert_eq!(
             prst_geom(&p),
             r#"<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>"#
@@ -598,7 +705,10 @@ mod tests {
         read.anchors[0][2] += 5.0;
         read.anchors[0][4] += 5.0;
         match plan_of(&s, &read) {
-            Ok(Some(Geometry::Custom(xml))) => {
+            Ok(Some(Plan {
+                geometry: Some(Geometry::Custom(xml)),
+                size: None,
+            })) => {
                 assert!(
                     xml.starts_with("<a:custGeom>") && xml.contains("<a:close/>"),
                     "{xml}"
@@ -629,7 +739,7 @@ mod tests {
             .collect();
         read.anchors = mapped(&flat, &placement(&s, 100.0, 50.0, false));
         read.preset = Some(p.clone());
-        assert_eq!(plan_of(&s, &read), Ok(Some(Geometry::Preset(p))));
+        assert_eq!(plan_of(&s, &read), geometry(Geometry::Preset(p)));
     }
 
     /// The host reads a preset back only while it is live: a turned shape
@@ -649,16 +759,47 @@ mod tests {
         read.open.clear();
         read.anchors[1][1] += 7.0;
         match plan_of(&line, &read) {
-            Ok(Some(Geometry::Custom(xml))) => assert!(!xml.contains("<a:close/>"), "{xml}"),
+            Ok(Some(Plan {
+                geometry: Some(Geometry::Custom(xml)),
+                ..
+            })) => assert!(!xml.contains("<a:close/>"), "{xml}"),
             other => panic!("{other:?}"),
         }
     }
 
+    /// Engine ADR 1096, amendment 1: the canvas resized the frame and
+    /// refitted its preset; the size is written, the geometry only when
+    /// the program or its adjust values changed too.
     #[test]
-    fn a_resized_shape_is_refused() {
-        let s = shape("rect", &[]);
+    fn a_resized_shape_writes_its_size() {
+        let s = shape("roundRect", &[("adj", 20000)]);
         let mut read = read_of(&s);
-        read.preset.as_mut().unwrap().frame[2] = 120.0;
-        assert!(plan_of(&s, &read).unwrap_err().contains("resized"));
+        let mut p = read.preset.clone().unwrap();
+        p.frame = [0.0, 0.0, 160.0, 50.0];
+        read.anchors = flat(&paged_preset_geom::model::draw(&p).unwrap());
+        read.preset = Some(p.clone());
+        read.size = Some([160.0, 50.0]);
+        assert_eq!(
+            plan_of(&s, &read),
+            Ok(Some(Plan {
+                geometry: None,
+                size: Some((160.0, 50.0)),
+            }))
+        );
+        p.adjusts = vec![("adj".into(), "val 5000".into())];
+        read.anchors = flat(&paged_preset_geom::model::draw(&p).unwrap());
+        read.preset = Some(p.clone());
+        assert_eq!(
+            plan_of(&s, &read),
+            Ok(Some(Plan {
+                geometry: Some(Geometry::Preset(p.clone())),
+                size: Some((160.0, 50.0)),
+            }))
+        );
+        // A preset not drawn for the box the frame says is refused.
+        read.size = Some([100.0, 50.0]);
+        assert!(plan_of(&s, &read)
+            .unwrap_err()
+            .contains("not drawn for its box"));
     }
 }

@@ -24,13 +24,13 @@
 //! (all 187, with their `a:avLst` guides; doc ADR 629, which replaced the
 //! hand port of fourteen that ADR 627 made while the definitions did not fit
 //! the doc wasm). An authored `a:custGeom` is the same program, read and
-//! evaluated by `dml-geom` too (amendment 4). The line ends are
-//! `dml_geom::heads`, Office's one head geometry. A name that is not a
-//! preset is told, never guessed.
+//! evaluated by `dml-geom` too (amendment 4). The line ends are the
+//! frame's Office heads, drawn by the engine (engine ADR 1093, amendment 3).
+//! A name that is not a preset is told, never guessed.
 
 use docx_core::{Shape, ShapeGeometry};
 
-pub use dml_geom::heads::{cut_under_heads, heads, inset, Head, Outline};
+pub use dml_geom::heads::Outline;
 
 /// `dml-geom`'s evaluated outline as the anchors the lowering draws. A
 /// contour that is not filled (a detail line) is left open; a closed one

@@ -8490,6 +8490,16 @@ pub struct AnchoredFrame {
     /// every other frame; absent from the bytes when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<live_shape::PresetShape>,
+    /// Engine ADR 1093 (amendment 3) — Office's line ends of an anchored
+    /// shape's open outline (a Word line's `a:headEnd` / `a:tailEnd`), at
+    /// the first and the last anchor of each open contour, drawn and cut
+    /// under as a Polygon's are ([`Polygon::start_office_head`]). Absent
+    /// from the bytes when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_office_head: Option<OfficeLineEnd>,
+    /// Office's head at the last anchor; see [`Self::start_office_head`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_office_head: Option<OfficeLineEnd>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands

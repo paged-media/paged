@@ -1292,63 +1292,20 @@ fn build_whole(
             // Engine ADR 1096 — the Word shape's preset, in the frame's own
             // box (where its anchors are).
             preset: sh.preset.clone(),
+            // Doc ADR 629, engine ADR 1093 (amendment 3) — its line ends,
+            // drawn by the engine.
+            start_office_head: sh.start_head,
+            end_office_head: sh.end_head,
             ..AnchoredFrame::default()
         };
         // The shape's look (fill, outline, opacity, effects).
         if let Some(fx) = &sh.fx {
             paint_frame(&mut frame, fx, &mut minted.looks)?;
         }
-        // Doc ADR 629 — with line ends, a Group of the shape and its arrow
-        // heads (filled in the line's colour, or stroked), placed as the
-        // shape is.
-        if !sh.heads.is_empty() {
-            let id = format!("docx_shape{}", minted.shapes);
-            let mut children = Vec::new();
-            for (k, hd) in sh.heads.iter().enumerate() {
-                let mut head = AnchoredFrame {
-                    frame_kind: AnchoredFrameKind::Rectangle,
-                    self_id: Some(format!("{id}_h{k}")),
-                    bounds: frame.bounds,
-                    anchors: hd
-                        .anchors
-                        .iter()
-                        .map(|a| PathAnchor {
-                            anchor: (a[0], a[1]),
-                            left: (a[2], a[3]),
-                            right: (a[4], a[5]),
-                        })
-                        .collect(),
-                    subpath_starts: vec![0],
-                    subpath_open: vec![hd.open],
-                    ..AnchoredFrame::default()
-                };
-                if let Some(fx) = &hd.fx {
-                    paint_frame(&mut head, fx, &mut minted.looks)?;
-                }
-                children.push(head);
-            }
-            let (setting, layout) = (frame.setting.take(), std::mem::take(&mut frame.layout));
-            let bounds = frame.bounds;
-            frame.self_id = Some(format!("{id}_0"));
-            children.insert(0, frame);
-            frame = AnchoredFrame {
-                frame_kind: AnchoredFrameKind::Group,
-                self_id: Some(id),
-                bounds,
-                setting,
-                layout,
-                children,
-                ..AnchoredFrame::default()
-            };
-        }
         if let Some(d) = sh.drawing {
-            let id = format!("docx_shape{}", minted.shapes);
-            let outline = if sh.heads.is_empty() {
-                id
-            } else {
-                format!("{id}_0")
-            };
-            minted.shape_drawings.push((outline, d));
+            minted
+                .shape_drawings
+                .push((format!("docx_shape{}", minted.shapes), d));
         }
         para.anchored_frames.push(frame);
         minted.shapes += 1;

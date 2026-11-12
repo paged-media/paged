@@ -162,6 +162,65 @@ pub(crate) fn polygon_outline_path(
     polygon_path_from_anchors_with_open(anchors, subpath_starts, subpath_open)
 }
 
+/// Engine ADR 1096 (amendment 1) — a live preset's faces: the outline its
+/// filled paths make (its stroke-only detail contours left out) and each
+/// shaded path's contours (filled under the even-odd rule, as PowerPoint
+/// fills a path) with its shade, in the program's order. `None` when the
+/// item paints as any path (no preset, not live, nothing shaded or left
+/// unfilled).
+pub(crate) struct PresetFaces {
+    pub fill: PathData,
+    pub shaded: Vec<(PathData, paged_preset_geom::model::ContourFill)>,
+}
+
+pub(crate) fn preset_faces(
+    preset: Option<&paged_model::live_shape::PresetShape>,
+    anchors: &[PathAnchor],
+    subpath_starts: &[usize],
+    subpath_open: &[bool],
+) -> Option<PresetFaces> {
+    use paged_preset_geom::model::{contour_paints, ContourFill};
+    let paints = contour_paints(preset?, anchors, subpath_starts)?;
+    let ranges = contour_ranges(anchors.len(), subpath_starts);
+    if ranges.len() != paints.len() {
+        return None;
+    }
+    let path_of = |ks: &[usize]| {
+        let mut a = Vec::new();
+        let mut st = Vec::new();
+        let mut op = Vec::new();
+        for &k in ks {
+            let (lo, hi) = ranges[k];
+            st.push(a.len());
+            op.push(subpath_open.get(k).copied().unwrap_or(false));
+            a.extend_from_slice(&anchors[lo..hi]);
+        }
+        polygon_path_from_anchors_with_open(&a, &st, &op)
+    };
+    let filled: Vec<usize> = (0..paints.len())
+        .filter(|&k| paints[k].fill != ContourFill::None)
+        .collect();
+    let mut shaded = Vec::new();
+    let mut done: Vec<usize> = Vec::new();
+    for c in paints.iter().filter(|c| c.fill.is_shaded()) {
+        if done.contains(&c.path) {
+            continue;
+        }
+        done.push(c.path);
+        let ks: Vec<usize> = (0..paints.len())
+            .filter(|&k| paints[k].path == c.path && paints[k].fill.is_shaded())
+            .collect();
+        shaded.push((
+            path_of(&ks).with_fill_rule(paged_compose::FillRule::EvenOdd),
+            c.fill,
+        ));
+    }
+    Some(PresetFaces {
+        fill: path_of(&filled),
+        shaded,
+    })
+}
+
 /// Polygon emit. When the polygon carries `<PathPointType>` anchors
 /// (real-world InDesign export shape) we build a curved FillPath
 /// from them; otherwise fall back to drawing the AABB so synthetic
@@ -325,8 +384,20 @@ pub(super) fn emit_polygon_body(
     }
     let fill_group = push_target_group(page, resolved.fill_target, bbox, outer);
     crate::module::fill_shadow_module(&resolved, page, palette, color_ctx, outer);
-    crate::module::fill_paint_module(
-        &resolved, page, palette, color_ctx, fallback, outer, path_id,
+    emit_preset_fill(
+        page,
+        &resolved,
+        palette,
+        color_ctx,
+        fallback,
+        outer,
+        path_id,
+        preset_faces(
+            poly.preset.as_ref(),
+            &poly.anchors,
+            &poly.subpath_starts,
+            &poly.subpath_open,
+        ),
     );
     if fill_group {
         pop_blend_group(page);
@@ -466,6 +537,60 @@ pub(super) fn emit_polygon_body(
     }
     if needs_group {
         pop_blend_group(page);
+    }
+}
+
+/// The fill of a path item: through `path_id`, or a live preset's faces
+/// (engine ADR 1096, amendment 1): its filled outline, then each shaded
+/// path filled again with its shade.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_preset_fill(
+    page: &mut BuiltPage,
+    resolved: &ResolvedFrame<'_>,
+    palette: &Graphic,
+    color_ctx: ColorCtx<'_>,
+    fallback: Paint,
+    outer: Transform,
+    path_id: Option<paged_compose::PathId>,
+    faces: Option<PresetFaces>,
+) {
+    let (Some(faces), Some(_)) = (faces, path_id) else {
+        crate::module::fill_paint_module(
+            resolved, page, palette, color_ctx, fallback, outer, path_id,
+        );
+        return;
+    };
+    let seed = resolved
+        .self_id
+        .map(|id| fnv_1a_u64(id.as_bytes()))
+        .unwrap_or(0xFACE);
+    let fill = faces.fill.with_fill_rule(resolved.fill_rule);
+    let fid = page.list.paths.intern(seed ^ 0xFACE_0000, fill).0;
+    crate::module::fill_paint_module(
+        resolved,
+        page,
+        palette,
+        color_ctx,
+        fallback,
+        outer,
+        Some(fid),
+    );
+    for (k, (path, shade)) in faces.shaded.into_iter().enumerate() {
+        let sid = page
+            .list
+            .paths
+            .intern(seed ^ (0xFACE_0001 + k as u64), path)
+            .0;
+        crate::module::fill_paint_shaded(
+            resolved,
+            page,
+            palette,
+            color_ctx,
+            fallback,
+            outer,
+            Some(sid),
+            Some(shade),
+        );
     }
 }
 

@@ -63,7 +63,7 @@ pub(crate) use effects::{
     begin_feathered_object, emit_effects_post_fill, emit_effects_pre_fill, emit_feathers,
     emit_interior_effects, feather_outline, shape_feathers_by_content,
 };
-pub(crate) use fill_paint::fill_paint_module;
+pub(crate) use fill_paint::{fill_paint_module, fill_paint_shaded};
 pub(crate) use glyph_shadow::{emit_glyph_shadow_pass, GlyphShadowKind};
 pub(crate) use group::{group_pass, FrameCmdSpan, SpreadFrameSpans, TextSlot};
 pub(crate) use object_style::{object_style_cascade, resolve_applied_style};

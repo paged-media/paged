@@ -67,22 +67,22 @@ export interface ShapeFrameRead {
   preset?: unknown;
   anchors: [number, number, number, number, number, number][];
   starts: number[];
+  /** The frame's box `[w, h]` (`frameBounds`, engine ADR 1096 amendment
+   *  1: a resize writes the shape's new size), absent when not read. */
+  size?: [number, number];
 }
 
-/** The skeleton's id of every Word shape's outline frame in `ir`
- *  (`docx_shape<n>`, or its group's `docx_shape<n>_0` when the shape has
- *  line ends), in the order the skeleton mints them: the body's paragraphs,
- *  then — inside a table block — its cells' paragraphs. Ids the document
- *  does not hold read back as nothing. */
+/** The skeleton's id of every Word shape's frame in `ir` (`docx_shape<n>`;
+ *  its line ends are the frame's own, engine ADR 1093 amendment 3), in the
+ *  order the skeleton mints them: the body's paragraphs, then — inside a
+ *  table block — its cells' paragraphs. Ids the document does not hold read
+ *  back as nothing. */
 export function shapeFrameIds(ir: LoweredDoc): string[] {
-  type Shape = { heads?: unknown[] };
-  type Para = { shapes?: Shape[] };
+  type Para = { shapes?: unknown[] };
   const out: string[] = [];
   const add = (p: Para) => {
-    for (const sh of p.shapes ?? []) {
-      const id = `docx_shape${out.length}`;
-      out.push((sh.heads ?? []).length > 0 ? `${id}_0` : id);
-    }
+    const n = (p.shapes ?? []).length;
+    for (let k = 0; k < n; k++) out.push(`docx_shape${out.length}`);
   };
   const blocks = (ir as unknown as { story?: { blocks?: unknown[] } }).story
     ?.blocks;
@@ -132,11 +132,17 @@ export function shapeFrameOf(
       preset = undefined;
     }
   }
+  const b = value("frameBounds");
+  const box =
+    b?.type === "bounds" && Array.isArray(b.value)
+      ? (b.value as [number, number, number, number])
+      : null;
   return {
     frameId,
     ...(preset !== undefined ? { preset } : {}),
     anchors,
     starts: v.subpathStarts ?? [],
+    ...(box ? { size: [box[3] - box[1], box[2] - box[0]] } : {}),
   };
 }
 

@@ -921,6 +921,28 @@ pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
             }
         }
     }
+    // Amendment 3 — a Word shape anchored in text keeps no line end in the
+    // story's XML.
+    fn anchored<'a>(frames: &'a [paged_model::AnchoredFrame], out: &mut Vec<&'a str>) {
+        for f in frames {
+            if f.start_office_head.is_some() || f.end_office_head.is_some() {
+                out.push(f.self_id.as_deref().unwrap_or("?"));
+            }
+            anchored(&f.children, out);
+        }
+    }
+    let mut ids = Vec::new();
+    for parsed in &scene.stories {
+        for p in &parsed.story.paragraphs {
+            anchored(&p.anchored_frames, &mut ids);
+        }
+    }
+    for id in ids {
+        out.push(format!(
+            "Office line ends on anchored frame `{id}` have no IDML form — the anchored frame \
+             keeps no line end, so InDesign shows the line without its heads."
+        ));
+    }
     out
 }
 

@@ -51,6 +51,26 @@ pub(crate) fn fill_paint_module(
     outer: Transform,
     fill_path: Option<PathId>,
 ) {
+    fill_paint_shaded(
+        frame, page, palette, color_ctx, fallback, outer, fill_path, None,
+    );
+}
+
+/// [`fill_paint_module`] with the fill shaded as a live preset's face is
+/// (engine ADR 1096, amendment 1): each colour of the paint (a solid, a
+/// process colour, a gradient's stops) darkened or lightened in sRGB, as
+/// PowerPoint shades it. A pattern or a mesh paints unshaded.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fill_paint_shaded(
+    frame: &ResolvedFrame<'_>,
+    page: &mut BuiltPage,
+    palette: &Graphic,
+    color_ctx: ColorCtx<'_>,
+    fallback: Paint,
+    outer: Transform,
+    fill_path: Option<PathId>,
+    shade: Option<paged_preset_geom::model::ContourFill>,
+) {
     // Engine ADR 1048 — a gradient mesh or freeform gradient paints
     // instead of the swatch, whatever the swatch is.
     if super::mesh_fill::emit_mesh_fill(frame, page, color_ctx, outer, fill_path) {
@@ -89,6 +109,10 @@ pub(crate) fn fill_paint_module(
         object_tint(palette, frame.fill_color, frame.fill_tint),
         &color_ctx,
     );
+    let fill = match shade {
+        Some(s) => shade_paint(page, fill, s),
+        None => fill,
+    };
     // Q-08: Polygon fills route through `emit_fill_path`, whose
     // path_transform = `outer` directly (the path lives in inner-
     // anchor coords). A gradient paint's endpoints are stored in
@@ -135,6 +159,56 @@ pub(crate) fn fill_paint_module(
         fill_path,
     );
     rewrite_tail_for_overprint(page, start, frame.overprint_fill, false);
+}
+
+/// `paint` shaded as a preset face `shade` paints it: every colour in sRGB
+/// through [`paged_preset_geom::model::ContourFill::shade_srgb`]. A shaded
+/// gradient is a new entry of the display list (the source may be shared).
+fn shade_paint(
+    page: &mut BuiltPage,
+    paint: Paint,
+    shade: paged_preset_geom::model::ContourFill,
+) -> Paint {
+    use paged_color::math::{linear_to_srgb, srgb_to_linear};
+    use paged_compose::{Color, GradientStop};
+    let c = |v: f32| srgb_to_linear(shade.shade_srgb(linear_to_srgb(v)));
+    let col = |k: Color| Color::rgba(c(k.r), c(k.g), c(k.b), k.a);
+    let stops = |s: &[GradientStop]| -> Vec<GradientStop> {
+        s.iter()
+            .map(|g| GradientStop {
+                offset: g.offset,
+                color: col(g.color),
+            })
+            .collect()
+    };
+    let list = &mut page.list;
+    match paint {
+        Paint::Solid(k) => Paint::Solid(col(k)),
+        // Shaded, a process colour is no longer the swatch's ink.
+        Paint::Cmyk { rgb, .. } => Paint::Solid(col(rgb)),
+        Paint::LinearGradient(id) => match list.linear_gradient(id).cloned() {
+            Some(mut g) => {
+                g.stops = stops(&g.stops);
+                Paint::LinearGradient(list.push_linear_gradient(g))
+            }
+            None => paint,
+        },
+        Paint::RadialGradient(id) => match list.radial_gradient(id).cloned() {
+            Some(mut g) => {
+                g.stops = stops(&g.stops);
+                Paint::RadialGradient(list.push_radial_gradient(g))
+            }
+            None => paint,
+        },
+        Paint::SweepGradient(id) => match list.sweep_gradient(id).cloned() {
+            Some(mut g) => {
+                g.stops = stops(&g.stops);
+                Paint::SweepGradient(list.push_sweep_gradient(g))
+            }
+            None => paint,
+        },
+        _ => paint,
+    }
 }
 
 /// Engine ADR 1041 — rebase a pattern paint from the frame's box space

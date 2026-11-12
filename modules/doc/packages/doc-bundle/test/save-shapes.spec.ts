@@ -17,8 +17,8 @@
  */
 
 // Engine ADR 1096 — the Word shapes' frames read back for the save: the
-// skeleton's frame ids (a shape with line ends is a group whose first
-// child carries the outline) and each frame's live preset and outline.
+// skeleton's frame ids (a shape's line ends are its frame's own, engine ADR
+// 1093 amendment 3) and each frame's live preset, outline and box.
 
 import { describe, expect, it } from "bun:test";
 
@@ -38,7 +38,7 @@ describe("Word shapes read back for the save [doc.shapes]", () => {
     } as never;
     expect(shapeFrameIds(ir)).toEqual([
       "docx_shape0",
-      "docx_shape1_0",
+      "docx_shape1",
       "docx_shape2",
       "docx_shape3",
     ]);
@@ -63,6 +63,7 @@ describe("Word shapes read back for the save [doc.shapes]", () => {
         path: "frameShapePreset",
         value: { type: "text", value: JSON.stringify(preset) },
       },
+      { path: "frameBounds", value: { type: "bounds", value: [0, 0, 5, 10] } },
     ];
     expect(shapeFrameOf("docx_shape0", entries)).toEqual({
       frameId: "docx_shape0",
@@ -72,6 +73,7 @@ describe("Word shapes read back for the save [doc.shapes]", () => {
         [10, 5, 10, 5, 10, 5],
       ],
       starts: [0],
+      size: [10, 5],
     });
     // Not live: no preset read, the outline still is.
     const unread = shapeFrameOf("docx_shape0", [

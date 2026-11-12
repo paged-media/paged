@@ -116,7 +116,7 @@ and text rectangle equal the table's, so every preset evaluates bit-identically.
   routed again between its sites. Every inverse restores the touched items verbatim through the
   raw form of `frameShapePreset` (`{"restore": …}`, which neither redraws nor follows), so undo
   restores the model exactly (ADR 197). Anchored frames take the three writes (their box stays the
-  box the text flow placed); their move and resize follow is left to later work.
+  box the text flow placed); their resize follows since amendment 1.
 - **Reads.** `frameShapePreset` reads the live preset with its adjust handles (`handles`: position
   in the item's own coordinates, polar or xy, the values they move); `frameShapePresetAdjust`
   every adjust value of the program. Protocol 78, additive (three settable paths, 291 in all).
@@ -156,11 +156,9 @@ and text rectangle equal the table's, so every preset evaluates bit-identically.
 
 ## Open questions
 
-- A shaded face (`darken`, `lighten` paths of ribbons, action buttons, curved arrows) is still drawn
-  as its own item by the modules that draw it; a per-contour paint mode in the engine would make
-  it part of the preset.
-- Anchored frames (Word) take the preset writes and reads but not the follow after a move or
-  resize; a resized Word shape is redrawn by the docx lowering, not refitted by the engine.
+- Closed by amendment 1: the shaded face, and the follow of Word's anchored shapes.
+- The one-time lift of slide ADR 717's labels writes one undo step ("Update shapes"): the host has
+  no write outside the undo history (amendment 1, "Not done").
 
 ## Consequences
 
@@ -171,3 +169,71 @@ and text rectangle equal the table's, so every preset evaluates bit-identically.
   Illustrator path, a PowerPoint preset or a Word shape.
 - The preset table is data in every wasm that evaluates presets (the engine's now, too); no XML
   reader or XML text ships for it.
+
+## Amendment 1 (2026-11-12): shaded faces, Word's anchored shapes, the xlsx save
+
+- **A shaded face is part of the preset.** One path item holds every filled path of a preset
+  (`PresetPart::Fill`, or `All` for a shape without detail paths), shaded faces included. While the
+  preset is live, `paged_preset_geom::model::contour_paints` names each contour's fill as the
+  program says (`ContourFill`: `Norm`, `None` for a stroke-only contour, `Darken`, `DarkenLess`,
+  `Lighten`, `LightenLess`) and its program path. The renderer (`text_path::preset_faces`,
+  `emit_preset_fill`) fills the item's filled contours (a stroke-only contour of a whole preset is
+  not filled), then each shaded path again under the even-odd rule, as PowerPoint fills a path,
+  with the item's own paint shaded (`module::fill_paint_shaded`): every colour of the paint (a
+  solid, a process colour, a gradient's stops) in sRGB through `ContourFill::shade_srgb`. A pattern
+  or a mesh paints unshaded. Nothing is stored: the shade is a read of the live preset, so a point
+  edit ends it with the preset, and documents write and hash as before.
+- **The shade is PowerPoint's.** PowerPoint 16 (macOS) drew a cube, a can and an information
+  button in seven fills (`C86432`, `4472C4`, `808080`, `FF0000`, `00FF00`, `FFFFFF`, `202020`),
+  saved as PDF and sampled: `darken` is 60 % of each sRGB channel, `darkenLess` 80 %, `lighten`
+  40 % of the way to white, `lightenLess` 20 % (`C86432` → lid `D3825A`, side `A15028`, can lid
+  `DEA284`, button `784020`). The arithmetic is in sRGB, not in linear light, so it is applied to
+  the paint, not composited over it.
+- **Every module gets it.** paged.sheet's live items are the engine's parts now (`live_items`: one
+  filled item, one detail item), so `can`, `cube` and every preset with several filled paths are
+  live presets on the page. paged.slide already lowered a shape's filled paths as one item: its
+  shaded faces now paint as PowerPoint draws them (the `connectors` fixture's can, the `geometry`
+  fixture's 27 shaded presets). paged.doc's anchored shapes paint through the same path: an
+  anchored frame whose outline is a live preset with shaded or stroke-only contours, or that has
+  Office line ends, is drawn as the Polygon of its outline (`anchored::synthetic_path_item`).
+- **Word's anchored shapes follow a resize.** `frameBounds` on a Word shape's anchored frame (its
+  `Rectangle` id) takes the new size and keeps the box's top left, where the text flow placed it
+  (`preset_shape::apply_anchored_bounds`); in the same apply a live preset is drawn again for the
+  box scaled with it (a rounded corner keeps its radius) and any other outline is scaled with the
+  box; the raw restore undoes it exactly. The frame reads its box (`frameBounds`) and its Office
+  heads, and the canvas gesture resizes it by its handles (a move of an anchored object is the text
+  flow's: a drag keeps it). The docx writer writes a resized shape's size as `wp:extent` and
+  `wps:spPr/a:xfrm/a:ext` (EMU, the place keeping its top left) and its geometry only when the
+  program, the adjust values or the outline changed (`docx-export` `shapes::Plan`); the doc bundle
+  reads the frame's box back (`ShapeFrameRead.size`). A frame whose preset is not drawn for its box
+  is refused with a ledger line.
+- **The xlsx save holds the presets.** The sheet session writes the live presets of the placed
+  shapes into the workbook's drawings (`writeShapePresets` → `SheetEngine.setShapePreset`) after a
+  document change it did not make has settled, and before a `.paged` save (`onWillSave`), then
+  marks the workbook for its next persist. Every save, the synchronous `saveWorkbook` and the
+  persist included, then carries the edited preset and adjust values; the shape's size and place
+  (its cell anchor) are still not written.
+- **Not done: the slide lift outside the undo history.** It needs a host capability the contract
+  does not have: a `document.mutate` option that applies a write without an undo step (probed, as
+  `amend` is), an engine `Mutate` that does not record (refused unless the history is empty, or
+  clearing it, so no earlier inverse runs on a state it was not computed for), and the editor
+  host's plumbing between them. That is a plugin-contract change (a canary of plugin-sdk) and an
+  engine protocol change, larger than this amendment and owned by the extension contract; until
+  then the lift stays one named undo step, which an undo right after opening reverts.
+
+### Evidence (amendment 1)
+
+- `paged-preset-geom` `model`: a cube's faces paint `Norm`, `DarkenLess`, `LightenLess` while
+  live and nothing once reshaped; a whole can leaves its rim unfilled; the shade arithmetic.
+- `paged-renderer` `tests/it/preset_faces.rs` (CPU raster, one pixel per pt): a cube filled
+  `C86432` shows `C86432`, `D3825A` and `A05028` on its front, lid and side, within 2 levels of
+  PowerPoint's PDF; a reshaped cube paints plainly; a can's lid is `DEA284`.
+- `paged-canvas` `presets::an_anchored_shape_refits_its_preset_when_resized`: twice as wide, the
+  radius stays 10 pt, the box reads back, one undo restores preset, outline and box; its Office
+  head is written, read and undone.
+- `docx-export` `shapes::a_resized_shape_writes_its_size`; `docx-conformance` `shapes`: a resized
+  ellipse saves its new extent and keeps its `a:prstGeom` byte for byte, and reads back with the
+  size the canvas held.
+- `sheet-js` `w3_shapes`: `can` and `cube` are a filled item and a detail item, both live, the
+  filled one with shaded contours.
+

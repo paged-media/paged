@@ -304,6 +304,14 @@
       "baseline": []
     },
     {
+      "name": "preset-face-shade",
+      "description": "shade a preset's darken / lighten faces with paged_preset_geom::model::ContourFill (PowerPoint's sRGB shades, read from the live preset; the renderer's fill_paint_shaded applies it), not a module's own item or arithmetic",
+      "owner": ["engine/core/crates/paged-preset-geom/"],
+      "patterns": ["\"darkenLess\"", "\"lightenLess\""],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": []
+    },
+    {
       "name": "preset-guide-formulas",
       "description": "evaluate a DrawingML guide formula (Annex D: `*/`, `+-`, `pin`, `at2`, `cat2`, …) and preset programs with paged_preset_geom (dml_geom re-exports it), not a second evaluator",
       "owner": ["engine/core/crates/paged-preset-geom/"],

@@ -82,6 +82,7 @@ mod placed_psd;
 mod placed_svg_vectors;
 mod placed_tiff;
 mod polygon_corners;
+mod preset_faces;
 mod radial_gradient_start;
 mod real_ttf;
 mod real_ttf_features;

@@ -108,6 +108,7 @@ import {
   storyOfFrame,
   tableUnderFrame,
   subscribeChainReflow,
+  writeShapePresets,
   type ChainSubscription,
   type LoweredTableInfo,
 } from "./lower";
@@ -3436,18 +3437,58 @@ export function createWorkbookSession(
     return written;
   }
 
+  // Engine ADR 1096 — a placed shape's preset edited on the page (an adjust
+  // handle, a resize the engine refits) is written into the workbook's
+  // drawing (`a:prstGeom` + `a:avLst`), so every save — synchronous ones
+  // included (`saveWorkbook`, the persist) — holds it: after a document
+  // change this session did not make has settled, and before a save, the
+  // live presets of the placed shapes go to `setShapePreset`; a change
+  // marks the workbook for the next persist.
+  let shapePresetTimer: ReturnType<typeof setTimeout> | null = null;
+  const placesShapes = () =>
+    [...loweredTables.values()].some(
+      (i) => (i.content?.shapes?.length ?? 0) > 0,
+    );
+  async function syncShapePresets(): Promise<void> {
+    if (shapePresetTimer !== null) clearTimeout(shapePresetTimer);
+    shapePresetTimer = null;
+    const engine = state.engine;
+    if (detached || !engine?.setShapePreset || !placesShapes()) return;
+    const changed = await writeShapePresets(host, engine);
+    if (changed > 0 && state.engine === engine) {
+      readCache.clear();
+      schedulePersist();
+    }
+  }
+  function scheduleShapePresets(): void {
+    if (detached || !state.engine?.setShapePreset || !placesShapes()) return;
+    if (shapePresetTimer !== null) clearTimeout(shapePresetTimer);
+    shapePresetTimer = setTimeout(() => {
+      shapePresetTimer = null;
+      void syncShapePresets().catch((err) =>
+        host.log.warn("shape presets: workbook write failed", err),
+      );
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
   // A .paged save takes the workbook part as it stands; an edit still in the
   // debounce window would miss it. Where the host announces saves
-  // (`document.onWillSave@1`) the save waits for the pending write first.
+  // (`document.onWillSave@1`) the save waits for the pending write first
+  // (and for the shapes' presets, written into the workbook before it).
   // Without it, the debounce, the flush on frame exit and the flush on
   // dispose remain.
   const willSaveSub =
     !detached && host.supports("document.onWillSave@1")
       ? host.document.onWillSave(() =>
           Promise.all([
-            flushPersist().catch((err) =>
-              host.log.warn("workbook persist before save failed", err),
-            ),
+            syncShapePresets()
+              .catch((err) =>
+                host.log.warn("shape presets before save failed", err),
+              )
+              .then(() => flushPersist())
+              .catch((err) =>
+                host.log.warn("workbook persist before save failed", err),
+              ),
             flushPlacementRecords().catch((err) =>
               host.log.warn("placement records before save failed", err),
             ),
@@ -3543,6 +3584,8 @@ export function createWorkbookSession(
         }
         // A link, an unlink or a resize of a chain frame changes the window.
         scheduleChainRead();
+        // A shape's preset edited on the page reaches the workbook.
+        scheduleShapePresets();
         // A band the host inserted, a style or a reflow may leave a window
         // frame's table taller than its box: the windows check their fit.
         scheduleWindowFit();
@@ -7771,6 +7814,7 @@ export function createWorkbookSession(
       if (chainTimer !== null) clearTimeout(chainTimer);
       if (windowFitTimer !== null) clearTimeout(windowFitTimer);
       if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
+      if (shapePresetTimer !== null) clearTimeout(shapePresetTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before
       // the placements are forgotten; written in the background).

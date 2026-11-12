@@ -77,58 +77,6 @@ pub fn line_end(e: &OfficeLineEnd) -> LineEnd {
     }
 }
 
-fn mapped(e: Option<&LineEnd>) -> Option<OfficeLineEnd> {
-    e.and_then(|e| office_end(e).ok().flatten())
-}
-
-/// How far the stroke of a line stops short of its end under `e`
-/// (`paged_preset_geom::heads::inset`); 0 for a type Office does not draw.
-pub fn inset(e: &LineEnd, width_pt: f32) -> f32 {
-    mapped(Some(e)).map_or(0.0, |o| paged_preset_geom::heads::inset(&o, width_pt))
-}
-
-/// `o`'s first open contour shortened under its heads
-/// (`paged_preset_geom::heads::cut_under_heads`).
-pub fn cut_under_heads(
-    o: &mut Outline,
-    head: Option<&LineEnd>,
-    tail: Option<&LineEnd>,
-    width_pt: f32,
-) {
-    paged_preset_geom::heads::cut_under_heads(
-        o,
-        mapped(head).as_ref(),
-        mapped(tail).as_ref(),
-        width_pt,
-    );
-}
-
-/// The heads of `o`'s first open contour (`paged_preset_geom::heads::heads`)
-/// and, by name, the types Office does not define.
-pub fn heads(
-    o: &Outline,
-    head: Option<&LineEnd>,
-    tail: Option<&LineEnd>,
-    width_pt: f32,
-) -> (Vec<Head>, Vec<String>) {
-    let mut undrawn = Vec::new();
-    let mut take = |e: Option<&LineEnd>| match e.map(office_end) {
-        Some(Err(name)) => {
-            if !undrawn.contains(&name) {
-                undrawn.push(name);
-            }
-            None
-        }
-        Some(Ok(o)) => o,
-        None => None,
-    };
-    let (h, t) = (take(head), take(tail));
-    (
-        paged_preset_geom::heads::heads(o, h.as_ref(), t.as_ref(), width_pt),
-        undrawn,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

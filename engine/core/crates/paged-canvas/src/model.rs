@@ -8482,6 +8482,24 @@ impl CanvasModel {
                 value: Some(Value::Text(adjusts)),
             });
         }
+        // Engine ADR 1093 (amendment 3) — its Office line ends; ADR 1096
+        // (amendment 1) — its own box, which `frameBounds` resizes.
+        if !frame.anchors.is_empty() {
+            entries.push(PropertyEntry {
+                path: PropertyPath::FrameStrokeStartOfficeHead,
+                value: Some(Value::Text(office_head_text(frame.start_office_head))),
+            });
+            entries.push(PropertyEntry {
+                path: PropertyPath::FrameStrokeEndOfficeHead,
+                value: Some(Value::Text(office_head_text(frame.end_office_head))),
+            });
+            if let Some(b) = frame.bounds {
+                entries.push(PropertyEntry {
+                    path: PropertyPath::FrameBounds,
+                    value: Some(Value::Bounds([b.top, b.left, b.bottom, b.right])),
+                });
+            }
+        }
         Some(ElementProperties {
             id: id.clone(),
             kind: id.kind_label().to_string(),

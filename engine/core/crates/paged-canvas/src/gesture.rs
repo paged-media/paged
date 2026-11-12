@@ -1213,6 +1213,33 @@ impl CanvasModel {
                 }
             }
         }
+        // Engine ADR 1096 (amendment 1) — a Word shape anchored in text
+        // (its outline in its own box) resizes through `frameBounds`, which
+        // keeps the box where the text flow placed it and refits the
+        // outline; a move of it is the text flow's, so a drag keeps it.
+        if let ElementId::Rectangle(_) = id {
+            let shape = self.scene.stories.iter().find_map(|s| {
+                paged_model::anchored_frame_in(&s.story.paragraphs, raw)
+                    .filter(|f| !f.anchors.is_empty())
+            });
+            if let Some(f) = shape {
+                let bounds = f.bounds.unwrap_or(paged_model::Bounds {
+                    top: 0.0,
+                    left: 0.0,
+                    bottom: 0.0,
+                    right: 0.0,
+                });
+                return Ok(NodeSnapshot {
+                    id: id.clone(),
+                    node_id: NodeId::Rectangle(raw.to_string()),
+                    bounds,
+                    item_transform: None,
+                    image_item_transform: None,
+                    path_anchors: Vec::new(),
+                    drawn_from_path: false,
+                });
+            }
+        }
         Err(GestureError::ElementNotFound(id.clone()))
     }
 

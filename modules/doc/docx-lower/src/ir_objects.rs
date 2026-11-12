@@ -130,31 +130,24 @@ pub struct LoweredShape {
     /// The shape's look (fill, outline, effects).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<dml_native::native::NativeFx>,
-    /// Its line ends (arrow heads) in the same box, each filled in the
-    /// line's colour or stroked with the line (doc ADR 629).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub heads: Vec<LoweredHead>,
+    /// Its line ends (doc ADR 629): Office's head at the first and the last
+    /// anchor of its open outline (`a:headEnd`, `a:tailEnd`), drawn by the
+    /// engine in the line's paint, the line stopping under them (engine ADR
+    /// 1093, amendment 3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_head: Option<paged_model::OfficeLineEnd>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_head: Option<paged_model::OfficeLineEnd>,
     /// Engine ADR 1096 — the preset the outline is drawn from (a Word
     /// shape's `a:prstGeom` + `a:avLst`), in the shape's own box `[0, 0, w,
     /// h]`; `None` for a custom geometry. Live while the anchors are what it
-    /// draws: an upright shape whose line has no heads.
+    /// draws: an upright shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<paged_model::live_shape::PresetShape>,
     /// The drawing's ordinal in its part (`docx_core::Shape::drawing`):
     /// where save-back writes the geometry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drawing: Option<u32>,
-}
-
-/// One line end of a [`LoweredShape`].
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoweredHead {
-    pub anchors: Vec<[f32; 6]>,
-    /// Stroked only (Office's open `arrow`).
-    pub open: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fx: Option<dml_native::native::NativeFx>,
 }
 
 /// A chart (doc ADR 628) or a SmartArt diagram (doc ADR 629) anchored in its

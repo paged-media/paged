@@ -208,8 +208,9 @@ fn a_preset_item_is_the_engines_live_preset__feat__sheet_xlsx_shapes() {
 
 /// A preset whose detail path is stroke-only (a callout's leader) is two
 /// items: the filled path and the detail over it, each its part of the
-/// program. A preset with two filled paths (a can's shaded lid) does not
-/// split into the engine's parts and is drawn as before, with no preset.
+/// program. A preset with several filled paths (a can's shaded lid, a
+/// cube's sides) keeps them in its one filled item, which the engine paints
+/// face by face (engine ADR 1096, amendment 1): it is a live preset too.
 #[test]
 fn a_detail_path_is_the_presets_detail_part__feat__sheet_xlsx_shapes() {
     let callout = RECT.replacen(r#"prst="rect""#, r#"prst="borderCallout1""#, 1);
@@ -231,11 +232,38 @@ fn a_detail_path_is_the_presets_detail_part__feat__sheet_xlsx_shapes() {
         .items
         .iter()
         .all(|i| i.preset.as_ref().unwrap().key.as_deref() == Some(sh.id.as_str())));
-    let can = RECT.replacen(r#"prst="rect""#, r#"prst="can""#, 1);
-    let s = session_with(&anchored(3, 12, 1_270_000, 635_000, &can));
-    let sh = &s.list_shapes(0).unwrap()[0];
-    assert_eq!(sh.items.len(), 3);
-    assert!(sh.items.iter().all(|i| i.preset.is_none()));
+    for (name, faces) in [("can", 2), ("cube", 3)] {
+        let shape = RECT.replacen(r#"prst="rect""#, &format!(r#"prst="{name}""#), 1);
+        let s = session_with(&anchored(3, 12, 1_270_000, 635_000, &shape));
+        let sh = &s.list_shapes(0).unwrap()[0];
+        let parts: Vec<_> = sh
+            .items
+            .iter()
+            .map(|i| i.preset.as_ref().map(|p| p.part))
+            .collect();
+        assert_eq!(
+            parts,
+            vec![Some(PresetPart::Fill), Some(PresetPart::Detail)],
+            "{name}"
+        );
+        let fill = &sh.items[0];
+        assert!(fill.filled && !fill.stroked && fill.closed, "{name}");
+        assert_eq!(fill.subpath_starts.len(), faces, "{name}");
+        // The engine paints its faces with their shades.
+        let p = fill.preset.as_ref().unwrap();
+        let anchors: Vec<paged_model::PathAnchor> = fill
+            .anchors
+            .iter()
+            .map(|a| paged_model::PathAnchor {
+                anchor: (a.anchor[0] as f32, a.anchor[1] as f32),
+                left: (a.left[0] as f32, a.left[1] as f32),
+                right: (a.right[0] as f32, a.right[1] as f32),
+            })
+            .collect();
+        let paints =
+            paged_preset_geom::model::contour_paints(p, &anchors, &fill.subpath_starts).unwrap();
+        assert!(paints.iter().any(|c| c.fill.is_shaded()), "{name}");
+    }
 }
 
 #[test]

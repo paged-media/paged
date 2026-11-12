@@ -187,3 +187,14 @@ reader kept the box and dropped both turns, so the text of every turned shape st
   (ADR 627 amendment 3); before, the diagram rose over the paragraph above it.
 - **Open (as decided):** a diagram without a saved drawing is not drawn; Word draws it from its
   data and layout.
+
+## Amendment 5 (2026-11-12): the line ends are the engine's
+
+A shape's line ends are no longer drawn by the lowering. `LoweredShape` carries Office's heads
+(`start_head`, `end_head`: `a:headEnd` and `a:tailEnd` mapped by `dml_geom::heads::office_end`; a
+type Office does not define is counted, as before) and the whole outline; the skeleton puts them on
+the shape's anchored frame (`AnchoredFrame::start_office_head` / `end_office_head`), and the engine
+draws them and stops the stroke under them with the geometry of amendment 1, which moved into the
+engine (engine ADR 1093, amendments 2 and 3). A shape with heads is one frame, `docx_shape<n>`, not a
+group `docx_shape<n>` of `_0` and its heads `_h<k>`; its preset stays live, and a reshaped line with
+heads saves as `a:custGeom` like any other outline (its anchors are no longer cut).

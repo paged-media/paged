@@ -28,8 +28,9 @@
 //! the anchor box), its anchors are what the engine draws for that box (the
 //! flips mirror them in the box), and a rotation is the item's transform,
 //! not baked into the anchors, so a resize or an adjust handle keeps it a
-//! preset. A custom geometry (and a preset whose paths do not split into the
-//! engine's parts) is drawn as before, turned in the anchors.
+//! preset: its filled paths one item (a cube's shaded sides too, which the
+//! engine paints with their shades), its stroke-only detail a second. A
+//! custom geometry is drawn as before, turned in the anchors.
 
 use paged_model::live_shape::{PresetPart, PresetShape};
 use paged_model::OfficeLineEnd;
@@ -162,48 +163,14 @@ fn group(
     items
 }
 
-/// The engine part each item of a preset is (engine ADR 1096: one item draws
-/// every path, or the filled paths and the stroke-only detail paths over
-/// them), or `None` when the items do not split so.
-fn parts_of(
-    subpaths: &[dml_geom::SubPath],
-    items: &[(usize, Vec<usize>, ShapeItem)],
-) -> Option<Vec<PresetPart>> {
-    let drawn: Vec<usize> = (0..subpaths.len())
-        .filter(|&k| subpaths[k].points.len() >= 2)
-        .collect();
-    if items.len() == 1 {
-        return (items[0].1 == drawn).then(|| vec![PresetPart::All]);
-    }
-    let fill: Vec<usize> = drawn
-        .iter()
-        .copied()
-        .filter(|&k| subpaths[k].filled)
-        .collect();
-    let detail: Vec<usize> = drawn
-        .iter()
-        .copied()
-        .filter(|&k| !subpaths[k].filled && subpaths[k].stroked)
-        .collect();
-    items
-        .iter()
-        .map(|(_, subs, _)| {
-            if *subs == fill {
-                Some(PresetPart::Fill)
-            } else if *subs == detail {
-                Some(PresetPart::Detail)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
 /// The items of a preset shape drawn as the engine's live preset: upright in
 /// the `w` × `h` shape box centred in the `aw` × `ah` anchor box, mirrored
 /// by the flips, each with its part of the program; and the rotation about
-/// the box's centre as the items' transform. `None` for a name that is no
-/// preset or paths that do not split into the engine's parts.
+/// the box's centre as the items' transform. One item holds every filled
+/// path, shaded faces included (a can's lid, a cube's sides: the engine
+/// paints each with its shade, ADR 1096 amendment 1), and the stroke-only
+/// detail paths over a filled shape are a second item. `None` for a name
+/// that is no preset or a contour the page would not hold (a lone point).
 fn live_items(
     shape: &SheetShape,
     name: &str,
@@ -211,6 +178,18 @@ fn live_items(
     (w, h, aw, ah): (f64, f64, f64, f64),
 ) -> Option<(Vec<ShapeItem>, Option<[f64; 6]>)> {
     let evaluated = dml_geom::preset_evaluated(name, adjust, w, h)?;
+    let subs = &evaluated.outline.subpaths;
+    if subs.iter().any(|s| s.points.len() == 1) {
+        return None;
+    }
+    let drawn: Vec<&dml_geom::SubPath> = subs.iter().filter(|s| s.points.len() >= 2).collect();
+    let fills = drawn.iter().any(|s| s.filled);
+    let details = drawn.iter().any(|s| !s.filled && s.stroked);
+    let parts: Vec<PresetPart> = if fills && details {
+        vec![PresetPart::Fill, PresetPart::Detail]
+    } else {
+        vec![PresetPart::All]
+    };
     let (bx, by) = ((aw - w) / 2.0, (ah - h) / 2.0);
     let base = PresetShape {
         name: name.to_string(),
@@ -222,21 +201,26 @@ fn live_items(
         key: Some(shape.id.clone()),
         connector: None,
     };
-    let subs = &evaluated.outline.subpaths;
-    let grouped = group(subs, |p| [p.0, p.1]);
-    let parts = parts_of(subs, &grouped)?;
-    let mut items = Vec::with_capacity(grouped.len());
-    for ((_, _, mut item), part) in grouped.into_iter().zip(parts) {
+    let mut items = Vec::with_capacity(parts.len());
+    for part in parts {
+        let of_part: Vec<&&dml_geom::SubPath> = drawn
+            .iter()
+            .filter(|s| match part {
+                PresetPart::All => true,
+                PresetPart::Fill => s.filled,
+                PresetPart::Detail => !s.filled && s.stroked,
+            })
+            .collect();
         let preset = PresetShape {
             part,
             ..base.clone()
         };
         // The anchors the engine draws for the box: its own evaluation,
         // so the item is live by construction.
-        let drawn = paged_preset_geom::model::subpaths_in_box(&preset)?;
+        let engine = paged_preset_geom::model::subpaths_in_box(&preset)?;
         let mut anchors = Vec::new();
         let mut starts = Vec::new();
-        for s in drawn.iter().filter(|s| !s.points.is_empty()) {
+        for s in engine.iter().filter(|s| !s.points.is_empty()) {
             starts.push(anchors.len());
             anchors.extend(s.points.iter().map(|p| ShapeAnchor {
                 anchor: [p.anchor.0 + bx, p.anchor.1 + by],
@@ -244,15 +228,24 @@ fn live_items(
                 right: [p.right.0 + bx, p.right.1 + by],
             }));
         }
+        if starts.len() != of_part.len() {
+            return None;
+        }
         if starts.len() <= 1 {
             starts.clear();
         }
-        if anchors.len() != item.anchors.len() || starts != item.subpath_starts {
-            return None;
-        }
-        item.anchors = anchors;
-        item.preset = Some(preset);
-        items.push(item);
+        items.push(ShapeItem {
+            anchors,
+            subpath_starts: starts,
+            closed: of_part.iter().all(|s| s.closed),
+            filled: of_part.iter().any(|s| s.filled),
+            stroked: of_part.iter().any(|s| s.stroked),
+            preset: Some(preset),
+            start_head: None,
+            end_head: None,
+            start_arrowhead: None,
+            end_arrowhead: None,
+        });
     }
     let transform = (shape.rot % 21_600_000 != 0).then(|| {
         use dml_geom::place::{mul, orient, translate};

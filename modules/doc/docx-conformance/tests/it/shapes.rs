@@ -142,27 +142,22 @@ fn the_lowering_draws_the_outlines_it_has_and_tells_the_rest__feat__doc_shapes()
     // The cloud callout, which the hand port of ADR 627 did not draw, is
     // drawn: its outline is many curves.
     assert!(drawn[6].anchors.len() > 10);
-    // The arrow: an oval at its start, a filled triangle at its end, both
-    // in the line's colour; the plain line has none.
-    assert!(drawn[3].heads.is_empty());
-    let heads = &drawn[7].heads;
-    assert_eq!(heads.len(), 2);
-    assert_eq!((heads[0].anchors.len(), heads[1].anchors.len()), (4, 3));
-    assert!(heads
-        .iter()
-        .all(|h| !h.open && h.fx.as_ref().and_then(|f| f.fill.as_deref()) == Some("#7030A0")));
-    // Its tip is the line's end (the box's bottom right corner).
-    assert!((heads[1].anchors[0][0] - drawn[7].width_pt).abs() < 1e-3);
-    // The line stops under its large triangle, half a width short of its
-    // base: 5 x 2.25 - 1.125 pt back from the tip (ADR 629, amendment 1);
-    // the oval sits centred on its start, which keeps its point.
+    // The arrow: an oval at its start, a large triangle at its end, the
+    // frame's Office heads (engine ADR 1093, amendment 3), drawn by the
+    // engine in the line's colour; the plain line has none. The line keeps
+    // its whole length: the engine stops its stroke under the heads.
+    use paged_model::OfficeHeadKind;
+    assert!(drawn[3].start_head.is_none() && drawn[3].end_head.is_none());
+    assert_eq!(
+        drawn[7].start_head.map(|h| h.kind),
+        Some(OfficeHeadKind::Oval)
+    );
+    assert_eq!(
+        drawn[7].end_head.map(|h| h.kind),
+        Some(OfficeHeadKind::Triangle)
+    );
     let last = drawn[7].anchors.last().expect("line");
-    let tip = &heads[1].anchors[0];
-    let back = (tip[0] - last[0]).hypot(tip[1] - last[1]);
-    assert!((back - 10.125).abs() < 1e-2, "{back}");
-    let first = drawn[7].anchors[0];
-    let centre = (heads[0].anchors[0][0] + heads[0].anchors[2][0]) / 2.0;
-    assert!((first[0] - centre).abs() < 1e-2, "{first:?} {centre}");
+    assert!((last[0] - drawn[7].width_pt).abs() < 1e-3, "{last:?}");
     // Told: the shapes it draws.
     let messages: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
     assert!(
@@ -184,8 +179,7 @@ fn an_unedited_save_keeps_the_drawings__feat__doc_shapes() {
     assert_eq!(session.save_verbatim(), bytes);
 }
 
-/// The skeleton's anchored frames of a body, by id (a shape with line ends
-/// is a group whose first child carries the outline).
+/// The skeleton's anchored frames of a body, by id.
 fn frames_by_id(
     body: &docx_skeleton::body::NativeBody,
 ) -> std::collections::HashMap<String, paged_model::AnchoredFrame> {
@@ -233,6 +227,7 @@ fn read_back(f: &paged_model::AnchoredFrame, drawing: u32) -> docx_export::shape
             .collect(),
         starts: f.subpath_starts.clone(),
         open: f.subpath_open.clone(),
+        size: f.bounds.map(|b| [b.right - b.left, b.bottom - b.top]),
     }
 }
 
@@ -245,13 +240,15 @@ fn part_text(bytes: &[u8], name: &str) -> String {
 }
 
 /// Engine ADR 1096 — docx → paged → docx. The import maps each Word
-/// preset onto its anchored frame's engine preset (live while upright and
-/// without heads); the canvas changes an adjust value as the engine does
-/// (the preset with its new value, drawn again) and moves a point of
-/// another shape by hand; the writer writes the first as `a:prstGeom` with
-/// its new `a:avLst`, the second as `a:custGeom`, and leaves every other
-/// drawing byte for byte. The saved file reads back with the presets and
-/// adjust values the canvas held.
+/// preset onto its anchored frame's engine preset (live while upright);
+/// the canvas changes an adjust value as the engine does (the preset with
+/// its new value, drawn again), moves a point of another shape by hand and
+/// resizes a third (amendment 1: the frame's box and its preset refitted);
+/// the writer writes the first as `a:prstGeom` with its new `a:avLst`, the
+/// second as `a:custGeom`, the third's new size as `wp:extent` and
+/// `a:xfrm/a:ext`, and leaves every other drawing byte for byte. The saved
+/// file reads back with the presets, adjust values and sizes the canvas
+/// held.
 #[test]
 fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
     let bytes = shapes_docx();
@@ -261,8 +258,8 @@ fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
     let frames = frames_by_id(&body);
     assert_eq!(body.shapes.len(), SHAPE_CASES.len(), "{:?}", body.shapes);
 
-    // Paged: every preset is on its frame; the upright ones without heads
-    // are live (their anchors are what the engine draws).
+    // Paged: every preset is on its frame; the upright ones are live (their
+    // anchors are what the engine draws), the arrow with its heads too.
     let live = |f: &paged_model::AnchoredFrame| {
         f.preset.as_ref().is_some_and(|p| {
             paged_preset_geom::model::anchors_are(p, &f.anchors, &f.subpath_starts)
@@ -276,12 +273,13 @@ fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
             n => assert_eq!(f.preset.as_ref().map(|p| p.name.as_str()), Some(n), "{k}"),
         }
     }
-    for k in [0, 1, 2, 3, 6] {
+    for k in [0, 1, 2, 3, 6, 7] {
         assert!(live(frame_of(k)), "{}", SHAPE_CASES[k].0);
     }
+    assert!(frame_of(7).end_office_head.is_some());
     // The turned rounded rectangle: stored, not live (the lowering turns
-    // its anchors); the arrow: its line stops under its heads.
-    assert!(!live(frame_of(4)) && !live(frame_of(7)));
+    // its anchors).
+    assert!(!live(frame_of(4)));
     assert_eq!(
         frame_of(2).preset.as_ref().unwrap().adjusts,
         vec![("adj".to_string(), "val 30000".to_string())]
@@ -323,6 +321,24 @@ fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
             }
         }
     }
+    // The ellipse resized to half as wide again: its box and its preset
+    // drawn for the new box, as the engine's `frameBounds` write leaves them.
+    let mut ellipse = frame_of(1).clone();
+    let (ew, eh) = {
+        let b = ellipse.bounds.expect("box");
+        ((b.right - b.left) * 1.5, b.bottom - b.top)
+    };
+    {
+        let mut p = ellipse.preset.clone().unwrap();
+        p.frame = [0.0, 0.0, ew, eh];
+        let d = paged_preset_geom::model::draw(&p).unwrap();
+        ellipse.anchors = d.anchors;
+        ellipse.subpath_starts = d.starts;
+        ellipse.subpath_open = d.open;
+        ellipse.preset = Some(p);
+        let b = ellipse.bounds.as_mut().unwrap();
+        b.right = b.left + ew;
+    }
     let mut rect = frame_of(0).clone();
     rect.anchors[0].anchor.0 += 10.0;
     rect.anchors[0].left.0 += 10.0;
@@ -331,6 +347,7 @@ fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
         .map(|k| read_back(frame_of(k), body.shapes[k].1))
         .collect();
     read[0] = read_back(&rect, body.shapes[0].1);
+    read[1] = read_back(&ellipse, body.shapes[1].1);
     read[2] = read_back(&triangle, body.shapes[2].1);
     read[4] = read_back(&turned, body.shapes[4].1);
 
@@ -340,6 +357,14 @@ fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
         .expect("save");
     assert!(skips.is_empty(), "{skips:?}");
     let saved = pkg.write().expect("write");
+    // For the Word oracle (engine ADR 1096, amendment 1): the saved file.
+    if let Ok(dir) = std::env::var("PAGED_DOCX_EXPORT_DIR") {
+        std::fs::write(
+            std::path::Path::new(&dir).join("shapes-edited.docx"),
+            &saved,
+        )
+        .unwrap();
+    }
     let xml = part_text(&saved, "word/document.xml");
     assert!(xml.contains(
         r#"<a:prstGeom prst="triangle"><a:avLst><a:gd name="adj" fmla="val 70000"/></a:avLst></a:prstGeom>"#
@@ -380,6 +405,19 @@ fn presets_and_adjust_values_survive_docx_to_paged_to_docx__feat__doc_shapes() {
     );
     assert_eq!(shapes[4].rotation, 5_400_000);
     assert!(matches!(shapes[0].geometry, ShapeGeometry::Custom(_)));
+    // The resized ellipse: its new size, its preset unchanged.
+    let emu = |v: f32| (f64::from(v) * 12_700.0).round() as i64;
+    assert_eq!(
+        (shapes[1].width_emu, shapes[1].height_emu),
+        (emu(ew), emu(eh))
+    );
+    assert_eq!(
+        shapes[1].geometry,
+        ShapeGeometry::Preset {
+            name: "ellipse".into(),
+            adjust: vec![]
+        }
+    );
     // The custom outline is the edited one.
     let ir2 = docx_lower::lower(&again);
     let drawn = lowered_shapes(&ir2);

@@ -98,3 +98,18 @@ the same terms as engine ADR 1096's preset programs; `dml_geom::heads` keeps the
 the mapping of `a:headEnd` / `a:tailEnd` onto the model's line end and back (`office_end`,
 `line_end`), and the calls doc's lowering makes. Both fields are `serde(default)`, absent when
 unset, so a document without them writes and hashes as before.
+
+## Amendment 3 (2026-11-12): an anchored shape's line ends are its own
+
+A Word shape anchored in text carries Office's line ends as a page path does:
+`AnchoredFrame::start_office_head` / `end_office_head` (`serde(default)`, absent when unset). The
+renderer draws an anchored frame with heads as the Polygon of its outline
+(`anchored::synthetic_path_item`), so its heads, their geometry and the cut of the stroke under them
+are the ones above, at both ends of each open contour. `frameStrokeStartOfficeHead` /
+`frameStrokeEndOfficeHead` write them on the frame's `Rectangle` id with an exact undo and read them
+back. paged.doc's lowering no longer draws heads: the shape's `a:headEnd` / `a:tailEnd` map onto the
+frame (`LoweredShape::start_head` / `end_head`, `dml_geom::heads::office_end`) and its outline keeps
+its whole length, so a Word line with heads is one frame, not a group of the line and its heads, and
+stays a live preset (doc ADR 629, amendment 5). The IDML export names the heads of an anchored frame
+among its losses (the story's XML keeps no line end for it). `dml_geom::heads`'s doc-only wrappers
+(`heads`, `cut_under_heads`, `inset`) are gone; the geometry stays `paged_preset_geom::heads`.

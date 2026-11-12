@@ -163,3 +163,12 @@ lowering's.
 
 Evidence: `docx-lower` `shape_geom::an_upright_preset_is_the_engines_live_preset`, `docx-export`
 `shapes::tests`, `docx-conformance` `shapes::presets_and_adjust_values_survive_docx_to_paged_to_docx`.
+
+## Amendment (2026-11-12): a resized shape writes its size
+
+The canvas resizes a Word shape's anchored frame (`frameBounds`, engine ADR 1096 amendment 1: the
+box takes the new size where the text flow placed it, the preset is refitted), and the save writes
+it: `docx-export`'s `shapes::save_shapes` writes the new size as `wp:extent` and
+`wps:spPr/a:xfrm/a:ext` and the geometry only when the program, the adjust values or the outline
+changed, instead of refusing the shape. The doc bundle reads each shape frame's box back
+(`ShapeFrameRead.size`). The place (`wp:positionH` / `wp:positionV`) is kept.

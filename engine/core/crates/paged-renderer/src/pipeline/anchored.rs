@@ -1429,6 +1429,21 @@ fn emit_anchored_rect_via_pipeline(
         right: place_x + ox + w,
     };
     let synthetic = synthetic_rectangle(af, bounds, false);
+    // A shape whose outline paints as a path item's does (its preset's
+    // shaded faces, Office's line ends) is the Polygon of that outline.
+    if let Some(poly) = synthetic_path_item(af, &synthetic) {
+        super::text_path::emit_polygon_into(
+            &mut pages[target_page],
+            &poly,
+            em.document,
+            em.palette,
+            em.options.fallback_frame_fill,
+            em.color_ctx,
+            &mut |_: &mut BuiltPage| {},
+            &mut |_: &mut BuiltPage| {},
+        );
+        return;
+    }
     // `emit_rectangle_into` increments `page.stats.frames` internally.
     // An anchored frame's picture paints in its own pass (see
     // `emit_anchored_rect_image`).
@@ -1699,6 +1714,77 @@ fn synthetic_rectangle(
         fill_mesh: None,
         pattern_transform: None,
     }
+}
+
+/// Engine ADR 1096 (amendment 1) and ADR 1093 (amendment 3) — an anchored
+/// shape whose outline paints as a path item's: one with Office's line
+/// ends, or a live preset with shaded faces or stroke-only contours. It is
+/// the Polygon of the synthetic rectangle `r` (its look, its outline on the
+/// page), with the frame's preset moved with the outline and its heads.
+/// `None` for every other anchored frame, which paints as the rectangle.
+fn synthetic_path_item(
+    af: &paged_model::AnchoredFrame,
+    r: &Rectangle,
+) -> Option<paged_model::Polygon> {
+    if r.anchors.is_empty() {
+        return None;
+    }
+    let (dx, dy) = (r.bounds.left - af_left(af), r.bounds.top - af_top(af));
+    let preset = af.preset.clone().map(|mut p| {
+        p.frame[0] += dx;
+        p.frame[1] += dy;
+        p
+    });
+    let heads = af.start_office_head.is_some() || af.end_office_head.is_some();
+    let faces = super::text_path::preset_faces(
+        preset.as_ref(),
+        &r.anchors,
+        &r.subpath_starts,
+        &r.subpath_open,
+    )
+    .is_some();
+    if !heads && !faces {
+        return None;
+    }
+    let nearest = |h: Option<paged_model::OfficeLineEnd>| {
+        h.map_or(paged_model::ArrowheadType::None, |h| h.nearest_arrowhead())
+    };
+    let mut p = paged_model::Polygon::new(r.self_id.clone().unwrap_or_default(), r.bounds);
+    p.item_transform = r.item_transform;
+    p.fill_color = r.fill_color.clone();
+    p.fill_tint = r.fill_tint;
+    p.stroke_color = r.stroke_color.clone();
+    p.stroke_weight = r.stroke_weight;
+    p.stroke_type = r.stroke_type.clone();
+    p.stroke_alignment = r.stroke_alignment.clone();
+    p.stroke_dash = r.stroke_dash.clone();
+    p.end_cap = r.end_cap.clone();
+    p.end_join = r.end_join.clone();
+    p.miter_limit = r.miter_limit;
+    p.drop_shadow = r.drop_shadow.clone();
+    p.effects = r.effects.clone();
+    p.effect_stack = r.effect_stack.clone();
+    p.fill_transparency = r.fill_transparency.clone();
+    p.stroke_transparency = r.stroke_transparency.clone();
+    p.content_transparency = r.content_transparency.clone();
+    p.fill_drop_shadow = r.fill_drop_shadow.clone();
+    p.content_drop_shadow = r.content_drop_shadow.clone();
+    p.opacity = r.opacity;
+    p.blend_mode = r.blend_mode.clone();
+    p.applied_object_style = r.applied_object_style.clone();
+    p.gradient_fill_angle = r.gradient_fill_angle;
+    p.gradient_fill_length = r.gradient_fill_length;
+    p.gradient_fill_start = r.gradient_fill_start;
+    p.anchors = r.anchors.clone();
+    p.subpath_starts = r.subpath_starts.clone();
+    p.subpath_open = r.subpath_open.clone();
+    p.fill_rule = r.fill_rule;
+    p.start_office_head = af.start_office_head;
+    p.end_office_head = af.end_office_head;
+    p.start_arrow = nearest(af.start_office_head);
+    p.end_arrow = nearest(af.end_office_head);
+    p.preset = preset;
+    Some(p)
 }
 
 /// The left and top of an anchored frame's own box (its `bounds` in its

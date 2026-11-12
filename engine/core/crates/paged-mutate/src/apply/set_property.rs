@@ -86,7 +86,10 @@ fn apply_set_property_core(
             return super::preset_shape::apply_preset(doc, node, id, path, value);
         }
         (
-            NodeId::TextFrame(_) | NodeId::Polygon(_) | NodeId::GraphicLine(_),
+            NodeId::TextFrame(_)
+            | NodeId::Polygon(_)
+            | NodeId::GraphicLine(_)
+            | NodeId::Rectangle(_),
             PropertyPath::FrameShapePresetText
             | PropertyPath::FrameStrokeStartOfficeHead
             | PropertyPath::FrameStrokeEndOfficeHead,
@@ -197,6 +200,11 @@ fn apply_set_property_core(
         if let Some(applied) = bounds_carrying_mesh(doc, node, value)? {
             return Ok(applied);
         }
+    }
+    // Engine ADR 1096 (amendment 1) — a Word shape's anchored frame
+    // resized: its outline follows.
+    if path == PropertyPath::FrameBounds && super::anchored_look::names_anchored(doc, node) {
+        return super::preset_shape::apply_anchored_bounds(doc, node, value);
     }
     // Engine ADR 1045 — an anchored frame's fill, stroke, tint and
     // opacity (its other look paths reach it through the finders).

@@ -498,6 +498,105 @@ fn an_anchored_shape_takes_a_preset_and_its_handle_drags() {
     );
 }
 
+/// Engine ADR 1096, amendment 1 — a Word shape's anchored frame resized by
+/// `frameBounds`: its box takes the new size where the text flow placed it,
+/// its live preset is drawn again for the box (a rounded corner keeps its
+/// radius), the size and the outline read back, and one undo restores it
+/// all. Amendment 3 of ADR 1093: its Office heads are the frame's own.
+#[test]
+fn an_anchored_shape_refits_its_preset_when_resized() {
+    use paged_mutate::PropertyPath;
+    let mut m = CanvasModel::load("presets-anchored", &story_idml(), CanvasOptions::default())
+        .expect("load");
+    let at = |m: &CanvasModel| m.scene().stories[0].story.paragraphs[0].anchored_frames[0].clone();
+    let shape = ElementId::Rectangle("$h:shape".into());
+    let p = round_rect([0.0, 0.0, 120.0, 60.0]);
+    m.apply_mutation(&Mutation::Batch {
+        ops: vec![
+            Mutation::InsertAnchoredFrame {
+                paragraph: None,
+                story_id: "st1".into(),
+                offset: 0,
+                width: 120.0,
+                height: 60.0,
+                image_uri: None,
+                kind: None,
+                layout: None,
+                cell: None,
+            },
+            Mutation::BindCreated {
+                handle: "shape".into(),
+            },
+            Mutation::SetElementProperty {
+                element_id: shape.clone(),
+                path: PropertyPath::FrameShapePreset,
+                value: Value::Text(serde_json::to_string(&p).unwrap()),
+            },
+        ],
+    })
+    .expect("insert");
+    let f = at(&m);
+    let before = format!("{:?} {:?} {:?}", f.preset, f.anchors, f.bounds);
+    let id = ElementId::Rectangle(f.self_id.clone().unwrap());
+    let target = VirtualTarget::Element {
+        element_id: id.clone(),
+    };
+    let b = f.bounds.expect("box");
+    // Twice as wide, the box's top left kept.
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: id.clone(),
+        path: PropertyPath::FrameBounds,
+        value: Value::Bounds([b.top, b.left - 50.0, b.bottom, b.left + 190.0]),
+    })
+    .expect("resize");
+    let g = at(&m);
+    let gb = g.bounds.expect("box");
+    assert_eq!((gb.left, gb.right - gb.left), (b.left, 240.0));
+    let gp = g.preset.clone().expect("still a preset");
+    assert_eq!(gp.frame, [0.0, 0.0, 240.0, 60.0]);
+    assert!(paged_preset_geom::model::anchors_are(
+        &gp,
+        &g.anchors,
+        &g.subpath_starts
+    ));
+    // The corner radius is a sixth of the short side still: 10 pt.
+    let min_x = g
+        .anchors
+        .iter()
+        .map(|a| a.anchor.0)
+        .filter(|&x| x > 1e-3)
+        .fold(f32::MAX, f32::min);
+    assert!((min_x - 10.0).abs() < 0.01, "{min_x}");
+    match m.get_property(&target, "frameBounds") {
+        Ok(Value::Bounds(v)) => assert_eq!(v[3] - v[1], 240.0),
+        other => panic!("{other:?}"),
+    }
+    m.undo().expect("undo");
+    let u = at(&m);
+    assert_eq!(
+        format!("{:?} {:?} {:?}", u.preset, u.anchors, u.bounds),
+        before
+    );
+    // Its Office heads: written, read and undone exactly.
+    let head = r#"{"kind":"triangle","w":"med","len":"lg"}"#;
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: id.clone(),
+        path: PropertyPath::FrameStrokeEndOfficeHead,
+        value: Value::Text(head.into()),
+    })
+    .expect("head");
+    assert_eq!(
+        at(&m).end_office_head.map(|h| h.kind),
+        Some(paged_model::OfficeHeadKind::Triangle)
+    );
+    match m.get_property(&target, "frameStrokeEndOfficeHead") {
+        Ok(Value::Text(t)) => assert!(t.contains("triangle"), "{t}"),
+        other => panic!("{other:?}"),
+    }
+    m.undo().expect("undo");
+    assert_eq!(at(&m).end_office_head, None);
+}
+
 /// Office's line ends and a shape's text frame are plain writes with an
 /// exact undo, read back as JSON / the key.
 #[test]
