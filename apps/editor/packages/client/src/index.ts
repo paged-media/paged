@@ -27,6 +27,8 @@
 export {
   CanvasClient,
   changesTheDocument,
+  GestureInProgressError,
+  gestureInProgressOf,
   type CanvasClientOptions,
   type UndoGroupResult,
   type DefaultFontFace,

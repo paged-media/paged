@@ -604,7 +604,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     anchor: GestureAnchor | null,
   ) => {
     void props.client
-      .beginGesture(gs.target, gs.spec, anchor)
+      .beginGesture(gs.target, gs.spec, anchor, gs.modifiers)
       .then((handle) => {
         const drag = dragStateRef.current;
         const live = drag?.mode === "gesture" && drag.gestureState === gs;
@@ -984,6 +984,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           pagePoint: [docX - containing[1].x, docY - containing[1].y],
           hit: undefined,
           releaseDoc: null,
+          alt: e.altKey,
         };
       } else {
         mode = "marquee";
@@ -1057,7 +1058,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       pendingDelta: docDelta,
       target: [],
       spec: { kind: "translate" },
-      modifiers: { shift: drag.modifiers.shift, alt: false },
+      // Engine ADR 193, amendment 1 — the live Alt: an Alt press-drag on an
+      // unselected item duplicates it, as one on a selected item does.
+      modifiers: { shift: drag.modifiers.shift, alt: press.alt },
     };
     drag.mode = "gesture";
     drag.gestureState = gs;
@@ -1218,6 +1221,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (delta > drag.maxDelta) drag.maxDelta = delta;
     if (drag.mode === "press" && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX) {
       // The hit test has answered: become the move or the marquee.
+      if (drag.press) drag.press.alt = e.altKey;
       const rect = e.currentTarget.getBoundingClientRect();
       const [docX, docY] = viewportToDoc(
         props.camera,
@@ -1483,6 +1487,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (drag.mode === "press" && drag.press) {
       // Released before the press's hit test answered: finish it then.
       const rect = e.currentTarget.getBoundingClientRect();
+      drag.press.alt = e.altKey;
       drag.press.releaseDoc = viewportToDoc(
         props.camera,
         e.clientX - rect.left,
@@ -1873,6 +1878,8 @@ interface PressState {
   /** Set when the pointer went up past the threshold before the hit
    *  test answered: the release point, document pt. */
   releaseDoc: [number, number] | null;
+  /** Alt (Option) as the pointer last reported it. */
+  alt: boolean;
 }
 
 interface GestureState {
