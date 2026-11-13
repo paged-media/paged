@@ -61,7 +61,7 @@ type Ref = { kind: string; id: string };
 interface LegacyTape {
   /** `tapes/legacy-<name>.tape.json`. */
   name: string;
-  fixture: UxiFixtureName;
+  fixture: Exclude<UxiFixtureName, "F">;
   /** What the recording does, on the fixture, at 100 %. */
   script: (g: GestureDsl) => GestureDsl;
   /** An object whose move the outcome reports. */
