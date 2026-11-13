@@ -1185,6 +1185,11 @@ test.describe("the derived menu families", () => {
           row = await menuRow(page, candidate, { click: true });
           if (row) break;
         }
+        // UX audit F-18 — a plugin's own row that opens the panel through
+        // its dialog ("Data query…") stands for the panel's row ("Data
+        // query"), which the bar drops: one entry per panel.
+        if (!row && family === "Plugins/*" && (await menuRow(page, `${at}…`)))
+          continue;
         if (!row) {
           problems.push(`${m.path}: not on the bar`);
           continue;
