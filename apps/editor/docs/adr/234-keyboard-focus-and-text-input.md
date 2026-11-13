@@ -81,3 +81,11 @@ key could fire a single-key shortcut.
 - A Tab press on the page no longer hides the chrome: users who never click into the canvas
   first now get focus traversal. The toolbar's title says how to hide it.
 - Any new window-level key listener asks `canvasKeyYields` first.
+
+## Amendment 2026-11-13
+
+Decision 2 changes ([ADR 1201](1201-interaction-decisions.md), D-03): Tab and Shift+Tab move
+focus everywhere, the canvas included, and never toggle the chrome by default. The chrome toggle
+is the explicit command `view.toggleChrome` (Cmd/Ctrl+\; `paged.chrome.toggleAll` stays as its
+deprecated alias), and an opt-in preference, "Tab hides panels (InDesign)", restores decision 2's
+Tab on a canvas the user clicked into. Until that task lands the body describes the code.

@@ -134,6 +134,21 @@ extension carries the rows the pinned engine has and the SDK's vendored catalog 
 (a cell style's fill tint) or marks read-only although the engine now stores them (a cell's
 fill tint, engine 0.71.11); each applies only while the SDK's rows disagree.
 
+## Interaction contract programme (planned)
+
+Adopted on 2026-11-13: the interaction specification `PM-UX-INTERACTION-001` is the editor's
+normative interaction target and the UX/UI redesign strategy its product direction
+([ADR 1200](adr/1200-the-interaction-contract-is-adopted.md)); the specification's open
+decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work is planned in
+[`interaction-plan.md`](interaction-plan.md).
+
+Nothing of it is implemented yet. The editor behaves as the sections above and the existing
+records describe: Shift-click adds and Cmd-click toggles, the marquee takes what it intersects,
+Tab hides the chrome on a canvas the user clicked into, a double-click on an image frame enters
+paged.image, and Escape is answered by several listeners. Wave 0's interaction inventory
+(`scripts/interaction-inventory.json`, with the one exception ledger), the coverage report for
+the `UXI-T` tests and the test harness are being built.
+
 ## Limits of what is shipped
 
 - **Browser.** The application needs cross-origin isolation, `SharedArrayBuffer`,
