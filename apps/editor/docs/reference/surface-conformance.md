@@ -373,8 +373,9 @@ task that will claim it and why none does yet:
 The task must be one of [`interaction-plan.md`](../interaction-plan.md); the reason at least 40
 characters. The ratchet runs both ways: a test that starts claiming an acknowledged id fails the
 run until its entry goes (`--prune`), and a claimed id that loses its test fails unless it is
-acknowledged again. On 2026-11-13 all 76 are acknowledged; the harness and baseline work (W0.6,
-W0.7) and each task remove entries as their tests land.
+acknowledged again. On 2026-11-13 the baseline (`apps/canvas/tests/e2e/uxi-baseline.spec.ts`,
+W0.7) claims 11 scenarios that today's code already passes and 65 are acknowledged; each task
+removes entries as its tests land.
 
 `--gate` fails when a test of a gate in `enforcedGates` is neither claimed nor listed by an
 unexpired exception. `enforcedGates` is empty until the first gate is raised (G0 partially with

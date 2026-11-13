@@ -3968,7 +3968,7 @@
         "escape.threading",
         "escape.placement"
       ],
-      "tests": ["UXI-T07", "UXI-T30", "UXI-T31"],
+      "tests": ["UXI-T30", "UXI-T31"],
       "why": "Nine listeners answer Escape at the document, the editor root or the window, each on its own condition; nothing orders them, so one press can cancel a drag and climb out of a group in the same press (the spec's §12.1 allows one resolution per press).",
       "issue": "KF1",
       "owner": "editor shell",

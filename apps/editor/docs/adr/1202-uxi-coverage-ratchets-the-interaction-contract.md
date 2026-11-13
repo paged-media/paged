@@ -60,7 +60,8 @@ layer by path. Its ids are surface ids, though, and the spec says plainly (§1.4
 - **A ratchet both ways.** A scenario no test claims is acknowledged in
   `uxi-acknowledged.json` with its plan task and a reason; an acknowledged scenario a test
   claims fails the run until its entry goes, and a claimed one that loses its test fails unless
-  it is acknowledged again. All 76 start acknowledged.
+  it is acknowledged again. On 2026-11-13 the baseline claims 11 scenarios today's code
+  already passes; the other 65 are acknowledged.
 - **Gates are raised in the inventory.** `--gate` fails when a test of a gate in
   `enforcedGates` is neither claimed nor excused by an unexpired exception. It starts empty, so
   CI reports and does not enforce. A raised gate is not lowered (ADR 1200). With G4 enforced,
