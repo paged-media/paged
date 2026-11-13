@@ -27,3 +27,11 @@ context, in a text field or in a frame surface is not this key.
 - Every plugin with owned content gets keyboard entry without code of its own.
 - Contexts claimed by element kind (the vector-graphic context on paths) are not entered by Enter:
   Enter on a path stays path editing.
+
+## Amendment 2026-11-13
+
+[ADR 1201](1201-interaction-decisions.md), D-05: on an image frame a double-click no longer
+enters the image module; it enters content position (the picture moves, the frame stays). The
+explicit "Edit image" action enters paged.image's context: its button on the context toolbar,
+Enter on the selected frame as this record decides, or a second double-click. Other owned content
+is unchanged. Until that task lands the body describes the code.

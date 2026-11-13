@@ -14,6 +14,8 @@ always used:
 | 950–999 | `apps/server` |
 | 1000–1099 | `engine/core` (from 2026-10-22, PM-0012; its records 200–209 keep their numbers) |
 | 1100–1199 | `platform/extensions` (from 2026-10-30, PM-0016) |
+| 1200–1299 | `apps/editor` (from 2026-11-13, PM-0019; its records 300–315, written in the extensions' range, keep their numbers) |
+| 1300–1399 | `engine/core` (from 2026-11-13, PM-0020) |
 
 A PM record may supersede or amend a component record; it names it, and the component record
 keeps its text.
@@ -35,3 +37,5 @@ keeps its text.
 | [PM-0016](PM-0016-extensions-adr-range.md) | The extensions' records continue at 1100–1199; 300–349 keep their numbers |
 | [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) | The built-in modules are part of the core: one build, modules stay; isolation ends; one workspace gated on a spike (amends PM-0002, PM-0005, PM-0014) |
 | [PM-0018](PM-0018-document-properties-as-a-label.md) | Imported OOXML document properties (core/app) travel as the document label `x-paged:core.docprops`; no model field; parts untouched on save |
+| [PM-0019](PM-0019-editor-adr-range.md) | The editor's records continue at 1200–1299; its 200–299 and 300–315 keep their numbers (300, 301 and 303–315 collide with the extensions' and are told apart by directory) |
+| [PM-0020](PM-0020-engine-adr-range.md) | The engine's records continue at 1300–1399; the unused numbers inside 1000–1099 stay unused |

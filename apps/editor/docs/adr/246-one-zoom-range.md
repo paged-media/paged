@@ -35,3 +35,10 @@ Fit page, Fit spread and Fit selection (the rest of F-31's recommendation) are n
 Cmd/Ctrl+0 fits the page now and Fit document moved to Alt+Shift+Cmd/Ctrl+0; Fit page, Fit
 spread, Fit selection, zoom presets and the page keys are added as commands
 ([ADR 257](257-indesigns-fits-and-page-keys.md)).
+
+## Amendment 2026-11-13
+
+[ADR 1201](1201-interaction-decisions.md), D-12, keeps the one range and defines Actual size:
+100 % shows an inch of the page as 96 CSS px (today a camera scale of 1, an inch as 72 CSS px).
+A calibrated physical size is a separate, labelled option, and the inputs that still carry bounds
+of their own drop them. Until that task lands the body describes the code.
