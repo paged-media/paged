@@ -842,14 +842,12 @@ impl<'a> Writer<'a, '_> {
             &format!("slide {}: {name}: {}", self.job.slide_no, what.into()),
         );
     }
-    /// A sentence of the DrawingML picture writer (`dml_native`), under
-    /// `code` (its severity from what it says).
-    fn note_mapped(&self, code: &str, name: &str, what: String) {
+    /// A loss entry of the DrawingML picture writer (`dml_native::picture`,
+    /// its own `dml.picture.*` code), placed on this slide and shape.
+    fn note_entry(&self, name: &str, mut entry: dml_native::LossEntry) {
         let name = if name.is_empty() { "a shape" } else { name };
-        let line = format!("slide {}: {name}: {what}", self.job.slide_no);
-        self.lost
-            .borrow_mut()
-            .push_loss(pptx_core::loss::mapped(code, line));
+        entry.message = format!("slide {}: {name}: {}", self.job.slide_no, entry.message);
+        self.lost.borrow_mut().push_loss(entry);
     }
 
     fn fresh_id(&self) -> u32 {
@@ -1991,7 +1989,7 @@ impl<'a> Writer<'a, '_> {
             let (tag, lost) =
                 dml_native::picture::splice_blip(blip.text(&x), &adjustments_of(ec), px_per_pt(ec));
             for l in lost {
-                self.note_mapped("pptx.export.picture", name, l);
+                self.note_entry(name, l);
             }
             x = xml::splice(&x, blip.start, blip.end, &tag);
         }
@@ -2650,7 +2648,7 @@ impl<'a> Writer<'a, '_> {
                         px_per_pt(e),
                     );
                     for l in lost {
-                        self.note_mapped("pptx.export.picture", &name, l);
+                        self.note_entry(&name, l);
                     }
                     tag
                 };

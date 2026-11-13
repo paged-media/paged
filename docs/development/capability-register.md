@@ -535,7 +535,9 @@ losses }`), `pdf-import` (`Loss` is `LossEntry`), `paged-psd-fx` (`StyleLoss` is
   its item in the new optional `LossEntry.items`; paged.publish's `exportIdml` diagnostics carry each
   entry's code, the SDK harness and the `paged` CLI's JSON carry the entries) and the DrawingML mapper
   (2026-11-12: `dml-native`'s `Mapper` / `Lowering` losses are entries, `dml.<area>.<what>`, and with them
-  doc's, sheet's and web's lowered looks). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL
+  doc's, sheet's and web's lowered looks; 2026-11-13: its save direction too, `picture::effects_of` /
+  `splice_blip` answer `dml.picture.*` entries that pptx-export records with their own codes and docx-export's
+  save ledger names on each line). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL
   diagnostic (not a loss), image-js `LosslessShape` (a save-back classification) and the web bundle's
   linter findings (not losses). Single-owner rule `loss-report` (also: a `losses` / `lost` /
   `unsupported` / `not_exported` field of `Vec<String>`); its baseline is empty.

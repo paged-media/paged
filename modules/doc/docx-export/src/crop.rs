@@ -585,7 +585,11 @@ fn splice_crops(part: &[u8], edits: &[CropEdit], adjusts: &[AdjustEdit]) -> (Vec
             continue;
         };
         let (tag, lost) = dml_native::picture::splice_blip(text, &a.ops, a.px_per_pt);
-        skips.extend(lost.into_iter().map(|l| format!("{label}: {l}")));
+        // Engine ADR 1097 — the writer's `dml.picture.*` code rides the line.
+        skips.extend(
+            lost.into_iter()
+                .map(|l| format!("{label}: {} ({})", l.message, l.code)),
+        );
         holes.push((s, t, tag));
     }
     for e in edits {
