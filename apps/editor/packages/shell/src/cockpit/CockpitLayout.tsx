@@ -48,7 +48,6 @@ import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useWorkflowMode } from "../state/workflow-mode-context";
 import { useChromeRegions } from "../state/chrome-regions";
-import { useDataDrop } from "../state/data-door";
 import {
   TOUCH_TARGET_PX,
   useCompactLayout,
@@ -57,6 +56,7 @@ import {
 import type { ResolvedRegion } from "../profile/types";
 import { Icon } from "../icons";
 import { PanelHost } from "./PanelHost";
+import { CanvasDropZone } from "./drop-zone";
 import { TouchZoomControls } from "./TouchZoom";
 import { RightDock } from "./RightDock";
 import { ModuleViewHost } from "./ModuleViewHost";
@@ -132,9 +132,6 @@ export function CockpitLayout({
   // Export-style modes replace the document viewport with a centred
   // work surface — no rulers / filmstrip around it (kit canvas.jsx).
   const isOverride = canvasOverride != null || moduleView !== undefined;
-  // Editor ADR 291: a Data panel field, table or record dropped on the
-  // document is placed.
-  const fieldDrop = useDataDrop();
 
   // The fill shapes (editor ADR 294). The form region is a column beside
   // the canvas; below the breakpoint `form-first` puts the form first and
@@ -165,32 +162,12 @@ export function CockpitLayout({
       <PresentationChrome />
       {titleBar && <DocTitleBar />}
       {!isOverride && rulers && <HRuler />}
-      <div
-        data-cockpit-canvas
-        onDragOver={(e) => {
-          if (!isOverride && fieldDrop.accepts([...e.dataTransfer.types])) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "copy";
-          } else if (onFile) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          if (
-            !isOverride &&
-            fieldDrop.accepts([...e.dataTransfer.types]) &&
-            fieldDrop.drop(
-              (type) => e.dataTransfer.getData(type),
-              [...e.dataTransfer.types],
-              { clientX: e.clientX, clientY: e.clientY },
-            )
-          ) {
-            e.preventDefault();
-            return;
-          }
-          if (!onFile) return;
-          e.preventDefault();
-          const file = e.dataTransfer.files[0];
-          if (file) onFile(file, { clientX: e.clientX, clientY: e.clientY });
-        }}
+      {/* The drop target (drop-zone.tsx): a Data panel field, table or
+          record is placed on the document (editor ADR 291), a file goes
+          to `onFile`. */}
+      <CanvasDropZone
+        acceptsDataDrops={!isOverride}
+        onFile={onFile}
         style={{
           flex: 1,
           minHeight: 0,
@@ -221,7 +198,7 @@ export function CockpitLayout({
           )}
         </div>
         {!isOverride && touch && <TouchZoomControls />}
-      </div>
+      </CanvasDropZone>
       {/* W2.8 — headless guide-drag controller (ruler → drag →
           insert/move/delete guide). Only on the real canvas surface,
           not the export-style overrides (which have no rulers). */}
