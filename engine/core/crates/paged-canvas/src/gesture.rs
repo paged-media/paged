@@ -332,6 +332,22 @@ pub enum ShearAxis {
 pub struct GestureUpdateResult {
     pub page_ids: Vec<PageId>,
     pub snap_lines: Vec<crate::snap::SnapLine>,
+    /// v80 (engine ADR 1302) — Alt is held in a Translate whose selection
+    /// cannot be duplicated: the drag moves the selection, as its commit
+    /// will, and this says why no copy is made.
+    pub duplicate_refused: Option<DuplicateRefusal>,
+}
+
+/// v80 (engine ADR 1302) — why an Alt-drag cannot copy its selection
+/// (`UXI-SEL-007`, D-16): the item that stops the copy and the reason, in
+/// words a user can read. The copy is all or nothing: one item that cannot
+/// be copied stops it whole.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateRefusal {
+    pub id: ElementId,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone)]
@@ -359,6 +375,9 @@ pub struct NodeSnapshot {
     /// translated by moving its `bounds` — nothing painted follows — so
     /// `Translate` writes its `ItemTransform` instead.
     pub(crate) drawn_from_path: bool,
+    /// v80 (engine ADR 1302) — where each subpath of `path_anchors` starts
+    /// (a compound path's), kept by a resize that carries the path.
+    pub(crate) path_starts: Vec<usize>,
 }
 
 /// One active gesture. Lives on `CanvasModel`. Only one gesture is
@@ -416,6 +435,11 @@ pub(crate) struct GestureSession {
     /// v79 (engine ADR 125, amendment 2) — the snap targets the gesture
     /// holds, for the release hysteresis.
     pub(crate) snap_hold: crate::snap::SnapHold,
+    /// v80 (engine ADR 1302) — whether the selection can be duplicated,
+    /// once an Alt-drag asked: `None` until then, `Some(None)` when it can,
+    /// `Some(Some(why))` when it cannot. A property of the selection, not
+    /// of the pointer, so it is decided once.
+    pub(crate) duplicate_check: Option<Option<DuplicateRefusal>>,
 }
 
 /// The box a transform of the selection works on: `bounds` in the box's
@@ -517,6 +541,13 @@ enum NodeMutation {
         address: paged_mutate::PathPointAddress,
         position: [f32; 2],
     },
+    /// v80 (engine ADR 1302) — the resize of an item drawn from its path:
+    /// the new box and the path carried into it, so the drawing follows
+    /// the handles and the box keeps describing the path.
+    Reshape {
+        bounds: Bounds,
+        anchors: Vec<paged_model::PathAnchor>,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -550,6 +581,11 @@ pub enum GestureError {
     /// of the element; refused at the start, as a lock is.
     #[error("not permitted: {1} on {0:?}")]
     NotPermitted(ElementId, String),
+    /// v80 (engine ADR 1302) — an Alt-drag begun with Alt held whose
+    /// selection cannot be duplicated: refused at the press, whole, before
+    /// anything moves (`UXI-SEL-007`, D-16).
+    #[error("the selection cannot be duplicated: {} ({:?})", .0.reason, .0.id)]
+    DuplicateRefused(DuplicateRefusal),
 }
 
 impl CanvasModel {
@@ -684,6 +720,17 @@ impl CanvasModel {
             .iter()
             .map(|id| self.snapshot_for(id))
             .collect::<Result<Vec<_>, _>>()?;
+        // v80 (engine ADR 1302) — a press with Alt held asks for a copy: a
+        // selection that cannot be copied whole is refused now, with the
+        // reason, instead of at the release.
+        let duplicate_check = if modifiers.alt && matches!(gesture, GestureType::Translate) {
+            if let Err(refusal) = self.alt_duplicate_ops(&snapshots, (0.0, 0.0), None) {
+                return Err(GestureError::DuplicateRefused(refusal));
+            }
+            Some(None)
+        } else {
+            None
+        };
         // Phase G — rotated-frame resize is now supported. The
         // world-space pointer delta is inverse-rotated through each
         // node's `item_transform` linear part inside
@@ -778,6 +825,7 @@ impl CanvasModel {
             resize_box,
             preview_copies: None,
             snap_hold: Default::default(),
+            duplicate_check,
         });
         Ok(handle)
     }
@@ -956,24 +1004,40 @@ impl CanvasModel {
         if let Some(inverses) = stale_copies {
             self.remove_preview_copies(&inverses);
         }
-        let duplicate = modifiers.alt && matches!(session_clone.gesture, GestureType::Translate);
-        let copies = if duplicate {
+        let wants_copy = modifiers.alt && matches!(session_clone.gesture, GestureType::Translate);
+        // v80 (engine ADR 1302) — a selection found not to copy stays so
+        // for the gesture: it does not depend on where the pointer is.
+        let mut refused = match &session_clone.duplicate_check {
+            Some(Some(why)) if wants_copy => Some(why.clone()),
+            _ => None,
+        };
+        let mut copies = None;
+        if wants_copy && refused.is_none() {
             // D-02 — the originals stay where they were and the copy the
             // commit will paste follows the pointer.
             for snap in &session_clone.snapshots {
                 restore_snapshot_in_scene(&mut self.scene, snap);
             }
-            self.insert_preview_copies(&session_clone, snapped_delta)
-        } else {
+            match self.insert_preview_copies(&session_clone, snapped_delta) {
+                Ok(inverses) => copies = Some(inverses),
+                Err(why) => refused = Some(why),
+            }
+        }
+        if copies.is_none() {
+            // No copy: the selection moves. With Alt held on a selection
+            // that cannot be copied (D-16: all or nothing, said why), the
+            // drag stays a move, and its commit moves as this shows.
             for snap in &session_clone.snapshots {
                 let mutation = compute_node_mutation(snap, &session_clone, snapped_delta);
                 write_mutation_to_scene(&mut self.scene, &snap.node_id, mutation);
             }
-            None
-        };
+        }
         let structural = structural || copies.is_some();
         if let Some(session) = self.active_gesture.as_mut() {
             session.preview_copies = copies;
+            if wants_copy {
+                session.duplicate_check = Some(refused.clone());
+            }
         }
         let rebuilt = if structural {
             self.rebuild_after_structural_preview()
@@ -985,6 +1049,7 @@ impl CanvasModel {
         Ok(GestureUpdateResult {
             page_ids,
             snap_lines: adjustment.lines,
+            duplicate_refused: refused,
         })
     }
 
@@ -993,31 +1058,26 @@ impl CanvasModel {
     /// [`Self::alt_duplicate_ops`] builds for the commit, from the same
     /// scene (originals at rest, no copy), so the preview and the commit
     /// agree on the items, their ids and their place. Returns the inverse
-    /// ops, `None` when the copy cannot be made (the commit then fails the
-    /// same way, and the preview shows the originals at rest).
+    /// ops, or why the copy cannot be made (v80, engine ADR 1302: the drag
+    /// then moves the selection, and so does its commit).
     fn insert_preview_copies(
         &mut self,
         session: &GestureSession,
         delta: (f32, f32),
-    ) -> Option<Vec<Operation>> {
-        if session.snapshots.is_empty() {
-            return None;
-        }
+    ) -> Result<Vec<Operation>, DuplicateRefusal> {
         let destination = self.resolve_destination_spread(session, delta);
-        let ops = self
-            .alt_duplicate_ops(&session.snapshots, delta, destination)
-            .ok()?;
+        let ops = self.alt_duplicate_ops(&session.snapshots, delta, destination)?;
         let mut inverses = Vec::with_capacity(ops.len());
         for op in &ops {
             match paged_mutate::apply_checked(&mut self.scene, op, &self.session_policy) {
                 Ok(applied) => inverses.push(applied.inverse),
-                Err(_) => {
+                Err(e) => {
                     self.remove_preview_copies(&inverses);
-                    return None;
+                    return Err(refusal_of(&session.snapshots, &e));
                 }
             }
         }
-        Some(inverses)
+        Ok(inverses)
     }
 
     /// Take a preview's copies out of the scene again, newest first. No
@@ -1093,10 +1153,12 @@ impl CanvasModel {
         // Phase H — Alt+Translate commits as ONE paste of a copy of the
         // dragged items (`InsertSnippet`, ADR 193); the originals stay put.
         // For all other gesture types, emit per-snapshot SetProperty ops.
-        let ops: Vec<Operation> = if session.modifiers.alt
+        // v80 (engine ADR 1302) — a selection found not to copy was
+        // previewed as a move, and commits as one.
+        let duplicate = session.modifiers.alt
             && matches!(session.gesture, GestureType::Translate)
-            && !session.snapshots.is_empty()
-        {
+            && !matches!(session.duplicate_check, Some(Some(_)));
+        let ops: Vec<Operation> = if duplicate {
             // Track K — resolve destination spread from the world
             // pointer position. World pointer = source spread
             // origin + anchor in spread-local coords + delta.
@@ -1114,14 +1176,14 @@ impl CanvasModel {
                 web_sys::console::log_1(&"[K-debug] dest spread origin = (resolved)".into());
             }
             self.alt_duplicate_ops(&session.snapshots, delta, dest_spread_id)
-                .map_err(GestureError::Mutate)?
+                .map_err(GestureError::DuplicateRefused)?
         } else {
             session
                 .snapshots
                 .iter()
-                .map(|snap| {
+                .flat_map(|snap| {
                     let mutation = compute_node_mutation(snap, &session, delta);
-                    build_op_from_mutation(snap, mutation)
+                    build_ops_from_mutation(snap, mutation)
                 })
                 .collect()
         };
@@ -1139,7 +1201,7 @@ impl CanvasModel {
         // "Rotate"), not after the property ops it lowered to.
         self.set_step_label(
             outcome.applied_seq,
-            crate::undo_label::for_gesture(&session.gesture, session.modifiers.alt),
+            crate::undo_label::for_gesture(&session.gesture, duplicate),
         );
         outcome.reflow = resized_frame.and_then(|frame_id| {
             self.frame_content_box(&frame_id)
@@ -1257,8 +1319,14 @@ impl CanvasModel {
                         bounds: f.bounds,
                         item_transform: f.item_transform,
                         image_item_transform: None,
-                        path_anchors: Vec::new(),
+                        // v80 — a shaped frame's path, for its resize.
+                        path_anchors: if paged_renderer::text_frame_drawn_from_path(f) {
+                            f.anchors.clone()
+                        } else {
+                            Vec::new()
+                        },
                         drawn_from_path: paged_renderer::text_frame_drawn_from_path(f),
+                        path_starts: f.subpath_starts.clone(),
                     });
                 }
             }
@@ -1274,8 +1342,15 @@ impl CanvasModel {
                         bounds: f.bounds,
                         item_transform: f.item_transform,
                         image_item_transform: f.image_item_transform,
-                        path_anchors: Vec::new(),
+                        // v80 — a many-anchored rectangle's path, for its
+                        // resize.
+                        path_anchors: if paged_renderer::rectangle_drawn_from_path(f) {
+                            f.anchors.clone()
+                        } else {
+                            Vec::new()
+                        },
                         drawn_from_path: paged_renderer::rectangle_drawn_from_path(f),
+                        path_starts: f.subpath_starts.clone(),
                     });
                 }
             }
@@ -1293,6 +1368,7 @@ impl CanvasModel {
                         image_item_transform: None,
                         path_anchors: p.anchors.clone(),
                         drawn_from_path: paged_renderer::polygon_drawn_from_path(p),
+                        path_starts: p.subpath_starts.clone(),
                     });
                 }
             }
@@ -1309,6 +1385,7 @@ impl CanvasModel {
                         image_item_transform: None,
                         path_anchors: Vec::new(),
                         drawn_from_path: false,
+                        path_starts: Vec::new(),
                     });
                 }
             }
@@ -1326,6 +1403,7 @@ impl CanvasModel {
                         image_item_transform: None,
                         path_anchors: l.anchors.clone(),
                         drawn_from_path: paged_renderer::graphic_line_drawn_from_path(l),
+                        path_starts: l.subpath_starts.clone(),
                     });
                 }
             }
@@ -1350,6 +1428,7 @@ impl CanvasModel {
                         image_item_transform: None,
                         path_anchors: Vec::new(),
                         drawn_from_path: false,
+                        path_starts: Vec::new(),
                     });
                 }
             }
@@ -1378,6 +1457,7 @@ impl CanvasModel {
                     image_item_transform: None,
                     path_anchors: Vec::new(),
                     drawn_from_path: false,
+                    path_starts: Vec::new(),
                 });
             }
         }
@@ -1596,12 +1676,26 @@ impl CanvasModel {
     /// holds. Track K — `destination_spread_id` is the spread under the
     /// pointer at commit; the offset then carries the two spreads' origin
     /// difference, so the copy lands where the pointer is.
+    ///
+    /// v80 (engine ADR 1302) — a selection on several spreads is copied
+    /// spread by spread: one snippet per spread, each pasted on the spread
+    /// its items came from, all moved by the same offset, so the copies
+    /// keep the originals' places relative to each other (a snippet is one
+    /// spread's coordinate space and cannot hold items of two). The copy
+    /// is all or nothing: an item no snippet can carry refuses the whole
+    /// copy, with its reason.
     fn alt_duplicate_ops(
         &self,
         snapshots: &[NodeSnapshot],
         delta: (f32, f32),
         destination_spread_id: Option<String>,
-    ) -> Result<Vec<Operation>, String> {
+    ) -> Result<Vec<Operation>, DuplicateRefusal> {
+        let Some(first) = snapshots.first() else {
+            return Err(DuplicateRefusal {
+                id: ElementId::Group(String::new()),
+                reason: "nothing is selected".to_string(),
+            });
+        };
         let mut inner = std::collections::HashSet::new();
         for snap in snapshots {
             if let ElementId::Group(raw) = &snap.id {
@@ -1611,11 +1705,72 @@ impl CanvasModel {
                 inner.extend(members.iter().map(|m| m.raw_id().to_string()));
             }
         }
-        let sources: Vec<NodeId> = snapshots
-            .iter()
-            .filter(|s| !inner.contains(s.id.raw_id()))
-            .map(|s| s.node_id.clone())
-            .collect();
+        // The roots, by the spread that holds each, spreads in document
+        // order and roots in selection order within each.
+        let mut by_spread: Vec<(usize, Vec<&NodeSnapshot>)> = Vec::new();
+        for snap in snapshots.iter().filter(|s| !inner.contains(s.id.raw_id())) {
+            let raw = snap.id.raw_id();
+            let Some(si) = self.scene.spreads.iter().position(|p| {
+                spread_contains_frame(&p.spread, raw)
+                    || p.spread
+                        .groups
+                        .iter()
+                        .any(|g| g.self_id.as_deref() == Some(raw))
+            }) else {
+                return Err(DuplicateRefusal {
+                    id: snap.id.clone(),
+                    reason: "the item is on no spread — it cannot be copied".to_string(),
+                });
+            };
+            match by_spread.iter_mut().find(|(i, _)| *i == si) {
+                Some((_, roots)) => roots.push(snap),
+                None => by_spread.push((si, vec![snap])),
+            }
+        }
+        by_spread.sort_by_key(|(si, _)| *si);
+        if by_spread.is_empty() {
+            return Err(DuplicateRefusal {
+                id: first.id.clone(),
+                reason: "nothing is selected".to_string(),
+            });
+        }
+        // One spread: the pointer may carry the copy to another. Several:
+        // each copy stays on its own spread.
+        let destination = match by_spread.len() {
+            1 => destination_spread_id,
+            _ => None,
+        };
+        let mut ops = Vec::with_capacity(by_spread.len());
+        let mut item_offset = 0u64;
+        let mut story_offset = 0u64;
+        for (si, roots) in &by_spread {
+            ops.extend(self.duplicate_ops_on_spread(
+                *si,
+                roots,
+                delta,
+                destination.as_deref(),
+                &mut item_offset,
+                &mut story_offset,
+            )?);
+        }
+        Ok(ops)
+    }
+
+    /// The copy of `roots`, all on the spread at `source_index`: one
+    /// `InsertSnippet`, or the clones a snippet-refused lone text frame or
+    /// rectangle keeps. Ids are minted past `item_offset` / `story_offset`,
+    /// which move on, so the copies of several spreads never share one.
+    fn duplicate_ops_on_spread(
+        &self,
+        source_index: usize,
+        roots: &[&NodeSnapshot],
+        delta: (f32, f32),
+        destination_spread_id: Option<&str>,
+        item_offset: &mut u64,
+        story_offset: &mut u64,
+    ) -> Result<Vec<Operation>, DuplicateRefusal> {
+        let sources: Vec<NodeId> = roots.iter().map(|s| s.node_id.clone()).collect();
+        let source_spread = &self.scene.spreads[source_index];
         let snippet = match paged_mutate::extract_snippet(&self.scene, &sources) {
             Ok(s) => s,
             // A copy the snippet refuses (a threaded text frame: a copy of
@@ -1623,48 +1778,29 @@ impl CanvasModel {
             // drag-a-copy of a lone text frame or rectangle, which shares
             // the story, rather than failing the gesture. Its ids come off
             // the document's id line all the same.
-            Err(e)
+            Err(_)
                 if sources
                     .iter()
                     .all(|n| matches!(n, NodeId::TextFrame(_) | NodeId::Rectangle(_))) =>
             {
-                let _ = e;
-                let mut offset = 0;
                 return Ok(sources
                     .iter()
                     .map(|source| Operation::InsertNode {
                         parent: NodeId::Spread(String::new()),
                         position: usize::MAX,
                         node: paged_mutate::NodeSpec::CloneTranslate {
-                            self_id: self.mint_page_item_id_with_offset(&mut offset),
+                            self_id: self.mint_page_item_id_with_offset(item_offset),
                             source: source.clone(),
                             dx: delta.0,
                             dy: delta.1,
-                            destination_spread_id: destination_spread_id.clone(),
+                            destination_spread_id: destination_spread_id.map(str::to_string),
                         },
                         z_slot: None,
                     })
                     .collect());
             }
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(refusal_of_nodes(roots, &e)),
         };
-        let first = snapshots
-            .iter()
-            .find(|s| !inner.contains(s.id.raw_id()))
-            .map(|s| s.id.raw_id().to_string())
-            .unwrap_or_default();
-        let source_spread = self
-            .scene
-            .spreads
-            .iter()
-            .find(|s| {
-                spread_contains_frame(&s.spread, &first)
-                    || s.spread
-                        .groups
-                        .iter()
-                        .any(|g| g.self_id.as_deref() == Some(first.as_str()))
-            })
-            .ok_or_else(|| format!("no spread holds {first}"))?;
         let spread_id_of = |p: &paged_scene::ParsedSpread| {
             p.spread.self_id.clone().unwrap_or_else(|| p.src.clone())
         };
@@ -1672,7 +1808,7 @@ impl CanvasModel {
             Some(m) => (m[4], m[5]),
             None => (0.0, 0.0),
         };
-        let (spread, dx, dy) = match destination_spread_id.as_deref().and_then(|id| {
+        let (spread, dx, dy) = match destination_spread_id.and_then(|id| {
             self.scene
                 .spreads
                 .iter()
@@ -1689,12 +1825,23 @@ impl CanvasModel {
             _ => (spread_id_of(source_spread), delta.0, delta.1),
         };
         let demand = paged_mutate::snippet_demand(&snippet);
-        let mut offset = 0;
         let ids = (0..demand.items)
-            .map(|_| self.mint_page_item_id_with_offset(&mut offset))
+            .map(|_| self.mint_page_item_id_with_offset(item_offset))
             .collect();
-        let story_ids = self.mint_story_ids(demand.stories, 0);
-        let json = serde_json::to_string(&snippet).map_err(|e| e.to_string())?;
+        let story_ids = self.mint_story_ids(demand.stories, *story_offset);
+        // `mint_story_ids` skips ids the document holds; the next spread's
+        // copy starts past the last one handed out here.
+        if let Some(n) = story_ids
+            .last()
+            .and_then(|last: &String| last.strip_prefix("Story/u"))
+            .and_then(|n| n.parse::<u64>().ok())
+        {
+            *story_offset = (n + 1).saturating_sub(self.story_id_floor() as u64);
+        }
+        let json = serde_json::to_string(&snippet).map_err(|e| DuplicateRefusal {
+            id: roots[0].id.clone(),
+            reason: e.to_string(),
+        })?;
         Ok(vec![Operation::InsertSnippet {
             snippet: json,
             spread,
@@ -1864,12 +2011,20 @@ fn compute_node_mutation_in_spread(
             // user's drag would move the edge along the world axes
             // instead of the frame's local axes.
             let local_delta = inverse_rotate_delta(snap.item_transform, delta);
-            NodeMutation::Bounds(apply_resize(
-                snap.bounds,
-                handle,
-                local_delta,
-                session.modifiers,
-            ))
+            let bounds = apply_resize(snap.bounds, handle, local_delta, session.modifiers);
+            // v80 (engine ADR 1302) — an item drawn from its path paints
+            // its anchors, which a box write leaves where they were: the
+            // drawing stayed put while the box moved, and a copy written
+            // afresh took its box from the stale path (fuzz seed 31). The
+            // path is carried into the new box with it.
+            if snap.drawn_from_path && !snap.path_anchors.is_empty() {
+                NodeMutation::Reshape {
+                    bounds,
+                    anchors: map_path_into(&snap.path_anchors, snap.bounds, bounds),
+                }
+            } else {
+                NodeMutation::Bounds(bounds)
+            }
         }
         GestureType::Rotate => {
             let pivot = session.pivot_spread.unwrap_or((0.0, 0.0));
@@ -2337,6 +2492,28 @@ pub(crate) fn scale_about_pivot(
 /// Track K — does a parsed spread host the frame identified by
 /// `raw_id`? Walks every per-kind vec until one is found. Returns
 /// false for unknown ids.
+/// v80 (engine ADR 1302) — the refusal a failed copy stands for: the item
+/// the error names (the first root when it names none of them) and the
+/// error's own words.
+fn refusal_of_nodes(roots: &[&NodeSnapshot], e: &paged_mutate::OperationError) -> DuplicateRefusal {
+    let (node, reason) = match e {
+        paged_mutate::OperationError::InvalidValue { node, reason, .. } => {
+            (Some(node), reason.clone())
+        }
+        other => (None, other.to_string()),
+    };
+    let id = node
+        .and_then(|n| roots.iter().find(|s| &s.node_id == n))
+        .or(roots.first())
+        .map_or(ElementId::Group(String::new()), |s| s.id.clone());
+    DuplicateRefusal { id, reason }
+}
+
+fn refusal_of(snapshots: &[NodeSnapshot], e: &paged_mutate::OperationError) -> DuplicateRefusal {
+    let roots: Vec<&NodeSnapshot> = snapshots.iter().collect();
+    refusal_of_nodes(&roots, e)
+}
+
 fn spread_contains_frame(spread: &paged_model::Spread, raw_id: &str) -> bool {
     if spread
         .text_frames
@@ -2566,6 +2743,10 @@ fn write_mutation_to_scene(
                 {
                     match mutation {
                         NodeMutation::Bounds(b) => f.bounds = b,
+                        NodeMutation::Reshape { bounds, anchors } => {
+                            f.bounds = bounds;
+                            f.anchors = anchors;
+                        }
                         NodeMutation::Transform(m) => f.item_transform = m,
                         // TextFrames don't carry an image content
                         // transform — silently ignore (the caller's
@@ -2591,6 +2772,10 @@ fn write_mutation_to_scene(
                 {
                     match mutation {
                         NodeMutation::Bounds(b) => r.bounds = b,
+                        NodeMutation::Reshape { bounds, anchors } => {
+                            r.bounds = bounds;
+                            r.anchors = anchors;
+                        }
                         NodeMutation::Transform(m) => r.item_transform = m,
                         NodeMutation::ImageTransform(m) => r.image_item_transform = m,
                         // Rectangles don't carry path points — no-op.
@@ -2635,6 +2820,10 @@ fn write_mutation_to_scene(
                         // (and, for a translate, not even after) the
                         // commit.
                         NodeMutation::Bounds(b) => p.bounds = b,
+                        NodeMutation::Reshape { bounds, anchors } => {
+                            p.bounds = bounds;
+                            p.anchors = anchors;
+                        }
                         NodeMutation::Transform(m) => p.item_transform = m,
                         NodeMutation::ImageTransform(_) => {}
                     }
@@ -2653,7 +2842,9 @@ fn write_mutation_to_scene(
                     .find(|o| o.self_id.as_deref() == Some(id.as_str()))
                 {
                     match mutation {
-                        NodeMutation::Bounds(b) => o.bounds = b,
+                        NodeMutation::Bounds(b) | NodeMutation::Reshape { bounds: b, .. } => {
+                            o.bounds = b
+                        }
                         NodeMutation::Transform(m) => o.item_transform = m,
                         // The snapshot does not carry an oval's image
                         // transform, so the content gestures stay off
@@ -2675,6 +2866,10 @@ fn write_mutation_to_scene(
                 {
                     match mutation {
                         NodeMutation::Bounds(b) => l.bounds = b,
+                        NodeMutation::Reshape { bounds, anchors } => {
+                            l.bounds = bounds;
+                            l.anchors = anchors;
+                        }
                         NodeMutation::Transform(m) => l.item_transform = m,
                         NodeMutation::ImageTransform(_) | NodeMutation::PathPoint { .. } => {}
                     }
@@ -2715,6 +2910,10 @@ fn restore_snapshot_in_scene(scene: &mut paged_scene::Document, snap: &NodeSnaps
                 {
                     f.bounds = snap.bounds;
                     f.item_transform = snap.item_transform;
+                    // v80 — a shaped frame's resize wrote its path.
+                    if snap.drawn_from_path && !snap.path_anchors.is_empty() {
+                        f.anchors = snap.path_anchors.clone();
+                    }
                     return;
                 }
             }
@@ -2730,6 +2929,11 @@ fn restore_snapshot_in_scene(scene: &mut paged_scene::Document, snap: &NodeSnaps
                     r.bounds = snap.bounds;
                     r.item_transform = snap.item_transform;
                     r.image_item_transform = snap.image_item_transform;
+                    // v80 — a many-anchored rectangle's resize wrote its
+                    // path.
+                    if snap.drawn_from_path && !snap.path_anchors.is_empty() {
+                        r.anchors = snap.path_anchors.clone();
+                    }
                     return;
                 }
             }
@@ -2789,6 +2993,8 @@ fn restore_snapshot_in_scene(scene: &mut paged_scene::Document, snap: &NodeSnaps
                 {
                     l.bounds = snap.bounds;
                     l.item_transform = snap.item_transform;
+                    // v80 — a line's resize wrote its path.
+                    l.anchors = snap.path_anchors.clone();
                     return;
                 }
             }
@@ -2817,6 +3023,7 @@ pub(crate) fn compute_new_bounds(
         image_item_transform: None,
         path_anchors: Vec::new(),
         drawn_from_path: false,
+        path_starts: Vec::new(),
     };
     let session = GestureSession {
         handle: GestureHandle(0),
@@ -2833,22 +3040,45 @@ pub(crate) fn compute_new_bounds(
         resize_box: None,
         preview_copies: None,
         snap_hold: Default::default(),
+        duplicate_check: None,
     };
     match compute_node_mutation(&snap, &session, delta) {
-        NodeMutation::Bounds(b) => b,
+        NodeMutation::Bounds(b) | NodeMutation::Reshape { bounds: b, .. } => b,
         NodeMutation::Transform(_)
         | NodeMutation::ImageTransform(_)
         | NodeMutation::PathPoint { .. } => snapshot,
     }
 }
 
-fn build_op_from_mutation(snap: &NodeSnapshot, mutation: NodeMutation) -> Operation {
-    match mutation {
+fn build_ops_from_mutation(snap: &NodeSnapshot, mutation: NodeMutation) -> Vec<Operation> {
+    let op = match mutation {
         NodeMutation::Bounds(b) => Operation::SetProperty {
             node: snap.node_id.clone(),
             path: PropertyPath::FrameBounds,
             value: Value::Bounds([b.top, b.left, b.bottom, b.right]),
         },
+        // v80 (engine ADR 1302) — the box and the path, one after the
+        // other in the gesture's one step; the subpaths keep their starts.
+        NodeMutation::Reshape { bounds: b, anchors } => {
+            return vec![
+                Operation::SetProperty {
+                    node: snap.node_id.clone(),
+                    path: PropertyPath::FrameBounds,
+                    value: Value::Bounds([b.top, b.left, b.bottom, b.right]),
+                },
+                Operation::SetProperty {
+                    node: snap.node_id.clone(),
+                    path: PropertyPath::FramePath,
+                    value: Value::FramePath {
+                        anchors: anchors
+                            .iter()
+                            .map(paged_mutate::operation::PathAnchorSpec::from_parse)
+                            .collect(),
+                        subpath_starts: snap.path_starts.clone(),
+                    },
+                },
+            ];
+        }
         NodeMutation::Transform(m) => Operation::SetProperty {
             node: snap.node_id.clone(),
             path: PropertyPath::FrameTransform,
@@ -2864,7 +3094,41 @@ fn build_op_from_mutation(snap: &NodeSnapshot, mutation: NodeMutation) -> Operat
             path: PropertyPath::FramePathPoint,
             value: Value::PathPoint { address, position },
         },
-    }
+    };
+    vec![op]
+}
+
+/// v80 (engine ADR 1302) — a resized item's path, carried from its old box
+/// to its new one (both in the item's own space): every point keeps its
+/// place relative to the box. An axis the old box has no extent along (a
+/// straight line) moves with the box's edge instead of scaling.
+fn map_path_into(
+    anchors: &[paged_model::PathAnchor],
+    from: Bounds,
+    to: Bounds,
+) -> Vec<paged_model::PathAnchor> {
+    let axis = |v: f32, a0: f32, a1: f32, b0: f32, b1: f32| {
+        let span = a1 - a0;
+        if span.abs() < 1e-6 {
+            v + (b0 - a0)
+        } else {
+            b0 + (v - a0) * (b1 - b0) / span
+        }
+    };
+    let map = |(x, y): (f32, f32)| {
+        (
+            axis(x, from.left, from.right, to.left, to.right),
+            axis(y, from.top, from.bottom, to.top, to.bottom),
+        )
+    };
+    anchors
+        .iter()
+        .map(|a| paged_model::PathAnchor {
+            anchor: map(a.anchor),
+            left: map(a.left),
+            right: map(a.right),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -3294,6 +3558,7 @@ mod tests {
             image_item_transform: Some(IDENTITY),
             path_anchors: Vec::new(),
             drawn_from_path: false,
+            path_starts: Vec::new(),
         };
         let session = GestureSession {
             handle: GestureHandle(0),
@@ -3310,6 +3575,7 @@ mod tests {
             resize_box: None,
             preview_copies: None,
             snap_hold: Default::default(),
+            duplicate_check: None,
         };
         compute_node_mutation(&snap, &session, (0.0, 50.0))
     }
@@ -3317,7 +3583,7 @@ mod tests {
     #[test]
     fn rotate_content_gesture_emits_image_transform_op() {
         // Phase G — RotateContent produces an ImageTransform mutation
-        // (not a frame transform); build_op_from_mutation maps it to a
+        // (not a frame transform); build_ops_from_mutation maps it to a
         // SetProperty on ImageContentTransform.
         let mutation = content_gesture_mutation(GestureType::RotateContent);
         assert!(matches!(mutation, NodeMutation::ImageTransform(Some(_))));
@@ -3329,14 +3595,15 @@ mod tests {
             image_item_transform: Some(IDENTITY),
             path_anchors: Vec::new(),
             drawn_from_path: false,
+            path_starts: Vec::new(),
         };
-        let op = build_op_from_mutation(&snap, mutation);
+        let ops = build_ops_from_mutation(&snap, mutation);
         assert!(matches!(
-            op,
-            paged_mutate::Operation::SetProperty {
+            ops.as_slice(),
+            [paged_mutate::Operation::SetProperty {
                 path: paged_mutate::PropertyPath::ImageContentTransform,
                 ..
-            }
+            }]
         ));
     }
 

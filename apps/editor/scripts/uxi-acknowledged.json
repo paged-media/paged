@@ -120,10 +120,6 @@
     "task": "CM2",
     "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T43 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T44": {
-    "task": "CM1",
-    "reason": "No test claims it yet: the edit-context stack runs hooks inside state updaters and isInScope checks the root only; CM1 (over EN5) fixes both. Claim it in a test title (UXI-T44 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T45": {
     "task": "CM4",
     "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T45 — …) when that lands, or sooner where today's code already passes (W0.7)."
@@ -172,10 +168,6 @@
     "task": "IC3",
     "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T57 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T58": {
-    "task": "IC5",
-    "reason": "No test claims it yet: a drag that starts before its hit test answers gets no feedback from the down point yet (IC5, over EN7's atomic begin). Claim it in a test title (UXI-T58 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T59": {
     "task": "IC3",
     "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T59 — …) when that lands, or sooner where today's code already passes (W0.7)."
@@ -202,7 +194,7 @@
   },
   "UXI-T66": {
     "task": "DF4",
-    "reason": "No test claims it yet: an import's losses are not reported (the IDML lost list is dropped at client.exportIdml); DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
+    "reason": "No test claims it yet: the engine reports an IDML import's losses on the load (DocumentHandle.losses) and the client's exportIdml answers the export's (protocol 80, engine ADR 1305), but no report shows them; DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T68": {
     "task": "DF6",

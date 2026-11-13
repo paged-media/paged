@@ -69,7 +69,7 @@ interface CanvasGlobal {
         targetWidthPx: number,
         dpi?: number,
       ) => Promise<{ pngBytes: number[] }>;
-      exportIdml: () => Promise<Uint8Array>;
+      exportIdml: () => Promise<{ bytes: Uint8Array }>;
       loadDocument: (bytes: Uint8Array) => Promise<{ pageCount: number }>;
       elementGeometry: (
         ids: Array<{ kind: string; id: string }>,
@@ -969,7 +969,7 @@ export class Designer {
   async exportAndReload(): Promise<{ byteLength: number; pageCount: number }> {
     return this.page.evaluate(async () => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
-      const bytes = await c.client.exportIdml();
+      const bytes = (await c.client.exportIdml()).bytes;
       const byteLength = bytes.length;
       const handle = await c.client.loadDocument(bytes);
       return { byteLength, pageCount: handle.pageCount };

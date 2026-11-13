@@ -900,7 +900,10 @@ export async function createHeadlessEditor(
     saveAsIdml: async () => {
       if (!state.document.handle || state.document.handle.pageCount === 0)
         return;
-      opened.push({ kind: "download", detail: await client.exportIdml() });
+      opened.push({
+        kind: "download",
+        detail: (await client.exportIdml()).bytes,
+      });
     },
     savePaged: async () => {
       if (!state.document.handle || state.document.handle.pageCount === 0)

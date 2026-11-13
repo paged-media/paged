@@ -872,7 +872,29 @@ export type WorkerToMain = WorkerToMainKind & {
 //     `SnapSource` gains `margin` and `column`.
 //   - Live modifiers (engine ADR 193, amendment 1): `BeginGesture` gains the
 //     optional `modifiers`; an Alt-drag previews the copy it commits.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(79);
+// v80 — the engine's second half of the interaction contract (editor ADR
+//   1200, tasks EN5–EN8):
+//   - The edit scope (engine ADR 1301): `RequestScopeContains { root, ids,
+//     members }` answers `ScopeContains { found, contains, members?,
+//     stories?, revision }` — whether items lie in an edit context's subtree
+//     (`UXI-CTX-010`, `UXI-CTX-011`).
+//   - Duplicates are all or nothing (engine ADR 1302): an Alt-drag of a
+//     selection on several spreads copies spread by spread; one that cannot
+//     be copied is refused at the press with the new
+//     `GestureFailure::DuplicateRefused { id, reason }`, and Alt pressed
+//     during the drag moves it with `GestureUpdated.duplicateRefused` saying
+//     why. A resize of an item drawn from its path carries the path.
+//   - The press (engine ADR 1303): `BeginGestureAt(GesturePress)` answers
+//     `GestureBegunAt { hit, target, selection, selectionChanged, handle,
+//     marquee, outOfScope, refused }` — hit test, selection and gesture
+//     begin in one call (`UXI-OWN-006`, `UXI-OWN-007`).
+//   - Coalesced writes (engine ADR 1304): `MutateCoalesced { coalesce,
+//     mutation, label? }` joins consecutive writes with one key into one
+//     undo step; `EndCoalesce { coalesce? }` answers `CoalesceEnded`.
+//   - Import losses (engine ADR 1305): `DocumentHandle.losses` (additive,
+//     `LossEntry[]`) on every `DocumentLoaded` (`UXI-FIL-002`).
+//   New message kinds an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(80);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -2163,6 +2185,54 @@ pub enum MainToWorkerKind {
     CancelGesture {
         handle: crate::gesture::GestureHandle,
     },
+    /// v80 (engine ADR 1303) — a press: the hit test at the press point,
+    /// the selection changed as `select` says, and the gesture begun on the
+    /// selection, anchored at the point, in one call against one document
+    /// state (`UXI-OWN-006`, `UXI-OWN-007`). Reply: `GestureBegunAt`, also
+    /// when nothing was hit (`marquee`) or the gesture was refused
+    /// (`refused`). The legacy `HitTest` + `SetElementSelection` +
+    /// `BeginGesture` keep working.
+    BeginGestureAt(crate::press::GesturePress),
+    /// v80 (engine ADR 1301) — the edit scope of `root`: for each of `ids`,
+    /// whether it lies inside root's subtree (the root itself, a group's
+    /// members, a container's pasted-in children, a text frame's story and
+    /// the objects anchored in it, recursively); with `members`, every item
+    /// and story in it. A read. Reply: `ScopeContains`, whose `revision`
+    /// names the document state it holds for.
+    RequestScopeContains {
+        root: crate::element_selection::ElementId,
+        #[serde(default)]
+        ids: Vec<crate::element_selection::ElementId>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        members: bool,
+    },
+    /// v80 (engine ADR 1304) — apply `mutation` as part of the run of
+    /// writes keyed `coalesce`: the first write of a run is a step of its
+    /// own, and every following write with the same key joins that step
+    /// (one undo returns to the state before the first, one redo to the
+    /// state after the last) — until a write with another key or none, a
+    /// gesture, an undo or a redo comes between, or `EndCoalesce`. An
+    /// inspector scrub is one step however many previews it wrote. Refused
+    /// while a gesture holds the document (ADR 1300). Reply as for
+    /// `Mutate`; its `appliedSeq` names the run's step from then on.
+    MutateCoalesced {
+        coalesce: String,
+        mutation: Mutation,
+        /// The step's name (ADR 1030); absent keeps the default, and a
+        /// later write of the run renames it only when it gives one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
+    },
+    /// v80 (engine ADR 1304) — end the run of coalescing writes (only the
+    /// run keyed `coalesce`, when given): the next keyed write starts a
+    /// step. Reply: `CoalesceEnded`.
+    EndCoalesce {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        coalesce: Option<String>,
+    },
 }
 
 /// Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -2996,6 +3066,12 @@ pub enum WorkerToMainKind {
         page_ids: Vec<PageId>,
         #[serde(default)]
         snap_lines: Vec<crate::snap::SnapLine>,
+        /// v80 (engine ADR 1302) — Alt is held but the selection cannot be
+        /// copied: the drag moves it (and its commit will), and this says
+        /// why no copy is made. Absent otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        duplicate_refused: Option<crate::gesture::DuplicateRefusal>,
     },
     /// Phase B — `CommitGesture` succeeded. Mirrors
     /// `MutationApplied`'s payload: the new applied_seq + dirty pages
@@ -3045,12 +3121,84 @@ pub enum WorkerToMainKind {
     /// `apps/canvas/src/worker/worker.ts`.
     GestureSnapLines {
         snap_lines: Vec<crate::snap::SnapLine>,
+        /// v80 (engine ADR 1302) — `GestureUpdated.duplicateRefused` on the
+        /// shared-memory path.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        duplicate_refused: Option<crate::gesture::DuplicateRefusal>,
     },
     /// Sent by the JS-side worker glue (not by Rust) after `LoadDocument`
     /// succeeds, carrying the Tier 3 resolution result. The Rust variant
     /// exists so the TS contract is unified — emitting code lives in
     /// `apps/canvas/src/worker/worker.ts`.
     ResolutionDone(crate::resolve::ResolutionResult),
+    /// v80 (engine ADR 1303) — `BeginGestureAt` reply.
+    GestureBegunAt {
+        /// The hit test at the press point.
+        hit: HitResult,
+        /// The item the press took; null when it hit nothing, kept the
+        /// selection or hit outside the scope.
+        target: Option<crate::element_selection::ElementId>,
+        /// The selection after the press.
+        selection: Vec<crate::element_selection::ElementId>,
+        selection_changed: bool,
+        /// The gesture begun, for `UpdateGesture` / `CommitGesture` /
+        /// `CancelGesture`; null when none was.
+        handle: Option<crate::gesture::GestureHandle>,
+        /// Nothing was hit: the drag is a marquee (the selection is
+        /// untouched).
+        marquee: bool,
+        /// The hit item lies outside the press's scope: nothing changed.
+        out_of_scope: bool,
+        /// Why no gesture began although the press took an item (locked,
+        /// not permitted, a copy refused, another gesture active). The
+        /// selection change stands.
+        refused: Option<GestureFailure>,
+    },
+    /// v80 (engine ADR 1301) — `RequestScopeContains` reply.
+    ScopeContains {
+        root: crate::element_selection::ElementId,
+        /// Whether `root` names something in the document.
+        found: bool,
+        /// One per requested id, in order.
+        contains: Vec<bool>,
+        /// Every page item below the root (the root left out), when asked.
+        members: Option<Vec<crate::element_selection::ElementId>>,
+        /// The stories inside the scope, when asked: a story range, a
+        /// table or a cell of one is in scope.
+        stories: Option<Vec<String>>,
+        /// The document revision the answer holds for: it moves with every
+        /// change, so an answer cached under it is current while it stands.
+        revision: u64,
+    },
+    /// v80 (engine ADR 1304) — `EndCoalesce` reply: the step the run ended
+    /// in, null when no run was open.
+    CoalesceEnded { applied_seq: Option<u64> },
+}
+
+impl From<crate::hit::HitTestResult> for HitResult {
+    fn from(result: crate::hit::HitTestResult) -> Self {
+        HitResult {
+            frame_id: result.frame_id,
+            story_id: result.story_id,
+            offset_within_story: result.offset_within_story,
+            frame_bounds: result.frame_bounds.map(|b| FrameBounds {
+                left: b[0],
+                top: b[1],
+                right: b[2],
+                bottom: b[3],
+            }),
+            element: result.element,
+            bounds: result.bounds,
+            item_transform: result.item_transform,
+            group_chain: result.group_chain,
+            table_context: result.table_context.map(|t| TableHitContext {
+                table_id: t.table_id,
+                row: t.row,
+                col: t.col,
+            }),
+        }
+    }
 }
 
 /// Wire-format errors for the gesture envelope. Mirrors the variants
@@ -3086,6 +3234,13 @@ pub enum GestureFailure {
         id: crate::element_selection::ElementId,
         permission: String,
     },
+    /// v80 (engine ADR 1302) — a press with Alt held asked for a copy the
+    /// selection cannot make: `id` stops it, `reason` says why. Nothing
+    /// moved (`UXI-SEL-007`, D-16).
+    DuplicateRefused {
+        id: crate::element_selection::ElementId,
+        reason: String,
+    },
     Other {
         message: String,
     },
@@ -3109,6 +3264,10 @@ impl From<crate::gesture::GestureError> for GestureFailure {
             UnknownAnchorPage(page_id) => GestureFailure::UnknownAnchorPage { page_id },
             Locked(id) => GestureFailure::Locked { id },
             NotPermitted(id, permission) => GestureFailure::NotPermitted { id, permission },
+            DuplicateRefused(r) => GestureFailure::DuplicateRefused {
+                id: r.id,
+                reason: r.reason,
+            },
         }
     }
 }
@@ -5462,6 +5621,7 @@ mod tests {
                 overset_stories: 0,
             },
             ruler_guides: Vec::new(),
+            losses: Vec::new(),
         };
         let json = serde_json::to_string(&h).unwrap();
         for needle in [

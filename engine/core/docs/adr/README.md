@@ -125,7 +125,7 @@ is not written yet.
 | [190](190-a-placed-svg-draws-its-filters.md) | A placed SVG draws its filters | Accepted 2026-10-19 (amended 2026-10-20, 2026-10-24) |
 | [191](191-a-group-transforms-about-its-box.md) | A group transforms about its box | Accepted 2026-10-19 |
 | [192](192-a-reflection-reads-as-the-flip-with-the-smaller-turn.md) | A reflection reads as the flip with the smaller turn | Accepted 2026-10-19 |
-| [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19; amendment 1 2026-11-13: the Alt-drag previews the copy it commits, the press's modifiers begin the gesture |
+| [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19; amendment 1 2026-11-13: the Alt-drag previews the copy it commits, the press's modifiers begin the gesture; amendment 2 2026-11-13: an Alt-drag copy is all or nothing (1302) |
 | [194](194-deleting-a-style-moves-its-text-to-the-root-style.md) | Deleting a style moves its text to the root style | Accepted 2026-10-19 |
 | [195](195-the-state-hash-covers-the-whole-model.md) | The state hash covers the whole model | Accepted 2026-10-19 |
 | [196](196-fitting-alignment-takes-idml-anchor-names.md) | Fitting alignment takes IDML's anchor point names | Accepted 2026-10-19 |
@@ -205,6 +205,11 @@ is not written yet.
 | [1097](1097-one-loss-report.md) | One loss report: the leaf crate `paged-loss` owns `LossEntry` / `LossSeverity` / `LossReport`; every adapter (SVG, DXF, PDF vectors, PSD styles, DOCX lowering, PDF export, web lowering) maps onto it with its own codes as data; the contract's types are generated from it; the SDK's `lossDiagnostics` is the one translation onto the diagnostics channel | Accepted 2026-11-11 |
 | [1099](1099-a-layer-style-is-drawn-by-one-evaluator.md) | A layer style is drawn by one evaluator, from the effect stack: the stack carries every layer-style parameter (optional, absent on InDesign's), `paged-layer-fx` plans and draws the effects as kernel dispatches on a device (paged.image's GPU fold, the CPU device of its CPU fold and of the engine renderer), `paged-psd-fx` maps PSD styles onto and off the stack losslessly, and a PSD's layers are placed as frames (`document.placePsdLayers@1`) | Accepted 2026-11-12 |
 | [1300](1300-a-gesture-holds-the-document.md) | A gesture holds the document: while one is active, every write, undo, redo and script from another door is refused whole with the typed `GestureInProgress`; the editor's client orders its own writes after its gesture (`whenGestureIdle`) | Accepted 2026-11-13 |
+| [1301](1301-an-edit-scope-is-the-documents-own-nesting.md) | An edit scope is the document's own nesting: `RequestScopeContains` answers whether items lie in an element's subtree (group members, pasted-in children, a text frame's story and what is anchored in it), with the members and the document revision | Accepted 2026-11-13 |
+| [1302](1302-a-copy-is-all-or-nothing-and-a-path-follows-its-box.md) | A copy is all or nothing, and a path follows its box: an Alt-drag copies across spreads spread by spread or is refused at the press with `duplicateRefused`; a resize of an item drawn from its path carries the path | Accepted 2026-11-13 |
+| [1303](1303-a-press-is-one-call.md) | A press is one call: `BeginGestureAt` hit-tests, changes the selection and begins the gesture against one document state, answering the hit, the selection and the handle, or a marquee | Accepted 2026-11-13 |
+| [1304](1304-writes-with-one-coalesce-key-are-one-undo-step.md) | Writes with one coalesce key are one undo step, until another key, no key, a gesture, an undo or `EndCoalesce` | Accepted 2026-11-13 |
+| [1305](1305-an-opened-document-reports-its-losses.md) | An opened document reports its losses: `DocumentHandle.losses` (`idml.import.<what>`), and the client's `exportIdml` answers the export's | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

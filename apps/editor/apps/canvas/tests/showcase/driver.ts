@@ -1248,9 +1248,8 @@ export class ShowcaseDoc {
 
   /** The `.paged` container bytes for the document as it stands. */
   /**
-   * `exportIdml`, but reading BOTH halves of the wire reply. The typed
-   * `client.exportIdml()` returns only the bytes and discards
-   * `payload.lost` — the v58/C-28 honest-loss ledger (opacity masks and
+   * `exportIdml`, but reading BOTH halves of the wire reply: the bytes
+   * and `payload.lost` — the v58/C-28 honest-loss ledger (opacity masks and
    * every other `.paged`-native construct IDML cannot carry). The
    * assembly spec asserts that list EQUALS the expected loss set, so a
    * new silent loss fails the build instead of vanishing. Each loss is a
@@ -1435,10 +1434,12 @@ export class ShowcaseDoc {
     const b64 = await this.page.evaluate(async () => {
       const c = (
         globalThis as unknown as {
-          __canvas: { client: { exportIdml: () => Promise<Uint8Array> } };
+          __canvas: {
+            client: { exportIdml: () => Promise<{ bytes: Uint8Array }> };
+          };
         }
       ).__canvas;
-      const bytes = await c.client.exportIdml();
+      const bytes = (await c.client.exportIdml()).bytes;
       let s = "";
       for (const b of bytes) s += String.fromCharCode(b);
       return btoa(s);

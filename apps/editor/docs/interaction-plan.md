@@ -55,6 +55,7 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 | W0.8 this plan and the status block                     | Done                                                                                                                                                                    | this file, `status.md`                                 |
 | W0.4–W0.7 inventory, coverage report, harness, baseline | In progress                                                                                                                                                             | §3                                                     |
 | EN1–EN4, the engine and protocol 79                     | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview | §6; engine ADR 1300, amendments to 125, 193, 1011      |
+| EN5–EN8, the engine and protocol 80                     | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)              | §6; engine ADRs 1301–1305, amendment 2 to 193          |
 | Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX               | Not started                                                                                                                                                             | §4–§12                                                 |
 
 ## 1. Facts in the code that shape the plan
@@ -301,14 +302,15 @@ Two protocol versions: EN1–EN4 in the first, EN5–EN8 in the second. Engine r
 - **EN4 Live duplicate (D-02)**: the modifiers at begin and update decide, and the commit equals
   the last preview (`ENG/gesture.rs:761-981`, VC:1060). Tests: T06, T11. Closes GF-2, GF-3. **Done** (protocol 79, engine ADR 193 amendment 1).
 - **EN5 The scope query** `scopeContains(root, ids)`, answered per document revision, for
-  `SH/state/edit-context-stack.tsx:306-319`. Tests: T44.
+  `SH/state/edit-context-stack.tsx:306-319`. Tests: T44. **Done** (protocol 80, engine ADR 1301): `RequestScopeContains`; the client's `scopeContains` and `editScope` (a synchronous `contains`, cached until the document changes); CM1 wires `isInScope` to it.
 - **EN6 Losses reach the editor.** `exportIdml` returns `{bytes, lost}`
   (`apps/editor/packages/client/src/client.ts:1374`); an IDML import reports its `LossEntry[]`
-  on load.
+  on load. **Done** (protocol 80, engine ADR 1305): `exportIdml` answers `{ bytes, lost, links }`; `DocumentHandle.losses` (`idml.import.<what>`); the publish module's IDML diagnostics carry items and pages; DF4 builds the report.
 - **EN7 Atomic begin.** `beginGestureAt {point, modifiers, selectPolicy}`, one round trip.
-  Tests: T58.
+  Tests: T58. **Done** (protocol 80, engine ADR 1303): hit, selection (`replace`, `toggle`, `keep`), target rule and scope, gesture begin; IC5 adopts it in VC.
 - **EN8 Undo coalescing.** A coalesce key, so an inspector scrub is one undo step (ADR 253 holds
-  per action).
+  per action). **Done** (protocol 80, engine ADR 1304): `mutate(op, { coalesce })` and `endCoalesce()`; FI1 scrubs with it.
+- **EN fuzz findings** at `PAGED_GESTURE_FUZZ_N=200`: GF-5 (seeds 48, 141, 155, an Alt-drag across spreads) and GF-6 (seed 31, a resized path's copy moved on save → load) fixed by engine ADR 1302; the seeds replay as regression tests.
 
 ## 7. Track WS — Workspace and camera (the strategy's Phase 1 workspace; the spec's CAM)
 

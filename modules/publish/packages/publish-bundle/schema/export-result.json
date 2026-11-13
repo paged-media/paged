@@ -16,7 +16,12 @@
           },
           "code": { "kind": "text" },
           "message": { "kind": "text", "multiline": true },
-          "page": { "kind": "number", "integer": true }
+          "page": { "kind": "number", "integer": true },
+          "items": {
+            "kind": "list",
+            "of": { "kind": "text" },
+            "optional": true
+          }
         }
       }
     }

@@ -427,7 +427,7 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
       const c = (
         globalThis as unknown as {
           __canvas: {
-            client: { exportIdml(): Promise<Uint8Array> };
+            client: { exportIdml(): Promise<{ bytes: Uint8Array }> };
             registries: {
               importers: {
                 resolve(name: string): {
@@ -441,7 +441,7 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
           };
         }
       ).__canvas;
-      const bytes = await c.client.exportIdml();
+      const bytes = (await c.client.exportIdml()).bytes;
       const imp = c.registries.importers.resolve("doors.idml");
       if (!imp) return "no importer claims .idml";
       await imp.import({ name: "doors.idml", bytes });
@@ -586,7 +586,7 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
       const c = (
         globalThis as unknown as {
           __canvas: {
-            client: { exportIdml(): Promise<Uint8Array> };
+            client: { exportIdml(): Promise<{ bytes: Uint8Array }> };
             registries: {
               importers: {
                 resolve(name: string): {
@@ -600,7 +600,7 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
           };
         }
       ).__canvas;
-      const bytes = await c.client.exportIdml();
+      const bytes = (await c.client.exportIdml()).bytes;
       const imp = c.registries.importers.resolve("doors.idml");
       if (!imp) return "no importer claims .idml";
       await imp.import({ name: "doors.idml", bytes });

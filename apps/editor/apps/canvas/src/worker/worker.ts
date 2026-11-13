@@ -35,6 +35,7 @@
 /// <reference lib="webworker" />
 import type {
   CameraSabLayout,
+  DuplicateRefusal,
   GestureSabLayout,
   MainToWorker,
   SnapLine,
@@ -1265,6 +1266,8 @@ const GESTURE_DRAIN_INTERVAL_MS = 8;
 interface GestureRawOutcome {
   pageIds: string[];
   snapLines: SnapLine[];
+  /** Protocol 80 — Alt held on a selection that cannot be copied. */
+  duplicateRefused?: DuplicateRefusal;
 }
 
 function startGestureDrain() {
@@ -1316,6 +1319,11 @@ function drainGestureSab() {
     seq: null,
     protocol: PROTOCOL_VERSION,
     kind: "gestureSnapLines",
-    payload: { snapLines: outcome.snapLines },
+    payload: {
+      snapLines: outcome.snapLines,
+      ...(outcome.duplicateRefused
+        ? { duplicateRefused: outcome.duplicateRefused }
+        : {}),
+    },
   });
 }

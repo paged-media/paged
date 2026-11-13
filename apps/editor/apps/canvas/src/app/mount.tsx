@@ -1237,7 +1237,7 @@ function CanvasAppIntegration() {
         // (ADR 229).
         const fallbackName = sourceName || "document";
         try {
-          const bytes = await client.exportIdml();
+          const { bytes } = await client.exportIdml();
           const baseName = await client.documentMeta().then(
             (meta) => meta.documentName || fallbackName,
             // meta unavailable — keep the fallback name

@@ -72,7 +72,7 @@ interface CanvasHandle {
       executeScript: (
         s: string,
       ) => Promise<{ output: string[]; error: string | null }>;
-      exportIdml: () => Promise<Uint8Array>;
+      exportIdml: () => Promise<{ bytes: Uint8Array }>;
       exportPaged: () => Promise<Uint8Array>;
     };
   };
@@ -312,9 +312,9 @@ export function parsePlacedTables(idml: Buffer): PlacedDocument {
 export async function placedTables(page: Page): Promise<PlacedDocument> {
   const bytes = await page.evaluate(async () =>
     Array.from(
-      await (
-        globalThis as unknown as CanvasHandle
-      ).__canvas.client.exportIdml(),
+      await (globalThis as unknown as CanvasHandle).__canvas.client
+        .exportIdml()
+        .then((r) => r.bytes),
     ),
   );
   return parsePlacedTables(Buffer.from(bytes));

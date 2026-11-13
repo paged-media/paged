@@ -20,4 +20,4 @@
 //! register C18). Its owner is the leaf crate `paged-loss`, so a format crate
 //! below the model answers with the same shape; this module re-exports it.
 
-pub use paged_loss::{LossEntry, LossReport, LossSeverity};
+pub use paged_loss::{LossEntry, LossLog, LossReport, LossSeverity};
