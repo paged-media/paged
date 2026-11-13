@@ -1312,6 +1312,10 @@ With `prefers-reduced-motion: reduce` emulated, Home (fit page) still animates o
 
 **Screenshots:** `F-52-reduced-motion-fit.png`
 
+**Fixed (2026-11-13).** With reduce motion on, a fit, a page key or any other camera jump writes its
+target in one step: the same final view, no motion; a jump still running yields to the next wheel
+or pan instead of pulling the view back (editor ADR 1211; `UXI-T53`).
+
 ### Performance and responsiveness
 
 <a id="f-53"></a>

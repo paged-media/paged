@@ -82,6 +82,7 @@ import type {
 } from "@paged-media/shell";
 import {
   awaitPlacementPoint,
+  currentPageIndex,
   editorRootOf,
   queryEditor,
   scopeOf,
@@ -259,12 +260,10 @@ export interface PageTarget {
 }
 
 /**
- * Resolve the CURRENT page — the placement anchor for every verb.
- *
- * Viewport centre → `viewportToDoc` → the containing page over the
- * `layoutPages` stack (the `ViewportCanvas` pointer mapping) → else
- * the NEAREST page (pasteboard view) → else page 0 (camera not yet
- * initialised: scale 0 / no viewport). `null` only with no document.
+ * Resolve the CURRENT page — the placement anchor for every verb: the
+ * shell's one current page (`currentPageIndex`, editor ADR "Navigation
+ * history and one current page"), so an insert lands on the page the
+ * control bar names. `null` only with no document.
  */
 export function currentPageTarget(paged: PagedEditor): PageTarget | null {
   return pageTargetFor({
@@ -332,34 +331,11 @@ export function pageTargetFor({
 }: PageTargetInputs): PageTarget | null {
   if (!handle || handle.pageIds.length === 0) return null;
   const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
-  const at = (i: number): PageTarget => ({
-    pageId: handle.pageIds[i],
-    rect: rects[i],
-  });
-
-  const [vw, vh] = viewportSize;
-  if (!(cam.scale > 0) || vw <= 0 || vh <= 0) return at(0);
-  const [docX, docY] = viewportToDoc(cam, vw / 2, vh / 2);
-  if (!Number.isFinite(docX) || !Number.isFinite(docY)) return at(0);
-
-  let nearest = 0;
-  let nearestD = Infinity;
-  for (let i = 0; i < rects.length; i++) {
-    const r = rects[i];
-    if (docX >= r.x && docX <= r.x + r.w && docY >= r.y && docY <= r.y + r.h) {
-      return at(i);
-    }
-    // Distance to the rect (0 inside — handled above), for the
-    // pasteboard fallback.
-    const dx = Math.max(r.x - docX, 0, docX - (r.x + r.w));
-    const dy = Math.max(r.y - docY, 0, docY - (r.y + r.h));
-    const d = dx * dx + dy * dy;
-    if (d < nearestD) {
-      nearestD = d;
-      nearest = i;
-    }
-  }
-  return at(nearest);
+  // The one current page (the shell's `currentPageIndex`: the page
+  // containing the viewport's centre, else the nearest, rotation
+  // included; page 0 before the camera is measured).
+  const i = Math.max(0, currentPageIndex(rects, cam, viewportSize));
+  return { pageId: handle.pageIds[i], rect: rects[i] };
 }
 
 /** Page-local `[top, left, bottom, right]` for a `w × h` insert

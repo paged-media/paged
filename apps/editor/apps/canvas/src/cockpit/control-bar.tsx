@@ -48,13 +48,10 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import {
-  viewportToDoc,
-  type ElementId,
-  type FontSummary,
-} from "@paged-media/client";
+import { type ElementId, type FontSummary } from "@paged-media/client";
 import {
   ContributedControlBarGroups,
+  currentPageIndex,
   useActiveScopeContext,
   useHasControlBarGroups,
   usePageNavigation,
@@ -90,7 +87,7 @@ import {
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 import { usePagePosition } from "../panels/page-position";
-import { layoutPages, pageNearest } from "../ui/layout";
+import { layoutPages } from "../ui/layout";
 import { Chip, Sep, ToolPill } from "./toolbars";
 import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
 
@@ -254,16 +251,12 @@ function DocumentControls() {
       </span>
     );
   }
-  // The page under the middle of the viewport (each page at its place on
-  // the canvas — `layoutPages`, the same convention the navigator fits to).
+  // The one current page (the shell's `currentPageIndex`, UXI-CAM-015):
+  // the page at the viewport's centre, else the nearest, rotation
+  // included — the page Fit page fits and an insert lands on.
   const rects = layoutPages(sizes, handle.pageOriginsPt);
-  const [cx, cy] = viewportToDoc(
-    camera,
-    viewportSize[0] / 2,
-    viewportSize[1] / 2,
-  );
-  const nearest = pageNearest(rects, cx, cy);
-  const current = nearest < 0 ? 0 : nearest;
+  const at = currentPageIndex(rects, camera, viewportSize);
+  const current = at < 0 ? 0 : at;
   const go = (i: number) =>
     navigateToPages([Math.max(0, Math.min(sizes.length - 1, i))]);
   const [w, h] = sizes[current];

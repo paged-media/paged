@@ -31,6 +31,7 @@ import { useState } from "react";
 
 import {
   clampScale,
+  currentPageIndex,
   useCamera,
   useDocument,
   zoomCameraTo,
@@ -59,28 +60,14 @@ export const NAVIGATOR_THUMB_PX = 200;
 /** The zoom buttons' step: the View menu's (×1.5). */
 const STEP = 1.5;
 
-/** The page the view is on: the one under the viewport's centre, else
- *  the nearest to it. -1 without pages. */
+/** The page the view is on: the editor's one current page (the shell's
+ *  `currentPageIndex`, rotation included). -1 without pages. */
 export function pageInView(
   rects: ReadonlyArray<PageRect>,
   camera: Camera,
   viewport: readonly [number, number],
 ): number {
-  if (rects.length === 0) return -1;
-  const cx = (viewport[0] / 2 - camera.tx) / camera.scale;
-  const cy = (viewport[1] / 2 - camera.ty) / camera.scale;
-  let best = 0;
-  let bestD = Infinity;
-  rects.forEach((r, i) => {
-    const dx = Math.max(r.x - cx, 0, cx - (r.x + r.w));
-    const dy = Math.max(r.y - cy, 0, cy - (r.y + r.h));
-    const d = Math.hypot(dx, dy);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  });
-  return best;
+  return currentPageIndex(rects, camera, viewport);
 }
 
 /** The view rectangle in the page's own space, pt (it may reach past the

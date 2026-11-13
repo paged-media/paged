@@ -53,6 +53,11 @@ const M = defineMessages("app.appCommands", {
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   zoom100: "Zoom to 100%",
+  actualSize: "Actual size",
+  calibratedSize: "Calibrated size",
+  calibrateScreen: "Calibrate screen size…",
+  navigateBack: "Go back",
+  navigateForward: "Go forward",
   zoomFit: "Fit document",
   fitPage: "Fit page in window",
   fitSpread: "Fit spread in window",
@@ -86,6 +91,11 @@ defineMessages("menu", {
   "Zoom in": "Zoom in",
   "Zoom out": "Zoom out",
   "Zoom to 100%": "Zoom to 100%",
+  "Actual size": "Actual size",
+  "Calibrated size": "Calibrated size",
+  "Calibrate screen size…": "Calibrate screen size…",
+  "Go back": "Go back",
+  "Go forward": "Go forward",
   "Fit page in window": "Fit page in window",
   "Fit spread in window": "Fit spread in window",
   "Fit selection in window": "Fit selection in window",
@@ -120,6 +130,16 @@ export const PAGED_VIEW_ZOOM_IN = "paged.view.zoomIn";
 export const PAGED_VIEW_ZOOM_OUT = "paged.view.zoomOut";
 export const PAGED_VIEW_ZOOM_100 = "paged.view.zoom100";
 export const PAGED_VIEW_ZOOM_FIT = "paged.view.zoomFit";
+// ADR 1201 D-12 — the named views beside 100 %, and the calibration
+// behind the physical one.
+export const PAGED_VIEW_ACTUAL_SIZE = "paged.view.actualSize";
+export const PAGED_VIEW_CALIBRATED_SIZE = "paged.view.calibratedSize";
+export const PAGED_VIEW_CALIBRATE_SCREEN = "paged.view.calibrateScreen";
+// Navigation history (UXI-CAM-016): back and forward through the places
+// the explicit navigations left (editor ADR "Navigation history and one
+// current page").
+export const PAGED_VIEW_NAVIGATE_BACK = "paged.view.navigateBack";
+export const PAGED_VIEW_NAVIGATE_FORWARD = "paged.view.navigateForward";
 // The fit commands and the page keys (UX audit F-31, F-16; ADR 257).
 export const PAGED_VIEW_FIT_PAGE = "paged.view.fitPage";
 export const PAGED_VIEW_FIT_SPREAD = "paged.view.fitSpread";
@@ -192,11 +212,32 @@ export interface AppCommandHandlers {
   zoomIn: () => void;
   zoomOut: () => void;
   zoom100: () => void;
+  /** An inch of the document as 96 CSS px (about 133 %), about the
+   *  viewport's centre. */
+  actualSize: () => void;
+  /** An inch of the document as an inch on this screen; the calibration
+   *  first when there is none. */
+  calibratedSize: () => void;
+  /** Open the screen calibration. */
+  calibrateScreen: () => void;
+  /** Back to the place the last explicit navigation left. */
+  navigateBack: () => void;
+  /** Forward again after Back. */
+  navigateForward: () => void;
   zoomFit: () => void;
   fitPage: () => void;
   fitSpread: () => void | Promise<void>;
   fitSelection: () => void | Promise<void>;
   goToPage: (which: "first" | "previous" | "next" | "last") => void;
+}
+
+/** How many places Back (or Forward) holds in the editor `state` is, 0
+ *  when it cannot say. */
+function navigationCount(state: unknown, which: "back" | "forward"): number {
+  const s = state as {
+    camera?: { navigation?: { state(): Record<string, number> } };
+  } | null;
+  return s?.camera?.navigation?.state()[which] ?? 0;
 }
 
 /** The undo hooks an active edit context may declare (ADR-012 Tier 1). */
@@ -303,6 +344,38 @@ export function buildAppCommands(
       title: t(M.zoomFit),
       category: "View",
       handler: () => handlers.zoomFit(),
+    },
+    {
+      id: PAGED_VIEW_ACTUAL_SIZE,
+      title: t(M.actualSize),
+      category: "View",
+      handler: () => handlers.actualSize(),
+    },
+    {
+      id: PAGED_VIEW_CALIBRATED_SIZE,
+      title: t(M.calibratedSize),
+      category: "View",
+      handler: () => handlers.calibratedSize(),
+    },
+    {
+      id: PAGED_VIEW_CALIBRATE_SCREEN,
+      title: t(M.calibrateScreen),
+      category: "View",
+      handler: () => handlers.calibrateScreen(),
+    },
+    {
+      id: PAGED_VIEW_NAVIGATE_BACK,
+      title: t(M.navigateBack),
+      category: "Layout",
+      handler: () => handlers.navigateBack(),
+      when: (paged) => navigationCount(paged, "back") > 0,
+    },
+    {
+      id: PAGED_VIEW_NAVIGATE_FORWARD,
+      title: t(M.navigateForward),
+      category: "Layout",
+      handler: () => handlers.navigateForward(),
+      when: (paged) => navigationCount(paged, "forward") > 0,
     },
     {
       id: PAGED_VIEW_FIT_PAGE,
@@ -488,6 +561,26 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     order: 40,
     group: "zoom",
   },
+  // ADR 1201 D-12 — the named views, after 100 % (which they never
+  // redefine) and before the fits.
+  {
+    path: "View/Actual size",
+    command: PAGED_VIEW_ACTUAL_SIZE,
+    order: 41,
+    group: "zoom",
+  },
+  {
+    path: "View/Calibrated size",
+    command: PAGED_VIEW_CALIBRATED_SIZE,
+    order: 41.5,
+    group: "zoom",
+  },
+  {
+    path: "View/Calibrate screen size…",
+    command: PAGED_VIEW_CALIBRATE_SCREEN,
+    order: 51,
+    group: "zoom",
+  },
   // InDesign's View menu order: the three fits, then the whole
   // document (its "Entire pasteboard").
   {
@@ -537,6 +630,19 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     path: "Layout/Last page",
     command: PAGED_VIEW_LAST_PAGE,
     order: 23,
+    group: "navigate",
+  },
+  // InDesign's Layout ▸ Go Back / Go Forward, after the page keys.
+  {
+    path: "Layout/Go back",
+    command: PAGED_VIEW_NAVIGATE_BACK,
+    order: 24,
+    group: "navigate",
+  },
+  {
+    path: "Layout/Go forward",
+    command: PAGED_VIEW_NAVIGATE_FORWARD,
+    order: 25,
     group: "navigate",
   },
   {
@@ -607,6 +713,15 @@ export const APP_KEYBINDINGS: KeybindingContribution[] = [
   { key: "pageup", command: PAGED_VIEW_PREVIOUS_PAGE },
   { key: "pagedown", command: PAGED_VIEW_NEXT_PAGE },
   { key: "end", command: PAGED_VIEW_LAST_PAGE },
+  // Go back / Go forward (UXI-CAM-016): InDesign's Layout ▸ Go Back and
+  // Go Forward chords, Cmd/Ctrl+PageUp and PageDown (on a Mac keyboard
+  // without page keys, Fn+Cmd+↑ / ↓). None was taken: the bare page keys
+  // page, Alt+← / → is tracking in text and Cmd+[ / ] is Arrange
+  // (test/unit/keybindings.test.ts).
+  { key: "cmd+pageup", command: PAGED_VIEW_NAVIGATE_BACK },
+  { key: "ctrl+pageup", command: PAGED_VIEW_NAVIGATE_BACK },
+  { key: "cmd+pagedown", command: PAGED_VIEW_NAVIGATE_FORWARD },
+  { key: "ctrl+pagedown", command: PAGED_VIEW_NAVIGATE_FORWARD },
   // Save. Both commands shipped without a key, so the single most
   // reflexive gesture in any editor did nothing at all — and the app has
   // no autosave, so the reflex failing is not a small matter. Cmd+S is

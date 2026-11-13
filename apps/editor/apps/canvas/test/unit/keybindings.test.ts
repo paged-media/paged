@@ -495,6 +495,29 @@ describe("the tables as a whole", () => {
     expect(fires("pagedown")).toBe("paged.view.nextPage");
     expect(fires("end")).toBe("paged.view.lastPage");
   });
+
+  // Navigation history (UXI-CAM-016; editor ADR "Navigation history and
+  // one current page"): InDesign's Go Back / Go Forward chords, and the
+  // bare page keys still page.
+  test("Go back and Go forward are Cmd/Ctrl+PageUp and PageDown, apart from the page keys", () => {
+    covers(
+      "command:paged.view.navigateBack",
+      "command:paged.view.navigateForward",
+      "keybinding:cmd+pageup→paged.view.navigateBack",
+      "keybinding:ctrl+pageup→paged.view.navigateBack",
+      "keybinding:cmd+pagedown→paged.view.navigateForward",
+      "keybinding:ctrl+pagedown→paged.view.navigateForward",
+    );
+    expect(fires("cmd+pageup")).toBe("paged.view.navigateBack");
+    expect(fires("ctrl+pageup")).toBe("paged.view.navigateBack");
+    expect(fires("cmd+pagedown")).toBe("paged.view.navigateForward");
+    expect(fires("ctrl+pagedown")).toBe("paged.view.navigateForward");
+    expect(fires("pageup")).toBe("paged.view.previousPage");
+    expect(fires("pagedown")).toBe("paged.view.nextPage");
+    // Arrange keeps Cmd+[ / ], the text verbs Alt+← / →.
+    expect(fires("cmd+[")).not.toBe("paged.view.navigateBack");
+    expect(fires("cmd+]")).not.toBe("paged.view.navigateForward");
+  });
 });
 
 describe("the View menu's chords (editor ADR 287)", () => {

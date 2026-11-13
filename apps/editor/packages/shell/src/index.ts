@@ -122,8 +122,32 @@ export {
   CameraProvider,
   cameraKeepingCentre,
   useCamera,
+  useNavigationHistoryState,
   type ViewportSize,
 } from "./state/camera-context";
+export {
+  createNavigationHistory,
+  NAVIGATION_HISTORY_LIMIT,
+  sameView,
+  type NavigationHistory,
+  type NavigationHistoryState,
+} from "./state/navigation-history";
+export {
+  currentPageIndex,
+  pageAtDocumentPoint,
+  viewportCentreInDocument,
+  type PageBox,
+} from "./state/current-page";
+export { useCurrentPage, type CurrentPage } from "./state/use-current-page";
+export {
+  CALIBRATION_MAX_DPI,
+  CALIBRATION_MIN_DPI,
+  densityFromMeasurement,
+  getScreenCalibration,
+  setScreenCalibration,
+  useScreenCalibration,
+  type ScreenCalibration,
+} from "./state/zoom-calibration";
 export {
   isRecord,
   isStringArray,
@@ -147,7 +171,12 @@ export {
   type FileChooserOptions,
 } from "./lib/file-chooser";
 export {
+  ACTUAL_SIZE_SCALE,
+  calibratedScale,
   clampCamera,
+  CSS_PX_PER_INCH,
+  parseZoomPercent,
+  PT_PER_INCH,
   zoomCameraTo,
   ZOOM_PRESET_SCALES,
   clampScale,

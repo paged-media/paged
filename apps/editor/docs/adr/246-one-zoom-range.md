@@ -42,3 +42,13 @@ spread, Fit selection, zoom presets and the page keys are added as commands
 scale of 1 (an inch as 72 CSS px). Actual size is a separate, labelled view that shows an inch as
 96 CSS px, and a calibrated physical size is a further labelled option, and the inputs that still carry bounds
 of their own drop them. Until that task lands the body describes the code.
+
+## Amendment 2026-11-13 (ADR 1211)
+
+[ADR 1211](1211-navigation-history-and-one-current-page.md) builds D-12: `fitCamera` and `zoomAt`
+hold their results inside the range for every caller (the Zoom tool's click stops at 4,000 % about
+the point clicked; a fit stops at 5 %, centred), the slider spans the range, the % field is
+editable and shows the normalised result, and Actual size (an inch as 96 CSS px) and Calibrated
+size (an inch as an inch, from a screen calibration) are View commands beside Zoom to 100 %, which
+stays a camera scale of 1. `apps/canvas/src/ui/ZoomField.tsx` is gone; the field is the shell's
+`chrome/ZoomControl.tsx`.
