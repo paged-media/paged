@@ -407,6 +407,15 @@ pub(crate) struct GestureSession {
     /// theirs (ADR 191). `None` for a selection of leaves,
     /// which resize their bounds.
     pub(crate) resize_box: Option<SelectionBox>,
+    /// v79 (engine ADR 193, amendment 1) — while Alt is held in a
+    /// Translate the preview is the duplicate the commit will make: the
+    /// originals at rest and a copy at the dragged position. These are the
+    /// inverse ops that take the copy out of the scene again, newest last;
+    /// `None` while the preview moves the originals.
+    pub(crate) preview_copies: Option<Vec<Operation>>,
+    /// v79 (engine ADR 125, amendment 2) — the snap targets the gesture
+    /// holds, for the release hysteresis.
+    pub(crate) snap_hold: crate::snap::SnapHold,
 }
 
 /// The box a transform of the selection works on: `bounds` in the box's
@@ -572,6 +581,27 @@ impl CanvasModel {
         anchor: Option<GestureAnchor>,
         camera_scale: Option<f32>,
     ) -> Result<GestureHandle, GestureError> {
+        self.begin_gesture_with(
+            nodes,
+            gesture,
+            anchor,
+            camera_scale,
+            GestureModifiers::default(),
+        )
+    }
+
+    /// v79 (engine ADR 193, amendment 1) — begin with the modifiers held
+    /// at the press (`UXI-GST-008`, D-06): the session starts from them,
+    /// and every update replaces them with the live ones, so a gesture
+    /// whose first update comes with its commit still knows Alt was down.
+    pub fn begin_gesture_with(
+        &mut self,
+        nodes: Vec<ElementId>,
+        gesture: GestureType,
+        anchor: Option<GestureAnchor>,
+        camera_scale: Option<f32>,
+        modifiers: GestureModifiers,
+    ) -> Result<GestureHandle, GestureError> {
         if let Some(active) = self.active_gesture.as_ref() {
             return Err(GestureError::AlreadyActive(active.handle));
         }
@@ -735,17 +765,19 @@ impl CanvasModel {
             gesture,
             snapshots,
             current_delta: None,
-            modifiers: GestureModifiers::default(),
+            modifiers,
             anchor_spread,
             pivot_spread,
             shear_axis: anchor
                 .as_ref()
                 .and_then(|a| a.shear_axis)
                 .unwrap_or_default(),
-            camera_scale,
+            camera_scale: camera_scale.filter(|s| s.is_finite() && *s > 0.0),
             scale_frame,
             group_frames,
             resize_box,
+            preview_copies: None,
+            snap_hold: Default::default(),
         });
         Ok(handle)
     }
@@ -760,6 +792,24 @@ impl CanvasModel {
         delta: (f32, f32),
         modifiers: GestureModifiers,
     ) -> Result<GestureUpdateResult, GestureError> {
+        self.update_gesture_with_scale(handle, delta, modifiers, None)
+    }
+
+    /// v79 (engine ADR 125, amendment 2) — an update at the camera scale
+    /// (px/pt) the host shows now: the snap tolerances follow a zoom made
+    /// during the drag. `None` keeps the scale the session has.
+    ///
+    /// The preview is a function of the snapshot taken at begin, this
+    /// delta and these modifiers (`UXI-GST-008`, `UXI-GST-011`): nothing
+    /// accumulates across updates. With Alt held, a Translate previews the
+    /// duplicate its commit makes (engine ADR 193, amendment 1).
+    pub fn update_gesture_with_scale(
+        &mut self,
+        handle: GestureHandle,
+        delta: (f32, f32),
+        modifiers: GestureModifiers,
+        camera_scale: Option<f32>,
+    ) -> Result<GestureUpdateResult, GestureError> {
         let (session_clone, pages) = {
             let session = self
                 .active_gesture
@@ -769,6 +819,9 @@ impl CanvasModel {
                 return Err(GestureError::HandleMismatch);
             }
             session.modifiers = modifiers;
+            if let Some(scale) = camera_scale.filter(|s| s.is_finite() && *s > 0.0) {
+                session.camera_scale = Some(scale);
+            }
             let session_clone = session.clone();
             // Build a page_id → (vertical_guides, horizontal_guides)
             // lookup once per gesture tick. Walks each parsed spread,
@@ -802,6 +855,15 @@ impl CanvasModel {
                     }
                 }
             }
+            let mut margins_by_page: std::collections::HashMap<
+                &str,
+                &paged_model::MarginPreference,
+            > = std::collections::HashMap::new();
+            for parsed in &self.scene.spreads {
+                for (pid, m) in &parsed.spread.page_margins {
+                    margins_by_page.insert(pid.as_str(), m);
+                }
+            }
             let pages = self
                 .built
                 .pages
@@ -818,6 +880,10 @@ impl CanvasModel {
                         spread_origin: p.spread_origin,
                         vertical_guides,
                         horizontal_guides,
+                        margins: margins_by_page
+                            .get(p.id.as_str())
+                            .map(|m| crate::snap_point::margin_lines(m, p.width_pt, p.height_pt))
+                            .unwrap_or_default(),
                     }
                 })
                 .collect::<Vec<_>>();
@@ -874,28 +940,92 @@ impl CanvasModel {
                 let angles = crate::snap_point::element_angles(index, &moving);
                 crate::snap::compute_rotate_snap(&session_clone, delta, &pages, &angles, &env)
             }
-            _ => crate::snap::SnapAdjustment {
-                delta,
-                lines: Vec::new(),
-            },
+            _ => crate::snap::SnapAdjustment::pass(delta),
         };
         let snapped_delta = adjustment.delta;
-        {
+        let stale_copies = {
             let session = self.active_gesture.as_mut().expect("session still present");
             session.current_delta = Some(snapped_delta);
+            session.snap_hold = adjustment.hold.clone();
+            session.preview_copies.take()
+        };
+        // Re-write previewed state from the snapshot + snapped delta. The
+        // previous tick's copies go first, so every tick starts from the
+        // snapshot (`UXI-GST-011`).
+        let structural = stale_copies.is_some();
+        if let Some(inverses) = stale_copies {
+            self.remove_preview_copies(&inverses);
         }
-        // Re-write previewed state from the snapshot + snapped delta.
-        for snap in &session_clone.snapshots {
-            let mutation = compute_node_mutation(snap, &session_clone, snapped_delta);
-            write_mutation_to_scene(&mut self.scene, &snap.node_id, mutation);
+        let duplicate = modifiers.alt && matches!(session_clone.gesture, GestureType::Translate);
+        let copies = if duplicate {
+            // D-02 — the originals stay where they were and the copy the
+            // commit will paste follows the pointer.
+            for snap in &session_clone.snapshots {
+                restore_snapshot_in_scene(&mut self.scene, snap);
+            }
+            self.insert_preview_copies(&session_clone, snapped_delta)
+        } else {
+            for snap in &session_clone.snapshots {
+                let mutation = compute_node_mutation(snap, &session_clone, snapped_delta);
+                write_mutation_to_scene(&mut self.scene, &snap.node_id, mutation);
+            }
+            None
+        };
+        let structural = structural || copies.is_some();
+        if let Some(session) = self.active_gesture.as_mut() {
+            session.preview_copies = copies;
         }
-        self.rebuild_after_mutation()
-            .map_err(|e| GestureError::Mutate(e.to_string()))?;
+        let rebuilt = if structural {
+            self.rebuild_after_structural_preview()
+        } else {
+            self.rebuild_after_mutation()
+        };
+        rebuilt.map_err(|e| GestureError::Mutate(e.to_string()))?;
         let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
         Ok(GestureUpdateResult {
             page_ids,
             snap_lines: adjustment.lines,
         })
+    }
+
+    /// v79 (engine ADR 193, amendment 1) — put the copy an Alt-drag's
+    /// commit pastes into the scene as the preview: the same ops
+    /// [`Self::alt_duplicate_ops`] builds for the commit, from the same
+    /// scene (originals at rest, no copy), so the preview and the commit
+    /// agree on the items, their ids and their place. Returns the inverse
+    /// ops, `None` when the copy cannot be made (the commit then fails the
+    /// same way, and the preview shows the originals at rest).
+    fn insert_preview_copies(
+        &mut self,
+        session: &GestureSession,
+        delta: (f32, f32),
+    ) -> Option<Vec<Operation>> {
+        if session.snapshots.is_empty() {
+            return None;
+        }
+        let destination = self.resolve_destination_spread(session, delta);
+        let ops = self
+            .alt_duplicate_ops(&session.snapshots, delta, destination)
+            .ok()?;
+        let mut inverses = Vec::with_capacity(ops.len());
+        for op in &ops {
+            match paged_mutate::apply_checked(&mut self.scene, op, &self.session_policy) {
+                Ok(applied) => inverses.push(applied.inverse),
+                Err(_) => {
+                    self.remove_preview_copies(&inverses);
+                    return None;
+                }
+            }
+        }
+        Some(inverses)
+    }
+
+    /// Take a preview's copies out of the scene again, newest first. No
+    /// rebuild: the caller rebuilds once it has written the next preview.
+    fn remove_preview_copies(&mut self, inverses: &[Operation]) {
+        for op in inverses.iter().rev() {
+            let _ = paged_mutate::apply(&mut self.scene, op);
+        }
     }
 
     /// Commit the gesture: revert the preview, re-apply the final
@@ -916,10 +1046,16 @@ impl CanvasModel {
             self.active_gesture = Some(session);
             return Err(GestureError::HandleMismatch);
         }
+        // The preview's copies leave with the preview: the commit below
+        // pastes the same copy as its one undo step.
+        let structural = session.preview_copies.is_some();
+        if let Some(inverses) = session.preview_copies.as_deref() {
+            self.remove_preview_copies(inverses);
+        }
         let Some(delta) = session.current_delta else {
             // No pointer motion: revert (no-op restore) and exit with
             // an empty-batch outcome so the caller can update the UI.
-            self.restore_from_snapshots(&session.snapshots)
+            self.restore_from_snapshots(&session.snapshots, structural)
                 .map_err(|e| GestureError::Mutate(e.to_string()))?;
             let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
             // Synthesise an empty Batch so the channel's reply shape
@@ -951,7 +1087,7 @@ impl CanvasModel {
         // mutations no longer exist as far as `paged_mutate::apply` is
         // concerned, so the inverse it captures will be the correct
         // "back to original" value.
-        self.restore_from_snapshots(&session.snapshots)
+        self.restore_from_snapshots(&session.snapshots, structural)
             .map_err(|e| GestureError::Mutate(e.to_string()))?;
         // Step 2: build the canonical op (Batch when N>1).
         // Phase H — Alt+Translate commits as ONE paste of a copy of the
@@ -1088,7 +1224,12 @@ impl CanvasModel {
             self.active_gesture = Some(session);
             return Err(GestureError::HandleMismatch);
         }
-        self.restore_from_snapshots(&session.snapshots)
+        // `UXI-GST-006` — no copy outlives a cancelled duplicate-drag.
+        let structural = session.preview_copies.is_some();
+        if let Some(inverses) = session.preview_copies.as_deref() {
+            self.remove_preview_copies(inverses);
+        }
+        self.restore_from_snapshots(&session.snapshots, structural)
             .map_err(|e| GestureError::Mutate(e.to_string()))?;
         let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
         Ok(page_ids)
@@ -1565,14 +1706,21 @@ impl CanvasModel {
         }])
     }
 
+    /// Put every snapshotted node back as it was at begin and rebuild —
+    /// `structural` when a preview's copies just left the scene.
     fn restore_from_snapshots(
         &mut self,
         snapshots: &[NodeSnapshot],
+        structural: bool,
     ) -> Result<(), crate::channel::LoadError> {
         for snap in snapshots {
             restore_snapshot_in_scene(&mut self.scene, snap);
         }
-        self.rebuild_after_mutation()
+        if structural {
+            self.rebuild_after_structural_preview()
+        } else {
+            self.rebuild_after_mutation()
+        }
     }
 }
 
@@ -1895,10 +2043,7 @@ fn path_edit_snap(
     pages: &[crate::snap::PageInfo],
     address: paged_mutate::PathPointAddress,
 ) -> crate::snap::SnapAdjustment {
-    let pass = crate::snap::SnapAdjustment {
-        delta,
-        lines: Vec::new(),
-    };
+    let pass = crate::snap::SnapAdjustment::pass(delta);
     if !env.settings.enabled || session.modifiers.disable_snap {
         return pass;
     }
@@ -1947,6 +2092,7 @@ fn path_edit_snap(
     crate::snap::SnapAdjustment {
         delta: (r.point[0] - start.0, r.point[1] - start.1),
         lines: r.lines,
+        hold: Default::default(),
     }
 }
 
@@ -2685,6 +2831,8 @@ pub(crate) fn compute_new_bounds(
         scale_frame: None,
         group_frames: std::collections::HashMap::new(),
         resize_box: None,
+        preview_copies: None,
+        snap_hold: Default::default(),
     };
     match compute_node_mutation(&snap, &session, delta) {
         NodeMutation::Bounds(b) => b,
@@ -3160,6 +3308,8 @@ mod tests {
             scale_frame: None,
             group_frames: std::collections::HashMap::new(),
             resize_box: None,
+            preview_copies: None,
+            snap_hold: Default::default(),
         };
         compute_node_mutation(&snap, &session, (0.0, 50.0))
     }

@@ -483,6 +483,11 @@ impl WorkerCore {
                 let affected_story = story_id_for_mutation(&m);
                 let t0 = clock();
                 let model = self.model.as_mut().expect("checked above");
+                // Engine ADR 1300 — refused whole while a gesture holds the
+                // document, before the review clock or anything else moves.
+                if let Err(error) = model.refuse_during_gesture() {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
                 // Engine ADR 1040 — a tracked change carries the date of
                 // the edit that made it: the shell's clock stamps it (the
                 // engine reads none). A stub clock (0) stamps nothing.
@@ -649,6 +654,9 @@ impl WorkerCore {
                         error: WorkerError::NoDocument,
                     });
                 };
+                if let Err(error) = model.refuse_during_gesture() {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
                 let base = match model.check_amend(applied_seq) {
                     Ok(base) => base,
                     Err(error) => reply!(WorkerToMainKind::MutationFailed { error }),
@@ -948,6 +956,9 @@ impl WorkerCore {
                 }
                 let t0 = clock();
                 let model = self.model.as_mut().expect("checked above");
+                if let Err(error) = model.refuse_during_gesture() {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
                 // Diff the built page table across the undo so
                 // page-mutation undos refresh the editor's page grid
                 // (same contract as MutationApplied).
@@ -1069,11 +1080,23 @@ impl WorkerCore {
                     }
                 }
             }
-            MainToWorkerKind::RequestMarqueeHits { page_id, rect } => {
+            MainToWorkerKind::RequestMarqueeHits {
+                page_id,
+                rect,
+                mode,
+                scope,
+            } => {
                 let ids = self
                     .model
                     .as_ref()
-                    .map(|m| m.marquee_hits(&page_id, rect))
+                    .map(|m| {
+                        m.marquee_hits_with(
+                            &page_id,
+                            rect,
+                            mode.unwrap_or_default(),
+                            scope.as_ref(),
+                        )
+                    })
                     .unwrap_or_default();
                 WorkerToMainKind::MarqueeHits { ids }
             }
@@ -1823,6 +1846,11 @@ impl WorkerCore {
                         applied_seq: None,
                     });
                 };
+                // Engine ADR 1300 — a script never starts inside a gesture:
+                // its writes would land between the preview and the commit.
+                if let Err(error) = model.refuse_during_gesture() {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
                 // B-09 / W-08 — the worker's injected wall clock
                 // (`js_sys::Date::now` on wasm) is what gives the deadline
                 // teeth without `paged-script` ever touching `std::time`.
@@ -1870,6 +1898,16 @@ impl WorkerCore {
                 answers,
                 committed,
             } => {
+                // Engine ADR 1300 — a suspended script resumes only once no
+                // gesture holds the document; the session waits, untouched,
+                // for the host to send its answers again.
+                if let Some(error) = self
+                    .model
+                    .as_ref()
+                    .and_then(|m| m.refuse_during_gesture().err())
+                {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
                 let live = self.script_sessions.remove(&session);
                 let (Some(script), Some(model)) = (live, self.model.as_mut()) else {
                     reply!(WorkerToMainKind::ScriptResult {
@@ -1893,13 +1931,20 @@ impl WorkerCore {
                 gesture,
                 anchor,
                 camera_scale,
+                modifiers,
             } => {
                 let Some(model) = self.model.as_mut() else {
                     reply!(WorkerToMainKind::GestureFailed {
                         error: paged_canvas::channel::GestureFailure::NoDocument,
                     });
                 };
-                match model.begin_gesture_with_scale(nodes, gesture, anchor, camera_scale) {
+                match model.begin_gesture_with(
+                    nodes,
+                    gesture,
+                    anchor,
+                    camera_scale,
+                    modifiers.unwrap_or_default(),
+                ) {
                     Ok(handle) => WorkerToMainKind::GestureBegun { handle },
                     Err(e) => WorkerToMainKind::GestureFailed { error: e.into() },
                 }
@@ -1908,13 +1953,14 @@ impl WorkerCore {
                 handle,
                 delta,
                 modifiers,
+                camera_scale,
             } => {
                 let Some(model) = self.model.as_mut() else {
                     reply!(WorkerToMainKind::GestureFailed {
                         error: paged_canvas::channel::GestureFailure::NoDocument,
                     });
                 };
-                match model.update_gesture(handle, delta, modifiers) {
+                match model.update_gesture_with_scale(handle, delta, modifiers, camera_scale) {
                     Ok(result) => {
                         // Phase B v1 — clear the GPU scene cache
                         // wholesale on every update. Per-page
@@ -1992,6 +2038,9 @@ impl WorkerCore {
                 }
                 let t0 = clock();
                 let model = self.model.as_mut().expect("checked above");
+                if let Err(error) = model.refuse_during_gesture() {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
                 let pages_before = page_table(model);
                 match model.redo() {
                     Some(outcome) => {

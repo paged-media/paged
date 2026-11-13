@@ -852,7 +852,27 @@ export type WorkerToMain = WorkerToMainKind & {
 //   table's own paragraph take direct properties; `recordChange`'s spec
 //   takes the look before as properties (`beforeCharacterProperties`,
 //   `beforeParagraphProperties`). Additive; absent ⇒ as before.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
+// v79 — the engine's half of the editor's interaction contract (editor ADR
+//   1200, tasks EN1–EN4):
+//   - A gesture holds the document (engine ADR 1300): while one is active,
+//     `Mutate` (and what lowers to it), `AmendMutation`, `Undo`, `Redo`,
+//     `UndoTo`, `RedoTo`, `RestoreTo`, `ExecuteScript` and
+//     `HostObjectsResult` are refused whole with the new
+//     `WorkerError::GestureInProgress { handle }` (a `MutationFailed`, also
+//     for a script). A behaviour an older worker does not have, hence the
+//     bump.
+//   - The marquee (engine ADR 1011, amendment 1): `RequestMarqueeHits`
+//     gains the optional `mode` (`MarqueeMode`: intersect | contain) and
+//     `scope` (`MarqueeScope`: document | group { id }), and its rectangle is
+//     on the canvas, across pages and from the pasteboard.
+//   - Snapping (engine ADR 125, amendment 2): `UpdateGesture` gains the
+//     optional `cameraScale` (the wasm `updateGestureRaw` a sixth argument,
+//     the camera scale); a held target until the release tolerance;
+//     `SnapLine` gains the optional `targetKind` (`SnapTargetKind`);
+//     `SnapSource` gains `margin` and `column`.
+//   - Live modifiers (engine ADR 193, amendment 1): `BeginGesture` gains the
+//     optional `modifiers`; an Alt-drag previews the copy it commits.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(79);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -1572,7 +1592,22 @@ pub enum MainToWorkerKind {
     /// Phase A — return every selectable element whose oriented bounds
     /// intersect `rect` (page-local `[top, left, bottom, right]`).
     /// Reply: `MarqueeHits`.
-    RequestMarqueeHits { page_id: PageId, rect: [f32; 4] },
+    ///
+    /// v79 (engine ADR 1011, amendment 1) — `rect` may leave the page: it
+    /// is a rectangle on the canvas, measured from `page_id`, and takes
+    /// from every page and the pasteboard under it. `mode` (absent ⇒
+    /// `intersect`) and `scope` (absent ⇒ the leaves, as before) are
+    /// `CanvasModel::marquee_hits_with`'s.
+    RequestMarqueeHits {
+        page_id: PageId,
+        rect: [f32; 4],
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        mode: Option<crate::hit::MarqueeMode>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        scope: Option<crate::hit::MarqueeScope>,
+    },
     /// Phase A — fetch oriented geometry (raw bounds + composed
     /// transform) for one or more elements so the overlay can draw
     /// selection chrome without re-deriving the math in TS.
@@ -2089,6 +2124,12 @@ pub enum MainToWorkerKind {
         anchor: Option<crate::gesture::GestureAnchor>,
         #[serde(default)]
         camera_scale: Option<f32>,
+        /// v79 (engine ADR 193, amendment 1) — the modifiers held at the
+        /// press; every update replaces them with the live ones. Absent ⇒
+        /// none held.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        modifiers: Option<crate::gesture::GestureModifiers>,
     },
     /// Phase B — push a pointer-delta + modifier state into the
     /// active gesture. Worker rewrites the preview and replies
@@ -2098,6 +2139,12 @@ pub enum MainToWorkerKind {
         /// Cumulative pointer delta since `BeginGesture`, in doc pt.
         delta: (f32, f32),
         modifiers: crate::gesture::GestureModifiers,
+        /// v79 (engine ADR 125, amendment 2) — the camera scale (px/pt)
+        /// the host shows now, so the snap tolerances follow a zoom made
+        /// during the drag. Absent ⇒ the scale the gesture has.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        camera_scale: Option<f32>,
     },
     /// Phase B — commit the active gesture. Reply
     /// `GestureCommitted { handle, applied_seq, page_ids }`. The
@@ -5341,6 +5388,14 @@ pub enum WorkerError {
     /// applied.
     #[error("cannot amend step {applied_seq}: {reason}")]
     NotAmendable { applied_seq: u64, reason: String },
+    /// v79 (engine ADR 1300) — a gesture holds the document: a write, an
+    /// undo or redo, or a script that arrives while the gesture `handle` is
+    /// active is refused whole, before anything runs. It may be sent again
+    /// once the gesture has committed or been cancelled.
+    #[error("a gesture is in progress (handle {}): the document is held until it commits or is cancelled", .handle.0)]
+    GestureInProgress {
+        handle: crate::gesture::GestureHandle,
+    },
 }
 
 #[cfg(test)]
@@ -5818,8 +5873,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v78() {
-        assert_eq!(PROTOCOL_VERSION.0, 78);
+    fn protocol_version_is_v79() {
+        assert_eq!(PROTOCOL_VERSION.0, 79);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

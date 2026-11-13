@@ -2387,3 +2387,133 @@ fn a_pathological_svg_import_is_refused_and_the_worker_goes_on() {
     );
     assert_eq!(reply["kind"], "mutationApplied", "{reply}");
 }
+
+// ---------------------------------------------------------------------
+// v79 (engine ADR 1300) — a gesture holds the document on the wire
+// ---------------------------------------------------------------------
+
+fn begin_on_tf1(core: &mut WorkerCore, seq: u64) -> serde_json::Value {
+    let p = protocol();
+    let begun = roundtrip(
+        core,
+        &serde_json::json!({ "seq": seq, "protocol": p, "kind": "beginGesture",
+            "payload": { "nodes": [{ "kind": "textFrame", "id": "tf1" }],
+                "gesture": { "kind": "translate" }, "anchor": null, "cameraScale": 1.0,
+                "modifiers": { "shift": false, "alt": false } } }),
+    );
+    assert_eq!(begun["kind"], "gestureBegun", "{begun}");
+    begun["payload"]["handle"].clone()
+}
+
+fn assert_held(reply: &serde_json::Value, handle: &serde_json::Value) {
+    assert_eq!(reply["kind"], "mutationFailed", "{reply}");
+    assert_eq!(
+        reply["payload"]["error"]["kind"], "gestureInProgress",
+        "{reply}"
+    );
+    assert_eq!(
+        &reply["payload"]["error"]["details"]["handle"], handle,
+        "{reply}"
+    );
+}
+
+/// While a gesture is active, a mutation, an amend, an undo, a redo and a
+/// script are each refused whole with the typed `gestureInProgress`; the
+/// gesture's own update and commit pass, and the writes pass after it.
+#[test]
+fn uxi_t60_the_wire_refuses_writes_history_and_scripts_during_a_gesture() {
+    let mut core = loaded_core();
+    let p = protocol();
+    let insert = serde_json::json!({ "op": "insertText", "args": { "storyId": "story1", "offset": 0, "text": "X" } });
+    let applied = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 2, "protocol": p, "kind": "mutate", "payload": insert }),
+    );
+    assert_eq!(applied["kind"], "mutationApplied", "{applied}");
+    let step = applied["payload"]["appliedSeq"].clone();
+    let handle = begin_on_tf1(&mut core, 3);
+    let updated = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 4, "protocol": p, "kind": "updateGesture",
+            "payload": { "handle": handle, "delta": [12.0, 0.0],
+                "modifiers": { "shift": false, "alt": false }, "cameraScale": 2.0 } }),
+    );
+    assert_eq!(updated["kind"], "gestureUpdated", "{updated}");
+    for (seq, kind, payload) in [
+        (5, "mutate", insert.clone()),
+        (
+            6,
+            "amendMutation",
+            serde_json::json!({ "appliedSeq": step, "mutation": insert }),
+        ),
+        (7, "undo", serde_json::Value::Null),
+        (8, "redo", serde_json::Value::Null),
+        (9, "undoTo", serde_json::json!({ "appliedSeq": step })),
+        (10, "restoreTo", serde_json::json!({ "appliedSeq": 0 })),
+        (
+            11,
+            "executeScript",
+            serde_json::json!({ "source": "paged.pages()" }),
+        ),
+    ] {
+        let mut msg = serde_json::json!({ "seq": seq, "protocol": p, "kind": kind });
+        if !payload.is_null() {
+            msg["payload"] = payload;
+        }
+        assert_held(&roundtrip(&mut core, &msg), &handle);
+    }
+    let committed = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 12, "protocol": p, "kind": "commitGesture",
+            "payload": { "handle": handle } }),
+    );
+    assert_eq!(committed["kind"], "gestureCommitted", "{committed}");
+    let after = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 13, "protocol": p, "kind": "mutate", "payload": insert }),
+    );
+    assert_eq!(after["kind"], "mutationApplied", "{after}");
+    let script = execute_script(&mut core, "console.log(1)", serde_json::Value::Null);
+    assert_eq!(script["kind"], "scriptResult", "{script}");
+}
+
+/// A script suspended on the host is not resumed inside a gesture: its
+/// `hostObjectsResult` is refused, the session kept, and the same answers
+/// resume it once the gesture is cancelled.
+#[test]
+fn uxi_t60_a_suspended_script_resumes_only_after_the_gesture() {
+    let mut core = loaded_core();
+    let p = protocol();
+    let source = "const v = await paged.get('plugin:paged.test/thing/1', 'name'); console.log(JSON.parse(v));";
+    let req = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 2, "protocol": p, "kind": "executeScript",
+            "payload": { "source": source, "hostObjects": true } }),
+    );
+    assert_eq!(req["kind"], "requestHostObjects", "{req}");
+    let session = req["payload"]["session"].clone();
+    let handle = begin_on_tf1(&mut core, 3);
+    let answers = serde_json::json!([{ "value": { "kind": "value", "value": "Alpha" } }]);
+    let held = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 4, "protocol": p, "kind": "hostObjectsResult",
+            "payload": { "session": session, "answers": answers } }),
+    );
+    assert_held(&held, &handle);
+    let cancelled = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 5, "protocol": p, "kind": "cancelGesture",
+            "payload": { "handle": handle } }),
+    );
+    assert_eq!(cancelled["kind"], "gestureCancelled", "{cancelled}");
+    let done = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 6, "protocol": p, "kind": "hostObjectsResult",
+            "payload": { "session": session, "answers": answers } }),
+    );
+    assert_eq!(done["kind"], "scriptResult", "{done}");
+    assert_eq!(
+        done["payload"]["output"],
+        serde_json::json!(["[log] Alpha"])
+    );
+}
