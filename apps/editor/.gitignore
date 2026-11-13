@@ -7,6 +7,8 @@ dist/
 test-results/
 playwright-report/
 *.actual.png
+# `bun scripts/uxi-coverage.mjs --json` (CI uploads its own copy)
+/docs/reference/uxi-coverage.json
 
 # OS / editor / runtime
 .DS_Store

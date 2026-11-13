@@ -1,4 +1,4 @@
-# ADR 1203 — Docks are resizable and the workspace adapts
+# ADR 1205 — Docks are resizable and the workspace adapts
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/cockpit/` (`CockpitLayout.tsx`, `DockSplitter.tsx`,
@@ -88,9 +88,9 @@ beside the document's name. The pill comes in after 300 ms, so a document that o
 does not flash it. The viewport carries `data-loading-stage` (`ready` when done). The first open
 still fits page 1 (ADR 237).
 
-**The header and the chrome.** Beside the document's name sits the save status slot
-(`SaveStatusSlot`, `data-save-status-slot`): today's dirty/saved dot, the mount point a
-save-state machine fills. The browser tab reads "<document> — paged" when the editor is the page
+**The header and the chrome.** The save status after the menus is
+[ADR 1203](1203-save-status-says-what-is-saved-where.md)'s; the menus beside it scroll in their
+zone. The browser tab reads "<document> — paged" when the editor is the page
 (never an embedding host's tab). The disabled Share is a ghost button. A mode whose surfaces are
 mostly seams declares `placeholder: true` and the mode bar does not offer it, unless it is the
 active one (Review; Content now leads with Character and Paragraph). The developer readout

@@ -28,7 +28,10 @@ the gesture channel, overlay previews, selection, commands), and the gesture DSL
 drives the handler in document points, as the editor's gesture spine would.
 The same DSL drives the handler against the real engine through the headless
 host (`gestures({ editor: headless.host.editor, pages })`), where
-`checkUndoRedo` / `checkCancel` compare model dumps. Every DSL run is also a
+`checkUndoRedo` / `checkCancel` compare model dumps, `checkLiveness` proves an
+interrupted gesture (pointercancel, blur, capture loss, tool switch, document close)
+ends without a mutation (INV-8), and `checkNoInterleave` reads a reply log for a
+document write inside an open gesture (INV-7). Every DSL run is also a
 replayable pointer tape (`g.tape()`, `replayTape`).
 
 ```ts

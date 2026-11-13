@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 929,
+    "command": 930,
     "keybinding": 203,
-    "menu": 673,
+    "menu": 674,
     "panel": 151,
     "tool": 123
   },
@@ -4516,6 +4516,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.adaptiveWorkspace",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.density.comfortable",
       "kind": "command",
       "owner": "editor"
@@ -6319,6 +6324,11 @@
       "id": "menu:Edit/Selection to path",
       "kind": "menu",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Settings/Adapt the workspace to the window",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:Edit/Settings/Interface density/Comfortable",

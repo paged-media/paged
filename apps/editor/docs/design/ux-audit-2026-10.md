@@ -252,6 +252,12 @@ After a reload the editor comes back on "No document", although the library (OPF
 
 **Screenshots:** `F-06-reload-loses-document.png`
 
+**Partly fixed (2026-11-13, `901e94d63`).** Unsaved work survives a reload or a crash: a
+recovery journal keeps checkpoints in the browser and the next start offers Restore (as a new
+document, never over the saved version), Compare or Discard (editor ADR 1204;
+`tests/e2e/uxi-documents.spec.ts`). Reopening the last saved document, Open recent and Close
+stay open.
+
 <a id="f-07"></a>
 
 #### F-07 · Save state is unreadable: the status dot is amber after every open, and a save gives no feedback
@@ -272,6 +278,11 @@ The document chip's dot shows the engine status whenever the status string is no
 **Recommendation:** Treat the engine's post-load messages as ready (`packages/shell/src/chrome/Header.tsx`, `DocumentChip`). Show "Saved to … / Downloaded …" after Save. Merge the chip dot and the "Edited" label into one indicator.
 
 **Screenshots:** `F-07-status-dot-after-save.png`
+
+**Fixed (2026-11-13, `901e94d63`).** The chip shows a dot only while the engine is busy or
+failed; beside it the save status says what the last save did and where ("Saved", "Saved
+locally", "Saved locally · Not synced" with Retry, "Couldn't save" with the reason), and its
+popover names the file, the library or the download (editor ADR 1203; `UXI-T67`).
 
 <a id="f-08"></a>
 
@@ -524,7 +535,7 @@ Window ▸ Styles holds Color, Color settings, Color Wheel, Gradients, Swatches 
 
 **Screenshots:** `F-18-window-styles-category.png`, `F-17-window-menu-casing.png`
 
-**Fixed (2026-11-13, editor ADR 1203).** Each editor panel carries its Window-menu category
+**Fixed (2026-11-13, editor ADR 1205).** Each editor panel carries its Window-menu category
 (`windowCategory`, from `apps/canvas/src/panels/window-categories.ts`): Color, Styles, Type &
 Tables, Object & Layout, Interactive, Output and Utilities, with eight panels one click deep
 (Properties, Pages, Layers, Links, Document map, Stories, Library, Comments). Every panel is listed
@@ -599,7 +610,7 @@ A readout over the canvas shows "GPU 60 fps · 20 pages · cache 100% (20/20) ·
 
 **Screenshots:** `F-21-debug-hud.png`
 
-**Fixed (2026-11-13, editor ADR 1203).** The readout shows only with `?debug=hud`; zoom and page
+**Fixed (2026-11-13, editor ADR 1205).** The readout shows only with `?debug=hud`; zoom and page
 stay in the mode bar and the status bar.
 
 <a id="f-23"></a>
@@ -622,7 +633,7 @@ Review is "Approve soon", "Request changes soon", "Compare versions soon", "No c
 
 **Screenshots:** `F-23-review-mode-placeholders.png`, `F-22-internal-ids.png`
 
-**Fixed (2026-11-13, editor ADRs 1203 and 207 amended).** Review declares `placeholder: true`
+**Fixed (2026-11-13, editor ADRs 1205 and 207 amended).** Review declares `placeholder: true`
 and the mode bar no longer offers it (it shows while it is the active mode). Content opens on the
 Stories list with Character and Paragraph in the dock; the story inspector is the last tab, named
 "Story status". Export keeps its live PDF and image targets and its three honest seams.
@@ -647,7 +658,7 @@ Share is disabled (opacity 0.45 on the brand fill), but on the dark header it st
 
 **Screenshots:** `F-24-share-button-prominence.png`
 
-**Fixed (2026-11-13, editor ADR 1203).** The disabled Share is a ghost button in the muted text
+**Fixed (2026-11-13, editor ADR 1205).** The disabled Share is a ghost button in the muted text
 colour, and the browser tab reads "<document> — paged" while a document is open, when the editor
 is the page (an embedded editor leaves its host's title alone).
 
@@ -1308,7 +1319,7 @@ The editor reports ready after 1.1 s (a 54 MB, 8-page real-world IDML template) 
 
 **Screenshots:** `F-53-heavy-doc-blank-canvas.png`
 
-**Fixed (2026-11-13, editor ADR 1203; ADR 237 amended).** A load reports its real stages —
+**Fixed (2026-11-13, editor ADR 1205; ADR 237 amended).** A load reports its real stages —
 recognized, geometry, first paint, refining, ready — on the canvas and in the header, in words and
 counts, never a percentage; until the first page is composed the canvas outlines every page where
 it will be. UXI-T49 asserts the stages and the first-page fit on a 20-page document. How fast the
@@ -1359,7 +1370,7 @@ Both docks have fixed widths and never collapse. The canvas gets 25% of a 1280 �
 
 **Screenshots:** `F-55-viewport-1280x720.png`, `F-55-viewport-1024x768.png`, `F-55-viewport-800x600.png`
 
-**Fixed (2026-11-13, editor ADR 1203).** The docks are resizable (240–480 px) and the cockpit
+**Fixed (2026-11-13, editor ADR 1205).** The docks are resizable (240–480 px) and the cockpit
 adapts to the width it is given: wide docks both; a laptop width (about 1095–1575 px of window)
 collapses the left dock to a rail with a flyout; a narrow one makes both docks overlays that the
 next canvas press closes. No docked column takes the canvas below 640 px. The header's menus
@@ -1410,7 +1421,7 @@ The Window menu mixes Title Case ("Document Map", "Export Center") with sentence
 
 **Screenshots:** `F-17-window-menu-casing.png`
 
-**Fixed (2026-11-13, editor ADR 1203).** The editor's panel names are sentence case ("Document
+**Fixed (2026-11-13, editor ADR 1205).** The editor's panel names are sentence case ("Document
 map", "Export center", "Paragraph styles" …) and one name per thing: "Bullets and numbering" and
 "Numbering and section options" in the Window menu as in Type and Layout, "Type on a path" in Draw
 as in Object, "Color" in paged.image and the host's panels alike. Insert ▸ "Web frame" lost the

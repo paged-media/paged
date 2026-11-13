@@ -111,4 +111,4 @@ The columns are no longer fixed. Each dock is resizable (240–480 px, remembere
 the cockpit adapts to the width it is given: the left dock collapses to a rail with a flyout on a
 laptop-width workspace, and both docks become overlays on a narrow one; the Focus workspace hides
 everything but the canvas and the tool rail. The modes and their slots are unchanged; panels
-still do not float or pop out ([ADR 1203](1203-docks-are-resizable-and-the-workspace-adapts.md)).
+still do not float or pop out ([ADR 1205](1205-docks-are-resizable-and-the-workspace-adapts.md)).

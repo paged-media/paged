@@ -18,22 +18,24 @@
  */
 
 // Design system — the cockpit header (`--chrome-header-h`, 46 px at the
-// default density), in zones separated by hairlines:
+// default density), in zones separated by
+// hairlines:
 //
-//   brand · document · save status | menus (core, then context) | search |
-//   theme · Share
+//   brand · document | menus (core, then context) | search | theme · Share
 //
-// - The DOCUMENT chip names what is open (and the browser tab, when the
-//   editor is the page: "<document> — paged", UX audit F-24). Beside it,
-//   while a document opens, the load's stage (UXI-PRF-003); otherwise
-//   the SAVE STATUS SLOT (`SaveStatusSlot` below): today the dirty/saved
-//   dot, the mount point a save-state machine fills (strategy §2.4).
-// - The menus keep their place and scroll sideways rather than push the
-//   rest off a narrow editor (F-55).
+// - The DOCUMENT chip names what is open, with a dot for the engine's
+//   state while it is busy or failed. After the menus the SAVE STATUS says
+//   what the last save really did and where (editor ADR 1203,
+//   `SaveStatus`): a dot, and its label when the header has room.
+//   While a document opens, the chip shows the load's stage instead
+//   (UXI-PRF-003), and the browser tab reads "<document> — paged" when the
+//   editor is the page (UX audit F-24).
+// - The menus scroll sideways inside their zone rather than push the rest
+//   off a narrow editor (F-55).
 // - Search shrinks with the space it is given and becomes an icon
 //   below 220 px, so nothing is pushed off the right edge.
 // - Share is a quiet, honestly disabled control until there is a
-//   collaboration backend (F-24); output actions keep the labels.
+//   collaboration backend (F-24).
 // - Zoom lives in the bottom bar only (it was in both).
 //
 // File intake has no header widget: File ▸ Open…, canvas drag-drop,
@@ -54,6 +56,7 @@ import { useEditorScope } from "../state/editor-scope";
 import { useChromeRegions } from "../state/chrome-regions";
 import { useCompactLayout } from "../state/compact";
 import { RegionItems } from "./RegionItems";
+import { SaveStatus } from "./SaveStatus";
 import { HEADER } from "./messages";
 import { loadingWords } from "../cockpit/canvas-frame/LoadingStatus";
 import { editorOwnsPage } from "../state/editor-root";
@@ -85,13 +88,21 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
       >
         <Brand />
         <DocumentChip status={status} />
-        {chrome.has("menubar") && (
+        {chrome.has("menubar") ? (
           <>
             <span style={zoneDividerStyle} aria-hidden />
-            <div data-menubar-scroll style={menuScrollStyle}>
-              <MenuBar />
-            </div>
+            {/* The save status follows the menus: they stay the first stop
+             *  and keep their place; its dot takes the room the chip's dot
+             *  had. */}
+            <span style={menusAndStatusStyle}>
+              <div data-menubar-scroll style={menuScrollStyle}>
+                <MenuBar />
+              </div>
+              <SaveStatus />
+            </span>
           </>
+        ) : (
+          <SaveStatus />
         )}
       </div>
 
@@ -151,30 +162,47 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
   );
 }
 
-/** What is open, and its state: the load's stage while it opens, else
- *  the save status. */
+/** The engine's status string, read for the chip: work in progress ends
+ *  with an ellipsis ("loading Annual.idml…", "snapshotting…"), a failure
+ *  says so; everything else ("loaded 4 pages", "imported Annual.idml",
+ *  "worker ready") is a settled engine (UX audit F-07: the dot read every
+ *  settled message as unsaved work). */
+export function engineStatusOf(
+  status: string | undefined,
+): "settled" | "busy" | "failed" {
+  if (!status) return "settled";
+  if (/failed/i.test(status)) return "failed";
+  return /(…|\.\.\.)$/.test(status.trim()) ? "busy" : "settled";
+}
+
+/** What is open, and the engine's state while it is busy or failed. The
+ *  save state is `SaveStatus`'s, after the menus. */
 function DocumentChip({ status }: { status?: string }) {
   const strings = useStrings();
   const { handle, sourceName, loading } = useDocument();
   const meta = useDocumentMeta();
+  const engine = engineStatusOf(status);
+  const ready = engine === "settled";
   const name = handle
     ? meta?.documentName || sourceName || strings.t(HEADER.untitled)
     : loading
       ? loading.name
       : strings.t(HEADER.noDocument);
   usePageTitle(handle ? name : null);
+  // UXI-PRF-003 — while a document opens, its stage in words.
   const stage = loading ? loadingWords(strings, loading, "long") : null;
   return (
     <span
       data-document-chip
-      title={stage ? `${name} — ${stage}` : name}
+      title={
+        stage ? `${name} — ${stage}` : ready ? name : `${name} — ${status}`
+      }
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: 7,
         minWidth: 0,
-        maxWidth: "clamp(90px, 22vw, 300px)",
-        flexShrink: 0,
+        maxWidth: "clamp(90px, 14vw, 220px)",
         color: handle ? "var(--pg-fg)" : "var(--pg-muted-fg)",
         fontSize: 13,
       }}
@@ -188,7 +216,7 @@ function DocumentChip({ status }: { status?: string }) {
       >
         {name}
       </span>
-      {loading ? (
+      {loading && (
         <span
           data-header-loading-stage={loading.stage ?? "recognized"}
           aria-label={stage ?? undefined}
@@ -205,61 +233,25 @@ function DocumentChip({ status }: { status?: string }) {
           <span className="pg-loading-dot" aria-hidden />
           {loadingWords(strings, loading, "short")}
         </span>
-      ) : (
-        <SaveStatusSlot status={status} />
+      )}
+      {!ready && !loading && (
+        <span
+          // The hook the suite and scripts read for the worker state.
+          data-shell-status={status}
+          aria-label={status}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            flexShrink: 0,
+            background:
+              engine === "failed"
+                ? "var(--status-error)"
+                : "var(--status-progress)",
+          }}
+        />
       )}
     </span>
-  );
-}
-
-/**
- * The save status's place in the header (strategy §2.4: "paged. › Annual
- * Report · Saved"). Today it shows what the editor knows — the worker's
- * state while it is not ready, else whether there are edits since the
- * load — as one dot, its words the dot's label. A save-state machine
- * (saving, saved locally, synced, failed …) renders here in its place;
- * `data-save-status-slot` names the mount point.
- */
-export function SaveStatusSlot({ status }: { status?: string }) {
-  const strings = useStrings();
-  const { handle } = useDocument();
-  const meta = useDocumentMeta();
-  const ready = !status || /ready/i.test(status);
-  // U14 — honest wording: dirty means edits since load; nothing writes
-  // to disk on its own, so neither state may claim a save happened.
-  const state = !ready
-    ? status
-    : !handle
-      ? null
-      : meta?.dirty
-        ? strings.t(HEADER.edited)
-        : strings.t(HEADER.noUnsavedEdits);
-  const dot = !ready
-    ? "var(--status-review)"
-    : meta?.dirty
-      ? "var(--status-review)"
-      : "var(--status-approved)";
-  if (!state && ready) return null;
-  return (
-    <span
-      data-save-status-slot
-      // Both hooks the suite and scripts read: the worker state and the
-      // save state, one dot.
-      data-shell-status={status}
-      data-save-state={
-        handle && ready ? (meta?.dirty ? "dirty" : "saved") : undefined
-      }
-      role="img"
-      aria-label={state ?? undefined}
-      title={state ?? undefined}
-      style={{
-        width: 7,
-        height: 7,
-        borderRadius: "50%",
-        flexShrink: 0,
-        background: dot,
-      }}
-    />
   );
 }
 
@@ -427,6 +419,13 @@ const menuScrollStyle: React.CSSProperties = {
   overflowX: "auto",
   overflowY: "hidden",
   scrollbarWidth: "none",
+};
+
+const menusAndStatusStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  minWidth: 0,
 };
 
 const zoneDividerStyle: React.CSSProperties = {

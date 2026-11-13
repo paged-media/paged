@@ -154,7 +154,7 @@ async function settledView(page: Page, width: (s: ViewState) => boolean) {
 }
 
 test.describe("UXI workspace and camera", () => {
-  // The workspace adapts to the window (editor ADR 1203): these specs boot
+  // The workspace adapts to the window (editor ADR 1205): these specs boot
   // with it adapting, at the 1600 px desktop the classes are measured
   // against (the suite's default window is 1280 px).
   test.use({ viewport: { width: 1600, height: 1000 } });
@@ -548,7 +548,7 @@ test.describe("UXI workspace and camera", () => {
     await openCanvas(page, { adaptiveWorkspace: true });
     await loadViaReactPath(page, "geometry-groups");
     await expect(page).toHaveTitle(/ — paged$/);
-    await expect(page.locator("[data-save-status-slot]")).toHaveCount(1);
+    await expect(page.locator("[data-save-status]")).toHaveCount(1);
     const share = page.locator("[data-collab-share]");
     await expect(share).toBeDisabled();
     expect(

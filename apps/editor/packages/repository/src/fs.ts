@@ -30,6 +30,8 @@ export interface RepoFs {
   append(path: string, bytes: Uint8Array): Promise<void>;
   /** Entry names in a directory; empty when it does not exist. */
   list(dir: string): Promise<string[]>;
+  /** Removes one file; nothing when it does not exist. */
+  remove(path: string): Promise<void>;
   removeDir(dir: string): Promise<void>;
 }
 
@@ -56,13 +58,16 @@ export function memoryFs(): RepoFs {
       files.set(path, next);
     },
     async list(dir) {
-      const prefix = `${dir}/`;
+      const prefix = dir ? `${dir}/` : "";
       const names = new Set<string>();
       for (const p of files.keys()) {
         if (p.startsWith(prefix))
           names.add(p.slice(prefix.length).split("/")[0]);
       }
       return [...names].sort();
+    },
+    async remove(path) {
+      files.delete(path);
     },
     async removeDir(dir) {
       for (const p of [...files.keys()])
@@ -153,12 +158,21 @@ export async function opfsFs(root = "paged-library"): Promise<RepoFs> {
     async list(dir) {
       try {
         const out: string[] = [];
-        for await (const k of (await dirOf(dir.split("/"), false)).keys())
-          out.push(k);
+        const parts = dir ? dir.split("/") : [];
+        for await (const k of (await dirOf(parts, false)).keys()) out.push(k);
         return out.sort();
       } catch (e) {
         if (notFound(e)) return [];
         throw e;
+      }
+    },
+    async remove(path) {
+      const parts = path.split("/");
+      const name = parts.pop()!;
+      try {
+        await (await dirOf(parts, false)).removeEntry(name);
+      } catch (e) {
+        if (!notFound(e)) throw e;
       }
     },
     async removeDir(dir) {

@@ -45,3 +45,37 @@ that was just paid off.
 
 So the duplication stays and is documented instead. The cost of it going
 stale is now a lookup in this table rather than a mystery.
+
+## Interaction contract fixtures (A–H)
+
+The fixtures of the interaction contract (`apps/editor/docs/specs/ideas/paged_interaction_specification.md`
+§23.1) are not binaries: they are built in code, deterministic, and every id and hit point is
+exported beside its builder. Positions are page-local pt on a 612 × 792 page.
+
+| Fixture | Where                     | What it holds                                                                                                                                                                                                                                                                       |
+| ------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A       | `uxi-fixtures.ts` `UXI_A` | Two overlapping rectangles (`uxAback` under `uxAfront`), a locked third (`uxAlock`), a free fourth (`uxAfree`, for three-object selections) and a text frame `uxAnote` whose story `uxAs` must survive edits elsewhere.                                                             |
+| B       | `uxi-fixtures.ts` `UXI_B` | A group `uxBgroup` of a closed filled path `uxBpath` and a text frame `uxBtext` (story `uxBs`).                                                                                                                                                                                     |
+| C       | `uxi-fixtures.ts` `UXI_C` | Two threaded text frames `uxC1` → `uxC2` holding one story `uxCs`: Latin, diacritics, Japanese and Korean paragraphs (IME and dead-key text), long enough to run into the second frame.                                                                                             |
+| D       | `uxi-fixtures.ts` `UXI_D` | Twenty pages `uxD1`–`uxD20`; each a rectangle turned `15·n` degrees, a vertical guide at x 306 and a horizontal one at y 396; pages 1, 6, 11 and 16 an embedded 8 × 8 px PNG frame.                                                                                                 |
+| E       | `uxi-fixtures.ts` `UXI_E` | An embedded image frame `uxEimg` and a native vector frame `uxEvec` (a closed path with a curve). `placeModuleFrames` adds a sheet frame (the Workbook panel lowering `sheet-02-formulas.xlsx`) and a web frame (the web module's Insert command).                                  |
+| F       | `uxi-fixtures.ts` `UXI_F` | A template in the `template-fill` profile: a page with a headline text frame `uxFhead` and a design frame `uxFlogo`, loaded as IDML; as `author` the headline is made the field `headline` through the engine client, then the session is handed to a `filler` (`openUxiFixtureF`). |
+| G       | `two-instances.ts`        | Two editors mounted at once: the embedding demo `demos/two-editors.html` (each a business card as a filler, each its own engine and keys).                                                                                                                                          |
+| H       | `chaos.ts`                | A slow worker: the page opened with `?debug=chaos` publishes `__chaos`, a reply gate on the engine client that settles the callers of a request kind late or in reverse order.                                                                                                      |
+
+A–E are IDML packages from the test kit's `buildFixtureIdml` (`@paged-media/test-kit`, the stored-ZIP
+generalisation of `build-min-idml.ts`: stories, groups, many pages), plus the page items it has no
+helper for — threaded frames, ruler guides, an embedded image — written out in `uxi-fixtures.ts`.
+
+Known gaps:
+
+- **E's module frames are placed, not loaded.** IDML cannot carry a sheet or a web frame, so
+  `placeModuleFrames` places them through their modules (the sheet's Workbook panel lowers a range
+  into a text frame, the web module's Insert command adds a web frame), the way the journeys'
+  kits do. No acceptance test uses E yet. A drawing-module object (vectorised artwork) is not part
+  of E: "vector" here is the engine's own path.
+- **C's CJK text renders with the fallback font.** The fixture carries no font; the IME tests
+  assert the story's text and the caret, never glyph shapes.
+- **F's field and role are set, not loaded.** A role is session policy, not document content, and
+  the field is the module's metadata on the frame: both are written through the client after the
+  load (as `template-fill.journey.spec.ts` does).

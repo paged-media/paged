@@ -59,6 +59,10 @@ export interface DocumentLoaderCallbacks {
    *  from the library), so it is not imported again. Absent: the file is
    *  new to the library and becomes a document in it. */
   libraryDocument?: DocumentEntry;
+  /** False: the file is not taken into the library on open (a document
+   *  restored from the recovery journal is no file the user opened; its
+   *  first save makes it a library document, editor ADR 1204). */
+  remember?: boolean;
   /** The editor the document opens in: its library document, its source
    *  for the identity store, its newest load (plan task E1). */
   scope: EditorScope;
@@ -106,7 +110,8 @@ export async function loadDocumentFile(
   if (!fontBytes) warnDefaultFontUnavailable(cb);
 
   // loadDocument TRANSFERS the buffer to the worker; the library keeps a copy.
-  const forLibrary = cb.libraryDocument ? null : bytes.slice();
+  const forLibrary =
+    cb.libraryDocument || cb.remember === false ? null : bytes.slice();
   let handle: DocumentHandle;
   try {
     handle = await client.loadDocument(bytes, fontBytes);
@@ -121,6 +126,7 @@ export async function loadDocumentFile(
   if (cb.libraryDocument)
     setCurrentLibraryDocument(cb.scope, cb.libraryDocument);
   else if (forLibrary) rememberOpenedFile(cb.scope, forLibrary, file.name);
+  else setCurrentLibraryDocument(cb.scope, null);
   // Editor ADR 264 — the source this document came from, which a grant
   // remembered for it is keyed by: the library document it is, the file
   // handle the picker attached to `file`, else nothing (transient).

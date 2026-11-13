@@ -1,0 +1,251 @@
+{
+  "$comment": "UXI acceptance tests no test claims yet, each with the plan task that will make one claim it (editor ADR 1202; apps/editor/docs/reference/surface-conformance.md, 'Interaction contract coverage'). scripts/uxi-coverage.mjs fails while a claimed id is still listed here (run it with --prune) and when an unlisted id has no claiming test.",
+  "UXI-T03": {
+    "task": "IC6",
+    "reason": "No test claims it yet: Shift adds and the marquee only intersects today; the selection model of ADR 1201 (Shift toggles, a directional scoped marquee, a locked indication) lands with IC6. Claim it in a test title (UXI-T03 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T04": {
+    "task": "IC6",
+    "reason": "No test claims it yet: Shift adds and the marquee only intersects today; the selection model of ADR 1201 (Shift toggles, a directional scoped marquee, a locked indication) lands with IC6. Claim it in a test title (UXI-T04 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T06": {
+    "task": "EN4",
+    "reason": "No test claims it yet: the duplicate-drag modifier is read at different moments for the preview and the commit; EN4 makes the live preview the committed result. Claim it in a test title (UXI-T06 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T10": {
+    "task": "IC2",
+    "reason": "No test claims it yet: terminal events (pointercancel, lostpointercapture, blur, unmount, document and tool switch) do not end one coordinator session yet (IC2); an orphaned engine gesture still turns later drags into pans. Claim it in a test title (UXI-T10 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T11": {
+    "task": "IC7",
+    "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T11 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T12": {
+    "task": "IC8",
+    "reason": "No test claims it yet: snapping has no target labels, no hysteresis and two bypass keys today; IC8 (over EN3) settles them. Claim it in a test title (UXI-T12 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T14": {
+    "task": "IC7",
+    "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T14 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T17": {
+    "task": "IC11",
+    "reason": "No test claims it yet: the Pen tool does not stay Pen after closing a path, and deleting points is not one undo step yet (IC11). Claim it in a test title (UXI-T17 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T18": {
+    "task": "IC11",
+    "reason": "No test claims it yet: the Pen tool does not stay Pen after closing a path, and deleting points is not one undo step yet (IC11). Claim it in a test title (UXI-T18 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T19": {
+    "task": "KF3",
+    "reason": "No test claims it yet: Tab on a pointer-engaged canvas still toggles the chrome (ADR 234); conventional Tab order and the explicit chrome toggle land with KF3. Claim it in a test title (UXI-T19 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T20": {
+    "task": "KF6",
+    "reason": "No test claims it yet: Enter, Tab, Backspace and arrow precedence in key-ownership.ts does not follow the spec's §12 order yet (KF6). Claim it in a test title (UXI-T20 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T21": {
+    "task": "KF4",
+    "reason": "No test claims it yet: the text input surface has no composition session token and its caret box ignores rotation; KF4 adds both. Claim it in a test title (UXI-T21 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T22": {
+    "task": "KF4",
+    "reason": "No test claims it yet: the text input surface has no composition session token and its caret box ignores rotation; KF4 adds both. Claim it in a test title (UXI-T22 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T23": {
+    "task": "KF5",
+    "reason": "No test claims it yet: there is no focus-return service yet (KF5): the palette, menus and dialogs each restore focus their own way, and issue #32 is open. Claim it in a test title (UXI-T23 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T24": {
+    "task": "KF5",
+    "reason": "No test claims it yet: there is no focus-return service yet (KF5): the palette, menus and dialogs each restore focus their own way, and issue #32 is open. Claim it in a test title (UXI-T24 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T25": {
+    "task": "KF6",
+    "reason": "No test claims it yet: Enter, Tab, Backspace and arrow precedence in key-ownership.ts does not follow the spec's §12 order yet (KF6). Claim it in a test title (UXI-T25 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T26": {
+    "task": "KF6",
+    "reason": "No test claims it yet: Enter, Tab, Backspace and arrow precedence in key-ownership.ts does not follow the spec's §12 order yet (KF6). Claim it in a test title (UXI-T26 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T28": {
+    "task": "KF6",
+    "reason": "No test claims it yet: Enter, Tab, Backspace and arrow precedence in key-ownership.ts does not follow the spec's §12 order yet (KF6). Claim it in a test title (UXI-T28 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T29": {
+    "task": "IC6",
+    "reason": "No test claims it yet: Shift adds and the marquee only intersects today; the selection model of ADR 1201 (Shift toggles, a directional scoped marquee, a locked indication) lands with IC6. Claim it in a test title (UXI-T29 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T30": {
+    "task": "KF1",
+    "reason": "No test claims it yet: the Escape arbiter (KF1) is not there yet: about ten listeners answer Escape on their own, so one press can close or leave one thing and do a second as well. Claim it in a test title (UXI-T30 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T31": {
+    "task": "KF1",
+    "reason": "No test claims it yet: the Escape arbiter (KF1) is not there yet: about ten listeners answer Escape on their own, so one press can close or leave one thing and do a second as well. Claim it in a test title (UXI-T31 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T32": {
+    "task": "KF4",
+    "reason": "No test claims it yet: the text input surface has no composition session token and its caret box ignores rotation; KF4 adds both. Claim it in a test title (UXI-T32 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T33": {
+    "task": "KF2",
+    "reason": "No test claims it yet: raw window key listeners do not go through ownsEvent yet (KF2), so a shortcut can reach an editor instance that does not hold focus. Claim it in a test title (UXI-T33 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T34": {
+    "task": "KF5",
+    "reason": "No test claims it yet: there is no focus-return service yet (KF5): the palette, menus and dialogs each restore focus their own way, and issue #32 is open. Claim it in a test title (UXI-T34 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T35": {
+    "task": "CM4",
+    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T35 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T36": {
+    "task": "CM3",
+    "reason": "No test claims it yet: there is no frame/content model yet: double-clicking an image edits it rather than positioning its content (CM3, D-05). Claim it in a test title (UXI-T36 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T37": {
+    "task": "CM4",
+    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T37 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T38": {
+    "task": "CM4",
+    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T38 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T39": {
+    "task": "CM4",
+    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T39 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T40": {
+    "task": "CM1",
+    "reason": "No test claims it yet: the edit-context stack runs hooks inside state updaters and isInScope checks the root only; CM1 (over EN5) fixes both. Claim it in a test title (UXI-T40 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T41": {
+    "task": "CM2",
+    "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T41 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T42": {
+    "task": "CM2",
+    "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T42 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T43": {
+    "task": "CM2",
+    "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T43 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T44": {
+    "task": "CM1",
+    "reason": "No test claims it yet: the edit-context stack runs hooks inside state updaters and isInScope checks the root only; CM1 (over EN5) fixes both. Claim it in a test title (UXI-T44 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T45": {
+    "task": "CM4",
+    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T45 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T46": {
+    "task": "CM4",
+    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T46 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T48": {
+    "task": "WS8",
+    "reason": "No test claims it yet: the zoom routes use different ranges, reduced motion is ignored and the current page is computed in four places; WS8 unifies them. Claim it in a test title (UXI-T48 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T51": {
+    "task": "CM3",
+    "reason": "No test claims it yet: there is no frame/content model yet: double-clicking an image edits it rather than positioning its content (CM3, D-05). Claim it in a test title (UXI-T51 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T52": {
+    "task": "IC4",
+    "reason": "No test claims it yet: the canvas pointer path is not routed through the coordinator's adapters yet (IC4); ViewportCanvas keeps its own gesture refs beside the gesture spine. Claim it in a test title (UXI-T52 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T53": {
+    "task": "WS8",
+    "reason": "No test claims it yet: the zoom routes use different ranges, reduced motion is ignored and the current page is computed in four places; WS8 unifies them. Claim it in a test title (UXI-T53 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T54": {
+    "task": "WS8",
+    "reason": "No test claims it yet: the zoom routes use different ranges, reduced motion is ignored and the current page is computed in four places; WS8 unifies them. Claim it in a test title (UXI-T54 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T55": {
+    "task": "DF7",
+    "reason": "No test claims it yet: publication issues are not yet connected to navigation with a return path (DF7, with WS8's navigation history). Claim it in a test title (UXI-T55 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T56": {
+    "task": "IC7",
+    "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T56 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T57": {
+    "task": "IC3",
+    "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T57 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T58": {
+    "task": "IC5",
+    "reason": "No test claims it yet: a drag that starts before its hit test answers gets no feedback from the down point yet (IC5, over EN7's atomic begin). Claim it in a test title (UXI-T58 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T59": {
+    "task": "IC3",
+    "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T59 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T60": {
+    "task": "EN1",
+    "reason": "No test claims it yet: the engine does not refuse a script mutation during an active gesture yet (EN1, GestureInProgress). Claim it in a test title (UXI-T60 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T61": {
+    "task": "IC2",
+    "reason": "No test claims it yet: terminal events (pointercancel, lostpointercapture, blur, unmount, document and tool switch) do not end one coordinator session yet (IC2); an orphaned engine gesture still turns later drags into pans. Claim it in a test title (UXI-T61 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T62": {
+    "task": "DF3",
+    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T62 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T63": {
+    "task": "DF3",
+    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T63 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T64": {
+    "task": "DF3",
+    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T64 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T65": {
+    "task": "DF9",
+    "reason": "No test claims it yet: clipboard conformance across selection types and contexts is not asserted end to end yet (DF9). Claim it in a test title (UXI-T65 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T66": {
+    "task": "DF4",
+    "reason": "No test claims it yet: an import's losses are not reported (the IDML lost list is dropped at client.exportIdml); DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T68": {
+    "task": "DF6",
+    "reason": "No test claims it yet: export does not prevalidate the requested standard yet (DF6). Claim it in a test title (UXI-T68 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T69": {
+    "task": "AP1",
+    "reason": "No test claims it yet: there is no accessible object tree synchronized with the selection yet (AP1). Claim it in a test title (UXI-T69 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T70": {
+    "task": "AP2",
+    "reason": "No test claims it yet: keyboard-only creation and transform commands are not complete yet (AP2). Claim it in a test title (UXI-T70 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T71": {
+    "task": "AP4",
+    "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T71 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T72": {
+    "task": "AP4",
+    "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T72 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T73": {
+    "task": "CM5",
+    "reason": "No test claims it yet: the template-fill flow has not been reworked for touch on phones yet (CM5). Claim it in a test title (UXI-T73 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T74": {
+    "task": "AP3",
+    "reason": "No test claims it yet: high contrast and 200 % UI zoom are not carried by the tokens yet (AP3). Claim it in a test title (UXI-T74 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T75": {
+    "task": "AP3",
+    "reason": "No test claims it yet: high contrast and 200 % UI zoom are not carried by the tokens yet (AP3). Claim it in a test title (UXI-T75 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  },
+  "UXI-T76": {
+    "task": "KF6",
+    "reason": "No test claims it yet: Enter, Tab, Backspace and arrow precedence in key-ownership.ts does not follow the spec's §12 order yet (KF6). Claim it in a test title (UXI-T76 — …) when that lands, or sooner where today's code already passes (W0.7)."
+  }
+}
