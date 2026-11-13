@@ -14,6 +14,12 @@ What this folder holds.
 - [`composable-editor-plan.md`](composable-editor-plan.md): the implementation plan for the
   composable editor: workstreams, tasks with files and tests, milestones, the ADR ledger and
   the risks.
+- [`specs/ideas/`](specs/ideas/): proposals received for the editor, kept as written. The
+  [interaction specification](specs/ideas/paged_interaction_specification.md)
+  (`PM-UX-INTERACTION-001`, a proposed normative interaction contract with the `UXI-*`
+  requirement and test ids) and the
+  [UX/UI redesign strategy](specs/ideas/paged_ux_ui_redesign_strategy.md). What of them is
+  adopted is recorded in ADRs; a proposal never overrides an ADR or `status.md`.
 - [`adr/`](adr/README.md): the decision records of this repository, 002, 023, 024 and 200–217.
 - [`design/client-sdk.md`](design/client-sdk.md): the concept paper for the editor's client
   layer (`packages/client`, `catalog`, `shell`): the split between a framework-agnostic
