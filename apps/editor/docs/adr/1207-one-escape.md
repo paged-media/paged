@@ -1,4 +1,4 @@
-# ADR 1205 — One Escape: an arbiter resolves each press once, in the specification's order
+# ADR 1207 — One Escape: an arbiter resolves each press once, in the specification's order
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/interaction/escape-arbiter.ts` (the arbiter, `useEscapeHandler`,

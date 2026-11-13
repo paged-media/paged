@@ -101,7 +101,7 @@ function GlobalLightForm() {
   const strings = useStrings();
   const store = useScoped(OPEN);
   const close = () => store.set(false);
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.globalLightDialog",
     tier: "modal",

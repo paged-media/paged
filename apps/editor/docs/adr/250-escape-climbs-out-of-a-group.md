@@ -43,7 +43,7 @@ Until those tasks land the body describes the code.
 
 ## Amendment 2026-11-13 (implemented)
 
-[ADR 1205](1205-one-escape.md) builds the Escape order: the climb is the arbiter's `group` tier
+[ADR 1207](1207-one-escape.md) builds the Escape order: the climb is the arbiter's `group` tier
 (`panels/canvas-panel.tsx`), after a caret leaves the text and before the selection is cleared;
 at the top level Escape clears the selection (the `selection` tier). Until the drawing tools'
 gestures join the arbiter (track IC) both answer only while the tool in hand has no gesture

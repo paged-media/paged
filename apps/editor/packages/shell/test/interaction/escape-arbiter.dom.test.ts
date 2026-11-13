@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Escape arbiter on its own (editor ADR 1205): handlers in every tier,
+// The Escape arbiter on its own (editor ADR 1207): handlers in every tier,
 // one press, the first active handler in the order of the interaction
 // specification's §12.1 resolves it and no other runs. The built-in tiers
 // (an input method composing, an open layer, the focused control, a

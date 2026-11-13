@@ -1,6 +1,6 @@
 # ADR 1011 — A page has a place on the canvas (artboards)
 
-- **Status:** Accepted 2026-10-25.
+- **Status:** Accepted 2026-10-25; amendment 1 2026-11-13 (a marquee is a rectangle on the canvas).
 - **Scope:** protocol v77 (one new Mutation kind, rides v77 — see Consequences).
   `paged-model` (`Page::canvas_origin`, `canvas_layout`, `CANVAS_PAGE_GAP_PT`);
   `paged-mutate` (`PropertyPath::PageCanvasOrigin`, the copy of a placed page in
@@ -88,3 +88,26 @@ point to a page reads the origins (`layoutPages(sizes, origins)`).
   number.
 - A placed document opened by an older editor shows its pages stacked (the extra fields
   are additive and ignored).
+
+## Amendment 1 (2026-11-13): a marquee is a rectangle on the canvas
+
+Protocol 79; editor ADR 1201, decision D-01; task EN2: `UXI-SEL-008`, `UXI-SEL-009`,
+`UXI-HIT-004`.
+
+`RequestMarqueeHits` took a page-local rectangle and tested it against the items of that page's
+spread only, in spread space; the editor clamped it to the page, so a marquee could neither start
+on the pasteboard nor reach another page.
+
+- **The rectangle is on the canvas**, measured from `pageId` and not clamped. Every page sees it
+  through its own place: an item is tested against the part of the rectangle that covers a page
+  drawing it (every page it overlaps; for an item on the pasteboard, the nearest page of its
+  spread — the renderer's routing), in that spread's space. A marquee takes what the user sees
+  under it, on any page and on the pasteboard, across spreads.
+- **Mode.** `mode: intersect` (the default: what it touches, as before) or `contain` (what lies
+  wholly inside it). The editor chooses by the drag's direction (task IC6).
+- **Scope.** Absent, the answer is the leaves, as before. `{ kind: "document" }` answers as a
+  click at the top level does: each leaf as its outermost group. `{ kind: "group", id }` answers
+  inside an entered group: only its members, each as the child of `id` that holds it. In
+  `contain` mode a group is taken when every member the marquee may take lies inside.
+- The gates are a click's: a hidden or locked layer, and what the session may not select, are
+  never taken (`UXI-SEL-009`).

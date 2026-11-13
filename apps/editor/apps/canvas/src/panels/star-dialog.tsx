@@ -101,7 +101,7 @@ function StarForm({ close }: { close: () => void }) {
       .invoke("paged.insert.star", { ...options })
       .finally(close);
   };
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.starDialog",
     tier: "modal",

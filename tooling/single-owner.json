@@ -447,7 +447,7 @@
     },
     {
       "name": "escape-listener",
-      "description": "answer Escape through the Escape arbiter (editor ADR 1205): register a handler with a tier (useEscapeHandler, escapeArbiterOf(scope).register), never a key listener of your own; the arbiter resolves each press exactly once, in the order of the interaction specification's §12.1",
+      "description": "answer Escape through the Escape arbiter (editor ADR 1207): register a handler with a tier (useEscapeHandler, escapeArbiterOf(scope).register), never a key listener of your own; the arbiter resolves each press exactly once, in the order of the interaction specification's §12.1",
       "owner": ["apps/editor/packages/shell/src/interaction/escape-arbiter.ts"],
       "patterns": ["[\"']Escape[\"']"],
       "allOf": [

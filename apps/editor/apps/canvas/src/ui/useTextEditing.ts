@@ -290,7 +290,7 @@ export function useTextEditing(ctx: TextEditingContext) {
       // The remaining shortcuts require an active selection.
       if (!selRef.current || leavingRef.current) return;
 
-      // Escape is the arbiter's (ADR 1205): `leave` below.
+      // Escape is the arbiter's (ADR 1207): `leave` below.
       if (isEscapeKey(e)) return;
 
       // Select All inside text: the whole story, or the whole cell.
@@ -643,7 +643,7 @@ export function useTextEditing(ctx: TextEditingContext) {
     };
 
     // ED-1 — Escape leaves the text: the caret clears and the host puts
-    // the user back on the frame. The arbiter's text tier (ADR 1205): it
+    // the user back on the frame. The arbiter's text tier (ADR 1207): it
     // answers after a gesture, a transient mode and an edit context (a
     // header edited in place inside a context leaves the context's handler
     // inactive, so its Escape is this one, ADR 301), and before a group or

@@ -211,7 +211,7 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
     const onPointerCancel = () => finish(false);
 
     // Escape mid-scrub reverts to the value the scrub began from: a
-    // gesture of the Escape arbiter (ADR 1205), so the press does nothing
+    // gesture of the Escape arbiter (ADR 1207), so the press does nothing
     // else (it used to reach every other window listener too).
     const offEscape = escapeArbiter.register({
       id: "paged.scrub",

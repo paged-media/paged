@@ -97,7 +97,7 @@ function BarcodeForm({ close }: { close: () => void }) {
       .invoke("paged.insert.barcode", { ...options })
       .finally(close);
   };
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.barcodeDialog",
     tier: "modal",

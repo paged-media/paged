@@ -75,6 +75,30 @@ reachable from here as soon as the types are re-vendored. The typed
 helpers (`setSelection`, `registerFont`, `beginGesture`, …) exist where a
 call needs shaping; `send()` reaches anything they do not.
 
+## Gestures hold the document
+
+Since protocol 79 (engine ADR 1300) a gesture (`beginGesture` …
+`commitGesture` / `cancelGesture`) holds the document: while it is active
+the engine refuses every write, undo, redo and script from another door,
+whole, with a `mutationFailed` whose error is `gestureInProgress`.
+
+- A write this client sends while a gesture **it** began is live waits for
+  that gesture to settle (at most 30 s), so it lands after the gesture.
+- `client.gestureActive` says whether one of its gestures is live;
+  `await client.whenGestureIdle({ signal, timeoutMs })` waits for none to be
+  (`true` when idle, `false` on timeout or abort) — the door for a script
+  runner or an interaction coordinator.
+- `gestureInProgressOf(reply)` reads the refusal off a reply;
+  `executeScript` throws `GestureInProgressError` when the engine refuses.
+
+`beginGesture(nodes, gesture, anchor, modifiers?)` takes the modifiers held
+at the press, and an Alt-drag previews the copy its commit makes (engine
+ADR 193, amendment 1). `marqueeHits(pageId, rect, { mode, scope })` takes a
+`contain` or `intersect` mode and a `document` or `group` scope, with a
+rectangle that may cross pages and start on the pasteboard (engine ADR
+1011, amendment 1). Snap lines carry `targetKind` (engine ADR 125,
+amendment 2).
+
 ## The catalog
 
 `api-catalog.json`, shipped in this package, is the machine-readable

@@ -242,7 +242,7 @@ describe("Selection (paged.tool.select)", () => {
     await m.g.click(on(T.group.at)).settle();
     expect(m.state.elementSelection).toEqual([T.group.id]);
     // At the top level Escape clears the selection (ADR 1201, amending
-    // ADR 250's decision 3; one press, one thing: ADR 1205).
+    // ADR 250's decision 3; one press, one thing: ADR 1207).
     await m.g.key("Escape").settle();
     expect(m.state.elementSelection).toEqual([]);
   });

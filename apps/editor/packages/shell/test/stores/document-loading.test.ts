@@ -156,6 +156,13 @@ describe("loading a file", () => {
     expect(log.filter((l) => l.startsWith("handle"))).toEqual([]);
     expect(log.at(-1)).toBe("status load failed: Error: not an IDML package");
     expect(log).toContain("loading null");
+    // UXI-FIL-001: the open document stays as it was — nothing reset or
+    // renamed — and the failure is a visible warning (UX audit F-02).
+    expect(log).not.toContain("reset");
+    expect(log.some((l) => l.startsWith("name "))).toBe(false);
+    expect(log).toContain(
+      "warning broken.idml could not be opened: the file is damaged or uses something Paged cannot read. The open document is unchanged.",
+    );
   });
 
   test("a page whose snapshot fails is a warning; the rest still land", async () => {

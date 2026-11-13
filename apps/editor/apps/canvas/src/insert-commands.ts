@@ -766,7 +766,11 @@ export function isPlaceDropPayload(
     typeof p.fillPage.pageId === "string" &&
     p.fillPage.widthPt > 0 &&
     p.fillPage.heightPt > 0;
-  return at || fill;
+  // A frame to fill names itself fully, or the payload is not one.
+  const into =
+    p.into === undefined ||
+    (typeof p.into?.kind === "string" && typeof p.into?.id === "string");
+  return (at || fill) && into;
 }
 
 /** Smallest frame (pt) a place drag draws; a smaller box is a click. */
@@ -942,9 +946,25 @@ export async function placeImage(
     return frame;
   }
 
-  // An empty frame is selected: that is where it goes.
-  const into = await selectedEmptyFrame(paged);
+  // Where the picture goes when no new frame is minted. A DROP decides by
+  // the frame UNDER THE POINTER (editor ADR 1205): the drop zone resolved
+  // it and said so before the drop ("Place photo.png in this frame"); a
+  // drop that names no frame mints one where it landed, whatever is
+  // selected. File ▸ Place, with no pointer to go by, fills the selected
+  // empty frame (ED-6).
+  const into: ElementId | null = dropped
+    ? ((dropped.into as ElementId | undefined) ?? null)
+    : await selectedEmptyFrame(paged);
   if (into) {
+    if (dropped) {
+      // The frame that takes the picture is the selection afterwards, as
+      // a minted one is; an importer reads it to know where to go.
+      const ids = await paged.client.setElementSelection([into], "replace");
+      paged.selection.setElementSelection(ids);
+      paged.selection.setElementGeometry(
+        await paged.client.elementGeometry(ids),
+      );
+    }
     return (await fill(into)) ? { applied: true, createdId: into } : REFUSED;
   }
 

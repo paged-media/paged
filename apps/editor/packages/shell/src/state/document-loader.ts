@@ -98,10 +98,6 @@ export async function loadDocumentFile(
   const load = ++loads.newest;
   cb.setStatus(`loading ${file.name} (${file.size.toLocaleString()} bytes)…`);
   cb.setLoading({ name: file.name, bytes: file.size });
-  cb.resetForNewDocument();
-  // U14 — the file's name (extension stripped) is the document's
-  // fallback display identity when its meta has no documentName.
-  cb.setSourceName?.(file.name.replace(/\.[^.]+$/, "") || null);
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const fontBytes = await fetchDefaultFont();
@@ -116,10 +112,20 @@ export async function loadDocumentFile(
   } catch (err) {
     if (load !== loads.newest) return;
     cb.setLoading(null);
+    // UXI-FIL-001 — the open document stays as it was (the engine keeps
+    // it; nothing here was reset), and the failure is said where it is
+    // seen, not only in the status line's tooltip (UX audit F-02).
+    cb.pushWarning(t(LOAD.openFailed, { name: file.name }));
     cb.setStatus(`load failed: ${String(err)}`);
     return;
   }
   if (load !== loads.newest) return;
+  // Only a load that landed replaces what the editor shows: its pages'
+  // pictures and its name.
+  cb.resetForNewDocument();
+  // U14 — the file's name (extension stripped) is the document's
+  // fallback display identity when its meta has no documentName.
+  cb.setSourceName?.(file.name.replace(/\.[^.]+$/, "") || null);
 
   if (cb.libraryDocument)
     setCurrentLibraryDocument(cb.scope, cb.libraryDocument);

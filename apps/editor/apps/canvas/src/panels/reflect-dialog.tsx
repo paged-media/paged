@@ -140,7 +140,7 @@ function ReflectForm({
       )
       .finally(close);
   };
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.reflectDialog",
     tier: "modal",

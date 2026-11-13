@@ -225,7 +225,7 @@ function ConsentPrompt({
     model.entry.variants[0]!;
   const origins = service.downloadOrigins(model.entry.id);
   const needsAck = model.entry.licence.requiresAcknowledgement;
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.models.licence",
     tier: "modal",

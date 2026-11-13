@@ -544,7 +544,7 @@ export function ThreadingController() {
   }, [cursorLoaded, clearCursor]);
 
   // TH-03 — Esc clears the loaded cursor, no mutation: a transient mode
-  // of the Escape arbiter (ADR 1205), so the same press does nothing else.
+  // of the Escape arbiter (ADR 1207), so the same press does nothing else.
   useEscapeHandler({
     id: "paged.threading.loadedCursor",
     tier: "transient",

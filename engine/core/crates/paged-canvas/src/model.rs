@@ -3277,6 +3277,7 @@ impl CanvasModel {
         &mut self,
         mutation: &Mutation,
     ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        self.refuse_during_gesture()?;
         let outcome = self.apply_mutation_unlabeled(mutation)?;
         // The outermost call names the step last, so a `Set` reads as the
         // property it wrote and a batch as its children, not as the op one
@@ -6984,6 +6985,9 @@ impl CanvasModel {
         &mut self,
         op: paged_mutate::Operation,
     ) -> Result<FrameMutationOutcome, crate::channel::WorkerError> {
+        // A gesture's own commit applies after it has let go of the
+        // document (`commit_gesture` takes the session first).
+        self.refuse_during_gesture()?;
         // W1.24 (audit B18) — time the scene edit; the rebuild folds it
         // into RebuildStats.op_apply_ms.
         let t_op = phase_now();
@@ -7043,6 +7047,11 @@ impl CanvasModel {
     /// stack. Phase B — handles both text and frame variants of the
     /// unified log.
     pub fn undo(&mut self) -> Option<UndoOutcome> {
+        // Engine ADR 1300 — the history waits for an active gesture; a host
+        // asks `refuse_during_gesture` first for the typed refusal.
+        if self.active_gesture.is_some() {
+            return None;
+        }
         let rec = self.applied_log.pop()?;
         self.amend_anchor = None;
         self.history_moves += 1;
@@ -7109,6 +7118,9 @@ impl CanvasModel {
     /// Redo the most-recently-undone mutation. Phase 3 Item 7. Phase B
     /// — handles both text and frame variants.
     pub fn redo(&mut self) -> Option<UndoOutcome> {
+        if self.active_gesture.is_some() {
+            return None;
+        }
         let rec = self.redo_log.pop()?;
         self.amend_anchor = None;
         self.history_moves += 1;
@@ -7366,6 +7378,20 @@ impl CanvasModel {
         Ok(outcome)
     }
 
+    /// Engine ADR 1300 — a gesture holds the document: while one is active
+    /// every write, undo, redo and script is refused whole, so nothing
+    /// lands between its preview and its commit (`UXI-INV-008`,
+    /// `UXI-GST-012`, `UXI-MUT-012`). The gesture's own updates, commit and
+    /// cancel are the only doors in until it settles.
+    pub fn refuse_during_gesture(&self) -> Result<(), crate::channel::WorkerError> {
+        match self.active_gesture.as_ref() {
+            Some(session) => Err(crate::channel::WorkerError::GestureInProgress {
+                handle: session.handle,
+            }),
+            None => Ok(()),
+        }
+    }
+
     /// Engine ADR 1030 — is the step `applied_seq` the top of the undo log?
     fn top_step_is(&self, applied_seq: u64) -> bool {
         self.applied_log
@@ -7437,6 +7463,7 @@ impl CanvasModel {
         &mut self,
         applied_seq: u64,
     ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        self.refuse_during_gesture()?;
         if !self
             .applied_log
             .iter()
@@ -7464,6 +7491,7 @@ impl CanvasModel {
         &mut self,
         applied_seq: u64,
     ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        self.refuse_during_gesture()?;
         if !self.redo_log.iter().any(|r| r.applied_seq == applied_seq) {
             return Err(crate::channel::WorkerError::NotImplemented {
                 what: format!("redoTo: step {applied_seq} is not on the redo log"),
@@ -7496,6 +7524,7 @@ impl CanvasModel {
         applied_seq: u64,
         label: Option<&str>,
     ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        self.refuse_during_gesture()?;
         let refuse = |what: &str| crate::channel::WorkerError::NotImplemented {
             what: format!("restoreTo: {what}"),
         };
@@ -14914,6 +14943,16 @@ impl CanvasModel {
 
     pub fn palette(&self) -> &paged_model::Graphic {
         &self.scene.palette
+    }
+
+    /// v79 (engine ADR 193, amendment 1) — rebuild after a gesture preview
+    /// that added or took out items (an Alt-drag's copies). The cross-build
+    /// emit caches assume the page pools the previous build left, which an
+    /// added frame changes, so they go, as for a committed structural edit.
+    pub(crate) fn rebuild_after_structural_preview(
+        &mut self,
+    ) -> Result<(), crate::channel::LoadError> {
+        self.commit_and_rebuild(Invalidation::Everything)
     }
 
     /// ADR 027 §5 — the ONE commit path: drop what `invalidation`

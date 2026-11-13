@@ -150,6 +150,12 @@ Opening a damaged .idml leaves the editor on "No document" with nothing on scree
 
 **Screenshots:** `F-02-corrupt-file-silent.png`
 
+**Partly fixed (2026-11-13, `351867bd4`).** A file that is no package is refused before the
+replace question and before anything is reset, with a visible reason naming the file; a load the
+engine fails resets nothing and says so in the shell's warnings, and the chip's dot shows red for
+a failed load (editor ADR 1205, `UXI-FIL-001`). Listing the failure in Problems waits for the
+operation feedback service (DF8).
+
 <a id="f-03"></a>
 
 #### F-03 · Spreadsheets and images are accepted but lead to a dead end
@@ -363,6 +369,11 @@ The empty canvas says "Drop an IDML file here, or use File ▸ Open IDML…", bu
 **Deliberate?** the picker filter is a documented limit (status.md).
 
 **Screenshots:** `F-10-empty-state.png`
+
+**Fixed (2026-11-13, `351867bd4`).** The native picker's first entry is every format the editor
+opens, the importers' included, and Save writes back only over a `.paged` or an `.idml`. The
+empty canvas offers New document, Open…, the local library's recent documents and the list of
+formats (editor ADR 1205).
 
 <a id="f-11"></a>
 

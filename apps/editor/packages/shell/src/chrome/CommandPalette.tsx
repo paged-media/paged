@@ -198,7 +198,7 @@ export function CommandPalette() {
     if (open) setQuery("");
   }, [open]);
 
-  // Escape closes the palette (issue #32, ADR 1205): the palette's tier of
+  // Escape closes the palette (issue #32, ADR 1207): the palette's tier of
   // the Escape arbiter, which hears every Escape typed in this editor
   // wherever focus is. Radix's own Escape belongs to whichever dismissable
   // layer is on top and listens on the document, after the window's

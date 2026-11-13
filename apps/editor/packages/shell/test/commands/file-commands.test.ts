@@ -42,6 +42,7 @@ import {
   buildNewFromBriefCommand,
   buildOpenIdmlCommand,
   dropFile,
+  dropFileAs,
   dropPlaces,
   PLACE_DROPPED_COMMAND,
 } from "../../src/state/commands/file-commands";
@@ -346,6 +347,112 @@ describe("File ▸ Open… (paged.file.openIdml)", () => {
     await h.registry.invoke("paged.file.openIdml");
     expect(h.calls.setHandle).toBeUndefined();
     expect(h.statuses.at(-1)).toBe("load failed: Error: not an IDML package");
+    // UXI-FIL-001 (F-02): said where it is seen, and nothing was reset or
+    // renamed: the open document is the one on screen.
+    expect(h.warnings).toContain(
+      "Brochure.idml could not be opened: the file is damaged or uses something Paged cannot read. The open document is unchanged.",
+    );
+    expect(h.calls.resetForNewDocument).toBeUndefined();
+    expect(h.calls.setSourceName).toBeUndefined();
+  });
+
+  test("UXI-FIL-001: a file that is no package is refused before anything is asked or loaded", async () => {
+    covers("command:paged.file.openIdml");
+    const h = harness({ dirty: true, confirm: true });
+    h.pick(new File([new Uint8Array([104, 105])], "notes.txt"));
+    await h.registry.invoke("paged.file.openIdml");
+    expect(h.prompts).toEqual([]);
+    expect(h.calls.loadDocument).toBeUndefined();
+    expect(h.calls.resetForNewDocument).toBeUndefined();
+    expect(h.warnings).toEqual([
+      "notes.txt was not opened: it is not a Paged or IDML document. The open document is unchanged.",
+    ]);
+  });
+});
+
+describe("a resolved drop does what its label said (editor ADR 1205)", () => {
+  const sinks = (h: ReturnType<typeof harness>) => ({
+    setStatus: (s: string) => void h.statuses.push(s),
+    pushWarning: (w: string) => void h.warnings.push(w),
+  });
+  const png = () =>
+    new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" });
+
+  test("a refusal reports its reason and changes nothing", async () => {
+    covers("command:paged.file.openIdml");
+    const h = harness({ dirty: true });
+    await dropFileAs(
+      h.editor as never,
+      new File([new Uint8Array([1])], "notes.txt"),
+      { clientX: 1, clientY: 1 },
+      {
+        intent: "reject",
+        label: "Paged cannot open .txt files",
+        reason: "It opens Paged and InDesign (IDML) documents.",
+        provisional: false,
+      },
+      sinks(h),
+    );
+    expect(h.warnings).toEqual([
+      "Paged cannot open .txt files. It opens Paged and InDesign (IDML) documents.",
+    ]);
+    expect(h.calls.documentMeta).toBeUndefined();
+    expect(h.calls.loadDocument).toBeUndefined();
+  });
+
+  test("a picture for the frame under the pointer goes to Place with that frame", async () => {
+    covers("command:paged.insert.placeImage");
+    const h = harness({});
+    const placed: unknown[] = [];
+    h.registry.register({
+      id: PLACE_DROPPED_COMMAND,
+      title: "Place",
+      handler: (_p: unknown, payload: unknown) => void placed.push(payload),
+    });
+    await dropFileAs(
+      h.editor as never,
+      png(),
+      { clientX: 5, clientY: 6 },
+      {
+        intent: "place-in-frame",
+        frame: { kind: "rectangle", id: "uHit" },
+        label: "Place photo.png in this frame",
+        reason: null,
+        provisional: false,
+      },
+      sinks(h),
+    );
+    expect(placed).toEqual([
+      {
+        file: {
+          name: "photo.png",
+          bytes: new Uint8Array([1, 2, 3]),
+          mimeType: "image/png",
+        },
+        at: { clientX: 5, clientY: 6 },
+        into: { kind: "rectangle", id: "uHit" },
+      },
+    ]);
+  });
+
+  test("a document over an edited one opens through the replace question", async () => {
+    covers("command:paged.file.openIdml");
+    const h = harness({ dirty: true, confirm: false });
+    await dropFileAs(
+      h.editor as never,
+      idml(),
+      { clientX: 5, clientY: 6 },
+      {
+        intent: "replace-document",
+        label: "Open Brochure.idml in place of this document",
+        reason: "You will be asked to save your changes first.",
+        provisional: false,
+      },
+      sinks(h),
+    );
+    // Asked, answered Cancel (the platform confirm's false): nothing loads.
+    expect(h.prompts.length).toBe(1);
+    expect(h.calls.loadDocument).toBeUndefined();
   });
 });
 

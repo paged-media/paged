@@ -24,7 +24,7 @@
 // it, and focus goes back where it was (the canvas the user worked in) —
 // on the bundled-Chromium lane in CI and on real Chrome with a GPU
 // (`journeys-gpu`, local evidence: issue #32 failed only there). Escape is
-// the palette's handler of the editor's Escape arbiter (ADR 1205), so it
+// the palette's handler of the editor's Escape arbiter (ADR 1207), so it
 // no longer depends on which dismissable layer Radix holds on top.
 
 import { expect, test } from "@playwright/test";

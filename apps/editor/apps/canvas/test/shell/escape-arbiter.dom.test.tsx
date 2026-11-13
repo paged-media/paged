@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// One Escape (editor ADR 1205) on a mounted PagedShell over the real
+// One Escape (editor ADR 1207) on a mounted PagedShell over the real
 // engine: each press resolves exactly one thing, the first that applies in
 // the interaction specification's §12.1 order — a nested edit context pops
 // one level, not all (UXI-T31); a transient mode (an armed placement) is
@@ -174,7 +174,7 @@ async function mountShell(): Promise<{
 
 const depth = (p: Probe) => p.stack.stack.length;
 
-describe("one Escape, one resolution (ADR 1205)", () => {
+describe("one Escape, one resolution (ADR 1207)", () => {
   test("UXI-T31 — inside a nested edit context, Escape with no gesture unwinds one level, not all @feat:plugin-platform.edit-context @level:edge", async () => {
     const s = await mountShell();
     const calls: string[] = [];

@@ -523,6 +523,78 @@ describe("Place image", () => {
     expect(fill?.op).toBe("replaceImageBytes");
   });
 
+  // Editor ADR 1205 (UX audit F-40): a drop decides by the frame UNDER THE
+  // POINTER, which the drop zone resolved and named before the drop.
+  const viewportAt = (left: number, top: number) =>
+    stubGlobal("document", {
+      createElement: () => ({ click() {}, setAttribute() {}, remove() {} }),
+      body: { append() {} },
+      querySelector: (sel: string) =>
+        sel === "[data-paged-viewport]"
+          ? { getBoundingClientRect: () => ({ left, top }) }
+          : null,
+    });
+
+  test("a picture dropped over a frame goes into THAT frame, not the selected empty one", async () => {
+    covers("command:paged.insert.placeImage");
+    viewportAt(0, 0);
+    stubGlobal("createImageBitmap", async () => ({
+      width: 200,
+      height: 100,
+      close() {},
+    }));
+    const selectedFrame = id("rectangle", "uSel");
+    const underPointer = id("rectangle", "uHit");
+    const h = inserts({
+      selection: [selectedFrame],
+      geometry: (e) => ({
+        id: e,
+        pageId: "p1",
+        bounds: [0, 0, 10, 10],
+        itemTransform: null,
+        hasImage: false,
+      }),
+    });
+    const outcome = await h.invoke("paged.insert.placeImage", {
+      file: { name: "photo.png", bytes: PNG, mimeType: "image/png" },
+      at: { clientX: 50, clientY: 50 },
+      into: underPointer,
+    });
+    expect(h.fake.mutations()).toEqual([
+      {
+        op: "replaceImageBytes",
+        args: { elementId: "uHit", bytes: Array.from(PNG) },
+      },
+    ]);
+    expect(outcome).toEqual({ applied: true, createdId: underPointer });
+  });
+
+  test("a picture dropped where no frame is mints one there, even with an empty frame selected", async () => {
+    covers("command:paged.insert.placeImage");
+    viewportAt(0, 0);
+    stubGlobal("createImageBitmap", async () => ({
+      width: 200,
+      height: 100,
+      close() {},
+    }));
+    const h = inserts({
+      selection: [id("rectangle", "uSel")],
+      geometry: (e) => ({
+        id: e,
+        pageId: "p1",
+        bounds: [0, 0, 10, 10],
+        itemTransform: null,
+        hasImage: false,
+      }),
+    });
+    await h.invoke("paged.insert.placeImage", {
+      file: { name: "photo.png", bytes: PNG, mimeType: "image/png" },
+      at: { clientX: 100, clientY: 100 },
+    });
+    const ops = (h.fake.mutations() as Array<{ op: string }>).map((m) => m.op);
+    expect(ops).toEqual(["insertFrame", "replaceImageBytes"]);
+  });
+
   // UX audit F-03 (ADR 262): a picture opened with nothing open fills the
   // page minted for it, edge to edge — whatever is selected, wherever the
   // viewport is.

@@ -59,12 +59,8 @@ import type {
   TextCellAddr,
 } from "@paged-media/client";
 import { ViewportCanvas } from "../ui/ViewportCanvas";
+import { EmptyCanvas } from "./empty-canvas";
 import { useGestureSpine } from "../ui/useGestureSpine";
-import { defineMessages, useStrings } from "@paged-media/strings";
-
-const M = defineMessages("app.canvasPanel", {
-  empty: "Drop an IDML file here, or use File ▸ Open IDML…",
-});
 
 /** A cell's page-space AABB `[top, left, bottom, right]` from its
  *  engine geometry (bounds through the item transform). */
@@ -86,7 +82,6 @@ function cellAabb(item: {
 }
 
 export function CanvasPanel(_props: PanelProps) {
-  const strings = useStrings();
   // Phase 2 — the gesture spine. `toolGesture` is non-null only while
   // the effective tool carries a handler (Rectangle, …); select/text
   // keep `null` and run ViewportCanvas's proven legacy pointer path.
@@ -291,7 +286,7 @@ export function CanvasPanel(_props: PanelProps) {
       .catch(() => {});
   };
 
-  // The canvas's Escape handlers (editor ADR 1205, §12.1). Path editing
+  // The canvas's Escape handlers (editor ADR 1207, §12.1). Path editing
   // is a transient mode whose own listener (usePathEditMode) leaves it or
   // cancels the drag in it; it joins the arbiter with the rest of the
   // canvas's gestures (track IC). An entered group climbs one level. At
@@ -579,15 +574,9 @@ export function CanvasPanel(_props: PanelProps) {
     [client, setActiveGroup, setElementGeometry, setElementSelection],
   );
 
-  if (!handle || handle.pageCount === 0) {
-    return (
-      <div style={emptyStyle}>
-        <p style={{ fontSize: 14, color: "var(--pg-muted-fg)" }}>
-          {strings.t(M.empty)}
-        </p>
-      </div>
-    );
-  }
+  // UX audit F-10 (editor ADR 1205): New, Open, recent documents and the
+  // formats the editor opens.
+  if (!handle || handle.pageCount === 0) return <EmptyCanvas />;
 
   return (
     <div ref={containerRef} style={containerStyle}>
@@ -636,13 +625,4 @@ const containerStyle: React.CSSProperties = {
   position: "relative",
   width: "100%",
   height: "100%",
-};
-
-const emptyStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "var(--canvas-surround)",
 };

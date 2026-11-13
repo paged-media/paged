@@ -76,7 +76,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
   const allow = (): void => pending.decide({ granted: [...checked], remember });
 
   // Esc denies (the safe default for an un-acknowledged prompt): the modal
-  // tier of the Escape arbiter (ADR 1205), so only this editor's Escape
+  // tier of the Escape arbiter (ADR 1207), so only this editor's Escape
   // answers it and nothing else acts on that press.
   useEscapeHandler({
     id: "paged.consent",

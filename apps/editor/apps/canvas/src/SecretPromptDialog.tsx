@@ -77,7 +77,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
   const save = (): void => pending.decide(value);
 
   // Esc cancels (nothing stored — the safe default): the modal tier of the
-  // Escape arbiter (ADR 1205).
+  // Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.secretPrompt",
     tier: "modal",

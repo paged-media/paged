@@ -21,7 +21,7 @@
 // plugin-web W-03). The STACK (edit-context-stack.tsx) is pure state;
 // THIS side-effect component wires the stack to the shell chrome:
 //
-//   · Esc POPS one level (a handler of the Escape arbiter, ADR 1205);
+//   · Esc POPS one level (a handler of the Escape arbiter, ADR 1207);
 //   · on the ACTIVE frame change → EMPHASIZE the context's panels
 //     (cockpit `openPanel` raises each — UNLESS the panel on screen is
 //     one this context SERVES, see below) and FOCUS the first restricted
@@ -117,7 +117,7 @@ export function EditContextController() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return; // no context → don't intercept
-      // Escape is the arbiter's (ADR 1205): the handlers below.
+      // Escape is the arbiter's (ADR 1207): the handlers below.
       if (isEscapeKey(e)) return;
       // The focused control's keys stay its own (ADR 234): a field, a
       // dialog, an open menu, a toolbar's arrows, Tab on a button.
@@ -191,7 +191,7 @@ export function EditContextController() {
     return keys.listen("keydown", onKey, true);
   }, [commit, keys]);
 
-  // Escape (ADR 1205, §12.1 cases 5 and 6). Mid sub-edit (a cell being
+  // Escape (ADR 1207, §12.1 cases 5 and 6). Mid sub-edit (a cell being
   // typed) the context resolves the sub-edit through its `onContentKey`
   // and stays; a context that takes no keys of its own leaves its
   // sub-edit (a bundle's open transform box, extensions ADR 339) to the

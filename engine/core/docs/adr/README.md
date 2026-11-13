@@ -57,7 +57,7 @@ is not written yet.
 | 122 | Dual licence, per-file header, one contributor agreement | Reserved (not yet written) |
 | [123](123-viewer-ships-from-core.md) | The viewer ships from core | Accepted 2026-06-07, recorded here 2026-10-02 |
 | [124](124-opacity-masks-native.md) | Opacity masks are a native construct; loss is reported on IDML export | Accepted, recorded retroactively 2026-10-02; amended 2026-10-29 (Clip and the mask's option rows, editor ADR 309) |
-| [125](125-snapping-lives-in-the-engine.md) | Snapping lives in the engine | Accepted 2026-10-05 |
+| [125](125-snapping-lives-in-the-engine.md) | Snapping lives in the engine | Accepted 2026-10-05; amendment 2 2026-11-13: a held target (acquire 4 px, release 6 px), the current zoom, a fixed ranking by target kind, named targets, margins and columns |
 | [126](126-scene-text-in-its-own-face.md) | Scene-layer text draws in its own face | Accepted 2026-10-05 |
 | [127](127-fields-and-document-labels-for-data.md) | Field offsets, typing at a field, document labels and delete undo | Accepted 2026-10-05 |
 | [128](128-pages-a-merge-can-make.md) | Pages a merge can make: page handles, copied stories, margins | Accepted 2026-10-06 |
@@ -125,7 +125,7 @@ is not written yet.
 | [190](190-a-placed-svg-draws-its-filters.md) | A placed SVG draws its filters | Accepted 2026-10-19 (amended 2026-10-20, 2026-10-24) |
 | [191](191-a-group-transforms-about-its-box.md) | A group transforms about its box | Accepted 2026-10-19 |
 | [192](192-a-reflection-reads-as-the-flip-with-the-smaller-turn.md) | A reflection reads as the flip with the smaller turn | Accepted 2026-10-19 |
-| [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19 |
+| [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19; amendment 1 2026-11-13: the Alt-drag previews the copy it commits, the press's modifiers begin the gesture |
 | [194](194-deleting-a-style-moves-its-text-to-the-root-style.md) | Deleting a style moves its text to the root style | Accepted 2026-10-19 |
 | [195](195-the-state-hash-covers-the-whole-model.md) | The state hash covers the whole model | Accepted 2026-10-19 |
 | [196](196-fitting-alignment-takes-idml-anchor-names.md) | Fitting alignment takes IDML's anchor point names | Accepted 2026-10-19 |
@@ -151,7 +151,7 @@ is not written yet.
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
 | [1008](1008-an-items-effects-are-an-ordered-stack.md) | An item's effects are an ordered stack | Accepted 2026-10-25; note 2026-10-29 (the kinds described in the catalog, editor ADR 309; Photoshop styles mapped, ADR 1044); amended by 1099 (the layer-style convention, further instances, `patternOverlay`) |
 | [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
-| [1011](1011-a-page-has-a-place-on-the-canvas.md) | A page has a place on the canvas (artboards) | Accepted 2026-10-25 |
+| [1011](1011-a-page-has-a-place-on-the-canvas.md) | A page has a place on the canvas (artboards) | Accepted 2026-10-25; amendment 1 2026-11-13: a marquee is a rectangle on the canvas, with a mode (intersect, contain) and a scope (document, group) |
 | [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
 | [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24; amended 2026-10-24 (`paged.actions.*`) |
 | [1016](1016-word-first-fit-composer.md) | Word's first-fit is a composer of its own | Accepted 2026-10-24, amended 2026-10-25 |
@@ -204,6 +204,7 @@ is not written yet.
 | [1096](1096-an-office-preset-stays-a-live-shape.md) | An Office preset stays a live shape: the preset programs are the engine's (`paged-preset-geom`, Annex D compiled at build time); a preset live shape on the path item (name, adjust values, box, part, key, glued connector ends), refitted and routed by the engine with exact undo, its handles in the host overlay for every module; pptx, docx and xlsx map onto and off it | Accepted 2026-11-11 |
 | [1097](1097-one-loss-report.md) | One loss report: the leaf crate `paged-loss` owns `LossEntry` / `LossSeverity` / `LossReport`; every adapter (SVG, DXF, PDF vectors, PSD styles, DOCX lowering, PDF export, web lowering) maps onto it with its own codes as data; the contract's types are generated from it; the SDK's `lossDiagnostics` is the one translation onto the diagnostics channel | Accepted 2026-11-11 |
 | [1099](1099-a-layer-style-is-drawn-by-one-evaluator.md) | A layer style is drawn by one evaluator, from the effect stack: the stack carries every layer-style parameter (optional, absent on InDesign's), `paged-layer-fx` plans and draws the effects as kernel dispatches on a device (paged.image's GPU fold, the CPU device of its CPU fold and of the engine renderer), `paged-psd-fx` maps PSD styles onto and off the stack losslessly, and a PSD's layers are placed as frames (`document.placePsdLayers@1`) | Accepted 2026-11-12 |
+| [1300](1300-a-gesture-holds-the-document.md) | A gesture holds the document: while one is active, every write, undo, redo and script from another door is refused whole with the typed `GestureInProgress`; the editor's client orders its own writes after its gesture (`whenGestureIdle`) | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

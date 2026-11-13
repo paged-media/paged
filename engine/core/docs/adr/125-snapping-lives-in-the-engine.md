@@ -1,6 +1,6 @@
 # ADR 125 — Snapping lives in the engine
 
-- **Status:** Accepted 2026-10-05.
+- **Status:** Accepted 2026-10-05; amendment 2 2026-11-13 (hysteresis, current zoom, ranking, named targets).
 - **Scope:** `crates/paged-canvas/src/snap_point.rs`, `crates/paged-canvas/src/snap.rs`,
   `crates/paged-canvas/src/gesture.rs`, the `requestSnapPoint` and `setSnapSettings` message kinds
   (protocol 67)
@@ -64,3 +64,34 @@ The engine owns snapping: its targets, its precedence and its settings. Hosts an
   `modules/draw` ADR 358.)
 - Not built: snapping to text baselines or the baseline grid, snapping a rotated frame's edges
   during translate or resize (rotated members still pass through), and per-target tolerances.
+
+## Amendment 2 (2026-11-13): a held target, the current zoom, a fixed ranking, named targets
+
+Protocol 79; the editor's interaction contract (editor ADR 1200), task EN3: `UXI-SNP-001` to
+`UXI-SNP-004`, proven by `UXI-T12`.
+
+- **Hysteresis.** A gesture acquires a target within the tolerance (`SNAP_TOLERANCE_CSS_PX`,
+  4 px) and, once it holds it, keeps it until the pointer is beyond the release tolerance
+  (`SNAP_RELEASE_CSS_PX`, 6 px; a session tolerance other than 4 scales both alike), unless
+  another target within the acquire tolerance is strictly nearer. The held target per axis
+  (an angle for a rotate) lives on the gesture session (`SnapHold`), so the snap no longer
+  flickers on and off at the edge of reach. Translate, resize, scale and rotate hold; a path
+  point's drag goes through the stateless point resolver and does not. The Ctrl bypass drops
+  what is held.
+- **The current zoom.** The tolerances are screen pixels at the camera scale the host shows
+  NOW: every `UpdateGesture` may carry `cameraScale` (the shared-memory update reads it from
+  the camera buffer), replacing the scale the gesture began with. A zoom made during a drag
+  retunes the reach.
+- **Ranking.** Targets at the same distance (within 1e-4 pt) rank by kind — ruler guide,
+  margin, column, page edge, page centre, grid, baseline, another item's edge, its centre, an
+  anchor point, equal spacing, angle, a caller's point, a whole pixel — then by position,
+  adjustment and page, a total order, so one document, camera, pointer and history always
+  snap the same way.
+- **Named targets.** Every `SnapLine` carries `targetKind` (`SnapTargetKind`), on the gesture
+  lines and on `RequestSnapPoint`'s; the overlay labels the line with it. Where two kinds share
+  a line, it names the better-ranked one; the winning line names the winner's.
+- **Margins and columns** are targets, with the ruler guides (`guides` switch): a page's
+  margins on both axes and the edges of its margin box's columns, as the editor draws them,
+  for gestures and the point resolver alike (`SnapSource` gains `margin` and `column`).
+- `SnapTargetKind::Baseline` is part of the label set; no target produces it yet (text
+  baselines and the baseline grid stay on the list of what is not built).

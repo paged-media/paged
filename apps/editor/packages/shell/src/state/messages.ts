@@ -39,6 +39,7 @@ export const COMMANDS = defineMessages("shell.commands", {
   togglePanels: "Toggle panels (keep tool rail)",
   tabHidesPanels: "Tab hides panels (InDesign)",
   pickerDocuments: "Paged and IDML documents",
+  pickerEverything: "Everything Paged opens",
 });
 
 export const REPLACE = defineMessages("shell.replace", {
@@ -48,6 +49,44 @@ export const REPLACE = defineMessages("shell.replace", {
   requester: "{requester} wants to open {document} in place of this document. ",
   unsaved: "This document has unsaved edits. {who}{action} will discard them.",
   saveFirst: "Save with {chord} first, or continue to discard.",
+});
+
+/** What a drop will do (editor ADR 1205): the ghost label and its reason. */
+export const DROP = defineMessages("shell.drop", {
+  nothing: "Nothing to drop",
+  oneAtATime: "Drop one file at a time",
+  oneAtATimeReason: "Several files were dragged; Paged takes one per drop.",
+  cannotDrop: "Cannot drop here",
+  readOnly: "This editor is read-only.",
+  fillerRole: "Filling a template does not take dropped files.",
+  openPicture: "Open {name} as a new document",
+  openPictureUnnamed: "Open this picture as a new document",
+  importWith: "Import {name} ({importer})",
+  importUnnamed: "Import this file",
+  cannotPlace: "Cannot place this picture",
+  noPlace: "Placing pictures is not available in this editor.",
+  replacePicture: "Replace the picture in this frame",
+  placeInFrame: "Place {name} in this frame",
+  placeInFrameUnnamed: "Place the picture in this frame",
+  place: "Place {name}",
+  placeOnPasteboard: "Place {name} on the pasteboard",
+  placeUnnamed: "Place this picture",
+  open: "Open {name}",
+  openUnnamed: "Open this document",
+  replace: "Open {name} in place of this document",
+  replaceUnnamed: "Open this document in place of this one",
+  askFirst: "You will be asked to save your changes first.",
+  importMayAsk:
+    "If it opens as a document, you will be asked to save your changes first.",
+  decideOnDrop: "Drop to open or import this file",
+  unsupported: "Paged cannot open {ext} files",
+  unsupportedNamed: "Paged cannot open {name}",
+  unsupportedType: "Paged cannot open this kind of file",
+  unsupportedReason:
+    "It opens Paged and InDesign (IDML) documents, pictures, and the formats its modules import.",
+  changed: "The document changed while dragging",
+  changedReason: "Nothing was dropped. Drag the file again.",
+  refused: "{label}. {reason}",
 });
 
 /** The recovery journal (editor ADR 1204). */
@@ -64,6 +103,10 @@ export const LOAD = defineMessages("shell.load", {
   fontUnavailable:
     "default font unavailable — text in documents with missing fonts will not render",
   importFailed: "import of {name} via {importer} failed: {error}",
+  notAPackage:
+    "{name} was not opened: it is not a Paged or IDML document. The open document is unchanged.",
+  openFailed:
+    "{name} could not be opened: the file is damaged or uses something Paged cannot read. The open document is unchanged.",
   reducedMode:
     "Some features are running in a reduced mode. Reload the page; if it persists, the page is not being served with the headers the editor needs (cross-origin isolation).",
 });

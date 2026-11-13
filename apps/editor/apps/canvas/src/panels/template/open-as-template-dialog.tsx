@@ -173,7 +173,7 @@ function OpenAsTemplateForm(): ReactElement {
       live = false;
     };
   }, [client]);
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
   useEscapeHandler({
     id: "paged.openAsTemplateDialog",
     tier: "modal",
