@@ -117,13 +117,83 @@ export const PALETTE = defineMessages("shell.palette", {
 export const HEADER = defineMessages("shell.header", {
   untitled: "Untitled document",
   noDocument: "No document",
-  edited: "Edited — not saved",
-  noUnsavedEdits: "No unsaved edits",
   searchOrAsk: "Search or ask…",
   // Split before ")": the strings guard reads "})" as the end of the call.
   searchOrAskKey: "Search or ask ({key}" + ")",
   lightMode: "Light mode",
   darkMode: "Dark mode",
+});
+
+/** The header's save status (editor ADR 1203): a label per state, and the
+ *  details its popover gives (where, when, why, Retry). */
+export const SAVE_STATUS = defineMessages("shell.saveStatus", {
+  noChanges: "No changes",
+  notSavedYet: "Not saved yet",
+  editing: "Unsaved changes",
+  saving: "Saving…",
+  savedLocally: "Saved locally",
+  downloaded: "Downloaded",
+  syncing: "Saved locally · Syncing…",
+  synced: "Saved",
+  notSynced: "Saved locally · Not synced",
+  failed: "Couldn't save",
+  readOnly: "Read-only",
+  recovered: "Recovered · Not saved",
+  detailsTitle: "Save status",
+  openedFrom: "Opened from {name} at {time}. Nothing has been saved since.",
+  blank: "This document has not been saved yet.",
+  editingSince: "Changes made since {time} are not saved anywhere yet.",
+  savingNow: "Saving now. Nothing has been written yet.",
+  syncingTo: "Writing to {target}…",
+  savedAt: "Saved at {time}:",
+  notSyncedBecause: "Could not write to {target}: {reason}.",
+  failedBecause: "The document was not saved: {reason}.",
+  readOnlyBecause: "This editor cannot save this document.",
+  recoveredFrom:
+    "Restored from the recovery copy of {time}. It is not saved: save it to keep it.",
+  inLibrary: "In this browser's library",
+  inFile: "In {name}",
+  asDownload: "Downloaded as {name}",
+  toHost: "Handed to the application this editor runs in",
+  onServer: "On the server, in {repo}",
+  theFile: "the file",
+  theHost: "the application",
+  theServer: "the server",
+  checkpoint:
+    "A recovery copy was kept in this browser at {time}. It is not a save.",
+  libraryFailed: "This browser's library did not keep a version of this save.",
+  notPrepared:
+    "{plugin} did not finish preparing; its last committed state was saved.",
+  permissionDenied: "permission to write it was not granted",
+  fileMissing: "it was moved or deleted",
+  writeFailed: "it could not be written",
+  exportFailed: "the document could not be written out",
+  hostRefused: "the application did not accept it",
+  remoteFailed: "the server did not accept it",
+  unknown: "something went wrong",
+  retry: "Retry",
+  details: "Details",
+});
+
+/** The recovery prompt (editor ADR 1204): Restore, Compare, Discard. */
+export const RECOVERY_PROMPT = defineMessages("shell.recoveryPrompt", {
+  title: "Recover unsaved work?",
+  body: "{name} had unsaved changes when the editor last closed. A recovery copy from {time} is kept in this browser.",
+  restore: "Restore recovered work",
+  compare: "Compare with saved",
+  hideCompare: "Hide comparison",
+  discard: "Discard recovered copy",
+  later: "Not now",
+  recoveredCopy: "Recovered copy",
+  recoveredFacts: "Kept at {time}; {edits} unsaved changes; {pages} pages",
+  savedVersion: "Saved version",
+  inLibrary: "{name} in this browser's library, saved {time}",
+  inLibraryUndated: "{name} in this browser's library",
+  inFile: "The file {name}",
+  neverSaved: "Never saved",
+  restoreNote:
+    "Restoring opens the copy as a new document, {name}. The saved version is not changed.",
+  unknownPages: "?",
 });
 
 export const COLLAB = defineMessages("shell.collab", {

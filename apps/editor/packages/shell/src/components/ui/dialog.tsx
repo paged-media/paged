@@ -64,7 +64,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
   // An Escape typed in another editor on the page is not this dialog's.
   const escapeGuard = useEditorEscapeGuard(onEscapeKeyDown);
-  // ADR 234, ADR 1204 — focus returns to whatever opened the dialog, and to
+  // ADR 234, ADR 1206 — focus returns to whatever opened the dialog, and to
   // the canvas when that is gone (a menu item, `<body>`). Radix gives it
   // back to a Dialog TRIGGER only, and most of the editor's dialogs open
   // from a command (a menu item, a shortcut), so focus fell to <body>.

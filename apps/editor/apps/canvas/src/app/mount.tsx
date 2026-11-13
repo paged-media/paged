@@ -80,8 +80,6 @@ import {
   type OverlayContribution,
   type PagedEditor,
   type ShellSchemaPanelRendererProps,
-  writeToOpenFile,
-  commitSave,
   setLibrary,
   setChromeStorageScope,
   AI_ASK_COMMAND,
@@ -118,6 +116,8 @@ import {
 import CanvasRenderWorker from "../worker/worker.ts?worker";
 import LibraryWorker from "../library-worker.ts?worker";
 import { connectLibrary } from "@paged-media/repository";
+import { savePagedFile } from "./save-paged";
+import { startRecovery } from "./recovery-start";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import { loadBundle, mlObjectModel } from "@paged-media/plugin-sdk";
 
@@ -813,87 +813,6 @@ function PluginBundles() {
   return null;
 }
 
-/** Save (.paged) — the native container (the app's File ▸ Save, below).
- *  A module function, not a `try` in the component: the compiler does
- *  not lower the conditionals in it inside one (ADR 229). Throws what the
- *  caller reports. */
-async function savePagedFile(
-  instance: EditorInstance,
-  client: CanvasClient,
-  sourceName: string | null | undefined,
-): Promise<void> {
-  const { scope, services } = instance;
-  const { willSave } = services;
-  const hostSave = instance.actions.save;
-  // v66 — plugins with an edit session outside the document
-  // commit it first (bounded; a stuck one is reported, not
-  // waited on forever), so the file holds what is on screen.
-  const prepared = await willSave.run({ format: "paged" });
-  for (const id of [...prepared.failed, ...prepared.timedOut]) {
-    console.warn(
-      `Save (.paged): ${id} did not finish preparing (` +
-        `${prepared.failed.includes(id) ? "threw" : "timed out"}); ` +
-        `saving its last committed state`,
-    );
-  }
-  const bytes = await client.exportPaged();
-  // What the bytes hold: an edit landing while they are written
-  // out is not part of this save.
-  const savedMark = client.editMark;
-  let baseName = sourceName || "document";
-  try {
-    const meta = await client.documentMeta();
-    if (meta.documentName) baseName = meta.documentName;
-  } catch {
-    /* meta unavailable — keep the fallback name */
-  }
-  // An embedding host stores the document itself (concept §8.3): the
-  // bytes go to its `save` action, not to the library, a file or a
-  // download.
-  if (hostSave) {
-    await hostSave({ bytes, name: baseName });
-    client.markSaved(savedMark);
-    return;
-  }
-  // ADR 180 — the save is a commit in the local library, alongside
-  // (never instead of) the file write below. A library failure is
-  // reported and the file still gets written.
-  try {
-    await commitSave(scope, bytes.slice(), baseName);
-  } catch (err) {
-    console.warn("Save (.paged): the library did not take this save:", err);
-  }
-  // A5 — write BACK to the file the document was opened from,
-  // when there is one. Until now every save minted a download,
-  // so a second Cmd+S produced "document (1).paged" and the file
-  // the user opened was never touched: a save-AS wearing the
-  // word Save, with no autosave behind it.
-  //
-  // Falls back to the download whenever the write cannot happen
-  // — no handle, no platform support, a declined permission
-  // prompt, a moved file.  returns false rather
-  // than throwing for exactly that reason: a save that did not
-  // happen must not look like one that did.
-  //
-  // ED-4 — either way the document is saved, so the edited flag
-  // clears (until the next edit). Until now nothing cleared it:
-  // after a save the next Open still warned of unsaved edits.
-  if (await writeToOpenFile(scope, bytes, "application/x-paged+zip")) {
-    client.markSaved(savedMark);
-    return;
-  }
-  const blob = new Blob([bytes.slice()], {
-    type: "application/x-paged+zip",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${baseName.replace(/\.(paged|idml)$/i, "")}.paged`;
-  a.click();
-  URL.revokeObjectURL(url);
-  client.markSaved(savedMark);
-}
-
 /**
  * Canvas-app integration: legacy keyboard + camera + text-editing
  * hooks that read from the shell contexts but key off canvas
@@ -1342,14 +1261,18 @@ function CanvasAppIntegration() {
       // original OPC — none of which an IDML export can carry.
       savePaged: async () => {
         if (!handle || handle.pageCount === 0) return;
-        await savePagedFile(instance, client, sourceName).catch(
-          (err: unknown) => {
-            // A failed save that reaches only the devtools console is a
-            // failed save the user believes succeeded — and with no
-            // autosave behind it, believing wrongly is how work is lost.
-            reportFileFailure(problemsSink, t(M.savePaged), err);
-          },
-        );
+        await savePagedFile({
+          scope: instance.scope,
+          client,
+          willSave: instance.services.willSave,
+          ...(instance.actions.save ? { hostSave: instance.actions.save } : {}),
+          sourceName,
+        }).catch((err: unknown) => {
+          // A failed save that reaches only the devtools console is a
+          // failed save the user believes succeeded — and with no
+          // autosave behind it, believing wrongly is how work is lost.
+          reportFileFailure(problemsSink, t(M.savePaged), err);
+        });
       },
       zoomIn: () => {
         const cx = vw / 2;
@@ -2069,6 +1992,10 @@ export interface MountOptions {
   actions?: HostActions;
   /** Start the local document library (OPFS). Default: the plain editor only. */
   library?: boolean;
+  /** Keep a recovery journal of unsaved work (OPFS; editor ADR 1204) and
+   *  offer a crashed session's work back at the next start. Default: as
+   *  `library`. */
+  recovery?: boolean;
   /** Called once the editor's client exists. */
   onClient?: (client: CanvasClient) => void;
   /** Called once the shell is mounted (the embedding API's handle). */
@@ -2201,7 +2128,15 @@ export function mountEditor(
   // panels and modes) follow the editor's locale too.
   setActiveStrings(strings);
   const instance = createEditorInstance(options);
-  if (options.library ?? instance.surfaces.plain) startLibrary(instance.scope);
+  const library = options.library ?? instance.surfaces.plain;
+  if (library) startLibrary(instance.scope);
+  // Editor ADR 1204 — the recovery journal, this editor's own session.
+  const recovery =
+    (options.recovery ?? library)
+      ? startRecovery(instance.scope, () =>
+          instance.services.documentIdentity.current(),
+        )
+      : Promise.resolve(null);
   const root = createRoot(element);
   root.render(
     <StrictMode>
@@ -2212,5 +2147,12 @@ export function mountEditor(
       </StringsProvider>
     </StrictMode>,
   );
-  return { instance, dispose: () => root.unmount() };
+  return {
+    instance,
+    dispose: () => {
+      root.unmount();
+      // A clean close: this session's checkpoints go with it.
+      void recovery.then((stop) => stop?.());
+    },
+  };
 }

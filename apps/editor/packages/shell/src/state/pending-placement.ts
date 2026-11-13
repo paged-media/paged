@@ -193,7 +193,7 @@ export function awaitPlacementPoint(
       if (pressed) finish(pressed);
     };
 
-    // Escape cancels: a transient mode of the Escape arbiter (ADR 1203),
+    // Escape cancels: a transient mode of the Escape arbiter (ADR 1205),
     // so the same press neither leaves a context nor clears the selection.
     // Registered last here, after `finish` exists.
     const offEscape = escapeArbiterOf(scope).register({

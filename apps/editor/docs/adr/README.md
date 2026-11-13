@@ -65,7 +65,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
 | [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
 | [249](249-offered-only-where-it-applies.md) | A control is offered only where it applies: the command's when, the field's kind | Accepted 2026-10-19 |
-| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201 and 1203) |
+| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201 and 1205) |
 | [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
 | [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
@@ -126,8 +126,10 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1200](1200-the-interaction-contract-is-adopted.md) | The interaction contract is adopted: the specification `PM-UX-INTERACTION-001` is the normative interaction target, implemented in waves, with TARGET CHANGEs, one exception ledger and no screenshot-only gate; the UX/UI redesign strategy is the product direction | Accepted 2026-11-13 (adopted, not implemented) |
 | [1201](1201-interaction-decisions.md) | Interaction decisions D-01 to D-16 and the Escape order: Shift toggles, a directional marquee, conventional Tab, the image's content first, one exit resolver, one Escape resolution per press | Accepted 2026-11-13 (decided, not implemented); amends 234, 235, 246, 250, 282 |
 | [1202](1202-uxi-coverage-ratchets-the-interaction-contract.md) | An inventory mirrors the interaction contract (requirements, tests, interactions with their owners, the exception ledger, the enforced gates), and a coverage report ratchets its acceptance tests: tests claim `UXI-Tnn` in their titles, unclaimed ones are acknowledged with their task | Accepted 2026-11-13 |
-| [1203](1203-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13; amends 250 |
-| [1204](1204-focus-returns-to-the-opener.md) | Focus returns to the opener, else to the canvas: one focus-return service for dialogs, the palette, menus and the context menu | Accepted 2026-11-13 |
+| [1203](1203-save-status-says-what-is-saved-where.md) | The save status says what is saved where: one save-state machine per editor (new, editing, saving, saved locally, syncing, synced, not synced, failed, read-only, recovered), each a guarantee that held; a local save whose target failed reads "Saved locally · Not synced" with Retry (D-10) | Accepted 2026-11-13 |
+| [1204](1204-recovery-journal.md) | The recovery journal: per-editor checkpoints of unsaved work in the origin-private file system, a crashed session's work offered back as Restore (a new document, never over the source), Compare or Discard; bounded and purged on save and close | Accepted 2026-11-13 |
+| [1205](1205-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13; amends 250 |
+| [1206](1206-focus-returns-to-the-opener.md) | Focus returns to the opener, else to the canvas: one focus-return service for dialogs, the palette, menus and the context menu | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

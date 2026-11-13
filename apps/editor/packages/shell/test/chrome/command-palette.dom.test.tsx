@@ -180,7 +180,7 @@ describe("command palette rows", () => {
   // capture listeners: a layer that opened after the palette (a tooltip
   // whose delay ran out under a resting pointer, a toast) took the press,
   // and the palette never heard it. The palette is now a handler of the
-  // Escape arbiter (ADR 1203), which hears every Escape typed in its editor.
+  // Escape arbiter (ADR 1205), which hears every Escape typed in its editor.
   test("UXI-T23 — Escape closes the palette whichever layer Radix holds on top, and focus returns to the opener (issue #32) @feat:editor-shell.command-palette @level:edge", async () => {
     setAiAvailability("available");
     let showTip: (on: boolean) => void = () => {};

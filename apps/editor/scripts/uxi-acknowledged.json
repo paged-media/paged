@@ -164,10 +164,6 @@
     "task": "DF4",
     "reason": "No test claims it yet: an import's losses are not reported (the IDML lost list is dropped at client.exportIdml); DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T67": {
-    "task": "DF1",
-    "reason": "No test claims it yet: the save state is only dirty or saved; the save-state machine with saved-locally and not-synced lands with DF1. Claim it in a test title (UXI-T67 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T68": {
     "task": "DF6",
     "reason": "No test claims it yet: export does not prevalidate the requested standard yet (DF6). Claim it in a test title (UXI-T68 — …) when that lands, or sooner where today's code already passes (W0.7)."

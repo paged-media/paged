@@ -28,7 +28,14 @@
 import moduleManifest from "virtual:paged-modules";
 
 import type { CanvasClient } from "@paged-media/client";
-import { debugHandlesOf, replacePrompts } from "@paged-media/shell";
+import {
+  debugHandlesOf,
+  getOpenFileHandle,
+  replacePrompts,
+  saveStateOf,
+  setOpenFileHandle,
+  type WritableFileHandle,
+} from "@paged-media/shell";
 
 import { debugFlag } from "../debug-flags";
 import { createReplyChaos } from "./chaos";
@@ -109,6 +116,17 @@ export function publishDevHandles(instance: EditorInstance): () => void {
     },
     // v66 — Save waits for a listener a spec registers as a bundle would.
     __willSave: willSave,
+    // Editor ADR 1203 — what the save state says, and the file a save
+    // writes back to: a spec installs a handle whose write fails to prove
+    // a failed write-back reads "not synced", never "saved" (UXI-T67).
+    __saveState: {
+      current: () => saveStateOf(instance.scope).get(),
+      subscribe: (listener: () => void) =>
+        saveStateOf(instance.scope).subscribe(listener),
+      setOpenFileHandle: (handle: WritableFileHandle | null) =>
+        setOpenFileHandle(instance.scope, handle),
+      openFileName: () => getOpenFileHandle(instance.scope)?.name ?? null,
+    },
   };
   // Live: they exist once the bundles' host options do.
   const debug = () => debugHandlesOf(instance.scope);

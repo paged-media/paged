@@ -330,7 +330,7 @@ export function MenuBar() {
           }
           if (nav.origin !== "pointer") return;
           e.preventDefault();
-          // ADR 1204 — to where focus was, or the canvas when that is gone.
+          // ADR 1206 — to where focus was, or the canvas when that is gone.
           const back = nav.returnTo;
           nav.returnTo = null;
           focusReturn.open(MENU_SURFACE, back);

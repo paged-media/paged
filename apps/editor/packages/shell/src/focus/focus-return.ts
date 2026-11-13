@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Focus returns to the opener (editor ADR 1204, decision D-11 of ADR 1201,
+// Focus returns to the opener (editor ADR 1206, decision D-11 of ADR 1201,
 // the interaction specification's UXI-KEY-009 and UXI-A11Y-005).
 //
 // A surface that takes focus while it is open — the command palette, a
@@ -33,7 +33,7 @@
 // moves focus in another.
 
 import { scoped, useScoped, type EditorScope } from "../state/editor-scope";
-import { editorRootOf } from "../state/editor-root";
+import { editorRootOf, isActiveEditor } from "../state/editor-root";
 import { queryEditor } from "../state/editor-dom";
 import { CANVAS_SURFACE_ATTR } from "./key-ownership";
 
@@ -110,6 +110,23 @@ function createFocusReturn(scope: EditorScope): FocusReturn {
       if (!openers.has(surface)) return null;
       const opener = openers.get(surface) ?? null;
       openers.delete(surface);
+      // Focus the user already moved somewhere (a click in another editor or
+      // a panel's field closed the surface) stays there: only focus that
+      // dropped with the surface — to `<body>`, the root, or a node that left
+      // the document — is handed back, and only while this editor is still
+      // the page's active one.
+      if (typeof document !== "undefined") {
+        const now = document.activeElement;
+        const root = editorRootOf(scope);
+        if (!isActiveEditor(root)) return null;
+        const dropped =
+          now === null ||
+          now === document.body ||
+          now === document.documentElement ||
+          now === root ||
+          !now.isConnected;
+        if (!dropped) return null;
+      }
       if (canTakeFocus(opener)) {
         const landed = focusOn(opener);
         if (landed) return landed;

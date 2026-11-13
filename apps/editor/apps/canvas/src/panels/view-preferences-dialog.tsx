@@ -86,7 +86,7 @@ function ViewPreferencesForm() {
   const store = useScoped(OPEN);
   const prefs = useViewPreferences();
   const close = () => store.set(false);
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
   useEscapeHandler({
     id: "paged.viewPreferencesDialog",
     tier: "modal",

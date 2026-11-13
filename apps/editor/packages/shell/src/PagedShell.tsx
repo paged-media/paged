@@ -127,6 +127,10 @@ import { openAssistant } from "./ai/assistant-session";
 import { DemoOverlay, DemoSpotlight } from "./demo/overlay";
 import { runDemoScriptWithHandle } from "./demo/runner";
 import { ReplaceDocumentPrompt } from "./chrome/ReplaceDocumentPrompt";
+import { SaveStateController } from "./state/save-state-controller";
+import { RecoveryController } from "./state/recovery-controller";
+import { RecoveryPrompt } from "./chrome/RecoveryPrompt";
+import { useSaveState } from "./state/save-status";
 import { ExportPdfDialog } from "./chrome/ExportPdfDialog";
 import { ToolRail } from "./chrome/ToolRail";
 import { ScreenModeSelector } from "./chrome/ScreenModeSelector";
@@ -1536,6 +1540,17 @@ function ShellChrome({
       <DemoOverlay />
       <ExportPdfDialog />
       <ReplaceDocumentPrompt />
+      {/* Editor ADR 1203 — the save state follows the open document. */}
+      <SaveStateController />
+      {/* Editor ADR 1204 — the recovery journal: checkpoints of unsaved
+       *   work, and the prompt that offers a crashed session's back. */}
+      <RecoveryController />
+      <RecoveryPrompt
+        sinks={{
+          setStatus,
+          pushWarning: (w) => setWarnings((prev) => [...prev, w]),
+        }}
+      />
 
       {/* Canvas-app-specific integration: legacy hooks (keyboard
        *   shortcuts, camera tweens, text editing) that read from
@@ -1605,10 +1620,16 @@ interface DebugContextSnapshot {
  *  the dialog that is supposed to stop them.
  *
  *  This does not make the document safe, and must not be read as
- *  autosave. It buys a confirmation, nothing more. */
+ *  autosave. It buys a confirmation, nothing more. A document restored
+ *  from the recovery journal and not saved since counts as unsaved
+ *  (editor ADR 1204). */
 function UnsavedChangesGuard() {
   const meta = useDocumentMeta();
-  const dirty = meta?.dirty ?? false;
+  const saveState = useSaveState();
+  const dirty =
+    (meta?.dirty ?? false) ||
+    (saveState.document?.origin.kind === "recovered" &&
+      saveState.saved === null);
   useEffect(() => {
     if (!dirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// One Escape (editor ADR 1203, the interaction specification's §12.1).
+// One Escape (editor ADR 1205, the interaction specification's §12.1).
 //
 // Escape used to be answered by about ten listeners, each deciding for
 // itself whether the press was its own: one press could cancel a drag and

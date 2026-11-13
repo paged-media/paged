@@ -317,7 +317,7 @@ export function PlaygroundController(): React.ReactElement | null {
   }, [scriptId, keys]);
 
   // Escape inside the open guide card folds it to its pill: a popover of
-  // the Escape arbiter (ADR 1203), so the press does nothing else. The
+  // the Escape arbiter (ADR 1205), so the press does nothing else. The
   // script's own textarea keeps its Escape.
   const cardRef = useRef<HTMLElement | null>(null);
   useEscapeHandler({

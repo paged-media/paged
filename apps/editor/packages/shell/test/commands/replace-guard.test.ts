@@ -36,8 +36,10 @@ import {
   replaceConfirmText,
   replaceDeclinedError,
   replacePrompts,
+  setBeforeReplace,
   setDocumentSaver,
 } from "../../src/state/replace-guard";
+import { saveStateOf } from "../../src/state/save-status";
 
 const disposers: Array<() => void> = [];
 // One editor per test.
@@ -289,5 +291,38 @@ describe("SH-10 (UX audit F-01): a dropped file takes File ▸ Open's path", () 
     });
     expect(warnings).toEqual([]);
     expect(statuses.at(-1)).toBe("kept the open document; a.pdf not opened");
+  });
+});
+
+describe("the replace question and the recovery journal (editor ADR 1204)", () => {
+  test("a document restored from the journal and not saved since is asked about, though the engine reads it clean", async () => {
+    covers("command:paged.file.new");
+    surface();
+    saveStateOf(scope).dispatch({
+      type: "opened",
+      origin: { kind: "recovered", name: "Annual", checkpointAt: 1 },
+      at: 2,
+    });
+    const { client } = dirtyClient(false);
+    const answer = confirmReplace(scope, client, { action: "Opening a.idml" });
+    (await asked()).answer("cancel");
+    expect(await answer).toBe(false);
+  });
+
+  test("an edited document is checkpointed before the question is asked", async () => {
+    covers("command:paged.file.new");
+    surface();
+    const order: string[] = [];
+    disposers.push(
+      setBeforeReplace(scope, async () => {
+        order.push("checkpoint");
+      }),
+    );
+    const { client } = dirtyClient(true);
+    const answer = confirmReplace(scope, client, { action: "Opening a.idml" });
+    (await asked()).answer("discard");
+    order.push("asked");
+    expect(await answer).toBe(true);
+    expect(order).toEqual(["checkpoint", "asked"]);
   });
 });

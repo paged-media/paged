@@ -234,7 +234,7 @@ function TransformEachForm({
     void enqueue(revert).then(close);
   };
   // Escape takes the preview back: the modal tier of the Escape arbiter
-  // (ADR 1203).
+  // (ADR 1205).
   useEscapeHandler({
     id: "paged.transformEachDialog",
     tier: "modal",

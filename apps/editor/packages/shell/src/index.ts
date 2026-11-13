@@ -488,6 +488,8 @@ export {
   replaceConfirmText,
   replaceDeclinedError,
   replacePrompts,
+  documentSaver,
+  setBeforeReplace,
   setDocumentSaver,
   type DirtySource,
   type PendingReplace,
@@ -495,6 +497,38 @@ export {
   type ReplaceRequest,
 } from "./state/replace-guard";
 export { ReplaceDocumentPrompt } from "./chrome/ReplaceDocumentPrompt";
+// Editor ADR 1203 — the save state: the store the save reports into, and
+// the header's status.
+export {
+  declareNextOrigin,
+  documentNeedsSave,
+  saveStateOf,
+  useSaveState,
+} from "./state/save-status";
+export { SaveStateController } from "./state/save-state-controller";
+export { SaveStatus, saveStatusLabel } from "./chrome/SaveStatus";
+// Editor ADR 1204 — the recovery journal, as an editor uses it.
+export {
+  attachRecovery,
+  discardCheckpoint,
+  postponeCheckpoint,
+  purgeCheckpoints,
+  recoveryAttached,
+  recoveryOffers,
+  restoreCheckpoint,
+  savedVersionOf,
+  writeCheckpoint,
+  type RecoveryAttachment,
+  type RecoveryOffers,
+  type SavedVersion,
+} from "./state/recovery";
+export {
+  EVERY_OPS as RECOVERY_EVERY_OPS,
+  IDLE_MS as RECOVERY_IDLE_MS,
+  MIN_INTERVAL_MS as RECOVERY_MIN_INTERVAL_MS,
+  RecoveryController,
+} from "./state/recovery-controller";
+export { RecoveryPrompt } from "./chrome/RecoveryPrompt";
 export {
   CanvasContextMenu,
   closeCanvasContextMenu,
@@ -605,7 +639,7 @@ export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
 // ── Keyboard focus (ADR 234) ───────────────────────────────────
 export * from "./focus";
-// ── One Escape (ADR 1203) ──────────────────────────────────────
+// ── One Escape (ADR 1205) ──────────────────────────────────────
 export {
   ESCAPE_TIERS,
   escapeArbiterOf,
@@ -1011,8 +1045,10 @@ export {
   getOpenFileHandle,
   setOpenFileHandle,
   supportsFileHandles,
+  writeBackToOpenFile,
   writeToOpenFile,
   type WritableFileHandle,
+  type WriteBackResult,
 } from "./state/open-file-handle";
 
 export {

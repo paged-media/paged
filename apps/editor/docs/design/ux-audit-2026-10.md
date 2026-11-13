@@ -252,6 +252,12 @@ After a reload the editor comes back on "No document", although the library (OPF
 
 **Screenshots:** `F-06-reload-loses-document.png`
 
+**Partly fixed (2026-11-13, `901e94d63`).** Unsaved work survives a reload or a crash: a
+recovery journal keeps checkpoints in the browser and the next start offers Restore (as a new
+document, never over the saved version), Compare or Discard (editor ADR 1204;
+`tests/e2e/uxi-documents.spec.ts`). Reopening the last saved document, Open recent and Close
+stay open.
+
 <a id="f-07"></a>
 
 #### F-07 · Save state is unreadable: the status dot is amber after every open, and a save gives no feedback
@@ -272,6 +278,11 @@ The document chip's dot shows the engine status whenever the status string is no
 **Recommendation:** Treat the engine's post-load messages as ready (`packages/shell/src/chrome/Header.tsx`, `DocumentChip`). Show "Saved to … / Downloaded …" after Save. Merge the chip dot and the "Edited" label into one indicator.
 
 **Screenshots:** `F-07-status-dot-after-save.png`
+
+**Fixed (2026-11-13, `901e94d63`).** The chip shows a dot only while the engine is busy or
+failed; beside it the save status says what the last save did and where ("Saved", "Saved
+locally", "Saved locally · Not synced" with Retry, "Couldn't save" with the reason), and its
+popover names the file, the library or the download (editor ADR 1203; `UXI-T67`).
 
 <a id="f-08"></a>
 

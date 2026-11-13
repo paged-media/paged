@@ -198,13 +198,13 @@ export function CommandPalette() {
     if (open) setQuery("");
   }, [open]);
 
-  // Escape closes the palette (issue #32, ADR 1203): the palette's tier of
+  // Escape closes the palette (issue #32, ADR 1205): the palette's tier of
   // the Escape arbiter, which hears every Escape typed in this editor
   // wherever focus is. Radix's own Escape belongs to whichever dismissable
   // layer is on top and listens on the document, after the window's
   // capture listeners: a press another layer took, or one that never
   // reached the palette's input, left the palette open. Focus then goes
-  // back to the opener (ADR 1204, the dialog's close).
+  // back to the opener (ADR 1206, the dialog's close).
   useEscapeHandler({
     id: "paged.palette",
     tier: "palette",

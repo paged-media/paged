@@ -1,4 +1,4 @@
-# ADR 1204 — Focus returns to the opener, else to the canvas
+# ADR 1206 — Focus returns to the opener, else to the canvas
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/focus/focus-return.ts` (`focusReturnOf`, `useFocusReturn`,
@@ -29,8 +29,12 @@ canvas of another editor on the page.
 3. **Never as a click.** The hand-back focuses the viewport without marking it
    pointer-engaged (`UXI-KEY-010`): with the "Tab hides panels" preference on, Tab after a
    closed dialog moves focus, it does not hide the chrome.
-4. **Only its own editor.** The fallbacks run only while the editor's root is connected: a
-   surface that closes as its editor goes moves no focus, and never into another editor.
+4. **Only focus that dropped, only its own editor.** Focus is handed back only when it fell
+   with the surface (to `<body>`, the root, or a node that left the document) and while the
+   editor is still the page's active one: a click in another editor or in a panel's field that
+   closed the surface keeps its focus. The fallbacks run only while the editor's root is
+   connected: a surface that closes as its editor goes moves no focus, and never into another
+   editor.
 5. **Users.** The dialog wrapper (`onOpenAutoFocus` / `onCloseAutoFocus`, one surface per
    `useId`), so every shell dialog and the command palette; the canvas context menu (the opener
    is recorded by `openCanvasContextMenu`); the menu bar's pointer-opened menus. A

@@ -376,7 +376,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     };
   }, [info]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1205).
   useEscapeHandler({
     id: "paged.coreCommandDialog",
     tier: "modal",

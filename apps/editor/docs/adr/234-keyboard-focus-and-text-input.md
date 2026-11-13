@@ -104,8 +104,8 @@ restores decision 2 exactly: with it on, Tab on a canvas the user clicked into t
 panels and the tool rail and Shift+Tab the panels (`focus/tab-hides-panels.ts`); reached by
 keyboard the canvas still passes Tab on. Track WS's "Focus workspace" (WS4) is a separate,
 wider command; `paged.view.toggleChrome` stays the panels-and-rail toggle. A surface that took
-focus gives it back to its opener, else the canvas ([ADR 1204](1204-focus-returns-to-the-opener.md));
-Escape is resolved once per press ([ADR 1203](1203-one-escape.md)). The composite rule of
+focus gives it back to its opener, else the canvas ([ADR 1206](1206-focus-returns-to-the-opener.md));
+Escape is resolved once per press ([ADR 1205](1205-one-escape.md)). The composite rule of
 decision 1 gains the page keys, Enter and Space everywhere and typeahead letters in a listbox,
 a combobox and a native select (`compositeOwnsKey`, UXI-T76). The text input's composition
 commits once per session and is dropped when the caret moved mid-composition, and the input

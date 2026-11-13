@@ -74,7 +74,7 @@ export function openCanvasContextMenu(
   x: number,
   y: number,
 ): void {
-  // Where focus is now is where it goes back to (ADR 1204); a menu moved to
+  // Where focus is now is where it goes back to (ADR 1206); a menu moved to
   // a new point keeps the opener it was opened from.
   if (scope.get(MENU_AT).get() === null)
     focusReturnOf(scope).open(CONTEXT_MENU_SURFACE);
@@ -159,7 +159,7 @@ export function CanvasContextMenu({
         aria-label={strings.t(CONTEXT_MENU.label)}
         data-testid="canvas-context-menu"
         className="min-w-[13rem]"
-        // ADR 1204 — focus goes back to where it was as the menu opened
+        // ADR 1206 — focus goes back to where it was as the menu opened
         // (the canvas, the caret), not to the hidden anchor Radix picks.
         onCloseAutoFocus={(e) => {
           e.preventDefault();

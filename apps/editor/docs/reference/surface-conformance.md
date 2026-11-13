@@ -314,7 +314,7 @@ edit context's content and click-out presses; Hand, Zoom, the wheel, the middle 
 pinch; Space, Cmd and Cmd+Space spring-loading; the 23 other tools of the gesture spine; guide
 drag, threading, pending placement and the file drop; the context menu by pointer and by key;
 Tab's chrome toggle; the palette's Escape; text input; and Escape, resolved once per press by the
-Escape arbiter (ADR 1203: the text, the entered group, the edit context, the transient modes and
+Escape arbiter (ADR 1205: the text, the entered group, the edit context, the transient modes and
 the selection are its tiers). One exception: EXC-001 (the viewport's drag cancel, the gesture
 handlers and path editing still listen on their own, until IC4). EXC-002 (issue #32, the
 palette's Escape on real Chrome) closed with KF1/KF5.

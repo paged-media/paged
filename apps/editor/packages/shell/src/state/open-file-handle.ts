@@ -91,19 +91,43 @@ export function supportsFileHandles(): boolean {
   );
 }
 
-/** Write bytes back to the opened file.
+/** What a write back to the opened file came to (editor ADR 1203, the
+ *  save state): written; no file to write to; or the file is there and
+ *  did not take the bytes, and why. */
+export type WriteBackResult =
+  | { readonly kind: "written"; readonly name: string }
+  | { readonly kind: "no-target" }
+  | {
+      readonly kind: "failed";
+      readonly name: string;
+      readonly code: "permission-denied" | "file-missing" | "write-failed";
+      readonly detail: string | null;
+    };
+
+function failureCode(
+  err: unknown,
+): "permission-denied" | "file-missing" | "write-failed" {
+  const name = (err as { name?: unknown } | null)?.name;
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return "permission-denied";
+  if (name === "NotFoundError") return "file-missing";
+  return "write-failed";
+}
+
+/** Write bytes back to the opened file, and say what happened.
  *
- *  Returns false when there is no handle, when the platform cannot do
- *  it, or when the user declines the permission prompt — every one of
- *  which means the caller must fall back to a download rather than
- *  report a save that did not happen. */
-export async function writeToOpenFile(
+ *  `no-target` when there is no handle (a blank document, a drop, the
+ *  input fallback); `failed` when the user declines the permission prompt,
+ *  the file was moved or removed, or the write throws. Either way the
+ *  caller must not report a save to the file that did not happen. */
+export async function writeBackToOpenFile(
   scope: EditorScope,
   bytes: Uint8Array,
   mimeType: string,
-): Promise<boolean> {
+): Promise<WriteBackResult> {
   const handle = getOpenFileHandle(scope);
-  if (!handle) return false;
+  if (!handle) return { kind: "no-target" };
+  const name = handle.name;
   try {
     // Permission can lapse between sessions even though the handle
     // survives, so ask rather than assume. `queryPermission` is absent
@@ -111,9 +135,15 @@ export async function writeToOpenFile(
     const state = await handle.queryPermission?.({ mode: "readwrite" });
     if (state === "prompt") {
       const granted = await handle.requestPermission?.({ mode: "readwrite" });
-      if (granted !== "granted") return false;
+      if (granted !== "granted")
+        return {
+          kind: "failed",
+          name,
+          code: "permission-denied",
+          detail: null,
+        };
     } else if (state === "denied") {
-      return false;
+      return { kind: "failed", name, code: "permission-denied", detail: null };
     }
     const writable = await handle.createWritable();
     // Copy through a Blob so the mime type rides along and the caller's
@@ -130,10 +160,29 @@ export async function writeToOpenFile(
         lastModified: written.lastModified,
         size: written.size,
       });
-    return true;
-  } catch {
+    return { kind: "written", name };
+  } catch (err) {
     // A revoked permission, a removed file, a locked file. The caller
     // downloads instead — never silently "succeeds".
-    return false;
+    return {
+      kind: "failed",
+      name,
+      code: failureCode(err),
+      detail: err instanceof Error ? `${err.name}: ${err.message}` : null,
+    };
   }
+}
+
+/** Write bytes back to the opened file: true when it was written.
+ *
+ *  Returns false when there is no handle, when the platform cannot do
+ *  it, or when the user declines the permission prompt — every one of
+ *  which means the caller must fall back to a download rather than
+ *  report a save that did not happen. */
+export async function writeToOpenFile(
+  scope: EditorScope,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<boolean> {
+  return (await writeBackToOpenFile(scope, bytes, mimeType)).kind === "written";
 }

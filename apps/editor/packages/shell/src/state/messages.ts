@@ -50,6 +50,15 @@ export const REPLACE = defineMessages("shell.replace", {
   saveFirst: "Save with {chord} first, or continue to discard.",
 });
 
+/** The recovery journal (editor ADR 1204). */
+export const RECOVERY = defineMessages("shell.recovery", {
+  recoveredName: "{name} (recovered)",
+  restoring: "Restoring the recovered copy of {name}",
+  unreadable: "The recovery copy of {name} could not be read.",
+  notRestored:
+    "The recovery copy of {name} did not open. It is kept for the next start.",
+});
+
 export const LOAD = defineMessages("shell.load", {
   initialFailed: "Could not create the initial document: {error}",
   fontUnavailable:

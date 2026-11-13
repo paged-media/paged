@@ -93,6 +93,12 @@ export function ownsEvent(root: HTMLElement | null, event: Event): boolean {
   return nothingFocused && active === root;
 }
 
+/** Is the editor whose root is `root` the page's active editor (the one
+ *  last pointed at or focused)? A root-less editor is the page's. */
+export function isActiveEditor(root: HTMLElement | null): boolean {
+  return root === null || active === null || active === root;
+}
+
 /** Listen on the window for `type` events meant for `scope`'s editor;
  *  returns the unlisten. */
 export function listenForEditorKeys<K extends keyof WindowEventMap>(

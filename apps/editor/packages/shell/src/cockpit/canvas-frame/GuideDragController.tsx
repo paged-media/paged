@@ -430,7 +430,7 @@ export function GuideDragController() {
 
   // GD-03 — Escape cancels: nothing was mutated yet, so just drop the live
   // preview; a move's original guide is untouched. A transient mode of the
-  // Escape arbiter (ADR 1203), so the same press does nothing else.
+  // Escape arbiter (ADR 1205), so the same press does nothing else.
   useEscapeHandler({
     id: "paged.guides.drag",
     tier: "transient",

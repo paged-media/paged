@@ -291,7 +291,7 @@ export function CanvasPanel(_props: PanelProps) {
       .catch(() => {});
   };
 
-  // The canvas's Escape handlers (editor ADR 1203, §12.1). Path editing
+  // The canvas's Escape handlers (editor ADR 1205, §12.1). Path editing
   // is a transient mode whose own listener (usePathEditMode) leaves it or
   // cancels the drag in it; it joins the arbiter with the rest of the
   // canvas's gestures (track IC). An entered group climbs one level. At
