@@ -278,6 +278,12 @@ export function CockpitLayout({
     if (flyoutFor !== null) setFlyoutFor(null);
     if (drawerOpen) setDrawerOpen(false);
   };
+  // An overlay that stops being one (the window grew, the dock was pinned)
+  // is closed, so it does not come back open when the width shrinks again.
+  if (!leftFlyout && flyoutFor !== null) setFlyoutFor(null);
+  useEffect(() => {
+    if (!rightDrawer) setDrawerOpen(false);
+  }, [rightDrawer, setDrawerOpen]);
 
   const leftShown = hasLeft && !hidden && (!leftFlyout || flyoutOpen);
   const leftRail = hasLeft && !hidden && workspace !== "wide";
