@@ -331,7 +331,7 @@ Two protocol versions: EN1–EN4 in the first, EN5–EN8 in the second. Engine r
 - **WS7 Progressive loading.** Stages, a first-page fit, a `LoadingState` consumer. Tests: T49.
   Closes F-53.
 - **WS8 Zoom and navigation (D-12).** One zoom range (the bounds at VC:1403 and
-  `CV/ui/layout.ts:147` go), Actual size as the CSS inch, reduced motion
+  `CV/ui/layout.ts:147` go), 100 % kept as a camera scale of 1, Actual size (an inch as 96 CSS px) and a calibrated size as named views, reduced motion
   (`CV/ui/useAnimatedCamera.ts`), navigation history (back and forward), an editable
   `ZoomField` with a fit menu and Actual size, and one `SH/state/current-page.ts` in place of four
   computations. Tests: T47, T48, T53, T54. Closes F-52.

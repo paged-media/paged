@@ -97,7 +97,8 @@ Read against the code on 2026-11-13, the editor does not meet the spec's core in
    - The live duplicate preview is the committed result (D-02; closes GF-2 and GF-3 of
      [`reference/gestures.md`](../reference/gestures.md)).
    - Space during a mutating drag waits until the drag settles (D-09).
-   - 100 % is the CSS inch, 96 CSS px per inch (D-12, amends 246).
+   - One zoom range for every input; Actual size (an inch as 96 CSS px) and a calibrated size are
+     named views, while 100 % keeps its meaning (D-12, amends 246).
 
    A further departure found while migrating is added to ADR 1201 by a dated amendment, or
    recorded by the task's own ADR, before it ships; never silently.
