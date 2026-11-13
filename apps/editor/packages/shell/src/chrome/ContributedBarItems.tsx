@@ -102,12 +102,57 @@ export function useHasControlBarGroups(editContext: string | null): boolean {
  * contributed for the active context, start-aligned ones left, end-aligned
  * right. Rendered only while some item applies, so a document no bundle
  * claims keeps the canvas column as it was.
+ *
+ * Entering or leaving a frame's edit context never moves the canvas
+ * (editor ADR 1212, UXI-CTX-008): the bar takes a row of the layout only
+ * while the DOCUMENT context has items (then it stays, empty if need be,
+ * whatever context is entered); items that apply only because a frame's
+ * context is entered float over the canvas's bottom edge.
  */
 export function StatusBar() {
   const editContext = useActiveScopeContext();
+  const paged = useOptionalPaged() as {
+    documentContext?: string | null;
+  } | null;
+  const documentContext = paged?.documentContext ?? null;
   const registry = useRegistryView(useRegistries().statusItems);
-  const items = registry.forContext(editContext);
-  if (editContext === null || items.length === 0) return null;
+  const items = editContext === null ? [] : registry.forContext(editContext);
+  const reserved =
+    documentContext !== null && registry.forContext(documentContext).length > 0;
+  if (items.length === 0 && !reserved) return null;
+  const bar = <StatusRow editContext={editContext} items={items} />;
+  return reserved ? (
+    bar
+  ) : (
+    <div data-status-bar-float="" style={floatWrapStyle}>
+      <div style={floatBarStyle}>{bar}</div>
+    </div>
+  );
+}
+
+const floatWrapStyle: React.CSSProperties = {
+  position: "relative",
+  height: 0,
+  overflow: "visible",
+  zIndex: 20,
+};
+
+const floatBarStyle: React.CSSProperties = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+};
+
+function StatusRow({
+  editContext,
+  items,
+}: {
+  editContext: string | null;
+  items: ReturnType<
+    ReturnType<typeof useRegistries>["statusItems"]["forContext"]
+  >;
+}) {
   const side = (align: "start" | "end") =>
     items
       .filter((i) => (i.align ?? "start") === align)
@@ -120,14 +165,14 @@ export function StatusBar() {
             style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
           >
             <ContributionBoundary id={i.id}>
-              <Render editContext={editContext} />
+              <Render editContext={editContext ?? ""} />
             </ContributionBoundary>
           </span>
         );
       });
   return (
     <div
-      data-status-bar={editContext}
+      data-status-bar={editContext ?? undefined}
       role="status"
       aria-live="polite"
       className="pg-ui-xs"
