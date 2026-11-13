@@ -154,6 +154,39 @@ errors to hard assertions once a pack is known clean.
 - Don't loosen a budget or a threshold to hide a regression — fix it,
   then tighten.
 
+## Interaction contract harness
+
+The interaction contract (`docs/specs/ideas/paged_interaction_specification.md`, §23) asks every
+acceptance test to assert the document and its history, never a screenshot alone. The harness in
+`apps/canvas/tests/e2e/harness/` gives each half one call:
+
+| Helper                                                                   | File               | Answers                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelSnapshot(page)`                                                    | `model-dump.ts`    | The whole document as the gesture invariants compare it (the test kit's engine dump: scene tree, every element's properties, meta, pages, spreads, swatches, layers). Equal strings = equal documents.                          |
+| `selectionSnapshot(page)`                                                | `model-dump.ts`    | The main thread's element selection (sorted), the active group, the text caret or range. Selection is not in the history (D-15): compare it apart.                                                                              |
+| `undoDepth`, `historyDepth`, `expectHistoryUnchanged`, `expectUndoSteps` | `history.ts`       | The engine's undo timeline (`client.undoLog`), the log Cmd-Z acts on — not a count of replies.                                                                                                                                  |
+| `dragStartOnObject`, `movePointerBy`, `releasePointer`, `clickOn`        | `interaction.ts`   | Real pointer input on an element (its centre through its transform) or a page point, through the live camera.                                                                                                                   |
+| `expectNoGesturePreview`                                                 | `interaction.ts`   | No transient overlay is drawn. The marquee, the tool preview, the snap lines and the guide drag preview carry `data-gesture-preview` (`packages/shell/src/overlays/`).                                                          |
+| `engineGestureOpen`, `assertCanBeginNewDrag`                             | `interaction.ts`   | INV-8: nothing is left open in the engine (a begin with no nodes is refused as `alreadyActive` only while one is), and a fresh drag moves an object as one undo step, which the helper undoes.                                  |
+| `openUxiFixture(page, "A"…"E")`, `openUxiFixtureF`                       | `uxi-fixtures.ts`  | Fixtures A–F, built in code; ids and hit points exported (`UXI_A` …).                                                                                                                                                           |
+| `openTwoEditors`, `focusEditor`                                          | `two-instances.ts` | Fixture G: two editors on one page (`demos/two-editors.html`).                                                                                                                                                                  |
+| `openChaosCanvas`, `delayReply`, `reorderReplies`, `chaosIdle`           | `chaos.ts`         | Fixture H: a slow worker. Under `?debug=chaos` the page entry publishes `__chaos`, a reply gate (`CanvasClient.setReplyGate`) that settles the callers of a request kind late or in reverse order; an embedding never gets one. |
+
+`harness/FIXTURES.md` lists what each fixture holds and its known gaps. The plugin-sdk's gesture kit
+adds the invariants at every layer: `checkLiveness` (INV-8: an interrupted gesture ends without a
+mutation) and `checkNoInterleave` (INV-7: no document write lands inside an open gesture), next to
+`checkUndoRedo` and `checkCancel`.
+
+A scenario test is named by its spec id, with a real feature id and a level:
+`UXI-T02 — dragging an unselected rectangle moves it in the same gesture @feat:editor-tools.move.translate @level:gesture`.
+`covers()` names only the real surface ids the test asserts (`tool:paged.tool.select`,
+`keybinding:backspace→paged.object.delete`), never a spec id. `tests/e2e/uxi-baseline.spec.ts` holds
+the scenarios today's editor already meets; `tests/e2e/tapes/legacy-*.tape.json` are the recorded
+pointer streams of the legacy Selection, Type, Hand and Zoom tools with what each left in the
+document (`uxi-legacy-tapes.spec.ts` replays them): the parity baseline a reworked pointer
+coordinator must reproduce (UXI-MIG-001). Re-record them, deliberately, with
+`UXI_TAPES=record npx playwright test tests/e2e/uxi-legacy-tapes.spec.ts`.
+
 ## Flakes and the quarantine
 
 [ADR 228](../adr/228-flaky-tests-are-quarantined.md). In CI a test that fails and then passes

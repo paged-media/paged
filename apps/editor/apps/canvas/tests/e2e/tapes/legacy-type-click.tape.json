@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "name": "legacy-type-click",
+  "coords": "doc",
+  "viewport": {
+    "zoom": 1
+  },
+  "samples": [
+    {
+      "t": 0,
+      "type": "tool",
+      "tool": "paged.tool.type"
+    },
+    {
+      "t": 50,
+      "type": "pointerdown",
+      "pos": [186, 136],
+      "button": 0,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 100,
+      "type": "pointerup",
+      "pos": [186, 136],
+      "button": 0,
+      "buttons": 0,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0,
+      "tiltX": 0,
+      "tiltY": 0
+    }
+  ],
+  "fixture": "interaction contract fixture C (tests/e2e/harness/uxi-fixtures.ts)",
+  "expect": {
+    "selection": [],
+    "text": {
+      "storyId": "uxCs",
+      "start": 164,
+      "end": 164
+    },
+    "undoSteps": 0,
+    "modelChanged": false,
+    "zoomRatio": 1,
+    "pointUnderPointer": [186, 136]
+  }
+}
