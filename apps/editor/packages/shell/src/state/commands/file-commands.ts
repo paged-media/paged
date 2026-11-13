@@ -22,7 +22,8 @@
 // contribution so there's a single load path.
 
 import { t } from "@paged-media/strings";
-import { COMMANDS, LOAD, REPLACE } from "../messages";
+import { COMMANDS, DROP, LOAD, REPLACE } from "../messages";
+import type { DropIntent } from "../drop-intent";
 import { getAiAvailability } from "../../ai/availability";
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
 import { importReplaceAllowed, setPendingImportSource } from "../import-source";
@@ -214,6 +215,14 @@ export async function openFile(
     }
     return;
   }
+  // UXI-FIL-001 — a file the engine would only fail on (a .txt, a
+  // truncated or renamed package) is refused before anything is asked or
+  // reset: the open document stays as it was, and the reason is visible.
+  if (!(await isPackage(file))) {
+    sinks.pushWarning(t(LOAD.notAPackage, { name: file.name }));
+    sinks.setStatus(`open failed: ${file.name} is no package`);
+    return;
+  }
   // The guard sits HERE, not before the picker and not before the
   // importer routing above. Asking before the picker interrupts a
   // gesture the user may abandon anyway, and a plugin importer does
@@ -269,6 +278,11 @@ export interface PlaceDropPayload {
   file: { name: string; bytes: Uint8Array; mimeType: string };
   /** Where it was dropped: the picture's top-left lands there. */
   at?: { clientX: number; clientY: number };
+  /** The graphic frame under the pointer that takes the picture (editor
+   *  ADR 1205): an empty one is filled, one with a picture has it
+   *  replaced. Absent: a new frame where it was dropped, never the
+   *  selected frame. */
+  into?: { kind: string; id: string };
   /** The page it fills, edge to edge. */
   fillPage?: { pageId: string; widthPt: number; heightPt: number };
 }
@@ -319,6 +333,70 @@ export async function dropFile(
     return;
   }
   await openFile(editor, file, sinks);
+}
+
+/** A ZIP's first bytes: `.paged` and `.idml` are both ZIP packages. */
+async function isPackage(file: Blob): Promise<boolean> {
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  return (
+    head.length === 4 &&
+    head[0] === 0x50 &&
+    head[1] === 0x4b &&
+    (head[2] === 3 || head[2] === 5) &&
+    (head[3] === 4 || head[3] === 6)
+  );
+}
+
+/**
+ * Do what the drop zone said a dropped file would do (editor ADR 1205):
+ * the intent it resolved at the drop, after revalidating it. A refusal is
+ * reported and changes nothing; a picture is placed where it landed or
+ * into the frame under the pointer; anything else opens through File ▸
+ * Open's own path, with its replace question (UXI-DND-003).
+ */
+export async function dropFileAs(
+  editor: PagedEditor,
+  file: File,
+  at: { clientX: number; clientY: number },
+  intent: DropIntent,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+): Promise<void> {
+  switch (intent.intent) {
+    case "reject":
+      sinks.pushWarning(
+        intent.reason
+          ? t(DROP.refused, { label: intent.label, reason: intent.reason })
+          : intent.label,
+      );
+      return;
+    case "place":
+    case "place-in-frame":
+    case "replace-frame-content": {
+      if (!editor.registries.commands.get(PLACE_DROPPED_COMMAND)) {
+        sinks.pushWarning(t(DROP.noPlace));
+        return;
+      }
+      const payload: PlaceDropPayload = {
+        file: {
+          name: file.name,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          mimeType: file.type,
+        },
+        at,
+        ...(intent.frame ? { into: intent.frame } : {}),
+      };
+      await editor.registries.commands.invoke(PLACE_DROPPED_COMMAND, payload);
+      return;
+    }
+    case "import":
+    case "open":
+    case "replace-document":
+      await openFile(editor, file, sinks);
+      return;
+  }
 }
 
 /** Is a document with pages open? */

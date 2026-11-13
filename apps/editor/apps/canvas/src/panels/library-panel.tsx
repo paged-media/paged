@@ -35,11 +35,10 @@ import {
 
 import {
   FADE,
-  confirmDiscard,
   currentLibraryDocument,
   getLibrary,
   libraryVersion,
-  loadDocumentFile,
+  openLibraryDocument,
   scoped,
   subscribeLibrary,
   transitionWith,
@@ -294,32 +293,10 @@ export function LibraryPanel() {
 
   const open = async (entry: DocumentEntry, target = "main") => {
     if (!library) return;
-    if (
-      !(await confirmDiscard(
-        editor,
-        strings.t(M.opening, { name: entry.name }),
-      ))
-    )
-      return;
-    const bytes = await library.exportPaged(entry.id, target);
-    const doc = editor.document;
-    await loadDocumentFile(
-      editor.client,
-      new File([bytes.slice()], `${entry.name}.paged`),
-      {
-        setHandle: doc.setHandle,
-        setSourceName: doc.setSourceName,
-        setLoading: doc.setLoading,
-        setStatus: (s) => console.info("[library]", s),
-        setSnapshotsReady: doc.setSnapshotsReady,
-        addSnapshot: (pageId, url) =>
-          doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
-        resetForNewDocument: doc.resetForNewDocument,
-        pushWarning: (w) => console.warn("[library]", w),
-        libraryDocument: entry,
-        scope: editor.scope,
-      },
-    );
+    await openLibraryDocument(editor, entry, {
+      action: strings.t(M.opening, { name: entry.name }),
+      target,
+    });
   };
 
   const act = (f: () => Promise<unknown>) => () => {

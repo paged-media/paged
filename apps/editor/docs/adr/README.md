@@ -73,7 +73,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [255](255-every-choice-is-a-control.md) | Every choice is a control with its state | Accepted 2026-10-20 |
 | [256](256-the-object-section-reads-as-the-transform-panel.md) | The Object section reads as the Transform panel; type settings lead in text | Accepted 2026-10-20 |
 | [257](257-indesigns-fits-and-page-keys.md) | InDesign's fit commands and page keys, in the registry | Accepted 2026-10-20 |
-| [258](258-a-dropped-picture-is-placed-where-it-lands.md) | A picture dropped on an open document is placed where it lands | Accepted 2026-10-20 |
+| [258](258-a-dropped-picture-is-placed-where-it-lands.md) | A picture dropped on an open document is placed where it lands | Accepted 2026-10-20 (amended 2026-11-13 by 1205) |
 | [259](259-landmarks-tabs-and-headings.md) | Landmarks, the dock's tabs and panel headings | Accepted 2026-10-20 |
 | [261](261-the-insert-menu-draws-what-the-tools-draw.md) | Insert ▸ Rectangle and Ellipse draw what the drawing tools draw | Accepted 2026-10-20 |
 | [262](262-a-file-opened-with-nothing-open-becomes-a-document.md) | A file opened with nothing open becomes a document | Accepted 2026-10-20 |
@@ -128,6 +128,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1202](1202-uxi-coverage-ratchets-the-interaction-contract.md) | An inventory mirrors the interaction contract (requirements, tests, interactions with their owners, the exception ledger, the enforced gates), and a coverage report ratchets its acceptance tests: tests claim `UXI-Tnn` in their titles, unclaimed ones are acknowledged with their task | Accepted 2026-11-13 |
 | [1203](1203-save-status-says-what-is-saved-where.md) | The save status says what is saved where: one save-state machine per editor (new, editing, saving, saved locally, syncing, synced, not synced, failed, read-only, recovered), each a guarantee that held; a local save whose target failed reads "Saved locally · Not synced" with Retry (D-10) | Accepted 2026-11-13 |
 | [1204](1204-recovery-journal.md) | The recovery journal: per-editor checkpoints of unsaved work in the origin-private file system, a crashed session's work offered back as Restore (a new document, never over the source), Compare or Discard; bounded and purged on save and close | Accepted 2026-11-13 |
+| [1205](1205-drop-says-what-it-will-do.md) | A drop says what it will do: one resolver (place, place in the frame under the pointer, replace its picture, import, open, replace the document, refuse) shown at the pointer before the drop and carried out on it; a file that is no package replaces nothing; the open picker and the empty canvas offer every format | Accepted 2026-11-13; amends 258 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

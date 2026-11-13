@@ -29,3 +29,11 @@ dropped on a layout is placed at the drop point.
   `apps/canvas/test/unit/commands/insert-commands.test.ts`).
 - The other half of F-03 is not changed: with NO document open, a spreadsheet or a picture
   still fills its panel rather than opening a document sized to it.
+
+## Amendment (2026-11-13, [ADR 1205](1205-drop-says-what-it-will-do.md))
+
+A drop says what it will do before it lands, and does exactly that. A picture dropped over a
+graphic frame goes into the frame under the pointer (an empty one is filled, one with a picture
+has it replaced), never into the selected frame; on a page or the pasteboard it is still placed
+as a new frame where it lands. File ▸ Place, which has no pointer to go by, keeps filling the
+selected empty frame.

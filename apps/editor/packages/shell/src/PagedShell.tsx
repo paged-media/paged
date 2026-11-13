@@ -127,6 +127,9 @@ import { DemoOverlay, DemoSpotlight } from "./demo/overlay";
 import { runDemoScriptWithHandle } from "./demo/runner";
 import { ReplaceDocumentPrompt } from "./chrome/ReplaceDocumentPrompt";
 import { SaveStateController } from "./state/save-state-controller";
+import { pickerTypes, writesBackTo } from "./state/picker-types";
+import { DropIntentOverlay } from "./overlays/drop-intent-overlay";
+import type { DropIntent } from "./state/drop-intent";
 import { RecoveryController } from "./state/recovery-controller";
 import { RecoveryPrompt } from "./chrome/RecoveryPrompt";
 import { useSaveState } from "./state/save-status";
@@ -148,6 +151,7 @@ import {
   mintBlankDocument,
   buildOpenIdmlCommand,
   dropFile,
+  dropFileAs,
 } from "./state/commands/file-commands";
 import {
   buildExportAseCommand,
@@ -963,23 +967,23 @@ function ShellChrome({
                 try {
                   const [picked] = await fsPicker({
                     multiple: false,
-                    types: [
-                      {
-                        description: t(COMMANDS.pickerDocuments),
-                        accept: {
-                          "application/x-paged+zip": [".paged"],
-                          "application/vnd.adobe.indesign-idml-package": [
-                            ".idml",
-                          ],
-                        },
-                      },
-                    ],
+                    // F-10 (editor ADR 1205) — every format an importer
+                    // opens, not `.paged` and `.idml` alone; resolved at
+                    // click time so late-registered importers are listed.
+                    types: pickerTypes(registries.importers.list(), {
+                      everything: t(COMMANDS.pickerEverything),
+                      documents: t(COMMANDS.pickerDocuments),
+                    }),
                   });
                   if (picked) {
-                    setOpenFileHandle(scope, picked);
                     const file = await (
                       picked as unknown as { getFile(): Promise<File> }
                     ).getFile();
+                    // Save writes `.paged` bytes back only over a `.paged`
+                    // or an `.idml`; a Word or Excel file keeps no
+                    // write-back handle, so its first save never
+                    // overwrites the original.
+                    keepWriteBackHandle(scope, file.name, picked);
                     handled = true;
                     // Editor ADR 264 — the handle rides with the file, so
                     // the document it loads into can be recognised when
@@ -1406,14 +1410,25 @@ function ShellChrome({
   // A file dropped on the canvas or handed to the shell's file input takes
   // File ▸ Open's own path (`openFile`): the importer routing, and the
   // replace question before an edited document is replaced (F-01, ADR 230).
-  const onFile = (file: File, at?: { clientX: number; clientY: number }) => {
+  const onFile = (
+    file: File,
+    at?: { clientX: number; clientY: number },
+    intent?: DropIntent,
+  ) => {
     if (!paged) return;
+    const sinks = {
+      setStatus,
+      pushWarning: (w: string) => setWarnings((prev) => [...prev, w]),
+    };
+    // Editor ADR 1205 — a drop the zone resolved does what its label said
+    // (UXI-DND-001 to UXI-DND-004).
+    if (at && intent) {
+      void dropFileAs(paged as PagedEditor, file, at, intent, sinks);
+      return;
+    }
     // A picture dropped on an open document is placed where it lands
     // (F-03, ADR 258); the header's picker and everything else open.
-    void dropFile(paged as PagedEditor, file, at ?? null, {
-      setStatus,
-      pushWarning: (w) => setWarnings((prev) => [...prev, w]),
-    });
+    void dropFile(paged as PagedEditor, file, at ?? null, sinks);
   };
 
   const shellBody = (
@@ -1509,6 +1524,8 @@ function ShellChrome({
       <DemoOverlay />
       <ExportPdfDialog />
       <ReplaceDocumentPrompt />
+      {/* Editor ADR 1205 — what a dragged file will do, at the pointer. */}
+      <DropIntentOverlay />
       {/* Editor ADR 1203 — the save state follows the open document. */}
       <SaveStateController />
       {/* Editor ADR 1204 — the recovery journal: checkpoints of unsaved
@@ -1571,6 +1588,17 @@ interface DebugContextSnapshot {
    *  it here means the panel and the tests read the same source rather
    *  than two hand-kept lists that drift. */
   keybindings: { key: string; command: string }[];
+}
+
+/** The picked file's handle is kept for Save to write back to only when
+ *  Save may (`writesBackTo`): a module function, since the compiler does
+ *  not lower a conditional inside the picker's `try` (ADR 229). */
+function keepWriteBackHandle(
+  scope: EditorScope,
+  fileName: string,
+  handle: WritableFileHandle,
+): void {
+  setOpenFileHandle(scope, writesBackTo(fileName) ? handle : null);
 }
 
 /** Renderless: warn before the tab closes on an edited document.
