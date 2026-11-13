@@ -232,7 +232,7 @@ export function EditContextController() {
     // Capture so we win these keys while a context is active (this
     // editor's keys only).
     return keys.listen("keydown", onKey, true);
-  }, [commit, keys]);
+  }, [commit, keys, scope]);
 
   // Escape (ADR 1207, §12.1 cases 5 and 6). Mid sub-edit (a cell being
   // typed) the context resolves the sub-edit through its `onContentKey`
