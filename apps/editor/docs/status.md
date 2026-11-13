@@ -10,7 +10,13 @@ What the editor ships and what it does not, read from the code at commit `6d098e
 - **Documents.** Open (`.idml`, `.paged`, and any file type a loaded plugin's importer
   claims) from the "Open…" command or by drag and drop; New document; Save as a `.paged`
   container (Cmd/Ctrl+S), to a stored file handle when there is one and otherwise as a
-  download; "Save As IDML…"; "Open PDF…" through the PDF plugin's importer.
+  download; "Save As IDML…"; "Open PDF…" through the PDF plugin's importer. The header's
+  save status says what the last save did and where: saved locally, saved to the file,
+  "Saved locally · Not synced" with Retry when the file did not take the bytes, "Couldn't
+  save" with the reason ([ADR 1203](adr/1203-save-status-says-what-is-saved-where.md)). A
+  recovery journal keeps checkpoints of unsaved work in the browser and offers them back
+  after a crash or a reload: Restore (as a new document), Compare, Discard
+  ([ADR 1204](adr/1204-recovery-journal.md)).
 - **Export.** PDF through the export dialog, with progress and cancel; page images as PNG;
   every exporter a plugin registers, listed in the Outputs panel. Swatch libraries can be
   imported and exported as `.ase`.
@@ -142,8 +148,9 @@ normative interaction target and the UX/UI redesign strategy its product directi
 decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work is planned in
 [`interaction-plan.md`](interaction-plan.md).
 
-Nothing of it is implemented yet. The editor behaves as the sections above and the existing
-records describe: Shift-click adds and Cmd-click toggles, the marquee takes what it intersects,
+Implemented so far: the save status (DF1, [ADR 1203](adr/1203-save-status-says-what-is-saved-where.md),
+`UXI-T67`) and the recovery journal (DF2, [ADR 1204](adr/1204-recovery-journal.md)). Otherwise
+the editor behaves as the sections above and the existing records describe: Shift-click adds and Cmd-click toggles, the marquee takes what it intersects,
 Tab hides the chrome on a canvas the user clicked into, a double-click on an image frame enters
 paged.image, and Escape is answered by several listeners. Wave 0's interaction inventory
 (`scripts/interaction-inventory.json`, with the one exception ledger), the coverage report for
@@ -162,9 +169,12 @@ the `UXI-T` tests and the test harness are being built.
   importers are added only to the `<input type="file">` fallback
   (`packages/shell/src/PagedShell.tsx:763-771` and `:832-838`). Two importers may claim one
   extension; the first registered wins.
-- **Save.** There is no autosave and no recent-files list. Save writes the `.paged` bytes
-  to the file handle stored by the "Open…" command's native picker and downloads when none
-  is stored. That picker code is the only place the handle is set or cleared
+- **Save.** There is no autosave to the document's file and no recent-files list: the
+  recovery journal keeps checkpoints of unsaved work in this browser, which are no save
+  (ADR 1204), and only the page entry and the plain editor keep one. Save writes the
+  `.paged` bytes to the file handle stored by the "Open…" command's native picker and
+  downloads when none is stored. A push to paged.server is not reflected in the save
+  status. That picker code is the only place the handle is set or cleared
   (`packages/shell/src/PagedShell.tsx:774-844`).
 - **Default font.** The fallback face is fetched from `/fonts/Inter.ttf`. The dev server
   serves that path from a fixture directory outside this repository;

@@ -18,8 +18,10 @@
  */
 
 // @paged-media/repository — the local library of document repositories
-// (core ADR 180). Framework-free; the app runs it in a worker
-// (`serveLibrary`) and talks to it through `connectLibrary`.
+// (core ADR 180), the save state that says what a save did (`save-state`)
+// and the recovery journal (`recovery`). Framework-free; the app runs the
+// library in a worker (`serveLibrary`) and talks to it through
+// `connectLibrary`.
 
 export { memoryFs, opfsFs, type RepoFs } from "./fs.ts";
 export {
@@ -35,6 +37,38 @@ export {
   type WasmRepository,
 } from "./library.ts";
 export { connectLibrary, serveLibrary, type LibraryClient } from "./rpc.ts";
+export {
+  createSaveStateStore,
+  destinationName,
+  initialSaveState,
+  isTarget,
+  needsSave,
+  reduceSaveState,
+  sameDestination,
+  saveStateKind,
+  writeFailureCode,
+  type DocumentOrigin,
+  type SaveDestination,
+  type SaveEvent,
+  type SaveFailureCode,
+  type SaveNote,
+  type SaveProblem,
+  type SaveRecord,
+  type SaveState,
+  type SaveStateKind,
+  type SaveStateStore,
+} from "./save-state.ts";
+export {
+  memoryLiveness,
+  RecoveryJournal,
+  webLocksLiveness,
+  type CheckpointReason,
+  type RecoveryCheckpoint,
+  type RecoveryDocument,
+  type RecoveryLiveness,
+  type RecoveryOptions,
+  type RecoverySession,
+} from "./recovery.ts";
 export {
   accessToken,
   OAUTH_CHANNEL,

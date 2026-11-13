@@ -222,6 +222,18 @@
       "sites": [["getItem", "\"paged.library\""]]
     },
     {
+      "id": "paged.recovery",
+      "kind": "feature-flag",
+      "storage": "localStorage",
+      "key": "paged.recovery",
+      "default": "on (absent)",
+      "values": ["off"],
+      "effect": "\"off\" keeps the recovery journal (editor ADR 1204: checkpoints of unsaved work in the origin-private file system, and the prompt that offers a crashed session's work back) from starting; read through the editor's storage adapter",
+      "source": "apps/editor/apps/canvas/src/app/recovery-start.ts",
+      "marker": "\"paged.recovery\"",
+      "sites": [["getItem", "RECOVERY_FLAG"]]
+    },
+    {
       "id": "view.textThreads",
       "kind": "view-option",
       "storage": "memory",
@@ -504,9 +516,9 @@
       "sites": [["getDirectory", ""]]
     },
     {
-      "key": "OPFS <library root>",
+      "key": "OPFS <library root>, OPFS paged-recovery",
       "storage": "opfs",
-      "reason": "the local document library's repositories (documents and their versions), not configuration.",
+      "reason": "the local document library's repositories (documents and their versions), and the recovery journal's checkpoints of unsaved work (editor ADR 1204, root paged-recovery, opened through the same opfsFs): user data, not configuration.",
       "source": "apps/editor/packages/repository/src/fs.ts",
       "marker": "storage.getDirectory()",
       "sites": [["getDirectory", ""]]
