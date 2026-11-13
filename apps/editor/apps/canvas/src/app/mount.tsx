@@ -24,6 +24,7 @@ import "../strings";
 
 import {
   StrictMode,
+  useCallback,
   useEffect,
   useEffectEvent,
   useRef,
@@ -51,6 +52,11 @@ import {
   rotateHandleContribution,
   selectionChromeContribution,
   setCockpitPageNavigator,
+  ACTUAL_SIZE_SCALE,
+  calibratedScale,
+  currentPageIndex,
+  getScreenCalibration,
+  zoomCameraTo,
   snapLinesContribution,
   gridOverlayContribution,
   tableCellOverlayContribution,
@@ -104,6 +110,7 @@ import "@paged-media/shell/styles/globals.css";
 import {
   CanvasClient,
   rotateCameraAbout,
+  type Camera,
   type DocumentHandle,
   type ElementId,
 } from "@paged-media/client";
@@ -368,12 +375,11 @@ import { PlaygroundController } from "../playground/PlaygroundController";
 import { debugFlag } from "../debug-flags";
 import { IframeScriptBridge } from "../playground/IframeScriptBridge";
 import { useCameraTween } from "../ui/useAnimatedCamera";
+import { pageStep, selectionRect, spreadRect } from "../ui/fit-views";
 import {
-  pageAtViewportCentre,
-  pageStep,
-  selectionRect,
-  spreadRect,
-} from "../ui/fit-views";
+  openScreenCalibration,
+  ScreenCalibrationDialog,
+} from "../panels/screen-calibration-dialog";
 import { documentBounds, fitCamera, layoutPages } from "../ui/layout";
 import { usePathEditMode } from "../ui/usePathEditMode";
 import { frameHoldingCaret, useTextEditing } from "../ui/useTextEditing";
@@ -861,7 +867,7 @@ function reportFileFailure(
 function CanvasAppIntegration() {
   const instance = useEditorInstance();
   const client = useCanvasClient();
-  const { camera, setCamera, viewportSize } = useCamera();
+  const { camera, setCamera, viewportSize, navigation } = useCamera();
   const { handle, sourceName } = useDocument();
   const { contentSelection, setContentSelection } = useContentSelection();
   const registries = useRegistries();
@@ -973,6 +979,20 @@ function CanvasAppIntegration() {
   // (the page keys and the fits step from there).
   const { animateTo: animateCamera, destination: cameraDestination } =
     useCameraTween(camera, setCamera);
+  // An explicit navigation (a fit, a page key, a jump to a page, a story
+  // or a revealed range): the place it leaves becomes the Back entry
+  // (UXI-CAM-016, editor ADR "Navigation history and one current page").
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const navigateCamera = useCallback(
+    (target: Camera) => animateCamera(target, { record: true }),
+    [animateCamera],
+  );
+  // Back and Forward places belong to one document: a new one starts
+  // with none.
+  const historyDocId = handle?.docId ?? null;
+  useEffect(() => {
+    navigation.clear();
+  }, [navigation, historyDocId]);
   useTextEditing({
     client,
     selection: contentSelection,
@@ -1076,13 +1096,13 @@ function CanvasAppIntegration() {
         vh,
       );
       if (!cam) return false;
-      animateCamera(cam);
+      navigateCamera(cam);
       if (select) setContentSelection(sel);
       return true;
     });
     return () => pages.setTextReveal(null);
   }, [
-    animateCamera,
+    navigateCamera,
     pages,
     camera.scale,
     client,
@@ -1136,11 +1156,11 @@ function CanvasAppIntegration() {
         vh,
       );
       if (!cam) return false;
-      animateCamera(cam);
+      navigateCamera(cam);
       return true;
     });
     return () => pages.setPageGoTo(null);
-  }, [animateCamera, client, pages, viewportSize]);
+  }, [navigateCamera, client, pages, viewportSize]);
 
   // Cockpit — the thumbnail filmstrip / document map navigate by
   // page indices; the camera-fit math (page layout convention) is
@@ -1159,10 +1179,12 @@ function CanvasAppIntegration() {
       const target = rects[pageIndices[0]];
       if (!target) return;
       const [vw, vh] = viewportSize;
-      animateCamera(fitCamera(vw, vh, target));
+      navigateCamera(
+        fitCamera(vw, vh, target, 40, cameraDestination().rotation ?? 0),
+      );
     });
     return () => setCockpitPageNavigator(instance.scope, null);
-  }, [animateCamera, handle, instance.scope, viewportSize]);
+  }, [navigateCamera, cameraDestination, handle, instance.scope, viewportSize]);
 
   // SDK Phase 4 — register canvas-app commands + menu items +
   // keybindings. Closures capture the *current* camera / handle /
@@ -1234,7 +1256,7 @@ function CanvasAppIntegration() {
         // (ADR 229).
         const fallbackName = sourceName || "document";
         try {
-          const bytes = await client.exportIdml();
+          const { bytes } = await client.exportIdml();
           const baseName = await client.documentMeta().then(
             (meta) => meta.documentName || fallbackName,
             // meta unavailable — keep the fallback name
@@ -1306,9 +1328,37 @@ function CanvasAppIntegration() {
         const docY = (cy - camera.ty) / camera.scale;
         animateCamera({ scale: 1, tx: cx - docX, ty: cy - docY });
       },
+      // ADR 1201 D-12 — the named views beside 100 %: Actual size (an inch
+      // as 96 CSS px) and the calibrated size (an inch as an inch on this
+      // screen). Zooms about the viewport's centre, not navigations.
+      actualSize: () => {
+        animateCamera(zoomCameraTo(camera, ACTUAL_SIZE_SCALE, [vw, vh]));
+      },
+      calibratedSize: () => {
+        const scale = calibratedScale(
+          getScreenCalibration(instance.scope),
+          globalThis.devicePixelRatio || 1,
+        );
+        // Not calibrated yet: the calibration, which applies the view
+        // when it is saved.
+        if (scale === null) {
+          openScreenCalibration(instance.scope, { apply: true });
+          return;
+        }
+        animateCamera(zoomCameraTo(camera, scale, [vw, vh]));
+      },
+      calibrateScreen: () => openScreenCalibration(instance.scope),
+      navigateBack: () => {
+        const to = navigation.back(cameraDestination());
+        if (to) animateCamera(to);
+      },
+      navigateForward: () => {
+        const to = navigation.forward(cameraDestination());
+        if (to) animateCamera(to);
+      },
       zoomFit: () => {
         if (rects.length === 0) return;
-        animateCamera(fitCamera(vw, vh, documentBounds(rects), 40, rot));
+        navigateCamera(fitCamera(vw, vh, documentBounds(rects), 40, rot));
       },
       // The fit commands and the page keys (F-31, F-16, ADR 257). The
       // current page is the one at the viewport's centre once the camera
@@ -1316,12 +1366,12 @@ function CanvasAppIntegration() {
       // where that tween is going (Next, First pressed quickly lands on
       // the first page, not on the second the tween went on to).
       fitPage: () => {
-        const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
+        const at = currentPageIndex(rects, cameraDestination(), [vw, vh]);
         if (at < 0) return;
-        animateCamera(fitCamera(vw, vh, rects[at]!, 40, rot));
+        navigateCamera(fitCamera(vw, vh, rects[at]!, 40, rot));
       },
       fitSpread: async () => {
-        const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
+        const at = currentPageIndex(rects, cameraDestination(), [vw, vh]);
         if (at < 0 || !handle) return;
         let spreads: (string | null)[] = [];
         try {
@@ -1335,7 +1385,7 @@ function CanvasAppIntegration() {
           /* no spread map: the page is a spread of its own */
         }
         const rect = spreadRect(rects, spreads, at);
-        if (rect) animateCamera(fitCamera(vw, vh, rect, 40, rot));
+        if (rect) navigateCamera(fitCamera(vw, vh, rect, 40, rot));
       },
       fitSelection: async () => {
         if (!handle) return;
@@ -1361,7 +1411,7 @@ function CanvasAppIntegration() {
         // A line has no height (or width): fit a point of it, not nothing.
         const w = Math.max(rect.w, 1);
         const h = Math.max(rect.h, 1);
-        animateCamera(
+        navigateCamera(
           fitCamera(
             vw,
             vh,
@@ -1377,10 +1427,10 @@ function CanvasAppIntegration() {
         );
       },
       goToPage: (which) => {
-        const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
+        const at = currentPageIndex(rects, cameraDestination(), [vw, vh]);
         const target = pageStep(which, at, rects.length);
         if (target === null) return;
-        animateCamera(fitCamera(vw, vh, rects[target]!, 40, rot));
+        navigateCamera(fitCamera(vw, vh, rects[target]!, 40, rot));
       },
     });
     // `paged.object.*` — the object verbs (Arrange ×4, Group, Ungroup,
@@ -1761,7 +1811,9 @@ function CanvasAppIntegration() {
     handle,
     sourceName,
     animateCamera,
+    navigateCamera,
     cameraDestination,
+    navigation,
     problemsSink,
   ]);
 
@@ -1945,6 +1997,7 @@ function CanvasAppRoot() {
       <CoreCommandDialog />
       <GlobalLightDialog />
       <ViewPreferencesDialog />
+      <ScreenCalibrationDialog />
       <TransformEachDialog />
       <ReflectDialog />
       <StarDialog />

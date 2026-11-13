@@ -211,6 +211,13 @@ pub struct DocumentHandle {
     /// request.
     #[serde(default)]
     pub ruler_guides: Vec<RulerGuideWire>,
+    /// v80 (engine ADR 1305) — what the opened document does not carry or
+    /// show as its source did (`CanvasModel::import_losses`): an import
+    /// report's entries, `idml.import.<what>` codes with their items and
+    /// pages. Empty for a document that keeps everything; additive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[tsify(type = "LossEntry[]", optional)]
+    pub losses: Vec<LossEntry>,
 }
 
 /// Plan-2 §8.3 — wire shape of a ruler guide. `page_id` matches one
@@ -2106,6 +2113,9 @@ pub struct CanvasModel {
     /// `applied_log`, cleared by an undo and a redo. An entry a redo put
     /// back, or one an undo uncovered, is never amendable.
     amend_anchor: Option<u64>,
+    /// v80 (engine ADR 1304) — the run of coalescing writes the last step
+    /// belongs to: its key and the step's `applied_seq`.
+    coalesce: Option<(String, u64)>,
     /// Engine ADR 1004 (amendment 2026-10-23) — `(folded, amended)`: the
     /// seq an amend gave a step, and the seq the step had before. A script
     /// session reported the seq of a host commit made while it waited; when
@@ -3061,6 +3071,7 @@ impl CanvasModel {
             applied_log: Vec::new(),
             redo_log: Vec::new(),
             amend_anchor: None,
+            coalesce: None,
             amend_origins: Vec::new(),
             history_moves: 0,
             layout_cache,
@@ -3231,6 +3242,7 @@ impl CanvasModel {
             page_origins_pt: self.page_origins_pt(),
             stats,
             ruler_guides,
+            losses: self.import_losses(),
         }
     }
 
@@ -6544,7 +6556,7 @@ impl CanvasModel {
     /// Only an all-decimal suffix can equal the decimal id this minter
     /// formats, so the parser's `u<hex>` story ids (named from their
     /// file, never `Story/…`) are not candidates and are skipped.
-    fn story_id_floor(&self) -> usize {
+    pub(crate) fn story_id_floor(&self) -> usize {
         let mut floor = self.scene.stories.len();
         for s in &self.scene.stories {
             let Some(digits) = s.self_id.strip_prefix("Story/u") else {
@@ -7326,6 +7338,45 @@ impl CanvasModel {
         });
         self.redo_log.clear();
         self.amend_anchor = Some(applied_seq);
+    }
+
+    /// v80 (engine ADR 1304) — the step a write keyed `key` joins: the
+    /// open run's, when the run has that key and its step is still the
+    /// amendable top of the history (no step, undo or redo came after it).
+    /// `None` ⇒ the write starts a step (and a run).
+    pub fn coalesce_base(&self, key: &str) -> Option<usize> {
+        let (run, applied_seq) = self.coalesce.as_ref()?;
+        if run != key {
+            return None;
+        }
+        self.check_amend(*applied_seq).ok()
+    }
+
+    /// v80 (engine ADR 1304) — the run keyed `key` now ends in the step
+    /// `applied_seq`.
+    pub fn note_coalesced(&mut self, key: &str, applied_seq: u64) {
+        self.coalesce = Some((key.to_string(), applied_seq));
+    }
+
+    /// v80 (engine ADR 1304) — the open run of coalescing writes: its key
+    /// and the step it ends in.
+    pub fn coalesce_run(&self) -> Option<(String, u64)> {
+        self.coalesce.clone()
+    }
+
+    /// v80 (engine ADR 1304) — put back a run a write took down: a keyed
+    /// write that was refused leaves the run as it found it.
+    pub fn restore_coalesce_run(&mut self, run: Option<(String, u64)>) {
+        self.coalesce = run;
+    }
+
+    /// v80 (engine ADR 1304) — end the open run of coalescing writes (only
+    /// the run keyed `key`, when given). Returns the step it ended in.
+    pub fn end_coalesce(&mut self, key: Option<&str>) -> Option<u64> {
+        match (&self.coalesce, key) {
+            (Some((run, _)), Some(key)) if run != key => None,
+            _ => self.coalesce.take().map(|(_, seq)| seq),
+        }
     }
 
     /// How many undos and redos have run on this model (engine ADR 1004

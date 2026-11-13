@@ -302,7 +302,7 @@ const idmlEngine =
       : undefined;
 
 describe("media.paged.publish.exportIdml (unit)", () => {
-  it("asks the engine's writer, passes the link base, and reports every loss as a warning", async () => {
+  it("asks the engine's writer, passes the link base, and reports every loss as a warning with the items and page it stood on", async () => {
     covers("command:media.paged.publish.exportIdml");
     const b = boot(
       idmlEngine([
@@ -317,6 +317,7 @@ describe("media.paged.publish.exportIdml (unit)", () => {
           code: "idml.liveShape.pie",
           count: 1,
           severity: "info",
+          pages: [1],
           message: "pie angles on oval `o1` are a paged-native live shape",
         },
       ]),
@@ -338,12 +339,13 @@ describe("media.paged.publish.exportIdml (unit)", () => {
         code: "idml.section.missing",
         message: "section `u1` is missing from the exported designmap.xml",
         page: 0,
+        items: ["u1"],
       },
       {
         severity: "info",
         code: "idml.liveShape.pie",
         message: "pie angles on oval `o1` are a paged-native live shape",
-        page: 0,
+        page: 2,
       },
     ]);
     expect(b.fake.mutations()).toEqual([]);

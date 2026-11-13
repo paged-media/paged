@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1211 — the edit-context stack as a reducer and a post-commit
+// Editor ADR 1212 — the edit-context stack as a reducer and a post-commit
 // effect queue, and the one exit resolver. Pure: no React, no engine.
 
 import { describe, expect, test } from "bun:test";
@@ -366,6 +366,20 @@ describe("leaving through the resolver", () => {
     expect(await store.checkScope([member, B])).toEqual([true, false]);
     expect(store.isInScope(member)).toBe(true);
     expect(store.isInScope(B)).toBe(false);
+    store.pop();
+
+    // The whole scope (client.editScope, engine ADR 1301): read on entry,
+    // so `isInScope` knows the members before anything is checked.
+    store.configure({
+      editScope: async () => ({
+        contains: (id) => (id as { id: string }).id === "m",
+      }),
+    });
+    store.enter({ type: "t", entry: "doubleClick" }, A);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.isInScope(member)).toBe(true);
+    expect(store.isInScope(B)).toBe(false);
+    expect(await store.checkScope([A, member, B])).toEqual([true, true, false]);
   });
 
   test("a document switch asks only about unfinished work; a clean context stays until the document goes", async () => {

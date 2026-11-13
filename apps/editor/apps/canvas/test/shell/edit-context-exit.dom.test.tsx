@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// One way out of an edit context (editor ADR 1211), on a mounted PagedShell
+// One way out of an edit context (editor ADR 1212), on a mounted PagedShell
 // over the real engine: every exit — a press outside the frame, Escape, the
 // breadcrumb, another tool, another selection, another document — goes
 // through the one resolver; a dirty context whose module asks to be asked
@@ -87,8 +87,8 @@ async function settle() {
 async function mountShell(
   opts: {
     strict?: boolean;
-    /** Stands in for the engine's scope query (EN5): which ids lie inside
-     *  a root's subtree. */
+    /** Stands in for the engine's scope (EN5, `editScope` and
+     *  `scopeContains`): which ids lie inside a root's subtree. */
     scopeMembers?: (ids: readonly ElementId[]) => boolean[];
   } = {},
 ) {
@@ -111,10 +111,16 @@ async function mountShell(
   const c = await frame(420);
   if (opts.scopeMembers) {
     const members = opts.scopeMembers;
-    (client as unknown as { scopeContains: unknown }).scopeContains = async (
-      _root: ElementId,
-      ids: readonly ElementId[],
-    ) => members(ids);
+    const fake = client as unknown as {
+      scopeContains: unknown;
+      editScope: unknown;
+    };
+    fake.scopeContains = async (_root: ElementId, ids: readonly ElementId[]) =>
+      members(ids);
+    fake.editScope = async (root: ElementId) => ({
+      root,
+      contains: (id: ElementId) => members([id])[0] === true,
+    });
   }
   const scope: EditorScope = createEditorScope();
   probe = null;
@@ -206,7 +212,7 @@ function contribution(
   };
 }
 
-describe("one way out of a context (ADR 1211)", () => {
+describe("one way out of a context (ADR 1212)", () => {
   test("UXI-T40 — entering the same context twice under StrictMode: one frame, one onEnter @feat:plugin-platform.edit-context @level:edge", async () => {
     const s = await mountShell({ strict: true });
     const calls: string[] = [];
@@ -265,7 +271,7 @@ describe("one way out of a context (ADR 1211)", () => {
     expect(await s.undoLen()).toBe(undo);
   });
 
-  test("UXI-T41 — selecting another frame leaves through the same resolver (no scope query: the root alone is in scope) @feat:plugin-platform.edit-context @level:edge", async () => {
+  test("UXI-T41 — selecting another frame, outside the context's scope, leaves through the same resolver @feat:plugin-platform.edit-context @level:edge", async () => {
     const s = await mountShell();
     const calls: string[] = [];
     await s.enter(contribution(calls, { exitPolicy: "commit-if-safe" }), s.a);

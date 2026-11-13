@@ -488,6 +488,9 @@ impl WorkerCore {
                 if let Err(error) = model.refuse_during_gesture() {
                     reply!(WorkerToMainKind::MutationFailed { error });
                 }
+                // Engine ADR 1304 — a write with no key ends the run of
+                // coalescing writes (`MutateCoalesced` puts its own back).
+                model.end_coalesce(None);
                 // Engine ADR 1040 — a tracked change carries the date of
                 // the edit that made it: the shell's clock stamps it (the
                 // engine reads none). A stub clock (0) stamps nothing.
@@ -711,30 +714,7 @@ impl WorkerCore {
                     .as_ref()
                     .map(|m| m.hit_test_filtered(&page_id, doc_point, filter))
                     .unwrap_or_default();
-                WorkerToMainKind::HitResult(paged_canvas::HitResult {
-                    frame_id: result.frame_id,
-                    story_id: result.story_id,
-                    offset_within_story: result.offset_within_story,
-                    frame_bounds: result
-                        .frame_bounds
-                        .map(|b| paged_canvas::channel::FrameBounds {
-                            left: b[0],
-                            top: b[1],
-                            right: b[2],
-                            bottom: b[3],
-                        }),
-                    element: result.element,
-                    bounds: result.bounds,
-                    item_transform: result.item_transform,
-                    group_chain: result.group_chain,
-                    table_context: result.table_context.map(|t| {
-                        paged_canvas::channel::TableHitContext {
-                            table_id: t.table_id,
-                            row: t.row,
-                            col: t.col,
-                        }
-                    }),
-                })
+                WorkerToMainKind::HitResult(result.into())
             }
             MainToWorkerKind::RequestSnapshot {
                 page_id,
@@ -1971,6 +1951,7 @@ impl WorkerCore {
                             handle,
                             page_ids: result.page_ids,
                             snap_lines: result.snap_lines,
+                            duplicate_refused: result.duplicate_refused,
                         }
                     }
                     Err(e) => WorkerToMainKind::GestureFailed { error: e.into() },
@@ -2029,6 +2010,93 @@ impl WorkerCore {
                     }
                     Err(e) => WorkerToMainKind::GestureFailed { error: e.into() },
                 }
+            }
+            // v80 (engine ADR 1303) — the press: hit, selection and begin.
+            MainToWorkerKind::BeginGestureAt(press) => {
+                let Some(model) = self.model.as_mut() else {
+                    reply!(WorkerToMainKind::GestureFailed {
+                        error: paged_canvas::channel::GestureFailure::NoDocument,
+                    });
+                };
+                let out = model.begin_gesture_at(&press);
+                WorkerToMainKind::GestureBegunAt {
+                    hit: out.hit.into(),
+                    target: out.target,
+                    selection: out.selection,
+                    selection_changed: out.selection_changed,
+                    handle: out.handle,
+                    marquee: out.marquee,
+                    out_of_scope: out.out_of_scope,
+                    refused: out.refused.map(Into::into),
+                }
+            }
+            // v80 (engine ADR 1301) — the edit scope of an element.
+            MainToWorkerKind::RequestScopeContains { root, ids, members } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let scope = model.scope_subtree(&root);
+                let contains = ids.iter().map(|id| scope.contains(&root, id)).collect();
+                WorkerToMainKind::ScopeContains {
+                    found: scope.found,
+                    contains,
+                    members: members.then(|| scope.members.clone()),
+                    stories: members.then(|| scope.stories.clone()),
+                    revision: model.document_revision(),
+                    root,
+                }
+            }
+            // v80 (engine ADR 1304) — a write that joins the run of its key.
+            MainToWorkerKind::MutateCoalesced {
+                coalesce,
+                mutation,
+                label,
+            } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                if let Err(error) = model.refuse_during_gesture() {
+                    reply!(WorkerToMainKind::MutationFailed { error });
+                }
+                let base = model.coalesce_base(&coalesce);
+                let run = model.coalesce_run();
+                let (reply, effect) = self.dispatch(
+                    MainToWorker {
+                        seq: msg_seq,
+                        protocol: PROTOCOL_VERSION,
+                        kind: MainToWorkerKind::Mutate(mutation),
+                    },
+                    clock,
+                );
+                if let WorkerToMainKind::MutationApplied { applied_seq, .. } = &reply.kind {
+                    if let Some(model) = self.model.as_mut() {
+                        if let Some(base) = base {
+                            model.fold_amend(base, *applied_seq);
+                        }
+                        model.note_coalesced(&coalesce, *applied_seq);
+                        if let Some(label) = label
+                            .as_deref()
+                            .and_then(paged_canvas::undo_label::UndoLabel::explicit)
+                        {
+                            model.set_step_label(*applied_seq, label);
+                        }
+                    }
+                } else if let Some(model) = self.model.as_mut() {
+                    // Refused: nothing changed, and the run stands.
+                    model.restore_coalesce_run(run);
+                }
+                return (reply, effect);
+            }
+            MainToWorkerKind::EndCoalesce { coalesce } => {
+                let applied_seq = self
+                    .model
+                    .as_mut()
+                    .and_then(|m| m.end_coalesce(coalesce.as_deref()));
+                WorkerToMainKind::CoalesceEnded { applied_seq }
             }
             MainToWorkerKind::Redo => {
                 if self.model.is_none() {

@@ -22,7 +22,7 @@
 // THIS side-effect component wires the stack to the shell chrome:
 //
 //   · Esc leaves one level (a handler of the Escape arbiter, ADR 1207),
-//     through the one exit resolver (ADR 1211);
+//     through the one exit resolver (ADR 1212);
 //   · on the ACTIVE frame change → EMPHASIZE the context's panels
 //     (cockpit `openPanel` raises each — UNLESS the panel on screen is
 //     one this context SERVES, see below) and FOCUS the first restricted
@@ -32,7 +32,7 @@
 //     auto-exit); another document → the stack is cleared.
 //
 // Every way out asks `resolveContextExit` (state/context-exit.ts, editor
-// ADR 1211): Escape, picking another tool, another selection, the
+// ADR 1212): Escape, picking another tool, another selection, the
 // breadcrumb and a press outside the frame mean one thing per module, and
 // a dirty context whose module says so asks first — the resolve prompt
 // this component renders.
@@ -148,7 +148,7 @@ export function EditContextController() {
       const contribution = contributionRef.current;
       const onContentKey = contribution?.onContentKey;
 
-      // Editor ADR 1212 (D-05) — Enter on a picture's content level goes
+      // Editor ADR 1213 (D-05) — Enter on a picture's content level goes
       // one level in: Edit image. Without this the key reached path
       // editing on the frame below.
       const descend = descendOf(scope, contribution ?? null);
@@ -413,7 +413,7 @@ export function EditContextController() {
     // of the raster frame for zooming into its pixels). Free Transform
     // works on the frame being edited (ADR 311).
     if (toolStaysInContext(activeTool, active.toolIds)) return;
-    // The exit resolver (ADR 1211): the user reached for another tool,
+    // The exit resolver (ADR 1212): the user reached for another tool,
     // they did not press Esc, so the work is kept — or, for a dirty
     // context whose module asks to be asked, the user decides. Kept
     // (Cancel in the prompt): the context's tool comes back.
@@ -493,7 +493,7 @@ export function EditContextController() {
   }, [active, elementSelection, checkScope, leaveAll]);
 
   // Another document: the contexts were resolved before the replace
-  // question (ADR 1211); what is left belongs to a document that is gone,
+  // question (ADR 1212); what is left belongs to a document that is gone,
   // and leaves with nothing to keep or revert.
   const docId = useOptionalDocument()?.handle?.docId ?? null;
   const contextDocRef = useRef(docId);

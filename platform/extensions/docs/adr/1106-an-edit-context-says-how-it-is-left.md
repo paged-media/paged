@@ -4,7 +4,7 @@
 - **Scope:** `packages/plugin-api/src/host.ts` (`EditContextContribution.exitPolicy`, `.label`,
   `.editsPlacedImages`; `EditContextExitPolicy`), `packages/plugin-sdk/src/host-impl.ts`
   (`CreateBundleHostOptions.editContextExitPolicy`, `supports("editContext.exitPolicy@1")`). The
-  editor's side is editor ADRs 1211 (one way out of a context) and 1212 (frame, content, edit).
+  editor's side is editor ADRs 1212 (one way out of a context) and 1213 (frame, content, edit).
   plugin-sdk and plugin-api move to the next canary.
 
 ## Context

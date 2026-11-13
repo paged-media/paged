@@ -178,8 +178,15 @@ rail; density presets (Comfortable, Professional, Compact) size the chrome; a lo
 (UXI-T49); the header has a quiet Share and the document in the tab's title;
 Review is off the mode bar, the developer readout is behind `?debug=hud`, and the Window menu
 follows InDesign's categories with one sentence-case name per panel. UX audit F-17, F-18, F-21,
-F-23, F-24, F-53 and F-55 close. WS8–WS10 (zoom and navigation, editing aids, page lenses) are
-planned.
+F-23, F-24, F-53 and F-55 close. WS8 has landed
+([ADR 1211](adr/1211-navigation-history-and-one-current-page.md)): one current page for every
+reader (the page at the viewport's centre, rotation included, else the nearest; UXI-T54), Back and
+Forward through the places explicit navigations leave (Layout ▸ Go back / Go forward,
+Cmd/Ctrl+PageUp / PageDown, buttons in the bottom bar; UXI-T55's navigation half), every zoom
+route inside 5–4,000 %, an editable zoom field with the fits, Actual size (an inch as 96 CSS px)
+and Calibrated size (from a screen calibration) beside 100 % (UXI-T48), and camera jumps that
+respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 and WS10 (editing
+aids and Proof view, page lenses and semantic zoom) are planned.
 
 Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
 interaction coordinator that holds the session owning the pointer, the epochs a late answer is
@@ -188,10 +195,12 @@ checked against and a development trace (`__interaction`, no user text). It is b
 the canvas is a session, and a lost pointer capture, a window blur, a hidden page, a document or
 tool switch, a failed worker and unmount end it once, rolled back; a begin the engine refuses and
 Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
-a failed worker is said so (`UXI-T10`, `UXI-T61`). Without the flag the canvas behaves as before.
+a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a double-click's and the
+context menu's hit test that answers after a newer press, document or context is dropped
+(`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
 
-Track CM's first part has landed (CM1–CM3; [ADR 1211](adr/1211-one-way-out-of-a-context.md),
-[ADR 1212](adr/1212-frame-content-edit.md), extensions ADR 1106): every way out of an edit
+Track CM's first part has landed (CM1–CM4; [ADR 1212](adr/1212-one-way-out-of-a-context.md),
+[ADR 1213](adr/1213-frame-content-edit.md), extensions ADR 1106): every way out of an edit
 context — Escape, the breadcrumb, another tool, another selection, a document switch — goes
 through one exit resolver that weighs the reason, whether the context holds unfinished work and
 the module's declared `exitPolicy`; a dirty context whose module asks puts up a small Keep /
@@ -200,8 +209,10 @@ Discard / Cancel question, and a document switch asks it before the replace ques
 shows entered groups and lives in the context toolbar's fixed bar, so entering a context moves
 nothing (F-48); contexts and module-owned frames are named as their modules name them (F-45). A
 double-click on a picture frame positions the picture inside it first; Edit image (the level
-control, Enter, or a second double-click) enters paged.image (D-05). The canvas's press outside
-a context still commits until track IC calls the resolver there.
+control, Enter, or a second double-click) enters paged.image (D-05). A conformance suite holds
+every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, `UXI-T51`), and
+gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
+resolver there.
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

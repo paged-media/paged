@@ -27,10 +27,7 @@
 
 import type { Camera } from "@paged-media/client";
 // Deep import: the worker reads this module, and the shell barrel pulls in React.
-import {
-  ZOOM_MAX_SCALE,
-  ZOOM_MIN_SCALE,
-} from "@paged-media/shell/state/zoom-range";
+import { clampScale } from "@paged-media/shell/state/zoom-range";
 
 export interface PageRect {
   /** Top-left x in document space (pt). */
@@ -71,30 +68,6 @@ export function layoutPages(
 }
 
 /**
- * The page at document point (`x`, `y`): the one containing it, else the
- * nearest one (the later page on a tie — in the default stack, the lower
- * half of a gap belongs to the page below). -1 without pages.
- */
-export function pageNearest(
-  rects: ReadonlyArray<PageRect>,
-  x: number,
-  y: number,
-): number {
-  let best = -1;
-  let bestD = Infinity;
-  rects.forEach((r, i) => {
-    const dx = Math.max(r.x - x, 0, x - (r.x + r.w));
-    const dy = Math.max(r.y - y, 0, y - (r.y + r.h));
-    const d = dx * dx + dy * dy;
-    if (d <= bestD) {
-      best = i;
-      bestD = d;
-    }
-  });
-  return best;
-}
-
-/**
  * Total bounding box of all pages in document space. Used by
  * fit-to-document and to constrain pan bounds.
  */
@@ -126,6 +99,8 @@ export function openingView(rects: ReadonlyArray<PageRect>): PageRect {
  * Camera that fits `rect` (document space) into a viewport of the
  * given pixel size, with a margin. Centres the rect in the viewport.
  * Used for fit-to-document on load and fit-to-page on navigator click.
+ * The scale is held inside the one zoom range (ADR 246, ADR 1201 D-12):
+ * a fit that would need less than 5 % stops at 5 %, centred.
  */
 export function fitCamera(
   viewportWidthPx: number,
@@ -144,7 +119,7 @@ export function fitCamera(
   const h = rect.w * s + rect.h * c;
   const scaleX = (viewportWidthPx - 2 * marginPx) / w;
   const scaleY = (viewportHeightPx - 2 * marginPx) / h;
-  const scale = Math.max(0.01, Math.min(scaleX, scaleY));
+  const scale = clampScale(Math.min(scaleX, scaleY));
   // The rect's centre lands on the viewport's.
   const cx = rect.x + rect.w / 2;
   const cy = rect.y + rect.h / 2;
@@ -155,16 +130,24 @@ export function fitCamera(
   return { scale, tx, ty, rotation };
 }
 
-/** Apply a zoom-to-cursor zoom delta. `factor > 1` zooms in. */
+/**
+ * Apply a zoom-to-cursor zoom delta. `factor > 1` zooms in. The result
+ * stays inside the one zoom range (ADR 246, ADR 1201 D-12) for every
+ * caller, so a zoom that runs into a limit stops there about the cursor
+ * rather than being clamped later about the viewport's centre.
+ *
+ * @param _bounds Ignored. Callers once passed bounds of their own (the
+ *   Zoom tool's click passed 0.01 and 64); the one range replaced them,
+ *   and the argument goes when the last caller drops it.
+ */
 export function zoomAt(
   cam: Camera,
   cursorViewportX: number,
   cursorViewportY: number,
   factor: number,
-  minScale = ZOOM_MIN_SCALE,
-  maxScale = ZOOM_MAX_SCALE,
+  ..._bounds: number[]
 ): Camera {
-  const newScale = Math.max(minScale, Math.min(maxScale, cam.scale * factor));
+  const newScale = clampScale(cam.scale * factor);
   if (newScale === cam.scale) return cam;
   // Keep the document point under the cursor stationary.
   const docX = (cursorViewportX - cam.tx) / cam.scale;

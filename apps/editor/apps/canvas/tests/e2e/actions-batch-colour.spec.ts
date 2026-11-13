@@ -39,7 +39,7 @@ type Canvas = {
     client: {
       mutate(m: unknown): Promise<unknown>;
       collection(name: string): Promise<unknown[]>;
-      exportIdml(): Promise<Uint8Array>;
+      exportIdml(): Promise<{ bytes: Uint8Array }>;
       newBlankDocument(w: number, h: number): Promise<unknown>;
       markSaved(): void;
     };
@@ -153,7 +153,7 @@ test.describe("WP4.11 — Actions", () => {
       const c = (globalThis as unknown as Canvas).__canvas;
       const out: number[][] = [];
       for (let i = 0; i < 2; i++) {
-        out.push(Array.from(await c.client.exportIdml()));
+        out.push(Array.from((await c.client.exportIdml()).bytes));
       }
       c.client.markSaved();
       return out;

@@ -181,7 +181,7 @@ describe("Batch over files [editor-shell.actions-batch]", () => {
       await e.invoke("paged.file.new");
       await e.client.mutate(SWATCH(name, [0, 0, 0, 50]) as never);
       files.push(
-        new File([(await e.client.exportIdml()).slice()], `${name}.idml`),
+        new File([(await e.client.exportIdml()).bytes.slice()], `${name}.idml`),
       );
       e.client.markSaved();
     }
@@ -215,7 +215,10 @@ describe("Batch over files [editor-shell.actions-batch]", () => {
   test("a file that is not a document is logged at the open stage and the batch goes on", async () => {
     const e = await blankEditor();
     await e.client.mutate(SWATCH("Only", [0, 0, 0, 50]) as never);
-    const good = new File([(await e.client.exportIdml()).slice()], "good.idml");
+    const good = new File(
+      [(await e.client.exportIdml()).bytes.slice()],
+      "good.idml",
+    );
     e.client.markSaved();
     registerWriter(e, "test.stamp", "Stamp");
     const result = await runBatch(
@@ -241,7 +244,7 @@ describe("run on import [editor-shell.actions-batch]", () => {
   test("the open path reports a finished document load to the import listeners", async () => {
     const e = await blankEditor();
     await e.client.mutate(SWATCH("X", [0, 0, 0, 50]) as never);
-    const bytes = (await e.client.exportIdml()).slice();
+    const bytes = (await e.client.exportIdml()).bytes.slice();
     e.client.markSaved();
     const seen: ImportedFile[] = [];
     const off = onImported(e.editor.scope, (f) => void seen.push(f));

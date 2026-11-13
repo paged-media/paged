@@ -51,6 +51,6 @@ handler.
 
 ## Amendment 2026-11-13 (one way out)
 
-[ADR 1211](1211-one-way-out-of-a-context.md): Escape in a clean context leaves it through the one
+[ADR 1212](1212-one-way-out-of-a-context.md): Escape in a clean context leaves it through the one
 exit resolver, as every other exit does; an entered group is now a level of the breadcrumb (the
 group path is kept from the hit's chain), and its crumb climbs back to that level.

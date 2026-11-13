@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The resolve prompt of the one exit resolver (editor ADR 1211, D-04):
+// The resolve prompt of the one exit resolver (editor ADR 1212, D-04):
 // leaving an edit context that holds unfinished work, when its module
 // asks to be asked, puts this small question up — Keep changes (commit),
 // Discard changes (cancel), Cancel (stay in the context). Escape, the

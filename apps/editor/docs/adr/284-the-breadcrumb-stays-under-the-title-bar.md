@@ -36,7 +36,7 @@ made it visible there.
 
 ## Amendment 2026-11-13
 
-[ADR 1212](1212-frame-content-edit.md) moves the trail into the context toolbar, whose height is
+[ADR 1213](1213-frame-content-edit.md) moves the trail into the context toolbar, whose height is
 fixed, so entering a context no longer inserts a row (F-48); where a profile shows no context
 toolbar the trail floats over the work area and takes no row. Full screen is unchanged: the
 surface's own header still carries it there.

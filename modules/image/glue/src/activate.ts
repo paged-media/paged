@@ -2311,7 +2311,7 @@ export function activate(host: BundleHost): BundleHandle {
     onEnter: (ctx) => {
       host.log.debug("rasterImage context entered");
       workspaceSub.setContextActive(true);
-      // D-05 (editor ADR 1212) — the host's "Edit image" enters this
+      // D-05 (editor ADR 1213) — the host's "Edit image" enters this
       // context on any frame holding a picture, also one this session has
       // not taken in (no marker of ours yet): take it in now, as Adjust
       // image does. The host selected the frame before entering.

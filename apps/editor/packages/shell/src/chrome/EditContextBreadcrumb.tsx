@@ -18,12 +18,12 @@
  */
 
 // The edit-context BREADCRUMB (closes plugin-draw B-02 / plugin-web W-03;
-// editor ADRs 1211 and 1212). The trail of where the user is, root→top:
+// editor ADRs 1212 and 1213). The trail of where the user is, root→top:
 // each entered group (Track L, ADR 250) and then each entered context,
 // named as the module names it (`label`, F-45). Clicking an ancestor
 // goes back to that level and keeps it; clicking the last level leaves
 // it; the Esc button leaves one level as Escape does. Every context
-// level leaves through the exit resolver (ADR 1211). Shows nothing when
+// level leaves through the exit resolver (ADR 1212). Shows nothing when
 // nothing is entered.
 //
 // WHERE (F-48, UXI-CTX-008): the context toolbar carries the trail in its

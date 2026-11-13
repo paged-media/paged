@@ -1,4 +1,4 @@
-# ADR 1212 — Frame, content, edit: a picture frame enters its content first; the trail stays in a fixed bar
+# ADR 1213 — Frame, content, edit: a picture frame enters its content first; the trail stays in a fixed bar
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/state/frame-content.ts` (the levels, the picture frame's
@@ -32,7 +32,7 @@ context was entered, so the canvas, the rulers and the docks jumped down and bac
    content grabber's gestures without Cmd), one engine gesture and one undo step each; the frame
    never moves. The drag follows the pointer past the frame's edge; Escape during it puts the
    picture back. It declares `commit-if-safe`: nothing is in flight between drags, so leaving
-   never asks (ADR 1211).
+   never asks (ADR 1212).
 3. **D-05: Content first, Edit explicitly.** A double-click on a picture frame enters Content.
    Edit image is entered by the level control, by Enter (on the selected frame, as ADR 282
    decides for owned content, and on the Content level), or by a second double-click on the

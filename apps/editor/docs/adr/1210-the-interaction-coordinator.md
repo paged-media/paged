@@ -1,7 +1,7 @@
 # ADR 1210 — The interaction coordinator
 
-- **Status:** Accepted 2026-11-13: IC1 (the coordinator) and IC2 (the terminal events), behind the
-  `coordinator` debug flag. Amended as IC3 and IC4 land; what ships is in
+- **Status:** Accepted 2026-11-13: IC1 (the coordinator), IC2 (the terminal events) and IC3 (the
+  stale guards), behind the `coordinator` debug flag. Amended as IC4 lands; what ships is in
   [`status.md`](../status.md).
 - **Scope:** `packages/shell/src/interaction/` (`coordinator.ts`, `owners.ts`, `epochs.ts`,
   `trace.ts`, `interaction-provider.tsx`); the document, camera and tool contexts that feed it;
@@ -77,6 +77,22 @@ said so.
    `uxi-coordinator` Playwright project runs every `e2e/uxi-*.spec.ts` with the flag on (the
    project's `metadata.debugFlags`, which `openCanvas` adds to the page's query), in the editor
    tests' shards: the baseline and the `UXI-MIG-001` tapes come out the same under it.
+
+## Amendment 1 (2026-11-13): the stale guards (IC3)
+
+The answers that came back whenever they came now carry a token and are applied only while it is
+current (`UXI-OWN-008`, `UXI-ASY-002`, `UXI-INV-005`): a click's hit test (`hit-test`), the
+press's hit test that decides between a move and a marquee (`press-hit`, tied to its session),
+each step of a double-click's chain (`double-click`: the sub-context offer, the hit test, the
+owned-content offer, the image probe) and the context menu's select-under-the-pointer
+(`context-menu`, `apps/canvas/src/canvas-context-menu.tsx`). A newer press, a document opened or
+closed, or an edit context entered or left in between makes the answer stale: it is dropped and
+traced (`confirm`), and a press released before its stale hit ends its session as aborted. The
+client's `seq` already correlates each reply with its request; no engine change was needed. The
+canvas's guards follow the flag; the context menu's checks the document and context epochs
+without it too. Tests: `tests/e2e/uxi-async.spec.ts` over fixture H's reply gate (`UXI-T57`, a
+click answered after a newer click and a context menu answered after a newer press; `UXI-T59`, a
+click answered after a new document and a double-click chain answered after a newer press).
 
 ## Consequences
 

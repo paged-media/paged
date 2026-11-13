@@ -24,73 +24,13 @@
     "task": "IC6",
     "reason": "No test claims it yet: Shift adds and the marquee only intersects today; the selection model of ADR 1201 (Shift toggles, a directional scoped marquee, a locked indication) lands with IC6. Claim it in a test title (UXI-T29 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T35": {
-    "task": "CM4",
-    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T35 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T36": {
-    "task": "CM3",
-    "reason": "No test claims it yet: there is no frame/content model yet: double-clicking an image edits it rather than positioning its content (CM3, D-05). Claim it in a test title (UXI-T36 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T37": {
-    "task": "CM4",
-    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T37 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T38": {
-    "task": "CM4",
-    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T38 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T39": {
-    "task": "CM4",
-    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T39 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T45": {
-    "task": "CM4",
-    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T45 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T46": {
-    "task": "CM4",
-    "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T46 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T48": {
-    "task": "WS8",
-    "reason": "No test claims it yet: the zoom routes use different ranges, reduced motion is ignored and the current page is computed in four places; WS8 unifies them. Claim it in a test title (UXI-T48 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T51": {
-    "task": "CM3",
-    "reason": "No test claims it yet: there is no frame/content model yet: double-clicking an image edits it rather than positioning its content (CM3, D-05). Claim it in a test title (UXI-T51 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T52": {
     "task": "IC4",
     "reason": "No test claims it yet: the canvas pointer path is not routed through the coordinator's adapters yet (IC4); ViewportCanvas keeps its own gesture refs beside the gesture spine. Claim it in a test title (UXI-T52 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T53": {
-    "task": "WS8",
-    "reason": "No test claims it yet: the zoom routes use different ranges, reduced motion is ignored and the current page is computed in four places; WS8 unifies them. Claim it in a test title (UXI-T53 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T54": {
-    "task": "WS8",
-    "reason": "No test claims it yet: the zoom routes use different ranges, reduced motion is ignored and the current page is computed in four places; WS8 unifies them. Claim it in a test title (UXI-T54 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T55": {
-    "task": "DF7",
-    "reason": "No test claims it yet: publication issues are not yet connected to navigation with a return path (DF7, with WS8's navigation history). Claim it in a test title (UXI-T55 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T56": {
     "task": "IC7",
     "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T56 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T57": {
-    "task": "IC3",
-    "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T57 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T58": {
-    "task": "IC5",
-    "reason": "No test claims it yet: a drag that starts before its hit test answers gets no feedback from the down point yet (IC5, over EN7's atomic begin). Claim it in a test title (UXI-T58 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T59": {
-    "task": "IC3",
-    "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T59 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T65": {
     "task": "DF9",
@@ -98,7 +38,7 @@
   },
   "UXI-T66": {
     "task": "DF4",
-    "reason": "No test claims it yet: an import's losses are not reported (the IDML lost list is dropped at client.exportIdml); DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
+    "reason": "No test claims it yet: the engine reports an IDML import's losses on the load (DocumentHandle.losses) and the client's exportIdml answers the export's (protocol 80, engine ADR 1305), but no report shows them; DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T68": {
     "task": "DF6",

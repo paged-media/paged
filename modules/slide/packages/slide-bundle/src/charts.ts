@@ -22,7 +22,7 @@
 // and when the user leaves, the workbook is kept in the document and every
 // frame of the chart is redrawn from it in one undo step. Leaving keeps the
 // session's edits whichever way the user leaves — Esc in the data sheet, Esc
-// on the page, a press outside (editor ADR 1211: the context declares
+// on the page, a press outside (editor ADR 1212: the context declares
 // `commit-if-safe`); the one undo step takes them back. Export writes the
 // chart part and its workbook.
 //

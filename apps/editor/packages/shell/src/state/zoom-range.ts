@@ -56,6 +56,45 @@ export function clampCamera(
   return { ...cam, scale, tx: cx - docX * scale, ty: cy - docY * scale };
 }
 
+/** Points per inch: the document's unit. */
+export const PT_PER_INCH = 72;
+/** CSS px per inch: an inch is 96 CSS px in every browser (CSS Values 4,
+ *  absolute lengths). */
+export const CSS_PX_PER_INCH = 96;
+
+/**
+ * Actual size (ADR 1201, D-12): a named view in which an inch of the
+ * document measures 96 CSS px, about 133 %. It never redefines 100 %:
+ * 100 % stays a camera scale of 1, a point per CSS px (an inch as 72 CSS
+ * px), as in InDesign, so every percentage keeps its meaning. A CSS inch
+ * is the browser's reference inch, not a measured one; the calibrated
+ * size (`calibratedScale`) is the physical one.
+ */
+export const ACTUAL_SIZE_SCALE = CSS_PX_PER_INCH / PT_PER_INCH;
+
+/**
+ * The calibrated size (ADR 1201, D-12): the camera scale at which an inch
+ * of the document measures an inch on this screen, from a calibration in
+ * DEVICE pixels per physical inch (`zoom-calibration.ts`). Device pixels
+ * per inch belong to the monitor, so the scale follows the browser's zoom
+ * and the system's display scaling, which both change
+ * `devicePixelRatio`; a window moved to another monitor needs another
+ * calibration. Null without a usable calibration.
+ */
+export function calibratedScale(
+  devicePxPerInch: number | null | undefined,
+  devicePixelRatio = 1,
+): number | null {
+  if (
+    devicePxPerInch == null ||
+    !(devicePxPerInch > 0) ||
+    !Number.isFinite(devicePxPerInch) ||
+    !(devicePixelRatio > 0)
+  )
+    return null;
+  return clampScale(devicePxPerInch / devicePixelRatio / PT_PER_INCH);
+}
+
 /** The zoom presets of the zoom drop-down (UX audit F-31, ADR 257), as
  *  camera scales, all inside the range. InDesign's menu, trimmed to the
  *  steps that are not one keyboard zoom apart. */
@@ -64,9 +103,25 @@ export const ZOOM_PRESET_SCALES: readonly number[] = [
 ];
 
 /**
+ * What the zoom field reads from typed text: a percentage ("150", "150 %",
+ * "150%", "33.3", with a comma as the decimal separator too) as a camera
+ * scale held inside the one range, or null for text that is not a
+ * number. The field shows the clamped result, so 9,000 % reads back as
+ * 4,000 %.
+ */
+export function parseZoomPercent(text: string): number | null {
+  const cleaned = text.trim().replace(/\s*%$/, "").replace(",", ".");
+  if (!/^[+]?(\d+(\.\d*)?|\.\d+)$/.test(cleaned)) return null;
+  const percent = Number(cleaned);
+  if (!Number.isFinite(percent) || percent <= 0) return null;
+  return clampScale(percent / 100);
+}
+
+/**
  * The camera at `scale` (clamped to the range) with the document point
  * at the viewport's centre kept where it is: a preset zooms about what
- * the user is looking at, as a keyboard zoom does.
+ * the user is looking at, as a keyboard zoom does. The same formula at
+ * any view rotation.
  */
 export function zoomCameraTo(
   cam: Camera,

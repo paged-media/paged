@@ -103,10 +103,14 @@ async function importIdml(
 async function exportIdml(host: BundleHost): Promise<ExportResult | null> {
   try {
     // The typed command's path: the engine's losses become diagnostics there
-    // and the file is named after the document.
+    // (each with its code and the items it stood on) and the file is named
+    // after the document.
     const r = await exportIdmlResult(host);
     for (const d of r.diagnostics)
-      host.log.warn(`${IDML_EXPORTER_ID}: ${d.message}`);
+      host.log.warn(
+        `${IDML_EXPORTER_ID}: [${d.code}] ${d.message}` +
+          (d.items?.length ? ` (${d.items.join(", ")})` : ""),
+      );
     return { bytes: r.bytes, fileName: r.fileName };
   } catch (err) {
     host.log.error(`${IDML_EXPORTER_ID}: export failed — ${String(err)}`);

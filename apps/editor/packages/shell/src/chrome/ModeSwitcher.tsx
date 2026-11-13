@@ -30,7 +30,8 @@ import { Icon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 import { ZoomControl } from "./ZoomControl";
 import { useWorkspaceClass } from "../cockpit/workspace-class";
-import { useCamera } from "../state/camera-context";
+import { useCamera, useNavigationHistoryState } from "../state/camera-context";
+import { ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from "../state/zoom-range";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import {
@@ -100,17 +101,25 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
   );
 }
 
-/** Kit chrome.jsx — the bottom-right zoom cluster: the zoom dropdown
- *  (live percent + presets) and a log-scale slider that zooms around the viewport centre. */
+/** Kit chrome.jsx — the bottom-right zoom cluster: Back and Forward
+ *  through the navigation history, the zoom field and its menu (fits,
+ *  named views, presets) and a log-scale slider that zooms around the
+ *  viewport centre. */
 function ZoomCluster({ slider }: { slider: boolean }) {
   const strings = useStrings();
   const { camera, setCamera, viewportSize } = useCamera();
-  // Log mapping 1%…800% so page-fit zooms (~5–60%) get usable travel.
-  const MIN = Math.log(0.01);
-  const MAX = Math.log(8);
+  const commands = useRegistryView(useRegistries().commands);
+  const history = useNavigationHistoryState();
+  // The one zoom range (ADR 246, ADR 1201 D-12), on a log scale: three
+  // decades, so page-fit zooms (~5–60 %) keep usable travel.
+  const MIN = Math.log(ZOOM_MIN_SCALE);
+  const MAX = Math.log(ZOOM_MAX_SCALE);
   const pos = Math.min(
     1,
-    Math.max(0, (Math.log(Math.max(camera.scale, 0.01)) - MIN) / (MAX - MIN)),
+    Math.max(
+      0,
+      (Math.log(Math.max(camera.scale, ZOOM_MIN_SCALE)) - MIN) / (MAX - MIN),
+    ),
   );
   const onInput = (v: number) => {
     const scale = Math.exp(MIN + v * (MAX - MIN));
@@ -129,6 +138,24 @@ function ZoomCluster({ slider }: { slider: boolean }) {
       data-zoom-cluster
       style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}
     >
+      {commands.get("paged.view.navigateBack") && (
+        <div style={{ display: "inline-flex", gap: 2 }} data-navigation-history>
+          <HistoryButton
+            id="paged.view.navigateBack"
+            icon="ui-chevron-left"
+            label={strings.t(MODE_SWITCHER.back)}
+            disabled={history.back === 0}
+            onClick={() => void commands.invoke("paged.view.navigateBack")}
+          />
+          <HistoryButton
+            id="paged.view.navigateForward"
+            icon="ui-chevron-right"
+            label={strings.t(MODE_SWITCHER.forward)}
+            disabled={history.forward === 0}
+            onClick={() => void commands.invoke("paged.view.navigateForward")}
+          />
+        </div>
+      )}
       <ZoomControl side="top" />
       {slider && (
         <>
@@ -149,6 +176,41 @@ function ZoomCluster({ slider }: { slider: boolean }) {
         </>
       )}
     </div>
+  );
+}
+
+/** Back or Forward: an icon button that runs its command. */
+function HistoryButton(props: {
+  id: string;
+  icon: string;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-navigation={props.id}
+      aria-label={props.label}
+      title={props.label}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 24,
+        height: 26,
+        border: "none",
+        borderRadius: "var(--radius-md)",
+        background: "transparent",
+        color: "var(--chrome-menu-text)",
+        cursor: props.disabled ? "default" : "pointer",
+        opacity: props.disabled ? 0.4 : 1,
+      }}
+    >
+      <Icon name={props.icon} size={15} />
+    </button>
   );
 }
 

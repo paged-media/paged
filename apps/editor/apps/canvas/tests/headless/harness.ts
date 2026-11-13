@@ -900,7 +900,10 @@ export async function createHeadlessEditor(
     saveAsIdml: async () => {
       if (!state.document.handle || state.document.handle.pageCount === 0)
         return;
-      opened.push({ kind: "download", detail: await client.exportIdml() });
+      opened.push({
+        kind: "download",
+        detail: (await client.exportIdml()).bytes,
+      });
     },
     savePaged: async () => {
       if (!state.document.handle || state.document.handle.pageCount === 0)
@@ -928,6 +931,21 @@ export async function createHeadlessEditor(
     },
     goToPage: (which) => {
       opened.push({ kind: "camera", detail: `page:${which}` });
+    },
+    actualSize: () => {
+      opened.push({ kind: "camera", detail: "actualSize" });
+    },
+    calibratedSize: () => {
+      opened.push({ kind: "camera", detail: "calibratedSize" });
+    },
+    calibrateScreen: () => {
+      opened.push({ kind: "dialog", detail: "calibrateScreen" });
+    },
+    navigateBack: () => {
+      opened.push({ kind: "camera", detail: "back" });
+    },
+    navigateForward: () => {
+      opened.push({ kind: "camera", detail: "forward" });
     },
   });
   const objectDeps: ObjectCommandDeps = {

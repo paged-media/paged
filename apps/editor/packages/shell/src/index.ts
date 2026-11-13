@@ -122,8 +122,32 @@ export {
   CameraProvider,
   cameraKeepingCentre,
   useCamera,
+  useNavigationHistoryState,
   type ViewportSize,
 } from "./state/camera-context";
+export {
+  createNavigationHistory,
+  NAVIGATION_HISTORY_LIMIT,
+  sameView,
+  type NavigationHistory,
+  type NavigationHistoryState,
+} from "./state/navigation-history";
+export {
+  currentPageIndex,
+  pageAtDocumentPoint,
+  viewportCentreInDocument,
+  type PageBox,
+} from "./state/current-page";
+export { useCurrentPage, type CurrentPage } from "./state/use-current-page";
+export {
+  CALIBRATION_MAX_DPI,
+  CALIBRATION_MIN_DPI,
+  densityFromMeasurement,
+  getScreenCalibration,
+  setScreenCalibration,
+  useScreenCalibration,
+  type ScreenCalibration,
+} from "./state/zoom-calibration";
 export {
   isRecord,
   isStringArray,
@@ -147,7 +171,12 @@ export {
   type FileChooserOptions,
 } from "./lib/file-chooser";
 export {
+  ACTUAL_SIZE_SCALE,
+  calibratedScale,
   clampCamera,
+  CSS_PX_PER_INCH,
+  parseZoomPercent,
+  PT_PER_INCH,
   zoomCameraTo,
   ZOOM_PRESET_SCALES,
   clampScale,
@@ -489,7 +518,7 @@ export {
   type EditContextStackValue,
   type EnterPoint,
 } from "./state/edit-context-stack";
-// Editor ADR 1211 — one way out of an edit context.
+// Editor ADR 1212 — one way out of an edit context.
 export {
   DEFAULT_EXIT_POLICY,
   askContextExit,
@@ -506,16 +535,18 @@ export {
 } from "./state/context-exit";
 export {
   createEditContextStore,
+  editScopeOf,
   reduceEditContexts,
   scopeQueryOf,
   type EditContextAction,
   type EditContextEffect,
   type EditContextState,
   type EditContextStore,
+  type EditScopeLike,
   type ScopeQuery,
 } from "./state/edit-context-store";
 export { ContextExitPrompt } from "./chrome/ContextExitPrompt";
-// Editor ADR 1212 — Frame, Content, Edit.
+// Editor ADR 1213 — Frame, Content, Edit.
 export {
   IMAGE_CONTENT_CONTEXT,
   contentToPage,

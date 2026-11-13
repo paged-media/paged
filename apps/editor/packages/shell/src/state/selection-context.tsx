@@ -135,7 +135,7 @@ interface SelectionContextValue {
    *  path is its prefix up to `groupId`. */
   setActiveGroup: (groupId: string | null, chain?: readonly string[]) => void;
   /** The entered groups, outermost first, ending at `activeGroup` (empty
-   *  when none is): the breadcrumb's group levels (editor ADR 1211). */
+   *  when none is): the breadcrumb's group levels (editor ADR 1212). */
   activeGroupPath: readonly string[];
 }
 

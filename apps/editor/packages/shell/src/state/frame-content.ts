@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Frame, Content, Edit (editor ADR 1212; the UX strategy's §3.2; the
+// Frame, Content, Edit (editor ADR 1213; the UX strategy's §3.2; the
 // interaction specification's D-05, UXI-CTX-005, UXI-CTX-008, UXI-CTX-013).
 //
 // A selected frame offers up to three levels of what is being edited:
@@ -35,7 +35,7 @@
 // Enter, or a second double-click (D-05). Content is a host context of its
 // own (`IMAGE_CONTENT_CONTEXT`), so it sits on the edit-context stack like
 // any other level: the breadcrumb shows it, Escape leaves it, a press
-// outside the frame leaves it through the exit resolver (ADR 1211). Each
+// outside the frame leaves it through the exit resolver (ADR 1212). Each
 // drag inside it is one engine gesture and one undo step; the frame never
 // moves. Nothing here moves the camera or resizes the canvas (UXI-CTX-008).
 

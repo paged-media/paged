@@ -25,7 +25,7 @@
 // per editor (plan task E1), kept in its scope.
 
 import type { Camera } from "@paged-media/client";
-import { scoped, type EditorScope } from "@paged-media/shell";
+import { clampScale, scoped, type EditorScope } from "@paged-media/shell";
 
 import { fitCamera, layoutPages } from "./ui/layout";
 
@@ -121,7 +121,8 @@ export function cameraForPage(
   if (fit === "page") {
     return fitCamera(viewportWidthPx, viewportHeightPx, rect, marginPx);
   }
-  const scale = Math.max(0.01, (viewportWidthPx - 2 * marginPx) / rect.w);
+  // Inside the one zoom range (ADR 246, ADR 1201 D-12).
+  const scale = clampScale((viewportWidthPx - 2 * marginPx) / rect.w);
   return {
     scale,
     tx: (viewportWidthPx - rect.w * scale) / 2 - rect.x * scale,

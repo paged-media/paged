@@ -24,6 +24,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PropsWithChildren,
 } from "react";
 
@@ -31,6 +32,11 @@ import { IDENTITY_CAMERA, type Camera } from "@paged-media/client";
 
 import { useInteractionCoordinator } from "../interaction/coordinator";
 import { useCanvasClient } from "./canvas-client-context";
+import {
+  createNavigationHistory,
+  type NavigationHistory,
+  type NavigationHistoryState,
+} from "./navigation-history";
 import { clampCamera } from "./zoom-range";
 
 export type ViewportSize = readonly [number, number];
@@ -45,6 +51,17 @@ interface CameraContextValue {
    *  centre where it was (UXI-CAM-003, UXI-PNL-007). The canvas's
    *  ResizeObserver calls it. */
   anchorViewportResize: (from: ViewportSize, to: ViewportSize) => void;
+  /** The camera last written, at once: a frame of a tween or a wheel
+   *  step that React has not rendered yet included. What a navigation
+   *  records as the place it left, and where a tween starts from. */
+  peekCamera: () => Camera;
+  /** Counts the camera's writes. A tween compares it with the count after
+   *  its own last frame: a write in between was someone else's (a wheel,
+   *  a pan, another command), who now owns the camera, and the tween stops
+   *  rather than tug the view back (UXI-CAM-004). */
+  cameraRevision: () => number;
+  /** This editor's Back / Forward places (`navigation-history.ts`). */
+  navigation: NavigationHistory;
 }
 
 /**
@@ -98,12 +115,14 @@ export function CameraProvider({ children }: PropsWithChildren) {
   // The camera last written, for the resize anchor: `setCamera` is its one
   // writer, so it is current without a render.
   const cameraRef = useRef<Camera>(IDENTITY_CAMERA);
+  const revisionRef = useRef(0);
   const setCamera = useCallback(
     (requested: Camera) => {
       const rotation = requested.rotation ?? rotationRef.current;
       rotationRef.current = rotation;
       const cam = { ...clampCamera(requested, sizeRef.current), rotation };
       cameraRef.current = cam;
+      revisionRef.current += 1;
       setCameraState(cam);
       client.setCamera(cam);
       interactions.cameraChanged();
@@ -121,6 +140,13 @@ export function CameraProvider({ children }: PropsWithChildren) {
     [setCamera],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const peekCamera = useCallback(() => cameraRef.current, []);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const cameraRevision = useCallback(() => revisionRef.current, []);
+  // One history per editor, for the provider's lifetime.
+  const [navigation] = useState(createNavigationHistory);
+
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<CameraContextValue>(
     () => ({
@@ -129,8 +155,20 @@ export function CameraProvider({ children }: PropsWithChildren) {
       viewportSize,
       setViewportSize,
       anchorViewportResize,
+      peekCamera,
+      cameraRevision,
+      navigation,
     }),
-    [camera, setCamera, viewportSize, setViewportSize, anchorViewportResize],
+    [
+      camera,
+      setCamera,
+      viewportSize,
+      setViewportSize,
+      anchorViewportResize,
+      peekCamera,
+      cameraRevision,
+      navigation,
+    ],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
@@ -142,4 +180,15 @@ export function useCamera(): CameraContextValue {
     throw new Error("useCamera called outside CameraProvider");
   }
   return ctx;
+}
+
+/** How many places Back and Forward hold in this editor, re-rendering
+ *  when it changes (the Back / Forward buttons' enabled state). */
+export function useNavigationHistoryState(): NavigationHistoryState {
+  const { navigation } = useCamera();
+  return useSyncExternalStore(
+    navigation.subscribe,
+    navigation.state,
+    navigation.state,
+  );
 }

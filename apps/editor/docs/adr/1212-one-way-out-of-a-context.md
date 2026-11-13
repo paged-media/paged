@@ -1,4 +1,4 @@
-# ADR 1211 — One way out of a context: an exit resolver, and a stack that runs each hook once
+# ADR 1212 — One way out of a context: an exit resolver, and a stack that runs each hook once
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/state/context-exit.ts` (`resolveContextExit`, the resolve
@@ -72,11 +72,13 @@ The breadcrumb showed contexts but not the groups a double-click had entered.
    edit). Cancel keeps the document and the context (UXI-T43). A clean context stays until the
    document is really replaced; the controller then clears the stack with nothing to keep or
    revert.
-7. **The write scope** is the entered root and what the engine's scope query says lies inside
-   it: `checkScope(ids)` asks `client.scopeContains` (EN5, protocol 80) when the client has it,
-   and `isInScope` reads the last answer. Without the query only the root is in scope, never
-   presented as a subtree (UXI-CTX-011). Selecting inside the scope keeps the context;
-   selecting outside leaves it (UXI-CTX-010).
+7. **The write scope** is the entered root and what the engine says lies inside it (EN5,
+   protocol 80, engine ADR 1301): entering reads `client.editScope(root)`, whose synchronous
+   `contains` answers `isInScope`; `checkScope(ids)` reads it again (the client caches it until
+   the document changes), and a client with only `scopeContains` answers there. Without either,
+   only the root is in scope, never presented as a subtree (UXI-CTX-011). Selecting inside the
+   scope keeps the context — a member of an entered group, a frame's story — and selecting
+   outside leaves it (UXI-CTX-010).
 8. **The breadcrumb shows entered groups** as levels before the contexts (`activeGroupPath`,
    kept from the hit's group chain when a double-click enters a group). An ancestor crumb goes
    back to that level and keeps it; the last crumb leaves its level; the Esc button leaves one.
@@ -90,7 +92,7 @@ The breadcrumb showed contexts but not the groups a double-click had entered.
 - The breadcrumb's plain pop is gone: leaving by it now commits, as a press outside does.
 - paged.slide's chart: Escape on the page now keeps the chart's edits, as Escape in its data
   sheet already did (its context is `commit-if-safe`).
-- Until EN5 reaches the client, selecting a member of an entered frame leaves the context, as
-  before; the scope query switches it on without a change here.
+- Selecting a member of the entered root (a group's member, a frame's story) no longer leaves
+  the context, as it did while only the root was in scope.
 - `profile-change` has no caller yet: profiles are chosen when the editor mounts. A runtime
   switch calls `leaveAll("profile-change")` first (UXI-PLG-008).

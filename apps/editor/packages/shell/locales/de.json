@@ -367,6 +367,8 @@
   "shell.menuBar.soon": "bald",
   "shell.modeSwitcher.label": "Arbeitsmodus",
   "shell.modeSwitcher.zoom": "Zoom",
+  "shell.modeSwitcher.back": "Zurück",
+  "shell.modeSwitcher.forward": "Vorwärts",
   "shell.pages.cover": "Umschlag",
   "shell.pages.page": "Seite {range}",
   "shell.pages.pages": "Seiten {range}",
@@ -539,5 +541,10 @@
   "shell.zoom.fitSpread": "Druckbogen in Fenster einpassen",
   "shell.zoom.zoom100": "Auf 100 % zoomen",
   "shell.zoom.zoomIn": "Einzoomen",
-  "shell.zoom.zoomOut": "Auszoomen"
+  "shell.zoom.zoomOut": "Auszoomen",
+  "shell.zoom.actualSize": "Originalgröße",
+  "shell.zoom.calibratedSize": "Kalibrierte Größe",
+  "shell.zoom.calibrate": "Bildschirmgröße kalibrieren…",
+  "shell.zoom.field": "Zoom in Prozent",
+  "shell.zoom.menu": "Zoomoptionen"
 }

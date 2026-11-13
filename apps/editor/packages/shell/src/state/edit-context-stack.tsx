@@ -23,7 +23,7 @@
 // entered contexts and the chrome/scope they imply.
 //
 // The stack itself is `edit-context-store.ts`: a reducer and a post-commit
-// effect queue (editor ADR 1211), so every hook runs exactly once, after
+// effect queue (editor ADR 1212), so every hook runs exactly once, after
 // the stack has changed, in the order of the actions. This file puts one
 // store in front of React (`useSyncExternalStore`), wires its resolve
 // prompt and the engine's scope query, and registers it with the replace
@@ -43,9 +43,10 @@
 //     stack root→top for the UI trail.
 //
 // WRITE-SCOPE LINE (UXI-CTX-010, UXI-CTX-011): `isInScope(id)` is the
-// selection-level scope — the entered root, plus what the engine's scope
-// query (`client.scopeContains`, EN5) last said lies inside its subtree
-// (`checkScope`). Without the query only the root is in scope; root
+// selection-level scope — the entered root and what the engine's edit
+// scope (`client.editScope`, EN5, engine ADR 1301; read when a context is
+// entered and again by `checkScope`) says lies inside it; a client with
+// only `scopeContains` answers through `checkScope`. Without the query only the root is in scope; root
 // equality is never presented as subtree isolation. Engine-level refusal
 // of out-of-scope mutations is the engine's job, not this line's.
 
@@ -70,6 +71,7 @@ import {
 } from "./context-exit";
 import {
   createEditContextStore,
+  editScopeOf,
   scopeQueryOf,
   type ContextLeave,
   type EditContextFrame,
@@ -105,7 +107,7 @@ export interface EditContextStackValue {
     at?: EnterPoint,
   ): EditContextFrame;
   /** Leave the TOP frame for `reason` through the one exit resolver
-   *  (editor ADR 1211, D-04). */
+   *  (editor ADR 1212, D-04). */
   leave(reason: ContextExitReason): ContextLeave;
   /** Leave every frame, top to root, for `reason`; false when the user
    *  kept a context (Cancel in the resolve prompt). */
@@ -168,6 +170,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
     store.configure({
       ask: (request) => askContextExit(scope, request),
       scopeQuery: scopeQueryOf(client),
+      editScope: editScopeOf(client),
     });
   }, [store, scope, client]);
   // A document switch resolves the contexts before the replace question
@@ -197,7 +200,7 @@ export function useEditContextStack(): EditContextStackValue {
 }
 
 /** The one exit resolver for a caller that decides at once (editor ADR
- *  1211). */
+ *  1212). */
 export interface ContextExit {
   /** What leaving the top context for `reason` would do now; null with
    *  no context. Asks nothing, changes nothing. */

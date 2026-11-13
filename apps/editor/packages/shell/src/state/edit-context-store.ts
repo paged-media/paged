@@ -18,7 +18,7 @@
  */
 
 // The edit-context stack as a reducer and a post-commit effect queue
-// (editor ADR 1211, task CM1; UXI-CTX-001, UXI-CTX-002, UXI-PLG-005).
+// (editor ADR 1212, task CM1; UXI-CTX-001, UXI-CTX-002, UXI-PLG-005).
 //
 // The stack used to live in a React `useState` and ran the contexts'
 // hooks (onEnter, onCommit, onCancel, onExit) INSIDE the `setStack`
@@ -231,10 +231,18 @@ export type ScopeQuery = (
   ids: readonly ElementId[],
 ) => Promise<readonly boolean[]>;
 
-/** What the provider wires in: the resolve prompt and the scope query. */
+/** The engine's whole edit scope of a root (EN5, `client.editScope`,
+ *  engine ADR 1301), with a synchronous membership test. */
+export interface EditScopeLike {
+  contains(id: ElementId): boolean;
+}
+
+/** What the provider wires in: the resolve prompt and the scope queries. */
 export interface EditContextEnvironment {
   ask(request: ContextExitRequest): Promise<ContextExitAnswer>;
   scopeQuery: ScopeQuery | null;
+  /** The whole scope of a root, cached by the client per document state. */
+  editScope: ((root: ElementId) => Promise<EditScopeLike>) | null;
 }
 
 export interface EditContextSnapshot {
@@ -280,11 +288,29 @@ export function createEditContextStore(): EditContextStore {
   let env: EditContextEnvironment = {
     ask: () => Promise.resolve("commit"),
     scopeQuery: null,
+    editScope: null,
   };
   /** The open question per frame, so two exits never ask twice. */
   const asking = new Map<string, Promise<boolean>>();
   /** The engine's last answers per frame: element key → inside. */
   const scopeAnswers = new Map<string, Map<string, boolean>>();
+  /** The engine's whole scope per frame, when the client offers it. */
+  const scopes = new Map<string, EditScopeLike>();
+
+  const fetchScope = async (
+    frame: EditContextFrame,
+  ): Promise<EditScopeLike | null> => {
+    const editScope = env.editScope;
+    if (!editScope) return null;
+    try {
+      const scope = await editScope(frame.scopeRoot);
+      if (state.frames.some((f) => f.id === frame.id))
+        scopes.set(frame.id, scope);
+      return scope;
+    } catch {
+      return null;
+    }
+  };
 
   const runEffect = (e: EditContextEffect) => {
     const c = e.contribution;
@@ -306,6 +332,9 @@ export function createEditContextStore(): EditContextStore {
       state = out.state;
       for (const id of scopeAnswers.keys()) {
         if (!state.contributions.has(id)) scopeAnswers.delete(id);
+      }
+      for (const id of scopes.keys()) {
+        if (!state.contributions.has(id)) scopes.delete(id);
       }
       const top = state.frames[state.frames.length - 1] ?? null;
       snapshot = {
@@ -428,9 +457,10 @@ export function createEditContextStore(): EditContextStore {
       };
       const before = dispatch({ kind: "enter", frame, contribution, entered });
       // A no-op (CTX-002) leaves the existing frame on top.
-      return state === before
-        ? before.frames[before.frames.length - 1]!
-        : frame;
+      if (state === before) return before.frames[before.frames.length - 1]!;
+      // The engine's scope of the root, ahead of the first `isInScope`.
+      void fetchScope(frame);
+      return frame;
     },
     pop: () => exitTop("pop"),
     commit: () => exitTop("commit"),
@@ -473,8 +503,11 @@ export function createEditContextStore(): EditContextStore {
       if (id == null) return false;
       const key = elementKey(id);
       if (key === elementKey(frame.scopeRoot)) return true;
-      // The engine's last answer for this frame (checkScope); unknown is
-      // outside: root equality is not a subtree (UXI-CTX-011).
+      // The engine's scope of the root (EN5), else its last answers for
+      // this frame (checkScope); unknown is outside: root equality is not a
+      // subtree (UXI-CTX-011).
+      const scope = scopes.get(frame.id);
+      if (scope) return scope.contains(id);
       return scopeAnswers.get(frame.id)?.get(key) ?? false;
     },
     async checkScope(ids) {
@@ -482,6 +515,13 @@ export function createEditContextStore(): EditContextStore {
       if (!frame) return ids.map(() => true);
       const rootKey = elementKey(frame.scopeRoot);
       const fallback = () => ids.map((id) => elementKey(id) === rootKey);
+      // The whole scope first (it also answers `isInScope` afterwards);
+      // the client caches it until the document changes.
+      const scope = await fetchScope(frame);
+      if (scope)
+        return ids.map(
+          (id) => elementKey(id) === rootKey || scope.contains(id),
+        );
       const query = env.scopeQuery;
       if (!query || ids.length === 0) return fallback();
       let answer: readonly boolean[];
@@ -503,6 +543,18 @@ export function createEditContextStore(): EditContextStore {
       return out;
     },
   };
+}
+
+/** The whole-scope read of a client that has one (EN5, protocol 80,
+ *  `client.editScope`), else null. */
+export function editScopeOf(
+  client: unknown,
+): ((root: ElementId) => Promise<EditScopeLike>) | null {
+  const c = client as {
+    editScope?: (root: ElementId) => Promise<EditScopeLike>;
+  } | null;
+  if (!c || typeof c.editScope !== "function") return null;
+  return (root) => c.editScope!(root);
 }
 
 /** The scope query of a client that has one (EN5, protocol 80), else

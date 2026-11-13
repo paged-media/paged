@@ -114,12 +114,15 @@ export interface PdfWireOptions {
   tagged: boolean;
 }
 
-/** One exporter diagnostic; `page` is 1-based, 0 = the whole document. */
+/** One exporter diagnostic; `page` is 1-based, 0 = the whole document.
+ *  `items` are the page items it stood on, when the exporter names them
+ *  (an IDML loss entry's `items`), so a report can go to them. */
 export interface ExportDiagnostic {
   severity: "error" | "warning" | "info";
   code: string;
   message: string;
   page: number;
+  items?: string[];
 }
 
 /** What every exporter command answers (`schema/export-result.json`). */
@@ -363,7 +366,9 @@ export async function preflight(
 /** Export the active document to IDML through the engine's writer. Every
  *  loss the engine reports becomes a diagnostic with the loss's own
  *  `idml.<area>.<what>` code (engine ADR 1097): a warning, or info for one
- *  that changes nothing InDesign shows (the SDK's `lossDiagnostics`). */
+ *  that changes nothing InDesign shows (the SDK's `lossDiagnostics`). The
+ *  entry passes through whole: its first page (1-based) and the items it
+ *  stood on ride the diagnostic (`UXI-FIL-002`). */
 export async function exportIdmlResult(
   host: BundleHost,
   linkBase?: string,
@@ -386,11 +391,13 @@ export async function exportIdmlResult(
     pageCount: pages.length,
     diagnostics: (reply.payload.lost ?? []).map((loss) => {
       const [row] = lossDiagnostics([loss]);
+      const first = loss.pages?.[0];
       return {
         severity: row!.severity,
         code: loss.code,
         message: row!.message,
-        page: 0,
+        page: first === undefined ? 0 : first + 1,
+        ...(loss.items?.length ? { items: [...loss.items] } : {}),
       };
     }),
   };

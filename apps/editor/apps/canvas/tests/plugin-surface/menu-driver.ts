@@ -224,7 +224,7 @@ interface ProbeWindow {
         invoke(id: string, payload?: unknown): Promise<unknown>;
       };
     };
-    client: { exportIdml(): Promise<Uint8Array> };
+    client: { exportIdml(): Promise<{ bytes: Uint8Array }> };
     handle: { pageCount: number; pageIds: string[] } | null;
   };
 }
@@ -314,7 +314,7 @@ export async function mark(
 export async function documentDigest(page: Page): Promise<string> {
   return page.evaluate(async () => {
     const c = (globalThis as unknown as ProbeWindow).__canvas;
-    const bytes = await c.client.exportIdml();
+    const bytes = (await c.client.exportIdml()).bytes;
     let h = 2166136261;
     for (let i = 0; i < bytes.length; i++) {
       h ^= bytes[i];

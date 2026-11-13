@@ -42,7 +42,9 @@ import {
   engineModelChannel,
   geometryDigest,
   gestureFixture,
+  GESTURE_FUZZ_KNOWN,
   GESTURE_TARGETS as T,
+  runGestureFuzz,
   sceneElementIds,
   type ModelChannel,
 } from "../src/index.ts";
@@ -608,6 +610,53 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
         await geometryDigest(client.send.bind(client)),
       );
       expect(diff).toBeNull();
+    } finally {
+      reload.dispose();
+    }
+  });
+
+  // GF-5 (fixed, engine ADR 1302; fuzz seeds 48, 141 and 155 at
+  // PAGED_GESTURE_FUZZ_N=200): Alt pressed while dragging a selection on
+  // two spreads failed at the commit — a snippet holds one spread. Each
+  // spread's items are copied onto that spread now, by the same offset.
+  test("GF-5: an Alt-drag of a selection on two spreads commits a copy on each @level:gesture", async () => {
+    const before = await sceneElementIds(send);
+    const reply = await gesture({
+      nodes: [{ kind: "rectangle", id: "up2frame" }, FRAME],
+      gesture: { kind: "translate" },
+      deltas: [[12, 7]],
+      mods: { shift: false, alt: true, disableSnap: true },
+    });
+    expect(reply.kind).toBe("gestureCommitted");
+    expect((await sceneElementIds(send)).length).toBe(before.length + 2);
+  });
+
+  // GF-6 (fixed, engine ADR 1302; fuzz seed 31): a pasted copy of a
+  // resized path drifted by 116 pt on save → load — the resize wrote the
+  // path's box and not its anchors, and a copy written afresh took its box
+  // from the stale path. The four seeds replay clean.
+  test("GF-5, GF-6: the fuzz seeds 31, 48, 141 and 155 hold every invariant @level:gesture", async () => {
+    const reload = await createHeadlessHost({ console: silent });
+    try {
+      const client = (
+        reload.host.editor as unknown as { client: { send: Send } }
+      ).client;
+      for (const seed of [31, 48, 141, 155]) {
+        await h.load(gestureFixture("targets"));
+        const report = await runGestureFuzz({
+          send,
+          seed,
+          known: GESTURE_FUZZ_KNOWN,
+          roundTrip: async (idml) => {
+            await reload.load(idml);
+            return geometryDigest(client.send.bind(client));
+          },
+        });
+        expect({ seed, failures: report.failures }).toEqual({
+          seed,
+          failures: [],
+        });
+      }
     } finally {
       reload.dispose();
     }

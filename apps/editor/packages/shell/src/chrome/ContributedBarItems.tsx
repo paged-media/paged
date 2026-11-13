@@ -104,7 +104,7 @@ export function useHasControlBarGroups(editContext: string | null): boolean {
  * claims keeps the canvas column as it was.
  *
  * Entering or leaving a frame's edit context never moves the canvas
- * (editor ADR 1212, UXI-CTX-008): the bar takes a row of the layout only
+ * (editor ADR 1213, UXI-CTX-008): the bar takes a row of the layout only
  * while the DOCUMENT context has items (then it stays, empty if need be,
  * whatever context is entered); items that apply only because a frame's
  * context is entered float over the canvas's bottom edge.

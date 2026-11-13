@@ -58,6 +58,7 @@ import {
   ownerOfTool,
   useInteractionCoordinator,
   type EndResult,
+  type GuardToken,
   type InteractionCoordinator,
   type InteractionPhase,
   type InteractionSession,
@@ -732,6 +733,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     interactions.end(s, result, reason);
   };
 
+  /** IC3 — a late answer is applied only while the epochs it was asked
+   *  under hold (`UXI-OWN-008`, `UXI-ASY-002`): no newer press, no other
+   *  document, no other context, its session not aborted. With the flag
+   *  off every answer applies, as before. */
+  const stillCurrent = (token: GuardToken): boolean =>
+    !COORDINATED || interactions.confirm(token);
+
   /** What a session that holds the pointer undoes when it is ended from
    *  outside: whatever drag the canvas has open (INV-8). */
   const rollBackPointer = () => {
@@ -1243,6 +1251,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const resolvePress = (drag: DragState) => {
     const press = drag.press;
     if (!press) return;
+    const token = interactions.token("press-hit", sessionRef.current);
     void props.client
       .send({
         kind: "hitTest",
@@ -1262,6 +1271,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         press.hit = null;
       })
       .then(() => {
+        if (!stillCurrent(token)) {
+          // A newer press, another document or an aborted session: this
+          // press is over, whatever its hit was.
+          finishSession(drag.pressSession, "abort", "stale press-hit");
+          return;
+        }
         const live = dragStateRef.current === drag;
         if (press.releaseDoc) finishPress(drag);
         else if (live && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
@@ -1682,6 +1697,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           docY - pageRect.y,
         ];
         const filter = isText ? "text" : "any";
+        // IC3 — the click's answer applies only if no newer press, document
+        // or context came first (UXI-T57, UXI-T59).
+        const token = interactions.token("hit-test");
         // A promise chain, not a try: the compiler does not lower
         // conditionals inside a try (ADR 229).
         const resolveHit = async () => {
@@ -1689,6 +1707,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             kind: "hitTest",
             payload: { pageId, docPoint, filter },
           });
+          if (!stillCurrent(token)) return;
           if (reply.kind !== "hitResult") return;
           const hit = reply.payload;
           // C-4 — owned-content interception: a Type-tool click on
@@ -1699,6 +1718,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           // empty objectType registry early-outs, so documents
           // without plugins pay nothing.
           if (isText && hit.element) {
+            if (!stillCurrent(token)) return;
             const owned = await tryEnterOwnedContent({
               element: hit.element,
               groupChain: [],
@@ -1721,10 +1741,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
               hit.storyId,
               hit.offsetWithinStory,
               clickCount,
-              setContentSelection,
+              (sel) => {
+                if (stillCurrent(token)) setContentSelection(sel);
+              },
             );
             return;
           }
+          if (!stillCurrent(token)) return;
           props.onHit?.({ pageId, docPoint, hit }, modifiers);
         };
         void resolveHit().catch((err: unknown) => {
@@ -2034,8 +2057,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // document context's) sub-context providers may take the double-click
     // for a header, footer or note edited in place. None answering leaves
     // it to what follows.
+    // IC3 — the chain's answers apply only while no newer press, document
+    // or context came first.
+    const token = interactions.token("double-click");
     const offerFirst = async () => {
       if (await trySubContext({ pageId, pagePoint })) return;
+      if (!stillCurrent(token)) return;
       // Phase H — double-click on a frame nested inside a group →
       // select the whole outermost containing group as a unit.
       if (!props.onDoubleClickGroup || typeTool) return;
@@ -2051,6 +2078,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           filter: "any",
         },
       });
+      if (!stillCurrent(token)) return;
       if (reply.kind !== "hitResult") return;
       const chain = reply.payload.groupChain ?? [];
       const element = reply.payload.element ?? null;
@@ -2079,7 +2107,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           pageId,
           pagePoint,
         });
-        if (owned) return;
+        if (owned || !stillCurrent(token)) return;
         const tc = hit.tableContext ?? null;
         tool?.setBaseTool(TEXT_TOOL_ID);
         setContentSelection({
@@ -2111,6 +2139,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           .elementGeometry([element])
           .then((items) => items[0]?.hasImage === true)
           .catch(() => false));
+      if (!stillCurrent(token)) return;
       const at = {
         element,
         groupChain: chain,
