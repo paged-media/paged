@@ -30,3 +30,13 @@ a group selected selects the group that holds it, one level per press.
 - F-29 closes (`selection-tools.dom.test.tsx`, "Escape after entering a group selects the
   group, one level up").
 - Object ▸ Select parent group stays the menu way to climb without a group entered.
+
+## Amendment 2026-11-13
+
+[ADR 1201](1201-interaction-decisions.md) places this record inside the specification's Escape
+order (§12.1): one press resolves exactly one thing, the first case that applies (IME, a modal or
+menu, an active gesture, a transient mode, a dirty context, a clean context or entered group —
+this record's climb, one level per press — text editing, a selection). Decision 3 changes: at the
+top level Escape clears the selection. D-04 decides the click outside a context: a clean context
+exits; a dirty one follows the module's declared `exitPolicy` (commit if safe, otherwise ask).
+Until those tasks land the body describes the code.

@@ -6,8 +6,10 @@ When the code stops matching a record, the body is left as it is and a dated ame
 added at the end.
 
 ADR numbers are unique across the paged-media repositories, so a number names the same
-record wherever it is cited. New records in this repository use 1000–1099
-([PM-0012](../../../../docs/adr/PM-0012-engine-adr-range.md)); 100–199 is full, and the
+record wherever it is cited. New records in this repository use 1300–1399, from 2026-11-13
+([PM-0020](../../../../docs/adr/PM-0020-engine-adr-range.md)); 1000–1099
+([PM-0012](../../../../docs/adr/PM-0012-engine-adr-range.md)) is full, and its unused numbers
+stay unused. 100–199 is full too, and the
 records 200–209 written after it keep their numbers. The records below
 100 predate that scheme and keep their numbers; the numbers missing between them belong to
 other repositories. Records 100–124 were written on 2026-10-02 from the code as it stood,

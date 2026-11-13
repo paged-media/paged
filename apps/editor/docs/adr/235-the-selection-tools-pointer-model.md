@@ -65,3 +65,12 @@ under it (GT-3), and the transform tools began nothing on the pasteboard (GT-4).
   (GF-2), so the gesture matrix marks those two cells `known: GF-2` instead of F-26.
 - The rotate band costs a few pixels of marquee start area around a selected item's corners,
   as it does in InDesign.
+
+## Amendment 2026-11-13
+
+[ADR 1201](1201-interaction-decisions.md), D-01, changes the modifiers and the marquee:
+Shift-click toggles an item's membership and Cmd stays a toggle alias; a marquee drawn left to
+right takes what it fully contains, right to left what it touches, scoped to the active group,
+and it starts on the pasteboard too. D-05 changes decision 2 for image frames: a double-click
+enters content position first, and "Edit image" enters paged.image (the note on ADR 282). Until
+those tasks land the body describes the code.

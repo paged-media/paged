@@ -14,13 +14,23 @@ What this folder holds.
 - [`composable-editor-plan.md`](composable-editor-plan.md): the implementation plan for the
   composable editor: workstreams, tasks with files and tests, milestones, the ADR ledger and
   the risks.
+- [`interaction-plan.md`](interaction-plan.md): the implementation plan for the interaction
+  contract ([ADR 1200](adr/1200-the-interaction-contract-is-adopted.md), decisions in
+  [ADR 1201](adr/1201-interaction-decisions.md)): Wave 0, the tracks KF, IC, EN, WS, DF, FI, CM,
+  AP and PX with their tasks, files and `UXI-T` tests, the phases and the critical path, the
+  risks and the gates.
 - [`specs/ideas/`](specs/ideas/): proposals received for the editor, kept as written. The
   [interaction specification](specs/ideas/paged_interaction_specification.md)
   (`PM-UX-INTERACTION-001`, a proposed normative interaction contract with the `UXI-*`
   requirement and test ids) and the
   [UX/UI redesign strategy](specs/ideas/paged_ux_ui_redesign_strategy.md). What of them is
-  adopted is recorded in ADRs; a proposal never overrides an ADR or `status.md`.
-- [`adr/`](adr/README.md): the decision records of this repository, 002, 023, 024 and 200–217.
+  adopted is recorded in ADRs; a proposal never overrides an ADR or `status.md`. ADR 1200 adopts
+  both: the specification as the normative interaction target, the strategy as product
+  direction.
+- [`adr/`](adr/README.md): the decision records of this repository: 002, 023 and 024; 200–299;
+  300, 301 and 303–315, which sit in the extensions' range and are told apart from the
+  extensions' records by their directory; and, from 2026-11-13, 1200–1299
+  ([PM-0019](../../../docs/adr/PM-0019-editor-adr-range.md)).
 - [`design/client-sdk.md`](design/client-sdk.md): the concept paper for the editor's client
   layer (`packages/client`, `catalog`, `shell`): the split between a framework-agnostic
   client and a React shell, the contribution model, the catalogue and its bindings.
