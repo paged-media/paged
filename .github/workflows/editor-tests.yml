@@ -106,6 +106,9 @@ on:
       - "package.json"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!apps/editor/docs/**/*.md"
+      # Except the interaction specification: the inventory guard (job
+      # `surface`) fails when the inventory no longer says what it says.
+      - "apps/editor/docs/specs/ideas/paged_interaction_specification.md"
       # Module prose (B3a made every module an editor input).
       - "!modules/*/docs/**/*.md"
   pull_request:
@@ -535,6 +538,24 @@ jobs:
           bun scripts/surface-coverage.mjs --quiet --summary
           --json-out "$RUNNER_TEMP/surface-conformance.json"
           --md-out "$RUNNER_TEMP/surface-conformance.md"
+      # THE INTERACTION CONTRACT (editor ADRs 1200 and 1202; docs/reference/
+      # surface-conformance.md, "Interaction contract coverage"): the
+      # inventory is in sync with the spec, its ids resolve and no exception
+      # has expired; every UXI-T acceptance test is claimed by a test or
+      # acknowledged with its task (a ratchet both ways), and the gates in
+      # the inventory's enforcedGates hold. Independent of the surface gate,
+      # so each reports even when the other fails.
+      - name: the interaction contract's own tests (inventory guard, coverage report)
+        if: ${{ !cancelled() }}
+        run: bun test --timeout 30000 ./scripts/interaction-inventory.test.mjs ./scripts/uxi-coverage.test.mjs
+      - name: the interaction inventory
+        if: ${{ !cancelled() }}
+        run: bun scripts/interaction-inventory.mjs --check
+      - name: interaction contract coverage
+        if: ${{ !cancelled() }}
+        run: >-
+          bun scripts/uxi-coverage.mjs --quiet --summary --gate
+          --json "$RUNNER_TEMP/uxi-coverage.json"
       - name: upload the surface-conformance report
         if: always()
         uses: actions/upload-artifact@v4
@@ -543,6 +564,7 @@ jobs:
           path: |
             ${{ runner.temp }}/surface-conformance.json
             ${{ runner.temp }}/surface-conformance.md
+            ${{ runner.temp }}/uxi-coverage.json
           if-no-files-found: warn
           retention-days: 90
 

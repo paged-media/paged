@@ -23,6 +23,7 @@
     "test:object-model": "bun test --timeout 30000 ./scripts/object-model.test.mjs",
     "test:wasm-budget": "bun scripts/wasm-budget.mjs",
     "test:surface-coverage": "bun test --timeout 30000 ./scripts/surface-coverage.test.mjs && bun scripts/surface-coverage.mjs",
+    "test:interaction-contract": "bun test --timeout 30000 ./scripts/interaction-inventory.test.mjs ./scripts/uxi-coverage.test.mjs && bun scripts/interaction-inventory.mjs && bun scripts/uxi-coverage.mjs --gate",
     "test:headless": "bun run --filter ./apps/canvas test:headless",
     "test:seam-guard": "bun scripts/seam-guard.mjs",
     "test:applicability": "bun scripts/applicability-guard.mjs",

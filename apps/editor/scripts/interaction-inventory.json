@@ -1,0 +1,3994 @@
+{
+  "$schema": "./interaction-inventory.schema.json",
+  "$comment": "The interaction inventory (editor ADR 1202): the spec-derived sections are written by `bun scripts/interaction-inventory.mjs --sync`; the tests' gates, fixture, layers and requirements, the interactions, the exceptions and enforcedGates are curated. The guard: `bun scripts/interaction-inventory.mjs`.",
+  "spec": "apps/editor/docs/specs/ideas/paged_interaction_specification.md",
+  "owners": [
+    "canvas-select",
+    "canvas-transform",
+    "canvas-draw",
+    "canvas-text",
+    "canvas-path",
+    "canvas-camera",
+    "frame-content",
+    "ruler-guide",
+    "drag-drop",
+    "panel",
+    "modal",
+    "plugin-surface"
+  ],
+  "phases": [
+    "idle",
+    "pressed",
+    "pending-hit",
+    "previewing",
+    "committing",
+    "canceling",
+    "settled"
+  ],
+  "groups": [
+    {
+      "id": "A",
+      "title": "Pointer, selection, gesture, and history"
+    },
+    {
+      "id": "B",
+      "title": "Focus, keyboard, and text"
+    },
+    {
+      "id": "C",
+      "title": "Contexts and modules"
+    },
+    {
+      "id": "D",
+      "title": "Camera and overlays"
+    },
+    {
+      "id": "E",
+      "title": "Async, files, and failure"
+    },
+    {
+      "id": "F",
+      "title": "Accessibility and devices"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "A",
+      "description": "simple page with two overlapping rectangles and a locked third object"
+    },
+    {
+      "id": "B",
+      "description": "group containing path and text frame"
+    },
+    {
+      "id": "C",
+      "description": "linked text frames and IME test text"
+    },
+    {
+      "id": "D",
+      "description": "20-page IDML with rotated elements, guides and images"
+    },
+    {
+      "id": "E",
+      "description": "embedded image, sheet, vector and web frames"
+    },
+    {
+      "id": "F",
+      "description": "role-restricted template"
+    },
+    {
+      "id": "G",
+      "description": "two editor instances mounted simultaneously"
+    },
+    {
+      "id": "H",
+      "description": "a simulated slow worker and delayed hit-test response"
+    }
+  ],
+  "gates": [
+    {
+      "id": "G0",
+      "name": "Safety",
+      "criterion": "all cancel, rollback, document replacement, permission, and cross-document async tests pass."
+    },
+    {
+      "id": "G1",
+      "name": "Core input",
+      "criterion": "mouse selection, drag, marquee, resize, rotate, keyboard navigation, focus, text composition, and predictable Escape pass."
+    },
+    {
+      "id": "G2",
+      "name": "Module conformance",
+      "criterion": "each first-party module passes context entry, focus, role, cancel/commit, and common inspector/shortcut checks."
+    },
+    {
+      "id": "G3",
+      "name": "Visual/performance",
+      "criterion": "overlays align at supported DPR/zoom and camera states; pinned perf suite establishes acceptable budgets and no regression."
+    },
+    {
+      "id": "G4",
+      "name": "Release",
+      "criterion": "browser matrix, accessibility manual tests, and critical crash/recovery scenarios pass. All documented exceptions include issue links, owner, severity, and an expiry/review date."
+    }
+  ],
+  "layers": [
+    {
+      "id": "unit",
+      "name": "Unit/property tests",
+      "evidence": "Pure hit/coordinate/math, modifier semantics, owner precedence, state transitions, cursor priority."
+    },
+    {
+      "id": "component",
+      "name": "Shell component tests",
+      "evidence": "Focus ownership, keyboard yield, inspector mixed states, menus, dialogs, context stack, error messages."
+    },
+    {
+      "id": "engine",
+      "name": "WASM/engine channel",
+      "evidence": "Begin/update/commit/cancel, atomic mutation, permission refusal, replay/undo/redo."
+    },
+    {
+      "id": "journey-cpu",
+      "name": "Browser journey (CPU)",
+      "evidence": "Real pointer/keyboard/IME behavior, panel/camera synchronization, document lifecycle."
+    },
+    {
+      "id": "journey-gpu",
+      "name": "Browser journey (GPU)",
+      "evidence": "Same semantic outcomes, no overlay-render divergence, real-Chrome focus behavior."
+    },
+    {
+      "id": "visual",
+      "name": "Visual regression",
+      "evidence": "Handles/snap/selection/preview alignment across zoom, DPR, themes, rotation."
+    },
+    {
+      "id": "a11y-manual",
+      "name": "Accessibility manual",
+      "evidence": "Screen-reader journeys, keyboard-only tasks, touch/pen tasks, international input."
+    },
+    {
+      "id": "chaos",
+      "name": "Chaos/stress",
+      "evidence": "Delayed/reordered worker replies, blur, capture loss, doc switch, worker restart, large files."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "UXI-INV-001",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "At most one owner processes a pointer sequence; no simultaneous pan/marquee/transform."
+    },
+    {
+      "id": "UXI-INV-002",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "Every started gesture terminates exactly once as committed, canceled, or failed and rolled back."
+    },
+    {
+      "id": "UXI-INV-003",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "A canceled gesture leaves the document bitwise/semantically unchanged to the degree the engine's transaction contract promises; any rollback imperfection is a correctness defect."
+    },
+    {
+      "id": "UXI-INV-004",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "A completed single gesture produces one undoable logical document change or none (e.g., selection/pan)."
+    },
+    {
+      "id": "UXI-INV-005",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "A stale asynchronous answer cannot overwrite a newer selection, document, context, or active gesture."
+    },
+    {
+      "id": "UXI-INV-006",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "Screen-space handles, slop thresholds, snap acquisition, and hit targets are stable across zoom and device-pixel ratio."
+    },
+    {
+      "id": "UXI-INV-007",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "Keyboard events belonging to an input, dialog, menu, IME, or plugin frame surface are not treated as canvas commands."
+    },
+    {
+      "id": "UXI-INV-008",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "Changes initiated by panel, gesture, scripting, or plugin use the same authoritative mutation/permission boundary."
+    },
+    {
+      "id": "UXI-INV-009",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "When a context changes or a panel opens, user selection and the intended canvas anchor remain stable except when navigation is explicitly requested."
+    },
+    {
+      "id": "UXI-INV-010",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "A save-state label reflects what has actually been persisted and where."
+    },
+    {
+      "id": "UXI-INV-011",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "An operation denied by permissions or unsupported capabilities has no document side effects and receives an actionable response."
+    },
+    {
+      "id": "UXI-INV-012",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "Rendering, overlay, and accessibility representations must eventually converge on the same accepted selection/document revision."
+    },
+    {
+      "id": "UXI-INV-013",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "The editor never consumes characters or keys used by in-progress input-method composition."
+    },
+    {
+      "id": "UXI-INV-014",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "Pointer capture loss, OS window blur, document close, and unrecoverable worker failure cannot leave a gesture logically active."
+    },
+    {
+      "id": "UXI-INV-015",
+      "domain": "INV",
+      "section": "2.2",
+      "title": "No operation committed under a document/context revision may be accidentally applied to a subsequently opened document."
+    },
+    {
+      "id": "UXI-STATE-001",
+      "domain": "STATE",
+      "section": "3.2",
+      "title": "The host SHOULD expose a framework-independent coordinator responsible for event arbitration, gesture ownership, transition sequencing, and cancellation."
+    },
+    {
+      "id": "UXI-STATE-002",
+      "domain": "STATE",
+      "section": "3.3",
+      "title": "A session MUST only transition through legal edges."
+    },
+    {
+      "id": "UXI-STATE-003",
+      "domain": "STATE",
+      "section": "3.3",
+      "title": "Focus changes, tool changes, document replacement, and entering a modal MUST consult the coordinator before changing ownership."
+    },
+    {
+      "id": "UXI-STATE-004",
+      "domain": "STATE",
+      "section": "3.3",
+      "title": "A pointer gesture in progress MUST NOT become a text-edit gesture halfway through merely because hover changes."
+    },
+    {
+      "id": "UXI-OWN-001",
+      "domain": "OWN",
+      "section": "4.1",
+      "title": "Dispatch all canvas input through one arbitration decision."
+    },
+    {
+      "id": "UXI-OWN-002",
+      "domain": "OWN",
+      "section": "4.1",
+      "title": "A pointer capture belongs to the interaction session."
+    },
+    {
+      "id": "UXI-OWN-003",
+      "domain": "OWN",
+      "section": "4.1",
+      "title": "preventDefault() and stopPropagation() MUST be used only where the editor has explicitly claimed the event; avoid globally suppressing browser shortcuts or form behavior."
+    },
+    {
+      "id": "UXI-OWN-004",
+      "domain": "OWN",
+      "section": "4.1",
+      "title": "Nested plugin surfaces MUST be able to own their own events, but MUST provide a clear host return/exit path and MUST respect the document's role/permission policy."
+    },
+    {
+      "id": "UXI-OWN-005",
+      "domain": "OWN",
+      "section": "4.1",
+      "title": "Multiple editors embedded on one page MUST be isolated."
+    },
+    {
+      "id": "UXI-OWN-006",
+      "domain": "OWN",
+      "section": "4.3",
+      "title": "If determining a hit needs a worker request, record the pointer-down coordinates, viewport/camera transform, document/context epochs, modifiers, and interaction ID at the time of the request."
+    },
+    {
+      "id": "UXI-OWN-007",
+      "domain": "OWN",
+      "section": "4.3",
+      "title": "If movement begins before the hit resolves, buffer only the minimum latest pointer state necessary and resolve the eventual gesture against the original pointer-down geometry."
+    },
+    {
+      "id": "UXI-OWN-008",
+      "domain": "OWN",
+      "section": "4.3",
+      "title": "A late hit-test result is discarded when any epoch/token no longer matches."
+    },
+    {
+      "id": "UXI-OWN-009",
+      "domain": "OWN",
+      "section": "4.3",
+      "title": "Pointer capture loss while waiting for hit test ends the attempt without mutation."
+    },
+    {
+      "id": "UXI-OWN-010",
+      "domain": "OWN",
+      "section": "4.4",
+      "title": "Holding Space may temporarily engage Hand where the keyboard is owned by the canvas and no IME/composing input is active."
+    },
+    {
+      "id": "UXI-OWN-011",
+      "domain": "OWN",
+      "section": "4.4",
+      "title": "TARGET CHANGE / explicit policy choice: If a document-mutating gesture is already active, a temporary Hand override MUST NOT steal that pointer or commit/cancel the underlying edit."
+    },
+    {
+      "id": "UXI-OWN-012",
+      "domain": "OWN",
+      "section": "4.4",
+      "title": "A permanent tool switch during an active edit gesture MUST cancel it by default; a tool that expressly supports finish-on-switch needs a named exception and tests."
+    },
+    {
+      "id": "UXI-GEO-001",
+      "domain": "GEO",
+      "section": "5.1",
+      "title": "Camera and page/frame transforms MUST be inverted using a shared, tested transform utility."
+    },
+    {
+      "id": "UXI-GEO-002",
+      "domain": "GEO",
+      "section": "5.1",
+      "title": "When camera rotation is supported, hit tests, overlays, zoom anchors, page bounds, and drag deltas MUST use the full affine transform rather than an unrotated scale/translation shortcut."
+    },
+    {
+      "id": "UXI-GEO-003",
+      "domain": "GEO",
+      "section": "5.1",
+      "title": "A viewport resized or moved by opening panels MUST update both worker render dimensions and overlay coordinates before accepting new pointer input."
+    },
+    {
+      "id": "UXI-GEO-004",
+      "domain": "GEO",
+      "section": "5.1",
+      "title": "Pointer pressure, tilt, pointer type, and pen button are passed through when relevant, without changing mouse semantics."
+    },
+    {
+      "id": "UXI-GEO-005",
+      "domain": "GEO",
+      "section": "5.2",
+      "title": "Final numbers MUST be calibrated in user studies and per-input tests."
+    },
+    {
+      "id": "UXI-HIT-001",
+      "domain": "HIT",
+      "section": "5.3",
+      "title": "Explicit control handles and active edit-context handles take priority over page-item hit testing."
+    },
+    {
+      "id": "UXI-HIT-002",
+      "domain": "HIT",
+      "section": "5.3",
+      "title": "Among overlapping page items, resolve by visible stacking order and edit-context scope."
+    },
+    {
+      "id": "UXI-HIT-003",
+      "domain": "HIT",
+      "section": "5.3",
+      "title": "A transparent frame may still be selectable at its border; make the distinction between frame border hit and content hit discoverable."
+    },
+    {
+      "id": "UXI-HIT-004",
+      "domain": "HIT",
+      "section": "5.3",
+      "title": "Pasteboard objects use the same selection rules as page items where supported."
+    },
+    {
+      "id": "UXI-HIT-005",
+      "domain": "HIT",
+      "section": "5.3",
+      "title": "In nested contexts, out-of-scope clicks trigger defined context-exit/retarget logic, never an unguarded mutation of an outside object."
+    },
+    {
+      "id": "UXI-HIT-006",
+      "domain": "HIT",
+      "section": "5.3",
+      "title": "A future object-picker/cycle-selection affordance MAY expose the ordered stack beneath the pointer, but MUST not alter the default topmost-hit rule without explicit user input."
+    },
+    {
+      "id": "UXI-SEL-001",
+      "domain": "SEL",
+      "section": "6.1",
+      "title": "Object selection, text selection, path-point selection, and module-specific selection MUST be separate typed states."
+    },
+    {
+      "id": "UXI-SEL-002",
+      "domain": "SEL",
+      "section": "6.1",
+      "title": "Selection changes SHOULD be non-document operations (do not add to document undo history) unless a module has a documented, intentional alternative."
+    },
+    {
+      "id": "UXI-SEL-003",
+      "domain": "SEL",
+      "section": "6.1",
+      "title": "Selecting an object MUST update visible selection chrome, Properties, action applicability, and accessible selection state from the same accepted selection revision."
+    },
+    {
+      "id": "UXI-SEL-004",
+      "domain": "SEL",
+      "section": "6.2",
+      "title": "A drag on an unselected object's movable interior MUST move the object without requiring an initial selection click."
+    },
+    {
+      "id": "UXI-SEL-005",
+      "domain": "SEL",
+      "section": "6.2",
+      "title": "A drag that began on empty space remains a marquee even if the pointer crosses objects during movement."
+    },
+    {
+      "id": "UXI-SEL-006",
+      "domain": "SEL",
+      "section": "6.2",
+      "title": "The selection must not flicker between a stale and a newly requested set during asynchronous hit testing."
+    },
+    {
+      "id": "UXI-SEL-007",
+      "domain": "SEL",
+      "section": "6.2",
+      "title": "Copy/duplicate/move of a multi-selection preserves relative geometry and all eligible members; operations blocked for part of the set use an explicit all-or-none or subset policy (documented per action), never an…"
+    },
+    {
+      "id": "UXI-SEL-008",
+      "domain": "SEL",
+      "section": "6.3",
+      "title": "Adopt a documented marquee-direction convention (recommended: left-to-right = fully contained; right-to-left = intersecting), visually distinguish both, and apply consistently across mouse and pen."
+    },
+    {
+      "id": "UXI-SEL-009",
+      "domain": "SEL",
+      "section": "6.3",
+      "title": "Invisible/locked/out-of-context objects follow the same selection eligibility rules as clicks."
+    },
+    {
+      "id": "UXI-SEL-010",
+      "domain": "SEL",
+      "section": "6.3",
+      "title": "The marquee rectangle is an overlay only; moving the pointer during selection never mutates geometry."
+    },
+    {
+      "id": "UXI-SEL-011",
+      "domain": "SEL",
+      "section": "6.4",
+      "title": "Default click targets a group's top-level selectable object according to the current context."
+    },
+    {
+      "id": "UXI-SEL-012",
+      "domain": "SEL",
+      "section": "6.4",
+      "title": "Double-click, Direct Selection, or an explicit drill-down affordance lets users target a nested object; the editor MUST show group ancestry or context scope."
+    },
+    {
+      "id": "UXI-SEL-013",
+      "domain": "SEL",
+      "section": "6.4",
+      "title": "Repeated drill-down cannot leave the user in an invisible editing scope."
+    },
+    {
+      "id": "UXI-SEL-014",
+      "domain": "SEL",
+      "section": "6.4",
+      "title": "Selecting a child in a group MUST NOT implicitly detach it, regroup the parent, or change stacking order."
+    },
+    {
+      "id": "UXI-SEL-015",
+      "domain": "SEL",
+      "section": "6.4",
+      "title": "Deleting a group versus deleting a child must be visually and semantically distinguishable before commit."
+    },
+    {
+      "id": "UXI-SEL-016",
+      "domain": "SEL",
+      "section": "6.5",
+      "title": "Inspector fields show mixed for differing values, never arbitrary first-item values represented as shared truth."
+    },
+    {
+      "id": "UXI-SEL-017",
+      "domain": "SEL",
+      "section": "6.5",
+      "title": "Multi-edit commits one logical operation over the intended eligible set."
+    },
+    {
+      "id": "UXI-SEL-018",
+      "domain": "SEL",
+      "section": "6.5",
+      "title": "Align/distribute acts on the selected set with explicit reference options (selection, key object, page, spread where supported), and preview should reflect that reference."
+    },
+    {
+      "id": "UXI-GST-001",
+      "domain": "GST",
+      "section": "7.1",
+      "title": "Every mutating gesture has the sequence:"
+    },
+    {
+      "id": "UXI-GST-002",
+      "domain": "GST",
+      "section": "7.1",
+      "title": "The preview path MAY render imperatively, but persistent changes MUST go only through the engine mutation/gesture protocol."
+    },
+    {
+      "id": "UXI-GST-003",
+      "domain": "GST",
+      "section": "7.1",
+      "title": "A gesture MUST be cancelable from pointer down until its final operation has become irrevocably accepted."
+    },
+    {
+      "id": "UXI-GST-004",
+      "domain": "GST",
+      "section": "7.1",
+      "title": "The UI MUST NOT apply a document change simply by moving a DOM/SVG handle or by mutating an editor-side mirror of object geometry."
+    },
+    {
+      "id": "UXI-GST-005",
+      "domain": "GST",
+      "section": "7.1",
+      "title": "A successful single-object or multi-object drag results in exactly one logical undo step, including duplicate-drag and constrained transforms."
+    },
+    {
+      "id": "UXI-GST-006",
+      "domain": "GST",
+      "section": "7.1",
+      "title": "Cancel leaves no hidden cloned object, modified path, ghost guide, pending transaction, selection artifact, or stale status."
+    },
+    {
+      "id": "UXI-GST-007",
+      "domain": "GST",
+      "section": "7.2",
+      "title": "Terminalization MUST be idempotent: duplicate pointer-up / blur / cancel messages cannot cause a second mutation or a second cancellation error."
+    },
+    {
+      "id": "UXI-GST-008",
+      "domain": "GST",
+      "section": "7.3",
+      "title": "A gesture's resolved output SHOULD be a pure function of the gesture's initial model snapshot, current pointer position, and current normalized modifiers."
+    },
+    {
+      "id": "UXI-GST-009",
+      "domain": "GST",
+      "section": "7.3",
+      "title": "Modifiers MAY be fixed at gesture begin only if the interaction explicitly documents that semantic."
+    },
+    {
+      "id": "UXI-GST-010",
+      "domain": "GST",
+      "section": "7.3",
+      "title": "Shift during move constrains axis; Shift during resize preserves proportions when applicable; modifier precedence with Alt/Option for resize-from-center must be deterministic and visible."
+    },
+    {
+      "id": "UXI-GST-011",
+      "domain": "GST",
+      "section": "7.3",
+      "title": "Modifier transitions cannot result in geometry jumps unrelated to the pointer's anchor; recompute from initial snapshot rather than accumulating rounding error."
+    },
+    {
+      "id": "UXI-GST-012",
+      "domain": "GST",
+      "section": "7.4",
+      "title": "The coordinator MUST prevent a conflicting panel/script/plugin mutation from interleaving inside an active engine gesture."
+    },
+    {
+      "id": "UXI-GST-013",
+      "domain": "GST",
+      "section": "7.4",
+      "title": "Programmatic mutation APIs MUST be routed through the same operation ordering and permission checks as user gestures."
+    },
+    {
+      "id": "UXI-GST-014",
+      "domain": "GST",
+      "section": "7.4",
+      "title": "If a command is invoked while an edit gesture is active, it may not silently operate on a half-previewed geometry state."
+    },
+    {
+      "id": "UXI-GST-015",
+      "domain": "GST",
+      "section": "7.5",
+      "title": "During an active gesture the user sees correct cursor, drag/shape preview, selected bounds, and relevant modifiers; snapping and dimensions display only when useful."
+    },
+    {
+      "id": "UXI-GST-016",
+      "domain": "GST",
+      "section": "7.5",
+      "title": "On successful commit, transient preview disappears in coordination with authoritative render, without a visible double-flash or object jump."
+    },
+    {
+      "id": "UXI-GST-017",
+      "domain": "GST",
+      "section": "7.5",
+      "title": "On failed commit, show what failed and whether any change was applied."
+    },
+    {
+      "id": "UXI-TRN-001",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "Moving starts from an object's movable interior; dragging a control handle MUST NOT be interpreted as movement."
+    },
+    {
+      "id": "UXI-TRN-002",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "Selected sets move as a rigid arrangement unless the active transform explicitly acts on individual objects."
+    },
+    {
+      "id": "UXI-TRN-003",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "Resize preview must correspond to the selected handle, active transform origin, locked aspect ratio, and modifiers."
+    },
+    {
+      "id": "UXI-TRN-004",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "Rotation can be initiated through a recognized outside-corner zone (recommended), explicit rotate tool, or property field."
+    },
+    {
+      "id": "UXI-TRN-005",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "For rotated or sheared objects, drag geometry is computed in the intended object/page coordinate space."
+    },
+    {
+      "id": "UXI-TRN-006",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "Locked items cannot be transformed."
+    },
+    {
+      "id": "UXI-TRN-007",
+      "domain": "TRN",
+      "section": "8.1",
+      "title": "The cursor, preview, and actual committed result MUST agree on whether drag is move, copy, constrained move, scale, rotate, shear, crop, or content reposition."
+    },
+    {
+      "id": "UXI-HND-001",
+      "domain": "HND",
+      "section": "8.2",
+      "title": "Visual handles MAY be visually small, but target regions MUST be large enough for accurate mouse/stylus use and independent of zoom/DPR."
+    },
+    {
+      "id": "UXI-HND-002",
+      "domain": "HND",
+      "section": "8.2",
+      "title": "When hit regions overlap, prioritize the closer explicit handle with a stable deterministic tie-breaker; avoid a hover cursor changing rapidly between two actions."
+    },
+    {
+      "id": "UXI-HND-003",
+      "domain": "HND",
+      "section": "8.2",
+      "title": "Handles SHOULD be hidden or simplified at zoom levels too low to make geometry meaningful, while retaining keyboard/property access to the operation."
+    },
+    {
+      "id": "UXI-HND-004",
+      "domain": "HND",
+      "section": "8.2",
+      "title": "Rotation zones outside corners MUST not conflict with other page-item hits without a clear priority rule."
+    },
+    {
+      "id": "UXI-SNP-001",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "Snapping follows a clear hierarchy: explicit guide/grid and page margin references as configured; relevant object edges/centers/baselines; equal spacing; otherwise no snap."
+    },
+    {
+      "id": "UXI-SNP-002",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "A snap candidate MUST identify its target type in visual feedback, e.g., page center, guide, object edge, text baseline, or equal gap."
+    },
+    {
+      "id": "UXI-SNP-003",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "Snap acquisition and release thresholds are screen-space and use hysteresis to prevent flicker."
+    },
+    {
+      "id": "UXI-SNP-004",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "When multiple candidates are within tolerance, ranking MUST be deterministic for the same document/camera/pointer position."
+    },
+    {
+      "id": "UXI-SNP-005",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "Temporary snapping bypass MUST be consistent and documented (modifier assignment to be decided with the existing shortcut map)."
+    },
+    {
+      "id": "UXI-SNP-006",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "Snap line/label MUST follow the same camera transform as document content and MUST clear on commit, cancel, context change, and renderer reset."
+    },
+    {
+      "id": "UXI-SNP-007",
+      "domain": "SNP",
+      "section": "8.3",
+      "title": "Snap feedback must not imply a constraint is permanently stored unless the operation actually creates such a relationship."
+    },
+    {
+      "id": "UXI-DRW-001",
+      "domain": "DRW",
+      "section": "8.4",
+      "title": "Starting a shape/path tool creates only a preview until its defined completion event; cancellation leaves no incomplete object."
+    },
+    {
+      "id": "UXI-DRW-002",
+      "domain": "DRW",
+      "section": "8.4",
+      "title": "A drawing tool that supports repeated creation SHOULD remain active after successful creation."
+    },
+    {
+      "id": "UXI-DRW-003",
+      "domain": "DRW",
+      "section": "8.4",
+      "title": "A Pen/path tool MUST distinguish path-start, continue, close, join, drag-handle, and finish states with appropriate cursor and hover feedback."
+    },
+    {
+      "id": "UXI-DRW-004",
+      "domain": "DRW",
+      "section": "8.4",
+      "title": "Escape behavior for multi-stage path creation SHOULD be progressive: cancel current uncommitted segment, or finish/cancel active path according to an explicit per-tool state; it MUST never silently delete previously…"
+    },
+    {
+      "id": "UXI-DRW-005",
+      "domain": "DRW",
+      "section": "8.4",
+      "title": "Direct path editing MUST distinguish anchor points, Bézier handles, and segments."
+    },
+    {
+      "id": "UXI-DRW-006",
+      "domain": "DRW",
+      "section": "8.4",
+      "title": "All path edits that conceptually form one gesture MUST undo as one step."
+    },
+    {
+      "id": "UXI-GDE-001",
+      "domain": "GDE",
+      "section": "8.5",
+      "title": "Guide drag owns its pointer from ruler/guide hit; it cannot initiate a page marquee or object transform."
+    },
+    {
+      "id": "UXI-GDE-002",
+      "domain": "GDE",
+      "section": "8.5",
+      "title": "Creating, moving, or deleting a guide uses visible preview and one undo step for a document-stored guide."
+    },
+    {
+      "id": "UXI-GDE-003",
+      "domain": "GDE",
+      "section": "8.5",
+      "title": "Distinguish document guides from nonprinting structural aids (margins, bleed, grids)."
+    },
+    {
+      "id": "UXI-GDE-004",
+      "domain": "GDE",
+      "section": "8.5",
+      "title": "Guide visibility and snap enablement are independent unless the product explicitly chooses otherwise; invisible guides must not unexpectedly pull geometry without an indication."
+    },
+    {
+      "id": "UXI-TXT-001",
+      "domain": "TXT",
+      "section": "9.1",
+      "title": "A text frame has at least two distinct selections: its containing page item and a caret/range within a story."
+    },
+    {
+      "id": "UXI-TXT-002",
+      "domain": "TXT",
+      "section": "9.1",
+      "title": "The UI MUST clearly transition between frame selection and text editing through tool choice, double-click, or explicit Edit text action."
+    },
+    {
+      "id": "UXI-TXT-003",
+      "domain": "TXT",
+      "section": "9.1",
+      "title": "Text editing inside a threaded story operates on story offsets, not arbitrary DOM text proxies, while showing caret/selection at the corresponding rendered location."
+    },
+    {
+      "id": "UXI-TXT-004",
+      "domain": "TXT",
+      "section": "9.1",
+      "title": "Text input MUST NOT be lost because a document render/worker message completes out of order."
+    },
+    {
+      "id": "UXI-TXT-005",
+      "domain": "TXT",
+      "section": "9.2",
+      "title": "Use a real accessible text-input surface capable of compositionstart, compositionupdate, compositionend, beforeinput, selection, and dead-key behavior."
+    },
+    {
+      "id": "UXI-TXT-006",
+      "domain": "TXT",
+      "section": "9.2",
+      "title": "While IME composition is active, canvas shortcuts (including Escape, Enter, arrow keys, Space, and tool letters) MUST yield to the input method."
+    },
+    {
+      "id": "UXI-TXT-007",
+      "domain": "TXT",
+      "section": "9.2",
+      "title": "Do not double-insert composition text by handling both compositionend and a resulting input event without reconciliation."
+    },
+    {
+      "id": "UXI-TXT-008",
+      "domain": "TXT",
+      "section": "9.2",
+      "title": "The composing string and candidate window should appear near the actual caret, and the input surface must be positioned in viewport coordinates accounting for page position, camera transform, and scroll."
+    },
+    {
+      "id": "UXI-TXT-009",
+      "domain": "TXT",
+      "section": "9.2",
+      "title": "AltGr, dead-key diacritics, right-to-left text, and mixed-direction text MUST be tested as user input, not treated as generic editor modifier chords."
+    },
+    {
+      "id": "UXI-TXT-010",
+      "domain": "TXT",
+      "section": "9.3",
+      "title": "Arrow/Home/End/Page keys within an active text-editing surface move the caret or selection according to text semantics and platform convention; they MUST NOT pan the document or nudge an object."
+    },
+    {
+      "id": "UXI-TXT-011",
+      "domain": "TXT",
+      "section": "9.3",
+      "title": "Drag selection, Shift + arrows, and range extension must preserve story order across line wraps and threaded frames."
+    },
+    {
+      "id": "UXI-TXT-012",
+      "domain": "TXT",
+      "section": "9.3",
+      "title": "If the engine answers a caret-navigation request asynchronously, later navigation requests MUST supersede stale answers without caret jumps."
+    },
+    {
+      "id": "UXI-TXT-013",
+      "domain": "TXT",
+      "section": "9.3",
+      "title": "The selection overlay, input surface, and actual model insertion point converge after every accepted edit."
+    },
+    {
+      "id": "UXI-TXT-014",
+      "domain": "TXT",
+      "section": "9.3",
+      "title": "Overset text indicators are actionable: users can identify the affected frame/story and navigate to it without permanently changing the document."
+    },
+    {
+      "id": "UXI-TXT-015",
+      "domain": "TXT",
+      "section": "9.4",
+      "title": "Text insertion/deletion goes through the same engine-authoritative mutation channel as other edits."
+    },
+    {
+      "id": "UXI-TXT-016",
+      "domain": "TXT",
+      "section": "9.4",
+      "title": "A text formatting operation on a selection MUST apply to the intended character/paragraph range, with mixed-style state represented accurately."
+    },
+    {
+      "id": "UXI-TXT-017",
+      "domain": "TXT",
+      "section": "9.4",
+      "title": "Undo/redo after insertion restores the same story content and an intelligible caret/selection position."
+    },
+    {
+      "id": "UXI-TXT-018",
+      "domain": "TXT",
+      "section": "9.4",
+      "title": "When the active frame disappears or becomes non-editable during a pending text write, reject/rollback and show a safe explanation."
+    },
+    {
+      "id": "UXI-TXT-019",
+      "domain": "TXT",
+      "section": "9.5",
+      "title": "Text out-port activation creates a distinct loaded-thread state and cursor."
+    },
+    {
+      "id": "UXI-TXT-020",
+      "domain": "TXT",
+      "section": "9.5",
+      "title": "Thread connection previews show source and destination clearly."
+    },
+    {
+      "id": "UXI-TXT-021",
+      "domain": "TXT",
+      "section": "9.5",
+      "title": "Invalid targets must be visually identified before click if possible; failed threading must leave both frames unchanged."
+    },
+    {
+      "id": "UXI-CTX-001",
+      "domain": "CTX",
+      "section": "10.1",
+      "title": "Edit contexts form a stack, not an unrelated mode toggle."
+    },
+    {
+      "id": "UXI-CTX-002",
+      "domain": "CTX",
+      "section": "10.1",
+      "title": "Entering the same context on the same root when it is already topmost is idempotent."
+    },
+    {
+      "id": "UXI-CTX-003",
+      "domain": "CTX",
+      "section": "10.1",
+      "title": "The editor MUST expose active context and a back path."
+    },
+    {
+      "id": "UXI-CTX-004",
+      "domain": "CTX",
+      "section": "10.1",
+      "title": "toolIds: null (no restriction declared) and toolIds: [] (no tools permitted) retain distinct meanings."
+    },
+    {
+      "id": "UXI-CTX-005",
+      "domain": "CTX",
+      "section": "10.1",
+      "title": "A context's user-facing label MUST describe the content, not only the internal plugin kind or registry ID."
+    },
+    {
+      "id": "UXI-CTX-006",
+      "domain": "CTX",
+      "section": "10.2",
+      "title": "CURRENT distinction: The checked-in EditContextStack exposes commit(), cancel(), pop(), exitAll({commit}), and isActiveDirty()."
+    },
+    {
+      "id": "UXI-CTX-007",
+      "domain": "CTX",
+      "section": "10.2",
+      "title": "A dirty edit-context cancel should restore the context's pre-entry/pending state where supported, not rewrite previously saved document history."
+    },
+    {
+      "id": "UXI-CTX-008",
+      "domain": "CTX",
+      "section": "10.2",
+      "title": "Entering a context SHOULD change the tool/control rail and inspector without moving the page or resizing the canvas unnecessarily."
+    },
+    {
+      "id": "UXI-CTX-009",
+      "domain": "CTX",
+      "section": "10.2",
+      "title": "If the editor intentionally zooms to edit content, that is a separate, visible navigation action; preserve previous camera state and support return."
+    },
+    {
+      "id": "UXI-CTX-010",
+      "domain": "CTX",
+      "section": "10.3",
+      "title": "The host MUST prevent ordinary pointer selection outside an active context's declared selection scope."
+    },
+    {
+      "id": "UXI-CTX-011",
+      "domain": "CTX",
+      "section": "10.3",
+      "title": "CURRENT limitation: reviewed isInScope() recognizes the entered root element itself; general descendant membership is documented as future work."
+    },
+    {
+      "id": "UXI-CTX-012",
+      "domain": "CTX",
+      "section": "10.3",
+      "title": "Plugin edit contexts cannot bypass role policy."
+    },
+    {
+      "id": "UXI-CTX-013",
+      "domain": "CTX",
+      "section": "10.4",
+      "title": "Module authors must explicitly document if double-click opens a different context than the table recommends."
+    },
+    {
+      "id": "UXI-KEY-001",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "Keyboard ownership follows the focused UI element before canvas-wide handlers."
+    },
+    {
+      "id": "UXI-KEY-002",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "A native text field, select, contentEditable widget, or plugin-owned frame surface receives the keys required for its own editing, including Backspace, Delete, arrows, Home/End, Enter, Space, and text characters."
+    },
+    {
+      "id": "UXI-KEY-003",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "Dialogs, menus, comboboxes, trees, grids, tablists, sliders, and other ARIA composites own their appropriate navigation and activation keys."
+    },
+    {
+      "id": "UXI-KEY-004",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "A canvas-wide key listener MUST check composition state, defaultPrevented, active modal/menu ownership, and focused target before dispatching."
+    },
+    {
+      "id": "UXI-KEY-005",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "Plain tool shortcuts (e.g., V, T, P) apply only when the canvas/editor owns the key; never while typing in a text field or during IME composition."
+    },
+    {
+      "id": "UXI-KEY-006",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "Shortcuts shown in tooltips, menus, palette, and help MUST be derived from the actual active keybinding registry and reflect platform and profile scope."
+    },
+    {
+      "id": "UXI-KEY-007",
+      "domain": "KEY",
+      "section": "11.1",
+      "title": "Inactive, hidden, or disallowed module commands MUST NOT steal keybindings from the active context."
+    },
+    {
+      "id": "UXI-KEY-008",
+      "domain": "KEY",
+      "section": "11.2",
+      "title": "Pointer activation of a canvas editing action may focus the viewport when needed, but must not steal focus from a nested text editor, plugin surface, dialog, or focused field."
+    },
+    {
+      "id": "UXI-KEY-009",
+      "domain": "KEY",
+      "section": "11.2",
+      "title": "Opening a dialog/menu/palette moves focus into that surface; closing it restores focus to the invoking control or relevant canvas surface, provided the target still exists."
+    },
+    {
+      "id": "UXI-KEY-010",
+      "domain": "KEY",
+      "section": "11.2",
+      "title": "Pointer-based focus restoration MUST NOT unintentionally mark a keyboard-focused viewport as a pointer-engaged shortcut surface."
+    },
+    {
+      "id": "UXI-KEY-011",
+      "domain": "KEY",
+      "section": "11.2",
+      "title": "Each editor instance tracks its own focus ownership; an embedded editor must not receive shortcuts when the host page or another editor instance has focus."
+    },
+    {
+      "id": "UXI-KEY-012",
+      "domain": "KEY",
+      "section": "11.3",
+      "title": "An unhandled shortcut SHOULD fall through to the next eligible owner only if safe; a rejected command must not accidentally trigger a destructive fallback."
+    },
+    {
+      "id": "UXI-KEY-013",
+      "domain": "KEY",
+      "section": "11.4",
+      "title": "Primary means Meta on macOS and Ctrl where conventional elsewhere; localized keyboard layout and AltGr must be handled intentionally."
+    },
+    {
+      "id": "UXI-KEY-014",
+      "domain": "KEY",
+      "section": "11.4",
+      "title": "Hints must represent physical-versus-logical key semantics accurately (especially punctuation and non-US layouts)."
+    },
+    {
+      "id": "UXI-KEY-015",
+      "domain": "KEY",
+      "section": "11.4",
+      "title": "A shortcut customization system MAY be introduced, but MUST make conflict and context scope visible and preserve recoverable defaults."
+    },
+    {
+      "id": "UXI-ESC-001",
+      "domain": "ESC",
+      "section": "12.1",
+      "title": "Escape resolution"
+    },
+    {
+      "id": "UXI-KEY-016",
+      "domain": "KEY",
+      "section": "12.2",
+      "title": "Enter resolution"
+    },
+    {
+      "id": "UXI-KEY-017",
+      "domain": "KEY",
+      "section": "12.3",
+      "title": "Tab resolution"
+    },
+    {
+      "id": "UXI-KEY-018",
+      "domain": "KEY",
+      "section": "12.4",
+      "title": "Backspace/Delete resolution"
+    },
+    {
+      "id": "UXI-CAM-001",
+      "domain": "CAM",
+      "section": "13.1",
+      "title": "Pan, zoom, and viewport resize do not change document geometry or history."
+    },
+    {
+      "id": "UXI-CAM-002",
+      "domain": "CAM",
+      "section": "13.1",
+      "title": "Zoom around a pointer preserves the document point under that pointer to within numerical/render rounding tolerance."
+    },
+    {
+      "id": "UXI-CAM-003",
+      "domain": "CAM",
+      "section": "13.1",
+      "title": "When panel layout changes, retain a meaningful camera anchor (viewport center, active caret, or explicitly selected target) instead of unexpectedly re-fitting the entire document."
+    },
+    {
+      "id": "UXI-CAM-004",
+      "domain": "CAM",
+      "section": "13.1",
+      "title": "A camera animation is interruptible."
+    },
+    {
+      "id": "UXI-CAM-005",
+      "domain": "CAM",
+      "section": "13.1",
+      "title": "Respect prefers-reduced-motion: navigation may jump immediately or use minimal motion without losing final location."
+    },
+    {
+      "id": "UXI-CAM-006",
+      "domain": "CAM",
+      "section": "13.1",
+      "title": "Camera bounds should prevent unusable lost-document states while allowing intentional pasteboard travel and precision work."
+    },
+    {
+      "id": "UXI-CAM-007",
+      "domain": "CAM",
+      "section": "13.2",
+      "title": "Every zoom route uses one common min/max range and camera transform semantics."
+    },
+    {
+      "id": "UXI-CAM-008",
+      "domain": "CAM",
+      "section": "13.2",
+      "title": "Opening a multi-page document defaults to a useful first-page fit (unless a saved view/restoration applies), not an unintelligible 4% fit of the whole document."
+    },
+    {
+      "id": "UXI-CAM-009",
+      "domain": "CAM",
+      "section": "13.2",
+      "title": "Fit commands must account for rotated canvas state where enabled."
+    },
+    {
+      "id": "UXI-CAM-010",
+      "domain": "CAM",
+      "section": "13.3",
+      "title": "Ordinary wheel or trackpad vertical scroll pans vertically over the viewport unless actively owned by a nested scrollable surface."
+    },
+    {
+      "id": "UXI-CAM-011",
+      "domain": "CAM",
+      "section": "13.3",
+      "title": "Middle-button or Space+drag pans while the canvas owns the pointer."
+    },
+    {
+      "id": "UXI-CAM-012",
+      "domain": "CAM",
+      "section": "13.3",
+      "title": "Two-finger touch pinch/translation uses a stable centroid anchor and doesn't emit object mutation."
+    },
+    {
+      "id": "UXI-CAM-013",
+      "domain": "CAM",
+      "section": "13.3",
+      "title": "One-finger touch behavior depends on the current profile and edit context."
+    },
+    {
+      "id": "UXI-CAM-014",
+      "domain": "CAM",
+      "section": "13.4",
+      "title": "PageUp/PageDown/Home/End and thumbnail clicks must respect focus ownership."
+    },
+    {
+      "id": "UXI-CAM-015",
+      "domain": "CAM",
+      "section": "13.4",
+      "title": "The current page indicator identifies the page corresponding to the viewport's meaningful focus/center with documented tie-breaking, not a random page from a stale render."
+    },
+    {
+      "id": "UXI-CAM-016",
+      "domain": "CAM",
+      "section": "13.4",
+      "title": "Clicking a preflight issue, search result, comment, link, or structure entry may navigate and select, but MUST preserve a navigable return path (view history preferred) and distinguish selection from document mutation."
+    },
+    {
+      "id": "UXI-CAM-017",
+      "domain": "CAM",
+      "section": "13.4",
+      "title": "At very low zoom, hide or simplify tiny ruler labels, point handles, and other unreadable overlays while preserving page names, highlights, and navigation."
+    },
+    {
+      "id": "UXI-OVR-001",
+      "domain": "OVR",
+      "section": "14.1",
+      "title": "The worker owns document pixels; the main thread owns interaction overlays."
+    },
+    {
+      "id": "UXI-OVR-002",
+      "domain": "OVR",
+      "section": "14.1",
+      "title": "Overlay stacking order is defined, not accidental CSS z-index history."
+    },
+    {
+      "id": "UXI-OVR-003",
+      "domain": "OVR",
+      "section": "14.1",
+      "title": "Hidden overlays must not capture pointers or keyboard focus."
+    },
+    {
+      "id": "UXI-OVR-004",
+      "domain": "OVR",
+      "section": "14.1",
+      "title": "Every overlay with interactive handles declares accessible action names and touch/pointer target sizes."
+    },
+    {
+      "id": "UXI-OVR-005",
+      "domain": "OVR",
+      "section": "14.1",
+      "title": "Overlay geometry must account for camera rotation and page position, and updates must not lag one stale camera revision after pan/zoom."
+    },
+    {
+      "id": "UXI-OVR-006",
+      "domain": "OVR",
+      "section": "14.2",
+      "title": "Hover indication is lighter than selection indication; hover does not silently change selection."
+    },
+    {
+      "id": "UXI-OVR-007",
+      "domain": "OVR",
+      "section": "14.2",
+      "title": "Selection outlines, anchors, and resize handles must remain visible over varied page colors in light and dark chrome (consider dual-stroke or contrast halo rather than a single thin color)."
+    },
+    {
+      "id": "UXI-OVR-008",
+      "domain": "OVR",
+      "section": "14.2",
+      "title": "Locked/noneditable and mixed selections are visually distinguishable with shape/icon/label, not color alone."
+    },
+    {
+      "id": "UXI-OVR-009",
+      "domain": "OVR",
+      "section": "14.2",
+      "title": "Context-appropriate object labels MAY appear on hover but should not obscure text and must not be relied on as the only accessible description."
+    },
+    {
+      "id": "UXI-OVR-010",
+      "domain": "OVR",
+      "section": "14.3",
+      "title": "Cursor state MUST derive from current hover target + effective tool + active context + gesture phase; do not hard-code it independently in multiple components."
+    },
+    {
+      "id": "UXI-FBK-001",
+      "domain": "FBK",
+      "section": "14.4",
+      "title": "Use progressive feedback levels: inline validation near a field, nonblocking toast for brief operation result, persistent Problems/Health entry for unresolved document issues, blocking dialog only for high-risk…"
+    },
+    {
+      "id": "UXI-FBK-002",
+      "domain": "FBK",
+      "section": "14.4",
+      "title": "An error message SHOULD contain: attempted action, reason, whether the document changed, and next remedy."
+    },
+    {
+      "id": "UXI-FBK-003",
+      "domain": "FBK",
+      "section": "14.4",
+      "title": "Success messages should be subtle for common continuous edits, prominent for Save/Export/Import/long-running operations where confirmation matters."
+    },
+    {
+      "id": "UXI-FBK-004",
+      "domain": "FBK",
+      "section": "14.4",
+      "title": "Progress language must distinguish measurable percent from unknown-duration stage."
+    },
+    {
+      "id": "UXI-FBK-005",
+      "domain": "FBK",
+      "section": "14.4",
+      "title": "The canvas should visually signal file drop intent (Place image, Replace contents, Open document) before release; disabled or unsupported targets explain what is not possible."
+    },
+    {
+      "id": "UXI-OVR-011",
+      "domain": "OVR",
+      "section": "14.5",
+      "title": "Context transitions and overlay animations must be interruptible, short, and optional under reduced-motion settings."
+    },
+    {
+      "id": "UXI-OVR-012",
+      "domain": "OVR",
+      "section": "14.5",
+      "title": "No essential state is conveyed only by motion."
+    },
+    {
+      "id": "UXI-PNL-001",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "The default Properties inspector reflects the active typed selection or edit context."
+    },
+    {
+      "id": "UXI-PNL-002",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "Common properties use the same unit/rounding/input, mixed-value, reset, validation, and undo semantics across host and plugin panels."
+    },
+    {
+      "id": "UXI-PNL-003",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "If a property is unavailable, communicate whether it is inapplicable to current selection, read-only due to permissions, unsupported by the engine, or temporarily unavailable due to loading."
+    },
+    {
+      "id": "UXI-PNL-004",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "A disabled control must not look enabled."
+    },
+    {
+      "id": "UXI-PNL-005",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "Inspector fields commit according to explicit input type: numeric scrub as one undo step, text field on Enter/blur where appropriate, color chooser on apply/accepted change, and Escape returns pre-edit value if…"
+    },
+    {
+      "id": "UXI-PNL-006",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "Panel actions triggered during a canvas gesture MUST wait for safe ownership resolution and cannot operate on speculative geometry."
+    },
+    {
+      "id": "UXI-PNL-007",
+      "domain": "PNL",
+      "section": "15.1",
+      "title": "Opening, resizing, pinning, or hiding panels should preserve canvas anchor and active edit context."
+    },
+    {
+      "id": "UXI-PNL-008",
+      "domain": "PNL",
+      "section": "15.2",
+      "title": "Fields display Mixed if selected objects differ; empty and zero are separate states."
+    },
+    {
+      "id": "UXI-PNL-009",
+      "domain": "PNL",
+      "section": "15.2",
+      "title": "Numeric property inputs MAY support expressions (e.g., 10 mm + 2 pt) once validated; calculation results and unit conversion must be deterministic."
+    },
+    {
+      "id": "UXI-PNL-010",
+      "domain": "PNL",
+      "section": "15.2",
+      "title": "Bulk edits clearly state their scope and apply in a single coherent undo step."
+    },
+    {
+      "id": "UXI-PNL-011",
+      "domain": "PNL",
+      "section": "15.2",
+      "title": "Data-bound fields visibly indicate binding and source; changing a value cannot silently break a binding unless the action explicitly requests it."
+    },
+    {
+      "id": "UXI-CMD-001",
+      "domain": "CMD",
+      "section": "15.3",
+      "title": "Menus, palette, context menus, toolbar buttons, keyboard shortcuts, and scripts resolve through the same command/applicability model where they represent the same user operation."
+    },
+    {
+      "id": "UXI-CMD-002",
+      "domain": "CMD",
+      "section": "15.3",
+      "title": "Applicability is derived from active document, selection, edit context, role/permissions, feature gates, and module capabilities."
+    },
+    {
+      "id": "UXI-CMD-003",
+      "domain": "CMD",
+      "section": "15.3",
+      "title": "A command that fails MUST surface a user-readable error with no misleading success status."
+    },
+    {
+      "id": "UXI-CMD-004",
+      "domain": "CMD",
+      "section": "15.3",
+      "title": "A successful command SHOULD restore focus to a meaningful canvas or original control, unless it intentionally enters a new field/dialog/context."
+    },
+    {
+      "id": "UXI-CMD-005",
+      "domain": "CMD",
+      "section": "15.3",
+      "title": "A command palette item with a name and shortcut MUST execute the same underlying command as the corresponding menu item."
+    },
+    {
+      "id": "UXI-CMD-006",
+      "domain": "CMD",
+      "section": "15.3",
+      "title": "Keyboard navigation, typeahead, Escape dismissal, and focus restoration of the palette are tested in bundled Chromium and real Chrome, both CPU and GPU lanes where available."
+    },
+    {
+      "id": "UXI-CMD-007",
+      "domain": "CMD",
+      "section": "15.4",
+      "title": "Right-click/secondary click resolves selection under the pointer before constructing an object-specific menu where feasible."
+    },
+    {
+      "id": "UXI-CMD-008",
+      "domain": "CMD",
+      "section": "15.4",
+      "title": "Right-click empty canvas must not automatically discard selection unless that behavior is an explicitly adopted policy; menu actions should make their target clear."
+    },
+    {
+      "id": "UXI-CMD-009",
+      "domain": "CMD",
+      "section": "15.4",
+      "title": "Shift+F10 and the Context Menu key open the relevant menu at a useful anchored point near focused selection or viewport center, not offscreen."
+    },
+    {
+      "id": "UXI-CMD-010",
+      "domain": "CMD",
+      "section": "15.4",
+      "title": "Context menu opening and dismissal must be available without a mouse, honor focus priority, and not trigger the underlying canvas action twice."
+    },
+    {
+      "id": "UXI-DND-001",
+      "domain": "DND",
+      "section": "16.1",
+      "title": "Determine drop intent from file MIME/format, source, pointer target, current selection/context, and active role."
+    },
+    {
+      "id": "UXI-DND-002",
+      "domain": "DND",
+      "section": "16.1",
+      "title": "During drag-over, show a clearly named drop target and pending effect; cursor and label match the action that will happen if released."
+    },
+    {
+      "id": "UXI-DND-003",
+      "domain": "DND",
+      "section": "16.1",
+      "title": "Document replacement always passes through the same unsaved-change guard, independent of whether invoked by File menu, command palette, drag-and-drop, automation, or host action."
+    },
+    {
+      "id": "UXI-DND-004",
+      "domain": "DND",
+      "section": "16.1",
+      "title": "Drop handling must not steal a live pointer gesture or apply to a document that changed between drag-over and drop; revalidate document/context epoch on release."
+    },
+    {
+      "id": "UXI-CLP-001",
+      "domain": "CLP",
+      "section": "16.2",
+      "title": "Copy, Cut, Paste, Duplicate and Paste in Place operate on active selection type and context with clear fallback rules."
+    },
+    {
+      "id": "UXI-CLP-002",
+      "domain": "CLP",
+      "section": "16.2",
+      "title": "Cut is atomic: content is not deleted unless clipboard write (where required) and document mutation succeed as a coherent action, or failure is safely handled without data loss."
+    },
+    {
+      "id": "UXI-CLP-003",
+      "domain": "CLP",
+      "section": "16.2",
+      "title": "Object paste preserves supported appearance and resource references, with a documented target positioning policy."
+    },
+    {
+      "id": "UXI-CLP-004",
+      "domain": "CLP",
+      "section": "16.2",
+      "title": "Clipboard serialization includes enough information to distinguish native Paged objects, rich text, images, and plain text."
+    },
+    {
+      "id": "UXI-CLP-005",
+      "domain": "CLP",
+      "section": "16.2",
+      "title": "When pasting into another document or module, revalidate permissions and compatibility, and never inadvertently overwrite source content."
+    },
+    {
+      "id": "UXI-FIL-001",
+      "domain": "FIL",
+      "section": "16.3",
+      "title": "Loading an unsupported/corrupt file must not replace the current document with a misleading success state."
+    },
+    {
+      "id": "UXI-FIL-002",
+      "domain": "FIL",
+      "section": "16.3",
+      "title": "Imports that convert unsupported features SHOULD offer a readable import/loss report with affected objects or pages where possible; technical codes may be available in an expandable detail view."
+    },
+    {
+      "id": "UXI-FIL-003",
+      "domain": "FIL",
+      "section": "16.3",
+      "title": "Save/export state distinguishes saving, saved locally, synced remotely, failed, and unsaved edits, only when those persistence guarantees are true."
+    },
+    {
+      "id": "UXI-FIL-004",
+      "domain": "FIL",
+      "section": "16.3",
+      "title": "Export standards and output options are validated before starting."
+    },
+    {
+      "id": "UXI-FIL-005",
+      "domain": "FIL",
+      "section": "16.3",
+      "title": "Export progress is cancellable where the engine supports cancellation; completion must identify output location and warnings, and never present an unverified artifact as successful."
+    },
+    {
+      "id": "UXI-MUT-001",
+      "domain": "MUT",
+      "section": "17.1",
+      "title": "Every document change initiated by a panel, tool, module, script, AI-assisted workflow, keyboard command, or plugin goes through authorized engine operation/mutation interfaces."
+    },
+    {
+      "id": "UXI-MUT-002",
+      "domain": "MUT",
+      "section": "17.1",
+      "title": "Operations carry sufficient document identity and transaction context to reject changes intended for a previous document or invalidated selection scope."
+    },
+    {
+      "id": "UXI-MUT-003",
+      "domain": "MUT",
+      "section": "17.1",
+      "title": "Engine role/document policy is checked regardless of UI visibility."
+    },
+    {
+      "id": "UXI-MUT-004",
+      "domain": "MUT",
+      "section": "17.1",
+      "title": "Command and script automation use the same undo/redo model as GUI actions; the UI does not label a workflow reversible unless it can restore the appropriate model state."
+    },
+    {
+      "id": "UXI-MUT-005",
+      "domain": "MUT",
+      "section": "17.2",
+      "title": "Undo returns a committed operation to its precise pre-state; redo returns it to post-state without duplicating assets or shifting frames."
+    },
+    {
+      "id": "UXI-MUT-006",
+      "domain": "MUT",
+      "section": "17.2",
+      "title": "Preview state must never become an extra history item."
+    },
+    {
+      "id": "UXI-MUT-007",
+      "domain": "MUT",
+      "section": "17.2",
+      "title": "Undo/redo while an uncommitted gesture or dirty nested context exists must first resolve that active interaction; do not interleave two models of history."
+    },
+    {
+      "id": "UXI-MUT-008",
+      "domain": "MUT",
+      "section": "17.3",
+      "title": "Dirty state reflects accepted document changes not yet persisted to the declared save target."
+    },
+    {
+      "id": "UXI-MUT-009",
+      "domain": "MUT",
+      "section": "17.3",
+      "title": "A local journal/checkpoint must not be presented as confirmed remote sync."
+    },
+    {
+      "id": "UXI-MUT-010",
+      "domain": "MUT",
+      "section": "17.3",
+      "title": "Crash/session recovery should distinguish recoverable local state, last explicit saved state, and remote canonical state; selecting recovery must not silently overwrite source content."
+    },
+    {
+      "id": "UXI-MUT-011",
+      "domain": "MUT",
+      "section": "17.3",
+      "title": "Save guards apply before destructive document replacement and after dirty nested contexts are safely resolved."
+    },
+    {
+      "id": "UXI-MUT-012",
+      "domain": "MUT",
+      "section": "17.4",
+      "title": "Scripts that mutate content must be ordered relative to active gestures and panel changes; they cannot be applied between gesture preview and commit arbitrarily."
+    },
+    {
+      "id": "UXI-MUT-013",
+      "domain": "MUT",
+      "section": "17.4",
+      "title": "A recorded user workflow should record semantic commands and object references/selection intent, not raw viewport pixel coordinates whenever possible."
+    },
+    {
+      "id": "UXI-MUT-014",
+      "domain": "MUT",
+      "section": "17.4",
+      "title": "Replay validates document, context, permissions, and available capabilities; if assumptions do not hold, the user receives a precise refusal rather than silently targeting another object."
+    },
+    {
+      "id": "UXI-ASY-001",
+      "domain": "ASY",
+      "section": "18.1",
+      "title": "Each async UI request affecting document, selection, focus, context, cursor, or overlay must be correlated with a request/session token and document/context epoch."
+    },
+    {
+      "id": "UXI-ASY-002",
+      "domain": "ASY",
+      "section": "18.1",
+      "title": "A response to an obsolete epoch MUST be ignored."
+    },
+    {
+      "id": "UXI-ASY-003",
+      "domain": "ASY",
+      "section": "18.1",
+      "title": "A new gesture supersedes stale selection geometry requests that would otherwise apply old handles or incorrect inspector values."
+    },
+    {
+      "id": "UXI-ASY-004",
+      "domain": "ASY",
+      "section": "18.1",
+      "title": "Resizing the viewport during a worker render may temporarily display old pixels; overlays must not claim exact alignment to a mismatched frame."
+    },
+    {
+      "id": "UXI-ASY-005",
+      "domain": "ASY",
+      "section": "18.2",
+      "title": "If the render worker becomes unavailable, block unsafe mutations and show a bounded recovery state."
+    },
+    {
+      "id": "UXI-ASY-006",
+      "domain": "ASY",
+      "section": "18.2",
+      "title": "A worker restart must not accidentally double-submit previously accepted operations."
+    },
+    {
+      "id": "UXI-ASY-007",
+      "domain": "ASY",
+      "section": "18.2",
+      "title": "Render fallback from WebGPU to CPU cannot change selection semantics, hit targets, or document output intent."
+    },
+    {
+      "id": "UXI-ASY-008",
+      "domain": "ASY",
+      "section": "18.3",
+      "title": "For every race case, success means one coherent result, no cross-document mutation, no orphaned gesture, and no false save state."
+    },
+    {
+      "id": "UXI-ASY-009",
+      "domain": "ASY",
+      "section": "18.4",
+      "title": "Classify outcomes as success, canceled, blocked, unsupported, invalid-input, conflict/stale, recoverable-failure, or fatal-failure for UI response purposes."
+    },
+    {
+      "id": "UXI-ASY-010",
+      "domain": "ASY",
+      "section": "18.4",
+      "title": "The affected control should show an inline error if local; global document failures go to a persistent Problems/Health source."
+    },
+    {
+      "id": "UXI-ASY-011",
+      "domain": "ASY",
+      "section": "18.4",
+      "title": "Errors contain no raw stack trace or opaque internal IDs by default; developer diagnostics may expose a correlation ID and technical detail."
+    },
+    {
+      "id": "UXI-A11Y-001",
+      "domain": "A11Y",
+      "section": "19.1",
+      "title": "Menus, dialogs, tablists, tree views, panels, command palette, and controls use appropriate ARIA roles/states and native focus semantics."
+    },
+    {
+      "id": "UXI-A11Y-002",
+      "domain": "A11Y",
+      "section": "19.1",
+      "title": "Users can reach the canvas from keyboard and leave it without pointer assistance."
+    },
+    {
+      "id": "UXI-A11Y-003",
+      "domain": "A11Y",
+      "section": "19.1",
+      "title": "Selection and object actions have accessible names, type, state, and relationships."
+    },
+    {
+      "id": "UXI-A11Y-004",
+      "domain": "A11Y",
+      "section": "19.1",
+      "title": "When an object is selected through the accessibility tree, the canvas selection and inspector reflect the same object ID."
+    },
+    {
+      "id": "UXI-A11Y-005",
+      "domain": "A11Y",
+      "section": "19.1",
+      "title": "Dialog opens place focus inside; dialog close restores focus."
+    },
+    {
+      "id": "UXI-A11Y-006",
+      "domain": "A11Y",
+      "section": "19.2",
+      "title": "All essential document editing actions have an available keyboard command, accessible menu/control, or equivalent non-pointer flow."
+    },
+    {
+      "id": "UXI-A11Y-007",
+      "domain": "A11Y",
+      "section": "19.2",
+      "title": "Object position and size may be edited precisely through inspector fields; selected objects may be nudged with arrow keys when canvas owns keys."
+    },
+    {
+      "id": "UXI-A11Y-008",
+      "domain": "A11Y",
+      "section": "19.2",
+      "title": "Keyboard selection of overlapping/nested objects must be possible through a structure/layers view or explicit selection cycle."
+    },
+    {
+      "id": "UXI-A11Y-009",
+      "domain": "A11Y",
+      "section": "19.3",
+      "title": "Touch targets and hit zones meet practical size/spacing guidance."
+    },
+    {
+      "id": "UXI-A11Y-010",
+      "domain": "A11Y",
+      "section": "19.3",
+      "title": "Pen pressure/tilt affect only tools that declare support; selection, navigation, and inspector editing remain usable with pen."
+    },
+    {
+      "id": "UXI-A11Y-011",
+      "domain": "A11Y",
+      "section": "19.3",
+      "title": "In viewer/form/template-fill profiles on narrow touch screens, navigation and field entry take priority over dense desktop chrome, in line with existing compact profile behavior."
+    },
+    {
+      "id": "UXI-A11Y-012",
+      "domain": "A11Y",
+      "section": "19.4",
+      "title": "Status and errors use text/icon as well as color; relevant text and control contrast must satisfy the product's WCAG target (recommend WCAG 2.2 AA as adoption baseline)."
+    },
+    {
+      "id": "UXI-A11Y-013",
+      "domain": "A11Y",
+      "section": "19.4",
+      "title": "Reduced motion applies to camera, panel, and overlay transitions."
+    },
+    {
+      "id": "UXI-A11Y-014",
+      "domain": "A11Y",
+      "section": "19.4",
+      "title": "Locale changes affect labels, shortcut hints where appropriate, numeric/length parsing conventions, and status text without changing underlying document geometry."
+    },
+    {
+      "id": "UXI-A11Y-015",
+      "domain": "A11Y",
+      "section": "19.4",
+      "title": "Bidirectional text, CJK IME, dead keys, and screen-reader focus are release-gated by cross-browser tests, not treated as post-release polish."
+    },
+    {
+      "id": "UXI-PRF-001",
+      "domain": "PRF",
+      "section": "20.1",
+      "title": "The editor MUST prioritize continuity of pointer and keyboard interaction over eagerly rendering invisible pages."
+    },
+    {
+      "id": "UXI-PRF-002",
+      "domain": "PRF",
+      "section": "20.1",
+      "title": "During expensive live operations, a temporary reduced-resolution preview MAY be used if placement/geometry remains correct and it is never mistaken for final output fidelity."
+    },
+    {
+      "id": "UXI-PRF-003",
+      "domain": "PRF",
+      "section": "20.1",
+      "title": "Loading stages should expose recognized document, page geometry, first useful paint, and background refinement, without invented percent complete."
+    },
+    {
+      "id": "UXI-PRF-004",
+      "domain": "PRF",
+      "section": "20.1",
+      "title": "Page thumbnails, tile caches, decoded assets, fonts, and history snapshots need explicit memory budgets and eviction rules to prevent unbounded growth."
+    },
+    {
+      "id": "UXI-PRF-005",
+      "domain": "PRF",
+      "section": "20.1",
+      "title": "Active viewport and nearby pages receive priority over distant pages; stale render requests should be discarded if the camera moves."
+    },
+    {
+      "id": "UXI-PRF-006",
+      "domain": "PRF",
+      "section": "20.2",
+      "title": "Automated perf suites measure end-to-end perceptual outcome (input → worker/model acknowledgment → visible frame) separately from main-thread React latency."
+    },
+    {
+      "id": "UXI-PRF-007",
+      "domain": "PRF",
+      "section": "20.2",
+      "title": "Performance defects that change interaction semantics (lost pointer, stale selection, dropped text, partial mutation) are correctness blockers, not merely perf regressions."
+    },
+    {
+      "id": "UXI-PLG-001",
+      "domain": "PLG",
+      "section": "21.1",
+      "title": "Every tool contribution declares the pointer/keyboard events it handles and how it cancels or commits."
+    },
+    {
+      "id": "UXI-PLG-002",
+      "domain": "PLG",
+      "section": "21.1",
+      "title": "Every edit-context contribution declares entry trigger, active tool restrictions, panel emphasis, content pointer handling, dirty/commit/cancel semantics, and scope boundary as applicable."
+    },
+    {
+      "id": "UXI-PLG-003",
+      "domain": "PLG",
+      "section": "21.1",
+      "title": "Plugin native controls inside panels use the host's theme, focus, disabled, error, and shortcut semantics."
+    },
+    {
+      "id": "UXI-PLG-004",
+      "domain": "PLG",
+      "section": "21.1",
+      "title": "Plugin commands, panels, and tools participate in the same applicability and feature gates as host contributions."
+    },
+    {
+      "id": "UXI-PLG-005",
+      "domain": "PLG",
+      "section": "21.1",
+      "title": "Plugin failures cannot leave the canvas gesture owner, focus, or edit-context stack inconsistent."
+    },
+    {
+      "id": "UXI-PLG-006",
+      "domain": "PLG",
+      "section": "21.1",
+      "title": "Plugin context scope is not a security barrier; the engine checks permissions for all operations."
+    },
+    {
+      "id": "UXI-PLG-007",
+      "domain": "PLG",
+      "section": "21.2",
+      "title": "Removing a visible UI control through a profile MUST NOT be treated as sufficient authorization."
+    },
+    {
+      "id": "UXI-PLG-008",
+      "domain": "PLG",
+      "section": "21.2",
+      "title": "Changing profiles at runtime must resolve active gesture and content context safely, restore meaningful focus, and never lose uncommitted work without confirmation."
+    },
+    {
+      "id": "UXI-OBS-001",
+      "domain": "OBS",
+      "section": "22.1",
+      "title": "A development-only interaction trace SHOULD record timestamp, editor scope, document epoch, interaction ID, owner, tool, phase, input device, relevant coordinates without user text content, result, and latency."
+    },
+    {
+      "id": "UXI-OBS-002",
+      "domain": "OBS",
+      "section": "22.1",
+      "title": "The trace must not capture raw story text, document bytes, secret tokens, or personally identifying content."
+    },
+    {
+      "id": "UXI-OBS-003",
+      "domain": "OBS",
+      "section": "22.1",
+      "title": "Each unexpected transition should provide an actionable development diagnostic, e.g., stale hit-test discarded, gesture canceled: capture lost, context rejected: scope mismatch."
+    },
+    {
+      "id": "UXI-OBS-004",
+      "domain": "OBS",
+      "section": "22.1",
+      "title": "Production logging, if later introduced, requires separate privacy/security review; this spec does not authorize telemetry upload."
+    },
+    {
+      "id": "UXI-MIG-001",
+      "domain": "MIG",
+      "section": "24.2",
+      "title": "For each migrated tool, compare observable model/undo/render outcomes to prior behavior except where an approved TARGET CHANGE deliberately alters it."
+    },
+    {
+      "id": "UXI-MIG-002",
+      "domain": "MIG",
+      "section": "24.2",
+      "title": "No legacy key handler remains active in parallel with a new owner for the same event class; CI should assert no duplicate callbacks/operations."
+    },
+    {
+      "id": "UXI-MIG-003",
+      "domain": "MIG",
+      "section": "24.2",
+      "title": "Use feature gates for risky input routing transitions, but keep user-visible behavior consistent across gate variants whenever possible."
+    },
+    {
+      "id": "UXI-MIG-004",
+      "domain": "MIG",
+      "section": "24.2",
+      "title": "Keep one list of exceptions with planned retirement."
+    }
+  ],
+  "tests": [
+    {
+      "id": "UXI-T01",
+      "group": "A",
+      "title": "Click an unselected rectangle",
+      "assertion": "Only that object selected; inspector and accessibility tree agree.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-SEL-003", "UXI-INV-012", "UXI-A11Y-004"]
+    },
+    {
+      "id": "UXI-T02",
+      "group": "A",
+      "title": "Drag an unselected rectangle",
+      "assertion": "Object moves in same gesture; no marquee; one undo step.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": [
+        "UXI-SEL-004",
+        "UXI-TRN-001",
+        "UXI-INV-001",
+        "UXI-INV-004",
+        "UXI-GST-005"
+      ]
+    },
+    {
+      "id": "UXI-T03",
+      "group": "A",
+      "title": "Drag empty page across items",
+      "assertion": "Marquee, no objects moved; selection follows direction policy.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["unit", "journey-cpu"],
+      "requirements": [
+        "UXI-SEL-005",
+        "UXI-SEL-008",
+        "UXI-SEL-010",
+        "UXI-HIT-004"
+      ]
+    },
+    {
+      "id": "UXI-T04",
+      "group": "A",
+      "title": "Shift-click three items, toggle one off",
+      "assertion": "Set membership correct, no duplicate IDs.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["unit", "journey-cpu"],
+      "requirements": ["UXI-SEL-003", "UXI-SEL-009"]
+    },
+    {
+      "id": "UXI-T05",
+      "group": "A",
+      "title": "Drag one of three selected objects",
+      "assertion": "All eligible items move together; relative offsets unchanged.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": ["UXI-TRN-002", "UXI-SEL-007", "UXI-GST-005"]
+    },
+    {
+      "id": "UXI-T06",
+      "group": "A",
+      "title": "Alt/Option-drag and release",
+      "assertion": "One duplicate set at previewed position; one undo removes it.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": [
+        "UXI-GST-009",
+        "UXI-GST-005",
+        "UXI-TRN-007",
+        "UXI-INV-004"
+      ]
+    },
+    {
+      "id": "UXI-T07",
+      "group": "A",
+      "title": "Begin move, press Escape",
+      "assertion": "Geometry unchanged, no history item, overlays cleared.",
+      "gates": ["G0", "G1"],
+      "fixture": "A",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": [
+        "UXI-INV-002",
+        "UXI-INV-003",
+        "UXI-GST-003",
+        "UXI-GST-006",
+        "UXI-MUT-006",
+        "UXI-ESC-001"
+      ]
+    },
+    {
+      "id": "UXI-T08",
+      "group": "A",
+      "title": "Begin move, trigger pointercancel",
+      "assertion": "Rollback, pointer released, next drag works.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "chaos"],
+      "requirements": [
+        "UXI-INV-002",
+        "UXI-INV-014",
+        "UXI-OWN-002",
+        "UXI-GST-007"
+      ]
+    },
+    {
+      "id": "UXI-T09",
+      "group": "A",
+      "title": "Begin resize, blur browser",
+      "assertion": "No orphaned session; no partial edit.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "chaos"],
+      "requirements": ["UXI-INV-002", "UXI-INV-014", "UXI-GST-006"]
+    },
+    {
+      "id": "UXI-T10",
+      "group": "A",
+      "title": "Begin gesture, change permanent tool",
+      "assertion": "Cancels per default contract; new tool becomes effective.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["unit", "journey-cpu"],
+      "requirements": ["UXI-OWN-012", "UXI-STATE-003", "UXI-INV-002"]
+    },
+    {
+      "id": "UXI-T11",
+      "group": "A",
+      "title": "Press/release Shift mid-resize",
+      "assertion": "Preview follows live modifiers without cumulative jump.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["unit", "engine", "journey-cpu"],
+      "requirements": [
+        "UXI-GST-008",
+        "UXI-GST-010",
+        "UXI-GST-011",
+        "UXI-TRN-003"
+      ]
+    },
+    {
+      "id": "UXI-T12",
+      "group": "A",
+      "title": "Move near guide/object edge",
+      "assertion": "Stable snap target label and line; hysteresis; exact commit.",
+      "gates": ["G1"],
+      "fixture": "D",
+      "layers": ["unit", "engine", "visual"],
+      "requirements": [
+        "UXI-SNP-001",
+        "UXI-SNP-002",
+        "UXI-SNP-003",
+        "UXI-SNP-004",
+        "UXI-SNP-006"
+      ]
+    },
+    {
+      "id": "UXI-T13",
+      "group": "A",
+      "title": "Drag locked item",
+      "assertion": "No mutation; clear locked indication.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": [
+        "UXI-TRN-006",
+        "UXI-HIT-002",
+        "UXI-SEL-009",
+        "UXI-INV-011"
+      ]
+    },
+    {
+      "id": "UXI-T14",
+      "group": "A",
+      "title": "Rotate rotated object by outside-corner zone",
+      "assertion": "Angle and geometry consistent at multiple zooms.",
+      "gates": ["G1", "G3"],
+      "fixture": "D",
+      "layers": ["unit", "visual"],
+      "requirements": [
+        "UXI-TRN-004",
+        "UXI-TRN-005",
+        "UXI-HND-004",
+        "UXI-INV-006"
+      ]
+    },
+    {
+      "id": "UXI-T15",
+      "group": "A",
+      "title": "Hit same handle at 25%, 100%, 800%",
+      "assertion": "Effective CSS-pixel handle tolerance consistent.",
+      "gates": ["G1", "G3"],
+      "fixture": "A",
+      "layers": ["unit", "visual"],
+      "requirements": ["UXI-HND-001", "UXI-INV-006", "UXI-GEO-005"]
+    },
+    {
+      "id": "UXI-T16",
+      "group": "A",
+      "title": "Draw rectangle, cancel with Escape",
+      "assertion": "No object; no undo entry.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["journey-cpu"],
+      "requirements": [
+        "UXI-DRW-001",
+        "UXI-GST-006",
+        "UXI-INV-002",
+        "UXI-MUT-006"
+      ]
+    },
+    {
+      "id": "UXI-T17",
+      "group": "A",
+      "title": "Create path, close and continue another path",
+      "assertion": "State/cursor and undo boundaries match tool contract.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["unit", "journey-cpu"],
+      "requirements": ["UXI-DRW-002", "UXI-DRW-003", "UXI-DRW-004"]
+    },
+    {
+      "id": "UXI-T18",
+      "group": "A",
+      "title": "Delete selected path points",
+      "assertion": "Only intended points removed; one undo restores path.",
+      "gates": ["G1"],
+      "fixture": "B",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": ["UXI-DRW-005", "UXI-DRW-006", "UXI-KEY-018"]
+    },
+    {
+      "id": "UXI-T19",
+      "group": "B",
+      "title": "Tab through toolbar, canvas, inspector",
+      "assertion": "Focus reachable/leavable; no trap; visible indicator.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-KEY-017", "UXI-A11Y-002"]
+    },
+    {
+      "id": "UXI-T20",
+      "group": "B",
+      "title": "Type v, t, p into inspector text input",
+      "assertion": "Input receives letters; tools unchanged.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-KEY-002", "UXI-KEY-005", "UXI-INV-007"]
+    },
+    {
+      "id": "UXI-T21",
+      "group": "B",
+      "title": "Start CJK IME composition in text frame",
+      "assertion": "Composition text correct; no tool/shortcut side effects.",
+      "gates": ["G1", "G4"],
+      "fixture": "C",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": [
+        "UXI-TXT-005",
+        "UXI-TXT-006",
+        "UXI-TXT-007",
+        "UXI-INV-013"
+      ]
+    },
+    {
+      "id": "UXI-T22",
+      "group": "B",
+      "title": "Enter AltGr/dead-key sequence",
+      "assertion": "Correct character inserted once.",
+      "gates": ["G1", "G4"],
+      "fixture": "C",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-TXT-009", "UXI-TXT-007", "UXI-KEY-013"]
+    },
+    {
+      "id": "UXI-T23",
+      "group": "B",
+      "title": "Open command palette and Escape",
+      "assertion": "Palette closes and focus restores, including real Chrome GPU lane.",
+      "gates": ["G1", "G4"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "journey-gpu"],
+      "requirements": ["UXI-CMD-006", "UXI-KEY-009", "UXI-ESC-001"]
+    },
+    {
+      "id": "UXI-T24",
+      "group": "B",
+      "title": "Open modal and press arrow/Enter/Space",
+      "assertion": "Modal controls own keys; no canvas movement/text insertion.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-KEY-003", "UXI-KEY-016", "UXI-INV-007"]
+    },
+    {
+      "id": "UXI-T25",
+      "group": "B",
+      "title": "Select object, press arrows",
+      "assertion": "Nudge only when canvas owns focus; one logical action policy.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-KEY-001", "UXI-TXT-001", "UXI-A11Y-007"]
+    },
+    {
+      "id": "UXI-T26",
+      "group": "B",
+      "title": "Place caret in text, press arrows",
+      "assertion": "Caret moves; frame geometry unchanged.",
+      "gates": ["G1"],
+      "fixture": "C",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-TXT-001", "UXI-TXT-010"]
+    },
+    {
+      "id": "UXI-T27",
+      "group": "B",
+      "title": "Select object, press Delete",
+      "assertion": "Object deleted; text in other stories unchanged.",
+      "gates": ["G1"],
+      "fixture": "C",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": ["UXI-KEY-018"]
+    },
+    {
+      "id": "UXI-T28",
+      "group": "B",
+      "title": "Select text, press Delete",
+      "assertion": "Story range removed; containing frame remains.",
+      "gates": ["G1"],
+      "fixture": "C",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": ["UXI-KEY-018", "UXI-TXT-015"]
+    },
+    {
+      "id": "UXI-T29",
+      "group": "B",
+      "title": "Open context menu with Shift+F10",
+      "assertion": "Menu opens near selection and works without pointer.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-CMD-009", "UXI-CMD-010"]
+    },
+    {
+      "id": "UXI-T30",
+      "group": "B",
+      "title": "Close menu with Escape",
+      "assertion": "Menu only closes; selection remains.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-ESC-001", "UXI-CMD-010", "UXI-KEY-009"]
+    },
+    {
+      "id": "UXI-T31",
+      "group": "B",
+      "title": "Enter nested edit context; Escape with no active gesture",
+      "assertion": "One context level unwound, not all.",
+      "gates": ["G1"],
+      "fixture": "B",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-ESC-001", "UXI-CTX-003", "UXI-SEL-013"]
+    },
+    {
+      "id": "UXI-T32",
+      "group": "B",
+      "title": "Enter text input; Escape during IME",
+      "assertion": "IME owns Escape; editor context remains.",
+      "gates": ["G1"],
+      "fixture": "C",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-ESC-001", "UXI-TXT-006", "UXI-INV-013"]
+    },
+    {
+      "id": "UXI-T33",
+      "group": "B",
+      "title": "Switch focus between two embedded editors",
+      "assertion": "Only focused instance processes shortcut.",
+      "gates": ["G1"],
+      "fixture": "G",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-OWN-005", "UXI-KEY-011"]
+    },
+    {
+      "id": "UXI-T34",
+      "group": "B",
+      "title": "Replace selected object by keyboard action",
+      "assertion": "Focus returns meaningfully; no ghost canvas key handling.",
+      "gates": ["G1"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-CMD-004", "UXI-KEY-009"]
+    },
+    {
+      "id": "UXI-T35",
+      "group": "C",
+      "title": "Double-click text frame",
+      "assertion": "Text caret in correct story; toolbar/inspector context correct.",
+      "gates": ["G2"],
+      "fixture": "C",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-TXT-002", "UXI-CTX-008", "UXI-PNL-001"]
+    },
+    {
+      "id": "UXI-T36",
+      "group": "C",
+      "title": "Double-click image frame",
+      "assertion": "Enters documented frame/content mode; frame does not unexpectedly move.",
+      "gates": ["G2"],
+      "fixture": "E",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-CTX-013", "UXI-CTX-008", "UXI-CTX-009"]
+    },
+    {
+      "id": "UXI-T37",
+      "group": "C",
+      "title": "Double-click group child with Direct Selection",
+      "assertion": "Correct nested target, breadcrumb and scope shown.",
+      "gates": ["G2"],
+      "fixture": "B",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-SEL-012", "UXI-SEL-014", "UXI-CTX-003"]
+    },
+    {
+      "id": "UXI-T38",
+      "group": "C",
+      "title": "Double-click sheet frame, type/edit cell",
+      "assertion": "Grid owns keys; host frame is not nudged.",
+      "gates": ["G2"],
+      "fixture": "E",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-OWN-004", "UXI-KEY-002", "UXI-KEY-018"]
+    },
+    {
+      "id": "UXI-T39",
+      "group": "C",
+      "title": "Enter web frame, edit source then leave",
+      "assertion": "Defined commit/cancel; no unrelated document edits.",
+      "gates": ["G2"],
+      "fixture": "E",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-CTX-006", "UXI-CTX-007", "UXI-PLG-002"]
+    },
+    {
+      "id": "UXI-T40",
+      "group": "C",
+      "title": "Enter same context twice",
+      "assertion": "No duplicate frame, no repeated onEnter effects.",
+      "gates": ["G2"],
+      "fixture": "E",
+      "layers": ["component"],
+      "requirements": ["UXI-CTX-002"]
+    },
+    {
+      "id": "UXI-T41",
+      "group": "C",
+      "title": "Click out of clean context",
+      "assertion": "Exits according to documented retarget policy.",
+      "gates": ["G2"],
+      "fixture": "E",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-HIT-005", "UXI-CTX-006"]
+    },
+    {
+      "id": "UXI-T42",
+      "group": "C",
+      "title": "Escape dirty context",
+      "assertion": "Pending edit resolved safely; no silent loss.",
+      "gates": ["G0", "G2"],
+      "fixture": "E",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-CTX-006", "UXI-CTX-007", "UXI-ESC-001"]
+    },
+    {
+      "id": "UXI-T43",
+      "group": "C",
+      "title": "Switch documents inside dirty module context",
+      "assertion": "Guard invoked; Cancel preserves original context.",
+      "gates": ["G0", "G2"],
+      "fixture": "E",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-CTX-006", "UXI-MUT-011", "UXI-DND-003"]
+    },
+    {
+      "id": "UXI-T44",
+      "group": "C",
+      "title": "Select out-of-scope object while context active",
+      "assertion": "No out-of-scope mutation.",
+      "gates": ["G0", "G2"],
+      "fixture": "B",
+      "layers": ["engine", "component"],
+      "requirements": ["UXI-CTX-010", "UXI-CTX-011", "UXI-HIT-005"]
+    },
+    {
+      "id": "UXI-T45",
+      "group": "C",
+      "title": "Restricted role calls hidden mutating command",
+      "assertion": "Engine rejects; no partial result.",
+      "gates": ["G0", "G2"],
+      "fixture": "F",
+      "layers": ["engine"],
+      "requirements": [
+        "UXI-MUT-003",
+        "UXI-PLG-007",
+        "UXI-INV-011",
+        "UXI-CMD-002"
+      ]
+    },
+    {
+      "id": "UXI-T46",
+      "group": "C",
+      "title": "Viewer profile attempts editing via pointer, shortcut, script",
+      "assertion": "All mutation channels forbidden; navigation works.",
+      "gates": ["G0", "G2"],
+      "fixture": "F",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": [
+        "UXI-PLG-007",
+        "UXI-MUT-001",
+        "UXI-INV-008",
+        "UXI-GST-013"
+      ]
+    },
+    {
+      "id": "UXI-T47",
+      "group": "D",
+      "title": "Wheel-zoom about chosen point",
+      "assertion": "Anchor preserved within chosen tolerance at various DPRs.",
+      "gates": ["G3"],
+      "fixture": "D",
+      "layers": ["unit", "journey-cpu", "visual"],
+      "requirements": ["UXI-CAM-002", "UXI-INV-006"]
+    },
+    {
+      "id": "UXI-T48",
+      "group": "D",
+      "title": "Fit page/spread/selection/document",
+      "assertion": "Correct bounds and shared zoom limits.",
+      "gates": ["G3"],
+      "fixture": "D",
+      "layers": ["unit", "journey-cpu"],
+      "requirements": ["UXI-CAM-007", "UXI-CAM-009"]
+    },
+    {
+      "id": "UXI-T49",
+      "group": "D",
+      "title": "Open 20-page document first time",
+      "assertion": "First meaningful page fits; not slivers of whole document.",
+      "gates": ["G3"],
+      "fixture": "D",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-CAM-008", "UXI-PRF-003"]
+    },
+    {
+      "id": "UXI-T50",
+      "group": "D",
+      "title": "Resize right dock",
+      "assertion": "Canvas anchor and selection preserved; overlay alignment correct.",
+      "gates": ["G2", "G3"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "visual"],
+      "requirements": [
+        "UXI-CAM-003",
+        "UXI-PNL-007",
+        "UXI-GEO-003",
+        "UXI-INV-009"
+      ]
+    },
+    {
+      "id": "UXI-T51",
+      "group": "D",
+      "title": "Enter image context without navigation request",
+      "assertion": "Camera stays stable; relevant controls change.",
+      "gates": ["G2"],
+      "fixture": "E",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-CTX-008", "UXI-CTX-009", "UXI-INV-009"]
+    },
+    {
+      "id": "UXI-T52",
+      "group": "D",
+      "title": "Rapid wheel zoom while animation active",
+      "assertion": "No camera tug-back or stale overlay.",
+      "gates": ["G3"],
+      "fixture": "D",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-CAM-004", "UXI-OVR-005"]
+    },
+    {
+      "id": "UXI-T53",
+      "group": "D",
+      "title": "Enable reduced motion and fit page",
+      "assertion": "No unnecessary camera animation; correct final view.",
+      "gates": ["G3", "G4"],
+      "fixture": "D",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-CAM-005", "UXI-A11Y-013", "UXI-OVR-011"]
+    },
+    {
+      "id": "UXI-T54",
+      "group": "D",
+      "title": "Pan over nearby pages",
+      "assertion": "Current-page indicator updates deterministically.",
+      "gates": ["G3"],
+      "fixture": "D",
+      "layers": ["unit", "journey-cpu"],
+      "requirements": ["UXI-CAM-015"]
+    },
+    {
+      "id": "UXI-T55",
+      "group": "D",
+      "title": "Trigger preflight navigation and return",
+      "assertion": "Target selected, return view recoverable.",
+      "gates": ["G3"],
+      "fixture": "D",
+      "layers": ["journey-cpu"],
+      "requirements": ["UXI-CAM-016"]
+    },
+    {
+      "id": "UXI-T56",
+      "group": "D",
+      "title": "Change zoom with rotation enabled",
+      "assertion": "Guide and handle position follow full transform.",
+      "gates": ["G1", "G3"],
+      "fixture": "D",
+      "layers": ["unit", "visual"],
+      "requirements": ["UXI-GEO-002", "UXI-OVR-005", "UXI-CAM-009"]
+    },
+    {
+      "id": "UXI-T57",
+      "group": "E",
+      "title": "Click A then B with reordered hit-test replies",
+      "assertion": "B remains selected; A's late result ignored.",
+      "gates": ["G0"],
+      "fixture": "H",
+      "layers": ["journey-cpu", "chaos"],
+      "requirements": [
+        "UXI-INV-005",
+        "UXI-OWN-008",
+        "UXI-ASY-002",
+        "UXI-SEL-006"
+      ]
+    },
+    {
+      "id": "UXI-T58",
+      "group": "E",
+      "title": "Drag while hit test is delayed",
+      "assertion": "Motion starts from original down point, no jump.",
+      "gates": ["G0", "G1"],
+      "fixture": "H",
+      "layers": ["journey-cpu", "chaos"],
+      "requirements": ["UXI-OWN-006", "UXI-OWN-007"]
+    },
+    {
+      "id": "UXI-T59",
+      "group": "E",
+      "title": "Close document while drag request in flight",
+      "assertion": "Old request cannot change new document.",
+      "gates": ["G0"],
+      "fixture": "H",
+      "layers": ["journey-cpu", "chaos"],
+      "requirements": ["UXI-INV-015", "UXI-MUT-002", "UXI-ASY-002"]
+    },
+    {
+      "id": "UXI-T60",
+      "group": "E",
+      "title": "Start script mutation during active gesture",
+      "assertion": "Conflict serialized/rejected according to policy; never interleaved.",
+      "gates": ["G0"],
+      "fixture": "H",
+      "layers": ["engine", "chaos"],
+      "requirements": ["UXI-GST-012", "UXI-GST-013", "UXI-MUT-012"]
+    },
+    {
+      "id": "UXI-T61",
+      "group": "E",
+      "title": "Worker fails after pointer down",
+      "assertion": "Gesture terminates; recovery presented; no false success.",
+      "gates": ["G0", "G4"],
+      "fixture": "H",
+      "layers": ["journey-cpu", "chaos"],
+      "requirements": ["UXI-ASY-005", "UXI-ASY-006", "UXI-INV-014"]
+    },
+    {
+      "id": "UXI-T62",
+      "group": "E",
+      "title": "Drop image over empty page",
+      "assertion": "Shows Place intent and places image, no document replacement.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-DND-001", "UXI-DND-002", "UXI-FBK-005"]
+    },
+    {
+      "id": "UXI-T63",
+      "group": "E",
+      "title": "Drop document on dirty editor",
+      "assertion": "Save/Don't save/Cancel guard; Cancel preserves edits.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-DND-003", "UXI-MUT-011"]
+    },
+    {
+      "id": "UXI-T64",
+      "group": "E",
+      "title": "Drop unsupported file",
+      "assertion": "No mutation; clear reason.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-DND-001", "UXI-FIL-001", "UXI-INV-011"]
+    },
+    {
+      "id": "UXI-T65",
+      "group": "E",
+      "title": "Copy/paste multiple native objects",
+      "assertion": "Semantics and relative geometry preserved; undo correct.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": ["UXI-CLP-001", "UXI-CLP-003", "UXI-SEL-007"]
+    },
+    {
+      "id": "UXI-T66",
+      "group": "E",
+      "title": "Import document with conversion losses",
+      "assertion": "Import report accurately indicates differences; current doc safe on failure.",
+      "gates": ["G0"],
+      "fixture": "D",
+      "layers": ["engine", "journey-cpu"],
+      "requirements": ["UXI-FIL-001", "UXI-FIL-002"]
+    },
+    {
+      "id": "UXI-T67",
+      "group": "E",
+      "title": "Save locally, fail remote sync",
+      "assertion": "Status says local only; never claims synced.",
+      "gates": ["G0", "G4"],
+      "fixture": "A",
+      "layers": ["unit", "component"],
+      "requirements": ["UXI-INV-010", "UXI-FIL-003", "UXI-MUT-009"]
+    },
+    {
+      "id": "UXI-T68",
+      "group": "E",
+      "title": "Request unsupported PDF export standard",
+      "assertion": "Prevalidation explains blocker; no false success.",
+      "gates": ["G0"],
+      "fixture": "A",
+      "layers": ["engine", "component"],
+      "requirements": ["UXI-FIL-004", "UXI-FIL-005", "UXI-CMD-003"]
+    },
+    {
+      "id": "UXI-T69",
+      "group": "F",
+      "title": "Screen-reader navigate objects",
+      "assertion": "Names, type, selected/locked state available; selection synchronized.",
+      "gates": ["G4"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-A11Y-001", "UXI-A11Y-003", "UXI-A11Y-004"]
+    },
+    {
+      "id": "UXI-T70",
+      "group": "F",
+      "title": "Use keyboard-only creation/transform",
+      "assertion": "Essential editing available without mouse.",
+      "gates": ["G4"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-A11Y-006", "UXI-A11Y-007"]
+    },
+    {
+      "id": "UXI-T71",
+      "group": "F",
+      "title": "Touch pinch while selection candidate pending",
+      "assertion": "Document unchanged, camera changes without ghost gesture.",
+      "gates": ["G4"],
+      "fixture": "H",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-CAM-012"]
+    },
+    {
+      "id": "UXI-T72",
+      "group": "F",
+      "title": "Pen drag/pressure in draw tool",
+      "assertion": "Tool receives pressure/tilt; mouse-select unaffected.",
+      "gates": ["G4"],
+      "fixture": "A",
+      "layers": ["unit", "a11y-manual"],
+      "requirements": ["UXI-GEO-004", "UXI-A11Y-010"]
+    },
+    {
+      "id": "UXI-T73",
+      "group": "F",
+      "title": "Touch template form on phone",
+      "assertion": "Field editing and zoom work; controls appropriately sized.",
+      "gates": ["G4"],
+      "fixture": "F",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-A11Y-009", "UXI-A11Y-011", "UXI-CAM-013"]
+    },
+    {
+      "id": "UXI-T74",
+      "group": "F",
+      "title": "Switch dark/light/high-contrast environment",
+      "assertion": "Handles, focus, labels, and warnings remain identifiable.",
+      "gates": ["G3", "G4"],
+      "fixture": "A",
+      "layers": ["visual", "a11y-manual"],
+      "requirements": ["UXI-OVR-007", "UXI-OVR-008", "UXI-A11Y-012"]
+    },
+    {
+      "id": "UXI-T75",
+      "group": "F",
+      "title": "Run at reduced motion and 200% UI zoom",
+      "assertion": "Keyboard focus and canvas access remain usable.",
+      "gates": ["G3", "G4"],
+      "fixture": "A",
+      "layers": ["journey-cpu", "a11y-manual"],
+      "requirements": ["UXI-A11Y-002", "UXI-A11Y-013"]
+    },
+    {
+      "id": "UXI-T76",
+      "group": "F",
+      "title": "Plugin panel opens long select/list",
+      "assertion": "ARIA widget keys remain local; no canvas command fires.",
+      "gates": ["G1", "G2"],
+      "fixture": "A",
+      "layers": ["component", "journey-cpu"],
+      "requirements": ["UXI-KEY-003", "UXI-INV-007", "UXI-PLG-003"]
+    }
+  ],
+  "interactions": [
+    {
+      "id": "select.click",
+      "title": "Selection and Direct Selection: a click selects what is under the pointer",
+      "owner": "canvas-select",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:select",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "pending-hit", "settled"],
+      "permission": "Selection is not a document change; the worker's hit test picks the target and a locked item stays selectable (ADR 251).",
+      "cancel": "A release under the click threshold settles; the hit-test answer carries no epoch, so a late one can apply (IC3).",
+      "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
+      "uxi": [
+        "UXI-SEL-001",
+        "UXI-SEL-003",
+        "UXI-SEL-006",
+        "UXI-HIT-002",
+        "UXI-OWN-008"
+      ],
+      "status": "legacy",
+      "notes": "Shift adds and Cmd toggles today (ADR 235); ADR 1201 makes Shift toggle (D-01)."
+    },
+    {
+      "id": "select.marquee",
+      "title": "Selection: a drag that starts on empty canvas draws a marquee",
+      "owner": "canvas-select",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:select/empty",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "previewing", "settled"],
+      "permission": "No document change; the marquee takes what it intersects, page by page (EN2 adds contain/intersect, scope and the pasteboard).",
+      "cancel": "pointercancel and window blur abort it; Escape does not cancel a marquee yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.select"],
+      "uxi": ["UXI-SEL-005", "UXI-SEL-008", "UXI-SEL-010", "UXI-HIT-004"],
+      "status": "legacy"
+    },
+    {
+      "id": "select.move",
+      "title": "Selection: a drag on an object moves the selection (Alt duplicates)",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:select/object",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "pending-hit",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine translate gesture; the engine refuses a locked item.",
+      "cancel": "Escape cancels the engine gesture and the rest of the drag pans; pointercancel and window blur abort; lostpointercapture and unmount do not yet, and an orphaned gesture turns later drags into pans (IC2).",
+      "surfaceIds": ["tool:paged.tool.select"],
+      "uxi": [
+        "UXI-SEL-004",
+        "UXI-TRN-001",
+        "UXI-TRN-002",
+        "UXI-GST-005",
+        "UXI-GST-009",
+        "UXI-INV-002",
+        "UXI-INV-014"
+      ],
+      "status": "legacy"
+    },
+    {
+      "id": "select.handles",
+      "title": "Selection: a resize or rotate handle drag transforms the selection",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/handle",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/packages/shell/src/overlays/resize-handles.tsx",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "Bounds resize, matrix scale or rotation as one engine gesture; the engine refuses a locked item.",
+      "cancel": "As the move: Escape cancels and the drag pans on; pointercancel and blur abort (IC2).",
+      "surfaceIds": ["tool:paged.tool.select"],
+      "uxi": [
+        "UXI-HIT-001",
+        "UXI-HND-001",
+        "UXI-HND-002",
+        "UXI-TRN-003",
+        "UXI-TRN-004",
+        "UXI-OVR-010"
+      ],
+      "status": "legacy",
+      "notes": "ViewportCanvas reads the handle under the press (readHandleAttr) and begins the gesture; resize cursors ignore rotation (IC7)."
+    },
+    {
+      "id": "select.bundle-handle",
+      "title": "Selection: a bundle's overlay handle (a preset's adjust handle) drags its parameter",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/handle",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "The bundle's handle router commits through the engine; it wins over the path session, the resize handles, the move and the marquee (extensions ADR 1103).",
+      "cancel": "Escape calls the router's cancel (ViewportCanvas onEscapeKey).",
+      "surfaceIds": ["tool:paged.tool.select"],
+      "uxi": ["UXI-HIT-001", "UXI-OWN-004", "UXI-PLG-001"],
+      "status": "legacy"
+    },
+    {
+      "id": "direct-select.path-edit",
+      "title": "Direct Selection: path-edit mode drags anchors, handles and its anchor marquee",
+      "owner": "canvas-path",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/path-edit",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/packages/tools/src/path-edit/direct-select-session.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "Path edits are engine operations over paged.draw's machine.",
+      "cancel": "Escape mid-drag undoes the drag and keeps the mode; Escape idle leaves the mode (usePathEditMode's own listener).",
+      "surfaceIds": ["tool:paged.tool.directSelect"],
+      "uxi": ["UXI-DRW-005", "UXI-DRW-006", "UXI-SEL-001"],
+      "status": "legacy"
+    },
+    {
+      "id": "type.click-caret",
+      "title": "Type: a click places a text caret",
+      "owner": "canvas-text",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:type",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "pending-hit", "settled"],
+      "permission": "Placing a caret is not a document change.",
+      "cancel": "Settles on release; nothing to roll back.",
+      "surfaceIds": ["tool:paged.tool.type"],
+      "uxi": ["UXI-TXT-001", "UXI-TXT-002", "UXI-TXT-013"],
+      "status": "legacy",
+      "notes": "The press arms the Type gesture handler too (ViewportCanvas legacyAlso); the release splits click from drag at CLICK_DRAG_THRESHOLD_PX."
+    },
+    {
+      "id": "tool.type-drag",
+      "title": "Type: a drag draws a text frame",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:type",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/type-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.type"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002"],
+      "status": "legacy"
+    },
+    {
+      "id": "dblclick.enter",
+      "title": "Double-click enters the hit frame's content: a story caret, a group level or a module context",
+      "owner": "frame-content",
+      "eventClass": "pointer:primary-dblclick",
+      "scope": "canvas/tool:select",
+      "adapter": "ContentContextAdapter",
+      "site": "apps/editor/packages/shell/src/state/use-edit-context-entry.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "pending-hit", "settled"],
+      "permission": "Entering a context changes no document state; the context's scope is root equality only (UXI-CTX-011).",
+      "cancel": "Nothing to cancel on entry; the hit test that picks the target carries no epoch (IC3).",
+      "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
+      "uxi": ["UXI-CTX-002", "UXI-CTX-013", "UXI-SEL-012", "UXI-TXT-002"],
+      "status": "legacy",
+      "notes": "An image enters its edit context today; ADR 1201 makes it content position first (D-05)."
+    },
+    {
+      "id": "edit-context.content-pointer",
+      "title": "An edit context that opts into content pointers takes presses over its frame",
+      "owner": "frame-content",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/edit-context",
+      "adapter": "ContentContextAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "The module answers in content coordinates and writes through its own engine operations.",
+      "cancel": "The module's own; nothing coordinates it with the canvas Escape listeners (KF1).",
+      "surfaceIds": [],
+      "uxi": ["UXI-OWN-004", "UXI-CTX-010", "UXI-PLG-002"],
+      "status": "legacy"
+    },
+    {
+      "id": "edit-context.click-out",
+      "title": "A press outside an edit context's frame commits the context and then selects",
+      "owner": "frame-content",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/edit-context/outside",
+      "adapter": "ContentContextAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "settled"],
+      "permission": "Commits the context's pending edit whether clean or dirty.",
+      "cancel": "None: the press commits, then falls through to select what is under it (D-04 makes a clean context exit and a dirty one follow its exitPolicy).",
+      "surfaceIds": [],
+      "uxi": ["UXI-HIT-005", "UXI-CTX-006", "UXI-CTX-007"],
+      "status": "legacy"
+    },
+    {
+      "id": "hand.pan",
+      "title": "Hand: a drag pans the view",
+      "owner": "canvas-camera",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:hand",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/apps/canvas/src/panels/canvas-panel.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "previewing", "settled"],
+      "permission": "Camera only; no document change.",
+      "cancel": "Release ends it; nothing to roll back.",
+      "surfaceIds": [
+        "tool:paged.tool.hand",
+        "keybinding:h→paged.tool.activate.paged.tool.hand"
+      ],
+      "uxi": ["UXI-CAM-001", "UXI-CAM-011"],
+      "status": "legacy"
+    },
+    {
+      "id": "hand.spring-space",
+      "title": "Holding Space engages Hand until it is released",
+      "owner": "canvas-camera",
+      "eventClass": "key:Space-hold",
+      "scope": "editor",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/packages/shell/src/tools/use-spring-loaded-tools.ts",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Tool override only; no document change. Yields to a focused control and to a live text caret.",
+      "cancel": "Key-up pops the override; window blur clears every override.",
+      "surfaceIds": ["tool:paged.tool.hand"],
+      "uxi": ["UXI-OWN-010", "UXI-OWN-011"],
+      "status": "legacy",
+      "notes": "A press during a mutating drag swaps the gesture spine's single handler slot; ADR 1201 defers it until the drag settles (D-09)."
+    },
+    {
+      "id": "direct-select.spring-meta",
+      "title": "Holding Cmd engages Direct Selection until it is released",
+      "owner": "canvas-select",
+      "eventClass": "key:Meta-hold",
+      "scope": "editor",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/packages/shell/src/tools/use-spring-loaded-tools.ts",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Tool override only; no document change. A tool that reads Cmd as a gesture modifier keeps it (Free Transform).",
+      "cancel": "Key-up pops the override; window blur clears every override.",
+      "surfaceIds": ["tool:paged.tool.directSelect"],
+      "uxi": ["UXI-OWN-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "zoom.click",
+      "title": "Zoom: a click zooms in, Alt-click zooms out",
+      "owner": "canvas-camera",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:zoom",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/apps/canvas/src/panels/canvas-panel.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "settled"],
+      "permission": "Camera only; no document change.",
+      "cancel": "Settles on release.",
+      "surfaceIds": [
+        "tool:paged.tool.zoom",
+        "keybinding:z→paged.tool.activate.paged.tool.zoom"
+      ],
+      "uxi": ["UXI-CAM-002", "UXI-CAM-007"],
+      "status": "legacy"
+    },
+    {
+      "id": "zoom.drag",
+      "title": "Zoom: a drag pans (no rectangle zoom yet)",
+      "owner": "canvas-camera",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:zoom",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "previewing", "settled"],
+      "permission": "Camera only; no document change.",
+      "cancel": "Release ends it; nothing to roll back.",
+      "surfaceIds": ["tool:paged.tool.zoom"],
+      "uxi": ["UXI-CAM-001", "UXI-CAM-011"],
+      "status": "legacy"
+    },
+    {
+      "id": "zoom.spring-primary-space",
+      "title": "Holding Cmd+Space engages Zoom until it is released",
+      "owner": "canvas-camera",
+      "eventClass": "key:Primary+Space-hold",
+      "scope": "editor",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/packages/shell/src/tools/use-spring-loaded-tools.ts",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Tool override only; no document change.",
+      "cancel": "Key-up pops the override; window blur clears every override.",
+      "surfaceIds": ["tool:paged.tool.zoom"],
+      "uxi": ["UXI-OWN-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "camera.wheel",
+      "title": "The wheel pans; Cmd+wheel and the trackpad pinch zoom about the pointer",
+      "owner": "canvas-camera",
+      "eventClass": "wheel:any",
+      "scope": "canvas",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "Camera only; no document change.",
+      "cancel": "Each event settles; an animation in flight can tug the camera back (WS8).",
+      "surfaceIds": [],
+      "uxi": ["UXI-CAM-001", "UXI-CAM-002", "UXI-CAM-004", "UXI-CAM-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "camera.middle-drag",
+      "title": "A middle-button drag pans, whatever the tool",
+      "owner": "canvas-camera",
+      "eventClass": "pointer:middle-drag",
+      "scope": "canvas",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "pressed", "previewing", "settled"],
+      "permission": "Camera only; no document change.",
+      "cancel": "Release ends it; nothing to roll back.",
+      "surfaceIds": [],
+      "uxi": ["UXI-CAM-011"],
+      "status": "legacy"
+    },
+    {
+      "id": "camera.pinch",
+      "title": "A two-finger touch pinch zooms and pans",
+      "owner": "canvas-camera",
+      "eventClass": "touch:pinch",
+      "scope": "canvas",
+      "adapter": "CameraNavigationAdapter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "element",
+      "states": ["idle", "previewing", "settled"],
+      "permission": "Camera only; no document change.",
+      "cancel": "Lifting the fingers ends it; a pending one-finger selection is not arbitrated against it yet (AP4).",
+      "surfaceIds": [],
+      "uxi": ["UXI-CAM-012"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.page",
+      "title": "Page: a click selects a page, a drag resizes it, Alt-click inserts one after it",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:page",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/page-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.page"],
+      "uxi": ["UXI-GST-001", "UXI-GST-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.artboard",
+      "title": "Artboard: a drag moves or resizes an artboard, Alt-drag duplicates it",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:artboard",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/artboard-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.artboard"],
+      "uxi": ["UXI-GST-001", "UXI-GST-005", "UXI-SNP-001"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.line",
+      "title": "Line: a drag draws a straight line",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:line",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/line-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.line"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.pen",
+      "title": "Pen: clicks set corner anchors, drags set curves, Enter or the first anchor finishes",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:pen",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/pen-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape cancels the path in progress through the spine's key path; Enter commits one insertPath.",
+      "surfaceIds": ["tool:paged.tool.pen"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004"],
+      "status": "legacy",
+      "notes": "The Pen returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
+    },
+    {
+      "id": "tool.pencil",
+      "title": "Pencil: a drag draws a freehand path",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:pencil",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/pencil-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.pencil"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GEO-004"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.smooth",
+      "title": "Smooth: a click on a path simplifies it",
+      "owner": "canvas-path",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:smooth",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/smooth-tool.ts",
+      "listener": "element",
+      "states": ["idle", "pressed", "committing", "settled"],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.smooth"],
+      "uxi": ["UXI-DRW-005", "UXI-DRW-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.rectangle-frame",
+      "title": "Rectangle Frame: a drag draws a rectangular frame",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:rectangleFrame",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/rectangle-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.rectangleFrame"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.ellipse-frame",
+      "title": "Ellipse Frame: a drag draws an elliptical frame",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:ellipseFrame",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/ellipse-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.ellipseFrame"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.polygon-frame",
+      "title": "Polygon Frame: a drag draws a polygonal frame",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:polygonFrame",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/polygon-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.polygonFrame"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.rectangle",
+      "title": "Rectangle: a drag draws a rectangle",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:rectangle",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/rectangle-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.rectangle"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006", "UXI-GST-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.ellipse",
+      "title": "Ellipse: a drag draws an ellipse, Shift a circle",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:ellipse",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/ellipse-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.ellipse"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006", "UXI-GST-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.polygon",
+      "title": "Polygon: a drag draws a polygon or a star",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:polygon",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/polygon-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.polygon"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.scissors",
+      "title": "Scissors: a click on a path cuts it there",
+      "owner": "canvas-path",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:scissors",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/scissors-tool.ts",
+      "listener": "element",
+      "states": ["idle", "pressed", "committing", "settled"],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.scissors"],
+      "uxi": ["UXI-DRW-005", "UXI-DRW-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.free-transform",
+      "title": "Free Transform: one box moves, scales, rotates, shears and distorts the selection",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:freeTransform",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/free-transform-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.freeTransform"],
+      "uxi": ["UXI-TRN-003", "UXI-TRN-004", "UXI-TRN-005", "UXI-GST-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.rotate",
+      "title": "Rotate: a drag rotates the selection about its reference point",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:rotate",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/transform-tools.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.rotate"],
+      "uxi": ["UXI-TRN-004", "UXI-GST-005", "UXI-GST-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.scale",
+      "title": "Scale: a drag scales the selection from its reference point",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:scale",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/transform-tools.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.scale"],
+      "uxi": ["UXI-TRN-003", "UXI-GST-005", "UXI-GST-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.shear",
+      "title": "Shear: a drag slants the selection",
+      "owner": "canvas-transform",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:shear",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/shear-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.shear"],
+      "uxi": ["UXI-TRN-005", "UXI-GST-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.gradient-swatch",
+      "title": "Gradient Swatch: a drag across an object sets its gradient's direction and length",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:gradientSwatch",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/gradient-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.gradientSwatch"],
+      "uxi": ["UXI-GST-001", "UXI-GST-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.mesh",
+      "title": "Mesh: a click adds mesh points, a drag moves points and handles",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:mesh",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/mesh-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.mesh"],
+      "uxi": ["UXI-GST-001", "UXI-GST-005", "UXI-DRW-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.gradient-feather",
+      "title": "Gradient Feather: a drag across an object fades it to transparent",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:gradientFeather",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/gradient-feather-tool.ts",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.gradientFeather"],
+      "uxi": ["UXI-GST-001", "UXI-GST-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.eyedropper",
+      "title": "Eyedropper: a click samples a colour or an object's appearance onto the selection",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/tool:eyedropper",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/eyedropper-tool.ts",
+      "listener": "element",
+      "states": ["idle", "pressed", "committing", "settled"],
+      "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.eyedropper"],
+      "uxi": ["UXI-GST-004", "UXI-MUT-001"],
+      "status": "legacy"
+    },
+    {
+      "id": "tool.measure",
+      "title": "Measure: a drag reads a distance and an angle",
+      "owner": "canvas-draw",
+      "eventClass": "pointer:primary-drag",
+      "scope": "canvas/tool:measure",
+      "adapter": "RegisteredGestureAdapter",
+      "site": "apps/editor/packages/tools/src/handlers/measure-tool.ts",
+      "listener": "element",
+      "states": ["idle", "pressed", "previewing", "settled"],
+      "permission": "Reads only; no document change.",
+      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "surfaceIds": ["tool:paged.tool.measure"],
+      "uxi": ["UXI-GST-006", "UXI-CAM-001"],
+      "status": "legacy"
+    },
+    {
+      "id": "guide.drag",
+      "title": "A drag from a ruler or on a guide creates or moves a guide",
+      "owner": "ruler-guide",
+      "eventClass": "pointer:primary-drag",
+      "scope": "ruler",
+      "adapter": "session",
+      "site": "apps/editor/packages/shell/src/cockpit/canvas-frame/GuideDragController.tsx",
+      "listener": "window",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One guide operation on release; guides on a locked layer refuse.",
+      "cancel": "Escape cancels through the controller's own window capture listener; window pointer listeners own the drag (IC4 makes it a session).",
+      "surfaceIds": [],
+      "uxi": ["UXI-GDE-001", "UXI-GDE-002"],
+      "status": "legacy"
+    },
+    {
+      "id": "threading.link",
+      "title": "Clicking a text frame's out-port loads the cursor; the next click threads to the target",
+      "owner": "canvas-text",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/loaded:thread",
+      "adapter": "session",
+      "site": "apps/editor/packages/shell/src/cockpit/canvas-frame/ThreadingController.tsx",
+      "listener": "window",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One link operation; an invalid target refuses.",
+      "cancel": "Escape and pointercancel unload the cursor through window capture listeners (IC4 makes it a session).",
+      "surfaceIds": [],
+      "uxi": ["UXI-TXT-019", "UXI-TXT-020", "UXI-TXT-021"],
+      "status": "legacy"
+    },
+    {
+      "id": "placement.pending",
+      "title": "Place: a loaded place cursor puts the image where the user clicks or drags",
+      "owner": "drag-drop",
+      "eventClass": "pointer:primary-click",
+      "scope": "canvas/loaded:place",
+      "adapter": "session",
+      "site": "apps/editor/packages/shell/src/state/pending-placement.ts",
+      "listener": "window",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One place operation at the answered point; cancelling is an ordinary answer with nothing placed.",
+      "cancel": "Escape answers nothing through a window capture listener; a stolen capture still answers with the press (IC4 makes it a session).",
+      "surfaceIds": [
+        "command:paged.insert.placeImage",
+        "keybinding:cmd+d→paged.insert.placeImage",
+        "keybinding:ctrl+d→paged.insert.placeImage"
+      ],
+      "uxi": ["UXI-DND-001", "UXI-FBK-005"],
+      "status": "legacy"
+    },
+    {
+      "id": "drop.file",
+      "title": "A file dropped on the canvas area goes to the app's file handler",
+      "owner": "drag-drop",
+      "eventClass": "drop:file",
+      "scope": "canvas",
+      "adapter": "DropIntentResolver",
+      "site": "apps/editor/packages/shell/src/cockpit/CockpitLayout.tsx",
+      "listener": "element",
+      "states": ["idle", "previewing", "committing", "settled"],
+      "permission": "The app's handler opens, imports or places the first file by type; a document replacement asks the replace question (ADR 230).",
+      "cancel": "Leaving the canvas or Escape during the drag ends it; no intent is shown before release (DF3).",
+      "surfaceIds": [],
+      "uxi": [
+        "UXI-DND-001",
+        "UXI-DND-002",
+        "UXI-DND-003",
+        "UXI-DND-004",
+        "UXI-FBK-005"
+      ],
+      "status": "legacy"
+    },
+    {
+      "id": "context-menu.pointer",
+      "title": "A secondary click opens the canvas context menu for what is under the pointer",
+      "owner": "canvas-select",
+      "eventClass": "pointer:secondary-click",
+      "scope": "canvas",
+      "adapter": "LegacySelectionAdapter",
+      "site": "apps/editor/apps/canvas/src/canvas-context-menu.tsx",
+      "listener": "document",
+      "states": ["idle", "pressed", "pending-hit", "settled"],
+      "permission": "Opening the menu changes no document state; each item runs its command through applicability.",
+      "cancel": "Escape or a press outside closes the menu; the hit test that resolves its target carries no epoch (IC3).",
+      "surfaceIds": ["command:paged.edit.contextMenu"],
+      "uxi": ["UXI-CMD-007", "UXI-CMD-008", "UXI-OWN-008"],
+      "status": "legacy"
+    },
+    {
+      "id": "context-menu.keyboard",
+      "title": "Shift+F10 and the Context Menu key open the canvas context menu",
+      "owner": "modal",
+      "eventClass": "key:Shift+F10",
+      "scope": "canvas",
+      "adapter": "none",
+      "site": "apps/editor/apps/canvas/src/canvas-context-menu.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Opening the menu changes no document state.",
+      "cancel": "Escape closes the menu and keeps the selection.",
+      "surfaceIds": [
+        "command:paged.edit.contextMenu",
+        "keybinding:shift+f10→paged.edit.contextMenu",
+        "keybinding:contextmenu→paged.edit.contextMenu"
+      ],
+      "uxi": ["UXI-CMD-009", "UXI-CMD-010"],
+      "status": "legacy"
+    },
+    {
+      "id": "chrome.tab-toggle",
+      "title": "Tab on a pointer-engaged canvas hides and shows the chrome",
+      "owner": "panel",
+      "eventClass": "key:Tab",
+      "scope": "canvas/pointer-engaged",
+      "adapter": "none",
+      "site": "apps/editor/packages/shell/src/PagedShell.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Chrome only; no document change.",
+      "cancel": "Pressing it again restores the chrome.",
+      "surfaceIds": [
+        "command:paged.chrome.toggleAll",
+        "command:paged.chrome.togglePanels",
+        "keybinding:tab→paged.chrome.toggleAll",
+        "keybinding:shift+tab→paged.chrome.togglePanels"
+      ],
+      "uxi": ["UXI-KEY-017", "UXI-A11Y-002"],
+      "status": "legacy",
+      "notes": "ADR 1201 makes Tab move focus and the chrome toggle an explicit command with an opt-in preference (D-03, KF3)."
+    },
+    {
+      "id": "palette.escape",
+      "title": "Cmd+K opens the command palette; Escape closes it and restores focus",
+      "owner": "modal",
+      "eventClass": "key:Escape",
+      "scope": "modal:palette",
+      "adapter": "none",
+      "site": "apps/editor/packages/shell/src/chrome/CommandPalette.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "No document change; the palette runs commands through applicability.",
+      "cancel": "Escape closes it; on real Chrome it does not (issue #32, EXC-002).",
+      "surfaceIds": [
+        "command:paged.palette.toggle",
+        "keybinding:cmd+k→paged.palette.toggle",
+        "keybinding:ctrl+k→paged.palette.toggle"
+      ],
+      "uxi": ["UXI-CMD-006", "UXI-KEY-009", "UXI-ESC-001"],
+      "status": "legacy"
+    },
+    {
+      "id": "text.input",
+      "title": "Typing, composition and editing keys go to the active text caret",
+      "owner": "canvas-text",
+      "eventClass": "text:input",
+      "scope": "canvas/text-caret",
+      "adapter": "none",
+      "site": "apps/editor/apps/canvas/src/ui/useTextEditing.ts",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Each accepted edit is one engine text operation; a story the role forbids refuses.",
+      "cancel": "Composition is the input method's; there is no composition session token yet (KF4).",
+      "surfaceIds": ["tool:paged.tool.type"],
+      "uxi": [
+        "UXI-TXT-004",
+        "UXI-TXT-005",
+        "UXI-TXT-006",
+        "UXI-TXT-007",
+        "UXI-INV-013"
+      ],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.viewport",
+      "title": "Escape cancels the canvas move or handle drag",
+      "owner": "canvas-transform",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+      "listener": "document",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Cancels the engine gesture; the rest of the drag pans (IC2 stops the pan).",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-GST-003", "UXI-INV-002"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.tool-handler",
+      "title": "Escape reaches the active gesture handler",
+      "owner": "canvas-draw",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/ui/useGestureSpine.ts",
+      "listener": "editor-root",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Forwarded to the handler unless canvasKeyYields; each handler cancels its own way.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-DRW-001", "UXI-DRW-004"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.text",
+      "title": "Escape leaves text editing for the frame",
+      "owner": "canvas-text",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/ui/useTextEditing.ts",
+      "listener": "editor-root",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Leaves the caret unless the event is already handled or the context owns Escape.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-TXT-006"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.path-edit",
+      "title": "Escape ends a path-edit drag, then the mode",
+      "owner": "canvas-path",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/ui/usePathEditMode.ts",
+      "listener": "editor-root",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Mid-drag undoes the drag; idle leaves path-edit mode.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-DRW-004"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.group-climb",
+      "title": "Escape climbs out of the entered group",
+      "owner": "canvas-select",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/panels/canvas-panel.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Climbs one group level (ADR 250) unless a control owns the key or path edit is on.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-SEL-013", "UXI-CTX-003"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.edit-context",
+      "title": "Escape cancels the active edit context",
+      "owner": "frame-content",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/packages/shell/src/state/edit-context-controller.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Cancels the context unless a sub-context or a dirty sub-edit takes it.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-CTX-003", "UXI-CTX-007"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.guide-drag",
+      "title": "Escape cancels a guide drag",
+      "owner": "ruler-guide",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/packages/shell/src/cockpit/canvas-frame/GuideDragController.tsx",
+      "listener": "window",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Cancels the guide drag from a window capture listener.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-GDE-002"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.threading",
+      "title": "Escape unloads the threading cursor",
+      "owner": "canvas-text",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/packages/shell/src/cockpit/canvas-frame/ThreadingController.tsx",
+      "listener": "window",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Unloads the cursor from a window capture listener.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-TXT-019"],
+      "status": "legacy"
+    },
+    {
+      "id": "escape.placement",
+      "title": "Escape cancels a pending placement",
+      "owner": "drag-drop",
+      "eventClass": "key:Escape",
+      "scope": "editor",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/packages/shell/src/state/pending-placement.ts",
+      "listener": "window",
+      "states": ["idle", "canceling", "settled"],
+      "permission": "Cancels or leaves without a document change of its own.",
+      "cancel": "Answers the placement with nothing, stopping propagation, from a window capture listener.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-DND-001"],
+      "status": "legacy"
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "EXC-001",
+      "contract": ["UXI-ESC-001", "UXI-MIG-002", "UXI-KEY-004"],
+      "scope": "Escape on the canvas: the viewport, the gesture handlers, text editing, path edit, the group climb, the edit context, guide drag, threading and pending placement",
+      "interactions": [
+        "escape.viewport",
+        "escape.tool-handler",
+        "escape.text",
+        "escape.path-edit",
+        "escape.group-climb",
+        "escape.edit-context",
+        "escape.guide-drag",
+        "escape.threading",
+        "escape.placement"
+      ],
+      "tests": ["UXI-T07", "UXI-T30", "UXI-T31"],
+      "why": "Nine listeners answer Escape at the document, the editor root or the window, each on its own condition; nothing orders them, so one press can cancel a drag and climb out of a group in the same press (the spec's §12.1 allows one resolution per press).",
+      "issue": "KF1",
+      "owner": "editor shell",
+      "severity": "major",
+      "expiry": "2027-01-31",
+      "repro": "Enter a group, begin a move inside it and press Escape: ViewportCanvas's onEscapeKey cancels the move and canvas-panel's listener climbs out of the group on the same keydown."
+    },
+    {
+      "id": "EXC-002",
+      "contract": ["UXI-CMD-006", "UXI-KEY-009"],
+      "scope": "the command palette on real Chrome (the journeys-gpu lane)",
+      "interactions": ["palette.escape"],
+      "tests": ["UXI-T23"],
+      "why": "Under real Chrome (channel chrome, new headless) Escape does not dismiss the command palette, while bundled Chromium and local macOS runs pass; the focus target after Ctrl+K is the suspect.",
+      "issue": "https://github.com/paged-media/paged/issues/32",
+      "owner": "editor shell",
+      "severity": "major",
+      "expiry": "2027-01-31",
+      "repro": "apps/editor/apps/canvas/tests/journey/focused/command-palette.journey.spec.ts on the journeys-gpu project: the footer stays visible after Escape."
+    }
+  ],
+  "enforcedGates": []
+}

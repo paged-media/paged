@@ -125,6 +125,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [315](315-reference-inserts-are-host-commands.md) | Footnotes, destinations, cross-references and index entries are host commands (`paged.insert.*`) and panel forms; paged.doc's dialogs call them | Accepted 2026-11-11 |
 | [1200](1200-the-interaction-contract-is-adopted.md) | The interaction contract is adopted: the specification `PM-UX-INTERACTION-001` is the normative interaction target, implemented in waves, with TARGET CHANGEs, one exception ledger and no screenshot-only gate; the UX/UI redesign strategy is the product direction | Accepted 2026-11-13 (adopted, not implemented) |
 | [1201](1201-interaction-decisions.md) | Interaction decisions D-01 to D-16 and the Escape order: Shift toggles, a directional marquee, conventional Tab, the image's content first, one exit resolver, one Escape resolution per press | Accepted 2026-11-13 (decided, not implemented); amends 234, 235, 246, 250, 282 |
+| [1202](1202-uxi-coverage-ratchets-the-interaction-contract.md) | An inventory mirrors the interaction contract (requirements, tests, interactions with their owners, the exception ledger, the enforced gates), and a coverage report ratchets its acceptance tests: tests claim `UXI-Tnn` in their titles, unclaimed ones are acknowledged with their task | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
