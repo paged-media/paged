@@ -211,7 +211,11 @@ fn spread_xml(idml: &[u8]) -> String {
 #[allow(non_snake_case)]
 fn idml_writes_the_fill_and_the_artwork_and_reimports_live__feat__plugin_draw_brushes_width() {
     let mut m = load();
-    let clean = m.idml_export_losses();
+    let clean: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     set(
         &mut m,
         &el(ElementId::Rectangle("r1".into())),
@@ -229,6 +233,7 @@ fn idml_writes_the_fill_and_the_artwork_and_reimports_live__feat__plugin_draw_br
     let losses: Vec<String> = m
         .idml_export_losses()
         .into_iter()
+        .map(|l| l.message)
         .filter(|l| !clean.contains(l))
         .collect();
     assert_eq!(losses.len(), 2, "{losses:?}");

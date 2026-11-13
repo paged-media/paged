@@ -45,10 +45,31 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use paged_model::report::{LossEntry, LossSeverity};
 use paged_model::{
     GuideOrientation, HyperlinkDestinationKind, Paragraph, Section, Spread, Story, Table,
 };
 use paged_scene::{Document, ParsedStory};
+
+const DROPPED: LossSeverity = LossSeverity::Dropped;
+const APPROXIMATED: LossSeverity = LossSeverity::Approximated;
+const INFO: LossSeverity = LossSeverity::Info;
+
+/// One IDML export loss (engine ADR 1097): its `idml.<area>.<what>` code,
+/// how it fared, the item it stood on (left off when the producer could
+/// not name it) and the sentence a reader is shown.
+pub(crate) fn idml_loss<I: AsRef<str> + ?Sized>(
+    code: &str,
+    severity: LossSeverity,
+    item: Option<&I>,
+    message: impl Into<String>,
+) -> LossEntry {
+    let e = LossEntry::new(code, severity, message);
+    match item.map(AsRef::as_ref) {
+        Some(id) if !id.is_empty() && id != "?" => e.on(id),
+        _ => e,
+    }
+}
 
 /// What the export was asked for, so the diff can tell a loss from a
 /// construct the caller has been handed the means to keep.
@@ -69,8 +90,8 @@ pub(crate) struct LossContext {
 /// Diff `scene` against `twin` (the scene as re-parsed from its own IDML
 /// export). One human-readable line per element the twin lacks or
 /// misrepresents, sorted for determinism.
-pub(crate) fn diff(scene: &Document, twin: &Document, ctx: &LossContext) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+pub(crate) fn diff(scene: &Document, twin: &Document, ctx: &LossContext) -> Vec<LossEntry> {
+    let mut out: Vec<LossEntry> = Vec::new();
     diff_sections(scene, twin, &mut out);
     diff_guides(scene, twin, &mut out);
     diff_hyperlinks(scene, twin, &mut out);
@@ -78,7 +99,7 @@ pub(crate) fn diff(scene: &Document, twin: &Document, ctx: &LossContext) -> Vec<
     diff_stories(scene, twin, &mut out);
     diff_page_items(scene, twin, ctx, &mut out);
     diff_canvas_placement(scene, twin, &mut out);
-    out.sort();
+    out.sort_by(|a, b| a.message.cmp(&b.message));
     out.dedup();
     out
 }
@@ -90,7 +111,7 @@ pub(crate) fn diff(scene: &Document, twin: &Document, ctx: &LossContext) -> Vec<
 /// pages side by side. The export keeps the page order and every spread
 /// as it is — an artboard alone in its spread stays its own spread, pages
 /// that share one stay adjacent — and the page opens in its default slot.
-fn diff_canvas_placement(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+fn diff_canvas_placement(scene: &Document, twin: &Document, out: &mut Vec<LossEntry>) {
     let twin_origin: HashMap<&str, Option<[f32; 2]>> = twin
         .spreads
         .iter()
@@ -111,8 +132,16 @@ fn diff_canvas_placement(scene: &Document, twin: &Document, out: &mut Vec<String
             } else {
                 ""
             };
-            out.push(format!(
-                "page `{id}` is placed at [{x}, {y}] pt on the canvas (an artboard position) —                  IDML has no free page placement: InDesign stacks the spreads, so the page                  keeps its place in the page order{shared} and opens in its default slot",
+            out.push(idml_loss(
+                "idml.page.canvasPlacement",
+                APPROXIMATED,
+                Some(id),
+                format!(
+                    "page `{id}` is placed at [{x}, {y}] pt on the canvas (an artboard \
+                     position) — IDML has no free page placement: InDesign stacks the spreads, \
+                     so the page keeps its place in the page order{shared} and opens in its \
+                     default slot",
+                ),
             ));
         }
     }
@@ -120,7 +149,7 @@ fn diff_canvas_placement(scene: &Document, twin: &Document, out: &mut Vec<String
 
 // ---- sections -------------------------------------------------------------
 
-fn diff_sections(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+fn diff_sections(scene: &Document, twin: &Document, out: &mut Vec<LossEntry>) {
     for s in &scene.designmap.sections {
         match twin
             .designmap
@@ -128,20 +157,30 @@ fn diff_sections(scene: &Document, twin: &Document, out: &mut Vec<String>) {
             .iter()
             .find(|t| t.self_id == s.self_id)
         {
-            None => out.push(format!(
-                "section `{}` (PageStart `{}`) is missing from the exported designmap.xml — \
-                 the IDML exporter does not yet serialise a <Section> the source archive lacks",
-                s.self_id,
-                s.page_start.as_deref().unwrap_or("?"),
+            None => out.push(idml_loss(
+                "idml.section.missing",
+                DROPPED,
+                Some(&s.self_id),
+                format!(
+                    "section `{}` (PageStart `{}`) is missing from the exported designmap.xml — \
+                     the IDML exporter does not yet serialise a <Section> the source archive lacks",
+                    s.self_id,
+                    s.page_start.as_deref().unwrap_or("?"),
+                ),
             )),
             Some(t) => {
                 let stale = section_differences(s, t);
                 if !stale.is_empty() {
-                    out.push(format!(
-                        "section `{}` exports with stale attributes ({}) — the IDML exporter \
-                         does not yet patch a changed <Section>",
-                        s.self_id,
-                        stale.join(", "),
+                    out.push(idml_loss(
+                        "idml.section.stale",
+                        APPROXIMATED,
+                        Some(&s.self_id),
+                        format!(
+                            "section `{}` exports with stale attributes ({}) — the IDML exporter \
+                             does not yet patch a changed <Section>",
+                            s.self_id,
+                            stale.join(", "),
+                        ),
                     ));
                 }
             }
@@ -224,14 +263,19 @@ fn guide_label(g: &paged_model::RulerGuide) -> String {
     )
 }
 
-fn diff_guides(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+fn diff_guides(scene: &Document, twin: &Document, out: &mut Vec<LossEntry>) {
     for parsed in &scene.spreads {
         let Some(t) = twin_spread(twin, &parsed.src, parsed.spread.self_id.as_deref()) else {
             if !parsed.spread.guides.is_empty() {
-                out.push(format!(
-                    "spread `{}` is missing from the export — its {} guide(s) are lost with it",
-                    parsed.src,
-                    parsed.spread.guides.len()
+                out.push(idml_loss(
+                    "idml.spread.missing",
+                    DROPPED,
+                    Some(&parsed.src),
+                    format!(
+                        "spread `{}` is missing from the export — its {} guide(s) are lost with it",
+                        parsed.src,
+                        parsed.spread.guides.len()
+                    ),
                 ));
             }
             continue;
@@ -244,21 +288,32 @@ fn diff_guides(scene: &Document, twin: &Document, out: &mut Vec<String>) {
             if let Some(pos) = remaining.iter().position(|k| *k == key) {
                 remaining.swap_remove(pos);
             } else {
-                out.push(format!(
-                    "guide ({}) on spread `{}` is missing from the export — the IDML exporter \
-                     does not yet serialise <Guide> elements the source spread lacks",
-                    guide_label(g),
-                    parsed.src
+                out.push(idml_loss(
+                    "idml.guide.missing",
+                    DROPPED,
+                    Some(&parsed.src),
+                    format!(
+                        "guide ({}) on spread `{}` is missing from the export — the IDML exporter \
+                         does not yet serialise <Guide> elements the source spread lacks",
+                        guide_label(g),
+                        parsed.src
+                    ),
                 ));
             }
         }
         for key in remaining {
             if let Some(g) = t.guides.iter().find(|g| guide_key(g) == key) {
-                out.push(format!(
-                    "guide ({}) on spread `{}` was removed from the model but the export still \
-                     carries it — the IDML exporter does not yet drop deleted <Guide> elements",
-                    guide_label(g),
-                    parsed.src
+                out.push(idml_loss(
+                    "idml.guide.stale",
+                    APPROXIMATED,
+                    Some(&parsed.src),
+                    format!(
+                        "guide ({}) on spread `{}` was removed from the model but the export \
+                         still carries it — the IDML exporter does not yet drop deleted <Guide> \
+                         elements",
+                        guide_label(g),
+                        parsed.src
+                    ),
                 ));
             }
         }
@@ -299,7 +354,7 @@ fn run_sources(doc: &Document) -> HashSet<String> {
     out
 }
 
-fn diff_hyperlinks(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+fn diff_hyperlinks(scene: &Document, twin: &Document, out: &mut Vec<LossEntry>) {
     let scene_sources = run_sources(scene);
     let twin_sources = run_sources(twin);
     for d in &scene.designmap.hyperlink_destinations {
@@ -309,12 +364,17 @@ fn diff_hyperlinks(scene: &Document, twin: &Document, out: &mut Vec<String>) {
             .iter()
             .any(|t| t.self_id == d.self_id)
         {
-            out.push(format!(
-                "hyperlink destination `{}` ({}) is missing from the exported designmap.xml — \
-                 the IDML exporter does not yet serialise a <Hyperlink*Destination> the source \
-                 archive lacks",
-                d.self_id,
-                destination_label(&d.kind)
+            out.push(idml_loss(
+                "idml.hyperlink.destinationMissing",
+                DROPPED,
+                Some(&d.self_id),
+                format!(
+                    "hyperlink destination `{}` ({}) is missing from the exported designmap.xml \
+                     — the IDML exporter does not yet serialise a <Hyperlink*Destination> the \
+                     source archive lacks",
+                    d.self_id,
+                    destination_label(&d.kind)
+                ),
             ));
         }
     }
@@ -325,33 +385,48 @@ fn diff_hyperlinks(scene: &Document, twin: &Document, out: &mut Vec<String>) {
             .iter()
             .find(|t| t.self_id == h.self_id)
         {
-            None => out.push(format!(
-                "hyperlink `{}` (source `{}`, destination `{}`) is missing from the exported \
-                 designmap.xml — the IDML exporter does not yet serialise a <Hyperlink> the \
-                 source archive lacks",
-                h.self_id,
-                h.source.as_deref().unwrap_or("?"),
-                h.destination.as_deref().unwrap_or("?"),
+            None => out.push(idml_loss(
+                "idml.hyperlink.missing",
+                DROPPED,
+                Some(&h.self_id),
+                format!(
+                    "hyperlink `{}` (source `{}`, destination `{}`) is missing from the exported \
+                     designmap.xml — the IDML exporter does not yet serialise a <Hyperlink> the \
+                     source archive lacks",
+                    h.self_id,
+                    h.source.as_deref().unwrap_or("?"),
+                    h.destination.as_deref().unwrap_or("?"),
+                ),
             )),
             Some(t) => {
                 if h.destination != t.destination {
-                    out.push(format!(
-                        "hyperlink `{}` exports pointing at `{}` instead of `{}` — the IDML \
-                         exporter does not yet patch a changed <Hyperlink>",
-                        h.self_id,
-                        t.destination.as_deref().unwrap_or(""),
-                        h.destination.as_deref().unwrap_or(""),
+                    out.push(idml_loss(
+                        "idml.hyperlink.stale",
+                        APPROXIMATED,
+                        Some(&h.self_id),
+                        format!(
+                            "hyperlink `{}` exports pointing at `{}` instead of `{}` — the IDML \
+                             exporter does not yet patch a changed <Hyperlink>",
+                            h.self_id,
+                            t.destination.as_deref().unwrap_or(""),
+                            h.destination.as_deref().unwrap_or(""),
+                        ),
                     ));
                 }
             }
         }
         if let Some(src) = &h.source {
             if scene_sources.contains(src) && !twin_sources.contains(src) {
-                out.push(format!(
-                    "hyperlink `{}`'s text source `{}` wraps no run in the exported stories — \
-                     the IDML exporter does not yet serialise <HyperlinkTextSource> around the \
-                     linked run",
-                    h.self_id, src
+                out.push(idml_loss(
+                    "idml.hyperlink.sourceMissing",
+                    DROPPED,
+                    Some(&h.self_id),
+                    format!(
+                        "hyperlink `{}`'s text source `{}` wraps no run in the exported stories \
+                         — the IDML exporter does not yet serialise <HyperlinkTextSource> around \
+                         the linked run",
+                        h.self_id, src
+                    ),
                 ));
             }
         }
@@ -360,23 +435,33 @@ fn diff_hyperlinks(scene: &Document, twin: &Document, out: &mut Vec<String>) {
 
 // ---- conditions -----------------------------------------------------------
 
-fn diff_conditions(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+fn diff_conditions(scene: &Document, twin: &Document, out: &mut Vec<LossEntry>) {
     for (id, c) in &scene.styles.conditions {
         match twin.styles.conditions.get(id) {
-            None => out.push(format!(
-                "condition `{}` (`{}`) is missing from the export — the IDML exporter does not \
-                 yet serialise a <Condition> the source archive lacks",
-                id,
-                c.name.as_deref().unwrap_or("")
+            None => out.push(idml_loss(
+                "idml.condition.missing",
+                DROPPED,
+                Some(id),
+                format!(
+                    "condition `{}` (`{}`) is missing from the export — the IDML exporter does \
+                     not yet serialise a <Condition> the source archive lacks",
+                    id,
+                    c.name.as_deref().unwrap_or("")
+                ),
             )),
             Some(t) => {
                 let want = c.visible.unwrap_or(true);
                 let got = t.visible.unwrap_or(true);
                 if want != got {
-                    out.push(format!(
-                        "condition `{id}` exports Visible=\"{got}\" but the model says \
-                         Visible=\"{want}\" — the IDML exporter does not yet patch a changed \
-                         <Condition>"
+                    out.push(idml_loss(
+                        "idml.condition.stale",
+                        APPROXIMATED,
+                        Some(id),
+                        format!(
+                            "condition `{id}` exports Visible=\"{got}\" but the model says \
+                             Visible=\"{want}\" — the IDML exporter does not yet patch a \
+                             changed <Condition>"
+                        ),
                     ));
                 }
             }
@@ -384,9 +469,14 @@ fn diff_conditions(scene: &Document, twin: &Document, out: &mut Vec<String>) {
     }
     for id in scene.styles.condition_sets.keys() {
         if !twin.styles.condition_sets.contains_key(id) {
-            out.push(format!(
-                "condition set `{id}` is missing from the export — the IDML exporter does not \
-                 yet serialise a <ConditionSet> the source archive lacks"
+            out.push(idml_loss(
+                "idml.conditionSet.missing",
+                DROPPED,
+                Some(id),
+                format!(
+                    "condition set `{id}` is missing from the export — the IDML exporter does \
+                     not yet serialise a <ConditionSet> the source archive lacks"
+                ),
             ));
         }
     }
@@ -470,7 +560,7 @@ fn table_shape(t: &Table) -> (usize, usize) {
     (rows, cols)
 }
 
-fn diff_stories(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+fn diff_stories(scene: &Document, twin: &Document, out: &mut Vec<LossEntry>) {
     // The writer drops a story no frame references (InDesign discards
     // one on open — measured), so the twin lacks it BY DESIGN; the loss
     // line says so, loudly, instead of reporting it as an exporter gap.
@@ -488,12 +578,17 @@ fn diff_stories(scene: &Document, twin: &Document, out: &mut Vec<String>) {
                 .map(|r| r.text.chars().count())
                 .sum();
             if text_chars > 0 || !scene_tables.is_empty() {
-                out.push(format!(
-                    "story `{}` ({} chars, {} tables) is referenced by no frame — dropped from \
-                     the export; delete it or place it",
-                    s.self_id,
-                    text_chars,
-                    scene_tables.len()
+                out.push(idml_loss(
+                    "idml.story.unplaced",
+                    DROPPED,
+                    Some(&s.self_id),
+                    format!(
+                        "story `{}` ({} chars, {} tables) is referenced by no frame — dropped \
+                         from the export; delete it or place it",
+                        s.self_id,
+                        text_chars,
+                        scene_tables.len()
+                    ),
                 ));
             }
             continue;
@@ -506,12 +601,17 @@ fn diff_stories(scene: &Document, twin: &Document, out: &mut Vec<String>) {
                 .flat_map(|p| p.runs.iter())
                 .map(|r| r.text.chars().count())
                 .sum();
-            out.push(format!(
-                "story `{}` is missing from the export entirely ({} characters, {} table(s)) — \
-                 its text, tables and links are all lost",
-                s.self_id,
-                text_chars,
-                scene_tables.len()
+            out.push(idml_loss(
+                "idml.story.missing",
+                DROPPED,
+                Some(&s.self_id),
+                format!(
+                    "story `{}` is missing from the export entirely ({} characters, {} table(s)) \
+                     — its text, tables and links are all lost",
+                    s.self_id,
+                    text_chars,
+                    scene_tables.len()
+                ),
             ));
             continue;
         };
@@ -524,15 +624,20 @@ fn diff_stories(scene: &Document, twin: &Document, out: &mut Vec<String>) {
         if scene_paras != twin_paras {
             let scene_chars: usize = scene_paras.iter().map(|p| p.chars().count()).sum();
             let twin_chars: usize = twin_paras.iter().map(|p| p.chars().count()).sum();
-            out.push(format!(
-                "story `{}` exports with different text: {} paragraph(s) / {} character(s) in \
-                 the model, {} / {} in the export — the IDML exporter re-serialised a run it \
-                 could not match (a split run, a lost paragraph mark)",
-                s.self_id,
-                scene_paras.len(),
-                scene_chars,
-                twin_paras.len(),
-                twin_chars
+            out.push(idml_loss(
+                "idml.story.text",
+                APPROXIMATED,
+                Some(&s.self_id),
+                format!(
+                    "story `{}` exports with different text: {} paragraph(s) / {} character(s) \
+                     in the model, {} / {} in the export — the IDML exporter re-serialised a run \
+                     it could not match (a split run, a lost paragraph mark)",
+                    s.self_id,
+                    scene_paras.len(),
+                    scene_chars,
+                    twin_paras.len(),
+                    twin_chars
+                ),
             ));
         }
         let twin_tables = tables_of(&t.story);
@@ -551,29 +656,44 @@ fn diff_stories(scene: &Document, twin: &Document, out: &mut Vec<String>) {
                 None => twin_tables.get(i).copied(),
             };
             match twin_table {
-                None => out.push(format!(
-                    "table `{}` ({}×{}) in story `{}` is missing from the export — the IDML \
-                     exporter does not yet serialise a table inside a {}",
-                    id,
-                    rows,
-                    cols,
-                    s.self_id,
-                    if minted {
-                        "minted story"
-                    } else {
-                        "source story that does not carry it"
-                    }
+                None => out.push(idml_loss(
+                    "idml.table.missing",
+                    DROPPED,
+                    Some(&id),
+                    format!(
+                        "table `{}` ({}×{}) in story `{}` is missing from the export — the IDML \
+                         exporter does not yet serialise a table inside a {}",
+                        id,
+                        rows,
+                        cols,
+                        s.self_id,
+                        if minted {
+                            "minted story"
+                        } else {
+                            "source story that does not carry it"
+                        }
+                    ),
                 )),
                 Some(tt) => {
                     let (tr, tc) = table_shape(tt);
                     if (tr, tc) != (rows, cols) {
-                        out.push(format!(
-                            "table `{}` in story `{}` exports as {}×{} but the model has {}×{} \
-                             — the IDML exporter does not yet patch table structure",
-                            id, s.self_id, tr, tc, rows, cols
+                        out.push(idml_loss(
+                            "idml.table.shape",
+                            APPROXIMATED,
+                            Some(&id),
+                            format!(
+                                "table `{}` in story `{}` exports as {}×{} but the model has \
+                                 {}×{} — the IDML exporter does not yet patch table structure",
+                                id, s.self_id, tr, tc, rows, cols
+                            ),
                         ));
                     } else if let Some(line) = cell_text_loss(&id, &s.self_id, st, tt) {
-                        out.push(line);
+                        out.push(idml_loss(
+                            "idml.table.cellText",
+                            APPROXIMATED,
+                            Some(&id),
+                            line,
+                        ));
                     }
                 }
             }
@@ -671,7 +791,7 @@ fn image_frames(spread: &Spread) -> Vec<ImageFrame<'_>> {
     out
 }
 
-fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &mut Vec<String>) {
+fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &mut Vec<LossEntry>) {
     for parsed in &scene.spreads {
         let Some(t) = twin_spread(twin, &parsed.src, parsed.spread.self_id.as_deref()) else {
             continue;
@@ -683,10 +803,15 @@ fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &m
                 continue; // no image on this frame: nothing to lose
             }
             let Some(tf) = twin_frames.get(f.id) else {
-                out.push(format!(
-                    "page item `{}` on spread `{}` is missing from the export — the placed \
-                     image it carried is lost with it",
-                    f.id, parsed.src
+                out.push(idml_loss(
+                    "idml.pageItem.missing",
+                    DROPPED,
+                    Some(f.id),
+                    format!(
+                        "page item `{}` on spread `{}` is missing from the export — the placed \
+                         image it carried is lost with it",
+                        f.id, parsed.src
+                    ),
                 ));
                 continue;
             };
@@ -704,15 +829,23 @@ fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &m
                     .unwrap_or(false);
                 if tf.bytes.is_none() && !handed_back {
                     match (f.link, tf.link) {
-                        (Some(uri), Some(_)) => out.push(format!(
+                        (Some(uri), Some(_)) => out.push(idml_loss(
+                            "idml.image.bytesLinked",
+                            APPROXIMATED,
+                            Some(f.id),
+                            format!(
                             "image bytes on `{}` ({} bytes) are not in the export — IDML cannot \
                              embed pixels; the frame links to `{}` instead, so InDesign re-reads \
                              the asset and any edit to the pixels is lost. Export with a link \
                              base to have the bytes written beside the package, or save as \
                              `.paged` to keep them",
                             f.id, n, uri
-                        )),
-                        _ => out.push(format!(
+                        ))),
+                        _ => out.push(idml_loss(
+                            "idml.image.bytes",
+                            DROPPED,
+                            Some(f.id),
+                            format!(
                             "image placed from bytes on `{}` ({} bytes) is not in the export — an \
                              image placed from bytes has no IDML link to point at (IDML cannot embed \
                              pixels), so the frame exports empty. Export with a link base to have \
@@ -724,7 +857,7 @@ fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &m
                                 Some(_) => " (the bytes are in no format InDesign places)",
                                 None => "",
                             }
-                        )),
+                        ))),
                     }
                 }
             }
@@ -741,10 +874,15 @@ fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &m
                     None => false,
                 };
                 if !(carried || (tf.has_image_element && tf.bytes.is_some())) {
-                    out.push(format!(
-                        "image link `{}` on `{}` is missing from the export — the IDML exporter \
-                         does not yet serialise <Image>/<Link> for a placed image",
-                        uri, f.id
+                    out.push(idml_loss(
+                        "idml.image.link",
+                        DROPPED,
+                        Some(f.id),
+                        format!(
+                            "image link `{}` on `{}` is missing from the export — the IDML \
+                             exporter does not yet serialise <Image>/<Link> for a placed image",
+                            uri, f.id
+                        ),
                     ));
                 }
             }
@@ -760,12 +898,17 @@ fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &m
                 continue;
             };
             if !twin_groups.contains(id) {
-                out.push(format!(
-                    "group `{}` ({} member(s)) on spread `{}` is missing from the export — the \
-                     IDML exporter does not yet serialise <Group> on a minted spread",
-                    id,
-                    g.members.len(),
-                    parsed.src
+                out.push(idml_loss(
+                    "idml.group.missing",
+                    DROPPED,
+                    Some(id),
+                    format!(
+                        "group `{}` ({} member(s)) on spread `{}` is missing from the export — \
+                         the IDML exporter does not yet serialise <Group> on a minted spread",
+                        id,
+                        g.members.len(),
+                        parsed.src
+                    ),
                 ));
             }
         }
@@ -775,8 +918,8 @@ fn diff_page_items(scene: &Document, twin: &Document, ctx: &LossContext, out: &m
 /// The opacity-mask lines — the one construct IDML genuinely cannot
 /// carry. Text kept verbatim from the declared-loss era: the harness
 /// matches on it.
-pub(crate) fn opacity_mask_losses(scene: &Document) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+pub(crate) fn opacity_mask_losses(scene: &Document) -> Vec<LossEntry> {
+    let mut out: Vec<LossEntry> = Vec::new();
     for parsed in &scene.spreads {
         let mut ids: Vec<(&String, &paged_model::OpacityMask)> =
             parsed.spread.opacity_masks.iter().collect();
@@ -784,11 +927,16 @@ pub(crate) fn opacity_mask_losses(scene: &Document) -> Vec<String> {
         // reported list is deterministic across runs.
         ids.sort_by(|a, b| a.0.cmp(b.0));
         for (target, mask) in ids {
-            out.push(format!(
-                "opacity mask on `{target}` (artwork `{}`) is a paged-native construct — \
-                 IDML has no opacity-mask element, so the mask is dropped and its artwork \
-                 exports as an ordinary item. Save as `.paged` to keep it.",
-                mask.mask_item
+            out.push(idml_loss(
+                "idml.mask.opacity",
+                DROPPED,
+                Some(target),
+                format!(
+                    "opacity mask on `{target}` (artwork `{}`) is a paged-native construct — \
+                     IDML has no opacity-mask element, so the mask is dropped and its artwork \
+                     exports as an ordinary item. Save as `.paged` to keep it.",
+                    mask.mask_item
+                ),
             ));
         }
     }
@@ -802,7 +950,7 @@ pub(crate) fn opacity_mask_losses(scene: &Document) -> Vec<String> {
 /// cross, so InDesign fills them non-zero (a star's middle fills). Declared
 /// from the model, like the opacity masks, because the twin cannot tell
 /// a re-wound outline from one that never was even-odd.
-pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<LossEntry> {
     use paged_model::FillRule;
     let mut out = Vec::new();
     let mut check = |kind: &str,
@@ -814,11 +962,16 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
         if rule == FillRule::EvenOdd
             && !paged_model::winding::even_odd_is_expressible(anchors, starts, open)
         {
-            out.push(format!(
-                "even-odd fill rule on {kind} `{}` is a paged-native property — IDML fills \
-                 non-zero and its contours cross, so no re-winding fills the same area; it \
-                 exports filled non-zero. Save as `.paged` to keep it.",
-                id.unwrap_or("?")
+            out.push(idml_loss(
+                "idml.fillRule.evenOdd",
+                APPROXIMATED,
+                id,
+                format!(
+                    "even-odd fill rule on {kind} `{}` is a paged-native property — IDML fills \
+                     non-zero and its contours cross, so no re-winding fills the same area; it \
+                     exports filled non-zero. Save as `.paged` to keep it.",
+                    id.unwrap_or("?")
+                ),
             ));
         }
     };
@@ -878,18 +1031,24 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
 /// a paged reader lifts back; in InDesign it is a plain path. A live
 /// polygon is not listed: InDesign keeps no polygon's sides either, and
 /// its anchors are exact. Declared from the model, like the opacity masks.
-pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn live_shape_losses(scene: &Document) -> Vec<LossEntry> {
     let mut out = Vec::new();
     for parsed in &scene.spreads {
         for o in &parsed.spread.ovals {
             if let Some(pie) = paged_model::live_shape::cut_pie(o) {
-                out.push(format!(
-                    "pie angles ({}° to {}°) on oval `{}` are a paged-native live shape — IDML \
-                     draws the wedge as the oval's path, and the angles ride its \
-                     `paged:liveShape` label: InDesign shows the pie but cannot edit its angles.",
-                    pie.start,
-                    pie.end,
-                    o.self_id.as_deref().unwrap_or("?")
+                out.push(idml_loss(
+                    "idml.liveShape.pie",
+                    INFO,
+                    o.self_id.as_deref(),
+                    format!(
+                        "pie angles ({}° to {}°) on oval `{}` are a paged-native live shape — \
+                         IDML draws the wedge as the oval's path, and the angles ride its \
+                         `paged:liveShape` label: InDesign shows the pie but cannot edit its \
+                         angles.",
+                        pie.start,
+                        pie.end,
+                        o.self_id.as_deref().unwrap_or("?")
+                    ),
                 ));
             }
         }
@@ -913,10 +1072,15 @@ pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
             )
         {
             if has {
-                out.push(format!(
-                    "Office line ends on `{}` have no IDML form — they are written as \
-                     InDesign's nearest arrowheads.",
-                    id.as_deref().unwrap_or("?")
+                out.push(idml_loss(
+                    "idml.lineEnd.office",
+                    APPROXIMATED,
+                    id.as_deref(),
+                    format!(
+                        "Office line ends on `{}` have no IDML form — they are written as \
+                         InDesign's nearest arrowheads.",
+                        id.as_deref().unwrap_or("?")
+                    ),
                 ));
             }
         }
@@ -953,7 +1117,7 @@ pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
 /// restores; InDesign shows the outline, not the effect. A group whose
 /// members a Pathfinder effect cannot be written over (a text frame, a
 /// nested group, a symbol instance) is written as its members.
-pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<LossEntry> {
     use paged_model::effect_stack::{vector_entries, EffectEntry};
     let mut out = Vec::new();
     let mut unwritten = Vec::new();
@@ -996,29 +1160,34 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
         // Engine ADR 1053 — a stroke style beside a fill is written as
         // two items: the fill part and the stroke's artwork.
         let split = split_ids.contains(&id.map(str::to_string));
-        out.push(format!(
-            "vector effect{} {} on {kind} `{}` has no IDML form — written baked (the \
+        out.push(idml_loss(
+            "idml.vectorEffect.baked",
+            APPROXIMATED,
+            id,
+            format!(
+                "vector effect{} {} on {kind} `{}` has no IDML form — written baked (the \
              effected outline{}{}), the source and the live stack kept in the item's \
              `paged:vectorSource` and `paged:effectStack` labels, which a paged reader \
              restores; InDesign shows the outline, not the effect.",
-            if kinds.len() > 1 { "s" } else { "" },
-            kinds
-                .iter()
-                .map(|k| format!("`{k}`"))
-                .collect::<Vec<_>>()
-                .join(", "),
-            id.unwrap_or("?"),
-            match kind {
-                "oval" => ", as a polygon",
-                "group" => ", as one polygon in the group's place",
-                _ => "",
-            },
-            if split {
-                "; its stroke style as a separate polygon `<id>vfx` of the stroke's \
+                if kinds.len() > 1 { "s" } else { "" },
+                kinds
+                    .iter()
+                    .map(|k| format!("`{k}`"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                id.unwrap_or("?"),
+                match kind {
+                    "oval" => ", as a polygon",
+                    "group" => ", as one polygon in the group's place",
+                    _ => "",
+                },
+                if split {
+                    "; its stroke style as a separate polygon `<id>vfx` of the stroke's \
                  artwork after the item, which keeps its fill"
-            } else {
-                ""
-            }
+                } else {
+                    ""
+                }
+            ),
         ));
     };
     for parsed in &scene.spreads {
@@ -1048,12 +1217,17 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
             if readable {
                 check("group", g.self_id.as_deref(), &g.effect_stack);
             } else if vector_entries(&g.effect_stack).next().is_some() {
-                unwritten.push(format!(
-                    "the Pathfinder effect on group `{}` is not written — the group holds a \
-                     text frame, a group or a symbol instance, which IDML cannot replace by \
-                     one outline; it is written as its members, the stack kept in its label \
-                     is not (InDesign draws the members).",
-                    g.self_id.as_deref().unwrap_or("?")
+                unwritten.push(idml_loss(
+                    "idml.vectorEffect.unwritten",
+                    DROPPED,
+                    g.self_id.as_deref(),
+                    format!(
+                        "the Pathfinder effect on group `{}` is not written — the group holds a \
+                         text frame, a group or a symbol instance, which IDML cannot replace by \
+                         one outline; it is written as its members, the stack kept in its label \
+                         is not (InDesign draws the members).",
+                        g.self_id.as_deref().unwrap_or("?")
+                    ),
                 ));
             }
         }
@@ -1068,10 +1242,11 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
 /// paged reader restores it), and an order of InDesign's own effects that
 /// differs from the fixed one InDesign draws them in. Declared from the
 /// model: the twin reads the label back, so it cannot see the loss.
-pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<LossEntry> {
     use paged_model::effect_stack::{EffectBearing, EffectTarget};
     let mut out = Vec::new();
     let mut check = |kind: &str, id: Option<&str>, item: &dyn EffectBearing| {
+        let on_item = id;
         let id = id.unwrap_or("?");
         for target in EffectTarget::ALL {
             let slots = item.effect_slots(target);
@@ -1085,20 +1260,30 @@ pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
                 // Vector effects are reported (and baked) by
                 // `vector_effect_losses`.
                 if e.effect.indesign().is_none() && !e.effect.is_vector() {
-                    out.push(format!(
-                        "effect `{}` on {kind} `{id}`{on} has no IDML form — InDesign has its \
-                         nine effects only; it is kept in the item's `paged:effectStack` label, \
-                         which InDesign preserves and does not draw. Save as `.paged` to keep \
-                         it visible everywhere.",
-                        e.effect.kind_name()
+                    out.push(idml_loss(
+                        "idml.effect.unsupported",
+                        APPROXIMATED,
+                        on_item,
+                        format!(
+                            "effect `{}` on {kind} `{id}`{on} has no IDML form — InDesign has \
+                             its nine effects only; it is kept in the item's `paged:effectStack` \
+                             label, which InDesign preserves and does not draw. Save as \
+                             `.paged` to keep it visible everywhere.",
+                            e.effect.kind_name()
+                        ),
                     ));
                 }
             }
             if slots.indesign_order_differs() {
-                out.push(format!(
-                    "the order of the InDesign effects on {kind} `{id}`{on} differs from \
-                     InDesign's fixed order — InDesign draws them in its own; the order is \
-                     kept in the item's `paged:effectStack` label."
+                out.push(idml_loss(
+                    "idml.effect.order",
+                    APPROXIMATED,
+                    on_item,
+                    format!(
+                        "the order of the InDesign effects on {kind} `{id}`{on} differs from \
+                         InDesign's fixed order — InDesign draws them in its own; the order is \
+                         kept in the item's `paged:effectStack` label."
+                    ),
                 ));
             }
         }
@@ -1144,7 +1329,7 @@ pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
 /// bakes it to a group of single-paint items and keeps the source in the
 /// carrier's `paged:appearance` label. Declared from the model: the twin
 /// reads the label back, so it cannot see the loss.
-pub(crate) fn appearance_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn appearance_losses(scene: &Document) -> Vec<LossEntry> {
     scene
         .spreads
         .iter()
@@ -1157,21 +1342,26 @@ pub(crate) fn appearance_losses(scene: &Document) -> Vec<String> {
 /// is; the export keeps each stack in the frame's label, which paged reads
 /// back on reopen. Declared from the model, like the opacity masks: the
 /// twin reads the label back and so cannot tell the loss.
-pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<LossEntry> {
     let mut out = Vec::new();
     let mut check = |kind: &str, id: Option<&str>, ops: &[paged_model::RasterOp]| {
         if ops.is_empty() {
             return;
         }
         let names: Vec<&str> = ops.iter().map(|op| op.name()).collect();
-        out.push(format!(
-            "image filter stack on {kind} `{}` ({}) is a paged-native construct — IDML has \
-             no adjustment on a placed picture, so InDesign shows it unadjusted; the stack \
-             rides the frame's `{}` label and comes back when paged reopens the file. \
-             Save as `.paged` to keep it.",
-            id.unwrap_or("?"),
-            names.join(", "),
-            paged_model::image_adjust::IMAGE_ADJUSTMENTS_LABEL,
+        out.push(idml_loss(
+            "idml.imageAdjustment.label",
+            APPROXIMATED,
+            id,
+            format!(
+                "image filter stack on {kind} `{}` ({}) is a paged-native construct — IDML has \
+                 no adjustment on a placed picture, so InDesign shows it unadjusted; the stack \
+                 rides the frame's `{}` label and comes back when paged reopens the file. \
+                 Save as `.paged` to keep it.",
+                id.unwrap_or("?"),
+                names.join(", "),
+                paged_model::image_adjust::IMAGE_ADJUSTMENTS_LABEL,
+            ),
         ));
     };
     for parsed in &scene.spreads {
@@ -1208,13 +1398,18 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
         .filter(|f| !f.image_adjustments.is_empty())
     {
         let names: Vec<&str> = f.image_adjustments.iter().map(|op| op.name()).collect();
-        out.push(format!(
-            "image filter stack on anchored frame `{}` ({}) is a paged-native construct — \
-             IDML has no adjustment on a placed picture and the anchored frame keeps no label \
-             for it, so InDesign shows the picture unadjusted and the stack is not written. \
-             Save as `.paged` to keep it.",
-            f.self_id.as_deref().unwrap_or("?"),
-            names.join(", "),
+        out.push(idml_loss(
+            "idml.imageAdjustment.anchored",
+            DROPPED,
+            f.self_id.as_deref(),
+            format!(
+                "image filter stack on anchored frame `{}` ({}) is a paged-native construct — \
+                 IDML has no adjustment on a placed picture and the anchored frame keeps no \
+                 label for it, so InDesign shows the picture unadjusted and the stack is not \
+                 written. Save as `.paged` to keep it.",
+                f.self_id.as_deref().unwrap_or("?"),
+                names.join(", "),
+            ),
         ));
     }
     out
@@ -1225,7 +1420,7 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
 /// keeps the medium in the frame's label, which paged reads back on reopen;
 /// InDesign shows the poster. A medium in a container part travels only in
 /// a `.paged` file. Declared from the model, like the filter stacks.
-pub(crate) fn media_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn media_losses(scene: &Document) -> Vec<LossEntry> {
     let mut out = Vec::new();
     for parsed in &scene.spreads {
         for r in &parsed.spread.rectangles {
@@ -1242,12 +1437,17 @@ pub(crate) fn media_losses(scene: &Document) -> Vec<String> {
                     format!("its medium is linked at `{uri}`")
                 }
             };
-            out.push(format!(
-                "{kind} `{}` is a paged-native construct here — InDesign is given the picture \
-                 frame of its poster, with the medium in the frame's `{}` label, which paged \
-                 reads back on reopen; {carried}. Save as `.paged` to keep it.",
-                r.self_id.as_deref().unwrap_or("?"),
-                paged_model::media::MEDIA_LABEL,
+            out.push(idml_loss(
+                "idml.media.poster",
+                APPROXIMATED,
+                r.self_id.as_deref(),
+                format!(
+                    "{kind} `{}` is a paged-native construct here — InDesign is given the \
+                     picture frame of its poster, with the medium in the frame's `{}` label, \
+                     which paged reads back on reopen; {carried}. Save as `.paged` to keep it.",
+                    r.self_id.as_deref().unwrap_or("?"),
+                    paged_model::media::MEDIA_LABEL,
+                ),
             ));
         }
     }
@@ -1260,7 +1460,7 @@ pub(crate) fn media_losses(scene: &Document) -> Vec<String> {
 /// Declared from the model, as the fill rule's line is: one line per
 /// item (object, target or effect) naming the mode, what was written and
 /// `.paged`, which keeps it.
-pub(crate) fn blend_mode_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn blend_mode_losses(scene: &Document) -> Vec<LossEntry> {
     let mut out = Vec::new();
     for parsed in &scene.spreads {
         let Ok(tree) = serde_json::to_value(&parsed.spread) else {
@@ -1274,7 +1474,7 @@ pub(crate) fn blend_mode_losses(scene: &Document) -> Vec<String> {
 /// Walk a serialised spread: every `*blend_mode` string the engine reads
 /// as one of Photoshop's modes is a line, attributed to the nearest
 /// enclosing object's `self_id`.
-fn walk_blend_modes(v: &serde_json::Value, owner: Option<&str>, out: &mut Vec<String>) {
+fn walk_blend_modes(v: &serde_json::Value, owner: Option<&str>, out: &mut Vec<LossEntry>) {
     match v {
         serde_json::Value::Object(map) => {
             let owner = map
@@ -1288,12 +1488,17 @@ fn walk_blend_modes(v: &serde_json::Value, owner: Option<&str>, out: &mut Vec<St
                         .and_then(paged_blend::BlendMode::from_name)
                         .filter(|m| !m.is_native())
                     {
-                        out.push(format!(
-                            "blend mode {} on `{}` ({key}) is a Photoshop mode InDesign cannot \
-                             store — IDML gets {}. Save as `.paged` to keep it.",
-                            mode.name(),
-                            owner.unwrap_or("?"),
-                            mode.idml_name(),
+                        out.push(idml_loss(
+                            "idml.blendMode.photoshop",
+                            APPROXIMATED,
+                            owner,
+                            format!(
+                                "blend mode {} on `{}` ({key}) is a Photoshop mode InDesign \
+                                 cannot store — IDML gets {}. Save as `.paged` to keep it.",
+                                mode.name(),
+                                owner.unwrap_or("?"),
+                                mode.idml_name(),
+                            ),
                         ));
                         continue;
                     }

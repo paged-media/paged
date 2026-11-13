@@ -71,11 +71,14 @@ they test does.
   reads it as properties (its presence turns on row splitting and autofit). Sheet's minted cell styles are
   gone (2026-11-12, engine ADR 1098, sheet ADR 518 amendment): `cell-text-format.ts` writes a cell's face,
   size, colour, alignment, indent and repeat-fill tab as direct properties on the cell-qualified
-  `storyRange`. Doc's table cells set Word's direct formatting the same way (2026-11-12, doc ADR 600
-  amendment): the Word style a synthesized `docx-auto-*` style stands on, then its properties
-  (`doc-host-model` `direct-format.ts`, the native body's rule), and a synthesized style only cells named
-  is no longer minted; the body's deferred blocks still apply them (their tracked format changes name a look
-  by a style). Later: the Rust adapters build
+  `storyRange`. Doc sets Word's direct formatting the same way everywhere it writes through the mutation
+  door (2026-11-12, doc ADR 600 amendments): the Word style a synthesized `docx-auto-*` style stands on,
+  then its properties. One rule, `docx_skeleton::body::paragraph_plan` (the native body, the placement
+  batch and the pour); the pour reads it as `direct` looks `docx-js` writes into the IR
+  (`docx_skeleton::direct`), and its TypeScript twin (`direct-format.ts`) is deleted. Blank lines and a
+  table's own paragraph take them through a caret that names its paragraph, a tracked change's look before
+  through `recordChange`'s before-properties (engine ADR 1098 amendment); a synthesized style is minted only
+  where the native body keeps one. Later: the Rust adapters build
   `paged_model` tables directly (doc ADR 625's path) instead of lowering to ops.
 - **Consolidation pass 2, Rust (2026-11-11):** the oval outline is `paged_geom::oval_anchors`
   (`paged-mutate` re-exports it; IDML writers, snapping, the generators); `slide-resolve` and
@@ -366,7 +369,11 @@ Status (draw items, one line each; updated as they land):
   (`live-shape-handles.tsx`, editor ADR 310 amended): a rectangle's and a text frame's corners one by
   one, any closed polygon's corners together (the renderer's rule, `@paged-media/vector-tools`
   `polygon-corners.ts`). Draw's Corner Radius tool, handler and the box half of its machine are gone
-  (id through the deprecation window; draw ADR 359 amended).
+  (id through the deprecation window; draw ADR 359 amended). 2026-11-12: the corner widgets also show
+  in path-edit mode, under Direct Selection, which every context keeps; before, a context without
+  the Selection tool (sheet, web, data, image, draw) could not reach them (editor ADR 310 amended).
+  The every-context e2e (`HPX-P2-*`) rounds, distorts, samples and inserts references in each module
+  context without leaving it.
 - Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
   `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
   payload it inserts, centred on the page. The write is one implementation in
@@ -523,11 +530,17 @@ losses }`), `pdf-import` (`Loss` is `LossEntry`), `paged-psd-fx` (`StyleLoss` is
   export producer has its own `pptx.<area>.<what>` code and a severity, `pptx_core::loss`; a kept import
   report's sentences read as `pptx.legacy` entries in Rust and in the bundle's `readLosses`; the bundle
   shows them through `lossDiagnostics`) and `paged-ps` (`Report.unsupported` is `LossEntry`, codes
-  `eps.<area>.<what>`). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL diagnostic (not a
-  loss), the IDML export's `lost` lines (a wire field, `IdmlExported.lost`, so a protocol change of its
-  own), image-js `LosslessShape` (a save-back classification) and the web bundle's linter findings (not
-  losses). Single-owner rule `loss-report` (also: a `losses` / `lost` / `unsupported` / `not_exported`
-  field of `Vec<String>`; the six left are the DrawingML mapper's sentences in doc, sheet and web).
+  `eps.<area>.<what>`), the IDML export (2026-11-12, protocol v78 rider: `IdmlExported.lost` is
+  `LossEntry[]`, every producer of `idml_export_losses` names an `idml.<area>.<what>` code, a severity and
+  its item in the new optional `LossEntry.items`; paged.publish's `exportIdml` diagnostics carry each
+  entry's code, the SDK harness and the `paged` CLI's JSON carry the entries) and the DrawingML mapper
+  (2026-11-12: `dml-native`'s `Mapper` / `Lowering` losses are entries, `dml.<area>.<what>`, and with them
+  doc's, sheet's and web's lowered looks; 2026-11-13: its save direction too, `picture::effects_of` /
+  `splice_blip` answer `dml.picture.*` entries that pptx-export records with their own codes and docx-export's
+  save ledger names on each line). Not mapped, with reasons in ADR 1097: `paged-data-store`'s SQL
+  diagnostic (not a loss), image-js `LosslessShape` (a save-back classification) and the web bundle's
+  linter findings (not losses). Single-owner rule `loss-report` (also: a `losses` / `lost` /
+  `unsupported` / `not_exported` field of `Vec<String>`); its baseline is empty.
 
 ### W9 status (2026-11-08): PDF, scripting, data leftovers
 

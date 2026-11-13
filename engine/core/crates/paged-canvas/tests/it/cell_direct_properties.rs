@@ -114,6 +114,7 @@ impl Fixture {
             start,
             end,
             cell: Some(self.cell.clone()),
+            paragraph: None,
         }
     }
 

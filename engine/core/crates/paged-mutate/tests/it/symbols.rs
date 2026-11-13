@@ -402,6 +402,12 @@ fn the_idml_expansion_is_undone_by_the_label_restore__feat__frames_paths_symbol_
     let mut written = doc.clone();
     let lines = expand_symbols_for_interchange(&mut written);
     assert_eq!(lines.len(), 2, "one loss line per instance");
+    assert!(
+        lines
+            .iter()
+            .all(|l| l.code == "idml.symbol.expanded" && l.items.len() == 1),
+        "{lines:?}"
+    );
     assert!(written.spreads[0].spread.instances.is_empty());
     let restored = restore_symbols_from_labels(&mut written);
     assert_eq!(restored, 2);

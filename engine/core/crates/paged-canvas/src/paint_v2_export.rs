@@ -306,14 +306,25 @@ pub(crate) fn lower_for_idml(scene: &mut Document) {
 /// The paint-v2 constructs the IDML export cannot carry, one line each,
 /// declared from `scene` and, where a lowering stands in for one,
 /// checked against `twin` (the export re-imported).
-pub(crate) fn paint_v2_losses(scene: &Document, twin: Option<&Document>) -> Vec<String> {
+pub(crate) fn paint_v2_losses(
+    scene: &Document,
+    twin: Option<&Document>,
+) -> Vec<paged_model::report::LossEntry> {
+    use crate::export_losses::idml_loss;
+    use paged_model::report::LossSeverity;
     let mut out = Vec::new();
     let palette = &scene.palette;
     for (gid, g) in &palette.gradients {
         if g.kind == GradientKind::Conic {
-            out.push(format!(
-                "conic gradient `{gid}` is a paged-native paint — IDML has no conic gradient, \
-                 so it exports as a linear one of the same stops. Save as `.paged` to keep it."
+            out.push(idml_loss(
+                "idml.gradient.conic",
+                LossSeverity::Approximated,
+                Some(gid),
+                format!(
+                    "conic gradient `{gid}` is a paged-native paint — IDML has no conic \
+                     gradient, so it exports as a linear one of the same stops. Save as \
+                     `.paged` to keep it."
+                ),
             ));
         }
         if let Some(twin) = twin {
@@ -327,11 +338,16 @@ pub(crate) fn paint_v2_losses(scene: &Document, twin: Option<&Document>) -> Vec<
                     })
                 });
                 if !kept {
-                    out.push(format!(
-                        "stop {} of gradient `{gid}` carries its own colour, which the exported \
-                         gradient does not — the IDML exporter writes a changed source gradient \
-                         as it was. Save as `.paged` to keep it.",
-                        i + 1
+                    out.push(idml_loss(
+                        "idml.gradient.stopColor",
+                        LossSeverity::Approximated,
+                        Some(gid),
+                        format!(
+                            "stop {} of gradient `{gid}` carries its own colour, which the \
+                             exported gradient does not — the IDML exporter writes a changed \
+                             source gradient as it was. Save as `.paged` to keep it.",
+                            i + 1
+                        ),
                     ));
                 }
             }
@@ -355,36 +371,53 @@ pub(crate) fn paint_v2_losses(scene: &Document, twin: Option<&Document>) -> Vec<
                                 .all(|(a, b)| (a.alpha_pct - b.opacity() * 100.0).abs() < 0.5)
                     });
                 if !feathered {
-                    out.push(format!(
-                        "the opacity stops of gradient `{}` on {} `{id}` are a paged-native paint \
-                         — IDML stops have no opacity and no equivalent gradient feather was \
-                         written, so the fill exports opaque. Save as `.paged` to keep it.",
-                        f.fill.unwrap_or("?"),
-                        f.kind
+                    out.push(idml_loss(
+                        "idml.gradient.opacityStops",
+                        LossSeverity::Dropped,
+                        f.id,
+                        format!(
+                            "the opacity stops of gradient `{}` on {} `{id}` are a paged-native \
+                             paint — IDML stops have no opacity and no equivalent gradient \
+                             feather was written, so the fill exports opaque. Save as `.paged` \
+                             to keep it.",
+                            f.fill.unwrap_or("?"),
+                            f.kind
+                        ),
                     ));
                 }
             }
         }
         if let Some(g) = f.stroke.and_then(|c| palette.gradients.get(c)) {
             if g.has_opacity_stops() {
-                out.push(format!(
-                    "the opacity stops of gradient `{}` on the stroke of {} `{id}` are a \
-                     paged-native paint — IDML stops have no opacity (a feather would fade the \
-                     whole object), so the stroke exports opaque. Save as `.paged` to keep it.",
-                    f.stroke.unwrap_or("?"),
-                    f.kind
+                out.push(idml_loss(
+                    "idml.gradient.strokeOpacityStops",
+                    LossSeverity::Dropped,
+                    f.id,
+                    format!(
+                        "the opacity stops of gradient `{}` on the stroke of {} `{id}` are a \
+                         paged-native paint — IDML stops have no opacity (a feather would fade \
+                         the whole object), so the stroke exports opaque. Save as `.paged` to \
+                         keep it.",
+                        f.stroke.unwrap_or("?"),
+                        f.kind
+                    ),
                 ));
             }
             if f.mode != StrokeGradientMode::Within {
-                out.push(format!(
-                    "the stroke gradient of {} `{id}` runs {} its path, a paged-native mapping — \
-                     IDML strokes a gradient within the frame only, so it exports that way. Save \
-                     as `.paged` to keep it.",
-                    f.kind,
-                    match f.mode {
-                        StrokeGradientMode::Along => "along",
-                        _ => "across",
-                    }
+                out.push(idml_loss(
+                    "idml.gradient.strokeMode",
+                    LossSeverity::Approximated,
+                    f.id,
+                    format!(
+                        "the stroke gradient of {} `{id}` runs {} its path, a paged-native \
+                         mapping — IDML strokes a gradient within the frame only, so it exports \
+                         that way. Save as `.paged` to keep it.",
+                        f.kind,
+                        match f.mode {
+                            StrokeGradientMode::Along => "along",
+                            _ => "across",
+                        }
+                    ),
                 ));
             }
         }

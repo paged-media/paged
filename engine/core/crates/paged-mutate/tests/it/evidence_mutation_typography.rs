@@ -84,6 +84,7 @@ where
                 start: 0,
                 end: 10,
                 cell: None,
+                paragraph: None,
             },
             path,
             value,

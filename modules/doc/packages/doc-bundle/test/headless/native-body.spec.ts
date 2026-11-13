@@ -370,6 +370,11 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
         expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
           false,
         );
+        // Doc ADR 600, amendment 2026-11-12b — the old pour sets the same
+        // looks (the native rule, written into the IR by docx-js).
+        expect(old.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
+          false,
+        );
       }
       const exported = async (o: Opened): Promise<string> => {
         const exporter = o.h
@@ -383,7 +388,14 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
           inflatedPart(out!.bytes, "word/document.xml"),
         );
       };
-      expect(await exported(native)).toEqual(await exported(old));
+      const oldExport = await exported(old);
+      expect(await exported(native)).toEqual(oldExport);
+      // Unedited, the old pour saves Word's document part as it was.
+      expect(oldExport).toEqual(
+        new TextDecoder().decode(
+          inflatedPart(fixture(name), "word/document.xml"),
+        ),
+      );
     }, 120_000);
   }
 

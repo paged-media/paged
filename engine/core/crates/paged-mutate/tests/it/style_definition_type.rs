@@ -226,6 +226,7 @@ fn a_paragraph_carries_its_own_hyphenation_zone() {
                 start: 0,
                 end: 10,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::ParagraphHyphenationZone,
             value: Value::Length(Some(12.0)),

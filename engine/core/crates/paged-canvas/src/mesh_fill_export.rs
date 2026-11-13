@@ -105,7 +105,12 @@ fn what(fill: &MeshFill) -> &'static str {
 /// One line per frame whose mesh fill IDML cannot say, checked against
 /// `twin` (the export re-imported, which restores the fill from its
 /// label) where there is one.
-pub(crate) fn mesh_fill_losses(scene: &Document, twin: Option<&Document>) -> Vec<String> {
+pub(crate) fn mesh_fill_losses(
+    scene: &Document,
+    twin: Option<&Document>,
+) -> Vec<paged_model::report::LossEntry> {
+    use crate::export_losses::idml_loss;
+    use paged_model::report::LossSeverity;
     let twin_frames = twin.map(mesh_frames).unwrap_or_default();
     mesh_frames(scene)
         .into_iter()
@@ -115,18 +120,29 @@ pub(crate) fn mesh_fill_losses(scene: &Document, twin: Option<&Document>) -> Vec
                     .iter()
                     .any(|(_, tid, tf)| *tid == id && *tf == fill);
             if carried {
-                format!(
-                    "the {} of {kind} `{id}` is a paged-native paint — IDML has none, so \
-                     InDesign shows the frame's swatch; the fill rides in the frame's label and \
-                     a paged import restores it. Save as `.paged` to keep it everywhere.",
-                    what(fill)
+                idml_loss(
+                    "idml.meshFill.label",
+                    LossSeverity::Approximated,
+                    Some(&id),
+                    format!(
+                        "the {} of {kind} `{id}` is a paged-native paint — IDML has none, so \
+                         InDesign shows the frame's swatch; the fill rides in the frame's label \
+                         and a paged import restores it. Save as `.paged` to keep it \
+                         everywhere.",
+                        what(fill)
+                    ),
                 )
             } else {
-                format!(
-                    "the {} of {kind} `{id}` is a paged-native paint — IDML has none, and the \
-                     label meant to carry it did not survive the export. Save as `.paged` to \
-                     keep it.",
-                    what(fill)
+                idml_loss(
+                    "idml.meshFill.lost",
+                    LossSeverity::Dropped,
+                    Some(&id),
+                    format!(
+                        "the {} of {kind} `{id}` is a paged-native paint — IDML has none, and \
+                         the label meant to carry it did not survive the export. Save as \
+                         `.paged` to keep it.",
+                        what(fill)
+                    ),
                 )
             }
         })

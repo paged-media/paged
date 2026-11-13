@@ -76,6 +76,7 @@ fn whole_story(m: &CanvasModel, story: &str) -> ElementId {
         start: 0,
         end: chars,
         cell: None,
+        paragraph: None,
     }
 }
 

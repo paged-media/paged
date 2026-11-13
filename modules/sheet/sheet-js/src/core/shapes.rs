@@ -34,6 +34,7 @@
 
 use paged_model::live_shape::{PresetPart, PresetShape};
 use paged_model::OfficeLineEnd;
+use sheet_chart::native::{LossEntry, LossSeverity};
 use sheet_xlsx::parts::shapes::{ShapeGeometry, SheetShape};
 
 use super::annotations::{place_anchor, Placed};
@@ -102,9 +103,9 @@ pub struct PageShape {
     /// Fill, outline, opacity and effects (colours as `#RRGGBB`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fx: Option<sheet_chart::native::NativeFx>,
-    /// What the page cannot hold of the shape, one line per kind.
+    /// What the page cannot hold of the shape, one entry per kind.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub losses: Vec<String>,
+    pub losses: Vec<LossEntry>,
     /// The URL its click action opens (`a:hlinkClick`, sheet ADR 531).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
@@ -303,7 +304,7 @@ fn items_of(
 /// Office's line ends on the open items of `shape` (`a:headEnd` at the first
 /// anchor, `a:tailEnd` at the last), with the nearest InDesign arrowhead
 /// for IDML; a line end Office does not define is a loss.
-fn put_heads(shape: &SheetShape, items: &mut [ShapeItem], losses: &mut Vec<String>) {
+fn put_heads(shape: &SheetShape, items: &mut [ShapeItem], losses: &mut Vec<LossEntry>) {
     let Some(line) = shape.props.line.as_ref() else {
         return;
     };
@@ -311,8 +312,10 @@ fn put_heads(shape: &SheetShape, items: &mut [ShapeItem], losses: &mut Vec<Strin
         match dml_geom::heads::office_end(e?) {
             Ok(o) => o,
             Err(kind) => {
-                losses.push(format!(
-                    "a line end of type \u{201c}{kind}\u{201d} is not drawn"
+                losses.push(LossEntry::new(
+                    "xlsx.shape.lineEnd",
+                    LossSeverity::Dropped,
+                    format!("a line end of type \u{201c}{kind}\u{201d} is not drawn"),
                 ));
                 None
             }
@@ -377,7 +380,11 @@ impl SheetSession {
                 };
                 let (fx, mut losses) = sheet_chart::native::shape_look(&theme, &s.props, w, h);
                 if !s.text.is_empty() {
-                    losses.push("the text of a shape is not drawn on the page yet".into());
+                    losses.push(LossEntry::new(
+                        "xlsx.shape.text",
+                        LossSeverity::Dropped,
+                        "the text of a shape is not drawn on the page yet",
+                    ));
                 }
                 let (mut items, transform) = items_of(&s, w, h, aw, ah);
                 put_heads(&s, &mut items, &mut losses);

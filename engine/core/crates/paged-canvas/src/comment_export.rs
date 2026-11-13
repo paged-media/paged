@@ -136,7 +136,9 @@ fn place_in(paragraphs: &mut [Paragraph], id: &str, note: &mut Option<Note>) {
 }
 
 /// The comments the IDML export does not carry whole, one line per thread.
-pub(crate) fn comment_losses(scene: &Document) -> Vec<String> {
+pub(crate) fn comment_losses(scene: &Document) -> Vec<paged_model::report::LossEntry> {
+    use crate::export_losses::idml_loss;
+    use paged_model::report::LossSeverity;
     let mut out = Vec::new();
     for t in &scene.comment_threads {
         let (kind, target) = match &t.anchor {
@@ -158,11 +160,16 @@ pub(crate) fn comment_losses(scene: &Document) -> Vec<String> {
             ThreadKind::Comment => "comment",
             ThreadKind::Note => "note",
         };
-        out.push(format!(
-            "comment thread `{}` ({what}{replies}) on {kind}{target} is dropped — IDML's only \
-             comment is the note, a point in a story's text, and this thread has none. \
-             Save as `.paged` to keep it, or export PDF with comments.",
-            t.id
+        out.push(idml_loss(
+            "idml.comment.unanchored",
+            LossSeverity::Dropped,
+            Some(&t.id),
+            format!(
+                "comment thread `{}` ({what}{replies}) on {kind}{target} is dropped — IDML's \
+                 only comment is the note, a point in a story's text, and this thread has \
+                 none. Save as `.paged` to keep it, or export PDF with comments.",
+                t.id
+            ),
         ));
     }
     for parsed in &scene.stories {
@@ -175,29 +182,44 @@ pub(crate) fn comment_losses(scene: &Document) -> Vec<String> {
                 .count();
             let placed = story_has_run(&story.paragraphs, &root.id);
             if !placed {
-                out.push(format!(
-                    "comment thread `{}` on a text range of story `{}` is dropped — its text \
-                     is gone, so it has no point to stand at as an IDML note. Save as `.paged` \
-                     to keep it.",
-                    root.id, parsed.self_id
+                out.push(idml_loss(
+                    "idml.comment.textGone",
+                    LossSeverity::Dropped,
+                    Some(&root.id),
+                    format!(
+                        "comment thread `{}` on a text range of story `{}` is dropped — its \
+                         text is gone, so it has no point to stand at as an IDML note. Save as \
+                         `.paged` to keep it.",
+                        root.id, parsed.self_id
+                    ),
                 ));
                 continue;
             }
             if replies > 0 {
-                out.push(format!(
-                    "comment thread `{}` on story `{}`: its {replies} repl{} fold into the \
-                     IDML note's text as paragraphs (`Author: text`) — a note has no replies. \
-                     Save as `.paged` to keep the thread.",
-                    root.id,
-                    parsed.self_id,
-                    if replies == 1 { "y" } else { "ies" }
+                out.push(idml_loss(
+                    "idml.comment.replies",
+                    LossSeverity::Approximated,
+                    Some(&root.id),
+                    format!(
+                        "comment thread `{}` on story `{}`: its {replies} repl{} fold into the \
+                         IDML note's text as paragraphs (`Author: text`) — a note has no \
+                         replies. Save as `.paged` to keep the thread.",
+                        root.id,
+                        parsed.self_id,
+                        if replies == 1 { "y" } else { "ies" }
+                    ),
                 ));
             }
             if root.resolved {
-                out.push(format!(
-                    "comment thread `{}` on story `{}` is resolved — an IDML note has no \
-                     resolved state, so it opens as an ordinary note.",
-                    root.id, parsed.self_id
+                out.push(idml_loss(
+                    "idml.comment.resolved",
+                    LossSeverity::Approximated,
+                    Some(&root.id),
+                    format!(
+                        "comment thread `{}` on story `{}` is resolved — an IDML note has no \
+                         resolved state, so it opens as an ordinary note.",
+                        root.id, parsed.self_id
+                    ),
                 ));
             }
         }

@@ -6,4 +6,3 @@
 
 export * from "./lowered.js";
 export * from "./mutations.js";
-export * from "./direct-format.js";

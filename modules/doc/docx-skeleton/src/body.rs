@@ -207,34 +207,69 @@ fn split_style<'a>(
 /// [`set_run_prop`]) and a paragraph style's PDF export tag (a style's).
 const NOT_ON_A_RANGE: [&str; 2] = ["characterLanguage", "paragraphStylePdfExportTag"];
 
-/// How one table cell paragraph is formatted when its cell is written
-/// through the mutation door (engine ADR 1098: a cell-qualified story range
-/// takes direct properties). The rule is [`build_paragraph`]'s: a
-/// synthesized style is its Word style plus direct properties, a paragraph
-/// style's character properties go onto its runs under their own, and the
-/// synthesized paragraph style is kept when it has character properties and
-/// no run to carry them or a run's Word character style sets one of them.
-/// `doc-host-model` `direct-format.ts` (`paragraphPlan`) is its TypeScript
-/// twin for the pour.
+/// Whether a paragraph keeps the synthesized style the lowering made for it
+/// instead of becoming its Word style plus direct properties: that style's
+/// character properties (`chars`) are the runs' own in the model, so a
+/// paragraph with no text (no run to carry them) and one whose run's Word
+/// character style sets one of the same paths (a run's own value would win
+/// where the cascade lets the character style win) keep it. The one rule of
+/// the native body ([`build_whole`]), the placement batch and the pour
+/// ([`paragraph_plan`]).
+fn keeps_paragraph_style(
+    doc: &LoweredDoc,
+    styles: &HashMap<&str, &LoweredStyle>,
+    p: &LoweredParagraph,
+    chars: &[&StyleProp],
+) -> bool {
+    if chars.is_empty() {
+        return false;
+    }
+    let all_empty = p.runs.iter().all(|r| r.text.is_empty());
+    all_empty
+        || p.runs.iter().any(|r| {
+            split_style(styles, r.char_style_id.as_deref())
+                .ok()
+                .and_then(|d| d.base)
+                .is_some_and(|base| {
+                    let theirs = resolve_style(doc, base);
+                    chars.iter().any(|c| theirs.contains_key(&c.path))
+                })
+        })
+}
+
+/// How one paragraph is formatted when it is written through the mutation
+/// door (doc ADR 600 amendments; engine ADR 1098: a story range, a cell's
+/// included, takes direct properties): a synthesized style is its Word style
+/// plus direct properties, a paragraph style's character properties go onto
+/// its runs under their own, and the synthesized paragraph style is kept
+/// where [`keeps_paragraph_style`] says so. The placement batch reads it for
+/// table cells, and the pour reads it through the `direct` looks
+/// [`crate::direct::annotate`] writes into the IR.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct CellParagraphPlan<'a> {
+pub struct ParagraphPlan<'a> {
     /// The paragraph style to apply, if any (a Word style, or the
     /// synthesized one when `kept`).
     pub style: Option<&'a str>,
     pub kept: bool,
     /// Paragraph properties set on the paragraph.
     pub props: Vec<&'a StyleProp>,
+    /// The paragraph style's character properties the runs carry (empty
+    /// when `kept`).
+    pub chars: Vec<&'a StyleProp>,
     /// Per run: its character style and direct properties; `None` for a run
     /// whose style is applied as it is (a synthesized style missing from the
     /// catalogue).
     pub runs: Vec<Option<(Option<&'a str>, Vec<&'a StyleProp>)>>,
 }
 
-/// [`CellParagraphPlan`] of `p`.
-pub fn cell_paragraph_plan<'a>(
+/// [`ParagraphPlan`] of `p`; `keep` forces the synthesized paragraph style
+/// to be kept (a break's part that could not carry the first part's
+/// character properties, say).
+pub fn paragraph_plan_with<'a>(
     doc: &'a LoweredDoc,
     p: &'a LoweredParagraph,
-) -> CellParagraphPlan<'a> {
+    keep: bool,
+) -> ParagraphPlan<'a> {
     let styles = catalogue(doc);
     let on_range = |x: &&StyleProp| !NOT_ON_A_RANGE.contains(&x.path.as_str());
     let runs: Vec<Option<Direct>> = p
@@ -243,10 +278,11 @@ pub fn cell_paragraph_plan<'a>(
         .map(|r| split_style(&styles, r.char_style_id.as_deref()).ok())
         .collect();
     let Ok(direct) = split_style(&styles, p.para_style_id.as_deref()) else {
-        return CellParagraphPlan {
+        return ParagraphPlan {
             style: p.para_style_id.as_deref(),
             kept: true,
             props: Vec::new(),
+            chars: Vec::new(),
             runs: runs
                 .into_iter()
                 .map(|d| d.map(|d| (d.base, d.props.into_iter().filter(on_range).collect())))
@@ -259,17 +295,10 @@ pub fn cell_paragraph_plan<'a>(
         .copied()
         .filter(|x| is_char_path(&x.path) && on_range(x))
         .collect();
-    let all_empty = p.runs.iter().all(|r| r.text.is_empty());
-    let overlaps = !chars.is_empty()
-        && runs.iter().flatten().any(|d| {
-            d.base.is_some_and(|base| {
-                let theirs = resolve_style(doc, base);
-                chars.iter().any(|c| theirs.contains_key(&c.path))
-            })
-        });
-    let kept = !chars.is_empty() && (all_empty || overlaps);
-    let under: &[&StyleProp] = if kept { &[] } else { &chars };
-    CellParagraphPlan {
+    let kept = (keep && p.para_style_id.as_deref().is_some_and(is_synthesized))
+        || keeps_paragraph_style(doc, &styles, p, &chars);
+    let under: Vec<&StyleProp> = if kept { Vec::new() } else { chars };
+    ParagraphPlan {
         style: if kept {
             p.para_style_id.as_deref()
         } else {
@@ -303,7 +332,35 @@ pub fn cell_paragraph_plan<'a>(
                 })
             })
             .collect(),
+        chars: under,
     }
+}
+
+/// [`paragraph_plan_with`], kept only where the rule says so.
+pub fn paragraph_plan<'a>(doc: &'a LoweredDoc, p: &'a LoweredParagraph) -> ParagraphPlan<'a> {
+    paragraph_plan_with(doc, p, false)
+}
+
+/// A look the lowering names by `id` as its Word style and direct
+/// properties (a synthesized chain flattened, the nearest style's value
+/// last; the properties a range does not take left out), or `None` when a
+/// synthesized style in its chain is not in the catalogue.
+pub fn split_look<'a>(
+    doc: &'a LoweredDoc,
+    id: Option<&'a str>,
+) -> Option<(Option<&'a str>, Vec<&'a StyleProp>)> {
+    let styles = catalogue(doc);
+    let d = split_style(&styles, id).ok()?;
+    let mut props: Vec<&StyleProp> = Vec::new();
+    for x in d
+        .props
+        .into_iter()
+        .filter(|x| !NOT_ON_A_RANGE.contains(&x.path.as_str()))
+    {
+        props.retain(|y| y.path != x.path);
+        props.push(x);
+    }
+    Some((d.base, props))
 }
 
 fn len_of(v: &PropValue) -> Option<f32> {
@@ -973,19 +1030,8 @@ fn build_whole(
         .copied()
         .filter(|x| is_char_path(&x.path))
         .collect();
-    let overlaps = !chars.is_empty()
-        && p.runs.iter().any(|r| {
-            split_style(styles, r.char_style_id.as_deref())
-                .ok()
-                .and_then(|d| d.base)
-                .is_some_and(|base| {
-                    let theirs = resolve_style(doc, base);
-                    chars.iter().any(|c| theirs.contains_key(&c.path))
-                })
-        });
-    let all_empty = p.runs.iter().all(|r| r.text.is_empty());
     let mut para_chars: Vec<&StyleProp> = Vec::new();
-    if !chars.is_empty() && (all_empty || overlaps) {
+    if keeps_paragraph_style(doc, styles, p, &chars) {
         para.paragraph_style = p.para_style_id.clone();
         let mut at = p.para_style_id.as_deref();
         while let Some(id) = at {

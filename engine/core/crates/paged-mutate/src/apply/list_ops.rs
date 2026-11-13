@@ -36,6 +36,7 @@ fn targets(
         start,
         end,
         cell: None,
+        paragraph: None,
     };
     if start > end {
         return Err(OperationError::InvalidValue {

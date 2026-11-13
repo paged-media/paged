@@ -87,6 +87,10 @@ pub struct LossEntry {
     /// The 0-based pages it stood on, when the source has pages.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pages: Vec<usize>,
+    /// The items it stood on, by the producer's own reference (a page
+    /// item's or a story's id, a section, a swatch), when it can name them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
     /// Why or what, worded; empty when the consumer words the code.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub message: String,
@@ -104,8 +108,19 @@ impl LossEntry {
             count: 1,
             severity,
             pages: Vec::new(),
+            items: Vec::new(),
             message: message.into(),
         }
+    }
+
+    /// The same entry, standing on the item `id` (added to [`Self::items`];
+    /// an empty id names nothing and is left out).
+    pub fn on(mut self, id: impl Into<String>) -> Self {
+        let id = id.into();
+        if !id.is_empty() && !self.items.contains(&id) {
+            self.items.push(id);
+        }
+        self
     }
 
     /// `n` occurrences of `code`, dropped, left for the consumer to word.
@@ -115,6 +130,7 @@ impl LossEntry {
             count: n,
             severity: LossSeverity::Dropped,
             pages: Vec::new(),
+            items: Vec::new(),
             message: String::new(),
         }
     }
@@ -186,6 +202,7 @@ impl LossLog for Vec<LossEntry> {
             count: n,
             severity,
             pages: Vec::new(),
+            items: Vec::new(),
             message: message.to_string(),
         });
     }
@@ -200,6 +217,11 @@ impl LossLog for Vec<LossEntry> {
                 for p in entry.pages {
                     if !e.pages.contains(&p) {
                         e.pages.push(p);
+                    }
+                }
+                for i in entry.items {
+                    if !e.items.contains(&i) {
+                        e.items.push(i);
                     }
                 }
             }
@@ -279,6 +301,7 @@ mod tests {
             count: 2,
             severity: LossSeverity::Dropped,
             pages: vec![0, 2],
+            items: Vec::new(),
             message: "a hyperlink".into(),
         };
         assert_eq!(full.to_string(), "2 x Link (page 1, 3): a hyperlink");
@@ -340,6 +363,14 @@ mod tests {
         assert_eq!(
             (m.losses[0].count, m.losses[0].pages.clone()),
             (3, vec![1, 4])
+        );
+        let mut on = LossReport::default();
+        on.push_loss(LossEntry::new("idml.x", LossSeverity::Dropped, "m").on("r1"));
+        on.push_loss(LossEntry::new("idml.x", LossSeverity::Dropped, "m").on("r2"));
+        assert_eq!(on.losses[0].items, ["r1", "r2"]);
+        assert_eq!(
+            serde_json::to_string(&on.losses[0]).unwrap(),
+            r#"{"code":"idml.x","count":2,"severity":"dropped","items":["r1","r2"],"message":"m"}"#
         );
         assert_eq!(
             LossReport::from(vec![LossEntry::counted("b", 1), LossEntry::counted("a", 1)])

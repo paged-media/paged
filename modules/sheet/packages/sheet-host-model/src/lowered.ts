@@ -41,7 +41,7 @@
  *  `"general"` is Excel's default (numbers right, text left), resolved
  *  in Rust; the lowered text is already the formatted value, so the
  *  translator treats alignment as an opaque tag it forwards. */
-import type { RasterOp } from "@paged-media/plugin-api";
+import type { LossEntry, RasterOp } from "@paged-media/plugin-api";
 
 import type { NativeFx } from "./chart";
 
@@ -394,8 +394,8 @@ export interface LoweredShape {
   /** Fill, outline, opacity and effects as the shared DrawingML mapper
    *  lowered them. */
   fx?: NativeFx;
-  /** What the page cannot hold of the shape, one line per kind. */
-  losses?: string[];
+  /** What the page cannot hold of the shape, one entry per kind. */
+  losses?: LossEntry[];
 }
 
 /** W2.3 — one picture placed over a page table (see
@@ -427,8 +427,8 @@ export interface LoweredPicture {
   /** The URL its click action opens (`a:hlinkClick`; sheet ADR 531): an
    *  item hyperlink on the frame, the engine's own link model. */
   link?: string;
-  /** What the page cannot hold of its look, one line per kind. */
-  losses?: string[];
+  /** What the page cannot hold of its look, one entry per kind. */
+  losses?: LossEntry[];
 }
 
 /** The `index` of a frame page's printed heading row and heading column

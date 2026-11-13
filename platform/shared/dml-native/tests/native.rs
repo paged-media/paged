@@ -104,7 +104,9 @@ fn a_picture_takes_its_alpha_and_reports_what_the_engine_cannot_hold__feat__plug
     assert_eq!(fx.feather, Some(2.5));
     let losses = l.take_losses();
     assert!(
-        losses.iter().any(|m| m.contains("adjustment blackWhite")),
+        losses
+            .iter()
+            .any(|m| m.message.contains("adjustment blackWhite")),
         "{losses:?}"
     );
     // The reflection rides the effect stack after InDesign's effects.
@@ -116,7 +118,7 @@ fn a_picture_takes_its_alpha_and_reports_what_the_engine_cannot_hold__feat__plug
         (Some(55.0), Some(50.0), Some(0.3))
     );
     assert!(
-        !losses.iter().any(|m| m.contains("reflection")),
+        !losses.iter().any(|m| m.message.contains("reflection")),
         "{losses:?}"
     );
     assert!(fx.describe().ends_with("reflection"), "{}", fx.describe());
@@ -150,7 +152,7 @@ fn blur_and_a_colour_overlay_go_on_the_wire_stack__feat__plugin_doc_native_effec
         10.0,
     );
     assert!(fx.effect_stack.is_empty());
-    assert!(l.take_losses()[0].contains("gradient fill overlay"));
+    assert!(l.take_losses()[0].message.contains("gradient fill overlay"));
     // An effect DAG's containers are named, never dropped.
     let el = parse(
         format!(
@@ -161,7 +163,13 @@ fn blur_and_a_colour_overlay_go_on_the_wire_stack__feat__plugin_doc_native_effec
     .unwrap();
     let fx = l.shape(&drawingml::shape_properties(&el, &|_| None), 10.0, 10.0);
     assert_eq!(fx.effect_stack.len(), 1);
-    assert_eq!(l.take_losses(), ["effect cont is not carried (not read)"]);
+    let l = l.take_losses();
+    assert_eq!(
+        l.iter()
+            .map(|e| (e.code.as_str(), e.message.as_str()))
+            .collect::<Vec<_>>(),
+        [("dml.effect.unread", "effect cont is not carried (not read)")]
+    );
 }
 
 #[test]

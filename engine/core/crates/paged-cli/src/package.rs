@@ -433,7 +433,12 @@ fn report_text(name: &str, report: &Value) -> String {
                 .unwrap_or_default()
         ));
         for l in &lost {
-            s.push_str(&format!("  {}\n", l.as_str().unwrap_or("")));
+            // A loss entry (engine ADR 1097): its sentence, or its code.
+            let line = l["message"]
+                .as_str()
+                .or_else(|| l["code"].as_str())
+                .unwrap_or("");
+            s.push_str(&format!("  {line}\n"));
         }
     }
     let parts = rows("moduleParts");

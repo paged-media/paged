@@ -47,7 +47,7 @@ use paged_model::Paragraph;
 use serde_json::{json, Value};
 
 use crate::body::{
-    cell_paragraph_plan, is_synthesized, native_body, read_paragraph_props, read_run_props,
+    is_synthesized, native_body, paragraph_plan, read_paragraph_props, read_run_props, split_look,
     NativeBlock,
 };
 
@@ -104,6 +104,28 @@ fn set(story: &str, start: usize, end: usize, path: &str, value: &impl serde::Se
         "op": "setElementProperty",
         "args": {
             "elementId": range(story, start, end),
+            "path": path,
+            "value": value,
+        }
+    })
+}
+
+/// A direct property on the paragraph a caret names (engine ADR 1098,
+/// amendment): a blank line, or a table's own paragraph, which a caret's
+/// offset cannot tell apart.
+fn set_at(
+    story: &str,
+    at: usize,
+    paragraph: usize,
+    path: &str,
+    value: &impl serde::Serialize,
+) -> Value {
+    json!({
+        "op": "setElementProperty",
+        "args": {
+            "elementId": { "kind": "storyRange",
+                           "id": { "story_id": story, "start": at, "end": at,
+                                   "paragraph": paragraph } },
             "path": path,
             "value": value,
         }
@@ -225,13 +247,16 @@ fn plain_table(t: &LoweredTable) -> Result<(), String> {
 }
 
 /// The styles a table still names once its cells' direct formatting is set
-/// directly (engine ADR 1098, [`cell_paragraph_plan`]): the table's own
+/// directly (engine ADR 1098, [`paragraph_plan`]): the table's own
 /// paragraph style, the Word styles, and an invented style a cell keeps.
 fn table_styles(doc: &LoweredDoc, t: &LoweredTable, out: &mut HashSet<String>) {
-    out.extend(t.para_style_id.iter().cloned());
+    match split_look(doc, t.para_style_id.as_deref()) {
+        Some((base, _)) => out.extend(base.map(str::to_owned)),
+        None => out.extend(t.para_style_id.iter().cloned()),
+    }
     for c in &t.cells {
         for p in &c.paragraphs {
-            let plan = cell_paragraph_plan(doc, p);
+            let plan = paragraph_plan(doc, p);
             out.extend(plan.style.map(str::to_owned));
             for (r, planned) in p.runs.iter().zip(&plan.runs) {
                 match planned {
@@ -357,7 +382,7 @@ fn table_cells(
             // style (engine ADR 1098), as the pour sets it.
             let mut at = 0usize;
             for p in &c.paragraphs {
-                let plan = cell_paragraph_plan(doc, p);
+                let plan = paragraph_plan(doc, p);
                 let from = at;
                 for (r, planned) in p.runs.iter().zip(&plan.runs) {
                     let start = at;
@@ -503,7 +528,7 @@ fn table_carets(
             }
         }
         for (o, p) in last {
-            let plan = cell_paragraph_plan(doc, p);
+            let plan = paragraph_plan(doc, p);
             if let Some(s) = plan.style {
                 out.push(cell_style(story, o, o, s, "paragraph", &addr));
             }
@@ -804,12 +829,8 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                     }
                     let paragraph_props = read_paragraph_props(para);
                     if runs.is_empty() {
-                        // A blank line has no range to hold direct formatting.
-                        if !paragraph_props.is_empty() {
-                            return Err(format!(
-                                "paragraph {i}: direct formatting on an empty paragraph"
-                            ));
-                        }
+                        // A blank line: its style and direct properties at
+                        // the caret that names it.
                         if let Some(s) = &para.paragraph_style {
                             carets.push(apply_style(
                                 story,
@@ -819,6 +840,9 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                                 "paragraph",
                                 Some(para_base + i),
                             ));
+                        }
+                        for (path, value) in &paragraph_props {
+                            carets.push(set_at(story, start, para_base + i, path, value));
                         }
                         continue;
                     }
@@ -890,15 +914,37 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                 let id = format!("$h:{handle}");
                 table_cells(doc, t, story, &id, &handle, &mut body_ops);
                 table_carets(doc, t, story, &id, &mut cell_carets);
-                if let Some(s) = &t.para_style_id {
-                    body_ops.push(apply_style(
-                        story,
-                        at,
-                        at,
-                        s,
-                        "paragraph",
-                        Some(last as usize),
-                    ));
+                // The table's own paragraph: the Word style its style
+                // stands on and its direct properties, at the caret that
+                // names it.
+                match split_look(doc, t.para_style_id.as_deref()) {
+                    Some((base, props)) => {
+                        if let Some(s) = base {
+                            body_ops.push(apply_style(
+                                story,
+                                at,
+                                at,
+                                s,
+                                "paragraph",
+                                Some(last as usize),
+                            ));
+                        }
+                        for x in props {
+                            body_ops.push(set_at(story, at, last as usize, &x.path, &x.value));
+                        }
+                    }
+                    None => {
+                        if let Some(s) = &t.para_style_id {
+                            body_ops.push(apply_style(
+                                story,
+                                at,
+                                at,
+                                s,
+                                "paragraph",
+                                Some(last as usize),
+                            ));
+                        }
+                    }
                 }
                 if !fresh {
                     text_at += 1;

@@ -186,7 +186,7 @@ fn a_pattern_is_the_mix_of_its_colours_and_reported__feat__plugin_slide_dml_nati
     assert_eq!(m.paint(&p), "Color/R808080");
     m.paint(&p);
     assert_eq!(m.losses().len(), 1, "one line per kind of loss");
-    assert!(m.losses()[0].contains("pattern"));
+    assert!(m.losses()[0].message.contains("pattern"));
 }
 
 #[test]
@@ -234,7 +234,7 @@ fn strokes_map_compound_dash_caps_joins_alignment_and_arrows__feat__plugin_slide
     m.stroke(Some(&line(
         r#"w="12700" cmpd="tri"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>"#,
     )));
-    assert!(m.losses().iter().any(|l| l.contains("triple")));
+    assert!(m.losses().iter().any(|l| l.message.contains("triple")));
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn what_the_engine_cannot_hold_is_reported_never_dropped__feat__plugin_slide_nat
         "scale and skew",
         "preset shadow beside",
     ] {
-        assert!(l.iter().any(|x| x.contains(what)), "{what}: {l:?}");
+        assert!(l.iter().any(|x| x.message.contains(what)), "{what}: {l:?}");
     }
     // A preset shadow alone is drawn as a drop shadow, and says so.
     let fx = effects_of_xml(
@@ -321,7 +321,7 @@ fn what_the_engine_cannot_hold_is_reported_never_dropped__feat__plugin_slide_nat
     let t = m.transparency(1.0, &fx, None);
     let s = t.shadow.unwrap();
     assert_eq!((s.x_offset, s.y_offset, s.size), (0.0, 2.0, 0.0));
-    assert!(m.losses()[0].contains("shdw17"));
+    assert!(m.losses()[0].message.contains("shdw17"));
 }
 
 #[test]
@@ -385,7 +385,7 @@ fn blur_reflection_and_overlay_ride_the_effect_stack__feat__plugin_slide_native_
     );
     assert!(m.transparency(1.0, &fx, None).stack.is_empty());
     assert!(
-        m.losses()[0].contains("gradient fill overlay"),
+        m.losses()[0].message.contains("gradient fill overlay"),
         "{:?}",
         m.losses()
     );
@@ -477,7 +477,11 @@ fn powerpoint_fills_a_path_even_odd__feat__frames_paths_fill_rule_even_odd() {
         m.fill_rule(&c, &[0, 4, 8], &[false; 3], &[0, 0, 1]),
         FillRule::NonZero
     );
-    assert!(m.losses()[0].contains("several paths"), "{:?}", m.losses());
+    assert!(
+        m.losses()[0].message.contains("several paths"),
+        "{:?}",
+        m.losses()
+    );
 }
 
 #[test]
@@ -526,18 +530,25 @@ fn colour_replacement_and_picture_blur_join_the_filter_stack__feat__images_graph
     assert!(mapped.adjustments.iter().all(RasterOp::is_valid));
     let l = m.take_losses();
     assert_eq!(l.len(), 1, "{l:?}");
-    assert!(l[0].contains("a:tint"), "{l:?}");
+    assert!(l[0].message.contains("a:tint"), "{l:?}");
+    assert_eq!(l[0].code, "dml.picture.tint");
     // Without the picture's pixel size the blur cannot be stated.
     let mapped = m.picture(&pic);
     assert_eq!(mapped.elements, ["a:clrRepl"]);
     assert!(
-        m.losses().iter().any(|x| x.contains("a:blur")),
+        m.losses().iter().any(|x| x.message.contains("a:blur")),
         "{:?}",
         m.losses()
     );
+    let lane = mapped.native_lane_losses();
     assert_eq!(
-        mapped.native_lane_losses(),
-        ["a:clrRepl (picture adjustment duotone) is not carried on the native lane"]
+        lane.iter()
+            .map(|e| (e.code.as_str(), e.message.as_str()))
+            .collect::<Vec<_>>(),
+        [(
+            "dml.picture.adjustment",
+            "a:clrRepl (picture adjustment duotone) is not carried on the native lane"
+        )]
     );
 }
 
@@ -678,7 +689,12 @@ fn a_turned_camera_and_a_contour_are_reported__feat__plugin_slide_native_effects
     let mut m = Mapper::new(&[]);
     let t = m.transparency(1.0, &fx, None);
     assert!(t.effects.and_then(|e| e.bevel).is_some());
-    let l = m.losses().join("\n");
+    let l = m
+        .losses()
+        .iter()
+        .map(|e| e.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         l.contains("perspective camera") && l.contains("contour"),
         "{l}"
@@ -700,5 +716,5 @@ fn a_pattern_becomes_a_tile_picture_on_the_slides_grid__feat__plugin_slide_nativ
     let row: Vec<u8> = t.indices[..t.w as usize].to_vec();
     assert_eq!(&row[..10], &[1, 1, 0, 0, 0, 0, 0, 0, 1, 1]);
     assert_eq!(m.losses().len(), 1);
-    assert!(m.losses()[0].contains("tiles"));
+    assert!(m.losses()[0].message.contains("tiles"));
 }

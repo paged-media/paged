@@ -36,6 +36,7 @@ pub(crate) mod word_structure;
 use std::collections::HashMap;
 
 use idml_export::{ExportedLink, FontFace};
+use paged_model::report::{LossEntry, LossSeverity};
 
 use paged_renderer::{
     pipeline, BuiltDocument, BuiltPage, BytesResolver, DisplayList, Document, PageId,
@@ -980,6 +981,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
             start,
             end,
             cell,
+            paragraph,
         } => NodeId::StoryRange {
             story_id: story_id.clone(),
             start: *start,
@@ -989,6 +991,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
                 row: c.row,
                 col: c.col,
             }),
+            paragraph: *paragraph,
         },
         ElementId::Table { story_id, table_id } => NodeId::Table {
             story_id: story_id.clone(),
@@ -7954,7 +7957,7 @@ impl CanvasModel {
     ///
     /// Cost: one full export + re-parse. This is a save-time gate, not a
     /// per-frame query.
-    pub fn idml_export_losses(&self) -> Vec<String> {
+    pub fn idml_export_losses(&self) -> Vec<LossEntry> {
         self.idml_export_losses_with_links(None)
     }
 
@@ -7965,7 +7968,7 @@ impl CanvasModel {
     /// Without a base the line stays. A story no frame references is
     /// reported here too: the writer drops it (InDesign would), so the
     /// drop is loud rather than silent.
-    pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
+    pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<LossEntry> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
         // Engine ADR 1039 — every symbol instance is written as artwork.
         out.extend(paged_mutate::expand_symbols_for_interchange(
@@ -7984,8 +7987,13 @@ impl CanvasModel {
             &mut self.scene.clone(),
         ));
         match self.export_idml_with_links(link_base) {
-            Err(e) => out.push(format!(
-                "the IDML export itself failed ({e}) — no construct below it could be measured"
+            Err(e) => out.push(LossEntry::new(
+                "idml.export.failed",
+                LossSeverity::Dropped,
+                format!(
+                    "the IDML export itself failed ({e}) — no construct below it could be \
+                     measured"
+                ),
             )),
             Ok((bytes, links)) => {
                 let twin = idml_import::open_source_archive(&bytes)
@@ -7994,9 +8002,13 @@ impl CanvasModel {
                         idml_import::import_idml_archive(&archive).map_err(|e| e.to_string())
                     });
                 match twin {
-                    Err(e) => out.push(format!(
-                        "the exported IDML does not re-parse ({e}) — every construct is at \
-                         risk and none below could be measured"
+                    Err(e) => out.push(LossEntry::new(
+                        "idml.export.unreadable",
+                        LossSeverity::Dropped,
+                        format!(
+                            "the exported IDML does not re-parse ({e}) — every construct is at \
+                             risk and none below could be measured"
+                        ),
                     )),
                     Ok(twin) => {
                         let ctx = crate::export_losses::LossContext {
@@ -8594,9 +8606,18 @@ impl CanvasModel {
             start,
             end,
             cell,
+            paragraph,
         } = id
         {
-            return self.story_range_properties(story_id, cell.as_ref(), *start, *end, id, true);
+            return self.story_range_properties(
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                *paragraph,
+                id,
+                true,
+            );
         }
         self.element_properties(id)
     }
@@ -8617,9 +8638,18 @@ impl CanvasModel {
             start,
             end,
             cell,
+            paragraph,
         } = id
         {
-            return self.story_range_properties(story_id, cell.as_ref(), *start, *end, id, false);
+            return self.story_range_properties(
+                story_id,
+                cell.as_ref(),
+                *start,
+                *end,
+                *paragraph,
+                id,
+                false,
+            );
         }
         // W3.A1 — tables / cells likewise live in stories, not spreads.
         if let ElementId::Table { story_id, table_id } = id {
@@ -10359,6 +10389,7 @@ impl CanvasModel {
         cell: Option<&paged_wire::TextCellAddr>,
         start: u32,
         end: u32,
+        paragraph: Option<u32>,
         id: &crate::element_selection::ElementId,
         effective: bool,
     ) -> Option<crate::channel::ElementProperties> {
@@ -10463,7 +10494,15 @@ impl CanvasModel {
         // the paragraph the mutation layer's caret rule names, and the
         // character before it (the first one at offset 0), as InDesign
         // shows the insertion point's attributes.
+        // A caret that names its paragraph reads that one (engine ADR 1098,
+        // amendment).
+        let named = paragraph
+            .filter(|&p| start == end && (p as usize) < paragraphs.len())
+            .map(|p| p as usize);
         let caret_paras: Option<Vec<usize>> = (start == end).then(|| {
+            if let Some(p) = named {
+                return vec![p];
+            }
             let mut at = 0u32;
             let spans: Vec<(u32, u32)> = paragraphs
                 .iter()

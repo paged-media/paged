@@ -1,7 +1,8 @@
 # ADR 1097 — One loss report
 
 - **Status:** Accepted 2026-11-11.
-- **Amended:** 2026-11-12 (paged.slide, `paged-ps`).
+- **Amended:** 2026-11-12 (paged.slide, `paged-ps`); 2026-11-12 (the IDML export, the DrawingML
+  mapper).
 - **Scope:** the leaf crate `paged-loss`; `paged-model` (`report` re-exports it); the adapters
   `paged-svg`, `draw-dxf`, `pdf-import` (place as vectors), `paged-psd-fx`, `docx-lower`,
   `paged-pdf-annots`, `paged-export-pdf`, `web-render`; the extension contract
@@ -57,14 +58,8 @@ reader) could not take the shared shape.
 
 - `paged-data-store`'s `Diagnostic { kind, message, offset }` is a failed SQL statement with the
   byte offset the query panel points at, not a conversion loss.
-- The IDML export's `lost` lines ride the wire (`IdmlExported.lost: string[]`, protocol v58) and the
-  host shows them as they are; moving them onto `LossEntry` changes that reply, so it needs a protocol
-  rider of its own. They have a dozen producers, each a sentence without a code: `paged-canvas`'s
-  `export_losses` (opacity masks, fill rules, live shapes, effect stacks, vector effects,
-  appearances, image adjustments, media, blend modes, the re-parse measurement), the comments, and
-  `paged-mutate`'s symbol and theme flattening for interchange. They are read by the CLI's publish
-  report and JSON and by the SDK's headless harness. Moving them is one change of its own: a code
-  per producer, the reply, the CLI goldens.
+- (Deferred here, done in the amendment "The IDML export and the DrawingML mapper" below: the IDML
+  export's `lost` lines, a wire field of their own.)
 - The web bundle's `WebDiagnostic` is a linter's finding with a line in the source, not something a
   conversion could not carry.
 - image-js `LosslessShape` classifies a layer for save-back; it reports nothing lost.
@@ -84,12 +79,12 @@ paged.slide's import and export diagnostics and `paged-ps`'s `Report.unsupported
    | -------- | --------------------------------------------------------------------------------------------------- |
    | parts    | `pptx.part.{tableStyles,master,theme,slide,chart,diagram,layout}`, `pptx.rel.{master,slide}` (dropped) |
    | shapes   | `pptx.shape.unknown`, `pptx.shape.notDrawn`, `pptx.frame.unknown`, `pptx.frame.notDrawn`, `pptx.smartart.noDrawing` (dropped) |
-   | look     | `pptx.effect.unsupported` (dropped); `pptx.paint.resolved`, `pptx.effect.resolved`, `pptx.paint.native` (dropped when the sentence says "not carried" / "not drawn", else approximated); `pptx.table.styleUnknown` (approximated) |
+   | look     | `pptx.effect.unsupported` (dropped); `pptx.paint.resolved`, `pptx.effect.resolved`, `pptx.paint.native` (since the amendment below: the mapper's own `dml.*` codes) (dropped when the sentence says "not carried" / "not drawn", else approximated); `pptx.table.styleUnknown` (approximated) |
    | pictures | `pptx.picture.{noImage,missing,format,empty}`, `pptx.media.{noMedium,missing}`, `pptx.link.target` (dropped) |
    | charts   | `pptx.chart.sheetLayout`, `pptx.chart.notLive` (approximated), `pptx.chart.missing` (dropped)        |
    | comments | `pptx.comments.{authors,unreadable}` (dropped)                                                       |
    | fonts    | `pptx.font.embedded` (approximated: drawn in a substitute)                                          |
-   | export   | `pptx.export.{document,editorSlide,foreignSlide,contentEdits,slide,notes,timing,mediaTiming,chart,chartData,theme,unreadablePart,masterDelete,layoutDelete,masterShapes,placeholderStyle,shape,smartartText,properties,link,pictureFrame,media,tableGrid,copy,group}` (dropped); `pptx.export.{text,mediaPlay,deadLinks}` and `pptx.export.media` for a medium written as a picture (approximated); `pptx.export.picture` (as `look`) |
+   | export   | `pptx.export.{document,editorSlide,foreignSlide,contentEdits,slide,notes,timing,mediaTiming,chart,chartData,theme,unreadablePart,masterDelete,layoutDelete,masterShapes,placeholderStyle,shape,smartartText,properties,link,pictureFrame,media,tableGrid,copy,group}` (dropped); `pptx.export.{text,mediaPlay,deadLinks}` and `pptx.export.media` for a medium written as a picture (approximated) |
 
 2. **Older reports read.** A document keeps its import report as a container part
    (`import/report.json`); one written before the codes holds sentences. `pptx_core::loss::read_losses`
@@ -111,3 +106,62 @@ paged.slide's import and export diagnostics and `paged-ps`'s `Report.unsupported
   wire's own rule). The editor and its worker ship as one build, and the contract's canary moved.
 - A DXF or PSD loss whose message differs for the same code is now its own row (before, the
   first message stood for all of them).
+
+## Amendment 2026-11-12: the IDML export and the DrawingML mapper
+
+The IDML export's `lost` lines and the DrawingML mapper's sentences are loss entries now; the
+`loss-report` ratchet's baseline is empty.
+
+1. **`LossEntry.items`.** An entry may name the items it stood on, in the producer's own reference (a
+   page item's or story's id, a section, a swatch): `items`, optional, merged like `pages` when
+   `LossLog` counts two entries into one; `LossEntry::on(id)` adds one. Additive in Rust and on the
+   wire (`items?: string[]`).
+2. **The IDML export (protocol v78 rider).** `CanvasModel::idml_export_losses` and the reply's
+   `IdmlExported.lost` are `LossEntry[]` (were `string[]`). Every producer names an
+   `idml.<area>.<what>` code, a severity and the item; the sentence is the message, unchanged (the
+   opacity-mask sentence the harness matches on included). A pre-rider worker's sentences still read:
+   each becomes an `idml.legacy` entry, dropped. Severity follows the rule of decision 2: `dropped`
+   when InDesign gets nothing of it, `approximated` when it is written differently or kept only in a
+   label InDesign does not draw, `info` when what InDesign shows is the same.
+
+   | Producer | Codes (severity) |
+   | --- | --- |
+   | declared from the model (`export_losses`) | `idml.mask.opacity`, `idml.vectorEffect.unwritten`, `idml.imageAdjustment.anchored` (dropped); `idml.fillRule.evenOdd`, `idml.lineEnd.office`, `idml.effect.unsupported`, `idml.effect.order`, `idml.vectorEffect.baked`, `idml.imageAdjustment.label`, `idml.media.poster`, `idml.blendMode.photoshop` (approximated); `idml.liveShape.pie` (info) |
+   | appearances (`paged_model::appearance::interchange`) | `idml.appearance.baked` (approximated) |
+   | paint (`paint_v2_export`, `mesh_fill_export`, `pattern_export`) | `idml.gradient.opacityStops`, `idml.gradient.strokeOpacityStops`, `idml.meshFill.lost`, `idml.pattern.lost`, `idml.pattern.unused` (dropped); `idml.gradient.conic`, `idml.gradient.stopColor`, `idml.gradient.strokeMode`, `idml.meshFill.label`, `idml.pattern.label` (approximated) |
+   | comments (`comment_export`) | `idml.comment.unanchored`, `idml.comment.textGone` (dropped); `idml.comment.replies`, `idml.comment.resolved` (approximated) |
+   | symbols, theme (`paged-mutate`) | `idml.symbol.missing`, `idml.symbol.empty`, `idml.theme.sourceTooLarge`, `idml.theme.unlinkedSwatch` (dropped); `idml.symbol.expanded` (info, approximated with a tint or 9-slice); `idml.theme.flattened` (info) |
+   | the measured diff (`export_losses::diff`) | `idml.section.missing`, `idml.spread.missing`, `idml.guide.missing`, `idml.hyperlink.{missing,destinationMissing,sourceMissing}`, `idml.condition.missing`, `idml.conditionSet.missing`, `idml.story.{unplaced,missing}`, `idml.table.missing`, `idml.pageItem.missing`, `idml.image.bytes`, `idml.image.link`, `idml.group.missing` (dropped); `idml.page.canvasPlacement`, `idml.section.stale`, `idml.guide.stale`, `idml.hyperlink.stale`, `idml.condition.stale`, `idml.story.text`, `idml.table.shape`, `idml.table.cellText`, `idml.image.bytesLinked` (approximated) |
+   | the measurement itself | `idml.export.failed`, `idml.export.unreadable` (dropped) |
+
+   Consumers: paged.publish's `exportIdml` command puts each entry on its diagnostics with the entry's
+   own code (was one `idml.lost` code for all), a warning or, for `info`, info (`lossDiagnostics`);
+   the SDK harness's `exportDocument` returns `lost?: LossEntry[]`; the `paged` CLI's `export`, `save`
+   and `package` JSON carry the entries and its text report prints their sentences; the Rust CLI
+   prints the sentences and writes the entries into `package`'s report.
+3. **The DrawingML mapper.** `dml-native`'s `Mapper` and `Lowering` keep `LossEntry`s (`lose(code,
+   severity, message)`, counted through `LossLog`; a repeat is counted where it was dropped before),
+   `dml.<area>.<what>`, the sentence unchanged as the message. With them doc's lowered picture look
+   (`docx-lower`, whose tally per sentence reads as before), sheet's chart geometry, picture and shape
+   looks (`sheet-chart`, `sheet-js`; sheet's own `xlsx.chart.patternLine`, `xlsx.shape.lineEnd`,
+   `xlsx.shape.text`) and web-render's effect groups (the key is the code: `mixBlendMode.*`,
+   `backgroundBlendMode`, `clipPath.url`, `clipPath.unsupported`, `mask.unpainted`, unworded) are
+   entries, in Rust and in their TypeScript lowering types. paged.slide's deck diagnostics carry the
+   mapper's `dml.*` codes as they are, instead of wrapping its sentences as `pptx.paint.native`.
+
+   | Area | Codes (severity) |
+   | --- | --- |
+   | paint | `dml.pattern.mix`, `dml.pattern.tiles`, `dml.overlay.pattern`, `dml.fillRule.evenOdd`, `dml.gradient.tile`, `dml.gradient.path`, `dml.resolve` (approximated); `dml.fill.picture`, `dml.overlay.gradient`, `dml.overlay.picture` (dropped) |
+   | lines | `dml.line.triple`, `dml.line.gradient`, `dml.line.translucent` (approximated) |
+   | effects | `dml.shadow.preset`, `dml.blur.grow` (approximated); `dml.shadow.distorted`, `dml.shadow.presetBeside`, `dml.reflection.distorted`, `dml.3d.camera`, `dml.3d.bevelBottom`, `dml.3d.contour`, `dml.effect.unread` (dropped) |
+   | pictures | `dml.picture.blurWide` (approximated); `dml.picture.clrReplAlpha`, `dml.picture.blur`, `dml.picture.tint`, `dml.picture.effect`, `dml.picture.adjustment` (dropped) |
+   | pictures, saved | `dml.picture.grayWeights`, `dml.picture.clrChangeTolerance` (approximated); `dml.picture.hslRanges`, `dml.picture.blurScale`, `dml.picture.unsaved` (dropped) |
+
+   The save direction (`dml_native::picture::effects_of` / `blip_xml` / `splice_blip`, an engine
+   filter stack written back as DrawingML) answers entries too (2026-11-13): paged.slide's export
+   records them with their own codes, the slide and shape in the message (the wrapper code
+   `pptx.export.picture` is gone); paged.doc's save-back ledger, a list of lines, carries the code
+   on each line.
+4. **Ratchet.** The `loss-report` baseline is empty: no `losses` / `lost` / `unsupported` /
+   `not_exported` field of `Vec<String>` is left.
+

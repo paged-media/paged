@@ -570,7 +570,7 @@ fn host_functions() -> Vec<HostFn> {
            "Accept a tracked deletion at its story offset (paged.collection(\"trackedChanges\")): the text stays deleted. Undoable."),
         f!("paged.rejectTrackedChange", "(storyId, offset)", "bool", "author",
            "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."),
-        f!("paged.recordChange", "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)", "bool", "author",
+        f!("paged.recordChange", "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?, beforeCharacterProperties?, beforeParagraphProperties?}, paragraph?)", "bool", "author",
            "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."),
         f!("paged.acceptChange", "({storyId?, id?, author?})", "bool", "author",
            "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."),

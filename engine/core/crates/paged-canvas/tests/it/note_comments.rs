@@ -90,7 +90,7 @@ fn an_unedited_document_keeps_its_notes_through_a_save() {
     assert!(m
         .idml_export_losses()
         .iter()
-        .all(|l| !l.contains("comment thread")));
+        .all(|l| !l.message.contains("comment thread")));
 }
 
 #[test]
@@ -123,7 +123,11 @@ fn a_text_comment_with_replies_exports_as_one_note_and_the_fold_is_reported() {
     })
     .expect("reply");
 
-    let lost = m.idml_export_losses();
+    let lost: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     assert!(
         lost.iter()
             .any(|l| l.contains("`c1`") && l.contains("1 reply") && l.contains("fold")),
@@ -151,7 +155,7 @@ fn a_document_thread_is_named_in_the_loss_list() {
     assert!(m
         .idml_export_losses()
         .iter()
-        .all(|l| !l.contains("comment thread")));
+        .all(|l| !l.message.contains("comment thread")));
     m.apply_mutation(&Mutation::InsertCommentThread {
         anchor: paged_mutate::operation::CommentAnchorSpec::Cell {
             item: "frame1".into(),
@@ -175,7 +179,11 @@ fn a_document_thread_is_named_in_the_loss_list() {
         },
     })
     .expect("reply");
-    let lost = m.idml_export_losses();
+    let lost: Vec<String> = m
+        .idml_export_losses()
+        .into_iter()
+        .map(|l| l.message)
+        .collect();
     let line = lost
         .iter()
         .find(|l| l.contains("`t1`"))

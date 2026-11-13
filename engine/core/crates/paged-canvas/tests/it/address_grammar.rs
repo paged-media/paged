@@ -133,6 +133,7 @@ fn live(m: &CanvasModel, kind: AddressKind) -> Option<String> {
                     start: 0,
                     end: 1,
                     cell: None,
+                    paragraph: None,
                 }
                 .to_string(),
             )

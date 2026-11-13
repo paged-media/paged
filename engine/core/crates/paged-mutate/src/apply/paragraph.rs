@@ -51,6 +51,7 @@ pub(super) fn apply_paragraph_property_in(
     cell: Option<&crate::operation::CellAddr>,
     start: u32,
     end: u32,
+    paragraph: Option<u32>,
     node: &NodeId,
     path: PropertyPath,
     value: &Value,
@@ -86,7 +87,20 @@ pub(super) fn apply_paragraph_property_in(
         char_offset += para_chars;
     }
 
-    let targets: Vec<usize> = if start == end {
+    // Engine ADR 1098, amendment — a caret that names its paragraph.
+    let named = paragraph.filter(|_| start == end);
+    if let Some(i) = named {
+        if i as usize >= paragraphs.len() {
+            return Err(OperationError::InvalidPosition {
+                parent: node.clone(),
+                position: i as usize,
+                len: paragraphs.len(),
+            });
+        }
+    }
+    let targets: Vec<usize> = if let Some(i) = named {
+        vec![i as usize]
+    } else if start == end {
         caret_paragraphs(paragraphs, &spans, start)
     } else {
         // Every paragraph intersecting `[start, end)`.
@@ -128,6 +142,7 @@ pub(super) fn apply_paragraph_property_in(
                 start: para_start,
                 end: para_end,
                 cell: cell.cloned(),
+                paragraph: named,
             },
             path,
             value: prev_value,
@@ -918,6 +933,7 @@ pub(super) fn apply_paragraph_field(
                                 start: 0,
                                 end: 0,
                                 cell: None,
+                                paragraph: None,
                             },
                             path,
                             reason: format!("unknown Justification: {new_val:?}"),
@@ -1086,6 +1102,7 @@ pub(super) fn apply_paragraph_field(
                 start: 0,
                 end: 0,
                 cell: None,
+                paragraph: None,
             },
             path,
         }),
@@ -1373,6 +1390,7 @@ pub(super) fn apply_character_field_on_run(
                 start: 0,
                 end: 0,
                 cell: None,
+                paragraph: None,
             },
             path,
         }),

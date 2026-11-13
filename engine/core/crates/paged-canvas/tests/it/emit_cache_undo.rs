@@ -405,6 +405,7 @@ fn character_property_undo_restores_display_list_no_stale_cache() {
             start: 0,
             end: 1000,
             cell: None,
+            paragraph: None,
         };
         model
             .apply_mutation(&Mutation::SetElementProperty {
@@ -461,6 +462,7 @@ fn character_ligatures_reads_default_on_and_round_trips() {
         start: 0,
         end: 1000,
         cell: None,
+        paragraph: None,
     };
 
     // Default state (no `Ligatures` attribute): reads ON.

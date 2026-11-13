@@ -28,7 +28,7 @@
 use paged_model::RasterOp;
 use paged_ooxml::drawingml::resolved::ImageEffect;
 
-use crate::BLUR_SIGMA_PER_RADIUS;
+use crate::{LossEntry, LossSeverity, BLUR_SIGMA_PER_RADIUS};
 
 /// The six range weights that grey a picture with Office's luma weights
 /// (0.3, 0.59, 0.11): what `a:grayscl` reads as.
@@ -50,9 +50,11 @@ pub const OWNED: [&str; 8] = [
 ];
 
 /// The resolved picture effects `ops` write as, in order, and what has no
-/// DrawingML form. `px_per_pt` is the picture's own pixels per point as
-/// placed (a blur's radius is in pixels; without it a blur is reported).
-pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>, Vec<String>) {
+/// DrawingML form, as loss entries (engine ADR 1097; `dml.picture.*` codes,
+/// the sentence as the message). `px_per_pt` is the picture's own pixels per
+/// point as placed (a blur's radius is in pixels; without it a blur is
+/// reported).
+pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>, Vec<LossEntry>) {
     let byte = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u8;
     let rgb = |c: [f32; 3]| c.map(byte);
     let mut out = Vec::new();
@@ -92,11 +94,12 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
             } => {
                 let w = [reds, yellows, greens, cyans, blues, magentas];
                 if w.iter().zip(OFFICE_GREY).any(|(a, b)| (a - b).abs() > 1e-3) {
-                    lost.push(
+                    lost.push(LossEntry::new(
+                        "dml.picture.grayWeights",
+                        LossSeverity::Approximated,
                         "a black & white with its own range weights is saved as a:grayscl \
-                         (Office's luma weights)"
-                            .to_string(),
-                    );
+                         (Office's luma weights)",
+                    ));
                 }
                 out.push(ImageEffect::Grayscale);
             }
@@ -111,11 +114,12 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
                 colorize,
             } => {
                 if ranges.is_some() || colorize.is_some() {
-                    lost.push(
+                    lost.push(LossEntry::new(
+                        "dml.picture.hslRanges",
+                        LossSeverity::Dropped,
                         "a hue/saturation's colour ranges and colorize are not saved (a:hsl is \
-                         the master row)"
-                            .to_string(),
-                    );
+                         the master row)",
+                    ));
                 }
                 out.push(ImageEffect::Hsl {
                     hue: f64::from(hue).rem_euclid(360.0),
@@ -130,11 +134,12 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
                 tolerance,
             } => {
                 if tolerance > 0.0 {
-                    lost.push(
+                    lost.push(LossEntry::new(
+                        "dml.picture.clrChangeTolerance",
+                        LossSeverity::Approximated,
                         "a colour replace's tolerance is not saved (a:clrChange matches one \
-                         colour)"
-                            .to_string(),
-                    );
+                         colour)",
+                    ));
                 }
                 out.push(ImageEffect::ColorChange {
                     from: rgb(from),
@@ -148,14 +153,19 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
                     radius: f64::from(radius) / (BLUR_SIGMA_PER_RADIUS * scale),
                     grow: true,
                 }),
-                None => lost.push(
-                    "a picture blur is not saved (the picture's pixel size is not known)"
-                        .to_string(),
-                ),
+                None => lost.push(LossEntry::new(
+                    "dml.picture.blurScale",
+                    LossSeverity::Dropped,
+                    "a picture blur is not saved (the picture's pixel size is not known)",
+                )),
             },
-            ref other => lost.push(format!(
-                "picture adjustment {} has no DrawingML form and is not saved",
-                other.name()
+            ref other => lost.push(LossEntry::new(
+                "dml.picture.unsaved",
+                LossSeverity::Dropped,
+                format!(
+                    "picture adjustment {} has no DrawingML form and is not saved",
+                    other.name()
+                ),
             )),
         }
     }
@@ -163,7 +173,7 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
 }
 
 /// `ops` as the `a:blip` children they write as (see [`effects_of`]).
-pub fn blip_xml(ops: &[RasterOp], px_per_pt: Option<f64>) -> (String, Vec<String>) {
+pub fn blip_xml(ops: &[RasterOp], px_per_pt: Option<f64>) -> (String, Vec<LossEntry>) {
     let (effects, lost) = effects_of(ops, px_per_pt);
     (paged_ooxml::drawingml::write::blip_effects(&effects), lost)
 }
@@ -171,7 +181,11 @@ pub fn blip_xml(ops: &[RasterOp], px_per_pt: Option<f64>) -> (String, Vec<String
 /// The `a:blip` element `blip` (its XML as written, prefix `a:`) with its
 /// [`OWNED`] children replaced by `ops`, written before the extension list;
 /// every other child and attribute is kept byte for byte.
-pub fn splice_blip(blip: &str, ops: &[RasterOp], px_per_pt: Option<f64>) -> (String, Vec<String>) {
+pub fn splice_blip(
+    blip: &str,
+    ops: &[RasterOp],
+    px_per_pt: Option<f64>,
+) -> (String, Vec<LossEntry>) {
     let (xml, lost) = blip_xml(ops, px_per_pt);
     let Some(open_end) = blip.find('>') else {
         return (blip.to_string(), lost);
@@ -321,7 +335,9 @@ mod tests {
         let (xml, lost) = blip_xml(&[RasterOp::Invert, RasterOp::Blur { radius: 1.0 }], None);
         assert!(xml.is_empty());
         assert_eq!(lost.len(), 2, "{lost:?}");
-        assert!(lost[0].contains("invert"), "{lost:?}");
+        assert_eq!(lost[0].code, "dml.picture.unsaved");
+        assert!(lost[0].message.contains("invert"), "{lost:?}");
+        assert_eq!(lost[1].code, "dml.picture.blurScale");
     }
 
     #[test]

@@ -387,6 +387,7 @@ fn every_advertised_schema_names_the_wire_apply_takes() {
                     start: 0,
                     end: 2,
                     cell: None,
+                    paragraph: None,
                 },
             ));
         }

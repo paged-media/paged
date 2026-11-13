@@ -120,7 +120,7 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
     let stack = &p3.fx.as_ref().unwrap().effect_stack;
     assert!(stack.iter().any(|e| e.kind == "reflection"), "{stack:?}");
     assert!(
-        !p3.losses.iter().any(|l| l.contains("reflection")),
+        !p3.losses.iter().any(|l| l.message.contains("reflection")),
         "{:?}",
         p3.losses
     );
@@ -134,7 +134,7 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         "{ops}"
     );
     assert!(
-        !p3.losses.iter().any(|l| l.contains("a:grayscl")),
+        !p3.losses.iter().any(|l| l.message.contains("a:grayscl")),
         "{:?}",
         p3.losses
     );

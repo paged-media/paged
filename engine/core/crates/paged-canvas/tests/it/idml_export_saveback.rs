@@ -656,6 +656,7 @@ fn mutated_text_fill_color_saves_and_text_survives() {
                 start: 0,
                 end: 1,
                 cell: None,
+                paragraph: None,
             },
             path: PropertyPath::CharacterFillColor,
             value: Value::ColorRef(Some("Color/RGBCyan".to_string())),

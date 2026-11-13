@@ -93,6 +93,9 @@ pub enum NodeIdJson {
         /// Engine ADR 1098 — a table cell's own text.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cell: Option<paged_mutate::operation::CellAddr>,
+        /// Engine ADR 1098, amendment — the paragraph a caret names.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        paragraph: Option<u32>,
     },
     /// W3.A1 — a `<Table>` addressed by `(story_id, table_id)`.
     Table {
@@ -130,11 +133,13 @@ impl From<NodeId> for NodeIdJson {
                 start,
                 end,
                 cell,
+                paragraph,
             } => NodeIdJson::StoryRange {
                 story_id,
                 start,
                 end,
                 cell,
+                paragraph,
             },
             NodeId::Table { story_id, table_id } => NodeIdJson::Table { story_id, table_id },
             NodeId::TableCell {
@@ -173,11 +178,13 @@ impl From<&NodeIdJson> for NodeId {
                 start,
                 end,
                 cell,
+                paragraph,
             } => NodeId::StoryRange {
                 story_id: story_id.clone(),
                 start: *start,
                 end: *end,
                 cell: cell.clone(),
+                paragraph: *paragraph,
             },
             NodeIdJson::Table { story_id, table_id } => NodeId::Table {
                 story_id: story_id.clone(),

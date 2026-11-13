@@ -158,6 +158,7 @@ fn targets() -> Vec<(ElementId, Option<&'static str>)> {
                 start: 0,
                 end: 5,
                 cell: None,
+                paragraph: None,
             },
             None,
         ),
@@ -194,6 +195,7 @@ fn node_of(id: &ElementId) -> NodeId {
             start,
             end,
             cell,
+            paragraph,
         } => NodeId::StoryRange {
             story_id: story_id.clone(),
             start: *start,
@@ -203,6 +205,7 @@ fn node_of(id: &ElementId) -> NodeId {
                 row: c.row,
                 col: c.col,
             }),
+            paragraph: *paragraph,
         },
         ElementId::Table { story_id, table_id } => NodeId::Table {
             story_id: story_id.clone(),

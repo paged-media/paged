@@ -419,6 +419,7 @@ impl Losses {
                 count,
                 severity: paged_model::report::LossSeverity::Dropped,
                 pages: pages.into_iter().collect(),
+                items: Vec::new(),
                 message,
             })
             .collect()
