@@ -53,6 +53,24 @@ export const WIDGET_KEYS: ReadonlySet<string> = new Set([
   "end",
 ]);
 
+/** The keys a focused composite also moves by, a page at a time (a long
+ *  listbox or tree, a slider's big step), and a text area scrolls by:
+ *  never the document's page keys while focus is there (UXI-KEY-003,
+ *  UXI-T76). */
+export const PAGE_KEYS: ReadonlySet<string> = new Set(["pageup", "pagedown"]);
+
+/** Composites whose letters are typeahead (WAI-ARIA APG; a native
+ *  `<select>` does the same): a printable key with no Cmd, Ctrl or Alt
+ *  moves to the matching option, so it is not a tool shortcut while focus
+ *  is inside one. A tree, a grid, a toolbar, a tablist, a radio group or a
+ *  slider take no letters here (the Layers tree has no typeahead): there a
+ *  letter stays a shortcut. */
+export const TYPEAHEAD_OWNERS = [
+  '[role="listbox"]',
+  '[role="combobox"]',
+  '[role="menu"]',
+].join(",");
+
 /** The keys that open the focused thing's menu: Shift+F10 and the
  *  context-menu key. A control with a menu of its own (a rail tool's
  *  flyout) claims them by preventing the default, and the canvas context
@@ -84,6 +102,7 @@ export const WIDGET_KEY_OWNERS = [
   '[role="slider"]',
   '[role="spinbutton"]',
   '[role="combobox"]',
+  '[role="treegrid"]',
 ].join(",");
 
 /** What a key handler reads of a key event. Every field but `key` is
@@ -185,6 +204,31 @@ function closest(el: Element, selector: string): boolean {
   return typeof el.closest === "function" && el.closest(selector) !== null;
 }
 
+/**
+ * Does the composite widget focus is in own this key (UXI-KEY-003, §12.2–
+ * §12.4)? Inside a composite (`owners`): its widget keys (the arrows,
+ * Home/End, Backspace/Delete), the page keys, Enter and Space with no
+ * Cmd/Ctrl, and — in a typeahead composite (a listbox, a combobox, a
+ * menu) — a printable character with no Cmd, Ctrl or Alt.
+ */
+export function compositeOwnsKey(
+  event: KeyOwnershipEvent,
+  el: Element,
+  owners: string = WIDGET_KEY_OWNERS,
+): boolean {
+  if (!closest(el, owners)) return false;
+  const key = event.key.toLowerCase();
+  if (WIDGET_KEYS.has(key)) return true;
+  const chord = event.metaKey === true || event.ctrlKey === true;
+  if (chord) return false;
+  if (PAGE_KEYS.has(key) || key === "enter" || key === " ") return true;
+  return (
+    event.key.length === 1 &&
+    event.altKey !== true &&
+    closest(el, TYPEAHEAD_OWNERS)
+  );
+}
+
 /** Is the focused element (the event's target) inside a dialog or an
  *  open menu, which own every key but a Cmd/Ctrl chord? */
 export function insideKeyOwningContainer(
@@ -208,7 +252,8 @@ export function insideKeyOwningContainer(
  *  - focus is inside a plugin's frame surface (extensions ADR 334): the
  *    surface handles its own keys, as a dialog does;
  *  - focus is inside a composite widget (a menubar, toolbar, tablist,
- *    listbox, tree…) and the key is one it moves with or activates by;
+ *    listbox, tree…) and the key is one it moves with, pages with,
+ *    activates by or — a listbox — types ahead with (`compositeOwnsKey`);
  *  - Enter or Space on a focused button, link or checkbox (the control
  *    activates);
  *  - Tab on any focused control: focus moves.
@@ -227,9 +272,7 @@ export function canvasKeyYields(event: KeyOwnershipEvent): boolean {
   if (closest(el, FRAME_SURFACE_SELECTOR)) return true;
   const key = event.key.toLowerCase();
   const activates = key === "enter" || key === " ";
-  if ((WIDGET_KEYS.has(key) || activates) && closest(el, WIDGET_KEY_OWNERS)) {
-    return true;
-  }
+  if (compositeOwnsKey(event, el)) return true;
   if (activates && isActivatable(el)) return true;
   if (key === "tab") return true;
   return false;

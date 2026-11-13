@@ -68,6 +68,7 @@ import { useSelection } from "../../state/selection-context";
 import { useThreading, type LoadedCursor } from "../../state/threading-context";
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
 import { queryEditor, useEditorRoot } from "../../state/editor-root";
+import { useEscapeHandler } from "../../interaction/escape-arbiter";
 
 /** Default size (pt) of a frame drawn by a plain CLICK on empty canvas
  *  (no drag): its top-left corner sits at the click and it is kept on
@@ -534,21 +535,22 @@ export function ThreadingController() {
       window.addEventListener("pointercancel", onCancel, true);
     };
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // TH-03 — Esc clears the loaded cursor, no mutation.
-      clearCursor();
-    };
-
     // Capture phase so we win the pointer before ViewportCanvas's own
     // pointerdown (which would start a marquee/translate).
     window.addEventListener("pointerdown", onDown, true);
-    window.addEventListener("keydown", onKey, true);
     return () => {
       window.removeEventListener("pointerdown", onDown, true);
-      window.removeEventListener("keydown", onKey, true);
     };
   }, [cursorLoaded, clearCursor]);
+
+  // TH-03 — Esc clears the loaded cursor, no mutation: a transient mode
+  // of the Escape arbiter (ADR 1207), so the same press does nothing else.
+  useEscapeHandler({
+    id: "paged.threading.loadedCursor",
+    tier: "transient",
+    isActive: () => cursorLoaded,
+    resolve: () => clearCursor(),
+  });
 
   // ── overset frame set (engine-truth, live `stories` overset) ─────
   // StorySummary.overset is the only LIVE threading read on the wire,

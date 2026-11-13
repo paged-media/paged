@@ -103,6 +103,12 @@ export function ownsEvent(root: HTMLElement | null, event: Event): boolean {
   return nothingFocused && active === root;
 }
 
+/** Is the editor whose root is `root` the page's active editor (the one
+ *  last pointed at or focused)? A root-less editor is the page's. */
+export function isActiveEditor(root: HTMLElement | null): boolean {
+  return root === null || active === null || active === root;
+}
+
 /** Listen on the window for `type` events meant for `scope`'s editor;
  *  returns the unlisten. */
 export function listenForEditorKeys<K extends keyof WindowEventMap>(
@@ -175,6 +181,27 @@ const PortalContext = createContext<HTMLElement | null>(null);
 /** The editor's root element (null outside one). */
 export function useEditorRoot(): HTMLElement | null {
   return useContext(RootContext);
+}
+
+/**
+ * A layer's Escape for this editor only (ADR 277; UXI-T33). Radix's menus,
+ * popovers and dialogs listen for Escape on the page's document, so a
+ * press typed in another editor on the page closed this one's layer: the
+ * returned handler, given as the content's `onEscapeKeyDown`, refuses such
+ * a press (Radix dismisses only when the event is not prevented) and hands
+ * this editor's own on to `onEscapeKeyDown`.
+ */
+export function useEditorEscapeGuard(
+  onEscapeKeyDown?: (event: KeyboardEvent) => void,
+): (event: KeyboardEvent) => void {
+  const root = useEditorRoot();
+  return (event) => {
+    if (!ownsEvent(root, event)) {
+      event.preventDefault();
+      return;
+    }
+    onEscapeKeyDown?.(event);
+  };
 }
 
 /** Where the editor's popovers, menus, dialogs and tooltips portal to: a

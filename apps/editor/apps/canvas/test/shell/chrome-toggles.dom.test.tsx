@@ -17,9 +17,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The two chrome toggles PagedShell registers over its own state (Tab,
-// Shift+Tab): the whole PagedShell mounted in happy-dom over the real
-// engine, with a stub canvas, one mode whose left slot holds a panel, and
+// The two chrome toggles PagedShell registers over its own state
+// (`paged.view.toggleChrome` on Cmd/Ctrl+\, and the panels-only toggle;
+// Tab and Shift+Tab run them only with the "Tab hides panels" preference
+// on): the whole PagedShell mounted in happy-dom over the real engine,
+// with a stub canvas, one mode whose left slot holds a panel, and
 // the built-in tools on the rail. The commands run through the shell's
 // registry; what they change is which chrome is shown. The panel columns
 // are hidden, not unmounted (ADR 240): the panel that comes back is the
@@ -133,14 +135,14 @@ async function mountShell() {
 }
 
 describe("the chrome toggles, on a mounted PagedShell", () => {
-  test("toggleAll hides the panels and the tool rail, and the second run brings both back", async () => {
-    covers("command:paged.chrome.toggleAll");
+  test("toggleChrome hides the panels and the tool rail, and the second run brings both back", async () => {
+    covers("command:paged.view.toggleChrome");
     const s = await mountShell();
     expect(s.chrome()).toEqual({ rail: true, left: true, canvas: true });
     const panel = s.leftPanel();
-    await s.invoke("paged.chrome.toggleAll");
+    await s.invoke("paged.view.toggleChrome");
     expect(s.chrome()).toEqual({ rail: false, left: false, canvas: true });
-    await s.invoke("paged.chrome.toggleAll");
+    await s.invoke("paged.view.toggleChrome");
     expect(s.chrome()).toEqual({ rail: true, left: true, canvas: true });
     // The same panel, kept while hidden (ADR 240), not a new one.
     expect(s.leftPanel()).toBe(panel);
@@ -155,17 +157,17 @@ describe("the chrome toggles, on a mounted PagedShell", () => {
     expect(s.chrome()).toEqual({ rail: true, left: true, canvas: true });
   });
 
-  test("toggleAll after togglePanels shows everything: one hidden half counts as hidden", async () => {
+  test("toggleChrome after togglePanels shows everything: one hidden half counts as hidden", async () => {
     covers(
-      "command:paged.chrome.toggleAll",
+      "command:paged.view.toggleChrome",
       "command:paged.chrome.togglePanels",
     );
     const s = await mountShell();
     await s.invoke("paged.chrome.togglePanels");
     expect(s.chrome()).toEqual({ rail: true, left: false, canvas: true });
-    await s.invoke("paged.chrome.toggleAll");
+    await s.invoke("paged.view.toggleChrome");
     expect(s.chrome()).toEqual({ rail: true, left: true, canvas: true });
-    await s.invoke("paged.chrome.toggleAll");
+    await s.invoke("paged.view.toggleChrome");
     expect(s.chrome()).toEqual({ rail: false, left: false, canvas: true });
   });
 });

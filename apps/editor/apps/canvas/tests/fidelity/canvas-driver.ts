@@ -101,7 +101,7 @@ export interface OpenCanvasOptions {
    *  appears (default true). A spec that asserts the question itself
    *  passes false and answers it. */
   answerReplacePrompts?: boolean;
-  /** Let the cockpit adapt to the window (editor ADR 1206): at the suite's
+  /** Let the cockpit adapt to the window (editor ADR 1208): at the suite's
    *  1280 px window the left dock would be a rail. Off by default, so the
    *  specs about panels read the docked layout they were written against
    *  (the user's "Adapt the workspace to the window" switch, set before

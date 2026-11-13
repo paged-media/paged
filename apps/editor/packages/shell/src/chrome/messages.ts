@@ -57,6 +57,8 @@ export const MENU = defineMessages("menu", {
   "Object & Layout": "Object & Layout",
   Interactive: "Interactive",
   Utilities: "Utilities",
+  Settings: "Settings",
+  "Tab hides panels (InDesign)": "Tab hides panels (InDesign)",
 });
 
 /** A menu path segment in the editor's language: `menu.<segment>` when a

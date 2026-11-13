@@ -312,8 +312,8 @@ Two protocol versions: EN1–EN4 in the first, EN5–EN8 in the second. Engine r
 
 ## 7. Track WS — Workspace and camera (the strategy's Phase 1 workspace; the spec's CAM)
 
-WS0–WS7 landed on 2026-11-13 ([ADR 1206](adr/1206-docks-are-resizable-and-the-workspace-adapts.md),
-[ADR 1207](adr/1207-density-presets.md)). Two choices the bullets below leave open: the classes
+WS0–WS7 landed on 2026-11-13 ([ADR 1208](adr/1208-docks-are-resizable-and-the-workspace-adapts.md),
+[ADR 1209](adr/1209-density-presets.md)). Two choices the bullets below leave open: the classes
 are measured on the cockpit's own element against canvas budgets beside the default docks (about
 1575 / 1095 px of window with the editor's rails), and the browser suite boots with the adaptive
 workspace off (its window is 1280 px) unless a spec is about the workspace.

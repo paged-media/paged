@@ -22,8 +22,10 @@ import type * as Api from "@paged-media/plugin-api";
 
 import {
   MENU_KEYS,
+  PAGE_KEYS,
   WIDGET_KEYS,
   canvasSurfaceOf,
+  compositeOwnsKey,
   insideFrameSurface,
   insideKeyOwningContainer,
   isActivatable,
@@ -310,6 +312,7 @@ export function targetOwnsKey(
   if (MENU_KEYS.has(key) && event.defaultPrevented) return true;
   const target = event.target as HTMLElement | null;
   if (!target || !target.tagName) return false;
+  const chord = event.metaKey || event.ctrlKey;
   // A plugin's frame surface (extensions ADR 334) says "mine" by preventing
   // the default of the keys it handles — Cmd+C/V included, which would
   // otherwise run the plugin's own keybinding a second time. A key it lets
@@ -318,7 +321,6 @@ export function targetOwnsKey(
   // Tab moves focus (F-49): from a field, a button, a dialog, the page.
   // Only the canvas's own surfaces hand it to a binding.
   if (key === "tab") return !isCanvasSurface(target);
-  const chord = event.metaKey || event.ctrlKey;
   // A dialog or an open menu owns every key but a Cmd/Ctrl chord: its
   // typeahead letters, Enter, Space, Escape (R9).
   if (!chord && insideKeyOwningContainer(target)) return true;
@@ -329,7 +331,19 @@ export function targetOwnsKey(
   const tag = target.tagName;
   const isEditable =
     tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
+  // The page keys scroll a field, a list, a tree, a select: never the
+  // document's pages while focus is there (UXI-T76).
+  const isPageKey = PAGE_KEYS.has(key) && !chord;
   if (isEditable) {
+    // The canvas's own text input leaves the Alt arrows to the text verbs
+    // (leading and tracking, UX audit F-34): it is the story, not a field.
+    if (
+      event.altKey &&
+      !chord &&
+      key.startsWith("arrow") &&
+      canvasSurfaceOf(target) === "text"
+    )
+      return false;
     // Cmd-K + similar modifier combos still apply inside inputs so the
     // palette opens regardless; pure-letter keys are suppressed. The
     // widget keys are suppressed WITH their modifiers — Cmd+Left is
@@ -339,15 +353,23 @@ export function targetOwnsKey(
       !event.ctrlKey &&
       !event.altKey &&
       event.key.length === 1;
-    return isPureLetter || isWidgetKey;
+    return isPureLetter || isWidgetKey || isPageKey;
   }
-  if (!isWidgetKey) return false;
-  // A <select> walks its options with the arrows.
-  if (tag === "SELECT") return true;
-  return (
-    typeof target.closest === "function" &&
-    target.closest(WIDGET_KEY_OWNERS) !== null
-  );
+  // A <select> walks its options with the arrows and the page keys, opens
+  // on Enter and Space, and jumps to an option by its first letters
+  // (UXI-T76: a long select in a panel types ahead; the letter is not also
+  // the Selection tool).
+  if (tag === "SELECT") {
+    const typeahead = event.key.length === 1 && !chord && !event.altKey;
+    const opens = !chord && key === "enter";
+    if (isWidgetKey || isPageKey || typeahead || opens) return true;
+  }
+  // An ARIA composite (a list, a tree, a grid, a slider…) owns its moving
+  // keys with their modifiers, and with none its page keys, Enter and
+  // Space, and — a listbox, a combobox — its typeahead letters
+  // (UXI-KEY-003): a plugin panel's long list keeps its keys, and no tool
+  // shortcut or page turn fires behind it.
+  return compositeOwnsKey(event, target, WIDGET_KEY_OWNERS);
 }
 
 /**

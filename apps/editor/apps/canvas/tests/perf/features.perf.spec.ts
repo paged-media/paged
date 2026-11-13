@@ -25,7 +25,7 @@
 //   - canvas pan: wheel steps over the canvas (the viewport re-renders with
 //     the camera; its window listeners must not re-subscribe);
 //   - dock tab switch: the right dock's tabs, round robin;
-//   - chrome toggle: Tab hides the panels and the rail, Tab shows them;
+//   - chrome toggle: Cmd/Ctrl+\ hides the panels and the rail, then shows them;
 //   - mode round trip: Design → Export → Design;
 //   - memory: JS heap and DOM counters after the switches (CDP, after a GC);
 //   - long page list: the Pages panel over a 60-page document, how many
@@ -144,12 +144,14 @@ test("chrome toggle", async ({ page }) => {
   await seed(page);
   const canvas = page.locator("[data-paged-canvas]");
   await expect(canvas).toBeVisible();
-  // Tab is the canvas's: focus nothing that takes it.
+  // The chrome toggle's chord (ADR 1201 D-03: Tab moves focus).
   await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
   const out: Sample[] = [];
   for (let i = 0; i < ROUNDS; i++) {
     await resetProbe(page);
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+Backslash" : "Control+Backslash",
+    );
     out.push(await sample(page));
   }
   results["chrome toggle"] = out;

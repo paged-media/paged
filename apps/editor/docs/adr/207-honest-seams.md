@@ -95,4 +95,4 @@ working ones (UX audit F-23): it declares `placeholder: true` (`ModeContribution
 registered and reachable (a profile, `setMode`, a stored mode), and shows on the bar only while it
 is the active mode. Review is such a mode. The rule for single controls is unchanged: they are
 rendered, disabled, and say so
-([ADR 1206](1206-docks-are-resizable-and-the-workspace-adapts.md)).
+([ADR 1208](1208-docks-are-resizable-and-the-workspace-adapts.md)).

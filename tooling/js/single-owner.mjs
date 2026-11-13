@@ -57,32 +57,45 @@ const config = JSON.parse(readFileSync(CONFIG, "utf8"));
 const skipped = (f) =>
   SKIP.some((s) => `/${f}`.includes(s.startsWith("/") ? s : `/${s}`));
 
-/** The files (tracked by git) any of `patterns` matches, among `extensions`.
- *  `git grep -P` does the reading: natively, in parallel, in a fraction of a
- *  second where reading every file from JavaScript took minutes. */
+/** The files (tracked by git) `pattern` matches, among `exts`. `git grep -P`
+ *  does the reading: natively, in parallel, in a fraction of a second where
+ *  reading every file from JavaScript took minutes. */
+const filesMatching = (rule, pattern, exts) => {
+  const out = spawnSync(
+    "git",
+    [
+      "grep",
+      "-l",
+      "-I",
+      "-P",
+      "-e",
+      pattern,
+      "--",
+      ...exts.map((e) => `*${e}`),
+    ],
+    { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 },
+  );
+  // Exit 1 is "no match"; anything else is a failure to look.
+  if (out.status !== 0 && out.status !== 1)
+    throw new Error(`git grep failed for ${rule.name}: ${out.stderr}`);
+  return out.stdout
+    .toString("utf8")
+    .split("\n")
+    .filter((f) => f && !skipped(f));
+};
+
+/** The files any of `patterns` matches, among `extensions`. A rule with
+ *  `allOf` names a capability no single line shows (a key listener that
+ *  answers Escape): a file then holds a copy only when it ALSO matches every
+ *  `allOf` pattern somewhere. */
 const matchesOf = (rule) => {
   const exts = rule.extensions ?? EXTENSIONS;
   const found = new Set();
-  for (const pattern of rule.patterns) {
-    const out = spawnSync(
-      "git",
-      [
-        "grep",
-        "-l",
-        "-I",
-        "-P",
-        "-e",
-        pattern,
-        "--",
-        ...exts.map((e) => `*${e}`),
-      ],
-      { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 },
-    );
-    // Exit 1 is "no match"; anything else is a failure to look.
-    if (out.status !== 0 && out.status !== 1)
-      throw new Error(`git grep failed for ${rule.name}: ${out.stderr}`);
-    for (const f of out.stdout.toString("utf8").split("\n"))
-      if (f && !skipped(f)) found.add(f);
+  for (const pattern of rule.patterns)
+    for (const f of filesMatching(rule, pattern, exts)) found.add(f);
+  for (const pattern of rule.allOf ?? []) {
+    const also = new Set(filesMatching(rule, pattern, exts));
+    for (const f of [...found]) if (!also.has(f)) found.delete(f);
   }
   return [...found].sort();
 };

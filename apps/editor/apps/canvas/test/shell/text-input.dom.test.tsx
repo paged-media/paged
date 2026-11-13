@@ -38,15 +38,20 @@ import {
 import {
   PagedShell,
   useContentSelection,
+  useEscapeArbiter,
   useRegistries,
   useTool,
+  type EscapeArbiter,
   type ShellRegistries,
   type ToolContextValue,
 } from "@paged-media/shell";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import { covers } from "@paged-media/test-kit";
 
-import { TextInputSurface } from "../../src/ui/TextInputSurface";
+import {
+  TextInputSurface,
+  caretScreenBox,
+} from "../../src/ui/TextInputSurface";
 import { useTextEditing } from "../../src/ui/useTextEditing";
 import { EngineWorker, headlessEngine } from "../panels/engine-worker";
 import { textScene } from "../panels/fixtures";
@@ -58,6 +63,7 @@ interface Probe {
   setSelection(sel: ContentSelection | null): void;
   selection(): ContentSelection | null;
   tool(): ToolContextValue;
+  arbiter: EscapeArbiter;
 }
 
 function Integration({
@@ -68,6 +74,7 @@ function Integration({
   onProbe(p: Probe): void;
 }) {
   const registries = useRegistries();
+  const arbiter = useEscapeArbiter();
   const tool = useTool();
   const toolRef = useRef(tool);
   useEffect(() => {
@@ -86,8 +93,9 @@ function Integration({
       setSelection: setContentSelection,
       selection: () => contentSelectionRef.current,
       tool: () => toolRef.current,
+      arbiter,
     });
-  }, [registries, setContentSelection, contentSelectionRef, onProbe]);
+  }, [registries, setContentSelection, contentSelectionRef, onProbe, arbiter]);
   return null;
 }
 
@@ -315,6 +323,130 @@ describe("text entry with a caret in a story", () => {
     await t.storyIs(`é${before}`);
   });
 
+  test("UXI-T21 — a CJK composition lands once at the caret; while it composes no shortcut, tool key or Escape acts @feat:stories-text.text.insert @level:edge", async () => {
+    const t = await mount();
+    await t.caretAt(0);
+    const before = await t.story();
+    const undoBefore = (await t.client.undoLog(0)).undoLen;
+    const toolBefore = t.probe.tool().effectiveTool;
+    await t.dispatch(t.surface(), composition("compositionstart", ""));
+    // The romaji keys of the composition: never the Selection tool.
+    await t.dispatch(t.surface(), keydown({ key: "v", isComposing: true }));
+    await t.dispatch(t.surface(), keydown({ key: "v", keyCode: 229 }));
+    expect(t.probe.tool().effectiveTool).toBe(toolBefore);
+    t.surface().value = "にほん";
+    await t.dispatch(t.surface(), typed("insertCompositionText", "にほん"));
+    expect(await t.story()).toBe(before);
+    // The commit, then the browser's own `input` for it with the text still
+    // in the textarea (Firefox's order): typed once, not twice.
+    await t.dispatch(t.surface(), composition("compositionend", "日本"));
+    t.surface().value = "日本";
+    await t.dispatch(
+      t.surface(),
+      new InputEvent("input", {
+        inputType: "insertCompositionText",
+        data: "日本",
+        bubbles: true,
+      }),
+    );
+    await t.storyIs(`日本${before}`);
+    expect(t.surface().value).toBe("");
+    // UTF-8: 日本 is six bytes.
+    expect(t.probe.selection()?.start).toBe(6);
+    expect((await t.client.undoLog(0)).undoLen).toBe(undoBefore + 1);
+  });
+
+  test("UXI-T22 — a dead-key sequence (´ then e) types é exactly once @feat:stories-text.text.insert @level:edge", async () => {
+    const t = await mount();
+    await t.caretAt(0);
+    const before = await t.story();
+    await t.dispatch(t.surface(), composition("compositionstart", ""));
+    t.surface().value = "´";
+    await t.dispatch(t.surface(), typed("insertCompositionText", "´"));
+    await t.dispatch(t.surface(), composition("compositionend", "é"));
+    // An echo with the textarea already emptied by the commit.
+    await t.dispatch(
+      t.surface(),
+      new InputEvent("input", { inputType: "insertText", bubbles: true }),
+    );
+    await t.storyIs(`é${before}`);
+    // The next key types normally (the echo guard is spent).
+    await t.dispatch(t.surface(), typed("insertText", "x"));
+    await t.storyIs(`éx${before}`);
+  });
+
+  test("UXI-T32 — Escape during a composition is the input method's: the caret and the text editing stay @feat:stories-text.caret-selection @level:edge", async () => {
+    const t = await mount();
+    await t.caretAt(2);
+    const before = await t.story();
+    await t.dispatch(t.surface(), composition("compositionstart", ""));
+    t.surface().value = "かな";
+    await t.dispatch(t.surface(), typed("insertCompositionText", "かな"));
+    const esc = keydown({ key: "Escape", isComposing: true });
+    await t.dispatch(t.surface(), esc);
+    expect(t.probe.arbiter.resolutionOf(esc)?.tier).toBe("ime");
+    expect(esc.defaultPrevented).toBe(false);
+    // Still editing: the caret is where it was, focus on the surface.
+    expect(t.probe.selection()?.start).toBe(2);
+    expect(document.activeElement).toBe(t.surface());
+    expect(await t.story()).toBe(before);
+    // The IME cancelled its composition: nothing to commit.
+    await t.dispatch(t.surface(), composition("compositionend", ""));
+    expect(await t.story()).toBe(before);
+    // Outside a composition, Escape leaves the text (ED-1).
+    const leave = keydown({ key: "Escape" });
+    await t.dispatch(t.surface(), leave);
+    expect(t.probe.arbiter.resolutionOf(leave)?.id).toBe("paged.textEditing");
+    await t.settle();
+    expect(t.probe.selection()).toBeNull();
+  });
+
+  test("a composition the caret left mid-way is dropped, never typed where the caret went (UXI-TXT-007)", async () => {
+    const t = await mount();
+    await t.caretAt(0);
+    const before = await t.story();
+    await t.dispatch(t.surface(), composition("compositionstart", ""));
+    t.surface().value = "にほ";
+    await t.dispatch(t.surface(), typed("insertCompositionText", "にほ"));
+    // A click elsewhere in the story moves the caret mid-composition.
+    await t.caretAt(4);
+    await t.dispatch(t.surface(), composition("compositionend", "日本"));
+    await t.settle();
+    expect(await t.story()).toBe(before);
+    expect(t.surface().value).toBe("");
+    // The next composition, begun here, lands.
+    await t.dispatch(t.surface(), composition("compositionstart", ""));
+    await t.dispatch(t.surface(), composition("compositionend", "語"));
+    await t.storyIs(`${before.slice(0, 4)}語${before.slice(4)}`);
+  });
+
+  test("the input surface sits at the caret through the whole camera transform, the view's rotation included (UXI-TXT-008)", () => {
+    const caret = {
+      pageId: "p1",
+      xPt: 100,
+      topPt: 50,
+      heightPt: 12,
+    } as never;
+    const pages = [{ x: 0, y: 0, w: 612, h: 792 }];
+    const flat = caretScreenBox(
+      caret,
+      { scale: 2, tx: 10, ty: 20 },
+      ["p1"] as never,
+      pages,
+    );
+    expect(flat).toEqual({ left: 210, top: 120, height: 24, rotation: 0 });
+    // A quarter turn clockwise: doc (100, 50) lands at (-50·2, 100·2) + t.
+    const turned = caretScreenBox(
+      caret,
+      { scale: 2, tx: 300, ty: 20, rotation: Math.PI / 2 },
+      ["p1"] as never,
+      pages,
+    )!;
+    expect(turned.left).toBeCloseTo(300 - 100, 6);
+    expect(turned.top).toBeCloseTo(20 + 200, 6);
+    expect(turned.rotation).toBeCloseTo(Math.PI / 2, 9);
+  });
+
   test("Option and AltGr characters type, from the surface and from anywhere that types nothing", async () => {
     const t = await mount();
     await t.caretAt(0);
@@ -393,7 +525,7 @@ describe("text entry with a caret in a story", () => {
   });
 
   test("Enter is a paragraph break, Shift+Enter a forced line break, Tab a tab character", async () => {
-    covers("keybinding:tab→paged.chrome.toggleAll");
+    covers("keybinding:tab→paged.view.toggleChrome");
     const t = await mount();
     await t.caretAt(0);
     const before = await t.story();

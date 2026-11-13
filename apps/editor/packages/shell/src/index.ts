@@ -61,6 +61,7 @@ export {
   listenForEditorKeys,
   ownsEvent,
   queryEditor,
+  useEditorEscapeGuard,
   useEditorKeys,
   useEditorRoot,
   usePortalContainer,
@@ -676,7 +677,7 @@ export {
 } from "./cockpit";
 
 // ── Chrome ─────────────────────────────────────────────────────
-export { CommandPalette } from "./chrome/CommandPalette";
+export { CommandPalette, notifyPalette } from "./chrome/CommandPalette";
 export {
   MenuBar,
   CONTEXT_MENU_ROOT,
@@ -700,6 +701,20 @@ export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
 // ── Keyboard focus (ADR 234) ───────────────────────────────────
 export * from "./focus";
+// ── One Escape (ADR 1207) ──────────────────────────────────────
+export {
+  ESCAPE_TIERS,
+  escapeArbiterOf,
+  isEscapeKey,
+  useEscapeArbiter,
+  useEscapeHandler,
+  type EscapeArbiter,
+  type EscapeHandler,
+  type EscapeHandlerSpec,
+  type EscapeOutcome,
+  type EscapeResolution,
+  type EscapeTier,
+} from "./interaction/escape-arbiter";
 export {
   ContributedControlBarGroups,
   StatusBar,

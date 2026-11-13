@@ -1,4 +1,4 @@
-# ADR 1206 — Docks are resizable and the workspace adapts
+# ADR 1208 — Docks are resizable and the workspace adapts
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/cockpit/` (`CockpitLayout.tsx`, `DockSplitter.tsx`,

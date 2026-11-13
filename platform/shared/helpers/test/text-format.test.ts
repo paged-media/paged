@@ -95,4 +95,40 @@ describe("runTextVerb", () => {
       ["characterLeading", { type: "length", value: 18 }, "paragraphs"],
     ]);
   });
+
+  test("leading steps by 2 pt from the set leading or from Auto (120 %), never below 1 pt (F-34)", async () => {
+    const set = door({ characterLeading: 14, characterFontSize: 10 });
+    await runTextVerb(set.d, "increaseLeading");
+    await runTextVerb(set.d, "decreaseLeading");
+    expect(
+      set.writes.map((w) => [w[0]!.path, w[0]!.value, w[0]!.extent]),
+    ).toEqual([
+      ["characterLeading", { type: "length", value: 16 }, "paragraphs"],
+      ["characterLeading", { type: "length", value: 12 }, "paragraphs"],
+    ]);
+    const auto = door({ characterLeading: null, characterFontSize: 12 });
+    await runTextVerb(auto.d, "increaseLeading");
+    expect(auto.writes[0]![0]!.value).toEqual({ type: "length", value: 16.4 });
+    const tight = door({ characterLeading: 2, characterFontSize: 2 });
+    await runTextVerb(tight.d, "decreaseLeading");
+    expect(tight.writes[0]![0]!.value).toEqual({ type: "length", value: 1 });
+    const unknown = door({
+      characterLeading: "mixed",
+      characterFontSize: "mixed",
+    });
+    expect(await runTextVerb(unknown.d, "increaseLeading")).toEqual({
+      applied: false,
+    });
+  });
+
+  test("tracking steps by 20/1000 em, from 0 when unset (F-34)", async () => {
+    const a = door({ characterTracking: 40 });
+    await runTextVerb(a.d, "decreaseTracking");
+    const b = door({});
+    await runTextVerb(b.d, "increaseTracking");
+    expect([a.writes[0]![0], b.writes[0]![0]]).toEqual([
+      { path: "characterTracking", value: { type: "length", value: 20 } },
+      { path: "characterTracking", value: { type: "length", value: 20 } },
+    ]);
+  });
 });

@@ -979,10 +979,6 @@ function CanvasAppIntegration() {
     setSelection: setContentSelection,
     // useTextEditing calls these through the latest render's context.
     undoOwnedByContext: () => !!editContextStack?.activeContribution?.onUndo,
-    // Editor ADR 301 — inside a header edited in place, Escape takes the
-    // caret out of the header (which leaves it), not the context.
-    escapeOwnedByContext: () =>
-      !!editContextStack?.active && !registries.subContexts.current(),
     // ED-1 — Escape out of the text is InDesign's: the frame that held
     // the caret becomes the selection and the Selection tool is in hand,
     // so the next key is a shortcut again rather than more text.

@@ -50,6 +50,7 @@ import { Icon } from "../icons";
 import { FIELD } from "./messages";
 import { BindPopover, type BindTarget } from "./bind-popover";
 import { useDataService } from "../state/data-door";
+import { useEditorKeys } from "../state/editor-root";
 import { useCanvasClient } from "../state/canvas-client-context";
 import {
   Dialog,
@@ -376,17 +377,20 @@ export function FieldMenu({
   onClose: () => void;
 }) {
   const strings = useStrings();
+  const keys = useEditorKeys();
   useEffect(() => {
     const close = () => onClose();
     window.addEventListener("pointerdown", close);
-    window.addEventListener("keydown", close);
+    // A key typed in this editor closes it (ADR 277: never another
+    // editor's key on the same page).
+    const offKey = keys.listen("keydown", close);
     window.addEventListener("blur", close);
     return () => {
       window.removeEventListener("pointerdown", close);
-      window.removeEventListener("keydown", close);
+      offKey();
       window.removeEventListener("blur", close);
     };
-  }, [onClose]);
+  }, [onClose, keys]);
   return (
     <div
       role="menu"

@@ -17,7 +17,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 
 | ADR | Title | Status |
 |---|---|---|
-| [002](002-cockpit-over-dockview.md) | Shell substrate: custom Cockpit, replacing Dockview | Accepted (amended 2026-10-02; 2026-11-13 by 1206) |
+| [002](002-cockpit-over-dockview.md) | Shell substrate: custom Cockpit, replacing Dockview | Accepted (amended 2026-10-02; 2026-11-13 by 1208) |
 | [023](023-shared-panels-binding-providers.md) | Shared panels: the host owns the panel, plugins provide the values | Accepted (amended 2026-10-02) |
 | [024](024-context-sensitivity-is-a-core-concept.md) | Context-sensitivity is a core concept of paged | Accepted (amended 2026-10-02) |
 | [200](200-engine-as-npm-wasm-packages.md) | The engine is consumed as published npm wasm packages | Accepted, recorded retroactively 2026-10-02 |
@@ -27,10 +27,10 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [204](204-declarative-property-panels.md) | Property panels are declarative compositions over a curated catalogue | Accepted, recorded retroactively 2026-10-02 |
 | [205](205-client-packaged-as-write-sdk.md) | The editor's wasm client is packaged as the write SDK | Accepted, recorded retroactively 2026-10-02; amended by PM-0008 (2026-10-18) |
 | [206](206-package-layering-lint-zones.md) | Package layering is enforced by lint zones that have their own tests | Accepted, recorded retroactively 2026-10-02 |
-| [207](207-honest-seams.md) | Unbacked UI ships as a visible, inert seam | Accepted, recorded retroactively 2026-10-02 (amended 2026-11-13 by 1206) |
+| [207](207-honest-seams.md) | Unbacked UI ships as a visible, inert seam | Accepted, recorded retroactively 2026-10-02 (amended 2026-11-13 by 1208) |
 | [208](208-tools-are-data-plus-gesture-handler.md) | Tools are data plus a gesture handler | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
 | [209](209-command-is-the-action-primitive.md) | The command is the single action primitive | Accepted, recorded retroactively 2026-10-02 |
-| [210](210-design-token-bridge.md) | One token file bridges the brand system to the UI substrate | Accepted, recorded retroactively 2026-10-02 (amended 2026-11-13 by 1207) |
+| [210](210-design-token-bridge.md) | One token file bridges the brand system to the UI substrate | Accepted, recorded retroactively 2026-10-02 (amended 2026-11-13 by 1209) |
 | [211](211-no-backend.md) | The editor has no backend: documents are local files | Accepted, recorded retroactively 2026-10-02 |
 | [212](212-one-automation-surface.md) | One automation surface for tests, demos and the playground | Accepted, recorded retroactively 2026-10-02 |
 | [213](213-solo-mode.md) | Solo mode is a filter over the same app | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-22) |
@@ -54,10 +54,10 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [231](231-page-item-clipboard.md) | The page-item clipboard: Cut, Copy, Paste, Paste in place, Duplicate | Accepted 2026-10-19 |
 | [232](232-canvas-context-menu.md) | The canvas context menu is made of commands | Accepted 2026-10-19 |
 | [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 |
-| [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
+| [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 (amended 2026-11-13 by 1201; D-03 implemented 2026-11-13) |
 | [235](235-the-selection-tools-pointer-model.md) | The Selection tools follow InDesign's pointer model | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
 | [236](236-a-caret-holds-its-character-style.md) | A caret holds the character style chosen at it | Accepted 2026-10-19 |
-| [237](237-a-document-opens-on-its-first-page.md) | A document opens on its first page | Accepted 2026-10-19 (amended 2026-11-13 by 1206) |
+| [237](237-a-document-opens-on-its-first-page.md) | A document opens on its first page | Accepted 2026-10-19 (amended 2026-11-13 by 1208) |
 | [238](238-the-default-pdf-is-one-the-document-can-meet.md) | The default PDF is one the document can meet | Accepted 2026-10-19 |
 | [240](240-react-19-features.md) | The editor uses React 19's effect events, Activity, view transitions, Fragment refs and Trusted Types | Accepted 2026-10-19 |
 | [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 |
@@ -65,7 +65,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
 | [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
 | [249](249-offered-only-where-it-applies.md) | A control is offered only where it applies: the command's when, the field's kind | Accepted 2026-10-19 |
-| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
+| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201 and 1207) |
 | [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
 | [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
@@ -129,8 +129,10 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1203](1203-save-status-says-what-is-saved-where.md) | The save status says what is saved where: one save-state machine per editor (new, editing, saving, saved locally, syncing, synced, not synced, failed, read-only, recovered), each a guarantee that held; a local save whose target failed reads "Saved locally · Not synced" with Retry (D-10) | Accepted 2026-11-13 |
 | [1204](1204-recovery-journal.md) | The recovery journal: per-editor checkpoints of unsaved work in the origin-private file system, a crashed session's work offered back as Restore (a new document, never over the source), Compare or Discard; bounded and purged on save and close | Accepted 2026-11-13 |
 | [1205](1205-drop-says-what-it-will-do.md) | A drop says what it will do: one resolver (place, place in the frame under the pointer, replace its picture, import, open, replace the document, refuse) shown at the pointer before the drop and carried out on it; a file that is no package replaces nothing; the open picker and the empty canvas offer every format | Accepted 2026-11-13; amends 258 |
-| [1206](1206-docks-are-resizable-and-the-workspace-adapts.md) | Docks are resizable and the workspace adapts: dividers and per-mode widths, wide / laptop / narrow by the width the cockpit is given, the camera keeps the centre on a resize, the Focus workspace, progressive loading stages, the header and the Window menu | Accepted 2026-11-13; amends 002, 207, 237 |
-| [1207](1207-density-presets.md) | Density presets: Comfortable, Professional and Compact through `[data-density]` tokens; density never sizes the document | Accepted 2026-11-13; amends 210 |
+| [1206](1206-focus-returns-to-the-opener.md) | Focus returns to the opener, else to the canvas: one focus-return service for dialogs, the palette, menus and the context menu | Accepted 2026-11-13 |
+| [1207](1207-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13; amends 250 |
+| [1208](1208-docks-are-resizable-and-the-workspace-adapts.md) | Docks are resizable and the workspace adapts: dividers and per-mode widths, wide / laptop / narrow by the width the cockpit is given, the camera keeps the centre on a resize, the Focus workspace, progressive loading stages, the header and the Window menu | Accepted 2026-11-13; amends 002, 207, 237 |
+| [1209](1209-density-presets.md) | Density presets: Comfortable, Professional and Compact through `[data-density]` tokens; density never sizes the document | Accepted 2026-11-13; amends 210 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

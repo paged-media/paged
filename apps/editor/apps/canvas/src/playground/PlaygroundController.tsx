@@ -52,6 +52,8 @@ import {
   type SessionState,
   type SessionStatus,
   type Statement,
+  useEditorKeys,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { tokenizeJs, type CodeToken } from "@paged-media/ui";
 import {
@@ -306,12 +308,32 @@ export function PlaygroundController(): React.ReactElement | null {
       restart();
     }
   });
+  // This editor's keys only (ADR 277): a second editor on the page never
+  // steps this guide.
+  const keys = useEditorKeys();
   useEffect(() => {
     if (!scriptId) return;
-    const onKey = (e: KeyboardEvent) => onTransportKey(e);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [scriptId]);
+    return keys.listen("keydown", (e) => onTransportKey(e));
+  }, [scriptId, keys]);
+
+  // Escape inside the open guide card folds it to its pill: a popover of
+  // the Escape arbiter (ADR 1207), so the press does nothing else. The
+  // script's own textarea keeps its Escape.
+  const cardRef = useRef<HTMLElement | null>(null);
+  useEscapeHandler({
+    id: "paged.playground.card",
+    tier: "menu",
+    enabled: !!scriptId && !prefs.collapsed,
+    isActive: (e) => {
+      const target = e.target as Node | null;
+      return (
+        !!target &&
+        !!cardRef.current?.contains(target) &&
+        !(target instanceof HTMLTextAreaElement)
+      );
+    },
+    resolve: () => setCollapsed(true),
+  });
 
   if (!scriptId) return null;
 
@@ -391,12 +413,7 @@ export function PlaygroundController(): React.ReactElement | null {
           id={cardId}
           data-playground-source
           aria-label={`Demo guide: ${title}`}
-          onKeyDown={(e) => {
-            if (e.key !== "Escape") return;
-            if (e.target instanceof HTMLTextAreaElement) return;
-            e.stopPropagation();
-            setCollapsed(true);
-          }}
+          ref={cardRef}
           style={{ ...cardStyle, width: prefs.script ? 460 : 360 }}
         >
           {/* header: what this is, and the guide's own controls */}

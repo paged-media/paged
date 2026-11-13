@@ -205,8 +205,41 @@ export const TEXT_VERBS = [
   "lineSpacing1",
   "lineSpacing15",
   "lineSpacing2",
+  "increaseLeading",
+  "decreaseLeading",
+  "increaseTracking",
+  "decreaseTracking",
 ] as const;
 export type TextVerb = (typeof TEXT_VERBS)[number];
+
+/** InDesign's keyboard increments (Preferences ▸ Units & Increments): the
+ *  leading step in points and the kerning/tracking step in thousandths of
+ *  an em. */
+export const LEADING_STEP_PT = 2;
+export const TRACKING_STEP = 20;
+
+/** Auto leading: 120 % of the size, InDesign's default. */
+export const AUTO_LEADING = 1.2;
+
+/** The leading one step from `leading` (Auto reads as 120 % of `sizePt`),
+ *  never below one point. */
+export function steppedLeading(
+  leading: Read<number>,
+  sizePt: Read<number>,
+  direction: 1 | -1,
+): number | null {
+  const now =
+    typeof leading === "number"
+      ? leading
+      : typeof sizePt === "number"
+        ? sizePt * AUTO_LEADING
+        : null;
+  if (now === null) return null;
+  return Math.max(
+    1,
+    Math.round((now + direction * LEADING_STEP_PT) * 100) / 100,
+  );
+}
 
 const text = (value: string): TextVerbValue => ({ type: "text", value });
 const length = (value: number | null): TextVerbValue => ({
@@ -296,6 +329,34 @@ export async function runTextVerb(
               typeof now === "number" ? now : 0,
               verb === "increaseIndent" ? 1 : -1,
             ),
+          ),
+        },
+      ]);
+    }
+    case "increaseLeading":
+    case "decreaseLeading": {
+      const leading = (await door.read("characterLeading")) as Read<number>;
+      const size = (await door.read("characterFontSize")) as Read<number>;
+      const next = steppedLeading(
+        leading,
+        size,
+        verb === "increaseLeading" ? 1 : -1,
+      );
+      if (next === null) return { applied: false };
+      return door.format([
+        { path: "characterLeading", value: length(next), extent: "paragraphs" },
+      ]);
+    }
+    case "increaseTracking":
+    case "decreaseTracking": {
+      const now = await door.read("characterTracking");
+      const base = typeof now === "number" ? now : 0;
+      return door.format([
+        {
+          path: "characterTracking",
+          value: length(
+            base +
+              (verb === "increaseTracking" ? TRACKING_STEP : -TRACKING_STEP),
           ),
         },
       ]);

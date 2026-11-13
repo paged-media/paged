@@ -24,7 +24,7 @@
 // `PropertyField`s on the `doc` address: each edit is one `set` through
 // `host.objects` = one undo step, and each offers "Bind to data…".
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
 import {
@@ -35,6 +35,7 @@ import {
   scopeOf,
   useScoped,
   type EditorScope,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import type {
   CommandContribution,
@@ -100,13 +101,13 @@ function GlobalLightForm() {
   const strings = useStrings();
   const store = useScoped(OPEN);
   const close = () => store.set(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") store.set(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [store]);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1207).
+  useEscapeHandler({
+    id: "paged.globalLightDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => close(),
+  });
 
   return (
     <div

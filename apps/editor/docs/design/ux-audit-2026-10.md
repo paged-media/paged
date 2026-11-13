@@ -546,7 +546,7 @@ Window ▸ Styles holds Color, Color settings, Color Wheel, Gradients, Swatches 
 
 **Screenshots:** `F-18-window-styles-category.png`, `F-17-window-menu-casing.png`
 
-**Fixed (2026-11-13, editor ADR 1206).** Each editor panel carries its Window-menu category
+**Fixed (2026-11-13, editor ADR 1208).** Each editor panel carries its Window-menu category
 (`windowCategory`, from `apps/canvas/src/panels/window-categories.ts`): Color, Styles, Type &
 Tables, Object & Layout, Interactive, Output and Utilities, with eight panels one click deep
 (Properties, Pages, Layers, Links, Document map, Stories, Library, Comments). Every panel is listed
@@ -621,7 +621,7 @@ A readout over the canvas shows "GPU 60 fps · 20 pages · cache 100% (20/20) ·
 
 **Screenshots:** `F-21-debug-hud.png`
 
-**Fixed (2026-11-13, editor ADR 1206).** The readout shows only with `?debug=hud`; zoom and page
+**Fixed (2026-11-13, editor ADR 1208).** The readout shows only with `?debug=hud`; zoom and page
 stay in the mode bar and the status bar.
 
 <a id="f-23"></a>
@@ -644,7 +644,7 @@ Review is "Approve soon", "Request changes soon", "Compare versions soon", "No c
 
 **Screenshots:** `F-23-review-mode-placeholders.png`, `F-22-internal-ids.png`
 
-**Fixed (2026-11-13, editor ADRs 1206 and 207 amended).** Review declares `placeholder: true`
+**Fixed (2026-11-13, editor ADRs 1208 and 207 amended).** Review declares `placeholder: true`
 and the mode bar no longer offers it (it shows while it is the active mode). Content opens on the
 Stories list with Character and Paragraph in the dock; the story inspector is the last tab, named
 "Story status". Export keeps its live PDF and image targets and its three honest seams.
@@ -669,7 +669,7 @@ Share is disabled (opacity 0.45 on the brand fill), but on the dark header it st
 
 **Screenshots:** `F-24-share-button-prominence.png`
 
-**Fixed (2026-11-13, editor ADR 1206).** The disabled Share is a ghost button in the muted text
+**Fixed (2026-11-13, editor ADR 1208).** The disabled Share is a ghost button in the muted text
 colour, and the browser tab reads "<document> — paged" while a document is open, when the editor
 is the page (an embedded editor leaves its host's title alone).
 
@@ -916,6 +916,8 @@ sideways.
 <a id="f-34"></a>
 
 #### F-34 · Type-size and style shortcuts do nothing
+
+> **Resolved (2026-11-13).** The text chords are host commands over the shared text verbs (`apps/canvas/src/text-format-commands.ts`, `@paged-media/helpers`), bound while a caret or a range is in a story outside an edit context: ⌘B / ⌘I / ⌘U, ⌘⇧> and ⌘⇧< (also ⌘⇧. and ⌘⇧,) for the size, ⌥↑ / ⌥↓ for the leading by 2 pt (from Auto at 120 %), ⌥← / ⌥→ for the tracking by 20/1000 em, and InDesign's alignment, case, strikethrough and position chords, each with its Ctrl twin. The Type ▸ Format menu lists them with their chords. On the canvas's text input the Alt arrows are the verbs' while a binding takes them, otherwise they move the caret. Tests: `tests/e2e/shell-keybindings.spec.ts` (every chord runs its verb with a caret, none with only a frame), `test/unit/commands/text-format-commands.test.ts`, `platform/shared/helpers/test/text-format.test.ts`. The original text follows for the record.
 
 **Severity:** minor · **Effort:** S · **Affects:** Text-heavy users.
 
@@ -1330,7 +1332,7 @@ The editor reports ready after 1.1 s (a 54 MB, 8-page real-world IDML template) 
 
 **Screenshots:** `F-53-heavy-doc-blank-canvas.png`
 
-**Fixed (2026-11-13, editor ADR 1206; ADR 237 amended).** A load reports its real stages —
+**Fixed (2026-11-13, editor ADR 1208; ADR 237 amended).** A load reports its real stages —
 recognized, geometry, first paint, refining, ready — on the canvas and in the header, in words and
 counts, never a percentage; until the first page is composed the canvas outlines every page where
 it will be. UXI-T49 asserts the stages and the first-page fit on a 20-page document. How fast the
@@ -1381,7 +1383,7 @@ Both docks have fixed widths and never collapse. The canvas gets 25% of a 1280 �
 
 **Screenshots:** `F-55-viewport-1280x720.png`, `F-55-viewport-1024x768.png`, `F-55-viewport-800x600.png`
 
-**Fixed (2026-11-13, editor ADR 1206).** The docks are resizable (240–480 px) and the cockpit
+**Fixed (2026-11-13, editor ADR 1208).** The docks are resizable (240–480 px) and the cockpit
 adapts to the width it is given: wide docks both; a laptop width (about 1095–1575 px of window)
 collapses the left dock to a rail with a flyout; a narrow one makes both docks overlays that the
 next canvas press closes. No docked column takes the canvas below 640 px. The header's menus
@@ -1432,7 +1434,7 @@ The Window menu mixes Title Case ("Document Map", "Export Center") with sentence
 
 **Screenshots:** `F-17-window-menu-casing.png`
 
-**Fixed (2026-11-13, editor ADR 1206).** The editor's panel names are sentence case ("Document
+**Fixed (2026-11-13, editor ADR 1208).** The editor's panel names are sentence case ("Document
 map", "Export center", "Paragraph styles" …) and one name per thing: "Bullets and numbering" and
 "Numbering and section options" in the Window menu as in Type and Layout, "Type on a path" in Draw
 as in Object, "Color" in paged.image and the host's panels alike. Insert ▸ "Web frame" lost the
@@ -1580,7 +1582,7 @@ The Object menu has no Lock (⌘L), Unlock all on spread, Hide (⌘3) or Show al
 | Floating, dockable panels                        | Fixed docks with tabs                     | Yes (ADR 002)                                            | —             |
 | Save / Don't save / Cancel on close              | Native OK/Cancel                          | Yes, in code, as interim                                 | [F-05](#f-05) |
 | Autosave and recent files                        | None                                      | Yes (status.md, Limits)                                  | [F-06](#f-06) |
-| Text shortcuts (⌘⇧> size, ⌥←/→ tracking)         | Not bound                                 | No                                                       | [F-34](#f-34) |
+| Text shortcuts (⌘⇧> size, ⌥←/→ tracking)         | Bound (resolved 2026-11-13)               | No                                                       | [F-34](#f-34) |
 
 ## Not tested, and why
 

@@ -31,8 +31,10 @@ import { CanvasClient } from "@paged-media/client";
 import {
   PagedShell,
   createEditorScope,
+  escapeArbiterOf,
   memoryStorage,
   notifyExportPdfDialog,
+  notifyPalette,
   setEditorStorage,
   useRegistries,
   type EditorScope,
@@ -237,8 +239,11 @@ describe("the editor as an instance (E1)", () => {
     // the host's.
     await cmdK(document.body);
     expect(heard).toEqual({ a: [], b: [] });
-    // Typed inside A: A's palette, not B's.
+    // Typed inside A: A's palette, not B's. (Settled: the palette takes
+    // focus as it opens, which makes A the page's active editor; that must
+    // happen before B is pointed at, not race it.)
     await cmdK(a.root.querySelector("[data-test-canvas]")!);
+    await settle();
     expect(heard.a).toEqual(["paged.palette.toggle"]);
     expect(heard.b).toEqual([]);
     // Pointed at, B takes the keys typed with nothing focused.
@@ -251,6 +256,55 @@ describe("the editor as an instance (E1)", () => {
     expect(heard.b).toEqual(["paged.palette.toggle"]);
     expect(heard.a).toEqual(["paged.palette.toggle"]);
     for (const off of offs) off.dispose();
+    a.unmount();
+    b.unmount();
+  });
+
+  test("UXI-T33 — two editors on one page: Escape and the shortcuts are processed only by the editor they were typed in @feat:editor-shell.solo-mode @level:edge", async () => {
+    const a = await mountShell();
+    const b = await mountShell();
+    const aCanvas = a.root.querySelector("[data-test-canvas]")!;
+    const bCanvas = b.root.querySelector("[data-test-canvas]")!;
+    const escapeOn = (target: EventTarget) =>
+      act(async () => {
+        target.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
+    // A has its palette open and a modal of its own.
+    let aModal = true;
+    const off = escapeArbiterOf(a.scope).register({
+      id: "test.a.modal",
+      tier: "modal",
+      isActive: () => aModal,
+      resolve: () => {
+        aModal = false;
+      },
+    });
+    await act(async () => notifyPalette(a.scope, "open"));
+    await settle();
+    const paletteIn = (m: Mounted) => m.root.querySelector("[cmdk-input]");
+    expect(paletteIn(a)).not.toBeNull();
+    // Escape typed in B: B's, so A's modal and palette stay.
+    await escapeOn(bCanvas);
+    await settle();
+    expect(aModal).toBe(true);
+    expect(paletteIn(a)).not.toBeNull();
+    expect(escapeArbiterOf(b.scope).last()).toBeNull();
+    // Escape typed in A: its modal first, then its palette, one per press.
+    await escapeOn(aCanvas);
+    await settle();
+    expect(aModal).toBe(false);
+    expect(paletteIn(a)).not.toBeNull();
+    await escapeOn(paletteIn(a) ?? aCanvas);
+    await settle();
+    expect(paletteIn(a)).toBeNull();
+    expect(escapeArbiterOf(a.scope).last()?.id).toBe("paged.palette");
+    off();
     a.unmount();
     b.unmount();
   });

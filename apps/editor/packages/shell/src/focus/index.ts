@@ -25,10 +25,13 @@ export {
   CANVAS_SURFACE_ATTR,
   FRAME_SURFACE_ATTR,
   KEY_OWNING_CONTAINERS,
+  PAGE_KEYS,
+  TYPEAHEAD_OWNERS,
   WIDGET_KEYS,
   WIDGET_KEY_OWNERS,
   canvasKeyYields,
   canvasSurfaceOf,
+  compositeOwnsKey,
   insideFrameSurface,
   insideKeyOwningContainer,
   isActivatable,
@@ -57,3 +60,18 @@ export {
   canvasViewportSurfaceProps,
   focusCanvasViewport,
 } from "./canvas-surface";
+export {
+  canTakeFocus,
+  canvasFocusTarget,
+  focusReturnOf,
+  useFocusReturn,
+  type FocusReturn,
+} from "./focus-return";
+export {
+  TAB_HIDES_PANELS_COMMAND,
+  TAB_HIDES_PANELS_KEY,
+  TOGGLE_CHROME_COMMAND,
+  setTabHidesPanels,
+  tabHidesPanels,
+  useTabHidesPanels,
+} from "./tab-hides-panels";

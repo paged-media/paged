@@ -155,10 +155,20 @@ Implemented so far: the save status (DF1, [ADR 1203](adr/1203-save-status-says-w
 `UXI-T67`), the recovery journal (DF2, [ADR 1204](adr/1204-recovery-journal.md)), and of DF3
 ([ADR 1205](adr/1205-drop-says-what-it-will-do.md)) the open picker, the empty canvas and failed
 opens that change nothing; the drop's label at the pointer and the drop into the frame under it
-wait for the canvas drop zone (WS0).
+wait for the canvas drop zone (WS0). Track KF (keyboard and focus) is built: Escape is resolved
+once per press by a per-editor arbiter in the specification's order, and at the top level it
+clears the selection ([ADR 1207](adr/1207-one-escape.md)); every key listener hears only its own
+editor's keys; Tab moves focus everywhere, the chrome toggle is `paged.view.toggleChrome`
+(Cmd/Ctrl+\) and "Tab hides panels (InDesign)" an opt-in setting
+([ADR 234](adr/234-keyboard-focus-and-text-input.md), amended); an input method's composition
+commits once and the input follows the rotated view; focus returns to the opener of a dialog,
+the palette or a menu, else the canvas ([ADR 1206](adr/1206-focus-returns-to-the-opener.md);
+issue #32); lists and selects keep their keys, and Alt+arrows set leading and tracking (UX audit
+F-34). The viewport's drag cancel, the gesture spine and path editing still answer Escape on
+their own listeners until track IC moves them onto the arbiter.
 
-Track WS's first part has landed (WS0–WS7; [ADR 1206](adr/1206-docks-are-resizable-and-the-workspace-adapts.md),
-[ADR 1207](adr/1207-density-presets.md)): the docks are resizable (240–480 px, per mode) and the
+Track WS's first part has landed (WS0–WS7; [ADR 1208](adr/1208-docks-are-resizable-and-the-workspace-adapts.md),
+[ADR 1209](adr/1209-density-presets.md)): the docks are resizable (240–480 px, per mode) and the
 cockpit adapts to the width it is given (wide; laptop, the left dock a rail with a flyout; narrow,
 both docks overlays), switchable in Edit ▸ Settings; a viewport resize keeps the document point at
 its centre (UXI-T50); the Focus workspace (Cmd/Ctrl+.) hides everything but the canvas and the tool
@@ -170,9 +180,10 @@ follows InDesign's categories with one sentence-case name per panel. UX audit F-
 F-23, F-24, F-53 and F-55 close. WS8–WS10 (zoom and navigation, editing aids, page lenses) are
 planned.
 
-Otherwise the editor behaves as the sections above and the existing records describe: Shift-click adds and Cmd-click toggles, the marquee takes what it intersects,
-Tab hides the chrome on a canvas the user clicked into, a double-click on an image frame enters
-paged.image, and Escape is answered by several listeners. Wave 0's interaction inventory
+Otherwise the editor behaves as
+the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
+the marquee takes what it intersects, and a double-click on an image frame enters paged.image.
+Wave 0's interaction inventory
 (`scripts/interaction-inventory.json`, with the one exception ledger), the coverage report for
 the `UXI-T` tests and the test harness are being built.
 
