@@ -28,6 +28,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
+import { useInteractionCoordinator } from "../interaction/coordinator";
 import type { ToolId } from "../registries/tool";
 
 /** Ids of the two built-in tools the legacy scalar `ActiveTool` union
@@ -160,17 +161,27 @@ export function ToolProvider({ children }: PropsWithChildren) {
     toolStateRef.current = internal.active;
   });
 
+  // A permanent tool switch ends the gesture in progress first: it is
+  // cancelled, never left open under the new tool (the interaction
+  // specification's `UXI-OWN-012`, `UXI-STATE-003`). A spring-load
+  // (push / pop) is not a switch.
+  const interactions = useInteractionCoordinator();
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const setBaseTool = useCallback((id: ToolId) => {
-    setInternal((prev) =>
-      prev.active.base === id && prev.reason === "switch"
-        ? prev
-        : {
-            active: { base: id, overrides: prev.active.overrides },
-            reason: "switch",
-          },
-    );
-  }, []);
+  const setBaseTool = useCallback(
+    (id: ToolId) => {
+      if (toolStateRef.current.base !== id)
+        interactions.abortAll("tool-switch");
+      setInternal((prev) =>
+        prev.active.base === id && prev.reason === "switch"
+          ? prev
+          : {
+              active: { base: id, overrides: prev.active.overrides },
+              reason: "switch",
+            },
+      );
+    },
+    [interactions],
+  );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const pushOverride = useCallback((id: ToolId) => {

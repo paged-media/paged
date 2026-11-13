@@ -180,6 +180,15 @@ follows InDesign's categories with one sentence-case name per panel. UX audit F-
 F-23, F-24, F-53 and F-55 close. WS8–WS10 (zoom and navigation, editing aids, page lenses) are
 planned.
 
+Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
+interaction coordinator that holds the session owning the pointer, the epochs a late answer is
+checked against and a development trace (`__interaction`, no user text). It is behind the
+`?debug=coordinator` flag until the adapters land (IC4): with the flag, every pointer sequence on
+the canvas is a session, and a lost pointer capture, a window blur, a hidden page, a document or
+tool switch, a failed worker and unmount end it once, rolled back; a begin the engine refuses and
+Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
+a failed worker is said so (`UXI-T10`, `UXI-T61`). Without the flag the canvas behaves as before.
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
 the marquee takes what it intersects, and a double-click on an image frame enters paged.image.

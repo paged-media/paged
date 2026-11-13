@@ -55,6 +55,7 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 | W0.8 this plan and the status block                     | Done                                                                                                                                                                    | this file, `status.md`                                 |
 | W0.4–W0.7 inventory, coverage report, harness, baseline | In progress                                                                                                                                                             | §3                                                     |
 | EN1–EN4, the engine and protocol 79                     | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview | §6; engine ADR 1300, amendments to 125, 193, 1011      |
+| IC1–IC2 the coordinator and the terminal events         | Done, behind `?debug=coordinator` until IC4: sessions, epochs, the trace, `abortAll` on every terminal event, no pan fallback                                           | ADR 1210                                               |
 | Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX               | Not started                                                                                                                                                             | §4–§12                                                 |
 
 ## 1. Facts in the code that shape the plan
