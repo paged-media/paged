@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "name": "legacy-type-drag",
+  "coords": "doc",
+  "viewport": {
+    "zoom": 1
+  },
+  "samples": [
+    {
+      "t": 0,
+      "type": "tool",
+      "tool": "paged.tool.type"
+    },
+    {
+      "t": 50,
+      "type": "pointerdown",
+      "pos": [100, 300],
+      "button": 0,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 66,
+      "type": "pointermove",
+      "pos": [127.5, 312.5],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 82,
+      "type": "pointermove",
+      "pos": [155, 325],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 98,
+      "type": "pointermove",
+      "pos": [182.5, 337.5],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 114,
+      "type": "pointermove",
+      "pos": [210, 350],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 130,
+      "type": "pointermove",
+      "pos": [237.5, 362.5],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 146,
+      "type": "pointermove",
+      "pos": [265, 375],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 162,
+      "type": "pointermove",
+      "pos": [292.5, 387.5],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 178,
+      "type": "pointermove",
+      "pos": [320, 400],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 194,
+      "type": "pointerup",
+      "pos": [320, 400],
+      "button": 0,
+      "buttons": 0,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0,
+      "tiltX": 0,
+      "tiltY": 0
+    }
+  ],
+  "fixture": "interaction contract fixture C (tests/e2e/harness/uxi-fixtures.ts)",
+  "expect": {
+    "selection": ["textFrame:new"],
+    "text": {
+      "storyId": "new",
+      "start": 0,
+      "end": 0
+    },
+    "undoSteps": 1,
+    "modelChanged": true,
+    "zoomRatio": 1,
+    "pointUnderPointer": [320, 400]
+  }
+}

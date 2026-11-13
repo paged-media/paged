@@ -3,9 +3,9 @@
   "package": "@paged-media/client",
   "protocol": 79,
   "counts": {
-    "clientMembers": 106,
+    "clientMembers": 107,
     "wireKinds": 67,
-    "exports": 94
+    "exports": 95
   },
   "wireKinds": [
     "amendMutation",
@@ -106,6 +106,12 @@
           "kind": "method",
           "signature": "async send(kind: MainToWorkerKind): Promise<WorkerToMain>",
           "summary": "Send a typed message and await the worker's reply."
+        },
+        {
+          "name": "CanvasClient.setReplyGate",
+          "kind": "method",
+          "signature": "setReplyGate(gate: ReplyGate | null): void",
+          "summary": "Hold, delay or reorder the replies callers await, through `gate` (null removes it): the interaction contract's slow-worker fixture."
         },
         {
           "name": "CanvasClient.beginUndoGroup",
@@ -789,6 +795,12 @@
           "name": "JournalDrain",
           "kind": "type",
           "signature": "JournalDrain",
+          "summary": null
+        },
+        {
+          "name": "ReplyGate",
+          "kind": "type",
+          "signature": "ReplyGate",
           "summary": null
         },
         {

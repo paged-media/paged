@@ -114,6 +114,18 @@ export interface UndoLog {
   evicted: number;
 }
 
+/**
+ * A test seam ({@link CanvasClient.setReplyGate}): it sees the reply to
+ * each request posted on the JSON channel, named by the REQUEST's kind,
+ * before the caller awaiting it does, and the caller settles with what it
+ * resolves to — at once, later, or after a reply that arrived after it.
+ * Subscribers still see every reply when it arrives.
+ */
+export type ReplyGate = (
+  requestKind: string,
+  reply: WorkerToMain,
+) => Promise<WorkerToMain>;
+
 export interface SnapshotBackendInfo {
   /** The policy {@link CanvasClient.setSnapshotBackend} set. */
   requested: "auto" | "gpu" | "cpu";
@@ -562,6 +574,8 @@ export class CanvasClient {
   private readonly liveGestures = new Set<GestureHandle>();
   private pendingGestureBegins = 0;
   private gestureIdleWaiters: Array<() => void> = [];
+  /** See {@link setReplyGate}. */
+  private replyGate: ReplyGate | null = null;
 
   constructor(options: CanvasClientOptions) {
     this.defaultFontProvider = options.defaultFontProvider;
@@ -647,7 +661,18 @@ export class CanvasClient {
       this.pending.set(seq, { resolve, reject });
     });
     this.worker.postMessage({ kind: "channel", msg: envelope });
-    return promise;
+    const gate = this.replyGate;
+    return gate ? promise.then((reply) => gate(kind.kind, reply)) : promise;
+  }
+
+  /**
+   * Hold, delay or reorder the replies callers await, through `gate`
+   * (null removes it): the interaction contract's slow-worker fixture.
+   * For tests only — the editor's page entry installs one on a page
+   * opened with `?debug=chaos`; an embedding never does.
+   */
+  setReplyGate(gate: ReplyGate | null): void {
+    this.replyGate = gate;
   }
 
   /**

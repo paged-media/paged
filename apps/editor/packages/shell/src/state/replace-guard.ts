@@ -47,6 +47,7 @@ import { t } from "@paged-media/strings";
 import { REPLACE } from "./messages";
 import { cancelPendingPlacement } from "./pending-placement";
 import { scoped, type EditorScope } from "./editor-scope";
+import { documentNeedsSave } from "./save-status";
 
 /** The user's answer to the replace question. */
 export type ReplaceAnswer = "save" | "discard" | "cancel";
@@ -86,6 +87,10 @@ interface GuardState {
   seq: number;
   surfaces: number;
   saver: (() => void | Promise<void>) | null;
+  /** Runs before an edited document may be replaced: the recovery
+   *  journal keeps a checkpoint (editor ADR 1204), since a load can fail
+   *  or take the tab down. */
+  beforeReplace: (() => Promise<unknown>) | null;
   readonly queue: PendingReplace[];
   readonly listeners: Set<() => void>;
   readonly prompts: ReplacePrompts;
@@ -104,6 +109,7 @@ const GUARD = scoped("replaceGuard", (): GuardState => {
     seq: 0,
     surfaces: 0,
     saver: null,
+    beforeReplace: null,
     queue,
     listeners,
     prompts: {
@@ -159,6 +165,39 @@ export function setDocumentSaver(
   return () => {
     if (g.saver === save) g.saver = null;
   };
+}
+
+/** Register what runs before `scope`'s edited document may be replaced
+ *  (the recovery journal's checkpoint). Returns the unregister. */
+export function setBeforeReplace(
+  scope: EditorScope,
+  run: () => Promise<unknown>,
+): () => void {
+  const g = scope.get(GUARD);
+  g.beforeReplace = run;
+  return () => {
+    if (g.beforeReplace === run) g.beforeReplace = null;
+  };
+}
+
+/** How long the question waits for the checkpoint before it is asked. */
+const BEFORE_REPLACE_WAIT_MS = 3_000;
+
+function runBeforeReplace(g: GuardState): Promise<unknown> {
+  const run = g.beforeReplace;
+  if (!run) return Promise.resolve();
+  return Promise.race([
+    run().catch(() => undefined),
+    new Promise((resolve) => setTimeout(resolve, BEFORE_REPLACE_WAIT_MS)),
+  ]);
+}
+
+/** The save `scope` registered (the app's Cmd+S), if any: the replace
+ *  question's Save, and the save status's Retry. */
+export function documentSaver(
+  scope: EditorScope,
+): (() => void | Promise<void>) | null {
+  return scope.get(GUARD).saver;
 }
 
 function ask(g: GuardState, request: ReplaceRequest): Promise<ReplaceAnswer> {
@@ -228,7 +267,12 @@ export async function confirmReplace(
     // No document, or the worker is not answering — nothing to lose.
     return true;
   }
+  // A document restored from the recovery journal and not saved since is
+  // clean in the engine (it was just loaded) but saved nowhere: replacing
+  // it asks too (editor ADR 1204, UXI-MUT-010).
+  if (!dirty) dirty = documentNeedsSave(scope);
   if (!dirty) return true;
+  await runBeforeReplace(g);
   if (g.surfaces === 0) return globalThis.confirm(replaceConfirmText(request));
   const answer = await ask(g, request);
   if (answer === "discard") return true;
@@ -241,7 +285,7 @@ export async function confirmReplace(
     return false;
   }
   try {
-    return !(await client.documentMeta()).dirty;
+    return !(await client.documentMeta()).dirty && !documentNeedsSave(scope);
   } catch {
     return false;
   }

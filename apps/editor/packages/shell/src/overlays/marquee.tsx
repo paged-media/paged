@@ -36,6 +36,7 @@ function MarqueeRender(props: OverlayProps) {
   const [top, left, bottom, right] = m.rect;
   return (
     <rect
+      data-gesture-preview="marquee"
       x={pr.x + left}
       y={pr.y + top}
       width={Math.max(0, right - left)}

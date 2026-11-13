@@ -37,6 +37,7 @@ export {
   type HostObjectsAnswerer,
   type HostObjectsRound,
   type JournalDrain,
+  type ReplyGate,
   type SnapshotBackendInfo,
   type SnapshotOptions,
   type UndoLog,

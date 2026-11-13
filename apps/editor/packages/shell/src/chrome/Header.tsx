@@ -22,9 +22,10 @@
 //
 //   brand · document | menus (core, then context) | search | theme · Share
 //
-// - The DOCUMENT chip names what is open and carries one status dot:
-//   the engine's state while it is not ready, else the save state (it
-//   moved here from the bottom bar, where it sat apart from the name).
+// - The DOCUMENT chip names what is open, with a dot for the engine's
+//   state while it is busy or failed. After the menus the SAVE STATUS says
+//   what the last save really did and where (editor ADR 1203,
+//   `SaveStatus`): a dot, and its label when the header has room.
 // - Search shrinks with the space it is given and becomes an icon
 //   below 220 px, so nothing is pushed off the right edge.
 // - Zoom lives in the bottom bar only (it was in both).
@@ -47,6 +48,7 @@ import { useEditorScope } from "../state/editor-scope";
 import { useChromeRegions } from "../state/chrome-regions";
 import { useCompactLayout } from "../state/compact";
 import { RegionItems } from "./RegionItems";
+import { SaveStatus } from "./SaveStatus";
 import { HEADER } from "./messages";
 
 export interface HeaderProps {
@@ -76,11 +78,19 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
       >
         <Brand />
         <DocumentChip status={status} />
-        {chrome.has("menubar") && (
+        {chrome.has("menubar") ? (
           <>
             <span style={zoneDividerStyle} aria-hidden />
-            <MenuBar />
+            {/* The save status follows the menus: they stay the first stop
+             *  and keep their place; its dot takes the room the chip's dot
+             *  had. */}
+            <span style={menusAndStatusStyle}>
+              <MenuBar />
+              <SaveStatus />
+            </span>
           </>
+        ) : (
+          <SaveStatus />
         )}
       </div>
 
@@ -140,33 +150,34 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
   );
 }
 
-/** What is open, and its state in one dot. */
+/** The engine's status string, read for the chip: work in progress ends
+ *  with an ellipsis ("loading Annual.idml…", "snapshotting…"), a failure
+ *  says so; everything else ("loaded 4 pages", "imported Annual.idml",
+ *  "worker ready") is a settled engine (UX audit F-07: the dot read every
+ *  settled message as unsaved work). */
+export function engineStatusOf(
+  status: string | undefined,
+): "settled" | "busy" | "failed" {
+  if (!status) return "settled";
+  if (/failed/i.test(status)) return "failed";
+  return /(…|\.\.\.)$/.test(status.trim()) ? "busy" : "settled";
+}
+
+/** What is open, and the engine's state while it is busy or failed. The
+ *  save state is `SaveStatus`'s, after the menus. */
 function DocumentChip({ status }: { status?: string }) {
   const strings = useStrings();
   const { handle, sourceName } = useDocument();
   const meta = useDocumentMeta();
-  const ready = !status || /ready/i.test(status);
+  const engine = engineStatusOf(status);
+  const ready = engine === "settled";
   const name = handle
     ? meta?.documentName || sourceName || strings.t(HEADER.untitled)
     : strings.t(HEADER.noDocument);
-  // U14 — honest wording: dirty means edits since load; nothing writes
-  // to disk on its own, so neither state may claim a save happened.
-  const state = !ready
-    ? status
-    : !handle
-      ? null
-      : meta?.dirty
-        ? strings.t(HEADER.edited)
-        : strings.t(HEADER.noUnsavedEdits);
-  const dot = !ready
-    ? "var(--status-review)"
-    : meta?.dirty
-      ? "var(--status-review)"
-      : "var(--status-approved)";
   return (
     <span
       data-document-chip
-      title={state ? `${name} — ${state}` : name}
+      title={ready ? name : `${name} — ${status}`}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -186,21 +197,20 @@ function DocumentChip({ status }: { status?: string }) {
       >
         {name}
       </span>
-      {(state || !ready) && (
+      {!ready && (
         <span
-          // Both hooks the suite and scripts read: the worker state and
-          // the save state, now one dot.
+          // The hook the suite and scripts read for the worker state.
           data-shell-status={status}
-          data-save-state={
-            handle && ready ? (meta?.dirty ? "dirty" : "saved") : undefined
-          }
-          aria-label={state ?? undefined}
+          aria-label={status}
           style={{
             width: 7,
             height: 7,
             borderRadius: "50%",
             flexShrink: 0,
-            background: dot,
+            background:
+              engine === "failed"
+                ? "var(--status-error)"
+                : "var(--status-progress)",
           }}
         />
       )}
@@ -344,6 +354,13 @@ export function ThemeToggle() {
     </button>
   );
 }
+
+const menusAndStatusStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  minWidth: 0,
+};
 
 const zoneDividerStyle: React.CSSProperties = {
   width: 1,

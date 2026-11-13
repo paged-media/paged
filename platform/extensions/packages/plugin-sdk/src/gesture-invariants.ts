@@ -23,13 +23,19 @@
 //         one committed worker gesture, never two, never a partial;
 //   INV-2 cancel (Escape mid-gesture) commits nothing, and a begun
 //         worker gesture is cancelled, not left open;
-//   INV-4 undo restores the model exactly and redo re-applies it.
+//   INV-4 undo restores the model exactly and redo re-applies it;
+//   INV-7 no document write from another channel (a script, a panel, an
+//         undo) applies while a gesture is open;
+//   INV-8 liveness: pointercancel, blur, capture loss, a tool switch and
+//         a document close each END an open gesture, without a mutation.
 //
 // Two levels. Against a FAKE editor the log is the evidence
 // (`expectOneCommit`, `expectNoCommit`, `expectOneUndoStep`). Against a
-// real ENGINE the model is: `checkUndoRedo` / `checkCancel` compare
-// model dumps through a `ModelChannel`, and `engineModelChannel` builds
-// one over any `client.send` (the headless host's, or the editor's).
+// real ENGINE the model is: `checkUndoRedo` / `checkCancel` /
+// `checkLiveness` compare model dumps through a `ModelChannel`, and
+// `engineModelChannel` builds one over any `client.send` (the headless
+// host's, or the editor's). `checkNoInterleave` reads the order of the
+// replies either level records.
 
 import type {
   ElementId,
@@ -39,7 +45,7 @@ import type {
 
 import type { FakeEditor, FakeEditorEvent } from "./fake-editor.js";
 
-export type InvariantId = "INV-1" | "INV-2" | "INV-4";
+export type InvariantId = "INV-1" | "INV-2" | "INV-4" | "INV-7" | "INV-8";
 
 export class InvariantError extends Error {
   constructor(
@@ -243,6 +249,123 @@ export async function checkCancel(
       `${label}: the model changed ${firstDifference(before, after)}`,
     );
   }
+}
+
+/** What ends an open gesture without committing it (INV-8). */
+export type LivenessInterrupt =
+  "pointercancel" | "blur" | "captureLoss" | "toolSwitch" | "documentClose";
+
+export interface LivenessOptions {
+  /** What `run` does to the open gesture, named in a failure. */
+  interrupt: LivenessInterrupt;
+  /** True once no gesture is open: the host is out of its dragging state
+   *  (a fake editor: every begun worker gesture cancelled; an engine: a
+   *  new begin is not refused as already active). */
+  idle: () => boolean | Promise<boolean>;
+  label?: string;
+}
+
+/**
+ * INV-8 against a real model: `run` begins a gesture and interrupts it
+ * the way `options.interrupt` says; afterwards nothing is open
+ * (`options.idle`) and the dump is byte-identical to before. A document
+ * close replaces the model, so after one only the first half is checked.
+ */
+export async function checkLiveness(
+  channel: ModelChannel,
+  run: () => unknown | Promise<unknown>,
+  options: LivenessOptions,
+): Promise<void> {
+  const label = options.label ?? `gesture ended by ${options.interrupt}`;
+  const compare = options.interrupt !== "documentClose";
+  const before = compare ? await channel.dump() : "";
+  await run();
+  if (!(await options.idle())) {
+    throw new InvariantError(
+      "INV-8",
+      `${label}: the gesture is still open after ${options.interrupt}`,
+    );
+  }
+  if (!compare) return;
+  const after = await channel.dump();
+  if (after !== before) {
+    throw new InvariantError(
+      "INV-8",
+      `${label}: ${options.interrupt} committed instead of aborting ${firstDifference(before, after)}`,
+    );
+  }
+}
+
+/** One reply of a channel log, in arrival order: its `kind` is a
+ *  `WorkerToMain` kind (`gestureBegun`, `mutationApplied`, …). */
+export interface ChannelLogEntry {
+  kind: string;
+}
+
+/** What opens a gesture, what ends one, and what writes the document. */
+const GESTURE_OPENS = new Set(["gestureBegun"]);
+const GESTURE_ENDS = new Set([
+  "gestureCommitted",
+  "gestureCancelled",
+  "gestureFailed",
+]);
+const DOCUMENT_WRITES = new Set([
+  "mutationApplied",
+  "undoApplied",
+  "redoApplied",
+]);
+
+export interface NoInterleaveOptions {
+  /** Reply kinds that write the document besides the defaults
+   *  (`mutationApplied`, `undoApplied`, `redoApplied`): a script run's
+   *  reply when the recorder keeps only the ones that wrote. */
+  writes?: readonly string[];
+  label?: string;
+}
+
+/** The replies a fake editor recorded since `mark`, as a channel log. */
+export function channelLog(fake: FakeEditor, mark = 0): ChannelLogEntry[] {
+  const out: ChannelLogEntry[] = [];
+  for (const e of fake.since(mark)) {
+    if (
+      e.channel === "mutation" ||
+      e.channel === "gesture" ||
+      e.channel === "history" ||
+      e.channel === "send"
+    ) {
+      out.push({ kind: e.reply.kind });
+    }
+  }
+  return out;
+}
+
+/**
+ * INV-7: in `log` (a fake editor's, or the replies a browser recorded),
+ * no document write lands between a gesture's begin and its commit,
+ * cancel or failure — another channel's write is serialised around the
+ * gesture or refused, never interleaved.
+ */
+export function checkNoInterleave(
+  log: FakeEditor | readonly ChannelLogEntry[],
+  options: NoInterleaveOptions = {},
+): void {
+  const label = options.label ?? "gesture";
+  const entries = Array.isArray(log)
+    ? (log as readonly ChannelLogEntry[])
+    : channelLog(log as FakeEditor);
+  const writes = new Set([...DOCUMENT_WRITES, ...(options.writes ?? [])]);
+  let openAt = -1;
+  entries.forEach((e, i) => {
+    if (GESTURE_OPENS.has(e.kind)) openAt = i;
+    else if (GESTURE_ENDS.has(e.kind)) openAt = -1;
+    else if (openAt >= 0 && writes.has(e.kind)) {
+      throw new InvariantError(
+        "INV-7",
+        `${label}: ${e.kind} at #${i} landed inside the gesture begun at #${openAt}`,
+        entries,
+      );
+    }
+  });
 }
 
 type Send = (message: MainToWorkerKind) => Promise<WorkerToMain>;
