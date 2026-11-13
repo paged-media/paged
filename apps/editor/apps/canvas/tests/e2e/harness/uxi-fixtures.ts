@@ -444,10 +444,9 @@ export async function openUxiFixture(
 }
 
 /** E's module half: a sheet frame (a range of the harness's formula
- *  workbook, lowered through the Workbook panel) and a web frame (the web
- *  module's Insert command), through the journeys' kits. Needs the sheet
- *  and web modules' wasm built (`moon run sheet:wasm web:wasm`). Resolves to the
- *  two frames. */
+ *  workbook, lowered through the Workbook panel into a text frame) and a
+ *  web frame (the web module's Insert command), through the journeys'
+ *  kits. Resolves to the two frames. */
 export async function placeModuleFrames(
   page: Page,
 ): Promise<{ sheet: Ref; web: Ref }> {

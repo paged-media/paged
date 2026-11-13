@@ -69,11 +69,11 @@ helper for — threaded frames, ruler guides, an embedded image — written out 
 
 Known gaps:
 
-- **E's module frames need the modules' wasm.** The sheet and web frames are placed through their
-  modules, so they need those modules' engines built (`moon run sheet:wasm web:wasm`); IDML cannot carry
-  them. No acceptance test uses E yet; the first that does runs where those wasms are built (the
-  journeys' lanes). A drawing-module object (vectorised artwork) is not part of E: "vector" here is
-  the engine's own path.
+- **E's module frames are placed, not loaded.** IDML cannot carry a sheet or a web frame, so
+  `placeModuleFrames` places them through their modules (the sheet's Workbook panel lowers a range
+  into a text frame, the web module's Insert command adds a web frame), the way the journeys'
+  kits do. No acceptance test uses E yet. A drawing-module object (vectorised artwork) is not part
+  of E: "vector" here is the engine's own path.
 - **C's CJK text renders with the fallback font.** The fixture carries no font; the IME tests
   assert the story's text and the caret, never glyph shapes.
 - **F's field and role are set, not loaded.** A role is session policy, not document content, and
