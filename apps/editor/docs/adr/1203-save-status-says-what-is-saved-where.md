@@ -50,14 +50,17 @@ edits" was all the user saw, whether the file was written or not.
    never reads "Saved". Retry runs the save again (the one `setDocumentSaver` registered, the
    replace question's Save), which commits nothing new to the library when nothing changed and
    writes the file again.
-4. **The header says it in words.** `SaveStatus`, beside the document chip, shows a dot and the
-   label ("No changes", "Not saved yet", "Unsaved changes", "Saving…", "Saved locally",
+4. **The header says it in words.** `SaveStatus`, after the menus, shows a dot and the label
+   ("No changes", "Not saved yet", "Unsaved changes", "Saving…", "Saved locally",
    "Downloaded", "Saved locally · Syncing…", "Saved", "Saved locally · Not synced", "Couldn't
    save", "Read-only", "Recovered · Not saved"); its popover says where (the library, the file by
    name, the download by name, the host, the server), when, why a step failed, and offers Retry.
-   `data-save-state` carries the state for tests and scripts. On a phone-width fill layout only
-   the dot shows. The chip keeps the name and shows a dot only while the engine is busy (a
-   status ending in "…") or failed; a settled status is no longer read as unsaved work.
+   `data-save-state` carries the state for tests and scripts. Below 1400 px of editor width, and
+   on a phone-width fill layout, the dot shows alone and the label is the button's name and
+   tooltip. After the menus, not beside the name: the menus stay the first tab stop and keep
+   their place, so deep submenus keep their room. The chip keeps the name and shows a dot only
+   while the engine is busy (a status ending in "…") or failed; a settled status is no longer
+   read as unsaved work.
 
 ## Consequences
 
