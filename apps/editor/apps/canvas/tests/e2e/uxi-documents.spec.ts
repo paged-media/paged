@@ -149,7 +149,7 @@ async function model(page: Page): Promise<unknown> {
 }
 
 test.describe("the save status says what a save did (editor ADR 1203)", () => {
-  test("UXI-T67 — a local save whose write-back fails reads Saved locally · Not synced, never Saved @feat:editor-shell.document-title @feat:package-anatomy.paged-container @level:unhappy", async ({
+  test("UXI-T67 — a local save whose write-back fails reads Saved locally · Not synced, never Saved @feat:editor-shell.document-title @feat:package-anatomy.paged-container @level:edge", async ({
     page,
   }) => {
     await openFixture(page);
