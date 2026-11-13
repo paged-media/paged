@@ -340,7 +340,13 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   `CV/ui/layout.ts:147` go), 100 % kept as a camera scale of 1, Actual size (an inch as 96 CSS px) and a calibrated size as named views, reduced motion
   (`CV/ui/useAnimatedCamera.ts`), navigation history (back and forward), an editable
   `ZoomField` with a fit menu and Actual size, and one `SH/state/current-page.ts` in place of four
-  computations. Tests: T47, T48, T53, T54. Closes F-52.
+  computations. Tests: T47, T48, T53, T54. Closes F-52. **Done**
+  ([ADR 1211](adr/1211-navigation-history-and-one-current-page.md)): the history lives in the camera
+  context and records explicit navigations only; Go back / Go forward are InDesign's
+  Cmd/Ctrl+PageUp / PageDown; the field is the shell's `ZoomControl`; the calibration is
+  `paged.view.calibration` in device pixels per inch; T55's navigation half is claimed (DF7 adds the
+  issue markers). The Zoom tool's `zoomAt(…, 0.01, 64)` and the developer readout's page in VC are
+  left to IC (the bounds are ignored already).
 - **WS9 Editing aids.** One control for frame edges, margins, guides, the baseline grid, threads,
   overset, hidden characters and non-printing items, and a Proof view
   (`SH/state/view-toggles.ts`).

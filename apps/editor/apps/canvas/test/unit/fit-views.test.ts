@@ -24,14 +24,13 @@
 import { describe, expect, test } from "bun:test";
 
 import { covers } from "@paged-media/test-kit";
-import { zoomCameraTo, ZOOM_MAX_SCALE } from "@paged-media/shell";
-
 import {
-  pageAtViewportCentre,
-  pageStep,
-  selectionRect,
-  spreadRect,
-} from "../../src/ui/fit-views";
+  currentPageIndex,
+  zoomCameraTo,
+  ZOOM_MAX_SCALE,
+} from "@paged-media/shell";
+
+import { pageStep, selectionRect, spreadRect } from "../../src/ui/fit-views";
 import { layoutPages } from "../../src/ui/layout";
 
 // Four Letter pages stacked with the layout's 24 pt gap.
@@ -47,16 +46,16 @@ describe("the fit views", () => {
     covers("command:paged.view.fitPage");
     // Camera at 1: the viewport's centre (500, 400) is on page 1.
     expect(
-      pageAtViewportCentre(rects, { scale: 1, tx: 0, ty: 0 }, [1000, 800]),
+      currentPageIndex(rects, { scale: 1, tx: 0, ty: 0 }, [1000, 800]),
     ).toBe(0);
     // Scrolled down by two pages and a bit: page 3.
     const ty = -(2 * (792 + 24));
-    expect(
-      pageAtViewportCentre(rects, { scale: 1, tx: 0, ty }, [1000, 800]),
-    ).toBe(2);
-    expect(
-      pageAtViewportCentre([], { scale: 1, tx: 0, ty: 0 }, [1000, 800]),
-    ).toBe(-1);
+    expect(currentPageIndex(rects, { scale: 1, tx: 0, ty }, [1000, 800])).toBe(
+      2,
+    );
+    expect(currentPageIndex([], { scale: 1, tx: 0, ty: 0 }, [1000, 800])).toBe(
+      -1,
+    );
   });
 
   test("Fit spread boxes every page of the current page's spread", () => {

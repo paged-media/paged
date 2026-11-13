@@ -221,11 +221,18 @@ export const ZOOM = defineMessages("shell.zoom", {
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   zoom100: "Zoom to 100%",
+  actualSize: "Actual size",
+  calibratedSize: "Calibrated size",
+  calibrate: "Calibrate screen size…",
+  field: "Zoom percent",
+  menu: "Zoom options",
 });
 
 export const MODE_SWITCHER = defineMessages("shell.modeSwitcher", {
   label: "Workflow mode",
   zoom: "Zoom",
+  back: "Go back",
+  forward: "Go forward",
 });
 
 export const SOFT_PROOF = defineMessages("shell.softProof", {

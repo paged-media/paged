@@ -21,7 +21,9 @@
 // ADR 257). Pure: rects in document space, a camera and a viewport in, a
 // rect to fit out. The commands in `main.tsx` animate the camera to it.
 //
-//   Fit page       (Cmd+0)        the page at the viewport's centre
+//   Fit page       (Cmd+0)        the current page (`currentPageIndex`,
+//                                 the shell's one rule: editor ADR
+//                                 "Navigation history and one current page")
 //   Fit spread     (Alt+Cmd+0)    every page of that page's spread
 //   Fit selection  (Alt+Cmd+=)    the selection's box
 //   Fit document   (Alt+Shift+Cmd+0)  every page
@@ -29,30 +31,7 @@
 //
 // InDesign's chords, its View menu's names.
 
-import type { Camera } from "@paged-media/client";
 import type { PageRect } from "./layout";
-
-/** The index of the page whose centre is nearest the viewport's centre:
- *  the "current" page of every relative command. -1 with no pages. */
-export function pageAtViewportCentre(
-  rects: ReadonlyArray<PageRect>,
-  camera: Camera,
-  viewport: readonly [number, number],
-): number {
-  if (rects.length === 0) return -1;
-  const docX = (viewport[0] / 2 - camera.tx) / camera.scale;
-  const docY = (viewport[1] / 2 - camera.ty) / camera.scale;
-  let best = 0;
-  let bestDistSq = Number.POSITIVE_INFINITY;
-  rects.forEach((r, i) => {
-    const dsq = (r.x + r.w / 2 - docX) ** 2 + (r.y + r.h / 2 - docY) ** 2;
-    if (dsq < bestDistSq) {
-      bestDistSq = dsq;
-      best = i;
-    }
-  });
-  return best;
-}
 
 /** The box around `rects`, or null for none. */
 function union(rects: ReadonlyArray<PageRect>): PageRect | null {

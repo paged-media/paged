@@ -929,6 +929,21 @@ export async function createHeadlessEditor(
     goToPage: (which) => {
       opened.push({ kind: "camera", detail: `page:${which}` });
     },
+    actualSize: () => {
+      opened.push({ kind: "camera", detail: "actualSize" });
+    },
+    calibratedSize: () => {
+      opened.push({ kind: "camera", detail: "calibratedSize" });
+    },
+    calibrateScreen: () => {
+      opened.push({ kind: "dialog", detail: "calibrateScreen" });
+    },
+    navigateBack: () => {
+      opened.push({ kind: "camera", detail: "back" });
+    },
+    navigateForward: () => {
+      opened.push({ kind: "camera", detail: "forward" });
+    },
   });
   const objectDeps: ObjectCommandDeps = {
     client,

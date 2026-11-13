@@ -43,3 +43,13 @@ shortcuts panel listed one chord twice with no context.
   `packages/shell/test/chrome/command-palette.dom.test.tsx`,
   `test/panels/keyboard-shortcuts-panel.dom.test.tsx`).
 - Ruler label thinning at low zoom, also named in F-31, is not part of this record.
+
+## Amendment 2026-11-13 (ADR 1211)
+
+The current page is the shell's one rule (`currentPageIndex`,
+[ADR 1211](1211-navigation-history-and-one-current-page.md)): the page containing the viewport's
+centre, rotation included, else the nearest by distance to its rectangle, ties to the first in
+document order; the control bar, the fits, the page keys, the insert verbs and the active page
+agree. The fits and the page keys are explicit navigations: each records the place it leaves for
+Layout ▸ Go back (Cmd/Ctrl+PageUp) and Go forward (Cmd/Ctrl+PageDown). The zoom drop-down is the
+zoom field's menu, with Actual size and Calibrated size beside Zoom to 100 %.

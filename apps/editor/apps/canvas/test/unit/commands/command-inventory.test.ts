@@ -103,6 +103,10 @@ const SITES: Record<string, number> = {
   "packages/shell/src/state/commands/registry-derived.ts": 3,
   "packages/shell/src/chrome/FillStrokeCluster.tsx": 3,
   "packages/shell/src/actions/actions-context.tsx": 3,
+  // Editor ADR 1208 / 1209 — the workspace's own commands.
+  "packages/shell/src/cockpit/focus-workspace.ts": 1,
+  "packages/shell/src/cockpit/workspace-class.ts": 1,
+  "packages/shell/src/state/density.ts": 1,
   "packages/shell/src/bundles/loader.ts": 1,
   "packages/shell/src/bundles/sample-bundle.worker.ts": 1,
   // The app tables, and the host actions as commands (hostCommands).
@@ -144,6 +148,17 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.actions.record",
     "paged.actions.stop",
     "paged.actions.play",
+  ],
+  "packages/shell/src/cockpit/focus-workspace.ts": [
+    "paged.view.focusWorkspace",
+  ],
+  "packages/shell/src/cockpit/workspace-class.ts": [
+    "paged.view.adaptiveWorkspace",
+  ],
+  "packages/shell/src/state/density.ts": [
+    "paged.view.density.comfortable",
+    "paged.view.density.professional",
+    "paged.view.density.compact",
   ],
   "packages/shell/src/bundles/sample-bundle.worker.ts": ["paged.sample.hello"],
   "apps/canvas/src/app/mount.tsx": [AI_ASK_COMMAND],

@@ -177,8 +177,15 @@ rail; density presets (Comfortable, Professional, Compact) size the chrome; a lo
 (UXI-T49); the header has a quiet Share and the document in the tab's title;
 Review is off the mode bar, the developer readout is behind `?debug=hud`, and the Window menu
 follows InDesign's categories with one sentence-case name per panel. UX audit F-17, F-18, F-21,
-F-23, F-24, F-53 and F-55 close. WS8–WS10 (zoom and navigation, editing aids, page lenses) are
-planned.
+F-23, F-24, F-53 and F-55 close. WS8 has landed
+([ADR 1211](adr/1211-navigation-history-and-one-current-page.md)): one current page for every
+reader (the page at the viewport's centre, rotation included, else the nearest; UXI-T54), Back and
+Forward through the places explicit navigations leave (Layout ▸ Go back / Go forward,
+Cmd/Ctrl+PageUp / PageDown, buttons in the bottom bar; UXI-T55's navigation half), every zoom
+route inside 5–4,000 %, an editable zoom field with the fits, Actual size (an inch as 96 CSS px)
+and Calibrated size (from a screen calibration) beside 100 % (UXI-T48), and camera jumps that
+respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 and WS10 (editing
+aids and Proof view, page lenses and semantic zoom) are planned.
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

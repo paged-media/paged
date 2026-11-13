@@ -61,7 +61,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [238](238-the-default-pdf-is-one-the-document-can-meet.md) | The default PDF is one the document can meet | Accepted 2026-10-19 |
 | [240](240-react-19-features.md) | The editor uses React 19's effect events, Activity, view transitions, Fragment refs and Trusted Types | Accepted 2026-10-19 |
 | [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 |
-| [246](246-one-zoom-range.md) | One zoom range, and the view chords in the keybinding registry | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
+| [246](246-one-zoom-range.md) | One zoom range, and the view chords in the keybinding registry | Accepted 2026-10-19 (amended 2026-11-13 by 1201, 1211) |
 | [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
 | [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
 | [249](249-offered-only-where-it-applies.md) | A control is offered only where it applies: the command's when, the field's kind | Accepted 2026-10-19 |
@@ -72,7 +72,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [254](254-engine-values-read-in-words.md) | Engine values read in words: enum members, references, ids | Accepted 2026-10-20 |
 | [255](255-every-choice-is-a-control.md) | Every choice is a control with its state | Accepted 2026-10-20 |
 | [256](256-the-object-section-reads-as-the-transform-panel.md) | The Object section reads as the Transform panel; type settings lead in text | Accepted 2026-10-20 |
-| [257](257-indesigns-fits-and-page-keys.md) | InDesign's fit commands and page keys, in the registry | Accepted 2026-10-20 |
+| [257](257-indesigns-fits-and-page-keys.md) | InDesign's fit commands and page keys, in the registry | Accepted 2026-10-20 (amended 2026-11-13 by 1211) |
 | [258](258-a-dropped-picture-is-placed-where-it-lands.md) | A picture dropped on an open document is placed where it lands | Accepted 2026-10-20 (amended 2026-11-13 by 1205) |
 | [259](259-landmarks-tabs-and-headings.md) | Landmarks, the dock's tabs and panel headings | Accepted 2026-10-20 |
 | [261](261-the-insert-menu-draws-what-the-tools-draw.md) | Insert ▸ Rectangle and Ellipse draw what the drawing tools draw | Accepted 2026-10-20 |
@@ -133,6 +133,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1207](1207-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13; amends 250 |
 | [1208](1208-docks-are-resizable-and-the-workspace-adapts.md) | Docks are resizable and the workspace adapts: dividers and per-mode widths, wide / laptop / narrow by the width the cockpit is given, the camera keeps the centre on a resize, the Focus workspace, progressive loading stages, the header and the Window menu | Accepted 2026-11-13; amends 002, 207, 237 |
 | [1209](1209-density-presets.md) | Density presets: Comfortable, Professional and Compact through `[data-density]` tokens; density never sizes the document | Accepted 2026-11-13; amends 210 |
+| [1211](1211-navigation-history-and-one-current-page.md) | Navigation history and one current page: one rule for the current page (rotation included), Back and Forward through explicit navigations, every zoom route in the one range, an editable zoom field, Actual size and a calibrated size, reduced motion and tweens that yield | Accepted 2026-11-13; amends 246, 257 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

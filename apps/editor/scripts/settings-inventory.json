@@ -522,6 +522,21 @@
       "sites": []
     },
     {
+      "id": "paged.view.calibration",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.view.calibration",
+      "default": "absent: not calibrated",
+      "effect": "View ▸ Calibrated size: this screen's density in device pixels per inch, measured in View ▸ Calibrate screen size… (a bar stretched to 10 cm or 4 in against a ruler); divided by the device pixel ratio it is the camera scale at which an inch of the document is an inch on the screen (ADR 1201 D-12, editor ADR \"Navigation history and one current page\"); read with a shape check (ADR 247)",
+      "source": "apps/editor/packages/shell/src/state/zoom-calibration.ts",
+      "marker": "\"paged.view.calibration\"",
+      "sites": [
+        ["getItem", "STORAGE_KEY"],
+        ["removeItem", "STORAGE_KEY"],
+        ["setItem", "STORAGE_KEY"]
+      ]
+    },
+    {
       "id": "paged.viewPreferences",
       "kind": "preference",
       "storage": "localStorage",
