@@ -18,9 +18,9 @@
  */
 
 // Cockpit — per-mode UI-state persistence. Replaces the dockview
-// layout snapshots: the fixed cockpit has nothing to serialize but
-// "which right-dock tabs are open, which is active". One small
-// localStorage blob, debounced writes, and a one-shot cleanup of the
+// layout snapshots: the cockpit serializes "which right-dock tabs are
+// open, which is active" and, in a second blob, the docks' widths. Small
+// localStorage blobs, debounced writes, and a one-shot cleanup of the
 // legacy `paged.layout.*` keys.
 
 import { createDebouncer } from "@paged-media/panel-kit";
@@ -119,6 +119,78 @@ export function saveModeUiState(
       ls.setItem(KEY(scope), JSON.stringify(pending.latest));
     } catch {
       /* quota / privacy mode — state stays in-memory */
+    }
+  });
+  return next;
+}
+
+// ── Dock layout (editor ADR "Docks are resizable and the workspace
+// adapts") — per workflow mode, the widths the user dragged the docks to
+// and whether the left dock is pinned open on a laptop-width workspace. Its
+// own small blob beside the tabs', debounced the same way.
+
+const DOCKS_KEY_BASE = "paged.cockpit.docks.v1";
+const DOCKS_KEY = (scope: EditorScope) =>
+  scopedChromeKey(scope, DOCKS_KEY_BASE);
+
+export interface ModeDockState {
+  /** Widths chosen per dock (CSS px); a missing one is its default. */
+  left?: number;
+  right?: number;
+  form?: number;
+  /** The left dock stays docked on a laptop-width workspace. */
+  leftPinned?: boolean;
+}
+
+export type DockStore = Partial<Record<WorkflowMode, ModeDockState>>;
+
+/** Each mode's dock layout, with every field of the wrong type dropped
+ *  (ADR 247: read field by field). */
+export function loadDockStore(scope: EditorScope): DockStore {
+  try {
+    const raw = editorStorage(scope).getItem(DOCKS_KEY(scope));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) return {};
+    const out: Record<string, ModeDockState> = {};
+    for (const [mode, entry] of Object.entries(parsed)) {
+      if (!isRecord(entry)) continue;
+      const state: ModeDockState = {};
+      for (const dock of ["left", "right", "form"] as const) {
+        const px = entry[dock];
+        if (typeof px === "number" && Number.isFinite(px)) state[dock] = px;
+      }
+      if (typeof entry.leftPinned === "boolean")
+        state.leftPinned = entry.leftPinned;
+      out[mode] = state;
+    }
+    return out as DockStore;
+  } catch {
+    return {};
+  }
+}
+
+const DOCKS_PENDING = scoped("cockpitDockPersistence", () => ({
+  latest: {} as DockStore,
+  write: createDebouncer(300),
+}));
+
+/** Merge one mode's dock layout into the blob; debounced 300 ms. */
+export function saveModeDockState(
+  scope: EditorScope,
+  store: DockStore,
+  mode: WorkflowMode,
+  state: ModeDockState,
+): DockStore {
+  const next: DockStore = { ...store, [mode]: state };
+  const pending = scope.get(DOCKS_PENDING);
+  pending.latest = next;
+  const ls = editorStorage(scope);
+  pending.write.schedule(() => {
+    try {
+      ls.setItem(DOCKS_KEY(scope), JSON.stringify(pending.latest));
+    } catch {
+      /* quota / privacy mode — the layout stays in-memory */
     }
   });
   return next;

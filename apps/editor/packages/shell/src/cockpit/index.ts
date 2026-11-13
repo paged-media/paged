@@ -44,3 +44,25 @@ export {
   usePageNavigation,
   type PageNavigator,
 } from "./cockpit-navigation";
+export {
+  CANVAS_MIN_WORKING_PX,
+  DOCK_DEFAULT_PX,
+  DOCK_MAX_PX,
+  DOCK_MIN_PX,
+  type DockId,
+} from "./dock-sizing";
+export {
+  ADAPTIVE_WORKSPACE_COMMAND,
+  isAdaptiveWorkspace,
+  setAdaptiveWorkspace,
+  useAdaptiveWorkspace,
+  useWorkspaceClass,
+  workspaceClassOf,
+  type WorkspaceClass,
+} from "./workspace-class";
+export {
+  FOCUS_WORKSPACE_COMMAND,
+  isFocusWorkspace,
+  setFocusWorkspace,
+  useFocusWorkspace,
+} from "./focus-workspace";

@@ -83,7 +83,7 @@ export const PRESET_PROMPTS = {
   skyReplacement: (style: string) =>
     `replace the sky with ${style || "a clear blue sky with soft clouds"}, keep the horizon and lighting natural`,
   colorize:
-    "colorize this image with natural, realistic colours, keep every detail",
+    "colorize this image with natural, realistic colors, keep every detail",
   skinSmoothing:
     "smooth the skin gently, remove blemishes, keep pores and texture natural",
 } as const;

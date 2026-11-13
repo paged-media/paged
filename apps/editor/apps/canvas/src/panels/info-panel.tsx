@@ -79,7 +79,7 @@ const M = defineMessages("app.infoPanel", {
   no: "no",
   cursor: "Cursor",
   selection: "Selection",
-  colour: "Colour under cursor",
+  colour: "Color under cursor",
   noSelection: "Nothing selected",
   text: "Text",
   words: "Words",
@@ -95,7 +95,7 @@ const M = defineMessages("app.infoPanel", {
   lab: "Lab",
   cmyk: "CMYK",
   cmykUnavailable:
-    "CMYK is not shown: the engine has no conversion from a sampled display colour to the document's CMYK yet.",
+    "CMYK is not shown: the engine has no conversion from a sampled display color to the document's CMYK yet.",
   sampleUnavailable: "The page could not be sampled",
 });
 

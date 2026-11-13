@@ -199,7 +199,7 @@ function leafValue(
 ): Value | null {
   if (value === undefined) return null;
   // A definite NULL is a value, not "mixed": an unset length
-  // (`Value::Length(None)`) or "no colour" — the same wire shapes the
+  // (`Value::Length(None)`) or "no color" — the same wire shapes the
   // selection binding handed the leaves, so they keep their null-vs-mixed
   // distinction. Other widgets have no null face and show the em-dash.
   if (value === null) {

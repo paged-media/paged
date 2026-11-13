@@ -90,7 +90,7 @@ defineMessages("menu", {
   "Reverse spine": "Reverse spine",
   "Reverse front to back": "Reverse front to back",
   "Objects on path": "Objects on path",
-  "Type on path": "Type on path",
+  "Type on a path": "Type on a path",
   Attach: "Attach",
   Detach: "Detach",
   Type: "Type",
@@ -247,8 +247,8 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Objects on path/Release", "releaseObjectsOnPath", "oop"],
 
   // ── Type on a path ──
-  ["Draw/Type on path/Attach", "attachTextToPath", "top"],
-  ["Draw/Type on path/Detach", "detachTextFromPath", "top"],
+  ["Draw/Type on a path/Attach", "attachTextToPath", "top"],
+  ["Draw/Type on a path/Detach", "detachTextFromPath", "top"],
   // ── Type ▸ Create outlines — the frame's glyphs become compound paths
   //    (one per colour), the frame goes; protocol 66 (RFI C-69). ──
   ["Draw/Type/Create outlines", "createOutlines", "type-outlines"],

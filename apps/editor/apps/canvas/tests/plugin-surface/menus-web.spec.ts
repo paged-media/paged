@@ -68,7 +68,7 @@ test.describe.serial("plugin menus — paged.web", () => {
   test.afterAll(async () => {
     await close();
   });
-  /** The web frame Insert ▸ Web frame… placed, selected again before each
+  /** The web frame Insert ▸ Web frame placed, selected again before each
    *  Web verb (a verb's own run may move the selection). */
   let webFrame: { kind: string; id: string } | null = null;
   const selectWebFrame = async () => {
@@ -76,21 +76,21 @@ test.describe.serial("plugin menus — paged.web", () => {
     await new Designer(live).selectElements([webFrame!]);
   };
 
-  test("Object/Insert web frame… — Insert ▸ Web frame… places a web frame and raises its Source panel", async () => {
-    covers("menu:Object/Insert web frame…");
-    await expectGreyedAndInert(bare, "Object/Insert web frame…");
+  test("Object/Insert web frame — Insert ▸ Web frame places a web frame and raises its Source panel", async () => {
+    covers("menu:Object/Insert web frame");
+    await expectGreyedAndInert(bare, "Object/Insert web frame");
     const out = await clickEntry(
       live,
-      "Object/Insert web frame…",
+      "Object/Insert web frame",
       "media.paged.web.command.insertWebFrame",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.web.panel.source" },
     ]);
-    expect(out.after, "Object/Insert web frame… changes the document").not.toBe(
+    expect(out.after, "Object/Insert web frame changes the document").not.toBe(
       out.before,
     );
-    await expectOneUndoRestores(live, "Object/Insert web frame…", out.before);
+    await expectOneUndoRestores(live, "Object/Insert web frame", out.before);
     // Put the frame back for the Web verbs below, and keep its id.
     await runCommand(live, "media.paged.web.command.insertWebFrame");
     await expect

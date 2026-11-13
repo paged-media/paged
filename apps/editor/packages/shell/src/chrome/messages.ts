@@ -51,6 +51,12 @@ export const MENU = defineMessages("menu", {
   Developer: "Developer",
   Other: "Other",
   Panels: "Panels",
+  // The Window menu's categories (UX audit F-18, InDesign's).
+  Color: "Color",
+  "Type & Tables": "Type & Tables",
+  "Object & Layout": "Object & Layout",
+  Interactive: "Interactive",
+  Utilities: "Utilities",
 });
 
 /** A menu path segment in the editor's language: `menu.<segment>` when a
@@ -122,6 +128,8 @@ export const HEADER = defineMessages("shell.header", {
   searchOrAskKey: "Search or ask ({key}" + ")",
   lightMode: "Light mode",
   darkMode: "Dark mode",
+  /** The browser tab's title while a document is open (F-24). */
+  pageTitle: "{name} — paged",
 });
 
 export const COLLAB = defineMessages("shell.collab", {
@@ -184,7 +192,8 @@ export const PANEL_RAIL = defineMessages("shell.panelRail", {
 });
 
 export const CONTEXT_TOOLBAR = defineMessages("shell.contextToolbar", {
-  focusMode: "Focus mode (⌘\\, or Tab on the canvas)",
+  // Split before ")": the strings guard reads "})" as the end of the call.
+  focusWorkspace: "Focus workspace ({key}" + ")",
   noTools: "no canvas tools apply here",
   escToLeave: "Esc to leave",
 });
@@ -256,7 +265,7 @@ export const FILL_STROKE = defineMessages("shell.fillStroke", {
   default: "Default fill and stroke",
   defaultKey: "Default fill and stroke (D)",
   toggleAffects: "Toggle formatting affects container/text",
-  applyColor: "Apply last colour",
+  applyColor: "Apply last color",
   applyGradient: "Apply last gradient",
   noGradients: "No gradient swatches in this document",
   applyNone: "Apply None",
@@ -265,8 +274,8 @@ export const FILL_STROKE = defineMessages("shell.fillStroke", {
   affectsContainer: "container",
   affectsText: "text",
   waiting: "Waiting for the document to load",
-  fillWell: "Fill — click to choose a colour",
-  strokeWell: "Stroke — click to choose a colour",
+  fillWell: "Fill — click to choose a color",
+  strokeWell: "Stroke — click to choose a color",
   none: "None",
 });
 

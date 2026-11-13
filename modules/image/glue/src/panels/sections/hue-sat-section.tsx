@@ -49,7 +49,7 @@ const M = defineMessages("image.hueSat", {
   colorizeHue: "Colorize hue",
   colorizeSaturation: "Colorize saturation",
   note:
-    "A colour range is fully affected within 15° of its centre and fades out " +
+    "A color range is fully affected within 15° of its centre and fades out " +
     "by 45°; greys belong to no range. Colorize tints every pixel with one " +
     "hue.",
 });

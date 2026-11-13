@@ -40,7 +40,7 @@ import { defineMessages, useStrings } from "@paged-media/strings";
 const M = defineMessages("app.themePanel", {
   noTheme: "This document has no theme.",
   name: "Theme",
-  colours: "Colours",
+  colours: "Colors",
   fonts: "Fonts",
   major: "Headings",
   minor: "Body",
@@ -48,12 +48,12 @@ const M = defineMessages("app.themePanel", {
   apply: "Apply",
   fromSwatches: "Create theme from swatches",
   fromSwatchesHint:
-    "Name the swatch each slot takes its colour from. Process RGB and CMYK swatches.",
+    "Name the swatch each slot takes its color from. Process RGB and CMYK swatches.",
   none: "(none)",
   spotNote:
-    "A spot swatch never follows a theme slot (its ink is its colour), so spot swatches cannot be chosen here.",
+    "A spot swatch never follows a theme slot (its ink is its color), so spot swatches cannot be chosen here.",
   cmykNote:
-    "A CMYK swatch stays CMYK: when its slot changes, its four values follow the slot's colour.",
+    "A CMYK swatch stays CMYK: when its slot changes, its four values follow the slot's color.",
   notFollowable: "{name} (cannot follow a slot)",
   styleFonts: "Style fonts",
   styleFontsHint:

@@ -86,8 +86,8 @@ const M = defineMessages("app.colorPanel", {
   fillWell: "Fill",
   strokeWell: "Stroke",
   rawWells:
-    "The fill and stroke wells are this content's own colours (in an image: the foreground and background). A swatch click sets the fill, Alt-click the stroke.",
-  paintTarget: "Apply colours the selection: {target}.",
+    "The fill and stroke wells are this content's own colors (in an image: the foreground and background). A swatch click sets the fill, Alt-click the stroke.",
+  paintTarget: "Apply colors the selection: {target}.",
 });
 
 /** The mixer's colour as a paint-target colour: the tint folded into the

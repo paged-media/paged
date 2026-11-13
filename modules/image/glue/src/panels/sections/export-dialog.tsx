@@ -20,7 +20,7 @@ const M = defineMessages("image.exportAs", {
   quality: "Quality",
   size: "Size",
   scale: "Scale",
-  colour: "Colour",
+  colour: "Color",
   rgb: "RGB",
   gray: "Grayscale",
   cmyk: "CMYK",
@@ -43,19 +43,19 @@ const M = defineMessages("image.exportAs", {
   resolution: "Resolution",
   ppi: "pixels/inch",
   keepMetadata: "Keep metadata (EXIF, XMP, IPTC)",
-  embedProfile: "Embed colour profile",
+  embedProfile: "Embed color profile",
   sourceCarries: "The source carries: {list}.",
   sourceCarriesNothing: "The source carries no metadata.",
   export: "Export",
   cancel: "Cancel",
   webpNote: "WebP is written lossless: there is no lossy WebP encoder.",
   gifNote:
-    "GIF holds 256 colours and one bit of transparency; an image with more " +
-    "colours is reduced. No metadata or colour profile is written.",
+    "GIF holds 256 colors and one bit of transparency; an image with more " +
+    "colors is reduced. No metadata or color profile is written.",
   jxlNote:
-    "JPEG XL is written lossless, at 8 or 16 bits. No metadata or colour " +
+    "JPEG XL is written lossless, at 8 or 16 bits. No metadata or color " +
     "profile is written.",
-  plainNote: "This format carries no metadata or colour profile.",
+  plainNote: "This format carries no metadata or color profile.",
   cmykNote:
     "CMYK is written as TIFF, converted through the chosen profile (or the " +
     "source's own CMYK profile); without one, the naive formula is used and " +

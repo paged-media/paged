@@ -653,7 +653,7 @@ film("home", async (k) => {
     await press(
       k,
       page
-        .getByRole("button", { name: "Fill — click to choose a colour" })
+        .getByRole("button", { name: "Fill — click to choose a color" })
         .first(),
     );
     await press(

@@ -514,15 +514,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Layer/New fill layer/Solid colour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Layer/New fill layer/Solid colour…");
-    await expectGreyedAndInert(
-      bare,
-      "Image/Layer/New fill layer/Solid colour…",
-    );
+  test("Image/Layer/New fill layer/Solid color… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New fill layer/Solid color…");
+    await expectGreyedAndInert(bare, "Image/Layer/New fill layer/Solid color…");
     const out = await clickEntry(
       live,
-      "Image/Layer/New fill layer/Solid colour…",
+      "Image/Layer/New fill layer/Solid color…",
       "media.paged.image.command.newFillSolid",
     );
     expect(out.shell).toEqual([
@@ -679,15 +676,15 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Layer/New adjustment layer/Colour balance… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Layer/New adjustment layer/Colour balance…");
+  test("Image/Layer/New adjustment layer/Color balance… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Color balance…");
     await expectGreyedAndInert(
       bare,
-      "Image/Layer/New adjustment layer/Colour balance…",
+      "Image/Layer/New adjustment layer/Color balance…",
     );
     const out = await clickEntry(
       live,
-      "Image/Layer/New adjustment layer/Colour balance…",
+      "Image/Layer/New adjustment layer/Color balance…",
       "media.paged.image.command.newAdjustmentColorBalance",
     );
     expect(out.shell).toEqual([
@@ -755,15 +752,15 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Layer/New adjustment layer/Colour lookup… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Layer/New adjustment layer/Colour lookup…");
+  test("Image/Layer/New adjustment layer/Color lookup… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Color lookup…");
     await expectGreyedAndInert(
       bare,
-      "Image/Layer/New adjustment layer/Colour lookup…",
+      "Image/Layer/New adjustment layer/Color lookup…",
     );
     const out = await clickEntry(
       live,
-      "Image/Layer/New adjustment layer/Colour lookup…",
+      "Image/Layer/New adjustment layer/Color lookup…",
       "media.paged.image.command.newAdjustmentColorLookup",
     );
     expect(out.shell).toEqual([
@@ -847,15 +844,15 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Layer/New adjustment layer/Selective colour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Layer/New adjustment layer/Selective colour…");
+  test("Image/Layer/New adjustment layer/Selective color… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Selective color…");
     await expectGreyedAndInert(
       bare,
-      "Image/Layer/New adjustment layer/Selective colour…",
+      "Image/Layer/New adjustment layer/Selective color…",
     );
     const out = await clickEntry(
       live,
-      "Image/Layer/New adjustment layer/Selective colour…",
+      "Image/Layer/New adjustment layer/Selective color…",
       "media.paged.image.command.newAdjustmentSelectiveColor",
     );
     expect(out.shell).toEqual([
@@ -968,12 +965,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Layer/Layer style/Colour overlay… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Layer/Layer style/Colour overlay…");
-    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Colour overlay…");
+  test("Image/Layer/Layer style/Color overlay… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Color overlay…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Color overlay…");
     const out = await clickEntry(
       live,
-      "Image/Layer/Layer style/Colour overlay…",
+      "Image/Layer/Layer style/Color overlay…",
       "media.paged.image.command.layerStyleColorOverlay",
     );
     expect(out.shell).toEqual([
@@ -1557,12 +1554,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Fill/Foreground colour — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Fill/Foreground colour");
-    await expectGreyedAndInert(bare, "Image/Fill/Foreground colour");
+  test("Image/Fill/Foreground color — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Fill/Foreground color");
+    await expectGreyedAndInert(bare, "Image/Fill/Foreground color");
     const out = await clickEntry(
       live,
-      "Image/Fill/Foreground colour",
+      "Image/Fill/Foreground color",
       "media.paged.image.command.fillForeground",
     );
     expect(out.shell).toEqual([
@@ -1669,12 +1666,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Mode/RGB colour — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Mode/RGB colour");
-    await expectGreyedAndInert(bare, "Image/Mode/RGB colour");
+  test("Image/Mode/RGB color — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/RGB color");
+    await expectGreyedAndInert(bare, "Image/Mode/RGB color");
     const out = await clickEntry(
       live,
-      "Image/Mode/RGB colour",
+      "Image/Mode/RGB color",
       "media.paged.image.command.modeRgb",
     );
     expect(out.shell).toEqual([
@@ -1685,12 +1682,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Mode/CMYK colour — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Mode/CMYK colour");
-    await expectGreyedAndInert(bare, "Image/Mode/CMYK colour");
+  test("Image/Mode/CMYK color — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/CMYK color");
+    await expectGreyedAndInert(bare, "Image/Mode/CMYK color");
     const out = await clickEntry(
       live,
-      "Image/Mode/CMYK colour",
+      "Image/Mode/CMYK color",
       "media.paged.image.command.modeCmyk",
     );
     expect(out.shell).toEqual([
@@ -1701,12 +1698,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Mode/Lab colour — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Mode/Lab colour");
-    await expectGreyedAndInert(bare, "Image/Mode/Lab colour");
+  test("Image/Mode/Lab color — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/Lab color");
+    await expectGreyedAndInert(bare, "Image/Mode/Lab color");
     const out = await clickEntry(
       live,
-      "Image/Mode/Lab colour",
+      "Image/Mode/Lab color",
       "media.paged.image.command.modeLab",
     );
     expect(out.shell).toEqual([
@@ -1717,12 +1714,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Mode/Indexed colour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Mode/Indexed colour…");
-    await expectGreyedAndInert(bare, "Image/Mode/Indexed colour…");
+  test("Image/Mode/Indexed color… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/Indexed color…");
+    await expectGreyedAndInert(bare, "Image/Mode/Indexed color…");
     const out = await clickEntry(
       live,
-      "Image/Mode/Indexed colour…",
+      "Image/Mode/Indexed color…",
       "media.paged.image.command.modeIndexed",
     );
     expect(out.shell).toEqual([
@@ -1797,12 +1794,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Proof/Proof colours — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Proof/Proof colours");
-    await expectGreyedAndInert(bare, "Image/Proof/Proof colours");
+  test("Image/Proof/Proof colors — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Proof/Proof colors");
+    await expectGreyedAndInert(bare, "Image/Proof/Proof colors");
     const out = await clickEntry(
       live,
-      "Image/Proof/Proof colours",
+      "Image/Proof/Proof colors",
       "media.paged.image.command.proofColors",
     );
     expect(out.shell).toEqual([
@@ -2231,12 +2228,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Filter/Pixelate/Colour halftone… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Filter/Pixelate/Colour halftone…");
-    await expectGreyedAndInert(bare, "Image/Filter/Pixelate/Colour halftone…");
+  test("Image/Filter/Pixelate/Color halftone… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Pixelate/Color halftone…");
+    await expectGreyedAndInert(bare, "Image/Filter/Pixelate/Color halftone…");
     const out = await clickEntry(
       live,
-      "Image/Filter/Pixelate/Colour halftone…",
+      "Image/Filter/Pixelate/Color halftone…",
       "media.paged.image.command.filterColorHalftone",
     );
     expect(out.shell).toEqual([
@@ -2432,12 +2429,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Filter/Adjust/Selective colour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Filter/Adjust/Selective colour…");
-    await expectGreyedAndInert(bare, "Image/Filter/Adjust/Selective colour…");
+  test("Image/Filter/Adjust/Selective color… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Adjust/Selective color…");
+    await expectGreyedAndInert(bare, "Image/Filter/Adjust/Selective color…");
     const out = await clickEntry(
       live,
-      "Image/Filter/Adjust/Selective colour…",
+      "Image/Filter/Adjust/Selective color…",
       "media.paged.image.command.filterSelectiveColour",
     );
     expect(out.shell).toEqual([
@@ -3277,12 +3274,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Filter/Adjust/Match colour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Filter/Adjust/Match colour…");
-    await expectGreyedAndInert(bare, "Image/Filter/Adjust/Match colour…");
+  test("Image/Filter/Adjust/Match color… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Adjust/Match color…");
+    await expectGreyedAndInert(bare, "Image/Filter/Adjust/Match color…");
     const out = await clickEntry(
       live,
-      "Image/Filter/Adjust/Match colour…",
+      "Image/Filter/Adjust/Match color…",
       "media.paged.image.command.filterMatchColor",
     );
     expect(out.shell).toEqual([
@@ -3293,12 +3290,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Filter/Adjust/Replace colour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Filter/Adjust/Replace colour…");
-    await expectGreyedAndInert(bare, "Image/Filter/Adjust/Replace colour…");
+  test("Image/Filter/Adjust/Replace color… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Adjust/Replace color…");
+    await expectGreyedAndInert(bare, "Image/Filter/Adjust/Replace color…");
     const out = await clickEntry(
       live,
-      "Image/Filter/Adjust/Replace colour…",
+      "Image/Filter/Adjust/Replace color…",
       "media.paged.image.command.filterReplaceColor",
     );
     expect(out.shell).toEqual([
@@ -3325,15 +3322,15 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Filter/Filter Gallery/Coloured pencil… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Filter/Filter Gallery/Coloured pencil…");
+  test("Image/Filter/Filter Gallery/Colored pencil… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Filter Gallery/Colored pencil…");
     await expectGreyedAndInert(
       bare,
-      "Image/Filter/Filter Gallery/Coloured pencil…",
+      "Image/Filter/Filter Gallery/Colored pencil…",
     );
     const out = await clickEntry(
       live,
-      "Image/Filter/Filter Gallery/Coloured pencil…",
+      "Image/Filter/Filter Gallery/Colored pencil…",
       "media.paged.image.command.filterColoredPencil",
     );
     expect(out.shell).toEqual([
@@ -3519,15 +3516,12 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Filter/Filter Gallery/Watercolour… — with no image open, raises the Image panel", async () => {
-    covers("menu:Image/Filter/Filter Gallery/Watercolour…");
-    await expectGreyedAndInert(
-      bare,
-      "Image/Filter/Filter Gallery/Watercolour…",
-    );
+  test("Image/Filter/Filter Gallery/Watercolor… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Filter Gallery/Watercolor…");
+    await expectGreyedAndInert(bare, "Image/Filter/Filter Gallery/Watercolor…");
     const out = await clickEntry(
       live,
-      "Image/Filter/Filter Gallery/Watercolour…",
+      "Image/Filter/Filter Gallery/Watercolor…",
       "media.paged.image.command.filterWatercolor",
     );
     expect(out.shell).toEqual([

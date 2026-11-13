@@ -56,15 +56,25 @@ import {
   type EditorScope,
 } from "./editor-scope";
 import { useOptionalTheme } from "./theme-context";
+import { useDensity } from "./density";
 
 const ROOT = scoped("editorRoot", () => ({
   element: null as HTMLElement | null,
+  ownsPage: false,
 }));
 
 /** `scope`'s root element; null before it mounts (and for a shell rendered
  *  without one: a standalone panel, a unit test). */
 export function editorRootOf(scope: EditorScope): HTMLElement | null {
   return scope.get(ROOT).element;
+}
+
+/** Whether `scope`'s editor is the page (the app entry's), so it may set
+ *  page-level things like the browser tab's title; an embedded editor
+ *  never does. False before its root mounts. */
+export function editorOwnsPage(scope: EditorScope): boolean {
+  const store = scope.get(ROOT);
+  return store.element !== null && store.ownsPage;
 }
 
 // The page's keyboard: the editors' roots on it (and whether each owns the
@@ -142,6 +152,7 @@ function attachRoot(
 ): () => void {
   const store = scope.get(ROOT);
   store.element = element;
+  store.ownsPage = ownsPage;
   roots.set(element, { ownsPage });
   const claim = () => {
     active = element;
@@ -199,6 +210,9 @@ export function EditorRoot({
   // The theme is the editor's: the `.dark` class on its root, not the
   // page's <html> (styles/theme.css).
   const dark = useOptionalTheme()?.theme === "dark";
+  // The interface density (state/density.ts): the attribute re-points the
+  // density tokens of styles/theme.css for everything inside the root.
+  const density = useDensity();
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [portals, setPortals] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -209,6 +223,7 @@ export function EditorRoot({
     <div
       ref={setRoot}
       data-paged-editor=""
+      data-density={density}
       className={dark ? "dark" : undefined}
       tabIndex={-1}
       style={rootStyle}

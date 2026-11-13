@@ -640,7 +640,7 @@ describe("the panel's Brush section", () => {
       "Flow",
       "Spacing (× diameter)",
       "Blend",
-      "Colour",
+      "Color",
       "Pen pressure drives",
     ]) {
       expect(text).toContain(label);

@@ -244,7 +244,7 @@ describe("Color settings panel: findings", () => {
       ),
     ).not.toContain("notes");
     expect(h.root.querySelector("[data-profile-error]")?.textContent).toBe(
-      "notes.icc is not an ICC colour profile.",
+      "notes.icc is not an ICC color profile.",
     );
   });
 });

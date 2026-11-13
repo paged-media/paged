@@ -9,8 +9,16 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": ["sceneLayer", "hitTest", "resourceProvider", "overlay"],
-    "assets": ["images", "fonts"],
+    "rendering": [
+      "sceneLayer",
+      "hitTest",
+      "resourceProvider",
+      "overlay"
+    ],
+    "assets": [
+      "images",
+      "fonts"
+    ],
     "network": false,
     "ml": [
       "segment",
@@ -407,7 +415,9 @@
       "media.paged.image.tool.note",
       "media.paged.image.tool.slice"
     ],
-    "importers": ["media.paged.image.importer.raster"],
+    "importers": [
+      "media.paged.image.importer.raster"
+    ],
     "exporters": [
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",
@@ -677,7 +687,7 @@
         },
         {
           "id": "media.paged.image.command.fillForeground",
-          "title": "Fill with the foreground colour",
+          "title": "Fill with the foreground color",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1011,7 +1021,7 @@
         },
         {
           "id": "media.paged.image.command.filterSelectiveColour",
-          "title": "Selective colour… (filter)",
+          "title": "Selective color… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1163,7 +1173,7 @@
         },
         {
           "id": "media.paged.image.command.filterColorHalftone",
-          "title": "Colour halftone… (filter)",
+          "title": "Color halftone… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1187,7 +1197,7 @@
         },
         {
           "id": "media.paged.image.command.filterMatchColor",
-          "title": "Match colour… (filter)",
+          "title": "Match color… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1195,7 +1205,7 @@
         },
         {
           "id": "media.paged.image.command.filterReplaceColor",
-          "title": "Replace colour… (filter)",
+          "title": "Replace color… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1211,7 +1221,7 @@
         },
         {
           "id": "media.paged.image.command.filterColoredPencil",
-          "title": "Coloured pencil… (filter)",
+          "title": "Colored pencil… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1571,7 +1581,7 @@
         },
         {
           "id": "media.paged.image.command.average",
-          "title": "Average (fill the selection with its average colour)",
+          "title": "Average (fill the selection with its average color)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1603,7 +1613,7 @@
         },
         {
           "id": "media.paged.image.command.newFillSolid",
-          "title": "New fill layer: solid colour",
+          "title": "New fill layer: solid color",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1827,7 +1837,7 @@
         },
         {
           "id": "media.paged.image.command.layerStyleColorOverlay",
-          "title": "Layer style: colour overlay…",
+          "title": "Layer style: color overlay…",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -2696,7 +2706,7 @@
         },
         {
           "id": "media.paged.image.command.modeRgb",
-          "title": "Mode: RGB colour (image)",
+          "title": "Mode: RGB color (image)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -2704,7 +2714,7 @@
         },
         {
           "id": "media.paged.image.command.modeCmyk",
-          "title": "Mode: CMYK colour (image)",
+          "title": "Mode: CMYK color (image)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -2712,7 +2722,7 @@
         },
         {
           "id": "media.paged.image.command.modeLab",
-          "title": "Mode: Lab colour (image)",
+          "title": "Mode: Lab color (image)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -2720,7 +2730,7 @@
         },
         {
           "id": "media.paged.image.command.modeIndexed",
-          "title": "Mode: indexed colour… (image)",
+          "title": "Mode: indexed color… (image)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -2736,7 +2746,7 @@
         },
         {
           "id": "media.paged.image.command.proofColors",
-          "title": "Proof colours (image)",
+          "title": "Proof colors (image)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -3013,13 +3023,20 @@
                     "kind": "list",
                     "of": {
                       "kind": "enum",
-                      "members": ["add", "subtract", "intersect"]
+                      "members": [
+                        "add",
+                        "subtract",
+                        "intersect"
+                      ]
                     },
                     "optional": true
                   },
                   "fillRule": {
                     "kind": "enum",
-                    "members": ["nonzero", "evenodd"],
+                    "members": [
+                      "nonzero",
+                      "evenodd"
+                    ],
                     "optional": true
                   },
                   "alpha": {

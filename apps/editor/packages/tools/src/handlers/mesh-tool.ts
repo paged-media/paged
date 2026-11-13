@@ -205,7 +205,7 @@ export function createMeshHandler(): GestureHandler {
             sel.grid,
             recolorNodes(grid, sel.nodes, paintToMeshColor(color)),
           ),
-          "mesh point colour",
+          "mesh point color",
           sel,
         );
       },

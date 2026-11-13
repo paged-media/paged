@@ -238,6 +238,9 @@ function regionOf(el: Element): string {
   if (at('[role="toolbar"][aria-label="Fill, stroke and view"]'))
     return "rail foot";
   if (at("[data-left-panel]")) return "left panel";
+  // A dock's divider is a focusable window splitter (WAI-ARIA), its own
+  // stop between the dock and the canvas.
+  if (at("[data-dock-splitter]")) return "divider";
   if (at('[data-canvas-surface="viewport"]')) return "canvas";
   if (at("[data-thumbnail-rail]")) return "page strip";
   if (at("[data-right-dock]")) return "right dock";
@@ -265,8 +268,10 @@ describe("keyboard focus across the main chrome", () => {
       "tools",
       "rail foot",
       "left panel",
+      "divider",
       "canvas",
       "page strip",
+      "divider",
       "panel rail",
       "modes",
       "mode bar",

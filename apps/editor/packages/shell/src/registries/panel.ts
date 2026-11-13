@@ -62,7 +62,25 @@ export interface PanelContribution extends Api.PanelContribution {
    *  not the problem; offering it to a designer browsing for a workspace
    *  is. */
   devOnly?: boolean;
+  /** UX audit F-18 — where the Window menu lists the panel: one of
+   *  InDesign's categories, or `Workspace` for the few panels one click
+   *  deep. Absent: derived from `defaultGroup` (PagedShell). */
+  windowCategory?: WindowCategory;
 }
+
+/** The Window menu's sections, in their order (InDesign's categories). */
+export const WINDOW_CATEGORIES = [
+  "Workspace",
+  "Color",
+  "Styles",
+  "Type & Tables",
+  "Object & Layout",
+  "Interactive",
+  "Output",
+  "Utilities",
+] as const;
+
+export type WindowCategory = (typeof WINDOW_CATEGORIES)[number];
 
 /** A contract-authored panel registers here unchanged. */
 export type _PanelRegistrable = Registrable<

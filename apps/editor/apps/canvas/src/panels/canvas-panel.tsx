@@ -114,8 +114,9 @@ export function CanvasPanel(_props: PanelProps) {
   const directSelect = effectiveTool === "paged.tool.directSelect";
   const zoomClick = effectiveTool === "paged.tool.zoom";
   const client = useCanvasClient();
-  const { camera, setCamera, setViewportSize } = useCamera();
-  const { handle, resolution } = useDocument();
+  const { camera, setCamera, setViewportSize, anchorViewportResize } =
+    useCamera();
+  const { handle, resolution, loading } = useDocument();
   const {
     elementSelection,
     setElementSelection,
@@ -555,11 +556,15 @@ export function CanvasPanel(_props: PanelProps) {
   );
 
   if (!handle || handle.pageCount === 0) {
+    // While a document opens, the cockpit shows its stage over this
+    // surface (UXI-PRF-003): no "drop a file" prompt under it.
     return (
       <div style={emptyStyle}>
-        <p style={{ fontSize: 14, color: "var(--pg-muted-fg)" }}>
-          {strings.t(M.empty)}
-        </p>
+        {!loading && (
+          <p style={{ fontSize: 14, color: "var(--pg-muted-fg)" }}>
+            {strings.t(M.empty)}
+          </p>
+        )}
       </div>
     );
   }
@@ -574,6 +579,9 @@ export function CanvasPanel(_props: PanelProps) {
         pageOriginsPt={handle.pageOriginsPt}
         camera={camera}
         onCameraChange={setCamera}
+        // UXI-CAM-003 — a dock that opens, closes or is dragged keeps the
+        // document point at the viewport's centre.
+        onViewportResize={anchorViewportResize}
         activeTool={activeTool}
         toolGesture={toolGesture}
         toolSharedAcrossContexts={CONTEXT_SHARED_TOOL_IDS.includes(

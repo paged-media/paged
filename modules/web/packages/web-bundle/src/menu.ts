@@ -3,7 +3,7 @@
  *
  * A top-level `Web` menu for the render/flow/bake verbs, plus the insert verb in the host's `Object` menu where minting a page item lives.
  *
- * Registered through `contribute.menu()`. `Object ▸ Insert web frame…`
+ * Registered through `contribute.menu()`. `Object ▸ Insert web frame`
  * is the path the host once curated for this bundle, so the item stays
  * where the user already found it.
  * */
@@ -15,7 +15,7 @@ const C = "media.paged.web.command";
 
 /** `[path, command suffix, group]`. */
 const ENTRIES: [path: string, suffix: string, group: string][] = [
-  ["Object/Insert web frame…", "insertWebFrame", "insert-plugin"],
+  ["Object/Insert web frame", "insertWebFrame", "insert-plugin"],
   ["Web/Render frame", "renderWebFrame", "render"],
   ["Web/Render flow across frames", "renderWebFlow", "render"],
   ["Web/Thread flow into frames", "threadWebFlow", "flow"],
@@ -29,7 +29,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
  *  in the editor's language. */
 defineMessages("menu", {
   Web: "Web",
-  "Insert web frame…": "Insert web frame…",
+  "Insert web frame": "Insert web frame",
   "Render frame": "Render frame",
   "Render flow across frames": "Render flow across frames",
   "Thread flow into frames": "Thread flow into frames",

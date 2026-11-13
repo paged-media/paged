@@ -17,7 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Design system (publishing cockpit) — the 48px bottom mode bar.
+// Design system (publishing cockpit) — the bottom mode bar
+// (`--chrome-modebar-h`, 48 px at the default density).
 // Six workflow modes, one product: the switcher is the cockpit's
 // primary navigation. The centre lists the registered modes; the right
 // side carries zoom (dropdown + slider). The save state moved to the
@@ -28,6 +29,7 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 import { ZoomControl } from "./ZoomControl";
+import { useWorkspaceClass } from "../cockpit/workspace-class";
 import { useCamera } from "../state/camera-context";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
@@ -50,7 +52,13 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
   // A view of the registry (state/live.ts, ADR 229): a bundle that
   // registers a mode after the first render shows up.
   const modes = useRegistryView(useRegistries().modes);
-  const list = modes.list();
+  // F-23 — a placeholder mode is not offered beside the working ones
+  // (shown only while it is the active mode, so the bar never hides where
+  // the user is).
+  const list = modes.list().filter((m) => !m.placeholder || m.id === mode);
+  // A narrow workspace (F-55): the modes keep their icons and drop their
+  // labels, and the zoom slider gives way to the zoom field.
+  const narrow = useWorkspaceClass() === "narrow";
   // One tab stop for the modes; Left/Right walk them (ADR 234).
   const roving = useRovingFocus({
     orientation: "horizontal",
@@ -79,13 +87,14 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
             icon={m.icon}
             blurb={m.blurb}
             active={m.id === mode}
+            iconOnly={narrow}
             onClick={() => setMode(m.id)}
           />
         ))}
       </div>
 
       <div style={{ ...sideStyle, justifyContent: "flex-end" }}>
-        {right ?? <ZoomCluster />}
+        {right ?? <ZoomCluster slider={!narrow} />}
       </div>
     </div>
   );
@@ -93,7 +102,7 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
 
 /** Kit chrome.jsx — the bottom-right zoom cluster: the zoom dropdown
  *  (live percent + presets) and a log-scale slider that zooms around the viewport centre. */
-function ZoomCluster() {
+function ZoomCluster({ slider }: { slider: boolean }) {
   const strings = useStrings();
   const { camera, setCamera, viewportSize } = useCamera();
   // Log mapping 1%…800% so page-fit zooms (~5–60%) get usable travel.
@@ -121,20 +130,24 @@ function ZoomCluster() {
       style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}
     >
       <ZoomControl side="top" />
-      <input
-        type="range"
-        aria-label={strings.t(MODE_SWITCHER.zoom)}
-        min={0}
-        max={1000}
-        value={Math.round(pos * 1000)}
-        onChange={(e) => onInput(Number(e.target.value) / 1000)}
-        style={{ width: 84, accentColor: "var(--pg-primary)" }}
-      />
-      <Icon
-        name="ui-displays"
-        size={15}
-        style={{ color: "var(--pg-muted-fg)" }}
-      />
+      {slider && (
+        <>
+          <input
+            type="range"
+            aria-label={strings.t(MODE_SWITCHER.zoom)}
+            min={0}
+            max={1000}
+            value={Math.round(pos * 1000)}
+            onChange={(e) => onInput(Number(e.target.value) / 1000)}
+            style={{ width: 84, accentColor: "var(--pg-primary)" }}
+          />
+          <Icon
+            name="ui-displays"
+            size={15}
+            style={{ color: "var(--pg-muted-fg)" }}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -145,6 +158,7 @@ function ModeButton(props: {
   icon: string;
   blurb?: string;
   active: boolean;
+  iconOnly: boolean;
   onClick: () => void;
 }) {
   const [hover, setHover] = useState(false);
@@ -153,6 +167,7 @@ function ModeButton(props: {
       pressed={props.active}
       data-mode-option={props.id}
       title={props.blurb ?? props.title}
+      aria-label={props.iconOnly ? props.title : undefined}
       onClick={props.onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -160,8 +175,8 @@ function ModeButton(props: {
         display: "inline-flex",
         alignItems: "center",
         gap: 7,
-        height: 32,
-        padding: "0 13px",
+        height: "calc(var(--density-control-h) + 2px)",
+        padding: props.iconOnly ? "0 9px" : "0 13px",
         borderRadius: "var(--radius-md)",
         border: "none",
         cursor: "pointer",
@@ -179,7 +194,7 @@ function ModeButton(props: {
       }}
     >
       <Icon name={props.icon} size={15} />
-      {props.title}
+      {!props.iconOnly && props.title}
     </Segment>
   );
 }
@@ -187,7 +202,8 @@ function ModeButton(props: {
 const barStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  height: 48,
+  minWidth: 0,
+  height: "var(--chrome-modebar-h)",
   padding: "0 14px",
   gap: 12,
   background: "var(--chrome-panel-bg)",

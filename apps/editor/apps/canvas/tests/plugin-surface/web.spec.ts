@@ -761,7 +761,7 @@ test.describe("plugin surface · paged.web", () => {
     //
     // `contribute.menu()` (plugin-api 0.2.33) is what changed: paged.web
     // now files its render / thread / bake verbs under a `Web` top level
-    // and keeps `Object ▸ Insert web frame…` where users already found
+    // and keeps `Object ▸ Insert web frame` where users already found
     // it. (The host's courtesy entry at that path is gone since B3b.) The
     // insert verb appears once, not twice.
     expect(

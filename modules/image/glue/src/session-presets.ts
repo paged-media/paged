@@ -64,7 +64,7 @@ const P = defineMessages("image.presetManager", {
   sessionOnlyPatterns:
     "The patterns are kept for this session only: without a binary store they are too large to keep.",
   gradientEnds:
-    "The gradient tool draws two colours: foreground and background are now the ends of “{name}”; the stops between them stay in the preset.",
+    "The gradient tool draws two colors: foreground and background are now the ends of “{name}”; the stops between them stay in the preset.",
   noPattern: "No pattern defined — use Define pattern first.",
   noStyle: "The active layer has no style to save.",
   patternUsed: "“{name}” is now the defined pattern ({w}×{h} px).",

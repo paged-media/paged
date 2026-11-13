@@ -178,7 +178,7 @@ export function makeColorBindingProvider(
     readProperty(request): BindingRead {
       const well = COLOUR_WELLS[request.path];
       if (!well || request.target.kind !== "selection") {
-        return { kind: "decline", reason: "not a colour well" };
+        return { kind: "decline", reason: "not a color well" };
       }
       const colours = session.state().colors;
       return { kind: "value", value: rgbaToValue(colours[well]) };
@@ -187,13 +187,13 @@ export function makeColorBindingProvider(
     async writeProperty(request): Promise<BindingWrite> {
       const well = COLOUR_WELLS[request.path];
       if (!well || request.target.kind !== "selection") {
-        return { kind: "decline", reason: "not a colour well" };
+        return { kind: "decline", reason: "not a color well" };
       }
       let colour: Rgba01 | null;
       if (request.value.type === "colorRef") {
         const id = request.value.value;
         if (id === null) {
-          return refused("an image's colours cannot be None");
+          return refused("an image's colors cannot be None");
         }
         colour = await swatchColour(id);
         if (!colour) return refused(`swatch "${id}" has no colour to take`);

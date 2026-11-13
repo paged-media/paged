@@ -6,8 +6,10 @@
  * with the editor's own custom properties. Once hosts set them, their names
  * are a contract, so they are published as one generated file,
  * `docs/theme-tokens.json`: every token `packages/shell/src/styles/theme.css`
- * defines, its group (the section comment above it) and its light and dark
- * values. `--check` regenerates and fails when the committed file differs.
+ * defines, its group (the section comment above it), its light and dark
+ * values and, for a density token, its value in each density preset other
+ * than the default (`[data-density]`, editor ADR "Density presets").
+ * `--check` regenerates and fails when the committed file differs.
  *
  *   bun scripts/theme-tokens.mjs           # write
  *   bun scripts/theme-tokens.mjs --check   # gate
@@ -52,9 +54,26 @@ function tokens(body) {
   return out;
 }
 
+/** The density presets' blocks: `[data-paged-editor][data-density="x"]`. */
+function densities(css) {
+  const out = new Map();
+  const head = /^\[data-paged-editor\]\[data-density="([\w-]+)"\]\s*\{/gm;
+  for (const m of css.matchAll(head)) {
+    const open = m.index + m[0].length - 1;
+    const close = css.indexOf("}", open);
+    if (close < 0)
+      throw new Error(`theme-tokens: density ${m[1]} is not closed`);
+    out.set(m[1], tokens(css.slice(open + 1, close)));
+  }
+  return out;
+}
+
 const css = readFileSync(CSS, "utf8");
 const light = tokens(block(css, ":root"));
 const dark = tokens(block(css, ".dark"));
+const presets = densities(css);
+if (presets.size === 0)
+  throw new Error("theme-tokens: no [data-density] preset in theme.css");
 const names = [...new Set([...light.keys(), ...dark.keys()])].sort();
 const contract = {};
 for (const name of names) {
@@ -65,6 +84,20 @@ for (const name of names) {
     light: l?.value ?? null,
     dark: d?.value ?? l?.value ?? null,
   };
+  const byDensity = {};
+  for (const [density, values] of presets) {
+    const v = values.get(name);
+    if (v) byDensity[density] = v.value;
+  }
+  if (Object.keys(byDensity).length > 0) contract[name].densities = byDensity;
+}
+for (const [density, values] of presets) {
+  for (const name of values.keys()) {
+    if (!light.has(name))
+      throw new Error(
+        `theme-tokens: density ${density} sets ${name}, which the default does not define`,
+      );
+  }
 }
 const text = `${JSON.stringify(
   {

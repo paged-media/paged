@@ -18,7 +18,8 @@
  */
 
 // Cockpit — the right dock: the kit's DockGroup (right-panels.jsx).
-// A 36px tab strip (icon · title · close ✕, active tab carries the
+// A tab strip (`--chrome-tabstrip-h`, 36 px at the default density:
+// icon · title · close ✕, active tab carries the
 // 2px violet underline) over the active panel. The strip hides when
 // only one tab is open — the kit's "single fixed inspector" look in
 // the non-design modes. The ONLY tabbed surface in the app; panels
@@ -168,7 +169,7 @@ export function RightDock() {
           style={{
             display: "flex",
             alignItems: "stretch",
-            height: 36,
+            height: "var(--chrome-tabstrip-h)",
             background: "var(--chrome-panel-bg)",
             borderBottom: "1px solid var(--chrome-border)",
             flexShrink: 0,

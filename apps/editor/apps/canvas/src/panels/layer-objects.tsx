@@ -74,7 +74,7 @@ const M = defineMessages("app.layerObjects", {
   expand: "Expand",
   collapse: "Collapse",
   empty: "No objects",
-  layerColour: "Layer colour (InDesign's default sequence)",
+  layerColour: "Layer color (InDesign's default sequence)",
   loading: "Reading objects…",
   noLayer: "No layer",
 });

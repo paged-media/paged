@@ -570,7 +570,7 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     id: "paged.tool.eyedropper",
     title: "Eyedropper",
     description:
-      "Click the page to pick up a colour, or (Sample: Object appearance) click an object to copy its fill, stroke, effects and opacity onto the selection.",
+      "Click the page to pick up a color, or (Sample: Object appearance) click an object to copy its fill, stroke, effects and opacity onto the selection.",
     icon: "tool-eyedropper",
     shortcut: "i",
     group: "eyedropper",

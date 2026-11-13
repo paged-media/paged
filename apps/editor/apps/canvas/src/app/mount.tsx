@@ -362,6 +362,7 @@ import { appCatalogRegistry } from "../panels/catalog-registry";
 import { CanvasPanel } from "../panels/canvas-panel";
 import { problemsOf, type ProblemsStore } from "../panels/problems-store";
 import { BUILT_IN_PANELS } from "../panels/built-in-panels";
+import { withWindowCategories } from "../panels/window-categories";
 import { applyHistoryDepthPreference } from "../panels/history-panel";
 import { PlaygroundController } from "../playground/PlaygroundController";
 import { debugFlag } from "../debug-flags";
@@ -2135,7 +2136,8 @@ export function createEditorInstance(
   // is absent from a preset until someone puts it there deliberately
   // (`scripts/profile-presets-guard.mjs` catches a renamed id).
   const surfaces = applyProfile(profile, {
-    panels: BUILT_IN_PANELS,
+    // UX audit F-18 — each panel's Window-menu category.
+    panels: withWindowCategories(BUILT_IN_PANELS),
     tools: BUILT_IN_TOOLS,
     panelRail: PANEL_RAIL,
     modes: COCKPIT_MODES,

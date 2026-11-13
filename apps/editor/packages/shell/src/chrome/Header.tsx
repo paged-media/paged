@@ -17,16 +17,23 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Design system — the 46px cockpit header, in zones separated by
-// hairlines:
+// Design system — the cockpit header (`--chrome-header-h`, 46 px at the
+// default density), in zones separated by hairlines:
 //
-//   brand · document | menus (core, then context) | search | theme · Share
+//   brand · document · save status | menus (core, then context) | search |
+//   theme · Share
 //
-// - The DOCUMENT chip names what is open and carries one status dot:
-//   the engine's state while it is not ready, else the save state (it
-//   moved here from the bottom bar, where it sat apart from the name).
+// - The DOCUMENT chip names what is open (and the browser tab, when the
+//   editor is the page: "<document> — paged", UX audit F-24). Beside it,
+//   while a document opens, the load's stage (UXI-PRF-003); otherwise
+//   the SAVE STATUS SLOT (`SaveStatusSlot` below): today the dirty/saved
+//   dot, the mount point a save-state machine fills (strategy §2.4).
+// - The menus keep their place and scroll sideways rather than push the
+//   rest off a narrow editor (F-55).
 // - Search shrinks with the space it is given and becomes an icon
 //   below 220 px, so nothing is pushed off the right edge.
+// - Share is a quiet, honestly disabled control until there is a
+//   collaboration backend (F-24); output actions keep the labels.
 // - Zoom lives in the bottom bar only (it was in both).
 //
 // File intake has no header widget: File ▸ Open…, canvas drag-drop,
@@ -48,6 +55,8 @@ import { useChromeRegions } from "../state/chrome-regions";
 import { useCompactLayout } from "../state/compact";
 import { RegionItems } from "./RegionItems";
 import { HEADER } from "./messages";
+import { loadingWords } from "../cockpit/canvas-frame/LoadingStatus";
+import { editorOwnsPage } from "../state/editor-root";
 
 export interface HeaderProps {
   onFile: (file: File) => void;
@@ -71,7 +80,7 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
           display: "flex",
           alignItems: "center",
           gap: 12,
-          flexShrink: 0,
+          minWidth: 0,
         }}
       >
         <Brand />
@@ -79,7 +88,9 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
         {chrome.has("menubar") && (
           <>
             <span style={zoneDividerStyle} aria-hidden />
-            <MenuBar />
+            <div data-menubar-scroll style={menuScrollStyle}>
+              <MenuBar />
+            </div>
           </>
         )}
       </div>
@@ -140,15 +151,80 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
   );
 }
 
-/** What is open, and its state in one dot. */
+/** What is open, and its state: the load's stage while it opens, else
+ *  the save status. */
 function DocumentChip({ status }: { status?: string }) {
   const strings = useStrings();
-  const { handle, sourceName } = useDocument();
+  const { handle, sourceName, loading } = useDocument();
   const meta = useDocumentMeta();
-  const ready = !status || /ready/i.test(status);
   const name = handle
     ? meta?.documentName || sourceName || strings.t(HEADER.untitled)
-    : strings.t(HEADER.noDocument);
+    : loading
+      ? loading.name
+      : strings.t(HEADER.noDocument);
+  usePageTitle(handle ? name : null);
+  const stage = loading ? loadingWords(strings, loading, "long") : null;
+  return (
+    <span
+      data-document-chip
+      title={stage ? `${name} — ${stage}` : name}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        minWidth: 0,
+        maxWidth: "clamp(90px, 22vw, 300px)",
+        flexShrink: 0,
+        color: handle ? "var(--pg-fg)" : "var(--pg-muted-fg)",
+        fontSize: 13,
+      }}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {name}
+      </span>
+      {loading ? (
+        <span
+          data-header-loading-stage={loading.stage ?? "recognized"}
+          aria-label={stage ?? undefined}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            flexShrink: 0,
+            color: "var(--pg-muted-fg)",
+            fontSize: 12,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span className="pg-loading-dot" aria-hidden />
+          {loadingWords(strings, loading, "short")}
+        </span>
+      ) : (
+        <SaveStatusSlot status={status} />
+      )}
+    </span>
+  );
+}
+
+/**
+ * The save status's place in the header (strategy §2.4: "paged. › Annual
+ * Report · Saved"). Today it shows what the editor knows — the worker's
+ * state while it is not ready, else whether there are edits since the
+ * load — as one dot, its words the dot's label. A save-state machine
+ * (saving, saved locally, synced, failed …) renders here in its place;
+ * `data-save-status-slot` names the mount point.
+ */
+export function SaveStatusSlot({ status }: { status?: string }) {
+  const strings = useStrings();
+  const { handle } = useDocument();
+  const meta = useDocumentMeta();
+  const ready = !status || /ready/i.test(status);
   // U14 — honest wording: dirty means edits since load; nothing writes
   // to disk on its own, so neither state may claim a save happened.
   const state = !ready
@@ -163,49 +239,46 @@ function DocumentChip({ status }: { status?: string }) {
     : meta?.dirty
       ? "var(--status-review)"
       : "var(--status-approved)";
+  if (!state && ready) return null;
   return (
     <span
-      data-document-chip
-      title={state ? `${name} — ${state}` : name}
+      data-save-status-slot
+      // Both hooks the suite and scripts read: the worker state and the
+      // save state, one dot.
+      data-shell-status={status}
+      data-save-state={
+        handle && ready ? (meta?.dirty ? "dirty" : "saved") : undefined
+      }
+      role="img"
+      aria-label={state ?? undefined}
+      title={state ?? undefined}
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 7,
-        minWidth: 0,
-        maxWidth: "clamp(90px, 14vw, 220px)",
-        color: handle ? "var(--pg-fg)" : "var(--pg-muted-fg)",
-        fontSize: 13,
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: dot,
       }}
-    >
-      <span
-        style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {name}
-      </span>
-      {(state || !ready) && (
-        <span
-          // Both hooks the suite and scripts read: the worker state and
-          // the save state, now one dot.
-          data-shell-status={status}
-          data-save-state={
-            handle && ready ? (meta?.dirty ? "dirty" : "saved") : undefined
-          }
-          aria-label={state ?? undefined}
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: "50%",
-            flexShrink: 0,
-            background: dot,
-          }}
-        />
-      )}
-    </span>
+    />
   );
+}
+
+/** The browser tab says what is open — "<document> — paged" — when the
+ *  editor is the page (never an embedding host's tab, F-24); the page's
+ *  own title comes back when the document closes. */
+function usePageTitle(name: string | null) {
+  const strings = useStrings();
+  const scope = useEditorScope();
+  const title = name ? strings.t(HEADER.pageTitle, { name }) : null;
+  useEffect(() => {
+    if (!title || typeof document === "undefined") return;
+    if (!editorOwnsPage(scope)) return;
+    const before = document.title;
+    document.title = title;
+    return () => {
+      document.title = before;
+    };
+  }, [scope, title]);
 }
 
 /** The `paged.` wordmark — the oxblood period IS the mark. */
@@ -263,8 +336,10 @@ function CommandTrigger() {
           alignItems: "center",
           justifyContent: compact ? "center" : "flex-start",
           gap: 9,
-          width: compact ? 34 : "min(460px, 100%)",
-          height: 34,
+          width: compact
+            ? "calc(var(--density-control-h) + 4px)"
+            : "min(460px, 100%)",
+          height: "calc(var(--density-control-h) + 4px)",
           padding: compact ? 0 : "0 12px",
           borderRadius: "var(--radius-full)",
           background: "var(--pg-muted)",
@@ -327,8 +402,8 @@ export function ThemeToggle() {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        width: 30,
-        height: 30,
+        width: "var(--density-control-h)",
+        height: "var(--density-control-h)",
         borderRadius: "var(--radius-md)",
         border: "none",
         background: hover ? "var(--hover)" : "transparent",
@@ -345,6 +420,15 @@ export function ThemeToggle() {
   );
 }
 
+/** The menus scroll sideways inside their zone when the header is short
+ *  of room (F-55), so nothing else is pushed off the edge. */
+const menuScrollStyle: React.CSSProperties = {
+  minWidth: 0,
+  overflowX: "auto",
+  overflowY: "hidden",
+  scrollbarWidth: "none",
+};
+
 const zoneDividerStyle: React.CSSProperties = {
   width: 1,
   height: 18,
@@ -355,7 +439,8 @@ const zoneDividerStyle: React.CSSProperties = {
 const headerStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  height: 46,
+  // The density's header height (styles/theme.css).
+  height: "var(--chrome-header-h)",
   padding: "0 12px 0 14px",
   gap: 14,
   background: "var(--chrome-panel-bg)",

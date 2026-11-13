@@ -19,9 +19,9 @@ const M = defineMessages("image.curvesTools", {
   grey: "Grey point",
   white: "White point",
   pickTitle: "Then click the image: {what}",
-  blackTitle: "the colour that should become black",
-  greyTitle: "a colour that should be neutral grey",
-  whiteTitle: "the colour that should become white",
+  blackTitle: "the color that should become black",
+  greyTitle: "a color that should be neutral grey",
+  whiteTitle: "the color that should become white",
   target: "Targeted adjustment",
   targetTitle:
     "Drag up or down on the image to move the curve at the tone under the pointer",

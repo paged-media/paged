@@ -27,7 +27,7 @@ export const TOOL_CLUSTER = defineMessages("shell.toolCluster", {
   draw: "Draw & type",
   shapes: "Frames & shapes",
   transform: "Transform",
-  colour: "Colour",
+  colour: "Color",
   view: "View",
 });
 

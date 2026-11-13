@@ -201,7 +201,7 @@ describe("the eyedropper and colour samplers [editor-shell.raster-color-binding]
     expect(session.addColorSampler([1, 0])).toBe(3);
     expect(session.addColorSampler([0, 0])).toBe(4);
     expect(session.addColorSampler([0, 0])).toBeNull();
-    expect(session.state().status).toContain("4 colour samplers");
+    expect(session.state().status).toContain("4 color samplers");
     // Off the image: refused.
     expect(session.removeColorSampler(4)).toBe(true);
     expect(session.addColorSampler([9, 9])).toBeNull();

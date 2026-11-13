@@ -45,7 +45,7 @@ const M = defineMessages("app.viewPreferencesDialog", {
   grid: "Grid",
   gridEvery: "Gridline every",
   subdivisions: "Subdivisions",
-  gridColor: "Colour",
+  gridColor: "Color",
   gridsInBack: "Grids in back",
   smartGuides: "Smart guides",
   angleGuides: "Construction guides (45°)",

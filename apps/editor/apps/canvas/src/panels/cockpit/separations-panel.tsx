@@ -76,7 +76,7 @@ const M = defineMessages("app.cockpitSeparationsPanel", {
   withinLimit: "Within limit",
   over: "{count} over",
   swatchNote:
-    "Exact, from the palette. Works with or without a colour profile, and " +
+    "Exact, from the palette. Works with or without a color profile, and " +
     "at any size — a 0.25 pt rich-black hairline is caught here even " +
     "though the page reading below under-samples it.",
   unseparable:

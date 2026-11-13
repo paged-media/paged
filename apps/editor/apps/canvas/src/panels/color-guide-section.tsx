@@ -42,7 +42,7 @@ import { applyGuideColor, readGuideBase } from "../color-guide";
 
 const M = defineMessages("app.colorGuide", {
   title: "Color guide",
-  none: "Select an object with a fill colour.",
+  none: "Select an object with a fill color.",
   rule: "Harmony rule",
   variations: "Variations",
   chipHint: "{hex}: click to fill, Alt-click to stroke",

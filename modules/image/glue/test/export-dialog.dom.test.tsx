@@ -153,7 +153,7 @@ describe("[image.codec.core-codecs] Export As dialog", () => {
     ]);
     expect(options.at(-1)!.textContent).toBe("JPEG XL");
     for (const [format, note] of [
-      ["gif", /256 colours/],
+      ["gif", /256 colors/],
       ["bmp", /no metadata/],
       ["tga", /no metadata/],
       ["jxl", /lossless/],

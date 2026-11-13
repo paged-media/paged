@@ -41,8 +41,8 @@ const M = defineMessages("image.dialogs", {
   trim: "Trim",
   basedOn: "Based on",
   transparent: "Transparent pixels",
-  topLeft: "Top-left pixel colour",
-  bottomRight: "Bottom-right pixel colour",
+  topLeft: "Top-left pixel color",
+  bottomRight: "Bottom-right pixel color",
   trimNote:
     "Trims away rows and columns of the chosen kind from every side, over " +
     "every layer — an exact crop, one undo step.",
@@ -54,16 +54,16 @@ const M = defineMessages("image.dialogs", {
     "Turns every layer and mask about the centre; the canvas grows to hold " +
     "the corners, which are transparent. Quarter turns are exact; any other " +
     "angle is resampled on the GPU. One undo step.",
-  indexedColor: "Indexed colour",
+  indexedColor: "Indexed color",
   palette: "Palette",
   paletteExact: "Exact",
   paletteWeb: "Web",
   paletteAdaptive: "Local (adaptive)",
-  colours: "Colours",
+  colours: "Colors",
   indexedNote:
-    "Flattens the image and gives every pixel the nearest colour of the " +
+    "Flattens the image and gives every pixel the nearest color of the " +
     "palette, without dither, at 8 bits per channel — one undo step. Exact " +
-    "takes the image's own colours (at most 256); Web the 216 Web colours.",
+    "takes the image's own colors (at most 256); Web the 216 Web colors.",
 });
 
 const dialogStyle = {

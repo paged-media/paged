@@ -80,7 +80,17 @@ export {
 } from "./state/canvas-client-context";
 
 export {
+  DEFAULT_DENSITY,
+  DENSITIES,
+  DENSITY_COMMANDS,
+  getDensity,
+  setDensity,
+  useDensity,
+  type Density,
+} from "./state/density";
+export {
   CameraProvider,
+  cameraKeepingCentre,
   useCamera,
   type ViewportSize,
 } from "./state/camera-context";
@@ -354,6 +364,8 @@ export {
   type PanelProps,
   type PanelRegistry,
   type PanelRegistryEvent,
+  WINDOW_CATEGORIES,
+  type WindowCategory,
   type SemanticGroupRegistry,
   type Tool,
   type ToolContribution,
@@ -577,6 +589,22 @@ export {
   type InspectorContext,
   type PageNavigator,
   type SpreadEntry,
+  CANVAS_MIN_WORKING_PX,
+  DOCK_DEFAULT_PX,
+  DOCK_MAX_PX,
+  DOCK_MIN_PX,
+  ADAPTIVE_WORKSPACE_COMMAND,
+  FOCUS_WORKSPACE_COMMAND,
+  isAdaptiveWorkspace,
+  isFocusWorkspace,
+  setAdaptiveWorkspace,
+  useAdaptiveWorkspace,
+  setFocusWorkspace,
+  useFocusWorkspace,
+  useWorkspaceClass,
+  workspaceClassOf,
+  type DockId,
+  type WorkspaceClass,
 } from "./cockpit";
 
 // ── Chrome ─────────────────────────────────────────────────────

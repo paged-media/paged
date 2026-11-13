@@ -38,7 +38,7 @@ import {
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.pluginColorPicker", {
-  colour: "Colour",
+  colour: "Color",
 });
 
 export interface HostColorPickerProps {

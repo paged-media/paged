@@ -71,7 +71,7 @@ const M = defineMessages("app.objectOptionsPanel", {
   path: "Path",
   label: "Label",
   objectOptions: "Object Options",
-  colour: "Colour",
+  colour: "Color",
   opacity: "Opacity",
   blend: "Blend",
   appearance: "Appearance",

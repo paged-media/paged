@@ -39,6 +39,30 @@ interface CameraContextValue {
   setCamera: (cam: Camera) => void;
   viewportSize: ViewportSize;
   setViewportSize: (size: ViewportSize) => void;
+  /** The viewport was resized from `from` to `to` (a dock opened, closed
+   *  or was dragged; the window changed): keep the document point at its
+   *  centre where it was (UXI-CAM-003, UXI-PNL-007). The canvas's
+   *  ResizeObserver calls it. */
+  anchorViewportResize: (from: ViewportSize, to: ViewportSize) => void;
+}
+
+/**
+ * `cam` for a viewport resized from `from` to `to` with the document point
+ * at the viewport's centre kept there: a translation by half the change,
+ * the same at any zoom and any view rotation. No fit, no zoom: a dock that
+ * opens or a window that narrows never re-fits the document. Unchanged for
+ * an unmeasured or collapsed (hidden) size on either side.
+ */
+export function cameraKeepingCentre(
+  cam: Camera,
+  from: ViewportSize,
+  to: ViewportSize,
+): Camera {
+  if (!(from[0] > 0 && from[1] > 0 && to[0] > 0 && to[1] > 0)) return cam;
+  const dx = (to[0] - from[0]) / 2;
+  const dy = (to[1] - from[1]) / 2;
+  if (dx === 0 && dy === 0) return cam;
+  return { ...cam, tx: cam.tx + dx, ty: cam.ty + dy };
 }
 
 const Context = createContext<CameraContextValue | null>(null);
@@ -69,21 +93,41 @@ export function CameraProvider({ children }: PropsWithChildren) {
   // view's: a pan or a zoom about a point is the same formula at any
   // rotation, so the writers that never heard of Rotate View stay right.
   const rotationRef = useRef(0);
+  // The camera last written, for the resize anchor: `setCamera` is its one
+  // writer, so it is current without a render.
+  const cameraRef = useRef<Camera>(IDENTITY_CAMERA);
   const setCamera = useCallback(
     (requested: Camera) => {
       const rotation = requested.rotation ?? rotationRef.current;
       rotationRef.current = rotation;
       const cam = { ...clampCamera(requested, sizeRef.current), rotation };
+      cameraRef.current = cam;
       setCameraState(cam);
       client.setCamera(cam);
     },
     [client],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const anchorViewportResize = useCallback(
+    (from: ViewportSize, to: ViewportSize) => {
+      const cam = cameraRef.current;
+      const next = cameraKeepingCentre(cam, from, to);
+      if (next !== cam) setCamera(next);
+    },
+    [setCamera],
+  );
+
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<CameraContextValue>(
-    () => ({ camera, setCamera, viewportSize, setViewportSize }),
-    [camera, setCamera, viewportSize, setViewportSize],
+    () => ({
+      camera,
+      setCamera,
+      viewportSize,
+      setViewportSize,
+      anchorViewportResize,
+    }),
+    [camera, setCamera, viewportSize, setViewportSize, anchorViewportResize],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

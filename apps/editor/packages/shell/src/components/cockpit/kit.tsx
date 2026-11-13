@@ -43,7 +43,8 @@ export function PanelHeader({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "12px 14px 8px",
+        // The density's panel padding (styles/theme.css).
+        padding: "12px var(--density-pad) 8px",
       }}
     >
       {/* A heading (UX audit F-50, ADR 259): the panel's title is what a
@@ -77,7 +78,12 @@ export function Section({
 }) {
   const { open, toggle, region } = useDisclosure(defaultOpen);
   return (
-    <div style={{ borderTop: "1px solid var(--pg-border)", padding: "0 14px" }}>
+    <div
+      style={{
+        borderTop: "1px solid var(--pg-border)",
+        padding: "0 var(--density-pad)",
+      }}
+    >
       <button
         type="button"
         {...toggle}
@@ -113,7 +119,10 @@ export function Section({
         </span>
       </button>
       {open && (
-        <div {...region} style={{ paddingBottom: 12 }}>
+        <div
+          {...region}
+          style={{ paddingBottom: "var(--density-section-gap)" }}
+        >
           {children}
         </div>
       )}
@@ -194,7 +203,9 @@ export function Btn({
         alignItems: "center",
         justifyContent: "center",
         gap: 7,
-        height: sm ? 28 : 34,
+        height: sm
+          ? "var(--density-row-h)"
+          : "calc(var(--density-control-h) + 4px)",
         padding: sm ? "0 11px" : "0 14px",
         borderRadius: sm ? "var(--radius-md)" : "var(--radius-lg)",
         border:

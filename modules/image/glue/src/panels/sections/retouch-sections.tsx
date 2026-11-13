@@ -64,7 +64,7 @@ const M = defineMessages("image.caf", {
   sampled: "{pct} % of the image is sampled",
   sampleAll: "Sample all layers",
   fillSettings: "Fill settings",
-  colourAdaptation: "Colour adaptation",
+  colourAdaptation: "Color adaptation",
   rotationAdaptation: "Rotation adaptation",
   scale: "Scale",
   mirror: "Mirror",
@@ -349,7 +349,7 @@ const MV = defineMessages("image.caMove", {
   move: "Move",
   extend: "Extend",
   structure: "Structure",
-  colour: "Colour",
+  colour: "Color",
   transformOnDrop: "Transform on drop",
   sampleAll: "Sample all layers",
   pending: "Moved by {dx}, {dy} px",
@@ -360,7 +360,7 @@ const MV = defineMessages("image.caMove", {
   note:
     "Drag the selection with the Content-Aware Move tool. Structure 7 keeps " +
     "the moved pixels exactly and re-synthesises only the seam; 1 blends a " +
-    "wide band. Colour adapts the moved pixels' tone to their new place.",
+    "wide band. Color adapts the moved pixels' tone to their new place.",
 });
 
 const HL = defineMessages("image.heal", {

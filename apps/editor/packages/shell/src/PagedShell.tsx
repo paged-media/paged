@@ -45,6 +45,7 @@ import {
   type EditorScope,
 } from "./state/editor-scope";
 import React, {
+  Activity,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -132,6 +133,16 @@ import { ScreenModeSelector } from "./chrome/ScreenModeSelector";
 import { FillStrokeCluster } from "./chrome/FillStrokeCluster";
 import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
+import { useDensityCommands } from "./state/density";
+import {
+  useFocusWorkspace,
+  useFocusWorkspaceCommand,
+} from "./cockpit/focus-workspace";
+import {
+  useAdaptiveWorkspaceCommand,
+  useRightDrawer,
+  useWorkspaceClass,
+} from "./cockpit/workspace-class";
 import {
   CockpitStateProvider,
   useCockpitActions,
@@ -168,7 +179,12 @@ import { installRegistryDerivedContributions } from "./state/commands/registry-d
 import { useSpringLoadedTools } from "./tools/use-spring-loaded-tools";
 import type { PagedEditor } from "./state/paged-editor";
 import type { OverlayContribution } from "./registries/overlay";
-import type { PanelContribution, PanelProps } from "./registries/panel";
+import {
+  WINDOW_CATEGORIES,
+  type PanelContribution,
+  type PanelProps,
+  type WindowCategory,
+} from "./registries/panel";
 import { panelBelongsHere } from "./registries/types";
 import type { ToolContribution } from "./registries/tool";
 import type { Disposable } from "./registries/types";
@@ -462,51 +478,47 @@ export function PagedShell({
   );
 }
 
-// U11 — Window-menu grouping. Panels cluster under a category label
-// derived from the contribution's `defaultGroup` (the dock-group
-// vocabulary the apps already register with), or — when a plugin
-// bundle stamps its display name on the contribution (`source`, being
-// added platform-side; read defensively) — under that bundle's name.
-// MenuBar sorts a menu's items by `order` and renders a separator
-// whenever the adjacent `group` label changes, so encoding the
-// category's rank in `order` yields visually grouped sections in the
-// table's order; unknown categories (plugin sources / the "Plugins"
-// fallback) land after the named ones in approximate alphabetical
-// order (first three characters — ties keep registration order).
-const WINDOW_MENU_CATEGORIES: ReadonlyArray<readonly [string, string]> = [
-  ["cockpit", "Workspace"],
-  ["chrome", "Workspace"],
-  ["workspace", "Workspace"],
-  ["structure", "Structure"],
-  ["styles", "Styles"],
-  ["text", "Text"],
-  ["properties", "Properties"],
-  ["inspector", "Properties"],
-  ["object", "Object"],
-  ["output", "Output"],
-  ["console", "Developer"],
-];
-
-const WINDOW_MENU_LABEL_ORDER: ReadonlyArray<string> = Array.from(
-  new Set(WINDOW_MENU_CATEGORIES.map(([, label]) => label)),
-);
+// U11, UX audit F-18 — Window-menu grouping. A host panel is listed under
+// its `windowCategory` (InDesign's categories: Color, Styles, Type &
+// Tables, Object & Layout, Interactive, Output, Utilities; `Workspace`
+// for the few one click deep), else under the category its
+// `defaultGroup` (the dock-group vocabulary) maps to; a plugin panel —
+// one whose bundle stamped its display name on it (`source`) — under that
+// bundle's name in Plugins. MenuBar sorts a menu's items by `order` and
+// renders a separator whenever the adjacent `group` label changes, so
+// encoding the category's rank in `order` yields visually grouped
+// sections in WINDOW_CATEGORIES' order; plugin sources land after the
+// named ones in approximate alphabetical order (first three characters —
+// ties keep registration order).
+const DEFAULT_GROUP_CATEGORY: Readonly<Record<string, WindowCategory>> = {
+  cockpit: "Workspace",
+  chrome: "Workspace",
+  workspace: "Workspace",
+  structure: "Object & Layout",
+  styles: "Styles",
+  text: "Type & Tables",
+  properties: "Object & Layout",
+  inspector: "Utilities",
+  object: "Object & Layout",
+  output: "Output",
+  console: "Utilities",
+};
 
 function windowMenuGroup(p: PanelContribution): {
   label: string;
   order: number;
 } {
   const source = (p as { source?: string }).source;
-  const fromTable = p.defaultGroup
-    ? WINDOW_MENU_CATEGORIES.find(([g]) => g === p.defaultGroup)?.[1]
-    : undefined;
-  const label =
-    (typeof source === "string" && source.trim()) || fromTable || "Other";
-  if (!source) {
-    const idx = WINDOW_MENU_LABEL_ORDER.indexOf(label);
-    if (idx >= 0) return { label, order: idx * 10 };
+  if (typeof source === "string" && source.trim()) {
+    const label = source.trim();
+    const c = (i: number) => (label.toUpperCase().charCodeAt(i) || 0) & 0x7f;
+    return { label, order: 1000 + c(0) * 0x4000 + c(1) * 0x80 + c(2) };
   }
-  const c = (i: number) => (label.toUpperCase().charCodeAt(i) || 0) & 0x7f;
-  return { label, order: 1000 + c(0) * 0x4000 + c(1) * 0x80 + c(2) };
+  const label: WindowCategory =
+    p.windowCategory ??
+    (p.defaultGroup ? DEFAULT_GROUP_CATEGORY[p.defaultGroup] : undefined) ??
+    "Utilities";
+  return { label, order: WINDOW_CATEGORIES.indexOf(label) * 10 };
 }
 
 /** "paged.draw" / "media.paged.draw" → "Draw"; a display name passes. */
@@ -553,6 +565,19 @@ function ShellChrome({
   // A fill shape on a phone (editor ADR 294): one finger pans and a tap
   // selects, so the tool rail gives way to the canvas.
   const compactLayout = useCompactLayout();
+  // The Focus workspace (cockpit/focus-workspace.ts): only the canvas and
+  // the tool rail stay; the chrome below is hidden, not unmounted, so
+  // leaving it brings the layout back as it was.
+  useFocusWorkspaceCommand();
+  // Edit ▸ Settings ▸ Interface density (state/density.ts) and the
+  // adaptive workspace's switch (cockpit/workspace-class.ts).
+  useDensityCommands();
+  useAdaptiveWorkspaceCommand();
+  const focus = useFocusWorkspace();
+  // A narrow workspace (cockpit/workspace-class.ts) shows the right dock as
+  // a drawer: the panel rail opens it.
+  const narrow = useWorkspaceClass() === "narrow";
+  const [drawerOpen, setDrawerOpen] = useRightDrawer();
   const actionsRegion = chrome.region("actions-bar");
   const actionsItems =
     actionsRegion === null
@@ -1413,21 +1438,23 @@ function ShellChrome({
   };
 
   const shellBody = (
-    <div style={shellStyle}>
-      {chrome.has("header") && (
-        <Header onFile={onFile} headerExtras={headerExtras} status={status} />
-      )}
+    <div style={shellStyle} data-focus-workspace={focus || undefined}>
+      <Activity mode={focus ? "hidden" : "visible"} name="header">
+        {chrome.has("header") && (
+          <Header onFile={onFile} headerExtras={headerExtras} status={status} />
+        )}
 
-      {/* The actions bar: host actions and commands a template shape
-       *  shows under the header (docs/composable-editor.md §5.2). */}
-      {actionsItems.length > 0 && <ActionsBar items={actionsItems} />}
+        {/* The actions bar: host actions and commands a template shape
+         *  shows under the header (docs/composable-editor.md §5.2). */}
+        {actionsItems.length > 0 && <ActionsBar items={actionsItems} />}
 
-      {/* Cockpit — the mode-aware context toolbar (only when the
-       *  app contributed modes; chrome stays lean otherwise). */}
-      {chrome.has("context-toolbar") &&
-        modes &&
-        modes.length > 0 &&
-        !railHidden && <ContextToolbar paged={paged} />}
+        {/* Cockpit — the mode-aware context toolbar (only when the
+         *  app contributed modes; chrome stays lean otherwise). */}
+        {chrome.has("context-toolbar") &&
+          modes &&
+          modes.length > 0 &&
+          !railHidden && <ContextToolbar paged={paged} />}
+      </Activity>
 
       {!sabSupported && (
         <div style={warningStyle}>{strings.t(LOAD.reducedMode)}</div>
@@ -1480,12 +1507,17 @@ function ShellChrome({
         )}
         {chrome.has("panel-rail") &&
           !railHidden &&
+          !focus &&
           panelRail &&
           panelRail.length > 0 && (
             <PanelRail
               items={panelRail}
-              panelsHidden={panelsHidden}
-              onRevealPanels={() => setPanelsHidden(false)}
+              // A closed drawer is a hidden dock: a rail button opens it.
+              panelsHidden={panelsHidden || (narrow && !drawerOpen)}
+              onRevealPanels={() => {
+                setPanelsHidden(false);
+                if (narrow) setDrawerOpen(true);
+              }}
             />
           )}
       </div>
@@ -1496,9 +1528,11 @@ function ShellChrome({
           dead affordance is worse than an absent one — the user reads it
           as a fault in their own input. Solo mode registers exactly one
           mode; the six-mode editor is unaffected. */}
-      {chrome.has("mode-bar") && modes && modes.length > 1 && !railHidden && (
-        <ModeSwitcher />
-      )}
+      {chrome.has("mode-bar") &&
+        modes &&
+        modes.length > 1 &&
+        !railHidden &&
+        !focus && <ModeSwitcher />}
 
       {chrome.has("palette") && <CommandPalette />}
       <DemoSpotlight />

@@ -508,6 +508,7 @@ export function buildMenuTree(
     n.order = 0;
     n.group = "plugins";
     n.groupLabel = undefined;
+    dropPanelsTheMenuOpens(n.children);
     nestPanelsUnderNamesakes(n.children);
   }
   if (plugins.length > 0) tops.set("Plugins", plugins);
@@ -576,6 +577,27 @@ function nestPanelsUnderNamesakes(nodes: MenuNode[]): void {
       groupLabel: undefined,
       order: first - 1,
     });
+  }
+}
+
+/** UX audit F-18 — a plugin's own menu row that opens one of its panels
+ *  ("Data query…") and the panel's row ("Data query") were two entries
+ *  for one panel. The plugin's row stays (it is the plugin's word for it);
+ *  the panel row named like it, less the ellipsis, goes. */
+function dropPanelsTheMenuOpens(nodes: MenuNode[]): void {
+  const named = new Set(
+    nodes
+      .filter(
+        (n): n is MenuLeaf =>
+          n.type === "leaf" && !n.command.startsWith(PANEL_SHOW),
+      )
+      .map((n) => n.label.replace(/…$/, "")),
+  );
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (n.type === "leaf" && n.command.startsWith(PANEL_SHOW)) {
+      if (named.has(n.label)) nodes.splice(i, 1);
+    }
   }
 }
 

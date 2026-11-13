@@ -32,9 +32,35 @@ import type {
   ResolutionResult,
 } from "@paged-media/client";
 
+/**
+ * Where a document load is (UXI-PRF-003; strategy §9.1; editor ADR "Docks
+ * are resizable and the workspace adapts", progressive loading). Real
+ * stages only — no percentage is invented:
+ *
+ *   recognized  the file is accepted: its name and size are known, the
+ *               engine is reading it
+ *   geometry    the document's structure is read: its page count and each
+ *               page's size and place, so the canvas can show where the
+ *               pages will be while the first one is composed
+ *   firstPaint  the first page is composed and on the canvas
+ *   refining    the remaining pages are being prepared, `pagesReady` of
+ *               `pageCount` so far
+ *
+ * Ready is the end of the load: `loading` is null again and the document
+ * context's `snapshotsReady` is true.
+ */
+export type LoadingStage =
+  "recognized" | "geometry" | "firstPaint" | "refining";
+
 export interface LoadingState {
   name: string;
   bytes: number;
+  /** The stage the load has reached (absent: `recognized`). */
+  stage?: LoadingStage;
+  /** The page count, once the structure is read. */
+  pageCount?: number;
+  /** Pages prepared so far, from the first useful paint on. */
+  pagesReady?: number;
 }
 
 interface DocumentContextValue {

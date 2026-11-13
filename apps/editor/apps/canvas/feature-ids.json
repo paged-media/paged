@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 925,
-    "keybinding": 201,
-    "menu": 669,
+    "command": 929,
+    "keybinding": 203,
+    "menu": 673,
     "panel": 151,
     "tool": 123
   },
@@ -4516,6 +4516,21 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.density.comfortable",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.density.compact",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.density.professional",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.firstPage",
       "kind": "command",
       "owner": "editor"
@@ -4532,6 +4547,11 @@
     },
     {
       "id": "command:paged.view.fitSpread",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.focusWorkspace",
       "kind": "command",
       "owner": "editor"
     },
@@ -4792,6 +4812,11 @@
     },
     {
       "id": "keybinding:cmd+-→paged.view.zoomOut",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+.→paged.view.focusWorkspace",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5172,6 +5197,11 @@
     },
     {
       "id": "keybinding:ctrl+-→paged.view.zoomOut",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+.→paged.view.focusWorkspace",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -6106,12 +6136,12 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:Draw/Type on path/Attach",
+      "id": "menu:Draw/Type on a path/Attach",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:Draw/Type on path/Detach",
+      "id": "menu:Draw/Type on a path/Detach",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -6289,6 +6319,21 @@
       "id": "menu:Edit/Selection to path",
       "kind": "menu",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Settings/Interface density/Comfortable",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Settings/Interface density/Compact",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Settings/Interface density/Professional",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:Edit/Settings/Models…",
@@ -6561,7 +6606,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Fill/Foreground colour",
+      "id": "menu:Image/Fill/Foreground color",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6606,17 +6651,17 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Filter/Adjust/Match colour…",
+      "id": "menu:Image/Filter/Adjust/Match color…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Filter/Adjust/Replace colour…",
+      "id": "menu:Image/Filter/Adjust/Replace color…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Filter/Adjust/Selective colour…",
+      "id": "menu:Image/Filter/Adjust/Selective color…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6746,7 +6791,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Filter/Filter Gallery/Coloured pencil…",
+      "id": "menu:Image/Filter/Filter Gallery/Colored pencil…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6941,7 +6986,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Filter/Filter Gallery/Watercolour…",
+      "id": "menu:Image/Filter/Filter Gallery/Watercolor…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7011,7 +7056,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Filter/Pixelate/Colour halftone…",
+      "id": "menu:Image/Filter/Pixelate/Color halftone…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7271,7 +7316,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/Layer style/Colour overlay…",
+      "id": "menu:Image/Layer/Layer style/Color overlay…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7376,12 +7421,12 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/New adjustment layer/Colour balance…",
+      "id": "menu:Image/Layer/New adjustment layer/Color balance…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/New adjustment layer/Colour lookup…",
+      "id": "menu:Image/Layer/New adjustment layer/Color lookup…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7431,7 +7476,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/New adjustment layer/Selective colour…",
+      "id": "menu:Image/Layer/New adjustment layer/Selective color…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7456,7 +7501,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/New fill layer/Solid colour…",
+      "id": "menu:Image/Layer/New fill layer/Solid color…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7596,7 +7641,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Mode/CMYK colour",
+      "id": "menu:Image/Mode/CMYK color",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7606,12 +7651,12 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Mode/Indexed colour…",
+      "id": "menu:Image/Mode/Indexed color…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Mode/Lab colour",
+      "id": "menu:Image/Mode/Lab color",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7621,7 +7666,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Mode/RGB colour",
+      "id": "menu:Image/Mode/RGB color",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7656,7 +7701,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Proof/Proof colours",
+      "id": "menu:Image/Proof/Proof colors",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -8136,7 +8181,7 @@
       "owner": "editor"
     },
     {
-      "id": "menu:Object/Insert web frame…",
+      "id": "menu:Object/Insert web frame",
       "kind": "menu",
       "owner": "media.paged.web"
     },
@@ -8777,6 +8822,11 @@
     },
     {
       "id": "menu:View/Fit spread in window",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Focus workspace",
       "kind": "menu",
       "owner": "editor"
     },
@@ -10758,6 +10808,126 @@
     {
       "id": "menu:Draw/Transform/Transform again",
       "replacement": "menu:Object/Transform/Transform again",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Type on path/Attach",
+      "replacement": "menu:Draw/Type on a path/Attach",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Type on path/Detach",
+      "replacement": "menu:Draw/Type on a path/Detach",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Fill/Foreground colour",
+      "replacement": "menu:Image/Fill/Foreground color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Adjust/Match colour…",
+      "replacement": "menu:Image/Filter/Adjust/Match color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Adjust/Replace colour…",
+      "replacement": "menu:Image/Filter/Adjust/Replace color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Adjust/Selective colour…",
+      "replacement": "menu:Image/Filter/Adjust/Selective color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Filter Gallery/Coloured pencil…",
+      "replacement": "menu:Image/Filter/Filter Gallery/Colored pencil…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Filter Gallery/Watercolour…",
+      "replacement": "menu:Image/Filter/Filter Gallery/Watercolor…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Pixelate/Colour halftone…",
+      "replacement": "menu:Image/Filter/Pixelate/Color halftone…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/Layer style/Colour overlay…",
+      "replacement": "menu:Image/Layer/Layer style/Color overlay…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Colour balance…",
+      "replacement": "menu:Image/Layer/New adjustment layer/Color balance…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Colour lookup…",
+      "replacement": "menu:Image/Layer/New adjustment layer/Color lookup…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Selective colour…",
+      "replacement": "menu:Image/Layer/New adjustment layer/Selective color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New fill layer/Solid colour…",
+      "replacement": "menu:Image/Layer/New fill layer/Solid color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/CMYK colour",
+      "replacement": "menu:Image/Mode/CMYK color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/Indexed colour…",
+      "replacement": "menu:Image/Mode/Indexed color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/Lab colour",
+      "replacement": "menu:Image/Mode/Lab color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/RGB colour",
+      "replacement": "menu:Image/Mode/RGB color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Proof/Proof colours",
+      "replacement": "menu:Image/Proof/Proof colors",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Object/Insert web frame…",
+      "replacement": "menu:Object/Insert web frame",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },

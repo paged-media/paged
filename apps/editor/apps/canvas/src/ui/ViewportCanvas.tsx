@@ -28,7 +28,7 @@
 //   2. Translate pointer + wheel events into camera updates
 //      (`CanvasClient.setCamera`).
 //   3. Track viewport size via ResizeObserver and forward to worker.
-//   4. Render a small HUD overlay (DOM) on top of the canvas.
+//   4. Render a small developer HUD over the canvas (`?debug=hud`).
 //
 // Per spec AC-V-7 the main thread does no rendering work here — the
 // `<canvas>` is opaque from React's perspective after the
@@ -87,6 +87,7 @@ import {
   type PageRect,
 } from "./layout";
 import { pinchCamera, startPinch, type Pinch } from "./pinch";
+import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
 
@@ -114,6 +115,13 @@ export interface ViewportCanvasProps {
   pageOriginsPt?: ReadonlyArray<readonly [number, number]>;
   camera: Camera;
   onCameraChange: (cam: Camera) => void;
+  /** The viewport was resized (`from` → `to`, CSS px): a dock opened,
+   *  closed or was dragged, or the window changed. The camera context
+   *  keeps the document point at the centre (UXI-CAM-003). */
+  onViewportResize?: (
+    from: readonly [number, number],
+    to: readonly [number, number],
+  ) => void;
   /** Called when the user clicks (not drags) on a page, and when a
    *  press-drag on an unselected item selects it before moving it
    *  (F-26). With the Selection tool it resolves to the selection the
@@ -383,6 +391,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // the overlay host with the wrapper (state, not a ref read in render:
   // the overlay follows a resize no other change re-renders for).
   const [hostSize, setHostSize] = useState({ width: 0, height: 0 });
+  // The last laid-out size, kept across a hide (an <Activity> unmounts this
+  // effect): the canvas shown again anchors from the size it left at.
+  const anchorSizeRef = useRef<readonly [number, number]>([0, 0]);
+  const onResized = useEffectEvent(
+    (from: readonly [number, number], to: readonly [number, number]) =>
+      props.onViewportResize?.(from, to),
+  );
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
@@ -400,6 +415,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       if (r.width === lastW && r.height === lastH) return;
       lastW = r.width;
       lastH = r.height;
+      // UXI-CAM-003 — a resize keeps the document point at the centre (a
+      // hidden canvas measures 0 and anchors nothing).
+      if (r.width > 0 && r.height > 0) {
+        const from = anchorSizeRef.current;
+        anchorSizeRef.current = [r.width, r.height];
+        if (from[0] > 0 && from[1] > 0) onResized(from, [r.width, r.height]);
+      }
       const dpr = self.devicePixelRatio || 1;
       if (transferredRef.current) {
         props.client.resizeCanvas(dpr, r.width, r.height);
@@ -1840,21 +1862,28 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         pageIds={props.pageIds}
         pageRects={rects}
       />
-      <ViewportHud
-        camera={props.camera}
-        pageCount={props.pageIds.length}
-        pageIds={props.pageIds}
-        pageRects={rects}
-        selection={props.selection ?? null}
-        fps={props.fps ?? 0}
-        gpuActive={props.gpuActive ?? null}
-        anchorCount={
-          props.resolution ? Object.keys(props.resolution.numbering).length : 0
-        }
-        footnoteCount={props.resolution?.footnoteCount ?? 0}
-        runningHeaders={props.resolution?.runningHeaders ?? []}
-        layoutCacheStats={props.layoutCacheStats ?? null}
-      />
+      {/* F-21 — the developer readout (renderer, fps, cache, camera, frame
+          ids) is a diagnostic: `?debug=hud` shows it. Users read zoom and
+          page from the mode bar and the status bar. */}
+      {debugFlag("hud") && (
+        <ViewportHud
+          camera={props.camera}
+          pageCount={props.pageIds.length}
+          pageIds={props.pageIds}
+          pageRects={rects}
+          selection={props.selection ?? null}
+          fps={props.fps ?? 0}
+          gpuActive={props.gpuActive ?? null}
+          anchorCount={
+            props.resolution
+              ? Object.keys(props.resolution.numbering).length
+              : 0
+          }
+          footnoteCount={props.resolution?.footnoteCount ?? 0}
+          runningHeaders={props.resolution?.runningHeaders ?? []}
+          layoutCacheStats={props.layoutCacheStats ?? null}
+        />
+      )}
     </div>
   );
 }

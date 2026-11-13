@@ -475,7 +475,7 @@ export function imageActions(
   return [
     {
       id: IMAGE_ACTION_IDS.info,
-      title: "Picture size and colour",
+      title: "Picture size and color",
       input: "asset",
       output: "value",
       async run(input) {

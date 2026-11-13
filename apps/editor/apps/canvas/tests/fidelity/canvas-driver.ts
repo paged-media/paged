@@ -101,6 +101,12 @@ export interface OpenCanvasOptions {
    *  appears (default true). A spec that asserts the question itself
    *  passes false and answers it. */
   answerReplacePrompts?: boolean;
+  /** Let the cockpit adapt to the window (editor ADR 1203): at the suite's
+   *  1280 px window the left dock would be a rail. Off by default, so the
+   *  specs about panels read the docked layout they were written against
+   *  (the user's "Adapt the workspace to the window" switch, set before
+   *  boot); a spec about the workspace passes true. */
+  adaptiveWorkspace?: boolean;
 }
 
 /** Open `file` through the React file input (`useDocumentMeta` and the
@@ -203,6 +209,15 @@ export async function openCanvas(
       }, 50);
     });
   }
+  // The adaptive workspace's preference, before the editor reads it. A
+  // later call on the same page adds a later script, which wins.
+  await page.addInitScript((on: boolean) => {
+    try {
+      localStorage.setItem("paged.adaptiveWorkspace", on ? "on" : "off");
+    } catch {
+      /* no storage: the editor's default */
+    }
+  }, options.adaptiveWorkspace === true);
   await page.goto(`/${options.search ?? ""}`);
   // Pull console output into the Playwright test log so render
   // panics surface in the test report instead of vanishing.
