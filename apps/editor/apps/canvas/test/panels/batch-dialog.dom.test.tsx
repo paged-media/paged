@@ -85,7 +85,7 @@ describe("Batch dialog [editor-shell.actions-batch]", () => {
     for (const name of ["One", "Two"]) {
       await h.act(() => h.client.newBlankDocument(612, 792));
       files.push(
-        new File([(await h.client.exportIdml()).slice()], `${name}.idml`),
+        new File([(await h.client.exportIdml()).bytes.slice()], `${name}.idml`),
       );
     }
     h.client.markSaved();

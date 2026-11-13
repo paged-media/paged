@@ -52,6 +52,10 @@ import {
   type ElementProperties,
   type FrameChainLink,
   type GestureType,
+  type GesturePress,
+  type HitResult,
+  type LossEntry,
+  type ExportedLinkWire,
   type SessionPolicy,
   type TemplateFieldProblem,
   type TemplateFieldSummary,
@@ -304,6 +308,7 @@ const WAITS_FOR_GESTURE: ReadonlySet<MainToWorkerKind["kind"]> = new Set<
   "hostObjectsResult",
   "setTemplateFields",
   "openAsTemplate",
+  "mutateCoalesced",
 ]);
 
 /** v66 — the buffers that may move to the worker: a view spanning its
@@ -508,6 +513,58 @@ function svgTooLarge(size: number): WorkerToMain {
     },
   };
 }
+/** Protocol 80 — what {@link CanvasClient.exportIdml} answers. */
+export interface IdmlExport {
+  /** The `.idml` package. */
+  bytes: Uint8Array;
+  /** What the package does not carry, one entry per kind (engine ADR
+   *  1097); empty for a lossless save. */
+  lost: LossEntry[];
+  /** The files a `linkBase` export asks the host to write. */
+  links: ExportedLinkWire[];
+}
+
+/** Protocol 80 — what {@link CanvasClient.beginGestureAt} answers. */
+export interface GesturePressResult {
+  hit: HitResult;
+  /** The item the press took; null when it hit nothing, kept the
+   *  selection or hit outside the scope. */
+  target: ElementId | null;
+  /** The engine's selection after the press. */
+  selection: ElementId[];
+  selectionChanged: boolean;
+  /** The gesture begun; null when none was. */
+  handle: GestureHandle | null;
+  /** Nothing was hit: the drag is a marquee. */
+  marquee: boolean;
+  /** The hit lies outside the press's scope: nothing changed. */
+  outOfScope: boolean;
+  /** Why no gesture began although the press took an item. */
+  refused: GestureFailure | null;
+}
+
+/** Protocol 80 — an edit context's scope ({@link CanvasClient.editScope}). */
+export interface EditScope {
+  root: ElementId;
+  /** Whether the root names something in the document. */
+  found: boolean;
+  /** Every page item below the root, the root left out. */
+  members: readonly ElementId[];
+  /** The stories whose text is in scope. */
+  stories: readonly string[];
+  /** The engine's document revision the scope describes. */
+  revision: number;
+  /** Whether `id` lies in the scope: the root, a member, or a story range,
+   *  table or cell of one of its stories. */
+  contains(id: ElementId): boolean;
+}
+
+/** A page item's identity for the scope: its `Self` (a host that read an
+ *  anchored frame by another kind still names it). */
+function itemKey(id: ElementId): string {
+  return typeof id.id === "string" ? id.id : JSON.stringify(id.id);
+}
+
 export class CanvasClient {
   private readonly worker: Worker;
   /** The selection last posted (`setSelection`); `documentStats` posts it
@@ -578,6 +635,10 @@ export class CanvasClient {
   private gestureIdleWaiters: Array<() => void> = [];
   /** See {@link setReplyGate}. */
   private replyGate: ReplyGate | null = null;
+  /** Protocol 80 — {@link editScope}'s answers for the document state
+   *  `scopeCacheEdit` names. */
+  private readonly scopeCache = new Map<string, EditScope>();
+  private scopeCacheEdit = -1;
 
   constructor(options: CanvasClientOptions) {
     this.defaultFontProvider = options.defaultFontProvider;
@@ -988,9 +1049,46 @@ export class CanvasClient {
    * which is how a caller learns the id of a thing it just created) or
    * `mutationFailed` with the engine's own words. It does not throw on
    * a rejected mutation: a refusal is an answer, not an exception.
+   *
+   * Protocol 80 (engine ADR 1304) — `coalesce` names a run of writes that
+   * is ONE undo step: the first write with a key is a step of its own, and
+   * every following write with the same key joins it (one undo returns to
+   * the state before the first, one redo to the state after the last). The
+   * run ends at a write with another key or none, a gesture, an undo or a
+   * redo, or {@link endCoalesce}. An inspector scrub sends each preview
+   * with one key per scrub and ends the run on release. `label` names the
+   * step (engine ADR 1030). Outside an undo group's amend chain.
    */
-  async mutate(mutation: Mutation): Promise<WorkerToMain> {
+  async mutate(
+    mutation: Mutation,
+    options: { coalesce?: string; label?: string } = {},
+  ): Promise<WorkerToMain> {
+    if (options.coalesce !== undefined) {
+      return this.send({
+        kind: "mutateCoalesced",
+        payload: {
+          coalesce: options.coalesce,
+          mutation,
+          ...(options.label !== undefined ? { label: options.label } : {}),
+        },
+      });
+    }
     return this.send({ kind: "mutate", payload: mutation });
+  }
+
+  /**
+   * Protocol 80 (engine ADR 1304) — end the run of coalescing writes (only
+   * the run keyed `coalesce`, when given), so the next keyed write starts a
+   * step. Resolves to the `appliedSeq` of the step the run ended in, or
+   * null when none was open.
+   */
+  async endCoalesce(coalesce?: string): Promise<number | null> {
+    const reply = await this.send({
+      kind: "endCoalesce",
+      payload: coalesce !== undefined ? { coalesce } : {},
+    });
+    if (reply.kind === "coalesceEnded") return reply.payload.appliedSeq ?? null;
+    throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
   /**
@@ -1192,6 +1290,76 @@ export class CanvasClient {
     });
     if (reply.kind === "marqueeHits") return reply.payload.ids;
     throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 80 (engine ADR 1301) — for each of `ids`, whether it lies in
+   * the edit scope of `root` (`UXI-CTX-010`, `UXI-CTX-011`): the root
+   * itself, a group's members, a container's pasted-in children, a text
+   * frame's story (a story range, a table or a cell in it) and the objects
+   * anchored in it, recursively. A read; one round trip.
+   */
+  async scopeContains(
+    root: ElementId,
+    ids: readonly ElementId[],
+  ): Promise<boolean[]> {
+    const reply = await this.send({
+      kind: "requestScopeContains",
+      payload: { root, ids: [...ids] },
+    });
+    if (reply.kind === "scopeContains") return reply.payload.contains;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 80 (engine ADR 1301) — the whole edit scope of `root`, with a
+   * synchronous {@link EditScope.contains} for a selection guard that may
+   * not wait (the context stack's `isInScope`). Cached per root until the
+   * document changes (any reply {@link changesTheDocument} names, a load
+   * included); `revision` is the engine's for the state it describes.
+   */
+  async editScope(root: ElementId): Promise<EditScope> {
+    const key = `${this.editCount}|${JSON.stringify(root)}`;
+    const cached = this.scopeCache.get(key);
+    if (cached) return cached;
+    const reply = await this.send({
+      kind: "requestScopeContains",
+      payload: { root, ids: [], members: true },
+    });
+    if (reply.kind !== "scopeContains")
+      throw new Error(`unexpected reply: ${reply.kind}`);
+    const p = reply.payload;
+    const members = p.members ?? [];
+    const stories = p.stories ?? [];
+    const memberKeys = new Set(members.map((m) => itemKey(m)));
+    const storySet = new Set(stories);
+    const rootKey = itemKey(root);
+    const scope: EditScope = {
+      root,
+      found: p.found,
+      members,
+      stories,
+      revision: p.revision,
+      contains: (id) => {
+        if (!p.found) return false;
+        if (
+          id.kind === "storyRange" ||
+          id.kind === "table" ||
+          id.kind === "tableCell"
+        )
+          return storySet.has(id.id.story_id);
+        const k = itemKey(id);
+        return k === rootKey || memberKeys.has(k);
+      },
+    };
+    // One entry per root and document state: an edit makes the old keys
+    // unreachable, so the map is cleared rather than left to grow.
+    if (this.scopeCacheEdit !== this.editCount) {
+      this.scopeCache.clear();
+      this.scopeCacheEdit = this.editCount;
+    }
+    this.scopeCache.set(key, scope);
+    return scope;
   }
 
   /**
@@ -1538,14 +1706,29 @@ export class CanvasClient {
    * ("Save As IDML"). One-shot, like `exportSwatchLibrary`: the worker
    * re-emits the parsed designmap + stories + resources as a ZIP and
    * replies `idmlExported` with the bytes (`exportIdmlFailed` on
-   * error). The returned `Uint8Array` is a complete IDML package
+   * error). The returned `bytes` are a complete IDML package
    * (starts with the `PK` zip magic) the caller hands to a browser
    * download, or feeds straight back into `loadDocument` to round-trip.
+   *
+   * Protocol 80 (`UXI-FIL-002`) — the reply's losses come with the bytes:
+   * `lost` is one `LossEntry` per kind of thing the package does not carry
+   * (an `idml.<area>.<what>` code, its severity, the items it stood on and
+   * a sentence; engine ADR 1097), so a lossy save is never silent. `links`
+   * are the files a `linkBase` export asks the host to write.
    */
-  async exportIdml(): Promise<Uint8Array> {
-    const reply = await this.send({ kind: "exportIdml", payload: {} });
+  async exportIdml(
+    options: { linkBase?: string | null } = {},
+  ): Promise<IdmlExport> {
+    const reply = await this.send({
+      kind: "exportIdml",
+      payload: options.linkBase ? { linkBase: options.linkBase } : {},
+    });
     if (reply.kind === "idmlExported") {
-      return new Uint8Array(reply.payload.idmlBytes);
+      return {
+        bytes: new Uint8Array(reply.payload.idmlBytes),
+        lost: reply.payload.lost ?? [],
+        links: reply.payload.links ?? [],
+      };
     }
     if (reply.kind === "exportIdmlFailed") {
       throw new Error(reply.payload.error);
@@ -2405,6 +2588,67 @@ export class CanvasClient {
     if (reply.kind === "gestureFailed") {
       throw new Error(
         `beginGesture failed: ${describeGestureFailure(reply.payload.error)}`,
+      );
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 80 (engine ADR 1303) — a press in ONE round trip: the hit test
+   * at `press.point` (page-local pt on `press.pageId`), the selection
+   * changed as `press.select` says (`replace` | `toggle` | `keep`), and the
+   * gesture (`translate` unless `press.gesture`) begun on the selection,
+   * anchored at the press point (`UXI-OWN-006`, `UXI-OWN-007`). Moves that
+   * come before the answer are deltas from the press point, so the drag
+   * starts where the pointer went down (`UXI-T58`).
+   *
+   * Never throws on an engine answer: `marquee` says nothing was hit (no
+   * gesture; the marquee's release decides the selection), `outOfScope`
+   * that the hit lies outside `press.scope` (nothing changed), and
+   * `refused` why no gesture began although the press took an item (a
+   * lock, a copy refused, another gesture). The selection it reports is
+   * the engine's after the press. A begun gesture holds the document
+   * until its commit or cancel, like {@link beginGesture}'s.
+   */
+  async beginGestureAt(
+    press: Omit<GesturePress, "cameraScale"> & { cameraScale?: number },
+  ): Promise<GesturePressResult> {
+    const camera = this.camera.read();
+    const cameraScale =
+      press.cameraScale ?? (camera.scale > 0 ? camera.scale : undefined);
+    this.pendingGestureBegins += 1;
+    let reply: WorkerToMain;
+    try {
+      reply = await this.send({
+        kind: "beginGestureAt",
+        payload: {
+          ...press,
+          ...(cameraScale !== undefined ? { cameraScale } : {}),
+        },
+      });
+      if (reply.kind === "gestureBegunAt" && reply.payload.handle != null) {
+        this.liveGestures.add(reply.payload.handle);
+      }
+    } finally {
+      this.pendingGestureBegins -= 1;
+      this.noteGestureSettled();
+    }
+    if (reply.kind === "gestureBegunAt") {
+      const p = reply.payload;
+      return {
+        hit: p.hit,
+        target: p.target ?? null,
+        selection: p.selection,
+        selectionChanged: p.selectionChanged,
+        handle: p.handle ?? null,
+        marquee: p.marquee,
+        outOfScope: p.outOfScope,
+        refused: p.refused ?? null,
+      };
+    }
+    if (reply.kind === "gestureFailed") {
+      throw new Error(
+        `beginGestureAt failed: ${describeGestureFailure(reply.payload.error)}`,
       );
     }
     throw new Error(`unexpected reply: ${reply.kind}`);

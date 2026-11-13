@@ -65,8 +65,9 @@ const reply = await client.mutate({
 // reply.kind === "mutationApplied" — `minted` carries the ids the
 // engine just created, which is how you address what you made.
 
-// Out: IDML, .paged, or PDF.
-const idml = await client.exportIdml();
+// Out: IDML, .paged, or PDF. An IDML export answers the package and what
+// it could not carry (`lost`, one LossEntry per kind).
+const { bytes, lost } = await client.exportIdml();
 ```
 
 `mutate()` takes the engine's `Mutation` type rather than offering a
@@ -98,6 +99,50 @@ ADR 193, amendment 1). `marqueeHits(pageId, rect, { mode, scope })` takes a
 rectangle that may cross pages and start on the pasteboard (engine ADR
 1011, amendment 1). Snap lines carry `targetKind` (engine ADR 125,
 amendment 2).
+
+## Presses, scopes, coalesced writes and losses (protocol 80)
+
+- **A press in one round trip** (engine ADR 1303).
+  `beginGestureAt({ pageId, point, modifiers, select, target, scope,
+gesture, cameraScale })` hit-tests the press point (page-local pt), changes
+  the selection (`select`: `replace` keeps a selection the press lands in,
+  `toggle` adds, `keep` moves the selection whatever was hit), and begins
+  the gesture on the selection, anchored at the point. `target` picks what a
+  press on a group member takes (`outermost`, `leaf`, `inGroup`). The answer
+  is `{ hit, target, selection, selectionChanged, handle, marquee,
+outOfScope, refused }`: `marquee` when nothing was hit, `outOfScope` when
+  the hit lies outside `scope`, `refused` (a `GestureFailure`) when the
+  press took an item but no gesture began (a lock, a copy refused). Moves
+  are deltas from the press point, so a drag that starts before the answer
+  starts where the pointer went down.
+- **The edit scope** (engine ADR 1301). `scopeContains(root, ids)` answers
+  whether each id lies in `root`'s subtree: a group's members, a
+  container's pasted-in children, a text frame's story and the objects
+  anchored in it, recursively. `editScope(root)` answers the whole scope
+  with a synchronous `contains(id)`, cached per root until the document
+  changes.
+- **Coalesced writes** (engine ADR 1304). `mutate(mutation, { coalesce })`
+  joins consecutive writes with one key into one undo step (an inspector
+  scrub: one key per scrub); `endCoalesce(key?)` ends the run, as a write
+  with another key or none, a gesture, an undo or a redo does.
+- **Duplicates are all or nothing** (engine ADR 1302). An Alt-drag across
+  spreads copies each spread's items onto that spread. A selection that
+  cannot be copied whole is refused at the press with
+  `GestureFailure` `duplicateRefused { id, reason }`; Alt pressed during the
+  drag keeps it a move, and the update (or the `gestureSnapLines`
+  notification on the shared-memory path) carries `duplicateRefused`.
+- **Losses** (`UXI-FIL-002`). `exportIdml({ linkBase? })` answers
+  `{ bytes, lost, links }`: `lost` is one `LossEntry` per kind of thing the
+  package does not carry (engine ADR 1097). `loadDocument` answers a
+  `DocumentHandle` whose `losses` lists what the opened IDML does not carry
+  or show as its source did (engine ADR 1305: `idml.import.<what>` codes —
+  frames left out, substituted fonts, missing or undecodable links,
+  content drawn from a preview or not at all, clipping paths not applied,
+  page numbers from a fallback rule), with the items and pages each stood
+  on. Other formats report through their own doors: a PSD's layers through
+  `requestPsdLayersPlace` (`PsdPlacePlan.losses`), an SVG through
+  `svgImportPlan` (`report.losses`), DOCX, PPTX and PDF through their
+  modules' import results.
 
 ## The catalog
 

@@ -58,6 +58,10 @@ mod wasm {
     struct GestureRawOutcome {
         page_ids: Vec<PageId>,
         snap_lines: Vec<SnapLine>,
+        /// v80 (engine ADR 1302) — Alt held on a selection that cannot be
+        /// copied: why the drag moves instead.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duplicate_refused: Option<paged_canvas::gesture::DuplicateRefusal>,
     }
 
     /// Browser wall-clock in milliseconds — the `Clock` the dispatch
@@ -877,6 +881,7 @@ mod wasm {
                     let outcome = GestureRawOutcome {
                         page_ids: result.page_ids,
                         snap_lines: result.snap_lines,
+                        duplicate_refused: result.duplicate_refused,
                     };
                     serde_json::to_string(&outcome).unwrap_or_default()
                 }

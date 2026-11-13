@@ -155,9 +155,13 @@ test.describe.serial("plugin menus — paged.draw", () => {
       Array.from(
         await (
           globalThis as unknown as {
-            __canvas: { client: { exportIdml(): Promise<Uint8Array> } };
+            __canvas: {
+              client: { exportIdml(): Promise<{ bytes: Uint8Array }> };
+            };
           }
-        ).__canvas.client.exportIdml(),
+        ).__canvas.client
+          .exportIdml()
+          .then((r) => r.bytes),
       ),
     );
   });

@@ -68,3 +68,15 @@ moving) was not what the release made (the item staying, a copy appearing). Now:
   `false`, so an Alt press-drag released before its first update still duplicates.
 - A preview that adds or removes the copy rebuilds as a committed structural edit does (the
   cross-build emit caches go); a plain move keeps them for the whole drag, as before.
+
+## Amendment 2 (2026-11-13): a copy is all or nothing
+
+Protocol 80; engine ADR 1302; editor ADR 1201, decision D-16; `UXI-SEL-007`.
+
+Amendment 1 left a copy the snippet refuses unpreviewed, with its commit failing as before:
+an Alt-drag of a selection on two spreads failed at the release. Now an Alt-drag copies a
+selection on several spreads spread by spread (one snippet per spread, each on its own spread,
+all by the same offset, one undo step); a selection that cannot be copied whole is refused at a
+press with Alt held (`GestureFailure::DuplicateRefused { id, reason }`), and Alt pressed during
+the drag keeps it a move whose updates say why (`duplicateRefused`). Copy and Paste still take
+the items of one spread.

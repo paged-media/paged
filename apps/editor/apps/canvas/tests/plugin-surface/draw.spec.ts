@@ -498,10 +498,12 @@ const documentDigest = (page: Page) =>
   page.evaluate(async () => {
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { exportIdml: () => Promise<Uint8Array> } };
+        __canvas: {
+          client: { exportIdml: () => Promise<{ bytes: Uint8Array }> };
+        };
       }
     ).__canvas;
-    const bytes = await c.client.exportIdml();
+    const bytes = (await c.client.exportIdml()).bytes;
     let h = 2166136261;
     for (let i = 0; i < bytes.length; i++) {
       h ^= bytes[i];

@@ -124,7 +124,7 @@ test.describe("The default family's italic", () => {
       const c = (
         globalThis as unknown as {
           __canvas: {
-            client: { exportIdml(): Promise<Uint8Array> };
+            client: { exportIdml(): Promise<{ bytes: Uint8Array }> };
             registries: {
               importers: {
                 resolve(name: string): {
@@ -138,7 +138,7 @@ test.describe("The default family's italic", () => {
           };
         }
       ).__canvas;
-      const bytes = await c.client.exportIdml();
+      const bytes = (await c.client.exportIdml()).bytes;
       const imp = c.registries.importers.resolve("italic.idml");
       if (!imp) throw new Error("no importer claims .idml");
       await imp.import({ name: "italic.idml", bytes });

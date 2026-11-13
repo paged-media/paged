@@ -2517,3 +2517,245 @@ fn uxi_t60_a_suspended_script_resumes_only_after_the_gesture() {
         serde_json::json!(["[log] Alpha"])
     );
 }
+
+// ---------------------------------------------------------------------
+// Protocol 80 — the scope, the press, coalesced writes (engine ADRs
+// 1301, 1303, 1304)
+// ---------------------------------------------------------------------
+
+fn send(
+    core: &mut WorkerCore,
+    seq: u64,
+    kind: &str,
+    payload: serde_json::Value,
+) -> serde_json::Value {
+    let mut msg = serde_json::json!({ "seq": seq, "protocol": protocol(), "kind": kind });
+    if !payload.is_null() {
+        msg["payload"] = payload;
+    }
+    roundtrip(core, &msg)
+}
+
+fn tf1_left(core: &mut WorkerCore, seq: u64) -> f64 {
+    let geo = send(
+        core,
+        seq,
+        "requestElementGeometry",
+        serde_json::json!({ "ids": [{ "kind": "textFrame", "id": "tf1" }] }),
+    );
+    let item = &geo["payload"]["items"][0];
+    item["bounds"][1].as_f64().expect("bounds") + item["itemTransform"][4].as_f64().unwrap_or(0.0)
+}
+
+fn undo_len(core: &mut WorkerCore, seq: u64) -> u64 {
+    let log = send(core, seq, "requestUndoLog", serde_json::json!({}));
+    log["payload"]["undoLen"].as_u64().expect("undoLen")
+}
+
+fn move_tf1(x: f64) -> serde_json::Value {
+    serde_json::json!({ "op": "moveFrame", "args": { "frameId": "tf1", "transform": [1, 0, 0, 1, x, 0] } })
+}
+
+/// `UXI-T44` over the wire: the scope answers per id, lists its members
+/// and stories when asked, and names the revision it holds for.
+#[test]
+fn uxi_t44_the_wire_answers_the_scope_of_a_text_frame() {
+    let mut core = loaded_core();
+    let reply = send(
+        &mut core,
+        2,
+        "requestScopeContains",
+        serde_json::json!({
+            "root": { "kind": "textFrame", "id": "tf1" },
+            "ids": [
+                { "kind": "textFrame", "id": "tf1" },
+                { "kind": "storyRange", "id": { "story_id": "story1", "start": 0, "end": 5 } },
+                { "kind": "rectangle", "id": "elsewhere" }
+            ],
+            "members": true
+        }),
+    );
+    assert_eq!(reply["kind"], "scopeContains", "{reply}");
+    assert_eq!(reply["payload"]["found"], true);
+    assert_eq!(
+        reply["payload"]["contains"],
+        serde_json::json!([true, true, false])
+    );
+    assert_eq!(reply["payload"]["stories"], serde_json::json!(["story1"]));
+    let revision = reply["payload"]["revision"].as_u64().expect("revision");
+    let edit = send(&mut core, 3, "mutate", move_tf1(5.0));
+    assert_eq!(edit["kind"], "mutationApplied", "{edit}");
+    let again = send(
+        &mut core,
+        4,
+        "requestScopeContains",
+        serde_json::json!({ "root": { "kind": "textFrame", "id": "tf1" } }),
+    );
+    assert!(
+        again["payload"]["revision"].as_u64().unwrap() > revision,
+        "{again}"
+    );
+    assert!(again["payload"]["members"].is_null(), "not asked: {again}");
+}
+
+/// `UXI-T58` over the wire: one `beginGestureAt` hits, selects and begins;
+/// the drag moves from the press point; the commit is one step.
+#[test]
+fn uxi_t58_the_wire_begins_a_gesture_at_a_press() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let begun = send(
+        &mut core,
+        3,
+        "beginGestureAt",
+        serde_json::json!({ "pageId": "p1", "point": [150.0, 150.0],
+            "modifiers": { "shift": false, "alt": false }, "select": "replace",
+            "target": { "kind": "outermost" }, "cameraScale": 1.0 }),
+    );
+    assert_eq!(begun["kind"], "gestureBegunAt", "{begun}");
+    let payload = &begun["payload"];
+    assert_eq!(
+        payload["hit"]["element"],
+        serde_json::json!({ "kind": "textFrame", "id": "tf1" })
+    );
+    assert_eq!(
+        payload["selection"],
+        serde_json::json!([{ "kind": "textFrame", "id": "tf1" }])
+    );
+    assert_eq!(payload["marquee"], false);
+    assert!(payload["refused"].is_null(), "{begun}");
+    let handle = payload["handle"].clone();
+    assert!(handle.is_number(), "{begun}");
+    let up = send(
+        &mut core,
+        4,
+        "updateGesture",
+        serde_json::json!({ "handle": handle, "delta": [25.0, 0.0],
+            "modifiers": { "shift": false, "alt": false, "disableSnap": true } }),
+    );
+    assert_eq!(up["kind"], "gestureUpdated", "{up}");
+    let done = send(
+        &mut core,
+        5,
+        "commitGesture",
+        serde_json::json!({ "handle": handle }),
+    );
+    assert_eq!(done["kind"], "gestureCommitted", "{done}");
+    assert_eq!(tf1_left(&mut core, 6), 125.0);
+    assert_eq!(undo_len(&mut core, 7), steps + 1);
+    // A press on nothing: a marquee, no gesture.
+    let empty = send(
+        &mut core,
+        8,
+        "beginGestureAt",
+        serde_json::json!({ "pageId": "p1", "point": [20.0, 20.0] }),
+    );
+    assert_eq!(empty["payload"]["marquee"], true, "{empty}");
+    assert!(empty["payload"]["handle"].is_null(), "{empty}");
+}
+
+/// The history table (`UXI-MUT-*`): an inspector scrub is one undo step
+/// however many previews it wrote; one undo returns to the state before
+/// the first write, one redo to the state after the last.
+#[test]
+fn coalesced_writes_with_one_key_are_one_undo_step() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    for (i, x) in [10.0, 20.0, 30.0].into_iter().enumerate() {
+        let r = send(
+            &mut core,
+            3 + i as u64,
+            "mutateCoalesced",
+            serde_json::json!({ "coalesce": "scrub:x", "mutation": move_tf1(x) }),
+        );
+        assert_eq!(r["kind"], "mutationApplied", "{r}");
+    }
+    assert_eq!(tf1_left(&mut core, 10), 130.0);
+    assert_eq!(undo_len(&mut core, 11), steps + 1, "one step");
+    let ended = send(&mut core, 12, "endCoalesce", serde_json::json!({}));
+    assert_eq!(ended["kind"], "coalesceEnded", "{ended}");
+    assert!(ended["payload"]["appliedSeq"].is_number(), "{ended}");
+    let undone = send(&mut core, 13, "undo", serde_json::Value::Null);
+    assert_eq!(undone["kind"], "undoApplied", "{undone}");
+    assert_eq!(tf1_left(&mut core, 14), 100.0, "before the first");
+    let redone = send(&mut core, 15, "redo", serde_json::Value::Null);
+    assert_eq!(redone["kind"], "redoApplied", "{redone}");
+    assert_eq!(tf1_left(&mut core, 16), 130.0, "after the last");
+}
+
+/// A run ends at another key, at a write with no key, at an undo and at
+/// `endCoalesce`; a refused write of the run keeps it.
+#[test]
+fn a_run_of_coalesced_writes_ends_where_the_history_says() {
+    let mut core = loaded_core();
+    let base = undo_len(&mut core, 2);
+    let keyed = |core: &mut WorkerCore, seq: u64, key: &str, x: f64| {
+        let r = send(
+            core,
+            seq,
+            "mutateCoalesced",
+            serde_json::json!({ "coalesce": key, "mutation": move_tf1(x) }),
+        );
+        assert_eq!(r["kind"], "mutationApplied", "{r}");
+    };
+    keyed(&mut core, 3, "a", 1.0);
+    keyed(&mut core, 4, "a", 2.0);
+    assert_eq!(undo_len(&mut core, 5), base + 1);
+    keyed(&mut core, 6, "b", 3.0);
+    assert_eq!(undo_len(&mut core, 7), base + 2, "another key: a new step");
+    let plain = send(&mut core, 8, "mutate", move_tf1(4.0));
+    assert_eq!(plain["kind"], "mutationApplied", "{plain}");
+    keyed(&mut core, 9, "b", 5.0);
+    assert_eq!(
+        undo_len(&mut core, 10),
+        base + 4,
+        "after a plain write: a new step"
+    );
+    // A refused write of the run keeps it.
+    let refused = send(
+        &mut core,
+        11,
+        "mutateCoalesced",
+        serde_json::json!({ "coalesce": "b",
+            "mutation": { "op": "moveFrame", "args": { "frameId": "nope", "transform": [1, 0, 0, 1, 0, 0] } } }),
+    );
+    assert_eq!(refused["kind"], "mutationFailed", "{refused}");
+    keyed(&mut core, 12, "b", 6.0);
+    assert_eq!(undo_len(&mut core, 13), base + 4, "the run stood");
+    send(
+        &mut core,
+        14,
+        "endCoalesce",
+        serde_json::json!({ "coalesce": "b" }),
+    );
+    keyed(&mut core, 15, "b", 7.0);
+    assert_eq!(undo_len(&mut core, 16), base + 5, "ended: a new step");
+    let undone = send(&mut core, 17, "undo", serde_json::Value::Null);
+    assert_eq!(undone["kind"], "undoApplied", "{undone}");
+    keyed(&mut core, 18, "b", 8.0);
+    assert_eq!(
+        undo_len(&mut core, 19),
+        base + 5,
+        "after an undo: a new step"
+    );
+}
+
+/// Engine ADR 1305 — a loaded document's handle carries the import's losses
+/// (none for a document that shows all it names).
+#[test]
+fn document_loaded_carries_the_import_losses() {
+    let mut core = WorkerCore::new();
+    let reply = roundtrip(&mut core, &load_msg(1));
+    assert_eq!(reply["kind"], "documentLoaded", "{reply}");
+    // No font registered: the run's face is substituted, and said so.
+    let losses = reply["payload"]["losses"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        losses
+            .iter()
+            .all(|l| l["code"].as_str().unwrap_or("").starts_with("idml.import.")),
+        "{reply}"
+    );
+}

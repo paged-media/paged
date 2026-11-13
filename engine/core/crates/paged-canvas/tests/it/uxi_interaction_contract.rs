@@ -716,3 +716,562 @@ fn uxi_t06_a_flapping_alt_commits_what_one_update_would() {
         "the flapped commit differs from the direct one"
     );
 }
+
+// ── protocol 80 ─────────────────────────────────────────────────────────
+
+/// Every rectangle on every spread: (spread index, id, [top, left,
+/// bottom, right] in spread space).
+fn all_rects(m: &CanvasModel) -> Vec<(usize, String, [f32; 4])> {
+    let mut out = Vec::new();
+    for (si, parsed) in m.scene().spreads.iter().enumerate() {
+        for r in &parsed.spread.rectangles {
+            let b = r.bounds;
+            let [tx, ty] = r.item_transform.map_or([0.0, 0.0], |t| [t[4], t[5]]);
+            out.push((
+                si,
+                r.self_id.clone().unwrap_or_default(),
+                [b.top + ty, b.left + tx, b.bottom + ty, b.right + tx],
+            ));
+        }
+    }
+    out
+}
+
+/// One page holding `items` (spread XML) besides the page.
+fn page_with(items: &str) -> CanvasModel {
+    let spread = format!(
+        r#"<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+{items}
+</Spread>"#
+    );
+    CanvasModel::load(
+        "press",
+        &package(&[("s1", spread)]),
+        CanvasOptions::default(),
+    )
+    .expect("load")
+}
+
+fn press(page: &str, point: (f32, f32)) -> paged_canvas::press::GesturePress {
+    paged_canvas::press::GesturePress {
+        page_id: PageId(page.into()),
+        point,
+        modifiers: none(),
+        select: paged_canvas::press::PressSelect::Replace,
+        target: paged_canvas::press::PressTarget::Outermost,
+        scope: None,
+        gesture: None,
+        filter: None,
+        camera_scale: Some(1.0),
+    }
+}
+
+fn group(id: &str) -> ElementId {
+    ElementId::Group(id.into())
+}
+
+// ── EN5: the edit scope (engine ADR 1301; UXI-T44) ──────────────────────
+
+#[test]
+fn uxi_t44_a_group_scope_holds_its_members_and_nothing_else() {
+    let m = one_page("");
+    let scope = m.scope_subtree(&group("g"));
+    assert!(scope.found);
+    assert_eq!(ids(&scope.members), vec!["rectangle:ga", "rectangle:gb"]);
+    assert_eq!(
+        m.scope_contains(
+            &group("g"),
+            &[group("g"), rect("ga"), rect("gb"), rect("m"), rect("t")]
+        ),
+        vec![true, true, true, false, false],
+        "the root, its members — and not the items beside it"
+    );
+}
+
+#[test]
+fn uxi_t44_a_container_scope_holds_what_is_pasted_into_it() {
+    let mut m = one_page("");
+    m.apply_mutation(&Mutation::PasteInto {
+        container_id: rect("t"),
+        child_id: rect("m"),
+    })
+    .expect("paste m into t");
+    assert_eq!(
+        m.scope_contains(&rect("t"), &[rect("m"), rect("ga")]),
+        vec![true, false]
+    );
+    // A nested group: its members are in the scope of what holds it.
+    m.apply_mutation(&Mutation::PasteInto {
+        container_id: rect("t"),
+        child_id: group("g"),
+    })
+    .expect("paste g into t");
+    assert_eq!(
+        m.scope_contains(&rect("t"), &[group("g"), rect("ga"), rect("gb")]),
+        vec![true, true, true]
+    );
+}
+
+#[test]
+fn uxi_t44_a_text_frame_scope_holds_its_story_and_what_is_anchored_in_it() {
+    let spread = r#"<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="tf1" ParentStory="st1" GeometricBounds="72 72 600 540" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="tf2" ParentStory="st2" GeometricBounds="620 72 700 540" ItemTransform="1 0 0 1 0 0"/>
+</Spread>"#;
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        let mut put = |name: &str, body: &str| {
+            zip.start_file(name, opts).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        };
+        put("mimetype", "application/vnd.adobe.indesign-idml-package");
+        put(
+            "designmap.xml",
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_st1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_st2.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+        );
+        put(
+            "Spreads/Spread_s1.xml",
+            &format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+{spread}</idPkg:Spread>"#
+            ),
+        );
+        for st in ["st1", "st2"] {
+            put(
+                &format!("Stories/Story_{st}.xml"),
+                &format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Story Self="{st}"><ParagraphStyleRange><CharacterStyleRange>
+<Content>Hello world</Content>
+</CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#
+                ),
+            );
+        }
+        zip.finish().unwrap();
+    }
+    let mut m = CanvasModel::load("anchored", &buf, CanvasOptions::default()).expect("load");
+    let anchored = m
+        .apply_mutation(&Mutation::InsertAnchoredFrame {
+            paragraph: None,
+            story_id: "st1".into(),
+            offset: 0,
+            width: 40.0,
+            height: 40.0,
+            image_uri: None,
+            kind: None,
+            layout: None,
+            cell: None,
+        })
+        .expect("anchor a frame in st1")
+        .created_id
+        .expect("the anchored frame's id");
+    let in_story = ElementId::StoryRange {
+        story_id: "st1".into(),
+        start: 0,
+        end: 5,
+        cell: None,
+        paragraph: None,
+    };
+    let elsewhere = ElementId::StoryRange {
+        story_id: "st2".into(),
+        start: 0,
+        end: 5,
+        cell: None,
+        paragraph: None,
+    };
+    let tf1 = ElementId::TextFrame("tf1".into());
+    assert_eq!(
+        m.scope_contains(&tf1, &[anchored.clone(), in_story, elsewhere]),
+        vec![true, true, false],
+        "the anchored frame and the frame's own text, not another story's"
+    );
+    assert_eq!(m.scope_subtree(&tf1).stories, vec!["st1".to_string()]);
+    // The anchored frame is a root of its own too.
+    assert!(m.scope_subtree(&anchored).found);
+}
+
+#[test]
+fn uxi_t44_an_unknown_root_has_an_empty_scope() {
+    let m = one_page("");
+    let scope = m.scope_subtree(&group("nope"));
+    assert!(!scope.found);
+    assert_eq!(
+        m.scope_contains(&group("nope"), &[group("nope"), rect("m")]),
+        vec![false, false]
+    );
+}
+
+#[test]
+fn uxi_t44_the_revision_moves_with_the_document_and_the_scope_with_it() {
+    let mut m = one_page("");
+    let before = m.document_revision();
+    assert_eq!(m.document_revision(), before, "a read does not move it");
+    m.apply_mutation(&Mutation::PasteInto {
+        container_id: rect("t"),
+        child_id: rect("m"),
+    })
+    .expect("paste");
+    assert!(m.document_revision() > before);
+    assert!(m.scope_contains(&rect("t"), &[rect("m")])[0]);
+    m.undo().expect("undo");
+    assert!(
+        !m.scope_contains(&rect("t"), &[rect("m")])[0],
+        "undone, m left t"
+    );
+}
+
+/// `UXI-CTX-010` — a press inside an entered context on an item outside
+/// its scope neither selects nor moves it.
+#[test]
+fn uxi_t44_a_press_outside_the_scope_changes_nothing() {
+    let mut m = one_page("");
+    let steps = undo_len(&m);
+    let mut p = press("p1", (150.0, 150.0)); // on m
+    p.scope = Some(group("g"));
+    p.target = paged_canvas::press::PressTarget::InGroup { id: "g".into() };
+    let out = m.begin_gesture_at(&p);
+    assert!(out.out_of_scope);
+    assert!(out.handle.is_none() && out.target.is_none());
+    assert!(m.element_selection.ids.is_empty(), "nothing selected");
+    assert_eq!(m.active_gesture_handle(), None);
+    // Inside the scope the press takes the member, not the group.
+    let mut p = press("p1", (125.0, 325.0)); // on ga
+    p.scope = Some(group("g"));
+    p.target = paged_canvas::press::PressTarget::InGroup { id: "g".into() };
+    let out = m.begin_gesture_at(&p);
+    assert_eq!(out.target, Some(rect("ga")));
+    let h = out.handle.expect("begun");
+    m.cancel_gesture(h).expect("cancel");
+    assert_eq!(undo_len(&m), steps);
+}
+
+// ── EN7: the press (engine ADR 1303; UXI-T58) ───────────────────────────
+
+/// The hit, the selection and the gesture in one call; the drag's deltas
+/// are measured from the press point, so it starts where the pointer went
+/// down (`UXI-OWN-007`).
+#[test]
+fn uxi_t58_a_press_hits_selects_and_begins_in_one_call() {
+    let mut m = one_page("");
+    let steps = undo_len(&m);
+    let out = m.begin_gesture_at(&press("p1", (150.0, 150.0)));
+    assert_eq!(out.hit.element, Some(rect("m")));
+    assert_eq!(out.target, Some(rect("m")));
+    assert_eq!(out.selection, vec![rect("m")]);
+    assert!(out.selection_changed && !out.marquee && out.refused.is_none());
+    assert_eq!(m.element_selection.ids, vec![rect("m")]);
+    let h = out.handle.expect("begun");
+    // A move that came before the answer is a delta from the press point.
+    m.update_gesture(h, (30.0, -20.0), none()).expect("update");
+    m.commit_gesture(h).expect("commit");
+    assert_eq!(bounds_of(&m, "m"), [80.0, 130.0, 180.0, 230.0], "no jump");
+    assert_eq!(undo_len(&m), steps + 1, "one step");
+    m.undo().expect("undo");
+    assert_eq!(bounds_of(&m, "m"), [100.0, 100.0, 200.0, 200.0]);
+}
+
+#[test]
+fn uxi_t58_a_press_on_nothing_is_a_marquee_and_changes_nothing() {
+    let mut m = one_page("");
+    m.element_selection.set(vec![rect("t")]);
+    let out = m.begin_gesture_at(&press("p1", (400.0, 50.0)));
+    assert!(out.marquee);
+    assert!(out.handle.is_none() && out.target.is_none() && !out.selection_changed);
+    assert_eq!(
+        out.selection,
+        vec![rect("t")],
+        "the marquee's release decides"
+    );
+    assert_eq!(m.active_gesture_handle(), None);
+}
+
+#[test]
+fn uxi_t58_a_press_on_a_group_member_takes_by_its_target_rule() {
+    let mut m = one_page("");
+    let on_ga = (125.0, 325.0);
+    let out = m.begin_gesture_at(&press("p1", on_ga));
+    assert_eq!(out.hit.element, Some(rect("ga")));
+    assert_eq!(out.target, Some(group("g")), "the outermost group");
+    m.cancel_gesture(out.handle.expect("begun"))
+        .expect("cancel");
+    let mut p = press("p1", on_ga);
+    p.target = paged_canvas::press::PressTarget::Leaf;
+    let out = m.begin_gesture_at(&p);
+    assert_eq!(out.target, Some(rect("ga")), "direct selection: the leaf");
+    m.cancel_gesture(out.handle.expect("begun"))
+        .expect("cancel");
+    // Inside another group's context a press leaves it: the outermost.
+    let mut p = press("p1", on_ga);
+    p.target = paged_canvas::press::PressTarget::InGroup { id: "other".into() };
+    let out = m.begin_gesture_at(&p);
+    assert_eq!(out.target, Some(group("g")));
+    m.cancel_gesture(out.handle.expect("begun"))
+        .expect("cancel");
+}
+
+/// `UXI-SEL-004` — a press on an item of the selection drags the whole
+/// selection; on an item outside it, the item alone (`replace`) or the
+/// selection with it (`toggle`).
+#[test]
+fn uxi_t58_select_policies_decide_what_the_drag_moves() {
+    let mut m = one_page("");
+    m.element_selection.set(vec![rect("m"), rect("t")]);
+    let out = m.begin_gesture_at(&press("p1", (150.0, 150.0)));
+    assert_eq!(out.selection, vec![rect("m"), rect("t")], "kept");
+    assert!(!out.selection_changed);
+    let h = out.handle.expect("begun");
+    m.update_gesture(h, (10.0, 0.0), none()).expect("update");
+    m.commit_gesture(h).expect("commit");
+    assert_eq!(bounds_of(&m, "m")[1], 110.0);
+    assert_eq!(bounds_of(&m, "t")[1], 510.0, "both moved");
+
+    m.element_selection.set(vec![rect("t")]);
+    let mut p = press("p1", (160.0, 150.0));
+    p.select = paged_canvas::press::PressSelect::Toggle;
+    let out = m.begin_gesture_at(&p);
+    assert_eq!(out.selection, vec![rect("t"), rect("m")], "added");
+    m.cancel_gesture(out.handle.expect("begun"))
+        .expect("cancel");
+
+    m.element_selection.set(vec![rect("t")]);
+    let out = m.begin_gesture_at(&press("p1", (160.0, 150.0)));
+    assert_eq!(out.selection, vec![rect("m")], "replaced");
+    m.cancel_gesture(out.handle.expect("begun"))
+        .expect("cancel");
+
+    // `keep`: the selection moves whatever the press hit.
+    m.element_selection.set(vec![rect("t")]);
+    let mut p = press("p1", (400.0, 50.0)); // nothing there
+    p.select = paged_canvas::press::PressSelect::Keep;
+    let out = m.begin_gesture_at(&p);
+    assert!(!out.marquee);
+    assert_eq!(out.selection, vec![rect("t")]);
+    let h = out.handle.expect("begun");
+    m.update_gesture(h, (0.0, 5.0), none()).expect("update");
+    m.commit_gesture(h).expect("commit");
+    assert_eq!(bounds_of(&m, "t")[0], 505.0);
+}
+
+/// D-08 — a locked item is selected by the press and not moved; the
+/// refusal says why.
+#[test]
+fn uxi_t58_a_locked_item_is_selected_and_its_drag_refused() {
+    let mut m = page_with(
+        r#"<Rectangle Self="lk" GeometricBounds="100 100 200 200" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black" Locked="true"/>"#,
+    );
+    let out = m.begin_gesture_at(&press("p1", (150.0, 150.0)));
+    assert_eq!(out.selection, vec![rect("lk")]);
+    assert!(out.handle.is_none());
+    assert!(
+        matches!(out.refused, Some(paged_canvas::GestureError::Locked(_))),
+        "{:?}",
+        out.refused
+    );
+    assert_eq!(m.active_gesture_handle(), None);
+}
+
+#[test]
+fn uxi_t58_a_press_during_a_gesture_changes_nothing() {
+    let mut m = one_page("");
+    let h = m
+        .begin_gesture(vec![rect("t")], GestureType::Translate, None)
+        .expect("begin");
+    m.element_selection.set(vec![rect("t")]);
+    let out = m.begin_gesture_at(&press("p1", (150.0, 150.0)));
+    assert!(matches!(
+        out.refused,
+        Some(paged_canvas::GestureError::AlreadyActive(active)) if active == h
+    ));
+    assert_eq!(out.selection, vec![rect("t")], "the selection stands");
+    assert!(out.handle.is_none() && out.target.is_none());
+    m.cancel_gesture(h).expect("cancel");
+}
+
+// ── fuzz findings at PAGED_GESTURE_FUZZ_N=200 (engine ADR 1302) ─────────
+
+/// Seeds 48, 141 and 155 — an Alt-drag of a selection on two spreads
+/// failed at its commit (a snippet holds one spread). It copies each
+/// spread's items onto that spread, all by the same offset, as one step.
+#[test]
+fn uxi_t06_an_alt_drag_across_two_spreads_copies_each_on_its_own_spread() {
+    let mut m = facing();
+    let before = all_rects(&m);
+    let steps = undo_len(&m);
+    let h = m
+        .begin_gesture_with(
+            vec![rect("r1"), rect("r3")],
+            GestureType::Translate,
+            None,
+            Some(1.0),
+            alt(),
+        )
+        .expect("begin: the copy can be made");
+    let up = m.update_gesture(h, (12.0, 7.0), alt()).expect("update");
+    assert!(up.duplicate_refused.is_none());
+    let preview = all_rects(&m);
+    m.commit_gesture(h).expect("commit");
+    let after = all_rects(&m);
+    assert_eq!(after, preview, "the commit equals the preview");
+    assert_eq!(undo_len(&m), steps + 1, "one step");
+    let new: Vec<_> = after
+        .iter()
+        .filter(|(_, id, _)| !before.iter().any(|(_, b, _)| b == id))
+        .cloned()
+        .collect();
+    assert_eq!(new.len(), 2, "{new:?}");
+    let orig = |id: &str| before.iter().find(|(_, i, _)| i == id).cloned().unwrap();
+    for (spread, source) in [(0, "r1"), (1, "r3")] {
+        let (si, _, b) = orig(source);
+        assert_eq!(si, spread);
+        let copy = new
+            .iter()
+            .find(|(s, _, _)| *s == spread)
+            .expect("a copy on its spread");
+        assert_eq!(
+            copy.2,
+            [b[0] + 7.0, b[1] + 12.0, b[2] + 7.0, b[3] + 12.0],
+            "{source}"
+        );
+    }
+    m.undo().expect("undo");
+    assert_eq!(all_rects(&m), before, "one undo takes both copies");
+    m.redo().expect("redo");
+    assert_eq!(all_rects(&m), after);
+}
+
+/// D-16 — a selection that cannot be copied whole (here a frame and what
+/// is pasted into it, which a copy of the frame already carries) is refused
+/// at a press with Alt held, before anything moves; Alt pressed during the
+/// drag keeps it a move, said why, and the commit moves as the preview.
+#[test]
+fn uxi_t06_a_selection_that_cannot_copy_is_refused_whole_and_said_why() {
+    let mut m = page_with(
+        r#"<Rectangle Self="box" GeometricBounds="100 100 300 300" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black"/>
+<Oval Self="dot" GeometricBounds="150 150 200 200" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black"/>"#,
+    );
+    m.apply_mutation(&Mutation::PasteInto {
+        container_id: rect("box"),
+        child_id: ElementId::Oval("dot".into()),
+    })
+    .expect("paste the oval in");
+    let opened = m.export_idml().expect("export");
+    let steps = undo_len(&m);
+    let both = vec![rect("box"), ElementId::Oval("dot".into())];
+    let err = m
+        .begin_gesture_with(both.clone(), GestureType::Translate, None, Some(1.0), alt())
+        .expect_err("refused at the press");
+    match err {
+        paged_canvas::GestureError::DuplicateRefused(r) => {
+            assert!(!r.reason.is_empty(), "{r:?}");
+        }
+        other => panic!("expected DuplicateRefused, got {other:?}"),
+    }
+    assert_eq!(m.export_idml().expect("export"), opened, "nothing moved");
+    assert_eq!(m.active_gesture_handle(), None);
+    // Alt pressed during the drag: a move, with the reason.
+    let h = m
+        .begin_gesture(both, GestureType::Translate, None)
+        .expect("begin without Alt");
+    let up = m.update_gesture(h, (20.0, 0.0), alt()).expect("update");
+    assert!(up.duplicate_refused.is_some(), "the update says why");
+    let preview = rects(&m);
+    m.commit_gesture(h).expect("the commit moves");
+    assert_eq!(rects(&m), preview, "as the preview showed");
+    assert_eq!(bounds_of(&m, "box")[1], 120.0);
+    assert_eq!(undo_len(&m), steps + 1);
+}
+
+/// Seed 31 — a pasted copy of a resized path drifted on save → load: the
+/// resize wrote the path's box and not its anchors, and a copy written
+/// afresh took its box from the stale path. The resize carries the path.
+#[test]
+fn a_resized_path_carries_its_anchors_and_its_copy_round_trips() {
+    let mut m = page_with(
+        r#"<Polygon Self="path" ItemTransform="1 0 0 1 0 0" StrokeWeight="1" StrokeColor="Color/Black" FillColor="Swatch/None">
+<Properties><PathGeometry><GeometryPathType PathOpen="true"><PathPointArray>
+<PathPointType Anchor="72 620" LeftDirection="72 620" RightDirection="72 620"/>
+<PathPointType Anchor="144 680" LeftDirection="144 680" RightDirection="144 680"/>
+<PathPointType Anchor="216 620" LeftDirection="216 620" RightDirection="216 620"/>
+</PathPointArray></GeometryPathType></PathGeometry></Properties></Polygon>"#,
+    );
+    let poly = ElementId::Polygon("path".into());
+    let h = m
+        .begin_gesture(
+            vec![poly.clone()],
+            GestureType::Resize {
+                handle: ResizeHandle::NorthEast,
+            },
+            None,
+        )
+        .expect("begin");
+    m.update_gesture(h, (36.0, -60.0), none()).expect("update");
+    m.commit_gesture(h).expect("commit");
+    let p = &m.scene().spreads[0].spread.polygons[0];
+    let xs: Vec<f32> = p.anchors.iter().map(|a| a.anchor.0).collect();
+    let ys: Vec<f32> = p.anchors.iter().map(|a| a.anchor.1).collect();
+    let extent = [
+        ys.iter().cloned().fold(f32::INFINITY, f32::min),
+        xs.iter().cloned().fold(f32::INFINITY, f32::min),
+        ys.iter().cloned().fold(f32::NEG_INFINITY, f32::max),
+        xs.iter().cloned().fold(f32::NEG_INFINITY, f32::max),
+    ];
+    let b = p.bounds;
+    assert_eq!(
+        extent,
+        [b.top, b.left, b.bottom, b.right],
+        "the path fills its box"
+    );
+    assert_eq!(extent, [560.0, 72.0, 680.0, 252.0]);
+    // The copy, written afresh, reads back where it was.
+    let h = m
+        .begin_gesture_with(vec![poly], GestureType::Translate, None, Some(1.0), alt())
+        .expect("begin");
+    m.update_gesture(h, (0.0, 0.0), alt()).expect("update");
+    m.commit_gesture(h).expect("commit");
+    let boxes = |m: &CanvasModel| {
+        let mut v: Vec<[f32; 4]> = m.scene().spreads[0]
+            .spread
+            .polygons
+            .iter()
+            .map(|p| [p.bounds.top, p.bounds.left, p.bounds.bottom, p.bounds.right])
+            .collect();
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v
+    };
+    let saved = m.export_idml().expect("export");
+    let back = CanvasModel::load("back", &saved, CanvasOptions::default()).expect("reload");
+    assert_eq!(boxes(&back), boxes(&m), "the copy round-trips");
+    assert_eq!(boxes(&m).len(), 2);
+}
+
+// ── EN6: the import's losses on the load (engine ADR 1305) ─────────────
+
+#[test]
+fn an_opened_document_reports_what_it_could_not_show() {
+    let m = page_with(
+        r#"<Rectangle Self="pic" GeometricBounds="100 100 300 300" ItemTransform="1 0 0 1 0 0">
+<Image Self="img" ItemTransform="1 0 0 1 0 0"><Link Self="lnk" LinkResourceURI="file:///nowhere/missing.png"/></Image>
+</Rectangle>"#,
+    );
+    let losses = m.handle().losses;
+    let missing = losses
+        .iter()
+        .find(|l| l.code == "idml.import.linkMissing")
+        .unwrap_or_else(|| panic!("a missing link is reported: {losses:?}"));
+    assert_eq!(missing.items, vec!["pic".to_string()]);
+    assert_eq!(missing.pages, vec![0]);
+    // A document that shows all it names reports nothing.
+    assert!(one_page("").handle().losses.is_empty());
+}

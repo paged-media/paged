@@ -147,7 +147,7 @@ async function exportAs(
   format: BatchFormat,
 ): Promise<Uint8Array> {
   const client = editor.client;
-  if (format === "idml") return client.exportIdml();
+  if (format === "idml") return (await client.exportIdml()).bytes;
   if (format === "paged") return client.exportPaged();
   return (await client.exportPdf({ standard: "pdf17" })).bytes;
 }
