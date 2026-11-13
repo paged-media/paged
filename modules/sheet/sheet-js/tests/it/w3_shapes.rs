@@ -393,6 +393,14 @@ fn a_pages_preset_is_written_into_the_drawing__feat__sheet_xlsx_shapes() {
     );
     assert!(s.set_shape_preset(&id, "notAPreset", &[]).is_err());
     let saved = s.save_xlsx().unwrap();
+    // For the Excel oracle (engine ADR 1096, amendment 1): the saved file.
+    if let Ok(dir) = std::env::var("PAGED_XLSX_EXPORT_DIR") {
+        std::fs::write(
+            std::path::Path::new(&dir).join("presets-edited.xlsx"),
+            &saved,
+        )
+        .unwrap();
+    }
     let drawing = part(&saved, id.split('#').next().unwrap());
     assert!(drawing.contains(
         r#"<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>"#

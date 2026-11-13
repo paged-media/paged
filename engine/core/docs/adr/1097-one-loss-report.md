@@ -126,7 +126,7 @@ The IDML export's `lost` lines and the DrawingML mapper's sentences are loss ent
 
    | Producer | Codes (severity) |
    | --- | --- |
-   | declared from the model (`export_losses`) | `idml.mask.opacity`, `idml.vectorEffect.unwritten`, `idml.imageAdjustment.anchored` (dropped); `idml.fillRule.evenOdd`, `idml.lineEnd.office`, `idml.effect.unsupported`, `idml.effect.order`, `idml.vectorEffect.baked`, `idml.imageAdjustment.label`, `idml.media.poster`, `idml.blendMode.photoshop` (approximated); `idml.liveShape.pie` (info) |
+   | declared from the model (`export_losses`) | `idml.mask.opacity`, `idml.vectorEffect.unwritten`, `idml.imageAdjustment.anchored`, `idml.lineEnd.officeAnchored` (dropped); `idml.fillRule.evenOdd`, `idml.lineEnd.office`, `idml.effect.unsupported`, `idml.effect.order`, `idml.vectorEffect.baked`, `idml.imageAdjustment.label`, `idml.media.poster`, `idml.blendMode.photoshop` (approximated); `idml.liveShape.pie` (info) |
    | appearances (`paged_model::appearance::interchange`) | `idml.appearance.baked` (approximated) |
    | paint (`paint_v2_export`, `mesh_fill_export`, `pattern_export`) | `idml.gradient.opacityStops`, `idml.gradient.strokeOpacityStops`, `idml.meshFill.lost`, `idml.pattern.lost`, `idml.pattern.unused` (dropped); `idml.gradient.conic`, `idml.gradient.stopColor`, `idml.gradient.strokeMode`, `idml.meshFill.label`, `idml.pattern.label` (approximated) |
    | comments (`comment_export`) | `idml.comment.unanchored`, `idml.comment.textGone` (dropped); `idml.comment.replies`, `idml.comment.resolved` (approximated) |

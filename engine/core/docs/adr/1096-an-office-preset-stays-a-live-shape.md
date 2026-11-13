@@ -236,4 +236,10 @@ and text rectangle equal the table's, so every preset evaluates bit-identically.
   size the canvas held.
 - `sheet-js` `w3_shapes`: `can` and `cube` are a filled item and a detail item, both live, the
   filled one with shaded contours.
+- Real applications (2026-11-13): Word 16 opened `docx-conformance` `shapes`' saved file
+  (`PAGED_DOCX_EXPORT_DIR`) without a repair prompt, read the resized ellipse at 162 x 72 pt and the
+  line's heads (oval, triangle) on the one line shape, and its own save kept `wp:extent`
+  `2057400 x 914400`, the presets with their adjust values and `a:headEnd` / `a:tailEnd`. Excel 16
+  opened `w3_shapes`' saved workbook (`PAGED_XLSX_EXPORT_DIR`) without repairing it, and its own save
+  kept `roundRect` with `adj = val 40000`.
 

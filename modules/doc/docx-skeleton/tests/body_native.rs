@@ -1080,18 +1080,17 @@ fn shapes_are_anchored_frames_along_their_outline() {
         assert!(!f.anchors.is_empty(), "{:?}", f.self_id);
         assert_eq!(f.subpath_starts.len(), f.subpath_open.len());
     }
-    // Doc ADR 629 — the line with arrow heads is a Group of the line and its
-    // two heads, placed as the shape.
+    // Engine ADR 1093 (amendment 3) — the line with arrow heads is one
+    // frame: its open outline, uncut, with Office's heads on its ends (no
+    // head frames, no group).
     let arrow = frames[7];
-    assert!(matches!(
+    assert!(!matches!(
         arrow.frame_kind,
         paged_model::AnchoredFrameKind::Group
     ));
-    assert_eq!(arrow.children.len(), 3);
-    assert_eq!(arrow.children[0].subpath_open, vec![true]);
-    assert!(arrow.children[1..]
-        .iter()
-        .all(|h| h.fill_color.is_some() && h.subpath_open == vec![false]));
+    assert!(arrow.children.is_empty());
+    assert_eq!(arrow.subpath_open, vec![true]);
+    assert!(arrow.start_office_head.is_some() || arrow.end_office_head.is_some());
     // The triangle's three anchors, closed, filled blue.
     assert_eq!(frames[2].anchors.len(), 3);
     assert_eq!(frames[2].subpath_open, vec![false]);

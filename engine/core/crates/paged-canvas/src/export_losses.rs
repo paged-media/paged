@@ -1102,9 +1102,14 @@ pub(crate) fn live_shape_losses(scene: &Document) -> Vec<LossEntry> {
         }
     }
     for id in ids {
-        out.push(format!(
-            "Office line ends on anchored frame `{id}` have no IDML form — the anchored frame \
-             keeps no line end, so InDesign shows the line without its heads."
+        out.push(idml_loss(
+            "idml.lineEnd.officeAnchored",
+            DROPPED,
+            Some(id),
+            format!(
+                "Office line ends on anchored frame `{id}` have no IDML form — the anchored \
+                 frame keeps no line end, so InDesign shows the line without its heads."
+            ),
         ));
     }
     out
