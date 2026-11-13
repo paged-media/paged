@@ -23,8 +23,9 @@
 //   brand · document | menus (core, then context) | search | theme · Share
 //
 // - The DOCUMENT chip names what is open, with a dot for the engine's
-//   state while it is not ready; beside it the SAVE STATUS says what the
-//   last save really did and where (editor ADR 1203, `SaveStatus`).
+//   state while it is busy or failed. After the menus the SAVE STATUS says
+//   what the last save really did and where (editor ADR 1203,
+//   `SaveStatus`): a dot, and its label when the header has room.
 // - Search shrinks with the space it is given and becomes an icon
 //   below 220 px, so nothing is pushed off the right edge.
 // - Zoom lives in the bottom bar only (it was in both).
@@ -77,12 +78,19 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
       >
         <Brand />
         <DocumentChip status={status} />
-        <SaveStatus />
-        {chrome.has("menubar") && (
+        {chrome.has("menubar") ? (
           <>
             <span style={zoneDividerStyle} aria-hidden />
-            <MenuBar />
+            {/* The save status follows the menus: they stay the first stop
+             *  and keep their place; its dot takes the room the chip's dot
+             *  had. */}
+            <span style={menusAndStatusStyle}>
+              <MenuBar />
+              <SaveStatus />
+            </span>
           </>
+        ) : (
+          <SaveStatus />
         )}
       </div>
 
@@ -156,7 +164,7 @@ export function engineStatusOf(
 }
 
 /** What is open, and the engine's state while it is busy or failed. The
- *  save state is `SaveStatus`'s, beside it. */
+ *  save state is `SaveStatus`'s, after the menus. */
 function DocumentChip({ status }: { status?: string }) {
   const strings = useStrings();
   const { handle, sourceName } = useDocument();
@@ -346,6 +354,13 @@ export function ThemeToggle() {
     </button>
   );
 }
+
+const menusAndStatusStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  minWidth: 0,
+};
 
 const zoneDividerStyle: React.CSSProperties = {
   width: 1,

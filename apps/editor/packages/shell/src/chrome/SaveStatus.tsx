@@ -44,10 +44,13 @@ import { useDocument } from "../state/document-context";
 import { useEditorScope } from "../state/editor-scope";
 import { documentSaver } from "../state/replace-guard";
 import { useSaveState } from "../state/save-status";
-import { useCompactLayout } from "../state/compact";
+import { useCompactLayout, useEditorWidth } from "../state/compact";
 import { SAVE_STATUS } from "./messages";
 
 type Tone = "quiet" | "pending" | "local" | "saved" | "warn" | "error";
+
+/** The editor width from which the header shows the label beside the dot. */
+const LABEL_MIN_WIDTH = 1400;
 
 const DOT: Record<Tone, string> = {
   quiet: "var(--status-draft)",
@@ -148,12 +151,22 @@ function retrySave(scope: ReturnType<typeof useEditorScope>): void {
   if (save) void Promise.resolve(save()).catch(() => undefined);
 }
 
+/** Does the header show the save status's label (not the dot alone)? */
+export function useSaveStatusLabelShown(): boolean {
+  const compact = useCompactLayout() !== null;
+  const width = useEditorWidth();
+  return !compact && width >= LABEL_MIN_WIDTH;
+}
+
 export function SaveStatus() {
   const strings = useStrings();
   const scope = useEditorScope();
   const state = useSaveState();
   const { handle } = useDocument();
-  const compact = useCompactLayout() !== null;
+  // The label needs room the header has from LABEL_MIN_WIDTH on; below it
+  // the dot carries the state (and the label is its name and tooltip), so
+  // nothing in the header is cut.
+  const narrow = !useSaveStatusLabelShown();
   if (!handle && state.kind !== "read-only") return null;
   const { label, tone } = saveStatusLabel(state, strings);
   const time = (at: number) =>
@@ -175,10 +188,10 @@ export function SaveStatus() {
           data-save-state={state.kind}
           aria-label={label}
           title={label}
-          style={triggerStyle}
+          style={narrow ? dotTriggerStyle : triggerStyle}
         >
           <span aria-hidden style={{ ...dotStyle, background: DOT[tone] }} />
-          {!compact && <span style={labelStyle}>{label}</span>}
+          {!narrow && <span style={labelStyle}>{label}</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -303,7 +316,13 @@ const triggerStyle: React.CSSProperties = {
   color: "var(--pg-muted-fg)",
   fontSize: 12,
   cursor: "pointer",
-  flexShrink: 1,
+  flexShrink: 0,
+};
+
+const dotTriggerStyle: React.CSSProperties = {
+  ...triggerStyle,
+  height: "auto",
+  padding: 0,
 };
 
 const dotStyle: React.CSSProperties = {

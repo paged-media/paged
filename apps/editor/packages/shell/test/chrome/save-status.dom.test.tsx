@@ -125,11 +125,11 @@ describe("the save status", () => {
     mount(scope, client, "Annual");
     await settle();
     expect(status()?.dataset.saveState).toBe("new");
-    expect(status()?.textContent).toBe("No changes");
+    expect(status()?.getAttribute("aria-label")).toBe("No changes");
     act(() => edit());
     await settle();
     expect(status()?.dataset.saveState).toBe("editing");
-    expect(status()?.textContent).toBe("Unsaved changes");
+    expect(status()?.getAttribute("aria-label")).toBe("Unsaved changes");
   });
 
   test("UXI-T67: a local commit whose write-back failed reads not synced, offers Retry, and never Saved", async () => {
@@ -167,7 +167,9 @@ describe("the save status", () => {
     off();
     expect(seen).not.toContain("synced");
     expect(status()?.dataset.saveState).toBe("not-synced");
-    expect(status()?.textContent).toBe("Saved locally · Not synced");
+    expect(status()?.getAttribute("aria-label")).toBe(
+      "Saved locally · Not synced",
+    );
     act(() => {
       fireEvent.click(status()!);
     });
@@ -208,7 +210,7 @@ describe("the save status", () => {
       { type: "save-finished", at: 2 },
     ]);
     expect(status()?.dataset.saveState).toBe("synced");
-    expect(status()?.textContent).toBe("Saved");
+    expect(status()?.getAttribute("aria-label")).toBe("Saved");
     act(() => {
       fireEvent.click(status()!);
     });
@@ -228,7 +230,7 @@ describe("the save status", () => {
       { type: "save-failed", code: "export-failed", detail: "boom", at: 2 },
     ]);
     expect(status()?.dataset.saveState).toBe("failed");
-    expect(status()?.textContent).toBe("Couldn't save");
+    expect(status()?.getAttribute("aria-label")).toBe("Couldn't save");
     act(() => {
       fireEvent.click(status()!);
     });
@@ -252,6 +254,6 @@ describe("the save status", () => {
       },
     ]);
     expect(status()?.dataset.saveState).toBe("recovered");
-    expect(status()?.textContent).toBe("Recovered · Not saved");
+    expect(status()?.getAttribute("aria-label")).toBe("Recovered · Not saved");
   });
 });

@@ -177,7 +177,10 @@ test.describe("the save status says what a save did (editor ADR 1203)", () => {
     });
     await save(page);
     await expect(status(page)).toHaveAttribute("data-save-state", "not-synced");
-    await expect(status(page)).toHaveText("Saved locally · Not synced");
+    await expect(status(page)).toHaveAttribute(
+      "aria-label",
+      "Saved locally · Not synced",
+    );
     const seen = await page.evaluate(
       () => (globalThis as unknown as Win).__kinds ?? [],
     );
@@ -227,7 +230,7 @@ test.describe("the save status says what a save did (editor ADR 1203)", () => {
     await status(page).click();
     await page.locator("[data-save-retry]").click();
     await expect(status(page)).toHaveAttribute("data-save-state", "synced");
-    await expect(status(page)).toHaveText("Saved");
+    await expect(status(page)).toHaveAttribute("aria-label", "Saved");
   });
 });
 
