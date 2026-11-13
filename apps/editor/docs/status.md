@@ -142,7 +142,20 @@ normative interaction target and the UX/UI redesign strategy its product directi
 decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work is planned in
 [`interaction-plan.md`](interaction-plan.md).
 
-Nothing of it is implemented yet. The editor behaves as the sections above and the existing
+Track WS's first part has landed (WS0–WS7; [ADR 1203](adr/1203-docks-are-resizable-and-the-workspace-adapts.md),
+[ADR 1204](adr/1204-density-presets.md)): the docks are resizable (240–480 px, per mode) and the
+cockpit adapts to the width it is given (wide; laptop, the left dock a rail with a flyout; narrow,
+both docks overlays), switchable in Edit ▸ Settings; a viewport resize keeps the document point at
+its centre (UXI-T50); the Focus workspace (Cmd/Ctrl+.) hides everything but the canvas and the tool
+rail; density presets (Comfortable, Professional, Compact) size the chrome; a load shows its stages
+(recognized, geometry, first paint, refining) on the canvas and in the header and fits page 1
+(UXI-T49); the header has a save-status slot, a quiet Share and the document in the tab's title;
+Review is off the mode bar, the developer readout is behind `?debug=hud`, and the Window menu
+follows InDesign's categories with one sentence-case name per panel. UX audit F-17, F-18, F-21,
+F-23, F-24, F-53 and F-55 close. WS8–WS10 (zoom and navigation, editing aids, page lenses) are
+planned.
+
+The rest is not implemented yet. The editor behaves as the sections above and the existing
 records describe: Shift-click adds and Cmd-click toggles, the marquee takes what it intersects,
 Tab hides the chrome on a canvas the user clicked into, a double-click on an image frame enters
 paged.image, and Escape is answered by several listeners. Wave 0's interaction inventory
@@ -172,7 +185,8 @@ the `UXI-T` tests and the test harness are being built.
 - **Seams.** Five tools, three export targets (web bundle, social crops, print package),
   the collaboration cluster in the header and several panels (comments, component library,
   review inspector, the data-suite preview, object export, export tagging) are rendered
-  disabled or as placeholders.
+  disabled or as placeholders. The Review mode, mostly such panels, is not offered on the
+  mode bar ([ADR 207](adr/207-honest-seams.md), amended).
 - **Multi-selection edits.** A property edit through a catalogue-bound panel on several
   selected elements sends one mutation per element, so it is one undo step per element
   (`packages/shell/src/catalog/binding-hook.ts:546-549`).
