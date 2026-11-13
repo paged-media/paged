@@ -36,7 +36,9 @@
 // grow. A subscription that the store itself notifies cannot drift that
 // way.
 
+import { isRecord, parseStored } from "../lib/stored-settings";
 import { scoped, type EditorScope } from "./editor-scope";
+import { editorStorage } from "./storage";
 
 export type ViewToggle =
   | "textThreads"
@@ -54,7 +56,38 @@ export type ViewToggle =
   | "pixelGrid"
   | "snapToGrid"
   | "snapToPixel"
-  | "smartGuides";
+  | "smartGuides"
+  // Editor ADR "Editing aids and Proof view" — the editing aids, each
+  // remembered (`paged.view.editingAids`); `textThreads` above is one.
+  | EditingAidToggle;
+
+/** The editing aids (the redesign strategy's §4.1): the nonprinting
+ *  structure drawn over the page while editing. `textThreads` is the
+ *  View menu's Show text threads. */
+export type EditingAidToggle =
+  | "frameEdges"
+  | "marginsColumns"
+  | "guides"
+  | "baselineGrid"
+  | "textThreads"
+  | "oversetMarkers"
+  | "hiddenCharacters"
+  | "nonprinting";
+
+/** The editing aids in the order the control lists them. */
+export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
+  "frameEdges",
+  "marginsColumns",
+  "guides",
+  "baselineGrid",
+  "textThreads",
+  "oversetMarkers",
+  "hiddenCharacters",
+  "nonprinting",
+];
+
+const isAid = (t: ViewToggle): t is EditingAidToggle =>
+  (EDITING_AID_TOGGLES as readonly string[]).includes(t);
 
 type Listener = () => void;
 
@@ -90,7 +123,54 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   snapToPixel: false,
   // On by default, as Illustrator's Smart Guides are.
   smartGuides: true,
+  // Editing aids. Off: the frame edges of every page item (a clean page
+  // reads as the publication; the selection still shows its own) and the
+  // document's baseline grid, as InDesign hides it by default.
+  frameEdges: false,
+  baselineGrid: false,
+  // On, as before they could be hidden: margins and columns, the ruler
+  // guides, the overset marker on a frame whose story runs over.
+  marginsColumns: true,
+  guides: true,
+  oversetMarkers: true,
+  // Hidden characters need glyph positions of spaces, tabs and returns
+  // the engine does not report yet: the control shows it, disabled.
+  hiddenCharacters: false,
+  // The engine draws nonprinting items on screen and leaves them out of
+  // export; hiding them on screen needs an engine view option it lacks:
+  // shown as on and disabled.
+  nonprinting: true,
 };
+
+/** Where the editing aids are remembered (an editor preference). */
+const AIDS_STORAGE_KEY = "paged.view.editingAids";
+
+/** The stored aids, field by field: a value that is not a boolean, or an
+ *  aid that is not known, is ignored (ADR 247). */
+function loadAids(scope: EditorScope): Partial<Record<ViewToggle, boolean>> {
+  const out: Partial<Record<ViewToggle, boolean>> = {};
+  try {
+    const stored = parseStored(editorStorage(scope).getItem(AIDS_STORAGE_KEY));
+    if (!isRecord(stored)) return out;
+    for (const aid of EDITING_AID_TOGGLES) {
+      const v = stored[aid];
+      if (typeof v === "boolean") out[aid] = v;
+    }
+  } catch {
+    /* storage unavailable: the defaults */
+  }
+  return out;
+}
+
+function saveAids(scope: EditorScope, state: Record<ViewToggle, boolean>) {
+  const aids: Partial<Record<EditingAidToggle, boolean>> = {};
+  for (const aid of EDITING_AID_TOGGLES) aids[aid] = state[aid];
+  try {
+    editorStorage(scope).setItem(AIDS_STORAGE_KEY, JSON.stringify(aids));
+  } catch {
+    /* persistence is a convenience only */
+  }
+}
 
 /** The pairs that exclude each other: turning one on turns the other off. */
 const EXCLUSIVE: Partial<Record<ViewToggle, ViewToggle>> = {
@@ -110,8 +190,8 @@ export function viewModeOf(scope: EditorScope): ViewModeName {
   return "preview";
 }
 
-const TOGGLES = scoped("viewToggles", () => ({
-  state: { ...DEFAULTS } as Record<ViewToggle, boolean>,
+const TOGGLES = scoped("viewToggles", (scope) => ({
+  state: { ...DEFAULTS, ...loadAids(scope) } as Record<ViewToggle, boolean>,
   listeners: new Set<Listener>(),
 }));
 
@@ -133,6 +213,7 @@ export function setViewToggle(
   state[which] = on;
   const other = EXCLUSIVE[which];
   if (on && other) state[other] = false;
+  if (isAid(which)) saveAids(scope, state);
   notify(scope);
 }
 
@@ -168,4 +249,9 @@ export function resetViewToggles(scope: EditorScope): void {
     }
   }
   if (changed) notify(scope);
+  try {
+    editorStorage(scope).removeItem(AIDS_STORAGE_KEY);
+  } catch {
+    /* nothing stored */
+  }
 }

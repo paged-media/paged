@@ -185,8 +185,14 @@ Forward through the places explicit navigations leave (Layout ▸ Go back / Go f
 Cmd/Ctrl+PageUp / PageDown, buttons in the bottom bar; UXI-T55's navigation half), every zoom
 route inside 5–4,000 %, an editable zoom field with the fits, Actual size (an inch as 96 CSS px)
 and Calibrated size (from a screen calibration) beside 100 % (UXI-T48), and camera jumps that
-respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 and WS10 (editing
-aids and Proof view, page lenses and semantic zoom) are planned.
+respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 has landed
+([ADR 1212](adr/1212-editing-aids-and-proof-view.md)): eight editing aids, each remembered on its
+own, in View ▸ Editing aids and the bottom bar (frame edges, margins and columns, ruler guides, the
+baseline grid, text threads, overset markers on every overset frame; hidden characters and
+nonprinting items are listed but disabled until the engine supports them), hidden ruler guides no
+longer snap, and Proof view (the former Preview screen mode, W) hides every aid and the selection's
+handles, masks the pasteboard at the trim or the bleed with crop marks and a badge, and keeps the
+selection. WS10 (page lenses and semantic zoom) is planned.
 
 Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
 interaction coordinator that holds the session owning the pointer, the epochs a late answer is

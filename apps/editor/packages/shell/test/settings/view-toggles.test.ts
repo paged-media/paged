@@ -37,6 +37,8 @@ import {
   type ViewToggle,
 } from "../../src/state/view-toggles";
 import { createEditorScope } from "../../src/state/editor-scope";
+import { memoryStorage, setEditorStorage } from "../../src/state/storage";
+import { overlayShown } from "../../src/state/editing-aids";
 
 // The toggles are an editor's (plan task E1): each test is a new one.
 let scope = createEditorScope();
@@ -58,6 +60,14 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   snapToGrid: false,
   snapToPixel: false,
   smartGuides: true,
+  // Editor ADR "Editing aids and Proof view".
+  frameEdges: false,
+  marginsColumns: true,
+  guides: true,
+  baselineGrid: false,
+  oversetMarkers: true,
+  hiddenCharacters: false,
+  nonprinting: true,
 };
 
 describe("view toggles", () => {
@@ -116,31 +126,83 @@ describe("view toggles", () => {
     expect(heard).toBe(2);
   });
 
-  test("they are not persisted: a reload starts from the defaults", async () => {
+  test("the other view options are not persisted: a reload starts from the defaults", async () => {
     covers(
-      "setting:view.textThreads",
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
       "setting:view.dataMarkers",
     );
-    // A reload mounts a new editor, with a new scope.
+    // A reload mounts a new editor, with a new scope, on the same storage.
+    const storage = memoryStorage();
     const before = createEditorScope();
-    setViewToggle(before, "textThreads", true);
+    setEditorStorage(before, storage);
     setViewToggle(before, "snapToPoints", false);
     setViewToggle(before, "headingAnchors", true);
     setViewToggle(before, "dataMarkers", true);
     const after = createEditorScope();
+    setEditorStorage(after, storage);
     expect({
-      textThreads: getViewToggle(after, "textThreads"),
       snapToPoints: getViewToggle(after, "snapToPoints"),
       headingAnchors: getViewToggle(after, "headingAnchors"),
       dataMarkers: getViewToggle(after, "dataMarkers"),
     }).toEqual({
-      textThreads: DEFAULTS.textThreads,
       snapToPoints: DEFAULTS.snapToPoints,
       headingAnchors: DEFAULTS.headingAnchors,
       dataMarkers: DEFAULTS.dataMarkers,
     });
+  });
+
+  test("the editing aids are remembered, each on its own, and read back field by field", () => {
+    covers(
+      "setting:paged.view.editingAids",
+      "setting:view.textThreads",
+      "setting:view.frameEdges",
+      "setting:view.marginsColumns",
+      "setting:view.guides",
+      "setting:view.baselineGrid",
+      "setting:view.oversetMarkers",
+      "setting:view.hiddenCharacters",
+      "setting:view.nonprinting",
+    );
+    const storage = memoryStorage();
+    const before = createEditorScope();
+    setEditorStorage(before, storage);
+    setViewToggle(before, "frameEdges", true);
+    setViewToggle(before, "guides", false);
+    setViewToggle(before, "textThreads", true);
+    expect(JSON.parse(storage.getItem("paged.view.editingAids")!)).toEqual({
+      frameEdges: true,
+      marginsColumns: true,
+      guides: false,
+      baselineGrid: false,
+      textThreads: true,
+      oversetMarkers: true,
+      hiddenCharacters: false,
+      nonprinting: true,
+    });
+    const after = createEditorScope();
+    setEditorStorage(after, storage);
+    expect(getViewToggle(after, "frameEdges")).toBe(true);
+    expect(getViewToggle(after, "guides")).toBe(false);
+    expect(getViewToggle(after, "textThreads")).toBe(true);
+    expect(getViewToggle(after, "baselineGrid")).toBe(false);
+
+    // A stale or hand-edited value: what is not a boolean is ignored, an
+    // unknown key is dropped, the rest is taken.
+    const edited = memoryStorage();
+    edited.setItem(
+      "paged.view.editingAids",
+      JSON.stringify({ frameEdges: "yes", guides: false, snapToPoints: false }),
+    );
+    const third = createEditorScope();
+    setEditorStorage(third, edited);
+    expect(getViewToggle(third, "frameEdges")).toBe(false);
+    expect(getViewToggle(third, "guides")).toBe(false);
+    expect(getViewToggle(third, "snapToPoints")).toBe(true);
+    edited.setItem("paged.view.editingAids", "not json");
+    const fourth = createEditorScope();
+    setEditorStorage(fourth, edited);
+    expect(getViewToggle(fourth, "guides")).toBe(true);
   });
 
   test("reset restores the defaults and tells subscribers once", () => {
@@ -155,6 +217,40 @@ describe("view toggles", () => {
     expect(heard).toBe(1);
     off();
     expect(getViewToggle(scope, "headingAnchors")).toBe(false);
+  });
+});
+
+describe('the overlay rule (editor ADR "Editing aids and Proof view")', () => {
+  test("an aid's overlay draws while its aid is on and the view is not a proof", () => {
+    covers("setting:view.frameEdges", "setting:view.guides");
+    const on = (which: ViewToggle) => getViewToggle(scope, which);
+    expect(overlayShown("paged.overlay.frameEdges", on, "normal")).toBe(false);
+    setViewToggle(scope, "frameEdges", true);
+    expect(overlayShown("paged.overlay.frameEdges", on, "normal")).toBe(true);
+    expect(overlayShown("paged.overlay.frameEdges", on, "preview")).toBe(false);
+    expect(overlayShown("paged.guide-overlay", on, "normal")).toBe(true);
+    setViewToggle(scope, "guides", false);
+    expect(overlayShown("paged.guide-overlay", on, "normal")).toBe(false);
+    expect(overlayShown("paged.ruler-guides", on, "normal")).toBe(false);
+  });
+
+  test("Proof view hides the editing chrome, keeps the gesture feedback and shows its surface", () => {
+    const on = (which: ViewToggle) => getViewToggle(scope, which);
+    for (const mode of ["preview", "bleed", "slug"] as const) {
+      expect(overlayShown("paged.selection-chrome", on, mode)).toBe(false);
+      expect(overlayShown("paged.resize-handles", on, mode)).toBe(false);
+      expect(overlayShown("paged.margin-guides", on, mode)).toBe(false);
+      expect(overlayShown("paged.page-decorations", on, mode)).toBe(false);
+      expect(overlayShown("paged.marquee", on, mode)).toBe(true);
+      expect(overlayShown("paged.caret", on, mode)).toBe(true);
+      expect(overlayShown("paged.overlay.proofSurface", on, mode)).toBe(true);
+    }
+    expect(overlayShown("paged.selection-chrome", on, "normal")).toBe(true);
+    expect(overlayShown("paged.overlay.proofSurface", on, "normal")).toBe(
+      false,
+    );
+    // Without a screen mode (no provider) nothing is a proof.
+    expect(overlayShown("paged.selection-chrome", on, null)).toBe(true);
   });
 });
 

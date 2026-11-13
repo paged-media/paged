@@ -47,6 +47,10 @@ import {
   subContextContribution,
   marginBandContribution,
   marginGuidesContribution,
+  frameEdgesContribution,
+  baselineGridContribution,
+  oversetMarkersContribution,
+  proofSurfaceContribution,
   pathEditContribution,
   resizeHandlesContribution,
   rotateHandleContribution,
@@ -423,7 +427,14 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
+  // Editor ADR "Editing aids and Proof view": the aids (each on its own
+  // remembered toggle) and Proof view's surface; the overlay host shows
+  // each by the toggles and the screen mode (shell editing-aids.ts).
+  proofSurfaceContribution,
+  baselineGridContribution,
   marginGuidesContribution,
+  frameEdgesContribution,
+  oversetMarkersContribution,
   // Editor ADR 287 — View ▸ Show grid / Show pixel grid.
   gridOverlayContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only

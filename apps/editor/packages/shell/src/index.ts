@@ -830,6 +830,14 @@ export {
   selectionChromeContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  frameEdgesContribution,
+  frameEdgePoints,
+  baselineGridContribution,
+  baselineGridLines,
+  BASELINE_GRID_MIN_SPACING_PX,
+  oversetMarkersContribution,
+  proofSurfaceContribution,
+  proofBox,
   dataMarkersContribution,
   elementOfPlacement,
   markersOf,
@@ -1193,15 +1201,29 @@ export {
 } from "./state/library-document";
 
 export {
+  EDITING_AID_TOGGLES,
   getViewToggle,
   resetViewToggles,
   setViewToggle,
   subscribeViewToggles,
   toggleViewToggle,
   viewModeOf,
+  type EditingAidToggle,
   type ViewModeName,
   type ViewToggle,
 } from "./state/view-toggles";
+export {
+  AID_OVERLAYS,
+  EDITING_AID_LABELS,
+  editingAidLabel,
+  isProofMode,
+  overlayShown,
+  PROOF_HIDDEN_OVERLAYS,
+  PROOF_SURFACE_OVERLAY,
+  UNSUPPORTED_AIDS,
+  unsupportedAidReason,
+} from "./state/editing-aids";
+export { EditingAidsControl } from "./chrome/EditingAidsControl";
 export {
   DEFAULT_VIEW_PREFERENCES,
   gridStep,

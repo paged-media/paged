@@ -34,7 +34,7 @@ export const COMMANDS = defineMessages("shell.commands", {
   importSwatches: "Import swatches (.ase)…",
   saveSwatches: "Save swatches (.ase)…",
   activateTool: "Tool: {tool}",
-  togglePreview: "Toggle preview screen mode",
+  togglePreview: "Proof view",
   toggleAll: "Toggle panels and tool rail",
   togglePanels: "Toggle panels (keep tool rail)",
   tabHidesPanels: "Tab hides panels (InDesign)",
@@ -113,7 +113,7 @@ export const LOAD = defineMessages("shell.load", {
 
 export const SCREEN_MODE = defineMessages("shell.screenMode", {
   normal: "Normal",
-  preview: "Preview",
+  preview: "Proof view",
   bleed: "Bleed",
   slug: "Slug",
   presentation: "Presentation",

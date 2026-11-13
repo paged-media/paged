@@ -954,7 +954,7 @@ film("home", async (k) => {
       page.getByRole("button", { name: "Design", exact: true }).last(),
     );
     await k.key("Alt+Shift+Meta+0", "Fit document", "⌥⇧⌘0");
-    await press(k, page.getByRole("button", { name: "Preview" }).first());
+    await press(k, page.getByRole("button", { name: "Proof" }).first());
     await k.hold(300);
     await k.recamera();
     k.focus(SPREAD, 1.3);

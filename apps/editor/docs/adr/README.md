@@ -97,7 +97,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [283](283-a-frame-surface-goes-full-screen.md) | A frame surface goes full screen through a chrome override | Accepted 2026-10-23 |
 | [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 |
 | [285](285-the-history-panel.md) | The History panel lists every step by name, and a snapshot restore is one step | Accepted 2026-10-24 |
-| [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 |
+| [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 (amended 2026-11-13 by 1212) |
 | [289](289-the-vector-clipboard.md) | The vector clipboard: copy writes SVG, paste reads SVG | Accepted 2026-10-28 |
 | [288](288-asset-export.md) | Asset Export | Accepted 2026-10-28 |
 | [290](290-the-ml-service.md) | The ML service: in-browser models on demand, a local image model through the editor's own origin | Accepted 2026-10-24 |
@@ -135,6 +135,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1209](1209-density-presets.md) | Density presets: Comfortable, Professional and Compact through `[data-density]` tokens; density never sizes the document | Accepted 2026-11-13; amends 210 |
 | [1210](1210-the-interaction-coordinator.md) | The interaction coordinator: one per editor, with sessions (owners ranked by §3.4, legal phase edges, ended exactly once), epochs and guarded tokens for late answers, and a trace with no user text; the terminal events (blur, a hidden page, a lost capture, a document or tool switch, a failed worker, unmount) end every session; no refused begin and no Escape turns a drag into a pan; behind the `coordinator` flag first | Accepted 2026-11-13 |
 | [1211](1211-navigation-history-and-one-current-page.md) | Navigation history and one current page: one rule for the current page (rotation included), Back and Forward through explicit navigations, every zoom route in the one range, an editable zoom field, Actual size and a calibrated size, reduced motion and tweens that yield | Accepted 2026-11-13; amends 246, 257 |
+| [1212](1212-editing-aids-and-proof-view.md) | Editing aids and Proof view: eight aids each remembered on its own (two disabled until the engine supports them), one overlay rule in the host, hidden guides do not snap, Proof view masks the pasteboard at the trim or the bleed and keeps the selection | Accepted 2026-11-13; amends 287 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

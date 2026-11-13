@@ -104,7 +104,6 @@ defineMessages("menu", {
   "Previous page": "Previous page",
   "Next page": "Next page",
   "Last page": "Last page",
-  "Show text threads": "Show text threads",
   "Snap to points": "Snap to points",
   "Show heading anchors": "Show heading anchors",
   Documentation: "Documentation",
@@ -645,16 +644,9 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     order: 25,
     group: "navigate",
   },
-  {
-    path: "View/Show text threads",
-    command: PAGED_VIEW_TOGGLE_TEXT_THREADS,
-    checked: (paged) => getViewToggle(scopeOf(paged), "textThreads"),
-    order: 60,
-    // Its own group so a separator divides "how big is the page" from
-    // "what extra structure is drawn on it" — InDesign splits Zoom from
-    // Extras for the same reason.
-    group: "extras",
-  },
+  // View ▸ Show text threads moved into View ▸ Editing aids ▸ Text threads
+  // (view-commands.ts; editor ADR "Editing aids and Proof view"), the
+  // same command and toggle.
   {
     path: "View/Snap to points",
     command: PAGED_VIEW_TOGGLE_SNAP_TO_POINTS,

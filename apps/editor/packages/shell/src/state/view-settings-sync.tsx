@@ -61,7 +61,10 @@ export function snapSettingsOf(
     alignment: smart,
     segments: true,
     page: true,
-    guides: true,
+    // UXI-GDE-004: hidden guides do not pull geometry. With the Ruler
+    // guides aid off nothing shows that a guide is there, so nothing
+    // snaps to one (InDesign's rule: guides snap only while shown).
+    guides: getViewToggle(scope, "guides"),
     grid: getViewToggle(scope, "snapToGrid"),
     pixel: getViewToggle(scope, "snapToPixel"),
     // The grid the host draws is the grid that snaps: a step of

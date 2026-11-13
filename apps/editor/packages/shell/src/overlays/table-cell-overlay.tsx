@@ -37,15 +37,12 @@
 // time — same convention as the guide overlay.
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
-import { useOptionalScreenMode } from "../state/screen-mode-context";
 import { useOptionalTableSelection } from "../state/table-selection-context";
 
 function TableCellOverlayRender(props: OverlayProps) {
   const ts = useOptionalTableSelection();
-  // Selection chrome is editing affordance — Normal mode only (matches
-  // the guide / selection overlays).
-  const screenMode = useOptionalScreenMode();
-  if (screenMode && screenMode.screenMode !== "normal") return null;
+  // Selection chrome: the overlay host hides it in a proof
+  // (state/editing-aids.ts).
   if (!ts || !ts.cell) return null;
 
   const cell = ts.cell;

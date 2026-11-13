@@ -21,7 +21,8 @@
 // its columns' gutters, drawn as InDesign draws them, in the guide
 // colour. The values come from the pages collection (the Margins and
 // Columns panel writes the same fields), so a change in the panel shows
-// on the page at once. Non-printing chrome: Normal screen mode only.
+// on the page at once. An editing aid (Margins and columns): the overlay
+// host hides it when the aid is off or the view is a proof.
 
 import type { ReactNode } from "react";
 
@@ -29,7 +30,6 @@ import type { PageId } from "@paged-media/client";
 
 import { useCollection } from "../catalog/use-collection";
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
-import { useOptionalScreenMode } from "../state/screen-mode-context";
 
 /** The fields of a page summary the guides read. */
 export interface PageMargins {
@@ -78,8 +78,6 @@ export function marginGuides(p: PageMargins): {
 
 function MarginGuidesRender(props: OverlayProps) {
   const pages = useCollection<PageMargins>("pages");
-  const screenMode = useOptionalScreenMode();
-  if (screenMode && screenMode.screenMode !== "normal") return null;
   if (!pages) return null;
   const out: ReactNode[] = [];
   for (const p of pages) {

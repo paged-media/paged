@@ -350,7 +350,10 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   left to IC (the bounds are ignored already).
 - **WS9 Editing aids.** One control for frame edges, margins, guides, the baseline grid, threads,
   overset, hidden characters and non-printing items, and a Proof view
-  (`SH/state/view-toggles.ts`).
+  (`SH/state/view-toggles.ts`). **Done** ([ADR 1212](adr/1212-editing-aids-and-proof-view.md)):
+  the overlay host applies one rule (`SH/state/editing-aids.ts`); Proof view is the Preview screen
+  mode completed; hidden characters and nonprinting items wait for engine view options (recorded
+  there).
 - **WS10 Page lenses** (Pages, Structure, Layers, Issues, Data) and semantic zoom. Closes F-57.
 
 ## 8. Track DF — Documents, files and feedback (spec wave 5)

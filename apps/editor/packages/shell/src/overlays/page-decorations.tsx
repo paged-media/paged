@@ -23,7 +23,6 @@ import type { PageId } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useDocument } from "../state/document-context";
-import { useOptionalScreenMode } from "../state/screen-mode-context";
 import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
 import { useEditorScope } from "../state/editor-scope";
 
@@ -42,11 +41,9 @@ function PageDecorationsRender(props: OverlayProps) {
     (l) => subscribeViewToggles(scope, l),
     () => getViewToggle(scope, "headingAnchors"),
   );
-  // Concept 1 (T7) — captions/badges are non-printing chrome: Normal
-  // mode only; Preview / Bleed / Slug / Presentation hide them.
-  const screenMode = useOptionalScreenMode();
+  // Captions and badges are editing chrome: the overlay host hides them
+  // in a proof (state/editing-aids.ts).
   const inv = 1 / props.camera.scale;
-  if (screenMode && screenMode.screenMode !== "normal") return null;
   const out: ReactNode[] = [];
 
   let i = 0;
