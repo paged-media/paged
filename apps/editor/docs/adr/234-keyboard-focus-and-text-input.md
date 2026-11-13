@@ -89,3 +89,24 @@ focus everywhere, the canvas included, and never toggle the chrome by default. T
 is the explicit command `view.toggleChrome` (Cmd/Ctrl+\; `paged.chrome.toggleAll` stays as its
 deprecated alias), and an opt-in preference, "Tab hides panels (InDesign)", restores decision 2's
 Tab on a canvas the user clicked into. Until that task lands the body describes the code.
+
+## Amendment 2026-11-13 (implemented)
+
+D-03 is built (task KF3): Tab and Shift+Tab move focus on the canvas too. The chrome toggle is
+the command `paged.view.toggleChrome` (View, "Toggle panels and tool rail") on Primary+\ (Cmd+\
+on macOS, Ctrl+\ elsewhere): decision 2's keyboard chord, free in the keybinding registry, taken
+by no browser or system shortcut on any platform, and a combo the host reserves (no edit
+context's scoped binding may take it, ADR 299); the Focus pill on the context toolbar runs it. `paged.chrome.toggleAll` and its three keybindings left the feature ids with a
+deprecation window, 0.78 to 0.80 (`apps/canvas/deprecated-ids.json`), read as
+`paged.view.toggleChrome`'s. The preference "Tab hides panels (InDesign)" (Edit ▸ Settings,
+`paged.preferences.tabHidesPanels`, storage key `paged.keyboard.tabHidesPanels`, off by default)
+restores decision 2 exactly: with it on, Tab on a canvas the user clicked into toggles the
+panels and the tool rail and Shift+Tab the panels (`focus/tab-hides-panels.ts`); reached by
+keyboard the canvas still passes Tab on. Track WS's "Focus workspace" (WS4) is a separate,
+wider command; `paged.view.toggleChrome` stays the panels-and-rail toggle. A surface that took
+focus gives it back to its opener, else the canvas ([ADR 1204](1204-focus-returns-to-the-opener.md));
+Escape is resolved once per press ([ADR 1203](1203-one-escape.md)). The composite rule of
+decision 1 gains the page keys, Enter and Space everywhere and typeahead letters in a listbox,
+a combobox and a native select (`compositeOwnsKey`, UXI-T76). The text input's composition
+commits once per session and is dropped when the caret moved mid-composition, and the input
+sits at the caret through the view's rotation (task KF4, UXI-T21, T22, T32).

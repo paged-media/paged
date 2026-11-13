@@ -142,10 +142,19 @@ normative interaction target and the UX/UI redesign strategy its product directi
 decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work is planned in
 [`interaction-plan.md`](interaction-plan.md).
 
-Nothing of it is implemented yet. The editor behaves as the sections above and the existing
-records describe: Shift-click adds and Cmd-click toggles, the marquee takes what it intersects,
-Tab hides the chrome on a canvas the user clicked into, a double-click on an image frame enters
-paged.image, and Escape is answered by several listeners. Wave 0's interaction inventory
+Track KF (keyboard and focus) is built: Escape is resolved once per press by a per-editor
+arbiter in the specification's order, and at the top level it clears the selection
+([ADR 1203](adr/1203-one-escape.md)); every key listener hears only its own editor's keys; Tab
+moves focus everywhere, the chrome toggle is `paged.view.toggleChrome` (Cmd/Ctrl+\) and "Tab
+hides panels (InDesign)" an opt-in setting ([ADR 234](adr/234-keyboard-focus-and-text-input.md),
+amended); an input method's composition commits once and the input follows the rotated view;
+focus returns to the opener of a dialog, the palette or a menu, else the canvas
+([ADR 1204](adr/1204-focus-returns-to-the-opener.md); issue #32); lists and selects keep their
+keys, and Alt+arrows set leading and tracking (UX audit F-34). The viewport's drag cancel, the
+gesture spine and path editing still answer Escape on their own listeners until track IC moves
+them onto the arbiter. The rest is not implemented yet: Shift-click adds and Cmd-click toggles,
+the marquee takes what it intersects, and a double-click on an image frame enters paged.image.
+Wave 0's interaction inventory
 (`scripts/interaction-inventory.json`, with the one exception ledger), the coverage report for
 the `UXI-T` tests and the test harness are being built.
 

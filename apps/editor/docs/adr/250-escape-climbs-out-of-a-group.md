@@ -40,3 +40,11 @@ this record's climb, one level per press — text editing, a selection). Decisio
 top level Escape clears the selection. D-04 decides the click outside a context: a clean context
 exits; a dirty one follows the module's declared `exitPolicy` (commit if safe, otherwise ask).
 Until those tasks land the body describes the code.
+
+## Amendment 2026-11-13 (implemented)
+
+[ADR 1203](1203-one-escape.md) builds the Escape order: the climb is the arbiter's `group` tier
+(`panels/canvas-panel.tsx`), after a caret leaves the text and before the selection is cleared;
+at the top level Escape clears the selection (the `selection` tier). Until the drawing tools'
+gestures join the arbiter (track IC) both answer only while the tool in hand has no gesture
+handler.

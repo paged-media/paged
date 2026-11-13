@@ -54,7 +54,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [231](231-page-item-clipboard.md) | The page-item clipboard: Cut, Copy, Paste, Paste in place, Duplicate | Accepted 2026-10-19 |
 | [232](232-canvas-context-menu.md) | The canvas context menu is made of commands | Accepted 2026-10-19 |
 | [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 |
-| [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
+| [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 (amended 2026-11-13 by 1201; D-03 implemented 2026-11-13) |
 | [235](235-the-selection-tools-pointer-model.md) | The Selection tools follow InDesign's pointer model | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
 | [236](236-a-caret-holds-its-character-style.md) | A caret holds the character style chosen at it | Accepted 2026-10-19 |
 | [237](237-a-document-opens-on-its-first-page.md) | A document opens on its first page | Accepted 2026-10-19 |
@@ -65,7 +65,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
 | [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
 | [249](249-offered-only-where-it-applies.md) | A control is offered only where it applies: the command's when, the field's kind | Accepted 2026-10-19 |
-| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
+| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201 and 1203) |
 | [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
 | [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
@@ -125,6 +125,8 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [315](315-reference-inserts-are-host-commands.md) | Footnotes, destinations, cross-references and index entries are host commands (`paged.insert.*`) and panel forms; paged.doc's dialogs call them | Accepted 2026-11-11 |
 | [1200](1200-the-interaction-contract-is-adopted.md) | The interaction contract is adopted: the specification `PM-UX-INTERACTION-001` is the normative interaction target, implemented in waves, with TARGET CHANGEs, one exception ledger and no screenshot-only gate; the UX/UI redesign strategy is the product direction | Accepted 2026-11-13 (adopted, not implemented) |
 | [1201](1201-interaction-decisions.md) | Interaction decisions D-01 to D-16 and the Escape order: Shift toggles, a directional marquee, conventional Tab, the image's content first, one exit resolver, one Escape resolution per press | Accepted 2026-11-13 (decided, not implemented); amends 234, 235, 246, 250, 282 |
+| [1203](1203-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13; amends 250 |
+| [1204](1204-focus-returns-to-the-opener.md) | Focus returns to the opener, else to the canvas: one focus-return service for dialogs, the palette, menus and the context menu | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

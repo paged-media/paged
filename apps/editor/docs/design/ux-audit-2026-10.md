@@ -874,6 +874,8 @@ sideways.
 
 #### F-34 · Type-size and style shortcuts do nothing
 
+> **Resolved (2026-11-13).** The text chords are host commands over the shared text verbs (`apps/canvas/src/text-format-commands.ts`, `@paged-media/helpers`), bound while a caret or a range is in a story outside an edit context: ⌘B / ⌘I / ⌘U, ⌘⇧> and ⌘⇧< (also ⌘⇧. and ⌘⇧,) for the size, ⌥↑ / ⌥↓ for the leading by 2 pt (from Auto at 120 %), ⌥← / ⌥→ for the tracking by 20/1000 em, and InDesign's alignment, case, strikethrough and position chords, each with its Ctrl twin. The Type ▸ Format menu lists them with their chords. On the canvas's text input the Alt arrows are the verbs' while a binding takes them, otherwise they move the caret. Tests: `tests/e2e/shell-keybindings.spec.ts` (every chord runs its verb with a caret, none with only a frame), `test/unit/commands/text-format-commands.test.ts`, `platform/shared/helpers/test/text-format.test.ts`. The original text follows for the record.
+
 **Severity:** minor · **Effort:** S · **Affects:** Text-heavy users.
 
 With text selected, ⌘⇧> (size up) left the size at 12 pt. No keybinding exists for size, leading, tracking, or bold, italic and underline (none is registered in the editor or the modules). The Type menu shows no shortcuts at all.
@@ -1513,7 +1515,7 @@ The Object menu has no Lock (⌘L), Unlock all on spread, Hide (⌘3) or Show al
 | Floating, dockable panels                        | Fixed docks with tabs                     | Yes (ADR 002)                                            | —             |
 | Save / Don't save / Cancel on close              | Native OK/Cancel                          | Yes, in code, as interim                                 | [F-05](#f-05) |
 | Autosave and recent files                        | None                                      | Yes (status.md, Limits)                                  | [F-06](#f-06) |
-| Text shortcuts (⌘⇧> size, ⌥←/→ tracking)         | Not bound                                 | No                                                       | [F-34](#f-34) |
+| Text shortcuts (⌘⇧> size, ⌥←/→ tracking)         | Bound (resolved 2026-11-13)               | No                                                       | [F-34](#f-34) |
 
 ## Not tested, and why
 
