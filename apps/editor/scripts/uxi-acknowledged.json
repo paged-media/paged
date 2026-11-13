@@ -112,18 +112,6 @@
     "task": "IC3",
     "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T59 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T62": {
-    "task": "DF3",
-    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T62 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T63": {
-    "task": "DF3",
-    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T63 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T64": {
-    "task": "DF3",
-    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T64 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T65": {
     "task": "DF9",
     "reason": "No test claims it yet: clipboard conformance across selection types and contexts is not asserted end to end yet (DF9). Claim it in a test title (UXI-T65 — …) when that lands, or sooner where today's code already passes (W0.7)."

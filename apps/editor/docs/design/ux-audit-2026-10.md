@@ -1062,6 +1062,11 @@ During `dragover` the canvas shows no outline, overlay or cursor change, so the 
 
 **Screenshots:** `F-40-no-drop-indicator.png`
 
+**Fixed (2026-11-13, `f2a5f111e`).** While a file is dragged over the canvas a label at the pointer
+says what the drop will do ("Place photo.png in this frame", "Open Annual.idml in place of this
+document", or a refusal with its reason), the frame that would take a picture is outlined, and
+the drop does exactly that (editor ADR 1205; `UXI-T62` to `UXI-T64`).
+
 ### Built-in modules
 
 <a id="f-42"></a>

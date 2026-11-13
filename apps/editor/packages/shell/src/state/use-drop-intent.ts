@@ -156,7 +156,7 @@ export function useDropIntent(
     onDragOver(e) {
       if (!onFile || !carriesFiles(e.dataTransfer)) return;
       e.preventDefault();
-      live.current.epoch ??= epochOf(paged);
+      if (live.current.epoch === null) live.current.epoch = epochOf(paged);
       const known = live.current.intent;
       e.dataTransfer.dropEffect = known?.intent === "reject" ? "none" : "copy";
       const { clientX: x, clientY: y } = e;
