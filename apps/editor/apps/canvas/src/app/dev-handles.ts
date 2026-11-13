@@ -27,6 +27,7 @@
 
 import moduleManifest from "virtual:paged-modules";
 
+import type { CanvasClient } from "@paged-media/client";
 import {
   debugHandlesOf,
   getOpenFileHandle,
@@ -36,6 +37,8 @@ import {
   type WritableFileHandle,
 } from "@paged-media/shell";
 
+import { debugFlag } from "../debug-flags";
+import { createReplyChaos } from "./chaos";
 import type { EditorInstance } from "./instance";
 
 type Handles = Record<string, unknown>;
@@ -127,6 +130,13 @@ export function publishDevHandles(instance: EditorInstance): () => void {
   };
   // Live: they exist once the bundles' host options do.
   const debug = () => debugHandlesOf(instance.scope);
+  // The interaction contract's slow worker (fixture H): delay or reorder
+  // the engine's replies, on a page opened with `?debug=chaos` only.
+  if (debugFlag("chaos")) {
+    handles.__chaos = createReplyChaos(
+      () => (debug().canvas as { client?: CanvasClient } | undefined)?.client,
+    );
+  }
   const live: Record<string, () => unknown> = {
     // The shell's automation handle, refreshed after every commit, and the
     // demo runner over it (PagedShell).

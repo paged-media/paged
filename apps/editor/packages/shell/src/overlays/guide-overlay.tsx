@@ -244,6 +244,7 @@ function renderPreview(
     return (
       <line
         data-guide-preview="vertical"
+        data-gesture-preview="guide"
         x1={x}
         y1={pr.y}
         x2={x}
@@ -260,6 +261,7 @@ function renderPreview(
   return (
     <line
       data-guide-preview="horizontal"
+      data-gesture-preview="guide"
       x1={pr.x}
       y1={y}
       x2={pr.x + pr.w}

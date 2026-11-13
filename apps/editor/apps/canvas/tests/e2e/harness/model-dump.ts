@@ -25,6 +25,8 @@
 
 import type { Page } from "@playwright/test";
 
+import { browserModel } from "./gesture-kit";
+
 interface CanvasGlobal {
   __canvas: {
     client: {
@@ -111,4 +113,56 @@ export async function dumpDoc(
     { collections },
   );
   return stableJson(data);
+}
+
+/** The whole document as the gesture invariants compare it: the scene
+ *  tree, every element's properties, the document meta (less `dirty` and
+ *  `activePage`) and the pages, spreads, swatches and layers — the test
+ *  kit's engine dump (`engineModelChannel`), the same one the headless
+ *  suites and `checkUndoRedo` use. Equal strings = equal documents. */
+export async function modelSnapshot(page: Page): Promise<string> {
+  return browserModel(page).dump();
+}
+
+/** What is selected, as the editor's main thread holds it: the element
+ *  selection mirror the canvas routes drags by (sorted, so order does not
+ *  count), the group the selection is scoped to (its id), and the text
+ *  caret or range, if any. Selection is not document state (D-15): compare
+ *  it apart from {@link modelSnapshot}. */
+export interface SelectionSnapshot {
+  elements: Array<{ kind: string; id: string }>;
+  activeGroup: string | null;
+  text: { storyId: string; start: number; end: number } | null;
+}
+
+export async function selectionSnapshot(
+  page: Page,
+): Promise<SelectionSnapshot> {
+  return page.evaluate(() => {
+    type Id = { kind: string; id: string };
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          elementSelection?: Id[] | null;
+          activeGroup?: string | null;
+          contentSelection?: {
+            storyId: string;
+            start: number;
+            end: number;
+          } | null;
+        };
+      }
+    ).__canvas;
+    const elements = (c.elementSelection ?? [])
+      .map((e) => ({ kind: String(e.kind), id: String(e.id) }))
+      .sort((a, b) =>
+        a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind < b.kind ? -1 : 1,
+      );
+    const t = c.contentSelection ?? null;
+    return {
+      elements,
+      activeGroup: c.activeGroup ?? null,
+      text: t ? { storyId: t.storyId, start: t.start, end: t.end } : null,
+    };
+  });
 }

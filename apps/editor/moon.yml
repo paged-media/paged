@@ -156,6 +156,29 @@ tasks:
       - "/engine/core/crates/**/*.{rs,json}"
       - "/package.json"
 
+  # The interaction contract (editor ADR 1202): the inventory guard and the
+  # UXI coverage report. Like the surface gate it reads test files across
+  # the repository (the UXI-T claims in titles and Rust fn names), the
+  # enumerated surface and the spec, so the inputs say so.
+  interaction-contract:
+    description: "The interaction inventory in sync with the spec, and every UXI-T test claimed or acknowledged (scripts/interaction-inventory.mjs, scripts/uxi-coverage.mjs)."
+    script: "bun test --timeout 30000 ./scripts/interaction-inventory.test.mjs ./scripts/uxi-coverage.test.mjs && bun scripts/interaction-inventory.mjs && bun scripts/uxi-coverage.mjs --quiet --gate"
+    inputs:
+      - "scripts/interaction-inventory*"
+      - "scripts/uxi-*"
+      - "scripts/surface/**/*"
+      - "scripts/settings-inventory.json"
+      - "docs/specs/ideas/paged_interaction_specification.md"
+      - "docs/interaction-plan.md"
+      - "apps/canvas/tests/quarantine.json"
+      - "apps/canvas/playwright.config.ts"
+      - "/apps/**/*.{ts,tsx,mts,mjs,js}"
+      - "/modules/**/*.{ts,tsx,mts,mjs,rs,json}"
+      - "/platform/**/*.{ts,tsx,mts,mjs,js,rs,json}"
+      - "/engine/core/crates/**/*.{rs,json}"
+      - "/tests/**/*.{ts,tsx,mts,mjs,js}"
+      - "/package.json"
+
   js-build:
     description: "vite build of apps/* (needs the engine wasm and the bundles' engine wasm)."
     command: "bun run build"

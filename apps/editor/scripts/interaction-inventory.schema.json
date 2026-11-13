@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "interaction-inventory.schema.json",
+  "title": "The editor's interaction inventory",
+  "description": "The machine-readable companion of the interaction specification (apps/editor/docs/specs/ideas/paged_interaction_specification.md; editor ADRs 1200 and 1202). The sections owners, phases, groups, fixtures, gates, layers, requirements and the spec fields of tests are written by `bun scripts/interaction-inventory.mjs --sync` from the spec and never by hand; tests' gates, fixture, layers and requirements, the interactions, the exceptions and enforcedGates are curated. OWNER NAMES ARE DATA: `owners` (and the `ownerName` enum below) are the spec's InteractionOwner union (§3.2), and apps/editor/packages/shell/src/interaction/owners.ts mirrors them; once that file exists the guard fails when it does not name every owner. scripts/interaction-inventory.mjs validates the inventory against this schema with its own validator, which refuses a keyword it does not implement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "spec",
+    "owners",
+    "phases",
+    "groups",
+    "fixtures",
+    "gates",
+    "layers",
+    "requirements",
+    "tests",
+    "interactions",
+    "exceptions",
+    "enforcedGates"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "spec": {
+      "description": "The specification the inventory mirrors (repository-relative).",
+      "const": "apps/editor/docs/specs/ideas/paged_interaction_specification.md"
+    },
+    "owners": {
+      "description": "The InteractionOwner names of the spec's §3.2, in its order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/ownerName" },
+      "minItems": 12,
+      "uniqueItems": true
+    },
+    "phases": {
+      "description": "The InteractionPhase names of the spec's §3.2: the states an interaction moves through.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z]+(-[a-z]+)*$" },
+      "minItems": 7,
+      "uniqueItems": true
+    },
+    "groups": {
+      "description": "The acceptance-test groups of §23.1 (A–F).",
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "$ref": "#/$defs/groupId" },
+          "title": { "type": "string", "minLength": 3 }
+        }
+      }
+    },
+    "fixtures": {
+      "description": "The test fixtures of §23.1 (A–H).",
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "$ref": "#/$defs/fixtureId" },
+          "description": { "type": "string", "minLength": 3 }
+        }
+      }
+    },
+    "gates": {
+      "description": "The acceptance gates of §23.4 (G0–G4).",
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "criterion"],
+        "properties": {
+          "id": { "$ref": "#/$defs/gateId" },
+          "name": { "type": "string", "minLength": 3 },
+          "criterion": { "type": "string", "minLength": 10 }
+        }
+      }
+    },
+    "layers": {
+      "description": "The evidence layers of §23.2, each with the id tests and the coverage report use (LAYER_IDS in interaction-inventory.mjs).",
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "evidence"],
+        "properties": {
+          "id": { "$ref": "#/$defs/layerId" },
+          "name": { "type": "string", "minLength": 3 },
+          "evidence": { "type": "string", "minLength": 10 }
+        }
+      }
+    },
+    "requirements": {
+      "description": "Every UXI-<DOMAIN>-### requirement of the spec, in its order: the domain, the section that defines it and its first sentence.",
+      "type": "array",
+      "minItems": 290,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "domain", "section", "title"],
+        "properties": {
+          "id": { "$ref": "#/$defs/requirementId" },
+          "domain": { "type": "string", "pattern": "^[A-Z0-9]+$" },
+          "section": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+          "title": { "type": "string", "minLength": 3 }
+        }
+      }
+    },
+    "tests": {
+      "description": "The acceptance tests UXI-T01…T76 of §23.1. id, group, title (the steps) and assertion come from the spec; the rest is curated: the gates of §23.4 the test belongs to (one or more), its fixture, the layers of §23.2 its evidence is expected in, and the requirement ids it proves.",
+      "type": "array",
+      "minItems": 76,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "group",
+          "title",
+          "assertion",
+          "gates",
+          "fixture",
+          "layers",
+          "requirements"
+        ],
+        "properties": {
+          "id": { "$ref": "#/$defs/testId" },
+          "group": { "$ref": "#/$defs/groupId" },
+          "title": { "type": "string", "minLength": 3 },
+          "assertion": { "type": "string", "minLength": 3 },
+          "gates": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/gateId" },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "fixture": { "$ref": "#/$defs/fixtureId" },
+          "layers": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/layerId" },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "requirements": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/requirementId" },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "interactions": {
+      "description": "Each user gesture, tool, context and key the editor answers, mapped to its owner (§3.2), the event class it claims in which scope, the adapter that routes it at the arbitration boundary (§24.2), the phases it moves through, how permission and cancel behave today, the real surface ids it exposes (checked against scripts/surface/enumerate.mjs) and the UXI requirements it answers to. status: legacy (routed as before the coordinator), migrated (behind the coordinator) or exception (listed by an entry of exceptions).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "owner",
+          "eventClass",
+          "scope",
+          "adapter",
+          "site",
+          "states",
+          "permission",
+          "cancel",
+          "surfaceIds",
+          "uxi",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "description": "Stable id: <area>.<name>.",
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*(\\.[a-z0-9]+(-[a-z0-9]+)*)+$"
+          },
+          "title": { "type": "string", "minLength": 3 },
+          "owner": { "$ref": "#/$defs/ownerName" },
+          "eventClass": {
+            "description": "<input>:<class>, e.g. pointer:primary-drag, key:Escape, wheel:any, drop:file.",
+            "type": "string",
+            "pattern": "^(pointer|touch|pen|wheel|key|text|drop):[A-Za-z0-9+-]+$"
+          },
+          "scope": {
+            "description": "Where the event class is claimed: canvas/tool:<tool>, canvas/handle, ruler, modal:<surface>, editor (any key the editor root or the window sees). Two owners of one event class in one scope break UXI-MIG-002.",
+            "type": "string",
+            "pattern": "^[a-z0-9]+([A-Za-z0-9.:/-]*[A-Za-z0-9])?$"
+          },
+          "adapter": {
+            "description": "What routes it at the arbitration boundary: one of the spec's §24.2 adapters (LegacySelectionAdapter, RegisteredGestureAdapter, ContentContextAdapter, CameraNavigationAdapter, OverlayRevisionAdapter), the EscapeArbiter, a coordinator session, another named component, or none.",
+            "type": "string",
+            "pattern": "^([A-Z][A-Za-z]+|session|none)$"
+          },
+          "site": {
+            "description": "The source file that answers it today (repository-relative; must exist).",
+            "type": "string",
+            "pattern": "^[a-z][A-Za-z0-9_./-]*\\.(ts|tsx|mjs|rs)$"
+          },
+          "listener": {
+            "description": "Where today's code listens: the element, the editor root (useEditorKeys), the document or the window.",
+            "enum": ["element", "editor-root", "document", "window"]
+          },
+          "states": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "permission": { "type": "string", "minLength": 10 },
+          "cancel": { "type": "string", "minLength": 10 },
+          "surfaceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(command|panel|tool|menu|keybinding|setting|cli|script|importer|exporter):.+$"
+            },
+            "uniqueItems": true
+          },
+          "uxi": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/requirementId" },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "status": { "enum": ["legacy", "migrated", "exception"] },
+          "notes": { "type": "string", "minLength": 10 }
+        }
+      }
+    },
+    "exceptions": {
+      "description": "The one exception ledger (UXI-MIG-004; editor ADR 1200): a known violation of the contract, with the contract ids it violates, the tool or module it affects (scope), the interactions and UXI tests it excuses, why, an issue (a GitHub issue, or until one is filed the plan task that retires it; gate G4 requires a GitHub issue), an owner (a team or role, never a person), a severity, an expiry or review date (the guard fails past it) and a test or manual reproduction.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "contract",
+          "scope",
+          "why",
+          "issue",
+          "owner",
+          "severity",
+          "expiry",
+          "repro"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^EXC-\\d{3}$" },
+          "contract": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/requirementId" },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "scope": { "type": "string", "minLength": 3 },
+          "interactions": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "tests": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/testId" },
+            "uniqueItems": true
+          },
+          "why": { "type": "string", "minLength": 40 },
+          "issue": {
+            "type": "string",
+            "pattern": "^(https://github\\.com/paged-media/paged/issues/\\d+|#\\d+|W0\\.\\d+|(KF|IC|EN|WS|DF|FI|CM|AP|PX)\\d{1,2})$"
+          },
+          "owner": { "type": "string", "minLength": 3 },
+          "severity": { "enum": ["blocker", "major", "minor", "polish"] },
+          "expiry": { "type": "string", "format": "date" },
+          "repro": { "type": "string", "minLength": 20 }
+        }
+      }
+    },
+    "enforcedGates": {
+      "description": "The gates scripts/uxi-coverage.mjs --gate enforces: every test of an enforced gate is claimed by a test, or excused by an unexpired exception. A raised gate is not lowered (ADR 1200).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/gateId" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "ownerName": {
+      "enum": [
+        "canvas-select",
+        "canvas-transform",
+        "canvas-draw",
+        "canvas-text",
+        "canvas-path",
+        "canvas-camera",
+        "frame-content",
+        "ruler-guide",
+        "drag-drop",
+        "panel",
+        "modal",
+        "plugin-surface"
+      ]
+    },
+    "requirementId": { "type": "string", "pattern": "^UXI-[A-Z0-9]+-\\d{3}$" },
+    "testId": { "type": "string", "pattern": "^UXI-T\\d{2}$" },
+    "groupId": { "type": "string", "pattern": "^[A-F]$" },
+    "fixtureId": { "type": "string", "pattern": "^[A-H]$" },
+    "gateId": { "type": "string", "pattern": "^G[0-4]$" },
+    "layerId": {
+      "enum": [
+        "unit",
+        "component",
+        "engine",
+        "journey-cpu",
+        "journey-gpu",
+        "visual",
+        "a11y-manual",
+        "chaos"
+      ]
+    }
+  }
+}

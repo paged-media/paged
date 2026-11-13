@@ -249,6 +249,140 @@ A test may carry both, and most behaviour tests should: `@feat` for the registry
 The JSON report is uploaded with a stable schema (`schema: 1`), so the registry can pull it
 the way it pulls `playwright-results`.
 
+## Interaction contract coverage
+
+The interaction specification
+([`specs/ideas/paged_interaction_specification.md`](../specs/ideas/paged_interaction_specification.md),
+adopted by [ADR 1200](../adr/1200-the-interaction-contract-is-adopted.md)) names requirements
+`UXI-<DOMAIN>-###` and 76 acceptance tests, `UXI-T01`…`UXI-T76`, in six groups (§23.1), with
+gates G0–G4 (§23.4). They are contract ids, not surface ids, so `covers()` never takes them. Two
+scripts beside this gate measure them ([ADR 1202](../adr/1202-uxi-coverage-ratchets-the-interaction-contract.md)):
+
+```sh
+bun run test:interaction-contract               # from apps/editor: both scripts' tests, the guard, the report with --gate
+bun scripts/interaction-inventory.mjs           # the inventory guard (also --check)
+bun scripts/interaction-inventory.mjs --sync    # rewrite the spec-derived sections from the spec
+bun scripts/uxi-coverage.mjs                    # the ratchet and the report
+bun scripts/uxi-coverage.mjs --prune            # drop acknowledged entries that a test claims now
+bun scripts/uxi-coverage.mjs --json [path]      # the report as JSON (default docs/reference/uxi-coverage.json, not committed)
+```
+
+CI runs both in the `surface` job, after this gate and independent of it: the scripts' own
+tests, `interaction-inventory.mjs --check` and `uxi-coverage.mjs --quiet --summary --gate`. The
+report goes to the job summary and into the `surface-conformance` artifact as
+`uxi-coverage.json`. An edit to the spec runs the job too. Moon runs both as
+`editor:interaction-contract`.
+
+### The inventory
+
+`scripts/interaction-inventory.json`, with its schema `interaction-inventory.schema.json`, is the
+machine-readable companion the spec asks for (§26). The spec is its source: `--sync` writes what
+the spec decides, and the guard fails when the inventory says something else.
+
+| Section                       | What it holds                                                                                                                                                                  | Written by |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| `owners`, `phases`            | the spec's `InteractionOwner` and `InteractionPhase` (§3.2)                                                                                                                    | `--sync`   |
+| `groups`, `fixtures`, `gates` | the test groups A–F and fixtures A–H (§23.1), the gates G0–G4 (§23.4)                                                                                                          | `--sync`   |
+| `layers`                      | the evidence layers of §23.2, with the ids tests use: `unit`, `component`, `engine`, `journey-cpu`, `journey-gpu`, `visual`, `a11y-manual`, `chaos`                            | `--sync`   |
+| `requirements`                | every `UXI-<DOMAIN>-###`, with its domain, its section and its first sentence                                                                                                  | `--sync`   |
+| `tests`                       | `UXI-T01`…`T76`: group, steps and assertion from the spec; the gates it belongs to, its fixture, the layers its evidence belongs in and the requirements it proves are curated | both       |
+| `interactions`                | each gesture, tool, context and key the editor answers: owner, event class and scope, adapter, the file that answers it today, states, permission, cancel, surface ids, status | by hand    |
+| `exceptions`                  | the one exception ledger (`UXI-MIG-004`, ADR 1200)                                                                                                                             | by hand    |
+| `enforcedGates`               | the gates `--gate` enforces; a raised gate is not lowered                                                                                                                      | by hand    |
+
+The guard fails when:
+
+- the inventory is not valid against its schema (a small validator in the script, which refuses
+  a schema keyword it does not implement);
+- a spec-derived section differs from the spec, or the spec mentions an id it does not define in
+  a form the parser reads (a table row, a line `` `UXI-…` — ``, a heading);
+- an id does not resolve: a requirement, a test, an owner, a phase, a gate, a fixture, a layer,
+  an interaction, a surface id (checked against `scripts/surface/enumerate.mjs`, family members
+  included), a source file, or a plan task in `docs/interaction-plan.md`;
+- an exception is past its expiry;
+- two interactions with different owners claim one event class in one scope (`UXI-MIG-002`),
+  unless an unexpired exception that names `UXI-MIG-002` lists one of them;
+- a section is under its floor (`FLOORS`: 290 requirements, 76 tests, 60 interactions on
+  2026-11-13), so a parser that stops matching cannot sync the inventory down to nothing.
+
+**Owner names are data.** `owners` is the spec's list; `packages/shell/src/interaction/owners.ts`
+mirrors it, and once that file exists the guard fails when it does not name every owner.
+
+**The seed (2026-11-13).** 60 interactions, all `legacy`: the Selection and Direct Selection
+click, marquee, move, handles and path edit; Type's click and drag; double-click entry and the
+edit context's content and click-out presses; Hand, Zoom, the wheel, the middle button and the
+pinch; Space, Cmd and Cmd+Space spring-loading; the 23 other tools of the gesture spine; guide
+drag, threading, pending placement and the file drop; the context menu by pointer and by key;
+Tab's chrome toggle; the palette's Escape; text input; and the nine listeners that answer Escape.
+Two exceptions: EXC-001 (the nine Escape listeners share one key with no order, until KF1) and
+EXC-002 (issue #32, the palette's Escape on real Chrome).
+
+### Claiming a scenario
+
+A test claims an acceptance test in its title. The report reads titles statically, like the
+`covers()` calls:
+
+```ts
+test("UXI-T07 — Escape aborts a move: no history step, overlays cleared @feat:… @level:edge", async ({
+  page,
+}) => {
+  covers("tool:paged.tool.select"); // real surface ids only, as before
+  // … assert the model and the undo depth, not only pixels (ADR 1200)
+});
+```
+
+- **The leading id** of a `test`, `it` or `describe` title (`UXI-T07 — …`, or the spec's
+  `UXI-T07: …`). A `describe` claims for the tests it holds.
+- **`@uxi:` tags** anywhere in the title claim more: `@uxi:UXI-T08` another scenario,
+  `@uxi:UXI-GST-006` a requirement directly.
+- **Rust**: a fn named `uxi_t60_…`, or a `/// UXI-T60 — …` doc line above the fn.
+
+A skipped test (`.skip`, `.fixme`, `.todo`), an expected failure (`.fail`), a Rust `#[ignore]`
+and a quarantined test (`@quarantine`, or an entry in `apps/canvas/tests/quarantine.json`;
+ADR 228) are listed in the report but claim nothing. A claimed id the inventory does not know,
+or a claim it cannot read (`UXI-T7 — …`), fails the run.
+
+The layer comes from the file's path, with this gate's rules:
+
+| Claim layer                  | Files                                                                                                                 |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `unit`                       | a `*.test.*` file that is not a DOM test                                                                              |
+| `component`                  | `*.dom.test.ts(x)`                                                                                                    |
+| `engine`                     | a Rust test, or a headless-editor test                                                                                |
+| `e2e`                        | Playwright under `apps/canvas/tests/` outside the journeys                                                            |
+| `journey-cpu`, `journey-gpu` | `apps/canvas/tests/journey/`: both, since `journeys-gpu` runs every journey; GPU only for the four `journeys` ignores |
+
+A test in `e2e` counts as evidence of the `journey-cpu` layer (a browser on the CPU path).
+`visual`, `a11y-manual` and `chaos` cannot be read from a path; the report lists them as
+expected layers without evidence. The layers are reported, not gated.
+
+### The ratchet and the gates
+
+An acceptance test no test claims is listed in `scripts/uxi-acknowledged.json` with the plan
+task that will claim it and why none does yet:
+
+```json
+{
+  "UXI-T07": {
+    "task": "IC2",
+    "reason": "No test claims it yet: terminal events … do not end one coordinator session yet (IC2) …"
+  }
+}
+```
+
+The task must be one of [`interaction-plan.md`](../interaction-plan.md); the reason at least 40
+characters. The ratchet runs both ways: a test that starts claiming an acknowledged id fails the
+run until its entry goes (`--prune`), and a claimed id that loses its test fails unless it is
+acknowledged again. On 2026-11-13 the baseline (`apps/canvas/tests/e2e/uxi-baseline.spec.ts`,
+W0.7) claims 11 scenarios that today's code already passes and 65 are acknowledged; each task
+removes entries as its tests land.
+
+`--gate` fails when a test of a gate in `enforcedGates` is neither claimed nor listed by an
+unexpired exception. `enforcedGates` is empty until the first gate is raised (G0 partially with
+IC1–IC5, then G1, G2, G0 in full, G3 and G4; the plan's verification table). With G4 enforced,
+every exception must link a GitHub issue. Requirement coverage (proved through a claimed test,
+or claimed directly) is reported per domain, not gated.
+
 ## State (2026-10-19)
 
 The programme is closed. Its six layers have their tests, the gate is a ratchet in CI, and

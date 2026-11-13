@@ -73,11 +73,10 @@ import {
   writeFileSync,
   appendFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readCovers } from "./surface/covers-reader.mjs";
+import { gitGrepFiles, readCovers } from "./surface/covers-reader.mjs";
 import {
   DYNAMIC_SITES,
   SETTINGS_INVENTORY,
@@ -243,32 +242,8 @@ function writeAcknowledged(entries, dir = ACK_DIR) {
 
 /** The files that hold a covers form, found by `git grep` (fast; the gate
  *  then parses only those for calls), or null without git. */
-function coversCandidates(root) {
-  try {
-    const out = execFileSync(
-      "git",
-      [
-        "grep",
-        "--untracked",
-        "-l",
-        "-I",
-        "-z",
-        "-E",
-        "covers!?[[:space:]]*\\(|//[[:space:]]*covers:",
-        "--",
-        ...["ts", "tsx", "mts", "cts", "js", "mjs", "cjs", "jsx", "rs"].map(
-          (e) => `*.${e}`,
-        ),
-      ],
-      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-    );
-    return new Set(out.split("\0").filter(Boolean));
-  } catch (e) {
-    // Exit status 1 is "no match": an empty set, not a failure.
-    if (e?.status === 1) return new Set();
-    return null;
-  }
-}
+const coversCandidates = (root) =>
+  gitGrepFiles(root, "covers!?[[:space:]]*\\(|//[[:space:]]*covers:");
 
 const globToRegex = (glob) =>
   new RegExp(

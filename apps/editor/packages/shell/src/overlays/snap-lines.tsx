@@ -166,7 +166,7 @@ function SnapLinesRender(props: OverlayProps) {
   if (lines.length === 0) return null;
   const inv = 1 / (props.camera.scale || 1);
   return (
-    <>
+    <g data-gesture-preview="snap-lines">
       {lines.map((l, i) => {
         const pr = props.pageRects.get(l.pageId);
         if (!pr) return null;
@@ -180,7 +180,7 @@ function SnapLinesRender(props: OverlayProps) {
           />
         );
       })}
-    </>
+    </g>
   );
 }
 

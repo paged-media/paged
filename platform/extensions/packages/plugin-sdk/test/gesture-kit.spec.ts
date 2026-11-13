@@ -32,7 +32,10 @@ import type {
 } from "@paged-media/plugin-api";
 
 import {
+  channelLog,
   checkCancel,
+  checkLiveness,
+  checkNoInterleave,
   checkUndoRedo,
   createBundleHost,
   createFakeEditor,
@@ -542,6 +545,45 @@ describe("the invariants — fake level", () => {
       /begun but only 0 cancelled/,
     );
   });
+
+  it("checkNoInterleave flags a write inside an open gesture, not one around it (INV-7)", async () => {
+    const fake = createFakeEditor();
+    const { client } = fake.editor;
+    const insert = {
+      op: "insertFrame",
+      args: { pageId: "p1", bounds: [0, 0, 10, 10] },
+    } as never;
+    const begin = () =>
+      client.send({
+        kind: "beginGesture",
+        payload: { nodes: [], gesture: { kind: "translate" } },
+      });
+    let mark = fake.mark();
+    const handle = ((await begin()).payload as { handle: number }).handle;
+    await client.send({ kind: "commitGesture", payload: { handle } });
+    await client.mutate(insert);
+    expect(channelLog(fake, mark).map((e) => e.kind)).toEqual([
+      "gestureBegun",
+      "gestureCommitted",
+      "mutationApplied",
+    ]);
+    checkNoInterleave(channelLog(fake, mark));
+
+    mark = fake.mark();
+    const open = ((await begin()).payload as { handle: number }).handle;
+    await client.mutate(insert);
+    await client.send({ kind: "cancelGesture", payload: { handle: open } });
+    expect(() => checkNoInterleave(channelLog(fake, mark))).toThrow(
+      /INV-7: gesture: mutationApplied at #1 landed inside the gesture begun at #0/,
+    );
+    // A recorded browser log reads the same way; extra write kinds count.
+    expect(() =>
+      checkNoInterleave([{ kind: "gestureBegun" }, { kind: "scriptRan" }], {
+        writes: ["scriptRan"],
+        label: "script",
+      }),
+    ).toThrow(InvariantError);
+  });
 });
 
 describe("the invariants — against the real headless engine", () => {
@@ -615,5 +657,77 @@ describe("the invariants — against the real headless engine", () => {
       await editor.client.send({ kind: "commitGesture", payload: { handle } });
     });
     expect(report.changed).toBe(true);
+  });
+
+  it("an interrupted worker gesture ends without a mutation; a dangling or committed one fails (INV-8)", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    const editor = editorOf(h);
+    const channel = engineModelChannel((m) => editor.client.send(m));
+    const rect = { kind: "rectangle", id: "urect" } as ElementId;
+    // The engine refuses a begin while a gesture is open: with no nodes it
+    // answers "already active" when one is, "empty selection" when not.
+    const idle = async () => {
+      const r = await editor.client.send({
+        kind: "beginGesture",
+        payload: { nodes: [], gesture: { kind: "translate" } },
+      });
+      return (
+        (r.payload as { error?: { kind?: string } }).error?.kind !==
+        "alreadyActive"
+      );
+    };
+    const begin = async () => {
+      const begun = await editor.client.send({
+        kind: "beginGesture",
+        payload: { nodes: [rect], gesture: { kind: "translate" } },
+      });
+      const handle = (begun.payload as { handle: number }).handle;
+      await editor.client.send({
+        kind: "updateGesture",
+        payload: {
+          handle,
+          delta: [30, 12],
+          modifiers: { shift: false, alt: false, disableSnap: true },
+        },
+      });
+      return handle;
+    };
+    let handle = 0;
+    await checkLiveness(
+      channel,
+      async () => {
+        handle = await begin();
+        // What a host maps a pointercancel to.
+        await editor.client.send({
+          kind: "cancelGesture",
+          payload: { handle },
+        });
+      },
+      { interrupt: "pointercancel", idle },
+    );
+    await expect(
+      checkLiveness(
+        channel,
+        async () => {
+          handle = await begin();
+        },
+        { interrupt: "blur", idle },
+      ),
+    ).rejects.toThrow(/INV-8: .*still open after blur/);
+    await editor.client.send({ kind: "cancelGesture", payload: { handle } });
+    await expect(
+      checkLiveness(
+        channel,
+        async () => {
+          handle = await begin();
+          await editor.client.send({
+            kind: "commitGesture",
+            payload: { handle },
+          });
+        },
+        { interrupt: "toolSwitch", idle },
+      ),
+    ).rejects.toThrow(/INV-8: .*toolSwitch committed instead of aborting/);
   });
 });

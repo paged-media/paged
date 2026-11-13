@@ -27,6 +27,7 @@
 // Every argument must be a string literal. Anything else is an ERROR the
 // gate fails on: a call it cannot read must not pass as covering nothing.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -48,9 +49,56 @@ export const SURFACE_KINDS = [
 /** Directories never scanned for tests. */
 const SKIP = /(^|\/)(node_modules|target|dist|\.moon|\.git|tooling\/import)\//;
 
+/** Is `file` (repo-relative) in a directory no test reader scans? */
+export const isSkippedPath = (file) => SKIP.test(file);
+
+/** The source extensions the test readers parse. */
+export const SOURCE_EXTENSIONS = [
+  "ts",
+  "tsx",
+  "mts",
+  "cts",
+  "js",
+  "mjs",
+  "cjs",
+  "jsx",
+  "rs",
+];
+
+/**
+ * The files whose text matches `pattern` (a POSIX extended regex), found by
+ * `git grep` over the tracked and untracked files of `root` with one of
+ * `extensions`. Fast: a reader then parses only those. Returns null without
+ * git, so the caller walks the tree instead.
+ */
+export function gitGrepFiles(root, pattern, extensions = SOURCE_EXTENSIONS) {
+  try {
+    const out = execFileSync(
+      "git",
+      [
+        "grep",
+        "--untracked",
+        "-l",
+        "-I",
+        "-z",
+        "-E",
+        pattern,
+        "--",
+        ...extensions.map((e) => `*.${e}`),
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    return new Set(out.split("\0").filter(Boolean));
+  } catch (e) {
+    // Exit status 1 is "no match": an empty set, not a failure.
+    if (e?.status === 1) return new Set();
+    return null;
+  }
+}
+
 /** Is `file` (repo-relative) a test file the gate reads? */
 export function isTestFile(file, text) {
-  if (SKIP.test(file)) return false;
+  if (isSkippedPath(file)) return false;
   if (file.endsWith(".rs")) {
     if (/(^|\/)tests\//.test(file)) return true;
     return text !== undefined && /#\[cfg\(test\)\]|#\[test\]/.test(text);
@@ -343,7 +391,7 @@ export function readCovers(root, files, options = {}) {
   const { candidates = null, keepTexts = true } = options;
   const out = { calls: [], errors: [], testFiles: [], texts: new Map() };
   for (const file of files) {
-    if (SKIP.test(file)) continue;
+    if (isSkippedPath(file)) continue;
     const isRust = file.endsWith(".rs");
     const isJs = /\.(ts|tsx|mts|cts|js|mjs|cjs|jsx)$/.test(file);
     if (!isRust && !isJs) continue;
