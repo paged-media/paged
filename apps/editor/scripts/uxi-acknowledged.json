@@ -120,18 +120,6 @@
     "task": "IC2",
     "reason": "No test claims it yet: terminal events (pointercancel, lostpointercapture, blur, unmount, document and tool switch) do not end one coordinator session yet (IC2); an orphaned engine gesture still turns later drags into pans. Claim it in a test title (UXI-T61 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T62": {
-    "task": "DF3",
-    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T62 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T63": {
-    "task": "DF3",
-    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T63 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T64": {
-    "task": "DF3",
-    "reason": "No test claims it yet: a drop shows no intent before it lands and is not resolved against the target under the pointer (DF3). Claim it in a test title (UXI-T64 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T65": {
     "task": "DF9",
     "reason": "No test claims it yet: clipboard conformance across selection types and contexts is not asserted end to end yet (DF9). Claim it in a test title (UXI-T65 — …) when that lands, or sooner where today's code already passes (W0.7)."

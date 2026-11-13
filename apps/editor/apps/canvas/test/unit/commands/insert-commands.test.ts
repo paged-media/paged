@@ -535,7 +535,7 @@ describe("Place image", () => {
           : null,
     });
 
-  test("a picture dropped over a frame goes into THAT frame, not the selected empty one", async () => {
+  test("UXI-T62: a picture dropped over a frame goes into THAT frame, not the selected empty one", async () => {
     covers("command:paged.insert.placeImage");
     viewportAt(0, 0);
     stubGlobal("createImageBitmap", async () => ({

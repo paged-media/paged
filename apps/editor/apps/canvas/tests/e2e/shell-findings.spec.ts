@@ -134,19 +134,20 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
     // The first stop is the menu bar's (one stop for all its menus).
     await expect(page.locator('[data-menu-trigger="File"]')).toBeFocused();
     const seen: Array<{ name: string; tools: boolean }> = [];
-    // Thirteen stops: the save status after the menus is one (editor ADR
-    // 1203).
-    for (let i = 0; i < 13; i++) {
+    // Walk until the canvas, at most twenty stops: the header's stops come
+    // and go with the chrome (the save status, ADR 1203; the workspace
+    // controls), and what is asserted is the order, not their number.
+    for (let i = 0; i < 20; i++) {
       await page.keyboard.press("Tab");
-      seen.push(
-        await page.evaluate(() => {
-          const el = document.activeElement;
-          return {
-            name: el?.getAttribute("aria-label") ?? "",
-            tools: el?.closest('[role="toolbar"][aria-label="Tools"]') != null,
-          };
-        }),
-      );
+      const stop = await page.evaluate(() => {
+        const el = document.activeElement;
+        return {
+          name: el?.getAttribute("aria-label") ?? "",
+          tools: el?.closest('[role="toolbar"][aria-label="Tools"]') != null,
+        };
+      });
+      seen.push(stop);
+      if (stop.name === "Document canvas") break;
     }
     expect(await railVisible(page)).toBe(true);
     // The tools are one stop, on the tool in hand, and the canvas is one.
