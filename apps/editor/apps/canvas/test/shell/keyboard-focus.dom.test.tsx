@@ -26,10 +26,11 @@
 //   · the chrome's tab stops, region by region, in reading order, each
 //     toolbar (menu bar, tools, rail foot, panel rail, modes) ONE stop;
 //   · the canvas viewport is a stop of its own;
-//   · Tab from the page, a button or a dialog moves focus and never hides
-//     the chrome; Tab on the canvas the user CLICKED into hides it; Tab on
-//     a canvas reached by keyboard passes on (no trap); Cmd/Ctrl+\ hides
-//     it from anywhere;
+//   · Tab moves focus everywhere and never hides the chrome, the canvas
+//     the user clicked into included (ADR 1201, D-03); with the opt-in
+//     preference "Tab hides panels (InDesign)" Tab on the clicked canvas
+//     hides it, and a canvas reached by keyboard still passes Tab on (no
+//     trap); Cmd/Ctrl+\ (`paged.view.toggleChrome`) hides it from anywhere;
 //   · the arrows, Home and End walk a toolbar;
 //   · a FocusScope moves focus in, keeps Tab inside, and gives focus back.
 
@@ -167,6 +168,19 @@ async function mountShell() {
             component: () => (
               <div data-test-left>
                 <input aria-label="Search pages" />
+                {/* A plugin panel's long list and select (UXI-T76). */}
+                <div role="listbox" aria-label="Long list" data-test-listbox>
+                  <div role="option" tabIndex={-1} aria-selected="true">
+                    Alpha
+                  </div>
+                  <div role="option" tabIndex={-1} aria-selected="false">
+                    Victor
+                  </div>
+                </div>
+                <select aria-label="Long select" data-test-select>
+                  <option>Alpha</option>
+                  <option>Victor</option>
+                </select>
               </div>
             ),
           },
@@ -210,6 +224,10 @@ async function mountShell() {
     registries: r,
     settle,
     rail: () => root.querySelector("[data-tool-rail]") !== null,
+    toolInHand: () =>
+      root
+        .querySelector('[data-tool-slot][aria-pressed="true"]')
+        ?.getAttribute("data-tool") ?? null,
     viewport: () =>
       root.querySelector<HTMLElement>('[data-canvas-surface="viewport"]')!,
     /** A keydown as the browser delivers it: on the focused element (or
@@ -296,7 +314,7 @@ describe("keyboard focus across the main chrome", () => {
 
   test("SH-2 (F-49): Tab from the page, a button or a dialog moves focus and leaves the chrome alone", async () => {
     covers(
-      "keybinding:tab→paged.chrome.toggleAll",
+      "keybinding:tab→paged.view.toggleChrome",
       "keybinding:shift+tab→paged.chrome.togglePanels",
     );
     const s = await mountShell();
@@ -320,10 +338,10 @@ describe("keyboard focus across the main chrome", () => {
     expect(s.rail()).toBe(true);
   });
 
-  test("Tab on the canvas the user clicked into hides the chrome; on a canvas reached by keyboard it passes on", async () => {
+  test("UXI-T19 — Tab moves focus on the canvas the user clicked into as everywhere: the chrome stays and the key is left to the browser @feat:editor-shell.keyboard-shortcuts @level:edge", async () => {
     covers(
-      "keybinding:tab→paged.chrome.toggleAll",
-      "command:paged.chrome.toggleAll",
+      "keybinding:tab→paged.view.toggleChrome",
+      "keybinding:shift+tab→paged.chrome.togglePanels",
     );
     const s = await mountShell();
     const viewport = s.viewport();
@@ -333,6 +351,65 @@ describe("keyboard focus across the main chrome", () => {
     // Reached by keyboard: focus, no pointer. Tab is focus traversal.
     await act(async () => viewport.focus());
     expect(document.activeElement).toBe(viewport);
+    const fromKeyboard = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => viewport.dispatchEvent(fromKeyboard));
+    expect(fromKeyboard.defaultPrevented).toBe(false);
+    expect(s.rail()).toBe(true);
+
+    // A click in the canvas: still focus traversal, not the chrome toggle
+    // (ADR 1201, D-03): no binding takes the key, so the browser moves focus.
+    await act(async () => {
+      viewport.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+    });
+    expect(document.activeElement).toBe(viewport);
+    for (const shiftKey of [false, true]) {
+      const tab = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => viewport.dispatchEvent(tab));
+      await s.settle();
+      expect({ shiftKey, prevented: tab.defaultPrevented }).toEqual({
+        shiftKey,
+        prevented: false,
+      });
+      expect(s.rail()).toBe(true);
+    }
+  });
+
+  test('with the preference "Tab hides panels (InDesign)" on, Tab on the canvas the user clicked into hides the chrome; reached by keyboard it still passes on', async () => {
+    covers(
+      "keybinding:tab→paged.view.toggleChrome",
+      "command:paged.view.toggleChrome",
+      "command:paged.preferences.tabHidesPanels",
+      "menu:Edit/Settings/Tab hides panels (InDesign)",
+      "setting:paged.keyboard.tabHidesPanels",
+    );
+    const s = await mountShell();
+    await act(async () => {
+      await s.registries.commands.invoke("paged.preferences.tabHidesPanels");
+    });
+    await s.settle();
+    // Edit ▸ Settings offers it; it is kept where the editor keeps its
+    // settings (the page's storage, here).
+    expect(
+      s.registries.menus
+        .list()
+        .some((m) => m.path === "Edit/Settings/Tab hides panels (InDesign)"),
+    ).toBe(true);
+    expect(localStorage.getItem("paged.keyboard.tabHidesPanels")).toBe("true");
+    const viewport = s.viewport();
+
+    // Reached by keyboard: Tab still passes on (no trap).
+    await act(async () => viewport.focus());
     await s.key({ key: "Tab" });
     expect(s.rail()).toBe(true);
 
@@ -342,17 +419,25 @@ describe("keyboard focus across the main chrome", () => {
         new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
       );
     });
-    expect(document.activeElement).toBe(viewport);
     await s.key({ key: "Tab" });
     expect(s.rail()).toBe(false);
+    await s.key({ key: "Tab" });
+    expect(s.rail()).toBe(true);
+
+    // Off again: Tab is focus traversal, and nothing is stored.
+    await act(async () => {
+      await s.registries.commands.invoke("paged.preferences.tabHidesPanels");
+    });
+    await s.settle();
+    expect(localStorage.getItem("paged.keyboard.tabHidesPanels")).toBe(null);
     await s.key({ key: "Tab" });
     expect(s.rail()).toBe(true);
   });
 
   test("Cmd+\\ and Ctrl+\\ hide and show the chrome from anywhere, a field included", async () => {
     covers(
-      "keybinding:cmd+\\→paged.chrome.toggleAll",
-      "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "keybinding:cmd+\\→paged.view.toggleChrome",
+      "keybinding:ctrl+\\→paged.view.toggleChrome",
     );
     const s = await mountShell();
     const field = s.root.querySelector<HTMLInputElement>(
@@ -363,6 +448,71 @@ describe("keyboard focus across the main chrome", () => {
     expect(s.rail()).toBe(false);
     await s.key({ key: "\\", ctrlKey: true }, document.body);
     expect(s.rail()).toBe(true);
+  });
+
+  test("UXI-T24 — inside a modal the arrows, Enter and Space are the dialog's: no binding behind it fires @feat:editor-shell.keyboard-shortcuts @level:edge", async () => {
+    const s = await mountShell();
+    const fired: string[] = [];
+    for (const key of ["arrowright", "arrowdown", "enter", "space", "v"]) {
+      const id = `test.behind.${key}`;
+      s.registries.commands.register({
+        id,
+        title: id,
+        handler: () => void fired.push(key),
+      });
+      s.registries.keybindings.register({ key, command: id });
+    }
+    const toolBefore = s.toolInHand();
+    await act(async () => openDialog(true));
+    await s.settle();
+    const field = document.querySelector<HTMLElement>(
+      "[data-test-dialog] [data-test-first]",
+    )!;
+    const button = document.querySelector<HTMLElement>(
+      "[data-test-dialog] [data-test-last]",
+    )!;
+    for (const target of [field, button]) {
+      await act(async () => target.focus());
+      for (const key of ["ArrowRight", "ArrowDown", "Enter", " ", "v"])
+        await s.key({ key });
+    }
+    expect(fired).toEqual([]);
+    expect(s.toolInHand()).toBe(toolBefore);
+    expect(s.rail()).toBe(true);
+    await act(async () => openDialog(false));
+    await s.settle();
+    // The control: on the page the same keys are the bindings'.
+    await s.key({ key: "ArrowRight" }, document.body);
+    expect(fired).toEqual(["arrowright"]);
+  });
+
+  test("UXI-T76 — a plugin panel's long list and select keep their keys: no page turn, tool or command fires behind them @feat:editor-shell.keyboard-shortcuts @level:edge", async () => {
+    const s = await mountShell();
+    const fired: string[] = [];
+    for (const key of ["pagedown", "pageup", "enter", "end"]) {
+      const id = `test.list.${key}`;
+      s.registries.commands.register({
+        id,
+        title: id,
+        handler: () => void fired.push(key),
+      });
+      s.registries.keybindings.register({ key, command: id });
+    }
+    const toolBefore = s.toolInHand();
+    const option = s.root.querySelector<HTMLElement>(
+      "[data-test-listbox] [role=option]",
+    )!;
+    const select = s.root.querySelector<HTMLElement>("[data-test-select]")!;
+    for (const target of [option, select]) {
+      await act(async () => target.focus());
+      for (const key of ["PageDown", "PageUp", "End", "Enter", "v", "t"])
+        await s.key({ key });
+    }
+    expect(fired).toEqual([]);
+    expect(s.toolInHand()).toBe(toolBefore);
+    // The control: on the page the page keys are the document's.
+    await s.key({ key: "PageDown" }, document.body);
+    expect(fired).toEqual(["pagedown"]);
   });
 
   test("the arrows, Home and End walk a toolbar and move its one tab stop", async () => {

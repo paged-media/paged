@@ -45,6 +45,7 @@ import {
   type EditorScope,
 } from "../state/editor-scope";
 import { useOptionalPaged } from "../state/paged-editor";
+import { focusReturnOf, useFocusReturn } from "../focus/focus-return";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { nativeKey, prettyKey } from "./MenuBar";
@@ -59,6 +60,9 @@ export interface ContextMenuEntry {
   label?: string;
 }
 
+/** The context menu's name with the focus-return service. */
+const CONTEXT_MENU_SURFACE = "canvasContextMenu";
+
 /** Where the menu is open (client space), per editor; null: closed. */
 const MENU_AT = scoped("canvasContextMenu", () =>
   createValueStore<{ x: number; y: number } | null>(null),
@@ -70,6 +74,10 @@ export function openCanvasContextMenu(
   x: number,
   y: number,
 ): void {
+  // Where focus is now is where it goes back to (ADR 1204); a menu moved to
+  // a new point keeps the opener it was opened from.
+  if (scope.get(MENU_AT).get() === null)
+    focusReturnOf(scope).open(CONTEXT_MENU_SURFACE);
   scope.get(MENU_AT).set({ x, y });
 }
 
@@ -95,6 +103,7 @@ export function CanvasContextMenu({
 }) {
   const strings = useStrings();
   const scope = useEditorScope();
+  const focusReturn = useFocusReturn();
   const store = scope.get(MENU_AT);
   const point = useSyncExternalStore(store.subscribe, store.get, store.get);
   const registries = useRegistries();
@@ -150,6 +159,12 @@ export function CanvasContextMenu({
         aria-label={strings.t(CONTEXT_MENU.label)}
         data-testid="canvas-context-menu"
         className="min-w-[13rem]"
+        // ADR 1204 — focus goes back to where it was as the menu opened
+        // (the canvas, the caret), not to the hidden anchor Radix picks.
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          focusReturn.close(CONTEXT_MENU_SURFACE);
+        }}
       >
         {rows.map((r, i) => (
           <Fragment key={r.command}>

@@ -22,12 +22,7 @@
 // step, live where the engine draws it (an upright star with Radius 2 the
 // smaller). The values last used are kept for the session of this editor.
 
-import {
-  useEffect,
-  useEffectEvent,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import {
@@ -37,6 +32,7 @@ import {
   useRegistries,
   useScoped,
   type EditorScope,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { LengthInput, NumberInput } from "@paged-media/ui";
 import { color, radius } from "@paged-media/panel-kit";
@@ -105,14 +101,13 @@ function StarForm({ close }: { close: () => void }) {
       .invoke("paged.insert.star", { ...options })
       .finally(close);
   };
-  const onEscape = useEffectEvent(() => close());
-  useEffect(() => {
-    const listener = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, []);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.starDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => close(),
+  });
 
   return (
     <div

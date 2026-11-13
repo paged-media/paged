@@ -104,6 +104,7 @@ import {
   heldTypingStyle,
   insideKeyOwningContainer,
   isCanvasSurface,
+  isEscapeKey,
   isFormField,
   DIRECT_SELECT_TOOL_ID,
   HAND_TOOL_ID,
@@ -113,6 +114,7 @@ import {
   useOptionalTool,
   useEditorKeys,
   useEditorRoot,
+  useEscapeArbiter,
   useRegistries,
 } from "@paged-media/shell";
 
@@ -126,9 +128,6 @@ export interface TextEditingContext {
    *  `onUndo`). The edit-context controller routes Cmd-Z to that context;
    *  this hook must then leave the document stack alone. */
   undoOwnedByContext?: () => boolean;
-  /** True while an edit context is active: its controller owns Escape
-   *  (it cancels the context), so leaving the text is not ours to do. */
-  escapeOwnedByContext?: () => boolean;
   /** Escape left the text. The caret is already cleared; the host puts
    *  the user back on the object level (InDesign: the frame that held
    *  the caret selected, the Selection tool in hand). */
@@ -180,6 +179,7 @@ export function toolEndsTextEditing(toolId: string): boolean {
 export function useTextEditing(ctx: TextEditingContext) {
   const root = useEditorRoot();
   const keys = useEditorKeys();
+  const escapeArbiter = useEscapeArbiter();
   const { keybindings } = useRegistries();
   // Shift-extend anchor: the offset that stays fixed while the focus
   // end moves. Reset to the caret offset on any non-extending move so a
@@ -196,7 +196,13 @@ export function useTextEditing(ctx: TextEditingContext) {
   // Set by Escape until the queued exit runs, so keys pressed in between
   // (the "v" after Escape) are not typed into the text being left.
   const leavingRef = useRef(false);
+  // The caret's SESSION: bumped whenever the selection changes from outside
+  // this handler (a click, a panel, Find, the text being left), never by
+  // the handler's own writes. A composition remembers the session it began
+  // in, and its commit lands only in that one (UXI-TXT-007).
+  const caretSessionRef = useRef(0);
   useLayoutEffect(() => {
+    if (ctx.selection !== selRef.current) caretSessionRef.current += 1;
     selRef.current = ctx.selection;
     leavingRef.current = false;
   }, [ctx.selection]);
@@ -242,11 +248,17 @@ export function useTextEditing(ctx: TextEditingContext) {
     /** An engine answer still applies only if nothing outside this
      *  handler moved the selection while the question was in flight. */
     const stillAt = (sel: ContentSelection) => selRef.current === sel;
+    // The composition under way, and the text its commit inserted
+    // (composition sessions, below).
+    let composition: { session: number } | null = null;
+    let committed: string | null = null;
 
     const onKey = (e: KeyboardEvent) => {
       // A field, a dialog, an open menu, a composition: not the text's
       // (R9, R10).
       if (canvasKeyYields(e)) return;
+      // A new key: a commit's echo (below) can no longer be on its way.
+      committed = null;
       // Editor ADR 299 — a scoped binding of the active edit context
       // takes the key before the text does (Cmd+B inside a Word
       // document, Tab as a list level): the registry runs it.
@@ -278,19 +290,8 @@ export function useTextEditing(ctx: TextEditingContext) {
       // The remaining shortcuts require an active selection.
       if (!selRef.current || leavingRef.current) return;
 
-      if (key === "Escape") {
-        if (e.defaultPrevented || ctx.escapeOwnedByContext?.()) return;
-        e.preventDefault();
-        e.stopPropagation();
-        leavingRef.current = true;
-        anchorRef.current = null;
-        enqueue((left) => {
-          leavingRef.current = false;
-          setSel(null);
-          latest().onLeaveText?.(left);
-        });
-        return;
-      }
+      // Escape is the arbiter's (ADR 1203): `leave` below.
+      if (isEscapeKey(e)) return;
 
       // Select All inside text: the whole story, or the whole cell.
       if (cmd && !e.altKey && !e.shiftKey && (key === "a" || key === "A")) {
@@ -441,6 +442,17 @@ export function useTextEditing(ctx: TextEditingContext) {
         return;
       }
 
+      // Alt+arrows bound to a verb here (InDesign's leading and tracking
+      // keys, F-34) are the verb's: the registry runs it. Unbound (inside a
+      // context that binds nothing on them) they move the caret as before.
+      if (
+        e.altKey &&
+        !cmd &&
+        key.startsWith("Arrow") &&
+        keybindings.resolve(e) !== null
+      )
+        return;
+
       // ── Caret navigation ────────────────────────────────────────
       // The caret offset (the "focus" the user steers) is the end the
       // last extend moved. For a collapsed selection both ends equal
@@ -569,22 +581,47 @@ export function useTextEditing(ctx: TextEditingContext) {
           e.preventDefault();
       }
     };
+    // COMPOSITION SESSIONS (KF4, UXI-TXT-007). A composition records the
+    // caret session it began in; its commit (`compositionend`) inserts once,
+    // and only into that session: a composition the caret left mid-way (a
+    // click elsewhere, Escape out of the text, Find moving the caret) is
+    // dropped rather than typed into a place the user is no longer at. The
+    // text a commit inserted is remembered until the browser's own `input`
+    // for the same commit has passed (Firefox and some Safari input methods
+    // send one after `compositionend`, with the text still in the
+    // textarea), so that event never types it a second time.
+    const onCompositionStart = (e: CompositionEvent) => {
+      if (canvasSurfaceOf(e.target) !== "text") return;
+      committed = null;
+      composition = { session: caretSessionRef.current };
+    };
     const onCompositionEnd = (e: CompositionEvent) => {
       if (canvasSurfaceOf(e.target) !== "text") return;
       (e.target as HTMLTextAreaElement).value = "";
+      const began = composition;
+      composition = null;
       const text = e.data;
+      if (began && began.session !== caretSessionRef.current) return;
       if (!text || !selRef.current || leavingRef.current) return;
+      committed = text;
       anchorRef.current = null;
       enqueue((sel, c) => insertAt(c, sel, text, setSel));
     };
     // Whatever reached the textarea without a cancellable beforeinput
     // (a browser that commits a composition differently) is typed too,
-    // so nothing the user entered is dropped or left behind.
+    // so nothing the user entered is dropped or left behind — except the
+    // echo of a commit `compositionend` already inserted.
     const onInput = (e: Event) => {
       if (canvasSurfaceOf(e.target) !== "text") return;
       if ((e as InputEvent).isComposing) return;
       const area = e.target as HTMLTextAreaElement;
       const text = area.value;
+      const echo = committed;
+      committed = null;
+      if (echo !== null && (text === "" || text === echo)) {
+        area.value = "";
+        return;
+      }
       if (!text) return;
       area.value = "";
       if (!selRef.current || leavingRef.current) return;
@@ -605,12 +642,41 @@ export function useTextEditing(ctx: TextEditingContext) {
       });
     };
 
+    // ED-1 — Escape leaves the text: the caret clears and the host puts
+    // the user back on the frame. The arbiter's text tier (ADR 1203): it
+    // answers after a gesture, a transient mode and an edit context (a
+    // header edited in place inside a context leaves the context's handler
+    // inactive, so its Escape is this one, ADR 301), and before a group or
+    // the selection, so one press does one of them.
+    const leave = () => {
+      const left = selRef.current;
+      leavingRef.current = false;
+      if (!left) return;
+      setSel(null);
+      latest().onLeaveText?.(left);
+    };
+    const offEscape = escapeArbiter.register({
+      id: "paged.textEditing",
+      tier: "text",
+      isActive: () =>
+        selRef.current !== null && !leavingRef.current && !!latest().client,
+      resolve: () => {
+        // Set until the queued exit runs, so keys pressed in between (the
+        // "v" after Escape) are not typed into the text being left.
+        leavingRef.current = true;
+        anchorRef.current = null;
+        after(leave);
+      },
+    });
+
     // Capture phase — preempt the bubble-phase page-nav shortcuts. Only
     // this editor's events (its root's, `useEditorKeys`).
     const offs = [
+      offEscape,
       keys.listen("keydown", onKey, true),
       keys.listen("paste", onPaste, true),
       keys.listen("beforeinput", onBeforeInput, true),
+      keys.listen("compositionstart", onCompositionStart, true),
       keys.listen("compositionend", onCompositionEnd, true),
       keys.listen("input", onInput, true),
       keys.listen("focusout", onFocusOut, true),
@@ -618,7 +684,7 @@ export function useTextEditing(ctx: TextEditingContext) {
     return () => {
       for (const off of offs) off();
     };
-  }, [keys, root, keybindings]);
+  }, [keys, root, keybindings, escapeArbiter]);
 
   // Keyboard focus follows the caret: a caret placed in a story takes
   // focus for the text input surface when nothing else holds it (the

@@ -28,19 +28,14 @@
 // app layer (main.tsx wires `hostOptions.secrets`), so the prompt does too,
 // styled with the brand tokens the rest of the app uses.
 
-import {
-  useEffect,
-  useEffectEvent,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type {
   PendingSecret,
   SecretPromptController,
 } from "./plugin-secret-store";
 import { color, font, radius } from "@paged-media/panel-kit";
-import { FocusScope } from "@paged-media/shell";
+import { FocusScope, useEscapeHandler } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.secretPromptDialog", {
@@ -81,15 +76,14 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
   const cancel = (): void => pending.decide(null);
   const save = (): void => pending.decide(value);
 
-  // Esc cancels (nothing stored — the safe default).
-  const onEscape = useEffectEvent(() => cancel());
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // Esc cancels (nothing stored — the safe default): the modal tier of the
+  // Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.secretPrompt",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => cancel(),
+  });
 
   const tierNote =
     pending.tier === "webcrypto"

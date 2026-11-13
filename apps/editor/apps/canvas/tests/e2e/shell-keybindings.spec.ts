@@ -95,10 +95,10 @@ const HOST_KEYS = [
   "shift+arrowdown→paged.object.nudgeDownLarge",
   "cmd+d→paged.insert.placeImage",
   "ctrl+d→paged.insert.placeImage",
-  "tab→paged.chrome.toggleAll",
+  "tab→paged.view.toggleChrome",
   "shift+tab→paged.chrome.togglePanels",
-  "cmd+\\→paged.chrome.toggleAll",
-  "ctrl+\\→paged.chrome.toggleAll",
+  "cmd+\\→paged.view.toggleChrome",
+  "ctrl+\\→paged.view.toggleChrome",
   "w→paged.view.toggleScreenPreview",
   "cmd+k→paged.palette.toggle",
   "ctrl+k→paged.palette.toggle",
@@ -185,6 +185,10 @@ const TEXT_KEYS = [
   "shift+ctrl+,→paged.text.shrinkFont",
   "shift+cmd+<→paged.text.shrinkFont",
   "shift+ctrl+<→paged.text.shrinkFont",
+  "alt+arrowup→paged.text.decreaseLeading",
+  "alt+arrowdown→paged.text.increaseLeading",
+  "alt+arrowleft→paged.text.decreaseTracking",
+  "alt+arrowright→paged.text.increaseTracking",
 ] as const;
 
 const split = (sig: string) => {
@@ -330,10 +334,10 @@ test.describe("host keybindings", () => {
       "keybinding:shift+arrowdown→paged.object.nudgeDownLarge",
       "keybinding:cmd+d→paged.insert.placeImage",
       "keybinding:ctrl+d→paged.insert.placeImage",
-      "keybinding:tab→paged.chrome.toggleAll",
+      "keybinding:tab→paged.view.toggleChrome",
       "keybinding:shift+tab→paged.chrome.togglePanels",
-      "keybinding:cmd+\\→paged.chrome.toggleAll",
-      "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "keybinding:cmd+\\→paged.view.toggleChrome",
+      "keybinding:ctrl+\\→paged.view.toggleChrome",
       "keybinding:w→paged.view.toggleScreenPreview",
       "keybinding:cmd+k→paged.palette.toggle",
       "keybinding:ctrl+k→paged.palette.toggle",
@@ -368,8 +372,18 @@ test.describe("host keybindings", () => {
     );
     await openShell(page, { doc: true });
     // One context every binding applies in: a document, a frame selected,
-    // no caret, the page focused.
+    // no caret, the page focused, and the opt-in "Tab hides panels
+    // (InDesign)" on, which the Tab bindings need (ADR 1201, D-03).
     await select(page, [SHELL.frame]);
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: { commands: { invoke(id: string): Promise<unknown> } };
+          };
+        }
+      ).__canvas.registries.commands.invoke("paged.preferences.tabHidesPanels"),
+    );
     await blurAll(page);
     const recorder = await recordCommands(page, [
       ...new Set(HOST_KEYS.map((s) => split(s).command)),
@@ -377,7 +391,8 @@ test.describe("host keybindings", () => {
     const wrong: string[] = [];
     for (const sig of HOST_KEYS) {
       const { key, command } = split(sig);
-      // Tab is the chrome toggle on the canvas the user clicked into.
+      // With the preference on, Tab is the chrome toggle on the canvas the
+      // user clicked into.
       if (key === "tab" || key === "shift+tab") await engageCanvas(page);
       await pressCombo(page, key);
       const got = await expect
@@ -433,6 +448,10 @@ test.describe("host keybindings", () => {
       "keybinding:shift+ctrl+,→paged.text.shrinkFont",
       "keybinding:shift+cmd+<→paged.text.shrinkFont",
       "keybinding:shift+ctrl+<→paged.text.shrinkFont",
+      "keybinding:alt+arrowup→paged.text.decreaseLeading",
+      "keybinding:alt+arrowdown→paged.text.increaseLeading",
+      "keybinding:alt+arrowleft→paged.text.decreaseTracking",
+      "keybinding:alt+arrowright→paged.text.increaseTracking",
     );
     await openShell(page, { doc: true });
     const verbs = [...new Set(TEXT_KEYS.map((s) => split(s).command))];
@@ -478,7 +497,7 @@ test.describe("host keybindings", () => {
       "keybinding:delete→paged.object.delete",
       "keybinding:arrowleft→paged.object.nudgeLeft",
       "keybinding:shift+arrowright→paged.object.nudgeRightLarge",
-      "keybinding:tab→paged.chrome.toggleAll",
+      "keybinding:tab→paged.view.toggleChrome",
       "keybinding:cmd+a→paged.edit.selectAll",
     );
     await openShell(page, { doc: true });
@@ -494,7 +513,7 @@ test.describe("host keybindings", () => {
       "delete→paged.object.delete",
       "arrowleft→paged.object.nudgeLeft",
       "shift+arrowright→paged.object.nudgeRightLarge",
-      "tab→paged.chrome.toggleAll",
+      "tab→paged.view.toggleChrome",
     ];
     const recorder = await recordCommands(page, [
       ...new Set(quiet.map((s) => split(s).command)),

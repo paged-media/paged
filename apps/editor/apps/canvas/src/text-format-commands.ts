@@ -77,6 +77,10 @@ const M = defineMessages("app.textFormatCommands", {
   lineSpacing1: "Text: Line spacing 1",
   lineSpacing15: "Text: Line spacing 1.5",
   lineSpacing2: "Text: Line spacing 2",
+  increaseLeading: "Text: Increase leading",
+  decreaseLeading: "Text: Decrease leading",
+  increaseTracking: "Text: Increase tracking",
+  decreaseTracking: "Text: Decrease tracking",
 });
 
 // The menu leaves (`menu.<label>`).
@@ -101,6 +105,10 @@ defineMessages("menu", {
   "Line spacing 1": "Line spacing 1",
   "Line spacing 1.5": "Line spacing 1.5",
   "Line spacing 2": "Line spacing 2",
+  "Increase leading": "Increase leading",
+  "Decrease leading": "Decrease leading",
+  "Increase tracking": "Increase tracking",
+  "Decrease tracking": "Decrease tracking",
 });
 
 /** The Problems panel's source id for these commands. */
@@ -135,6 +143,26 @@ const ENTRIES: readonly Entry[] = [
   { verb: "lineSpacing1", title: M.lineSpacing1, menu: "Line spacing 1" },
   { verb: "lineSpacing15", title: M.lineSpacing15, menu: "Line spacing 1.5" },
   { verb: "lineSpacing2", title: M.lineSpacing2, menu: "Line spacing 2" },
+  {
+    verb: "increaseLeading",
+    title: M.increaseLeading,
+    menu: "Increase leading",
+  },
+  {
+    verb: "decreaseLeading",
+    title: M.decreaseLeading,
+    menu: "Decrease leading",
+  },
+  {
+    verb: "increaseTracking",
+    title: M.increaseTracking,
+    menu: "Increase tracking",
+  },
+  {
+    verb: "decreaseTracking",
+    title: M.decreaseTracking,
+    menu: "Decrease tracking",
+  },
 ];
 
 /** What a run needs of the app: the client and the live content selection. */
@@ -385,10 +413,12 @@ function formFieldHasFocus(): boolean {
  *  twin: the registry has no `mod`. Bold, italic and underline are the word
  *  processors'; the rest are InDesign's (Shift+L / C / R / J align, K all
  *  caps, H small caps, / strikethrough, = superscript, Alt+= subscript, . and
- *  , the size steps). A shifted punctuation key reports the shifted glyph on
- *  some layouts, so those register both spellings (the bracket pair's rule,
- *  `OBJECT_KEYBINDINGS`). Not bound, as there is no convention to follow: the
- *  indents and the line spacings. */
+ *  , the size steps, Alt+Up / Down leading, Alt+Left / Right tracking — UX
+ *  audit F-34). A shifted punctuation key reports the shifted glyph on some
+ *  layouts, so those register both spellings (the bracket pair's rule,
+ *  `OBJECT_KEYBINDINGS`). The Alt arrows need no twin: Alt is Option on a
+ *  Mac and Alt elsewhere. Not bound, as there is no convention to follow:
+ *  the indents and the line spacings. */
 const TEXT_CHORDS: ReadonlyArray<readonly [string, string]> = [
   ["cmd+b", "paged.text.bold"],
   ["ctrl+b", "paged.text.bold"],
@@ -424,6 +454,11 @@ const TEXT_CHORDS: ReadonlyArray<readonly [string, string]> = [
   ["shift+ctrl+,", "paged.text.shrinkFont"],
   ["shift+cmd+<", "paged.text.shrinkFont"],
   ["shift+ctrl+<", "paged.text.shrinkFont"],
+  // InDesign: Alt+Up tightens the leading, Alt+Down opens it.
+  ["alt+arrowup", "paged.text.decreaseLeading"],
+  ["alt+arrowdown", "paged.text.increaseLeading"],
+  ["alt+arrowleft", "paged.text.decreaseTracking"],
+  ["alt+arrowright", "paged.text.increaseTracking"],
 ];
 
 export const TEXT_FORMAT_KEYBINDINGS: KeybindingContribution[] =

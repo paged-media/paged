@@ -17,18 +17,22 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Journey: the command palette.
+// Journey: the command palette (UXI-T23).
 //
 // Cmd/Ctrl+K is the keyboard-driven command surface a power user reaches
-// for. The journey proves the binding opens the palette and Escape
-// dismisses it — the foundational interaction the palette feature is.
+// for. The journey proves the binding opens the palette, Escape dismisses
+// it, and focus goes back where it was (the canvas the user worked in) —
+// on the bundled-Chromium lane in CI and on real Chrome with a GPU
+// (`journeys-gpu`, local evidence: issue #32 failed only there). Escape is
+// the palette's handler of the editor's Escape arbiter (ADR 1203), so it
+// no longer depends on which dismissable layer Radix holds on top.
 
 import { expect, test } from "@playwright/test";
 
 import { Designer } from "../driver/designer";
 
 test.describe("journey · command palette", () => {
-  test("Cmd+K opens the command palette; Escape dismisses it @feat:editor-shell.command-palette @level:gesture", async ({
+  test("UXI-T23 — Cmd+K opens the command palette; Escape dismisses it and focus returns to the canvas @feat:editor-shell.command-palette @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -36,7 +40,12 @@ test.describe("journey · command palette", () => {
     await designer.newDocument();
 
     const palette = page.locator("[data-palette-footer]");
+    const canvas = page.locator('[data-canvas-surface="viewport"]');
     await expect(palette).toBeHidden();
+
+    // Work in the canvas first: focus is there when the palette opens.
+    await canvas.focus();
+    await expect(canvas).toBeFocused();
 
     // The registry binds BOTH Cmd+K and Ctrl+K (PALETTE_TOGGLE_KEYBINDING
     // + _CTRL); press the platform one.
@@ -44,8 +53,10 @@ test.describe("journey · command palette", () => {
       process.platform === "darwin" ? "Meta+k" : "Control+k",
     );
     await expect(palette).toBeVisible();
+    await expect(page.locator("[cmdk-input]")).toBeFocused();
 
     await page.keyboard.press("Escape");
     await expect(palette).toBeHidden();
+    await expect(canvas).toBeFocused();
   });
 });

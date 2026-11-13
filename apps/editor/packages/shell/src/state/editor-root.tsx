@@ -166,6 +166,27 @@ export function useEditorRoot(): HTMLElement | null {
   return useContext(RootContext);
 }
 
+/**
+ * A layer's Escape for this editor only (ADR 277; UXI-T33). Radix's menus,
+ * popovers and dialogs listen for Escape on the page's document, so a
+ * press typed in another editor on the page closed this one's layer: the
+ * returned handler, given as the content's `onEscapeKeyDown`, refuses such
+ * a press (Radix dismisses only when the event is not prevented) and hands
+ * this editor's own on to `onEscapeKeyDown`.
+ */
+export function useEditorEscapeGuard(
+  onEscapeKeyDown?: (event: KeyboardEvent) => void,
+): (event: KeyboardEvent) => void {
+  const root = useEditorRoot();
+  return (event) => {
+    if (!ownsEvent(root, event)) {
+      event.preventDefault();
+      return;
+    }
+    onEscapeKeyDown?.(event);
+  };
+}
+
 /** Where the editor's popovers, menus, dialogs and tooltips portal to: a
  *  container inside its root, so they carry its theme and tokens and stay
  *  the editor's. Undefined outside an editor (the page's body, Radix's

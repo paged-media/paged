@@ -41,6 +41,7 @@ import { EditorRoot } from "./state/editor-root";
 import {
   createEditorScope,
   EditorScopeProvider,
+  scopeOf,
   useEditorScope,
   type EditorScope,
 } from "./state/editor-scope";
@@ -164,6 +165,12 @@ import {
   contentSelectionInactive,
 } from "./state/commands/tool-commands";
 import { canvasHasPointerFocus } from "./focus/canvas-surface";
+import {
+  TAB_HIDES_PANELS_COMMAND,
+  TOGGLE_CHROME_COMMAND,
+  setTabHidesPanels,
+  tabHidesPanels,
+} from "./focus/tab-hides-panels";
 import { installRegistryDerivedContributions } from "./state/commands/registry-derived";
 import { useSpringLoadedTools } from "./tools/use-spring-loaded-tools";
 import type { PagedEditor } from "./state/paged-editor";
@@ -704,9 +711,11 @@ function ShellChrome({
   // viewport component (the canvas is a SLOT, not a panel).
   const cockpitActive = Boolean(canvasComponent);
 
-  // Concept 1 — Tab / Shift+Tab chrome hide. Tab toggles panels + the
-  // tool rail; Shift+Tab toggles panels only. Pure state — the fixed
-  // slots simply unmount (canvas column stays).
+  // Concept 1 — the chrome hide: `paged.view.toggleChrome` (Cmd/Ctrl+\)
+  // toggles the panels and the tool rail, `paged.chrome.togglePanels` the
+  // panels only; with the "Tab hides panels (InDesign)" preference on, Tab
+  // and Shift+Tab on a clicked-into canvas run them (ADR 1201, D-03). Pure
+  // state — the fixed slots simply unmount (canvas column stays).
   const [railHidden, setRailHidden] = useState(false);
   const [panelsHidden, setPanelsHidden] = useState(false);
 
@@ -808,22 +817,26 @@ function ShellChrome({
   }, [cockpitActive, registries]);
 
   useEffect(() => {
-    // F-49 (ADR 234) — Tab is the chrome toggle only on the canvas the
-    // user clicked into (InDesign's convention). Everywhere else it moves
-    // focus: the registry's `targetOwnsKey` hands Tab to a binding only
-    // from a canvas surface, and this guard narrows that to a viewport
-    // that holds pointer focus with no caret in a story (a caret's Tab is
-    // a tab character). Reached by keyboard, the viewport passes Tab on,
-    // so it is never a trap; Cmd/Ctrl+\ toggles from anywhere. Inside an
-    // active edit context that claims Tab (a sheet's grid moves its cell
-    // cursor) the toggle never sees the key: EditContextController offers
-    // it to the context in the capture phase and stops a claimed key.
+    // D-03 (ADR 1201, amending ADR 234's decision 2) — Tab and Shift+Tab
+    // move focus, the canvas included; the chrome toggle is the command
+    // `paged.view.toggleChrome` on Cmd/Ctrl+\, from anywhere. With the
+    // opt-in preference "Tab hides panels (InDesign)" on, Tab is the toggle
+    // again on the canvas the user clicked into (F-49): the registry's
+    // `targetOwnsKey` hands Tab to a binding only from a canvas surface, and
+    // this guard narrows that to the preference, a viewport that holds
+    // pointer focus, and no caret in a story (a caret's Tab is a tab
+    // character). Reached by keyboard, the viewport passes Tab on either
+    // way, so it is never a trap. Inside an active edit context that claims
+    // Tab (a sheet's grid moves its cell cursor) the toggle never sees the
+    // key: EditContextController offers it to the context in the capture
+    // phase and stops a claimed key.
     const chromeKeyGuard = (state: unknown) =>
+      tabHidesPanels(scope) &&
       canvasHasPointerFocus() &&
       (contentSelectionInactive as (s: unknown) => boolean)(state);
     const disposables = [
       registries.commands.register({
-        id: "paged.chrome.toggleAll",
+        id: TOGGLE_CHROME_COMMAND,
         title: t(COMMANDS.toggleAll),
         category: "View",
         handler: (paged) => onToggleAll(paged as PagedEditor),
@@ -834,9 +847,25 @@ function ShellChrome({
         category: "View",
         handler: (paged) => onTogglePanels(paged as PagedEditor),
       }),
+      registries.commands.register({
+        id: TAB_HIDES_PANELS_COMMAND,
+        title: t(COMMANDS.tabHidesPanels),
+        category: "View",
+        handler: (paged) => {
+          const at = scopeOf(paged);
+          setTabHidesPanels(at, !tabHidesPanels(at));
+        },
+      }),
+      registries.menus.register({
+        path: "Edit/Settings/Tab hides panels (InDesign)",
+        command: TAB_HIDES_PANELS_COMMAND,
+        group: "settings",
+        order: 80,
+        checked: (paged) => tabHidesPanels(scopeOf(paged)),
+      }),
       registries.keybindings.register({
         key: "tab",
-        command: "paged.chrome.toggleAll",
+        command: TOGGLE_CHROME_COMMAND,
         when: chromeKeyGuard,
       }),
       registries.keybindings.register({
@@ -844,20 +873,22 @@ function ShellChrome({
         command: "paged.chrome.togglePanels",
         when: chromeKeyGuard,
       }),
-      // The chord a keyboard user hides the chrome with, from anywhere.
+      // The chord the chrome hides with, from anywhere: Primary+\ (Cmd on
+      // macOS, Ctrl elsewhere), taken by no browser or system shortcut and
+      // reserved by the host (no scoped binding may take it, ADR 299).
       registries.keybindings.register({
         key: "cmd+\\",
-        command: "paged.chrome.toggleAll",
+        command: TOGGLE_CHROME_COMMAND,
       }),
       registries.keybindings.register({
         key: "ctrl+\\",
-        command: "paged.chrome.toggleAll",
+        command: TOGGLE_CHROME_COMMAND,
       }),
     ];
     return () => {
       for (const d of disposables) d.dispose();
     };
-  }, [registries]);
+  }, [registries, scope]);
 
   // B-15 host-side fix (2026-06-06): tool activation commands +
   // guarded single-key shortcuts and panel show/hide pairs derive

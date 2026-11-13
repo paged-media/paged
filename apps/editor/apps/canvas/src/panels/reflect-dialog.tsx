@@ -23,12 +23,7 @@
 // the dialog opened with: ONE batch, one undo step, remembered for
 // Transform again. The options last used are kept for the session.
 
-import {
-  useEffect,
-  useEffectEvent,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import {
@@ -39,6 +34,7 @@ import {
   useRegistries,
   useScoped,
   type EditorScope,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { LengthInput, NumberInput } from "@paged-media/ui";
 import { color, radius } from "@paged-media/panel-kit";
@@ -144,14 +140,13 @@ function ReflectForm({
       )
       .finally(close);
   };
-  const onEscape = useEffectEvent(() => close());
-  useEffect(() => {
-    const listener = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, []);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.reflectDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => close(),
+  });
 
   return (
     <div

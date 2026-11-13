@@ -255,7 +255,7 @@
     },
     {
       "name": "arc-to-cubic",
-      "description": "approximate a circular arc with cubics (4/3\u00b7tan(\u03b8/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
+      "description": "approximate a circular arc with cubics (4/3·tan(θ/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
       "owner": ["engine/core/crates/paged-geom/"],
       "extensions": [".rs"],
       "patterns": [
@@ -443,6 +443,36 @@
         "class ArapSolver",
         "fn (triangulate_rings|vertex_pins)\\s*\\("
       ],
+      "baseline": []
+    },
+    {
+      "name": "escape-listener",
+      "description": "answer Escape through the Escape arbiter (editor ADR 1203): register a handler with a tier (useEscapeHandler, escapeArbiterOf(scope).register), never a key listener of your own; the arbiter resolves each press exactly once, in the order of the interaction specification's §12.1",
+      "owner": ["apps/editor/packages/shell/src/interaction/escape-arbiter.ts"],
+      "patterns": ["[\"']Escape[\"']"],
+      "allOf": [
+        "(addEventListener|\\.listen|listenForEditorKeys)\\(\\s*(\\w+\\s*,\\s*)?[\"']keydown[\"']"
+      ],
+      "extensions": [".ts", ".tsx"],
+      "baseline": [
+        "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
+        "apps/editor/apps/canvas/src/ui/useGestureSpine.ts",
+        "apps/editor/apps/canvas/src/ui/usePathEditMode.ts"
+      ]
+    },
+    {
+      "name": "raw-window-key-listener",
+      "description": "listen for an editor's keys through listenForEditorKeys / useEditorKeys (editor ADR 277), which hears only the keys meant for that editor, never with window.addEventListener or document.addEventListener: a second editor on the page must not react",
+      "allowReason": "the keybinding registry is created with its editor's `owns` filter (ownsEvent) and applies it to every key; useModifierState reads the modifier flags, a physical key state the whole page shares, and acts on no key",
+      "allow": [
+        "apps/editor/packages/shell/src/registries/keybinding.ts",
+        "apps/editor/packages/shell/src/hooks/useModifierState.ts"
+      ],
+      "owner": ["apps/editor/packages/shell/src/state/editor-root.tsx"],
+      "patterns": [
+        "(window|document|globalThis)\\.addEventListener\\(\\s*[\"']key(down|press)[\"']"
+      ],
+      "extensions": [".ts", ".tsx"],
       "baseline": []
     }
   ]

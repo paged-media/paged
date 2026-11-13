@@ -192,6 +192,22 @@
       ]
     },
     {
+      "id": "paged.keyboard.tabHidesPanels",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.keyboard.tabHidesPanels",
+      "default": false,
+      "values": [false, true],
+      "effect": "Edit ▸ Settings ▸ Tab hides panels (InDesign) (ADR 1201, D-03): Tab and Shift+Tab on a canvas the user clicked into toggle the panels and the tool rail instead of moving focus; stored as \"true\" while on, removed when off",
+      "source": "apps/editor/packages/shell/src/focus/tab-hides-panels.ts",
+      "marker": "\"paged.keyboard.tabHidesPanels\"",
+      "sites": [
+        ["getItem", "TAB_HIDES_PANELS_KEY"],
+        ["setItem", "TAB_HIDES_PANELS_KEY"],
+        ["removeItem", "TAB_HIDES_PANELS_KEY"]
+      ]
+    },
+    {
       "id": "paged.actions.v1",
       "kind": "user-library",
       "storage": "localStorage",

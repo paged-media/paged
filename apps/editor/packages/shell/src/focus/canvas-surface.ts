@@ -20,12 +20,13 @@
 // The canvas viewport as a keyboard surface (ADR 234).
 //
 // The viewport is focusable and in the tab order, so a keyboard user can
-// reach the document and leave it again. Tab on it hides the chrome — the
-// InDesign convention — only when the user got there with the POINTER: a
-// click in the canvas marks it `data-pointer-engaged` until focus leaves
-// it. Reached by Tab, the viewport passes Tab on like any other stop, so
-// it is never a keyboard trap (WCAG 2.1.2); Cmd/Ctrl+\ hides the chrome
-// from anywhere.
+// reach the document and leave it again: Tab passes on from it like from
+// any other stop, so it is never a keyboard trap (WCAG 2.1.2), and
+// Cmd/Ctrl+\ hides the chrome from anywhere (`paged.view.toggleChrome`,
+// ADR 1201 D-03). A click in the canvas marks it `data-pointer-engaged`
+// until focus leaves it: with the opt-in "Tab hides panels (InDesign)"
+// preference (tab-hides-panels.ts), Tab on a viewport the user got to with
+// the POINTER hides the chrome, InDesign's convention.
 
 import { t } from "@paged-media/strings";
 import { SURFACE } from "../messages";
@@ -50,9 +51,10 @@ export function canvasViewport(
 }
 
 /** Focus the canvas viewport: a pointer click on a tool hands focus back
- *  to the document, as InDesign does, so the next arrow nudges and the
- *  next Tab hides the chrome (`engaged`: the hand-back counts as pointer
- *  focus). No-op when none is mounted or focus is already inside it. */
+ *  to the document, as InDesign does, so the next arrow nudges (and, with
+ *  the Tab preference on, the next Tab hides the chrome: `engaged`, the
+ *  hand-back counts as pointer focus). No-op when none is mounted or focus
+ *  is already inside it. */
 export function focusCanvasViewport(
   options: { engaged?: boolean; root?: HTMLElement | null } = {},
 ): void {
@@ -63,7 +65,7 @@ export function focusCanvasViewport(
 }
 
 /** Does the viewport hold focus because the user clicked in the canvas?
- *  The chrome toggle on Tab applies only then. */
+ *  The chrome toggle on Tab (an opt-in preference) applies only then. */
 export function canvasHasPointerFocus(): boolean {
   if (typeof document === "undefined") return false;
   const active = document.activeElement;

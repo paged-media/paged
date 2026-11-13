@@ -37,6 +37,7 @@ export const COMMANDS = defineMessages("shell.commands", {
   togglePreview: "Toggle preview screen mode",
   toggleAll: "Toggle panels and tool rail",
   togglePanels: "Toggle panels (keep tool rail)",
+  tabHidesPanels: "Tab hides panels (InDesign)",
   pickerDocuments: "Paged and IDML documents",
 });
 

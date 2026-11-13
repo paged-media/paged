@@ -47,18 +47,18 @@ const openPanel = (page: Page, id: string) =>
   invoke(page, `paged.panel.show.${id}`);
 
 test.describe("hidden panels stay mounted (ADR 240)", () => {
-  test("a query typed in the left panel survives Tab hiding the panels", async ({
+  test("a query typed in the left panel survives the chrome toggle hiding the panels", async ({
     page,
   }) => {
-    covers("command:paged.chrome.toggleAll");
+    covers("command:paged.view.toggleChrome");
     await openShell(page, { doc: true });
     const search = page.locator("[data-document-map-search]");
     await expect(search).toBeVisible();
     await search.fill("2");
     await blurAll(page);
-    await invoke(page, "paged.chrome.toggleAll");
+    await invoke(page, "paged.view.toggleChrome");
     await expect(search).toBeHidden();
-    await invoke(page, "paged.chrome.toggleAll");
+    await invoke(page, "paged.view.toggleChrome");
     await expect(search).toBeVisible();
     await expect(search).toHaveValue("2");
   });

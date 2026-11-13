@@ -450,6 +450,30 @@
       "replacement": "tool:paged.tool.select",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:paged.chrome.toggleAll",
+      "replacement": "command:paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:tab→paged.chrome.toggleAll",
+      "replacement": "keybinding:tab→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:cmd+\\→paged.chrome.toggleAll",
+      "replacement": "keybinding:cmd+\\→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "replacement": "keybinding:ctrl+\\→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

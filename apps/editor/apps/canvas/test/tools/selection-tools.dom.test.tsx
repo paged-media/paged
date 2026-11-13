@@ -241,9 +241,10 @@ describe("Selection (paged.tool.select)", () => {
     // Out of the group: a click on its member selects the group again.
     await m.g.click(on(T.group.at)).settle();
     expect(m.state.elementSelection).toEqual([T.group.id]);
-    // A second Escape at the top level changes nothing.
+    // At the top level Escape clears the selection (ADR 1201, amending
+    // ADR 250's decision 3; one press, one thing: ADR 1203).
     await m.g.key("Escape").settle();
-    expect(m.state.elementSelection).toEqual([T.group.id]);
+    expect(m.state.elementSelection).toEqual([]);
   });
 });
 

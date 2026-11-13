@@ -470,13 +470,43 @@ describe("the focused widget keeps the keys it consumes (targetOwnsKey)", () => 
         role,
         owns: true,
       });
-      // A letter is not the composite's — except in a menu (typeahead)
-      // or a dialog, which own every key but a chord (R9).
+      // A letter is not the composite's — except in a menu, a listbox or a
+      // combobox (typeahead, UXI-KEY-003) or a dialog, which owns every key
+      // but a chord (R9).
       expect({ role, owns: keyIn("v", inside) }).toEqual({
         role,
-        owns: role === "menu" || role === "dialog",
+        owns: ["menu", "dialog", "listbox", "combobox"].includes(role),
       });
     }
+  });
+
+  test("UXI-T76 — a long list or select in a panel keeps its page keys, Enter, Space and typeahead; no page turn or tool fires behind it", () => {
+    covers(
+      "keybinding:pageup→paged.view.previousPage",
+      "keybinding:pagedown→paged.view.nextPage",
+    );
+    const option = el("DIV", { within: ["listbox"] });
+    for (const key of ["PageDown", "PageUp", "Home", "End", "ArrowDown"]) {
+      expect({ key, owns: keyIn(key, option) }).toEqual({ key, owns: true });
+    }
+    expect(keyIn("Enter", option)).toBe(true);
+    expect(keyIn(" ", option)).toBe(true);
+    expect(keyIn("p", option)).toBe(true);
+    // A chord still reaches the editor (Cmd+K, Cmd+S).
+    expect(keyIn("k", option, { metaKey: true })).toBe(false);
+    // A native select: the arrows, the page keys and its typeahead.
+    const select = el("SELECT");
+    for (const key of ["PageDown", "ArrowUp", "v", "t"]) {
+      expect({ key, owns: keyIn(key, select) }).toEqual({ key, owns: true });
+    }
+    expect(keyIn("s", select, { metaKey: true })).toBe(false);
+    // A text area scrolls with the page keys.
+    expect(keyIn("PageDown", el("TEXTAREA"))).toBe(true);
+    // A tree and a toolbar keep the shortcut letters free.
+    expect(keyIn("v", el("DIV", { within: ["tree"] }))).toBe(false);
+    expect(keyIn("v", el("BUTTON", { within: ["toolbar"] }))).toBe(false);
+    // The page keys on the page are the document's.
+    expect(keyIn("PageDown", el("BODY"))).toBe(false);
   });
 
   test("a toolbar does NOT own the arrows by role: its roving group prevents the default of the arrows it moves with", () => {
@@ -524,7 +554,7 @@ describe("the focused widget keeps the keys it consumes (targetOwnsKey)", () => 
   // not inside a dialog, not across the chrome. Tab is now the focused
   // control's everywhere but on a canvas surface (ADR 234).
   test("SH-2 (F-49): a dialog owns Tab, so focus can move between its controls", () => {
-    covers("keybinding:tab→paged.chrome.toggleAll");
+    covers("keybinding:tab→paged.view.toggleChrome");
     expect(keyIn("Tab", el("BUTTON", { within: ["dialog"] }))).toBe(true);
     expect(
       keyIn("Tab", el("SELECT", { within: ["dialog"] }), { shiftKey: true }),
@@ -533,7 +563,7 @@ describe("the focused widget keeps the keys it consumes (targetOwnsKey)", () => 
 
   test("Tab moves focus from a field, a button and the page; only a canvas surface hands it to a binding", () => {
     covers(
-      "keybinding:tab→paged.chrome.toggleAll",
+      "keybinding:tab→paged.view.toggleChrome",
       "keybinding:shift+tab→paged.chrome.togglePanels",
     );
     expect(keyIn("Tab", el("INPUT"))).toBe(true);

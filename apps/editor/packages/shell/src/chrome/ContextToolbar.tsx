@@ -36,6 +36,7 @@ import {
   type EditContextFrame,
 } from "../state/edit-context-stack";
 import { CONTEXT_TOOLBAR } from "./messages";
+import { TOGGLE_CHROME_COMMAND } from "../focus/tab-hides-panels";
 import { ContributedControlBarGroups } from "./ContributedBarItems";
 
 export interface ContextToolbarProps {
@@ -98,7 +99,7 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
         <ViewPill
           name="ui-expand"
           title={strings.t(CONTEXT_TOOLBAR.focusMode)}
-          onClick={() => void commands.invoke("paged.chrome.toggleAll")}
+          onClick={() => void commands.invoke(TOGGLE_CHROME_COMMAND)}
         />
       </div>
     </div>

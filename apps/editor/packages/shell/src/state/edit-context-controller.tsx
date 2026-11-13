@@ -21,8 +21,7 @@
 // plugin-web W-03). The STACK (edit-context-stack.tsx) is pure state;
 // THIS side-effect component wires the stack to the shell chrome:
 //
-//   · Esc POPS one level (the global keydown, skipped when an editable
-//     field has focus — same guard as usePathEditMode);
+//   · Esc POPS one level (a handler of the Escape arbiter, ADR 1203);
 //   · on the ACTIVE frame change → EMPHASIZE the context's panels
 //     (cockpit `openPanel` raises each — UNLESS the panel on screen is
 //     one this context SERVES, see below) and FOCUS the first restricted
@@ -49,6 +48,7 @@ import {
 } from "./tool-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
+import { isEscapeKey, useEscapeHandler } from "../interaction/escape-arbiter";
 import { useEditorKeys } from "./editor-root";
 import { useOptionalRegistries } from "./registries-context";
 
@@ -88,8 +88,10 @@ export function EditContextController() {
   // keeps Enter/Esc for a focused <input> elsewhere). Policy:
   //   · MID SUB-EDIT (isDirty, e.g. an in-frame cell being typed): the
   //     context's `onContentKey` owns ALL keys — Enter commits the CELL,
-  //     Esc cancels the CELL, the context stays.
-  //   · otherwise Esc CANCELS the context (onCancel→onExit); Enter COMMITS
+  //     Esc cancels the CELL (through the Escape arbiter, below), the
+  //     context stays.
+  //   · otherwise Esc CANCELS the context (onCancel→onExit, the arbiter's
+  //     handler below); Enter COMMITS
   //     it but only when it opts in (onCommit — sheet has none at the
   //     context level, so Enter falls through to start/forward below);
   //   · a printable / editing key (no Cmd/Ctrl) is FORWARDED to
@@ -115,6 +117,8 @@ export function EditContextController() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return; // no context → don't intercept
+      // Escape is the arbiter's (ADR 1203): the handlers below.
+      if (isEscapeKey(e)) return;
       // The focused control's keys stay its own (ADR 234): a field, a
       // dialog, an open menu, a toolbar's arrows, Tab on a button.
       if (canvasKeyYields(e)) return;
@@ -149,21 +153,9 @@ export function EditContextController() {
       }
 
       // A sub-edit of a context that takes no keys of its own (a bundle's
-      // open transform box, extensions ADR 339): Esc and Enter end the
-      // SUB-EDIT through the tool in hand, not the context.
-      if (
-        !onContentKey &&
-        isDirtyRef.current() &&
-        (e.key === "Escape" || e.key === "Enter")
-      )
-        return;
-      if (e.key === "Escape") {
-        if (subContexts?.current()) return;
-        e.preventDefault();
-        e.stopPropagation();
-        cancel();
-        return;
-      }
+      // open transform box, extensions ADR 339): Enter ends the SUB-EDIT
+      // through the tool in hand, not the context.
+      if (!onContentKey && isDirtyRef.current() && e.key === "Enter") return;
       if (e.key === "Enter" && wantsCommitRef.current) {
         e.preventDefault();
         e.stopPropagation();
@@ -197,7 +189,33 @@ export function EditContextController() {
     // Capture so we win these keys while a context is active (this
     // editor's keys only).
     return keys.listen("keydown", onKey, true);
-  }, [commit, cancel, keys, subContexts]);
+  }, [commit, keys]);
+
+  // Escape (ADR 1203, §12.1 cases 5 and 6). Mid sub-edit (a cell being
+  // typed) the context resolves the sub-edit through its `onContentKey`
+  // and stays; a context that takes no keys of its own leaves its
+  // sub-edit (a bundle's open transform box, extensions ADR 339) to the
+  // tool in hand. A clean context pops one level, unless a header or
+  // footer is edited in place inside it (ADR 301): then the text's
+  // handler takes the caret out of the header.
+  useEscapeHandler({
+    id: "paged.editContext.subEdit",
+    tier: "context-dirty",
+    isActive: () => !!active && isActiveDirty(),
+    resolve: (e) => {
+      const onContentKey = activeContribution?.onContentKey;
+      if (!onContentKey) return "defer";
+      onContentKey(e);
+    },
+  });
+  useEscapeHandler({
+    id: "paged.editContext",
+    tier: "context",
+    isActive: () => !!active && !subContexts?.current(),
+    resolve: () => {
+      cancel();
+    },
+  });
 
   // On the active frame ENTER → emphasize panels + focus the first tool.
   // Keyed by the frame identity (type + scope root) so re-running only

@@ -51,6 +51,8 @@ export const MENU = defineMessages("menu", {
   Developer: "Developer",
   Other: "Other",
   Panels: "Panels",
+  Settings: "Settings",
+  "Tab hides panels (InDesign)": "Tab hides panels (InDesign)",
 });
 
 /** A menu path segment in the editor's language: `menu.<segment>` when a
@@ -184,7 +186,7 @@ export const PANEL_RAIL = defineMessages("shell.panelRail", {
 });
 
 export const CONTEXT_TOOLBAR = defineMessages("shell.contextToolbar", {
-  focusMode: "Focus mode (⌘\\, or Tab on the canvas)",
+  focusMode: "Focus mode (⌘\\)",
   noTools: "no canvas tools apply here",
   escToLeave: "Esc to leave",
 });

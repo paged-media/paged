@@ -24,7 +24,7 @@
 // (`view-preferences.ts`, localStorage): every change applies at once and
 // is no undo step — the dialog changes no document.
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import {
@@ -35,6 +35,7 @@ import {
   useScoped,
   useViewPreferences,
   type EditorScope,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { ColorInput, color, radius } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -85,13 +86,13 @@ function ViewPreferencesForm() {
   const store = useScoped(OPEN);
   const prefs = useViewPreferences();
   const close = () => store.set(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") store.set(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [store]);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.viewPreferencesDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => close(),
+  });
 
   const check = (
     key:

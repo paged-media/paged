@@ -21,12 +21,7 @@
 // symbol lands centred on the current page as ONE undo step. The values last
 // used are kept for the session of this editor.
 
-import {
-  useEffect,
-  useEffectEvent,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import {
@@ -36,6 +31,7 @@ import {
   useRegistries,
   useScoped,
   type EditorScope,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { color, radius } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -101,14 +97,13 @@ function BarcodeForm({ close }: { close: () => void }) {
       .invoke("paged.insert.barcode", { ...options })
       .finally(close);
   };
-  const onEscape = useEffectEvent(() => close());
-  useEffect(() => {
-    const listener = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, []);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.barcodeDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => close(),
+  });
 
   return (
     <div

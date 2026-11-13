@@ -43,6 +43,7 @@ import {
   useOptionalCanvasClient,
   useSessionRole,
   useSetSessionRole,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import type {
   CommandContribution,
@@ -172,13 +173,13 @@ function OpenAsTemplateForm(): ReactElement {
       live = false;
     };
   }, [client]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") store.set(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [store]);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.openAsTemplateDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => store.set(false),
+  });
 
   const fields = derivation?.fields ?? [];
   const before = new Map(existing.map((r) => [r.field.name, r.field.kind]));

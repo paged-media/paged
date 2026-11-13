@@ -36,7 +36,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MlImage } from "@paged-media/plugin-api";
 import { defineMessages, useStrings } from "@paged-media/strings";
 import { color, font, radius } from "@paged-media/panel-kit";
-import { FocusScope } from "@paged-media/shell";
+import { FocusScope, useEscapeHandler } from "@paged-media/shell";
 
 import { reachableOrigin } from "../plugin-consent";
 import { useMlService, useMlSnapshot } from "../ml/scope";
@@ -225,13 +225,13 @@ function ConsentPrompt({
     model.entry.variants[0]!;
   const origins = service.downloadOrigins(model.entry.id);
   const needsAck = model.entry.licence.requiresAcknowledgement;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.models.licence",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => onClose(),
+  });
   const install = () => {
     onClose();
     service

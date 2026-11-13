@@ -76,6 +76,7 @@ import {
 } from "../../state/guide-drag-context";
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
 import { queryEditor, useEditorRoot } from "../../state/editor-root";
+import { useEscapeHandler } from "../../interaction/escape-arbiter";
 
 /** Whole-pt snap (GD spec: release snaps to whole pt). */
 function snapPt(v: number): number {
@@ -416,25 +417,26 @@ export function GuideDragController() {
       void settle({ ...d, ...resolved }, resolved.overRuler);
     };
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // GD-03 — cancel: nothing was mutated yet, so just drop the
-      // live preview. A move's original guide is untouched.
-      clearDrag();
-    };
-
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-    window.addEventListener("keydown", onKey, true);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("keydown", onKey, true);
     };
     // Listeners read the live drag / preview-resolver / settle through
     // effect events, so they bind exactly once per drag (mount/unmount on
     // dragActive).
   }, [dragActive, updateDrag, clearDrag]);
+
+  // GD-03 — Escape cancels: nothing was mutated yet, so just drop the live
+  // preview; a move's original guide is untouched. A transient mode of the
+  // Escape arbiter (ADR 1203), so the same press does nothing else.
+  useEscapeHandler({
+    id: "paged.guides.drag",
+    tier: "transient",
+    isActive: () => dragActive,
+    resolve: () => clearDrag(),
+  });
 
   return null;
 }

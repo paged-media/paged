@@ -47,6 +47,7 @@ import { useWorkflowMode } from "../state/workflow-mode-context";
 import { entryApplies, type VisibilityPredicate } from "../registries/types";
 import { Icon, hasIcon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
+import { useFocusReturn } from "../focus/focus-return";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
 import { MENU_BAR, menuLabel } from "./messages";
@@ -55,6 +56,9 @@ import {
   useEditorKeys,
   useEditorRoot,
 } from "../state/editor-root";
+
+/** The menu bar's name with the focus-return service. */
+const MENU_SURFACE = "menuBar";
 
 /**
  * Top-level menu bar. Reads from `MenuRegistry` and renders each
@@ -145,6 +149,7 @@ export function MenuBar() {
   // degrades to "everything enabled" rather than throwing.
   const paged = useOptionalPaged();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const focusReturn = useFocusReturn();
   // How the open menu was opened and where focus was before it: read
   // and written by the event handlers below, never during render.
   // F-50 (ADR 259): F10 puts focus on the menu bar's first menu, the
@@ -325,11 +330,11 @@ export function MenuBar() {
           }
           if (nav.origin !== "pointer") return;
           e.preventDefault();
+          // ADR 1204 — to where focus was, or the canvas when that is gone.
           const back = nav.returnTo;
           nav.returnTo = null;
-          if (back instanceof HTMLElement && back.isConnected) {
-            back.focus({ preventScroll: true });
-          }
+          focusReturn.open(MENU_SURFACE, back);
+          focusReturn.close(MENU_SURFACE);
         }}
       >
         {renderNodes(nodes, ctx)}

@@ -53,6 +53,7 @@ import {
   type CommandContribution,
   type EditorScope,
   type MenuItemContribution,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { LengthInput, NumberInput } from "@paged-media/ui";
 import { color, radius } from "@paged-media/panel-kit";
@@ -232,14 +233,14 @@ function TransformEachForm({
     closing.current = true;
     void enqueue(revert).then(close);
   };
-  const onEscape = useEffectEvent(() => cancel());
-  useEffect(() => {
-    const listener = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, []);
+  // Escape takes the preview back: the modal tier of the Escape arbiter
+  // (ADR 1203).
+  useEscapeHandler({
+    id: "paged.transformEachDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => cancel(),
+  });
 
   const ref = REFERENCE_POINTS.indexOf(params.reference);
 

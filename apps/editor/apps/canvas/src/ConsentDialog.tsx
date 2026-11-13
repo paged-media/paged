@@ -26,12 +26,7 @@
 // `hostOptions.consent`), so the prompt does too, styled with the brand tokens
 // the rest of the app uses rather than reaching across into shell-internal UI.
 
-import {
-  useEffect,
-  useEffectEvent,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import {
   reachableOrigin,
@@ -39,7 +34,7 @@ import {
   type PendingConsent,
 } from "./plugin-consent";
 import { color, font, radius } from "@paged-media/panel-kit";
-import { FocusScope } from "@paged-media/shell";
+import { FocusScope, useEscapeHandler } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.consentDialog", {
@@ -80,15 +75,15 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
   const deny = (): void => pending.decide({ granted: [], remember: false });
   const allow = (): void => pending.decide({ granted: [...checked], remember });
 
-  // Esc denies (the safe default for an un-acknowledged prompt).
-  const onEscape = useEffectEvent(() => deny());
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onEscape();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // Esc denies (the safe default for an un-acknowledged prompt): the modal
+  // tier of the Escape arbiter (ADR 1203), so only this editor's Escape
+  // answers it and nothing else acts on that press.
+  useEscapeHandler({
+    id: "paged.consent",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => deny(),
+  });
 
   const toggle = (origin: string): void =>
     setChecked((prev) => {

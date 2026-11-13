@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 925,
-    "keybinding": 201,
-    "menu": 669,
+    "command": 930,
+    "keybinding": 205,
+    "menu": 674,
     "panel": 151,
     "tool": 123
   },
@@ -3651,11 +3651,6 @@
       "owner": "editor"
     },
     {
-      "id": "command:paged.chrome.toggleAll",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
       "id": "command:paged.chrome.togglePanels",
       "kind": "command",
       "owner": "editor"
@@ -4366,6 +4361,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.preferences.tabHidesPanels",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.sample.hello",
       "kind": "command",
       "owner": "editor"
@@ -4426,12 +4426,32 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.text.decreaseLeading",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.decreaseTracking",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.text.growFont",
       "kind": "command",
       "owner": "editor"
     },
     {
       "id": "command:paged.text.increaseIndent",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.increaseLeading",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.increaseTracking",
       "kind": "command",
       "owner": "editor"
     },
@@ -4611,6 +4631,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.toggleChrome",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.toggleDataMarkers",
       "kind": "command",
       "owner": "editor"
@@ -4657,6 +4682,26 @@
     },
     {
       "id": "keybinding:*→paged.tool.activate.*",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:alt+arrowdown→paged.text.increaseLeading",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:alt+arrowleft→paged.text.decreaseTracking",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:alt+arrowright→paged.text.increaseTracking",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:alt+arrowup→paged.text.decreaseLeading",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -4826,7 +4871,7 @@
       "owner": "editor"
     },
     {
-      "id": "keybinding:cmd+\\→paged.chrome.toggleAll",
+      "id": "keybinding:cmd+\\→paged.view.toggleChrome",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5196,7 +5241,7 @@
       "owner": "editor"
     },
     {
-      "id": "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "id": "keybinding:ctrl+\\→paged.view.toggleChrome",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5646,7 +5691,7 @@
       "owner": "media.paged.doc"
     },
     {
-      "id": "keybinding:tab→paged.chrome.toggleAll",
+      "id": "keybinding:tab→paged.view.toggleChrome",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -6292,6 +6337,11 @@
     },
     {
       "id": "menu:Edit/Settings/Models…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Settings/Tab hides panels (InDesign)",
       "kind": "menu",
       "owner": "editor"
     },
@@ -8621,12 +8671,32 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Type/Format/Decrease leading",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Decrease tracking",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Type/Format/Increase font size",
       "kind": "menu",
       "owner": "editor"
     },
     {
       "id": "menu:Type/Format/Increase indent",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Increase leading",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Increase tracking",
       "kind": "menu",
       "owner": "editor"
     },
@@ -10594,8 +10664,32 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:paged.chrome.toggleAll",
+      "replacement": "command:paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:paged.file.importPdfVectors",
       "replacement": "command:media.paged.pdf.command.importVectors",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:cmd+\\→paged.chrome.toggleAll",
+      "replacement": "keybinding:cmd+\\→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "replacement": "keybinding:ctrl+\\→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:tab→paged.chrome.toggleAll",
+      "replacement": "keybinding:tab→paged.view.toggleChrome",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },

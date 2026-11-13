@@ -52,6 +52,7 @@ import {
   useEditorScope,
   useScoped,
   type EditorScope,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import { defineMessages, t as tr, useStrings } from "@paged-media/strings";
 
@@ -375,13 +376,13 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     };
   }, [info]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") dialog.set(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [dialog]);
+  // Escape closes: the modal tier of the Escape arbiter (ADR 1203).
+  useEscapeHandler({
+    id: "paged.coreCommandDialog",
+    tier: "modal",
+    isActive: () => true,
+    resolve: () => dialog.set(null),
+  });
 
   const run = async (): Promise<void> => {
     if (!op || !info) return;

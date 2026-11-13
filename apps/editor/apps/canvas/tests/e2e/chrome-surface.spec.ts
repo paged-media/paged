@@ -137,7 +137,7 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
     for (const command of [
       "paged.view.zoomIn",
       "paged.view.zoomOut",
-      "paged.chrome.toggleAll",
+      "paged.view.toggleChrome",
       "paged.chrome.togglePanels",
       "paged.fillStroke.swap",
       "paged.fillStroke.default",
