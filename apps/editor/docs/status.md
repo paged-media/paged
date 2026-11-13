@@ -188,7 +188,9 @@ checked against and a development trace (`__interaction`, no user text). It is b
 the canvas is a session, and a lost pointer capture, a window blur, a hidden page, a document or
 tool switch, a failed worker and unmount end it once, rolled back; a begin the engine refuses and
 Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
-a failed worker is said so (`UXI-T10`, `UXI-T61`). Without the flag the canvas behaves as before.
+a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a double-click's and the
+context menu's hit test that answers after a newer press, document or context is dropped
+(`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

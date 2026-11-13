@@ -100,17 +100,9 @@
     "task": "IC7",
     "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T56 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T57": {
-    "task": "IC3",
-    "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T57 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T58": {
     "task": "IC5",
     "reason": "No test claims it yet: a drag that starts before its hit test answers gets no feedback from the down point yet (IC5, over EN7's atomic begin). Claim it in a test title (UXI-T58 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T59": {
-    "task": "IC3",
-    "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T59 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T65": {
     "task": "DF9",

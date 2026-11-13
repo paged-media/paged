@@ -162,6 +162,9 @@ export interface InteractionCoordinator {
   token(label: string, session?: InteractionSession | null): GuardToken;
   /** Is the answer to `token`'s request still wanted? */
   isCurrent(token: GuardToken): boolean;
+  /** `isCurrent`, tracing `stale <label> discarded` when it is not: for an
+   *  answer checked between the steps of a chain. */
+  confirm(token: GuardToken): boolean;
   /** `promise`'s value while `token` is current, else `STALE` (traced). */
   guard<T>(token: GuardToken, promise: Promise<T>): Promise<T | Stale>;
   /** A document was loaded, replaced or closed: every session aborts
@@ -356,14 +359,18 @@ export function createInteractionCoordinator(
       return !s || !s.controller.signal.aborted;
     },
 
-    guard<T>(token: GuardToken, promise: Promise<T>): Promise<T | Stale> {
-      return promise.then((value) => {
-        if (coordinator.isCurrent(token)) return value;
-        record("stale", (token.session as MutableSession | null) ?? null, {
-          reason: `stale ${token.label} discarded`,
-        });
-        return STALE;
+    confirm(token) {
+      if (coordinator.isCurrent(token)) return true;
+      record("stale", (token.session as MutableSession | null) ?? null, {
+        reason: `stale ${token.label} discarded`,
       });
+      return false;
+    },
+
+    guard<T>(token: GuardToken, promise: Promise<T>): Promise<T | Stale> {
+      return promise.then((value) =>
+        coordinator.confirm(token) ? value : STALE,
+      );
     },
 
     documentChanged(reason) {
