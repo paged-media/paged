@@ -1,9 +1,9 @@
 # ADR 1205 — A drop says what it will do
 
-- **Status:** Accepted 2026-11-13. Decision 4 (failed opens change nothing), decision 5 (every
-  format offered) and the frame under the pointer in `placeImage` ship with this record;
-  decisions 2 and 3 (the label before the drop, the drop carried out from it) take effect when
-  the canvas drop zone of task WS0 (`cockpit/drop-zone.tsx`) mounts `useDropIntent`.
+- **Status:** Accepted 2026-11-13. Landed in two parts the same day: failed opens, the open
+  picker, the empty canvas and `placeImage`'s frame first; the label before the drop and the drop
+  carried out from it once the canvas drop zone of task WS0 (`cockpit/drop-zone.tsx`) existed to
+  mount `useDropIntent`.
 - **Scope:** `packages/shell/src/state/drop-intent.ts` (new: the resolver, pure),
   `state/drop-target.ts` (new: the target under the pointer), `state/use-drop-intent.ts` (new:
   the drop zone's handlers), `overlays/drop-intent-overlay.tsx` (new: the ghost label),
@@ -16,8 +16,8 @@
   nothing open). `UXI-DND-001` to `UXI-DND-004` and `UXI-FIL-001` of the interaction
   specification ([ADR 1200](1200-the-interaction-contract-is-adopted.md)); the UX strategy's
   §6.3; task DF3 of [`interaction-plan.md`](../interaction-plan.md). Amends
-  [ADR 258](258-a-dropped-picture-is-placed-where-it-lands.md). Closes UX audit F-10 and F-02's
-  silent and misleading opens; F-40 with the drop zone.
+  [ADR 258](258-a-dropped-picture-is-placed-where-it-lands.md). Closes UX audit F-40 and F-10,
+  and F-02's silent and misleading opens.
 
 ## Context
 
@@ -73,5 +73,4 @@ had already been reset, with the reason only in a tooltip (F-02).
   `test/commands/file-commands.test.ts` (refusals, `dropFileAs`, a file that is no package),
   `test/stores/document-loading.test.ts` (a failed load resets nothing),
   `apps/canvas/test/unit/commands/insert-commands.test.ts` (the frame under the pointer), and
-  `UXI-T62`, `UXI-T63`, `UXI-T64` in `apps/canvas/tests/e2e/uxi-drop-intent.spec.ts` with the
-  drop zone.
+  `UXI-T62`, `UXI-T63`, `UXI-T64` in `apps/canvas/tests/e2e/uxi-drop-intent.spec.ts`.

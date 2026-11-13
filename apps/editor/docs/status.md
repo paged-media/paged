@@ -19,7 +19,10 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   ([ADR 1204](adr/1204-recovery-journal.md)). The native picker and the empty canvas offer every
   format an importer opens (the empty canvas also New, Open… and the library's recent
   documents), and a file that is no package or that the engine cannot read leaves the open
-  document as it was and says why ([ADR 1205](adr/1205-drop-says-what-it-will-do.md)).
+  document as it was and says why. A file dragged over the canvas says what the drop will do
+  before it lands (place, place into the frame under the pointer, import, open, open in place
+  of this document, or refused and why), and the drop does that
+  ([ADR 1205](adr/1205-drop-says-what-it-will-do.md)).
 - **Export.** PDF through the export dialog, with progress and cancel; page images as PNG;
   every exporter a plugin registers, listed in the Outputs panel. Swatch libraries can be
   imported and exported as `.ase`.
@@ -152,10 +155,8 @@ decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work
 [`interaction-plan.md`](interaction-plan.md).
 
 Implemented so far: the save status (DF1, [ADR 1203](adr/1203-save-status-says-what-is-saved-where.md),
-`UXI-T67`), the recovery journal (DF2, [ADR 1204](adr/1204-recovery-journal.md)), and of DF3
-([ADR 1205](adr/1205-drop-says-what-it-will-do.md)) the open picker, the empty canvas and failed
-opens that change nothing; the drop's label at the pointer and the drop into the frame under it
-wait for the canvas drop zone (WS0). Track KF (keyboard and focus) is built: Escape is resolved
+`UXI-T67`), the recovery journal (DF2, [ADR 1204](adr/1204-recovery-journal.md)) and drop
+intent (DF3, [ADR 1205](adr/1205-drop-says-what-it-will-do.md), `UXI-T62` to `UXI-T64`). Track KF (keyboard and focus) is built: Escape is resolved
 once per press by a per-editor arbiter in the specification's order, and at the top level it
 clears the selection ([ADR 1207](adr/1207-one-escape.md)); every key listener hears only its own
 editor's keys; Tab moves focus everywhere, the chrome toggle is `paged.view.toggleChrome`
@@ -180,6 +181,15 @@ follows InDesign's categories with one sentence-case name per panel. UX audit F-
 F-23, F-24, F-53 and F-55 close. WS8–WS10 (zoom and navigation, editing aids, page lenses) are
 planned.
 
+Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
+interaction coordinator that holds the session owning the pointer, the epochs a late answer is
+checked against and a development trace (`__interaction`, no user text). It is behind the
+`?debug=coordinator` flag until the adapters land (IC4): with the flag, every pointer sequence on
+the canvas is a session, and a lost pointer capture, a window blur, a hidden page, a document or
+tool switch, a failed worker and unmount end it once, rolled back; a begin the engine refuses and
+Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
+a failed worker is said so (`UXI-T10`, `UXI-T61`). Without the flag the canvas behaves as before.
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
 the marquee takes what it intersects, and a double-click on an image frame enters paged.image.
@@ -196,9 +206,9 @@ the `UXI-T` tests and the test harness are being built.
   wide by default (`apps/canvas/src/worker/render.ts:93`).
 - **Page layout.** Pages are stacked vertically; the pages of a spread are not placed side
   by side (`apps/canvas/src/ui/layout.ts`).
-- **Open.** Two importers may claim one extension; the first registered wins. A file dragged
-  over the canvas shows nothing until it is dropped (UX audit F-40, open until the drop zone
-  takes ADR 1205's handlers).
+- **Open.** Two importers may claim one extension; the first registered wins. While a file is
+  dragged the browser names its type, not its file name, so a drop whose type nothing claims
+  reads "Drop to open or import this file" until it lands (ADR 1205).
 - **Save.** There is no autosave to the document's file and no recent-files list: the
   recovery journal keeps checkpoints of unsaved work in this browser, which are no save
   (ADR 1204), and only the page entry and the plain editor keep one. Save writes the

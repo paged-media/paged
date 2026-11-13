@@ -29,6 +29,7 @@ import {
 
 import { IDENTITY_CAMERA, type Camera } from "@paged-media/client";
 
+import { useInteractionCoordinator } from "../interaction/coordinator";
 import { useCanvasClient } from "./canvas-client-context";
 import { clampCamera } from "./zoom-range";
 
@@ -77,6 +78,7 @@ const Context = createContext<CameraContextValue | null>(null);
  */
 export function CameraProvider({ children }: PropsWithChildren) {
   const client = useCanvasClient();
+  const interactions = useInteractionCoordinator();
   const [camera, setCameraState] = useState<Camera>(IDENTITY_CAMERA);
   const [viewportSize, setViewportSizeState] = useState<ViewportSize>([0, 0]);
   // The size the clamp zooms about, read inside `setCamera` without
@@ -104,8 +106,9 @@ export function CameraProvider({ children }: PropsWithChildren) {
       cameraRef.current = cam;
       setCameraState(cam);
       client.setCamera(cam);
+      interactions.cameraChanged();
     },
-    [client],
+    [client, interactions],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)

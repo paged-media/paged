@@ -254,6 +254,19 @@ export default defineConfig({
       },
     },
     {
+      // The interaction contract's specs with the interaction coordinator
+      // switched on (`?debug=coordinator`, editor ADR "The interaction
+      // coordinator", UXI-MIG-003): the baseline and the legacy tapes must
+      // come out the same under it. Added to the query by `openCanvas`.
+      name: "uxi-coordinator",
+      testMatch: ["**/e2e/uxi-*.spec.ts"],
+      metadata: { debugFlags: ["coordinator"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        headless: true,
+      },
+    },
+    {
       // Cross-component round trips (/tests/integration): a module's state
       // saved into the editor's .paged container and read back on reopen.
       // The same browser and settings as `journeys`; CI runs it beside the

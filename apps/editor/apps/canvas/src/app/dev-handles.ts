@@ -31,6 +31,8 @@ import type { CanvasClient } from "@paged-media/client";
 import {
   debugHandlesOf,
   getOpenFileHandle,
+  interactionCoordinatorOf,
+  interactionDebugView,
   replacePrompts,
   saveStateOf,
   setOpenFileHandle,
@@ -148,6 +150,11 @@ export function publishDevHandles(instance: EditorInstance): () => void {
     __canvasPointer: () => debug().pointer,
     // The last crash the shell's boundary caught.
     __pagedCrash: () => debug().crash,
+    // The interaction coordinator's trace and state (editor ADR "The
+    // interaction coordinator"): ids, owners, phases and epochs, never
+    // user text.
+    __interaction: () =>
+      interactionDebugView(interactionCoordinatorOf(instance.scope)),
     // The aggregate PagedEditor handle every bundle host's `getEditor()`
     // returns: specs probe the members capability flags gate on.
     __paged: () => objects.editor() ?? undefined,
