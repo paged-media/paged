@@ -1,6 +1,6 @@
 # ADR 193 — Page-item snippets: what Copy takes and Paste puts back
 
-- **Status:** Accepted 2026-10-19.
+- **Status:** Accepted 2026-10-19; amendment 1 2026-11-13 (the Alt-drag previews the copy it commits).
 - **Scope:** `crates/paged-mutate/src/apply/snippet.rs` (`extract_snippet`, `Operation::InsertSnippet` /
   `RemoveSnippet`), `crates/paged-canvas` (`ExportElements` / `ElementsExported`,
   `Mutation::PasteElements`, the Alt+Translate commit), `crates/paged-script`
@@ -44,3 +44,27 @@ line, could collide (GF-3).
 - One copy path for the editor's clipboard, Alt-drag, scripts and the CLI.
 - Duplicate stays `DuplicateNodes` (directly above the source, in its group); a paste and an
   Alt-drag copy land on top of the spread, at top level.
+
+## Amendment 1 (2026-11-13): the Alt-drag previews the copy it commits
+
+Protocol 79; editor ADR 1201, decision D-02 (and D-06); task EN4: `UXI-GST-008`, `UXI-GST-009`,
+`UXI-GST-011`, proven by `UXI-T06` and `UXI-T11`.
+
+Decision 4's commit read the modifiers the last update left on the session while the preview
+moved the originals whatever Alt said, so what the user saw during an Alt-drag (the item
+moving) was not what the release made (the item staying, a copy appearing). Now:
+
+- **The preview is the commit.** While Alt is held in a Translate, an update puts the originals
+  back at rest and pastes the copy the commit will paste — the same `alt_duplicate_ops`, built
+  from the same scene (originals at rest, no copy), so the copy's items, ids and place are the
+  commit's — and keeps the ops that take it out again on the session. Each update takes the
+  previous copy out first and starts again from the snapshot, so pressing or releasing Alt
+  mid-drag switches between move and duplicate with no drift; the release commits what the last
+  update showed, as one undo step, and a cancel leaves no copy (`UXI-GST-006`). A copy the
+  snippet or the session's policy refuses is not previewed; its commit fails as it did.
+- **The press's modifiers begin the gesture.** `BeginGesture` takes the optional `modifiers`
+  held at the press (`CanvasModel::begin_gesture_with`); every update replaces them with the
+  live ones. The editor's press-drag on an unselected item passes the live Alt instead of
+  `false`, so an Alt press-drag released before its first update still duplicates.
+- A preview that adds or removes the copy rebuilds as a committed structural edit does (the
+  cross-build emit caches go); a plain move keeps them for the whole drag, as before.

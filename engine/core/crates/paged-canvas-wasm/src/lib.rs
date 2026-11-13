@@ -843,6 +843,11 @@ mod wasm {
         /// `modifier_bits`: bit 0 = shift, bit 1 = alt, bit 2 =
         /// disable_snap (Ctrl, plan-2 §8.4). Matches the SAB layout
         /// in `packages/shell/src/gestures/gesture-sab.ts`.
+        ///
+        /// v79 (engine ADR 125, amendment 2) — `camera_scale` is the
+        /// camera scale (px/pt) the worker's camera buffer holds now, so
+        /// the snap tolerances follow a zoom made during the drag; `0`
+        /// (or anything not a positive number) keeps the gesture's.
         #[wasm_bindgen(js_name = updateGestureRaw)]
         pub fn update_gesture_raw(
             &mut self,
@@ -851,6 +856,7 @@ mod wasm {
             dx: f32,
             dy: f32,
             modifier_bits: u32,
+            camera_scale: f32,
         ) -> String {
             let Some(model) = self.core.model.as_mut() else {
                 return String::new();
@@ -863,7 +869,8 @@ mod wasm {
                 alt: (modifier_bits & 0b010) != 0,
                 disable_snap: (modifier_bits & 0b100) != 0,
             };
-            match model.update_gesture(handle, (dx, dy), modifiers) {
+            let scale = (camera_scale.is_finite() && camera_scale > 0.0).then_some(camera_scale);
+            match model.update_gesture_with_scale(handle, (dx, dy), modifiers, scale) {
                 Ok(result) => {
                     #[cfg(feature = "gpu")]
                     self.scene_cache.clear();

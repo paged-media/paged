@@ -483,6 +483,7 @@ export {
   openDocumentFile,
   mintBlankDocument,
   dropFile,
+  dropFileAs,
   dropPlaces,
   PLACE_DROPPED_COMMAND,
   type PlaceDropPayload,
@@ -518,6 +519,39 @@ export {
 } from "./state/save-status";
 export { SaveStateController } from "./state/save-state-controller";
 export { SaveStatus, saveStatusLabel } from "./chrome/SaveStatus";
+export { openLibraryDocument } from "./state/open-library-document";
+// Editor ADR 1205 — what a dropped file will do, said before the drop.
+export {
+  carriesFiles,
+  useDropIntent,
+  type DropFileHandler,
+  type DropIntentHandlers,
+} from "./state/use-drop-intent";
+export {
+  extensionOf,
+  isDocumentFile,
+  isPicture,
+  resolveDropIntent,
+  revalidateDrop,
+  type DropEpoch,
+  type DropFile,
+  type DropIntent,
+  type DropIntentInput,
+  type DropIntentKind,
+  type DropTarget,
+} from "./state/drop-intent";
+export { dropTargetAt, type ResolvedDropTarget } from "./state/drop-target";
+export {
+  DropIntentOverlay,
+  dropIntentDrag,
+  type DropIntentDrag,
+} from "./overlays/drop-intent-overlay";
+export {
+  pickerTypes,
+  writesBackTo,
+  type PickerImporter,
+  type PickerType,
+} from "./state/picker-types";
 // Editor ADR 1204 — the recovery journal, as an editor uses it.
 export {
   attachRecovery,

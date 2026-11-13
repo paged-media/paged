@@ -8,21 +8,9 @@
     "task": "IC6",
     "reason": "No test claims it yet: Shift adds and the marquee only intersects today; the selection model of ADR 1201 (Shift toggles, a directional scoped marquee, a locked indication) lands with IC6. Claim it in a test title (UXI-T04 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T06": {
-    "task": "EN4",
-    "reason": "No test claims it yet: the duplicate-drag modifier is read at different moments for the preview and the commit; EN4 makes the live preview the committed result. Claim it in a test title (UXI-T06 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T10": {
     "task": "IC2",
     "reason": "No test claims it yet: terminal events (pointercancel, lostpointercapture, blur, unmount, document and tool switch) do not end one coordinator session yet (IC2); an orphaned engine gesture still turns later drags into pans. Claim it in a test title (UXI-T10 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T11": {
-    "task": "IC7",
-    "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T11 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T12": {
-    "task": "IC8",
-    "reason": "No test claims it yet: snapping has no target labels, no hysteresis and two bypass keys today; IC8 (over EN3) settles them. Claim it in a test title (UXI-T12 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T14": {
     "task": "IC7",
@@ -183,10 +171,6 @@
   "UXI-T59": {
     "task": "IC3",
     "reason": "No test claims it yet: click, double-click and context-menu hit tests carry no epoch yet (IC3), so a late answer can still apply over a newer one. Claim it in a test title (UXI-T59 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T60": {
-    "task": "EN1",
-    "reason": "No test claims it yet: the engine does not refuse a script mutation during an active gesture yet (EN1, GestureInProgress). Claim it in a test title (UXI-T60 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T61": {
     "task": "IC2",

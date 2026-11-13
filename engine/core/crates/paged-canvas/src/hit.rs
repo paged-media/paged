@@ -104,6 +104,48 @@ pub struct TableHitContext {
     pub col: u32,
 }
 
+/// v79 (engine ADR 1011, amendment 1) — how a marquee takes an item
+/// (`UXI-SEL-008`): `Intersect`, everything its rectangle touches (the
+/// default, and what a marquee always did); `Contain`, only what lies
+/// wholly inside it. The editor picks one by the drag's direction.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    tsify_next::Tsify,
+)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum MarqueeMode {
+    #[default]
+    Intersect,
+    Contain,
+}
+
+/// v79 (engine ADR 1011, amendment 1) — what a marquee answers with, the
+/// rule a click follows (`UXI-SEL-009`, `UXI-SEL-011`). Without a scope a
+/// marquee answers the leaves it took, as it always did.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, tsify_next::Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
+pub enum MarqueeScope {
+    /// The document's top level: each leaf counts as its outermost group
+    /// (or itself, ungrouped).
+    Document,
+    /// Inside the entered group `id`: only its members are taken, each
+    /// leaf counting as the child of `id` that holds it.
+    Group { id: String },
+}
+
 impl CanvasModel {
     /// Marquee-select every selectable element whose oriented bounds
     /// intersect `rect_in_page` (page-local coords,
@@ -116,61 +158,102 @@ impl CanvasModel {
     /// that crosses only an edge of a rotated frame (no corners
     /// inside) is correctly counted. AC-E-11.
     pub fn marquee_hits(&self, page_id: &PageId, rect_in_page: [f32; 4]) -> Vec<ElementId> {
-        let Some(built_page) = self.page(page_id) else {
+        self.marquee_hits_with(page_id, rect_in_page, MarqueeMode::Intersect, None)
+    }
+
+    /// v79 (engine ADR 1011, amendment 1) — the marquee with its `mode`
+    /// and `scope`, across pages and from the pasteboard.
+    ///
+    /// `rect_in_page` is in `page_id`'s page-local pt and is NOT clamped
+    /// to the page: it may start on the pasteboard and cross other pages.
+    /// It is a rectangle on the canvas (each page sits at its
+    /// `canvas_origin`, engine ADR 1011), and every page sees it through
+    /// its own place there: an item is taken by what the rectangle covers
+    /// of a page that draws it (a page it overlaps; the nearest page of
+    /// its spread for an item on the pasteboard), so the marquee takes
+    /// what the user sees under it, page or pasteboard.
+    ///
+    /// The answer, top-first, is promoted by `scope` (see
+    /// [`MarqueeScope`]). In `Contain` mode a promoted group is taken
+    /// when every member the marquee may take lies inside the rectangle.
+    pub fn marquee_hits_with(
+        &self,
+        page_id: &PageId,
+        rect_in_page: [f32; 4],
+        mode: MarqueeMode,
+        scope: Option<&MarqueeScope>,
+    ) -> Vec<ElementId> {
+        let Some(anchor) = self.page(page_id) else {
             return Vec::new();
         };
-        let (page_origin_x, page_origin_y) = built_page.spread_origin;
-        // page-local [top, left, bottom, right] → spread coords by
-        // adding the page origin to the x/y axes. W1.9 — when the spread
-        // carries a rotation/scale (`spread_transform`), first map the
-        // marquee's four corners back through its inverse (page-local →
-        // spread-inner) and take their AABB. For a rotated spread this is
-        // a conservative over-approximation of the rotated marquee rect
-        // (the marquee may select a few frames just outside the true
-        // rotated box); exact OBB-vs-OBB marquee under spread rotation is
-        // a follow-up. IDENTITY makes this the plain origin shift.
         let [t, l, bm, r] = rect_in_page;
-        let corners = [(l, t), (r, t), (r, bm), (l, bm)];
-        let (mut min_x, mut min_y, mut max_x, mut max_y) = (
-            f32::INFINITY,
-            f32::INFINITY,
-            f32::NEG_INFINITY,
-            f32::NEG_INFINITY,
-        );
-        for &(px, py) in &corners {
-            let (sx, sy) = invert_spread_transform(built_page.spread_transform, (px, py));
-            min_x = min_x.min(sx);
-            min_y = min_y.min(sy);
-            max_x = max_x.max(sx);
-            max_y = max_y.max(sy);
+        if ![t, l, bm, r].iter().all(|v| v.is_finite()) {
+            return Vec::new();
         }
-        let rect_spread = [
-            min_y + page_origin_y, // top
-            min_x + page_origin_x, // left
-            max_y + page_origin_y, // bottom
-            max_x + page_origin_x, // right
+        // The rectangle on the canvas.
+        let (ax, ay) = anchor.canvas_origin;
+        let canvas = [
+            (l + ax, t + ay),
+            (r + ax, t + ay),
+            (r + ax, bm + ay),
+            (l + ax, bm + ay),
         ];
+        // The rectangle as `page` sees it, in its spread's coordinates.
+        // W1.9 — a spread with a rotation/scale (`spread_transform`) maps
+        // the corners back through its inverse and takes their AABB, a
+        // conservative over-approximation of the rotated rectangle.
+        let rect_on = |page: &BuiltPage| -> [f32; 4] {
+            let (cx, cy) = page.canvas_origin;
+            let (ox, oy) = page.spread_origin;
+            let (mut min_x, mut min_y, mut max_x, mut max_y) = (
+                f32::INFINITY,
+                f32::INFINITY,
+                f32::NEG_INFINITY,
+                f32::NEG_INFINITY,
+            );
+            for &(x, y) in &canvas {
+                let (sx, sy) = invert_spread_transform(page.spread_transform, (x - cx, y - cy));
+                min_x = min_x.min(sx);
+                min_y = min_y.min(sy);
+                max_x = max_x.max(sx);
+                max_y = max_y.max(sy);
+            }
+            [min_y + oy, min_x + ox, max_y + oy, max_x + ox]
+        };
 
         let scene = self.scene();
         let designmap = &scene.designmap;
         let layer_renders = paged_scene::build_layer_render_map(designmap);
         let layer_lockeds = paged_scene::build_layer_locked_map(designmap);
         let layer_z = paged_scene::layer_z_index(designmap);
-
-        let mut hits: Vec<(usize, usize, ElementId)> = Vec::new();
         // Engine ADR 1000 — a marquee takes only what the session may select.
         let selectability = self.selectability();
+
+        struct Leaf {
+            order: (usize, usize),
+            id: ElementId,
+            chain: Vec<String>,
+            touched: bool,
+            inside: bool,
+        }
+        let mut leaves: Vec<Leaf> = Vec::new();
         for parsed in &scene.spreads {
-            let on_this_spread = parsed
+            // This spread's built pages, with their boxes in spread space.
+            let pages: Vec<(&BuiltPage, Bounds)> = parsed
                 .spread
                 .pages
                 .iter()
-                .any(|p| p.self_id.as_deref() == Some(page_id.as_str()) || p.self_id.is_none());
-            if !on_this_spread {
+                .filter_map(|p| {
+                    let id = p.self_id.as_deref()?;
+                    let built = self.built().pages.iter().find(|b| b.id.as_str() == id)?;
+                    Some((built, transform_bbox(p.bounds, p.item_transform)))
+                })
+                .collect();
+            if pages.is_empty() {
                 continue;
             }
-            let candidates = collect_candidates(&parsed.spread, &layer_z);
-            for c in &candidates {
+            let rects: Vec<[f32; 4]> = pages.iter().map(|(p, _)| rect_on(p)).collect();
+            for c in &collect_candidates(&parsed.spread, &layer_z) {
                 if !paged_scene::lookup_layer_render_visible(
                     &layer_renders,
                     c.item_layer.as_deref(),
@@ -183,17 +266,70 @@ impl CanvasModel {
                 if !selectability.allows(c.element_id.raw_id()) {
                     continue;
                 }
-                if obb_intersects_aabb(c.bounds, c.item_transform, rect_spread) {
-                    hits.push((c.layer_z, c.doc_order, c.element_id.clone()));
+                let bbox = transform_bbox(c.bounds, c.item_transform);
+                let drawn_on = drawn_on_pages(bbox, &pages);
+                let mut leaf = Leaf {
+                    order: (c.layer_z, c.doc_order),
+                    id: c.element_id.clone(),
+                    chain: c.group_chain.clone(),
+                    touched: false,
+                    inside: false,
+                };
+                for i in drawn_on {
+                    let rect = rects[i];
+                    leaf.touched |= obb_intersects_aabb(c.bounds, c.item_transform, rect);
+                    leaf.inside |= obb_inside_aabb(c.bounds, c.item_transform, rect);
                 }
+                leaves.push(leaf);
             }
         }
+
+        // Promote each leaf to what the scope answers with; a leaf out of
+        // the scope is not taken.
+        let promoted = |leaf: &Leaf| -> Option<ElementId> {
+            match scope {
+                None => Some(leaf.id.clone()),
+                Some(MarqueeScope::Document) => Some(match leaf.chain.first() {
+                    Some(outer) => ElementId::Group(outer.clone()),
+                    None => leaf.id.clone(),
+                }),
+                Some(MarqueeScope::Group { id }) => {
+                    let at = leaf.chain.iter().position(|g| g == id)?;
+                    Some(match leaf.chain.get(at + 1) {
+                        Some(child) => ElementId::Group(child.clone()),
+                        None => leaf.id.clone(),
+                    })
+                }
+            }
+        };
+        // (id, its top-most leaf's paint order, any leaf touched, every
+        // leaf inside)
+        let mut taken: Vec<(ElementId, (usize, usize), bool, bool)> = Vec::new();
+        for leaf in &leaves {
+            let Some(id) = promoted(leaf) else { continue };
+            match taken.iter_mut().find(|(t, ..)| *t == id) {
+                Some(entry) => {
+                    entry.1 = entry.1.max(leaf.order);
+                    entry.2 |= leaf.touched;
+                    entry.3 &= leaf.inside;
+                }
+                None => taken.push((id, leaf.order, leaf.touched, leaf.inside)),
+            }
+        }
+        let mut hits: Vec<((usize, usize), ElementId)> = taken
+            .into_iter()
+            .filter(|(_, _, touched, inside)| match mode {
+                MarqueeMode::Intersect => *touched,
+                MarqueeMode::Contain => *inside,
+            })
+            .map(|(id, order, ..)| (order, id))
+            .collect();
         // Top-first (cycle-8): the renderer paints ascending layer_z
         // (designmap[0] = backmost), so the topmost item is the
         // HIGHEST layer_z, then the last-painted (highest doc_order)
         // within that layer.
-        hits.sort_by_key(|(z, doc, _)| (std::cmp::Reverse(*z), std::cmp::Reverse(*doc)));
-        hits.into_iter().map(|(_, _, id)| id).collect()
+        hits.sort_by_key(|(order, _)| std::cmp::Reverse(*order));
+        hits.into_iter().map(|(_, id)| id).collect()
     }
 
     /// Hit-test a document-space point inside a page. Returns the
@@ -849,6 +985,65 @@ pub(crate) fn obb_intersects_aabb(
         }
     }
     true
+}
+
+/// v79 — does the oriented box `bounds` × `item_transform` lie wholly
+/// inside the AABB `[top, left, bottom, right]` (same space)? A marquee in
+/// `Contain` mode takes such an item.
+pub(crate) fn obb_inside_aabb(
+    bounds: Bounds,
+    item_transform: Option<[f32; 6]>,
+    aabb: [f32; 4],
+) -> bool {
+    let [top, left, bottom, right] = aabb;
+    let m = item_transform.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    [
+        (bounds.left, bounds.top),
+        (bounds.right, bounds.top),
+        (bounds.right, bounds.bottom),
+        (bounds.left, bounds.bottom),
+    ]
+    .into_iter()
+    .all(|(x, y)| {
+        let (px, py) = apply_matrix(&m, x, y);
+        px >= left && px <= right && py >= top && py <= bottom
+    })
+}
+
+/// v79 — the pages of a spread that draw an item whose spread-space box is
+/// `bbox`: every page it overlaps, else the nearest one (the renderer's
+/// routing, `frame_ref_local_pages`). Indices into `pages`, never empty
+/// when `pages` is not.
+fn drawn_on_pages(bbox: Bounds, pages: &[(&BuiltPage, Bounds)]) -> Vec<usize> {
+    let overlapping: Vec<usize> = pages
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, p))| {
+            bbox.left <= p.right
+                && bbox.right >= p.left
+                && bbox.top <= p.bottom
+                && bbox.bottom >= p.top
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if !overlapping.is_empty() {
+        return overlapping;
+    }
+    let (cx, cy) = (
+        (bbox.left + bbox.right) * 0.5,
+        (bbox.top + bbox.bottom) * 0.5,
+    );
+    let distance = |p: &Bounds| {
+        let dx = (p.left - cx).max(cx - p.right).max(0.0);
+        let dy = (p.top - cy).max(cy - p.bottom).max(0.0);
+        dx.hypot(dy)
+    };
+    pages
+        .iter()
+        .enumerate()
+        .min_by(|(_, (_, a)), (_, (_, b))| distance(a).total_cmp(&distance(b)))
+        .map(|(i, _)| vec![i])
+        .unwrap_or_default()
 }
 
 /// Convert a spread-coord bbox into a page-local bbox by subtracting

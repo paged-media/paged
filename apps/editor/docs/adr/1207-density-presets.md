@@ -1,4 +1,4 @@
-# ADR 1206 — Density presets
+# ADR 1207 — Density presets
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/styles/theme.css` (the density tokens and the

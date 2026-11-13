@@ -188,7 +188,9 @@ describe("File ▸ Open… (paged.file.openIdml)", () => {
     const kept = await e.dump();
     await e.invoke("paged.file.openIdml");
     await e.idle();
-    expect(status.at(-1)).toMatch(/^load failed: /);
+    // UXI-FIL-001 (editor ADR 1205): refused before the engine is asked,
+    // since the bytes are no package; the document is kept either way.
+    expect(status.at(-1)).toBe("open failed: broken.idml is no package");
     expect(dumpDiff(kept, await e.dump())).toEqual([]);
   });
 });

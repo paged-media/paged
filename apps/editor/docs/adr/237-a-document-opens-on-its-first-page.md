@@ -34,4 +34,4 @@ they will be), first paint, refining — in words and real counts on the canvas 
 never a percentage (UXI-PRF-003, UX audit F-53). The fit is unchanged: page 1, fitted, once the
 canvas attaches; a later change of the canvas's size keeps the document point at the centre
 instead of fitting again
-([ADR 1205](1205-docks-are-resizable-and-the-workspace-adapts.md)).
+([ADR 1206](1206-docks-are-resizable-and-the-workspace-adapts.md)).

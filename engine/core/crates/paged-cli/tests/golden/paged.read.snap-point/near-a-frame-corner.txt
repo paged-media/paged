@@ -15,6 +15,7 @@ $ paged read snap-point doc.paged usp 401 99
           ],
           "pageId": "usp",
           "position": 400.0,
+          "targetKind": "objectEdge",
           "to": [
             400.0,
             99.0

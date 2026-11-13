@@ -63,6 +63,8 @@ import {
   type LayerSummary,
   type LineBounds,
   type LodTier,
+  type MarqueeMode,
+  type MarqueeScope,
   type SceneLayer,
   type SceneTreeNode,
   type MainToWorker,
@@ -254,6 +256,55 @@ function describeGestureFailure(error: GestureFailure): string {
   if ("reason" in details) return `${error.kind}: ${details.reason}`;
   return `${error.kind}: ${JSON.stringify(details)}`;
 }
+
+/**
+ * Protocol 79 (engine ADR 1300) — a write the engine refused because a
+ * gesture holds the document (`UXI-INV-008`, `UXI-MUT-012`). Nothing of it
+ * was applied; it may be sent again once the gesture has committed or been
+ * cancelled ({@link CanvasClient.whenGestureIdle}).
+ */
+export class GestureInProgressError extends Error {
+  /** The gesture that holds the document. */
+  readonly handle: GestureHandle;
+  constructor(handle: GestureHandle, what = "the write") {
+    super(
+      `${what} was refused: a gesture is in progress (handle ${handle}) and holds the document until it commits or is cancelled`,
+    );
+    this.name = "GestureInProgressError";
+    this.handle = handle;
+  }
+}
+
+/** Protocol 79 — the gesture a reply says holds the document, when the
+ *  reply is that refusal (`mutationFailed` with `gestureInProgress`). */
+export function gestureInProgressOf(reply: WorkerToMain): GestureHandle | null {
+  if (reply.kind !== "mutationFailed") return null;
+  const error = reply.payload.error;
+  return error.kind === "gestureInProgress" ? error.details.handle : null;
+}
+
+/** The longest a document write waits for this client's own gesture to
+ *  settle before it is sent anyway (and refused by the engine, typed, if
+ *  the gesture still holds the document). */
+const GESTURE_WAIT_MS = 30_000;
+
+/** The document writes that wait for this client's own gesture to settle
+ *  (engine ADR 1300): sent mid-gesture, the engine refuses them whole. */
+const WAITS_FOR_GESTURE: ReadonlySet<MainToWorkerKind["kind"]> = new Set<
+  MainToWorkerKind["kind"]
+>([
+  "mutate",
+  "amendMutation",
+  "undo",
+  "redo",
+  "undoTo",
+  "redoTo",
+  "restoreTo",
+  "executeScript",
+  "hostObjectsResult",
+  "setTemplateFields",
+  "openAsTemplate",
+]);
 
 /** v66 — the buffers that may move to the worker: a view spanning its
  *  whole, non-shared buffer. Anything else (a window onto wasm memory, a
@@ -517,6 +568,12 @@ export class CanvasClient {
   private loading: Promise<unknown> | null = null;
   /** WP4.11 — the open undo group, if any (see {@link beginUndoGroup}). */
   private undoGroup: UndoGroupState | null = null;
+  /** Protocol 79 — the gestures this client began whose commit or cancel
+   *  has not answered yet, and the begins still in flight
+   *  ({@link whenGestureIdle}). */
+  private readonly liveGestures = new Set<GestureHandle>();
+  private pendingGestureBegins = 0;
+  private gestureIdleWaiters: Array<() => void> = [];
   /** See {@link setReplyGate}. */
   private replyGate: ReplyGate | null = null;
 
@@ -550,6 +607,12 @@ export class CanvasClient {
    * notifications and flow through `subscribe(...)` instead.
    */
   async send(kind: MainToWorkerKind): Promise<WorkerToMain> {
+    // Engine ADR 1300 — a gesture holds the document: a write this client
+    // sends while its own gesture is live waits for it to settle, so it is
+    // ordered after the gesture instead of refused inside it.
+    if (this.gestureActive && WAITS_FOR_GESTURE.has(kind.kind)) {
+      await this.whenGestureIdle({ timeoutMs: GESTURE_WAIT_MS });
+    }
     const group = this.undoGroup;
     if (group) {
       if (kind.kind === "mutate") {
@@ -654,6 +717,58 @@ export class CanvasClient {
   /** Is an undo group open? */
   get undoGroupOpen(): boolean {
     return this.undoGroup !== null;
+  }
+
+  /**
+   * Protocol 79 (engine ADR 1300) — whether a gesture this client began
+   * may still hold the document: its begin is in flight, or it has begun
+   * and its commit or cancel has not answered.
+   */
+  get gestureActive(): boolean {
+    return this.pendingGestureBegins > 0 || this.liveGestures.size > 0;
+  }
+
+  /**
+   * Protocol 79 (engine ADR 1300) — resolve once no gesture this client
+   * began holds the document (at once when none does). The script runner
+   * and the interaction coordinator wait here before a write, so it lands
+   * after the gesture rather than being refused inside it (`UXI-MUT-012`).
+   * Resolves `true` when idle, `false` when `timeoutMs` elapsed or
+   * `signal` aborted first.
+   */
+  whenGestureIdle(
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<boolean> {
+    if (!this.gestureActive) return Promise.resolve(true);
+    const { signal, timeoutMs } = options;
+    if (signal?.aborted) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const settle = (idle: boolean) => {
+        if (timer !== null) clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        this.gestureIdleWaiters = this.gestureIdleWaiters.filter(
+          (w) => w !== onIdle,
+        );
+        resolve(idle);
+      };
+      const onIdle = () => settle(true);
+      const onAbort = () => settle(false);
+      this.gestureIdleWaiters.push(onIdle);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => settle(false), timeoutMs);
+      }
+    });
+  }
+
+  /** Wake {@link whenGestureIdle}'s waiters, in the order they came, once
+   *  no gesture of this client is live. */
+  private noteGestureSettled(): void {
+    if (this.gestureActive) return;
+    const waiters = this.gestureIdleWaiters;
+    this.gestureIdleWaiters = [];
+    for (const wake of waiters) wake();
   }
 
   /** Subscribe to unsolicited worker → main notifications. */
@@ -1050,14 +1165,28 @@ export class CanvasClient {
    * Phase A — return every selectable element whose oriented bounds
    * intersect `rect` (page-local `[top, left, bottom, right]`). Returns
    * ids in paint order, top-first.
+   *
+   * Protocol 79 (engine ADR 1011, amendment 1) — `rect` may leave the page
+   * (a marquee started on the pasteboard, or one crossing pages): it is a
+   * rectangle on the canvas measured from `pageId`. `mode: "contain"` takes
+   * only what lies wholly inside it (default `"intersect"`); `scope` answers
+   * as a click would — `{ kind: "document" }` the top-level items, `{ kind:
+   * "group", id }` the children of the entered group — where no scope
+   * answers the leaves, as before.
    */
   async marqueeHits(
     pageId: PageId,
     rect: [number, number, number, number],
+    options: { mode?: MarqueeMode; scope?: MarqueeScope } = {},
   ): Promise<ElementId[]> {
     const reply = await this.send({
       kind: "requestMarqueeHits",
-      payload: { pageId, rect },
+      payload: {
+        pageId,
+        rect,
+        ...(options.mode ? { mode: options.mode } : {}),
+        ...(options.scope ? { scope: options.scope } : {}),
+      },
     });
     if (reply.kind === "marqueeHits") return reply.payload.ids;
     throw new Error(`unexpected reply: ${reply.kind}`);
@@ -1940,6 +2069,10 @@ export class CanvasClient {
     bytes: Uint8Array,
     transfer = false,
   ): Promise<WorkerToMain> {
+    // Engine ADR 1300 — after this client's own gesture, as `send` orders.
+    if (this.gestureActive) {
+      await this.whenGestureIdle({ timeoutMs: GESTURE_WAIT_MS });
+    }
     const group = this.undoGroup;
     if (group) {
       return group.serial((seq) =>
@@ -2109,10 +2242,14 @@ export class CanvasClient {
     budgetKind: string | null;
   }> {
     const answer = this.hostObjects;
+    // Protocol 79 (engine ADR 1300) — `send` holds the script back while a
+    // gesture of this client is live; one the engine still refuses throws.
     let reply = (await this.send({
       kind: "executeScript",
       payload: { source, ...(answer ? { hostObjects: true } : {}) },
     } as MainToWorkerKind)) as { kind: string; payload?: unknown };
+    const held = gestureInProgressOf(reply as WorkerToMain);
+    if (held !== null) throw new GestureInProgressError(held, "the script");
     // Engine protocol 71 (ADR 323): a script that names a `plugin:`
     // address suspends; answer its calls through the host's object
     // registry until the worker replies with the result.
@@ -2129,14 +2266,32 @@ export class CanvasClient {
       // the writes made answering this round are named by their applied
       // seqs, so they join it; a UI edit made while the script waits is
       // never named and stays its own step.
-      reply = (await this.send({
-        kind: "hostObjectsResult",
-        payload: {
-          session,
-          answers,
-          ...(committed.length > 0 ? { committed } : {}),
-        },
-      } as unknown as MainToWorkerKind)) as { kind: string; payload?: unknown };
+      // Protocol 79 — a suspended script resumes only when no gesture holds
+      // the document; the engine keeps the session, so wait and resume it.
+      const resume = () =>
+        this.send({
+          kind: "hostObjectsResult",
+          payload: {
+            session,
+            answers,
+            ...(committed.length > 0 ? { committed } : {}),
+          },
+        } as unknown as MainToWorkerKind) as Promise<{
+          kind: string;
+          payload?: unknown;
+        }>;
+      reply = await resume();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const holder = gestureInProgressOf(reply as WorkerToMain);
+        if (holder === null) break;
+        if (
+          attempt === 2 ||
+          !(await this.whenGestureIdle({ timeoutMs: GESTURE_WAIT_MS }))
+        ) {
+          throw new GestureInProgressError(holder, "the script");
+        }
+        reply = await resume();
+      }
     }
     if (reply.kind === "scriptResult") {
       const p = reply.payload as {
@@ -2199,18 +2354,36 @@ export class CanvasClient {
     nodes: ElementId[],
     gesture: GestureType,
     anchor: GestureAnchor | null = null,
+    modifiers?: GestureModifiers,
   ): Promise<GestureHandle> {
-    // Phase G — read the current camera scale from the SAB so the
-    // snap pass can keep its tolerance constant in screen px. The
-    // value is snapshot-locked for the gesture's lifetime (a mid-
-    // gesture zoom doesn't retune snap tolerance — that's a
-    // deliberate UX choice; consistency within a drag wins).
+    // Phase G — the camera scale the snap pass converts its screen-px
+    // tolerance with. Protocol 79 (engine ADR 125, amendment 2): every
+    // update sends the scale shown then, so a zoom made mid-drag retunes
+    // the tolerance; this is only the first value.
     const camera = this.camera.read();
     const cameraScale = camera.scale > 0 ? camera.scale : null;
-    const reply = await this.send({
-      kind: "beginGesture",
-      payload: { nodes, gesture, anchor, cameraScale },
-    });
+    this.pendingGestureBegins += 1;
+    let reply: WorkerToMain;
+    try {
+      reply = await this.send({
+        kind: "beginGesture",
+        // Protocol 79 (engine ADR 193, amendment 1) — the modifiers held at
+        // the press; the updates carry the live ones.
+        payload: {
+          nodes,
+          gesture,
+          anchor,
+          cameraScale,
+          ...(modifiers ? { modifiers } : {}),
+        },
+      });
+      if (reply.kind === "gestureBegun") {
+        this.liveGestures.add(reply.payload.handle);
+      }
+    } finally {
+      this.pendingGestureBegins -= 1;
+      this.noteGestureSettled();
+    }
     if (reply.kind === "gestureBegun") return reply.payload.handle;
     if (reply.kind === "gestureFailed") {
       throw new Error(
@@ -2241,12 +2414,20 @@ export class CanvasClient {
     mode: "json" | "sab" = "json",
   ): Promise<{ pageIds: PageId[]; snapLines: SnapLine[] }> {
     if (mode === "sab" && this.gestureSab.buffer instanceof SharedArrayBuffer) {
+      // The worker reads the camera scale from the camera buffer at drain.
       this.gestureSab.push(BigInt(handle), delta[0], delta[1], modifiers);
       return { pageIds: [], snapLines: [] };
     }
+    // Protocol 79 — the scale shown now: the snap tolerance follows a zoom.
+    const scale = this.camera.read().scale;
     const reply = await this.send({
       kind: "updateGesture",
-      payload: { handle, delta, modifiers },
+      payload: {
+        handle,
+        delta,
+        modifiers,
+        ...(scale > 0 ? { cameraScale: scale } : {}),
+      },
     });
     if (reply.kind === "gestureUpdated") {
       return {
@@ -2270,10 +2451,18 @@ export class CanvasClient {
     appliedSeq: number;
     pageIds: PageId[];
   }> {
-    const reply = await this.send({
-      kind: "commitGesture",
-      payload: { handle },
-    });
+    let reply: WorkerToMain;
+    try {
+      reply = await this.send({
+        kind: "commitGesture",
+        payload: { handle },
+      });
+    } finally {
+      // Committed or refused, the engine let go of it (a stale handle never
+      // held the document).
+      this.liveGestures.delete(handle);
+      this.noteGestureSettled();
+    }
     if (reply.kind === "gestureCommitted") {
       return {
         appliedSeq: reply.payload.appliedSeq,
@@ -2293,10 +2482,16 @@ export class CanvasClient {
    * resolves to the dirty pages set so the overlay can clear.
    */
   async cancelGesture(handle: GestureHandle): Promise<PageId[]> {
-    const reply = await this.send({
-      kind: "cancelGesture",
-      payload: { handle },
-    });
+    let reply: WorkerToMain;
+    try {
+      reply = await this.send({
+        kind: "cancelGesture",
+        payload: { handle },
+      });
+    } finally {
+      this.liveGestures.delete(handle);
+      this.noteGestureSettled();
+    }
     if (reply.kind === "gestureCancelled") return reply.payload.pageIds;
     if (reply.kind === "gestureFailed") {
       throw new Error(
@@ -2622,6 +2817,11 @@ export class CanvasClient {
     try {
       const result = await pending;
       if (!loaded(result)) for (const face of dropped) this.repostFace(face);
+      else {
+        // The engine's gesture went with the document it held.
+        this.liveGestures.clear();
+        this.noteGestureSettled();
+      }
       return result;
     } catch (err) {
       for (const face of dropped) this.repostFace(face);

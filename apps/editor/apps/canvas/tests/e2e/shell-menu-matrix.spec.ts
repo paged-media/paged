@@ -115,7 +115,7 @@ const HOST_MENU = [
   "Edit/Go to page…",
   // Editor ADR 290 — the ML service's Models settings page.
   "Edit/Settings/Models…",
-  // Editor ADRs 1205 and 1206 — the workspace's switch, the density
+  // Editor ADRs 1206 and 1207 — the workspace's switch, the density
   // presets and the Focus workspace.
   "Edit/Settings/Adapt the workspace to the window",
   "Edit/Settings/Interface density/Comfortable",

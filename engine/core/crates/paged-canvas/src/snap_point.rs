@@ -201,6 +201,10 @@ pub enum SnapSource {
     Intersection,
     /// v77 — an equal-spacing position.
     Spacing,
+    /// v79 — a page margin (snapped with the guides).
+    Margin,
+    /// v79 — an edge of a column of the page's margin box.
+    Column,
 }
 
 /// Leave an element (or some of its anchors) out of the targets. With
@@ -372,7 +376,51 @@ pub(crate) struct PageTargets {
     pub height: f32,
     pub vertical_guides: Vec<f32>,
     pub horizontal_guides: Vec<f32>,
+    /// v79 — the page's margin and column lines.
+    pub margins: MarginLines,
     elements: Vec<ElementTargets>,
+}
+
+/// v79 (engine ADR 125, amendment 2) — a page's margin and column lines,
+/// page-local pt: the x and y margin lines and the column edges (x)
+/// inside the margin box. A margin of 0 is the page edge and adds none.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct MarginLines {
+    pub x: Vec<f32>,
+    pub y: Vec<f32>,
+    pub columns: Vec<f32>,
+}
+
+/// The margin and column lines of a page `width` × `height` pt with the
+/// margins `m` (as the editor draws them: `left` from the left edge).
+pub(crate) fn margin_lines(
+    m: &paged_model::MarginPreference,
+    width: f32,
+    height: f32,
+) -> MarginLines {
+    fn push(v: &mut Vec<f32>, p: f32, extent: f32) {
+        if p.is_finite() && p > 1e-3 && p < extent - 1e-3 && !v.iter().any(|q| (q - p).abs() < 1e-3)
+        {
+            v.push(p);
+        }
+    }
+    let mut out = MarginLines::default();
+    push(&mut out.x, m.left, width);
+    push(&mut out.x, width - m.right, width);
+    push(&mut out.y, m.top, height);
+    push(&mut out.y, height - m.bottom, height);
+    if m.column_count > 1 {
+        let n = m.column_count as f32;
+        let column = (width - m.left - m.right - m.column_gutter * (n - 1.0)) / n;
+        if column > 0.0 {
+            for i in 1..m.column_count {
+                let end = m.left + i as f32 * column + (i - 1) as f32 * m.column_gutter;
+                push(&mut out.columns, end, width);
+                push(&mut out.columns, end + m.column_gutter, width);
+            }
+        }
+    }
+    out
 }
 
 /// Every page's snap targets for one document build.
@@ -700,6 +748,11 @@ pub(crate) fn build_index(
                 .or_insert_with(|| PageTargets {
                     width: bp.width_pt,
                     height: bp.height_pt,
+                    margins: spread
+                        .page_margins
+                        .get(*id)
+                        .map(|m| margin_lines(m, bp.width_pt, bp.height_pt))
+                        .unwrap_or_default(),
                     ..Default::default()
                 });
         }
@@ -829,6 +882,19 @@ pub(crate) fn static_lines(
         };
         for &g in guides {
             out.push(line(g, SnapSource::Guide));
+        }
+        // v79 — the margins and the column edges are guides too.
+        let margins = match axis {
+            SnapAxis::X => &page.margins.x,
+            SnapAxis::Y => &page.margins.y,
+        };
+        for &m in margins {
+            out.push(line(m, SnapSource::Margin));
+        }
+        if axis == SnapAxis::X {
+            for &c in &page.margins.columns {
+                out.push(line(c, SnapSource::Column));
+            }
         }
     }
     if settings.grid {
@@ -1034,7 +1100,13 @@ pub(crate) fn resolve(
             if l.source == SnapSource::Pixel {
                 continue;
             }
-            let mut line = SnapLine::new(axis, l.position, query.page_id.clone());
+            let extent = match axis {
+                SnapAxis::X => page.width,
+                SnapAxis::Y => page.height,
+            };
+            let mut line = SnapLine::new(axis, l.position, query.page_id.clone()).with_target(
+                crate::snap::SnapTargetKind::of_source(l.source, l.position, extent),
+            );
             // The smart guide runs from the point it came through to
             // the snapped point, with the distance between them.
             if let Some(t) = l.through {
@@ -1078,7 +1150,8 @@ pub(crate) fn resolve(
             }
         }
         if let Some((through, at, angle, _)) = ba {
-            let mut line = SnapLine::new(SnapAxis::X, through[0], query.page_id.clone());
+            let mut line = SnapLine::new(SnapAxis::X, through[0], query.page_id.clone())
+                .with_target(crate::snap::SnapTargetKind::Angle);
             line.kind = Some(crate::snap::SnapLineKind::Angle);
             line.from = Some(through);
             line.to = Some(at);
@@ -1250,6 +1323,7 @@ mod tests {
                 height: 800.0,
                 vertical_guides: vec![100.0],
                 horizontal_guides: vec![],
+                margins: MarginLines::default(),
                 elements,
             },
         );

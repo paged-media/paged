@@ -94,6 +94,9 @@ interface CanvasWorkerInstance {
     dx: number,
     dy: number,
     modifierBits: number,
+    // Protocol 79 — the camera scale shown now (0: keep the gesture's), so
+    // the snap tolerance follows a zoom made mid-drag.
+    cameraScale: number,
   ): string;
   pageCount(): number;
   pageInfo(index: number): unknown;
@@ -1284,12 +1287,14 @@ function drainGestureSab() {
   if (record.modifiers.shift) mods |= 0b001;
   if (record.modifiers.alt) mods |= 0b010;
   if (record.modifiers.disableSnap) mods |= 0b100;
+  const scale = cameraBuffer?.read().scale ?? 0;
   const outcomeJson = worker.updateGestureRaw(
     handleLo,
     handleHi,
     record.dx,
     record.dy,
     mods,
+    scale > 0 ? scale : 0,
   );
   if (!outcomeJson) {
     // Stale handle or no document. The main thread's

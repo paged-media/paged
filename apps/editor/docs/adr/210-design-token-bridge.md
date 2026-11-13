@@ -89,7 +89,7 @@ The token file also carries the interface's sizes: control and row heights, icon
 padding, section spacing and the chrome bars' heights, as Professional in the default block and
 re-pointed by `[data-paged-editor][data-density="comfortable" | "compact"]`; the chrome reads them
 instead of numbers. `docs/theme-tokens.json` lists each one's value per preset
-([ADR 1206](1206-density-presets.md)).
+([ADR 1207](1207-density-presets.md)).
 
 ## Related
 
