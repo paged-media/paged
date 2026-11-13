@@ -75,7 +75,8 @@ context toolbar's Focus pill, which used to run the Tab toggle) hides everything
 and the tool rail: header, context toolbar, docks, panel rail, mode bar, title bar, page strip and
 status bar. It is a flag over the layout, not a change to it, so the same command (or the
 "Leave Focus workspace" button over the canvas) brings back exactly what was there, the Tab
-toggles' state included. What it hides stays mounted. The Tab and Cmd+\ toggles (ADR 234) are
+toggles' state included. The header bars and the docks stay mounted, hidden (the bars by style, so
+a menu that ran the command still closes); the rails and the mode bar are drawn again. The Tab and Cmd+\ toggles (ADR 234) are
 unchanged.
 
 **Progressive loading.** A load reports real stages (`LoadingState.stage`): `recognized` (the

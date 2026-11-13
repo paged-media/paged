@@ -94,11 +94,7 @@ export function useFocusWorkspaceCommand(): void {
         category: "View",
         handler: (paged) => {
           const scope = scopeOf(paged);
-          const on = !isFocusWorkspace(scope);
-          // After the event that ran it: a menu row closes its menu in the
-          // same event, and a menu bar hidden in that commit would keep
-          // the close pending (a hidden <Activity> defers its updates).
-          setTimeout(() => setFocusWorkspace(scope, on), 0);
+          setFocusWorkspace(scope, !isFocusWorkspace(scope));
         },
       }),
       ...FOCUS_WORKSPACE_KEYS.map((key) =>

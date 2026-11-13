@@ -45,7 +45,6 @@ import {
   type EditorScope,
 } from "./state/editor-scope";
 import React, {
-  Activity,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -1439,7 +1438,11 @@ function ShellChrome({
 
   const shellBody = (
     <div style={shellStyle} data-focus-workspace={focus || undefined}>
-      <Activity mode={focus ? "hidden" : "visible"} name="header">
+      {/* The Focus workspace hides the bars above the body row. Hidden by
+          style, not an <Activity>: a menu that ran the command closes in
+          the same event, and a hidden <Activity> would hold that close
+          (and its portalled menu) back until the bars came back. */}
+      <div style={{ display: focus ? "none" : "contents" }}>
         {chrome.has("header") && (
           <Header onFile={onFile} headerExtras={headerExtras} status={status} />
         )}
@@ -1454,7 +1457,7 @@ function ShellChrome({
           modes &&
           modes.length > 0 &&
           !railHidden && <ContextToolbar paged={paged} />}
-      </Activity>
+      </div>
 
       {!sabSupported && (
         <div style={warningStyle}>{strings.t(LOAD.reducedMode)}</div>
