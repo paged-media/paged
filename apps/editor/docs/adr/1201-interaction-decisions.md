@@ -50,7 +50,7 @@ today and from accepted records:
 | D-09 | Space during a mutating drag | The Hand waits until the drag settles, unless the tool's handler declares a lossless suspension | Yes: the spring-load deactivates the tool mid-drag | — | `UXI-OWN-011` in the adapter tests, `UXI-T10` |
 | D-10 | A remote save fails after a local one | "Saved locally · Not synced", with Retry | New: the save state is dirty or saved | — | `UXI-T67` |
 | D-11 | Focus after in-context changes | The last meaningful control, else the canvas | No: extends ADR 234, decision 3, to the palette, menus and in-context mutations; fixes issue #32 | — | `UXI-T23`, `UXI-T24`, `UXI-T34` |
-| D-12 | Zoom range and actual size | One range, 5 % to 4,000 %. Actual size is 100 %, and 100 % shows an inch as 96 CSS px; a calibrated physical size is a separate, labelled option | Yes: 100 % shows an inch as 72 CSS px | 246 | `UXI-T47`, `UXI-T48` |
+| D-12 | Zoom range and actual size | One range, 5 % to 4,000 %. 100 % stays a camera scale of 1 (a point is a CSS px, an inch 72 CSS px), as in InDesign. Actual size is a separate, labelled view that shows an inch as 96 CSS px (about 133 %); a calibrated physical size is a further labelled option | No: the percentages keep their meaning; Actual size and the calibrated view are added | 246 | `UXI-T47`, `UXI-T48` |
 | D-13 | The document in the accessibility tree | A virtualized object tree, synchronized with the selection | New | — | `UXI-T69` |
 | D-14 | Browser matrix | Chromium in CI; real Chrome with a GPU as local evidence; targeted WebKit and Firefox runs | No | — | gate G4; `UXI-T23` on the GPU lane |
 | D-15 | Selection and undo | A selection change is not an undo step | No: confirms (selection is not a mutation in the engine) | — | `UXI-T01`, `UXI-T03`, `UXI-T04`, each asserting an unchanged history |
@@ -87,8 +87,10 @@ Details the table cannot hold:
    including an entered group (ADR 250's climb, one level per press); text editing, back to the
    frame; a selection, which is cleared; otherwise nothing. Each press acts on the first case
    that applies and on no other.
-7. **D-12.** The zoom field, the presets and the fit commands show percentages of the CSS inch.
-   The range is ADR 246's; the inputs that still carry bounds of their own (the Zoom tool's click,
+7. **D-12.** The zoom field, the presets and the fit commands keep today's percentages: 100 % is
+   a camera scale of 1 (owner decision, 2026-11-13). Actual size (an inch as 96 CSS px) and a
+   calibrated physical size are named views beside them, never a redefinition of 100 %. The range
+   is ADR 246's; the inputs that still carry bounds of their own (the Zoom tool's click,
    the fit computation) drop them.
 
 ## Consequences

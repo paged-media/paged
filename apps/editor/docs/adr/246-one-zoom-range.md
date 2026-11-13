@@ -38,7 +38,7 @@ spread, Fit selection, zoom presets and the page keys are added as commands
 
 ## Amendment 2026-11-13
 
-[ADR 1201](1201-interaction-decisions.md), D-12, keeps the one range and defines Actual size:
-100 % shows an inch of the page as 96 CSS px (today a camera scale of 1, an inch as 72 CSS px).
-A calibrated physical size is a separate, labelled option, and the inputs that still carry bounds
+[ADR 1201](1201-interaction-decisions.md), D-12, keeps the one range and keeps 100 % as a camera
+scale of 1 (an inch as 72 CSS px). Actual size is a separate, labelled view that shows an inch as
+96 CSS px, and a calibrated physical size is a further labelled option, and the inputs that still carry bounds
 of their own drop them. Until that task lands the body describes the code.
