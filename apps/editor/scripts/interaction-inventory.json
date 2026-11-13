@@ -2936,12 +2936,19 @@
       "site": "apps/editor/packages/shell/src/state/use-edit-context-entry.tsx",
       "listener": "element",
       "states": ["idle", "pressed", "pending-hit", "settled"],
-      "permission": "Entering a context changes no document state; the context's scope is root equality only (UXI-CTX-011).",
+      "permission": "Entering a context changes no document state; the context's write scope is its root plus what the engine's scope query answers (editor ADR 1211; the root alone until EN5 reaches the client, UXI-CTX-011).",
       "cancel": "Nothing to cancel on entry; the hit test that picks the target carries no epoch (IC3).",
       "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
-      "uxi": ["UXI-CTX-002", "UXI-CTX-013", "UXI-SEL-012", "UXI-TXT-002"],
+      "uxi": [
+        "UXI-CTX-002",
+        "UXI-CTX-005",
+        "UXI-CTX-008",
+        "UXI-CTX-013",
+        "UXI-SEL-012",
+        "UXI-TXT-002"
+      ],
       "status": "legacy",
-      "notes": "An image enters its edit context today; ADR 1201 makes it content position first (D-05)."
+      "notes": "A picture frame enters its content level first and Edit image on a second double-click, Enter or the level control (D-05, editor ADR 1212); tryEnterEditContext decides every double-click, picture frames included. Stays legacy until track IC's ContentContextAdapter routes the canvas's double-click through it."
     },
     {
       "id": "edit-context.content-pointer",
@@ -2968,7 +2975,7 @@
     },
     {
       "id": "edit-context.click-out",
-      "title": "A press outside an edit context's frame commits the context and then selects",
+      "title": "A press outside an edit context's frame leaves the context through the exit resolver, then selects",
       "owner": "frame-content",
       "eventClass": "pointer:primary-click",
       "scope": "canvas/edit-context/outside",
@@ -2976,11 +2983,12 @@
       "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
       "listener": "element",
       "states": ["idle", "pressed", "settled"],
-      "permission": "Commits the context's pending edit whether clean or dirty.",
-      "cancel": "None: the press commits, then falls through to select what is under it (D-04 makes a clean context exit and a dirty one follow its exitPolicy).",
+      "permission": "Leaves through resolveContextExit (editor ADR 1211): a clean context commits at once; a dirty one commits when its module declares commit-if-safe, asks (Keep / Discard / Cancel) when it declares ask.",
+      "cancel": "An open resolve prompt holds the press (Cancel keeps the context); otherwise the press falls through to select what is under it (D-04).",
       "surfaceIds": [],
       "uxi": ["UXI-HIT-005", "UXI-CTX-006", "UXI-CTX-007"],
-      "status": "legacy"
+      "status": "legacy",
+      "notes": "The resolver and useContextExit are in the shell; the canvas switches its commit() to leave(\"click-outside\") with track IC (ViewportCanvas.tsx is IC's)."
     },
     {
       "id": "hand.pan",
@@ -3892,7 +3900,7 @@
     },
     {
       "id": "escape.edit-context",
-      "title": "Escape cancels the active edit context",
+      "title": "Escape leaves the active edit context through the exit resolver",
       "owner": "frame-content",
       "eventClass": "key:Escape",
       "scope": "editor/edit-context",
@@ -3901,9 +3909,9 @@
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "The context tiers of the Escape arbiter (editor ADR 1207): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand), a clean context pops one level; a header edited in place leaves its Escape to the text.",
+      "cancel": "The context tiers of the Escape arbiter (editor ADR 1207): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand); a clean context leaves one level through resolveContextExit (editor ADR 1211: cancel, or commit for a commit-if-safe module); a header edited in place leaves its Escape to the text.",
       "surfaceIds": [],
-      "uxi": ["UXI-ESC-001", "UXI-CTX-003", "UXI-CTX-007"],
+      "uxi": ["UXI-CTX-003", "UXI-CTX-006", "UXI-CTX-007", "UXI-ESC-001"],
       "status": "migrated"
     },
     {

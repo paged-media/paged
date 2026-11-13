@@ -108,8 +108,9 @@ test.describe("ED-11 — raster context chrome", () => {
     await expect(segment).toBeVisible();
     await expect(segment).not.toContainText("rasterImage");
     await expect(segment).not.toContainText(",");
+    // The module's own name for it (editor ADR 1212, F-45).
     await expect(segment.locator("[data-context-label]")).toHaveText(
-      "Raster image",
+      "Image",
     );
     const pills = segment.locator("[data-context-tool]");
     expect(await pills.count()).toBeGreaterThan(1);

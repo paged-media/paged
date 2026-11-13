@@ -160,25 +160,29 @@ export interface ImageContentDeps {
   arbiter(): EscapeArbiter | null;
   /** Called after a drag committed, with the frame's fresh geometry. */
   onCommitted(geometry: ElementGeometryItem[]): void;
-  /** Enter the frame's Edit level (Enter, D-05). */
-  descend(frame: ElementId): void;
 }
 
-/** The host-private extras of a content level: Enter descends to Edit. */
-const DESCEND = new WeakMap<EditContextContribution, (f: ElementId) => void>();
-
-/** The descent a content level offers (the controller's Enter), if the
- *  contribution is one. */
+/** The descent `scope`'s content level offers (the controller's Enter: to
+ *  Edit image), when `contribution` is that level. */
 export function descendOf(
+  scope: EditorScope,
   contribution: EditContextContribution | null,
 ): ((frame: ElementId) => void) | null {
-  return contribution ? (DESCEND.get(contribution) ?? null) : null;
+  const level = imageContentLevelOf(scope);
+  return contribution !== null && contribution === level.contribution
+    ? (frame) => level.descend(frame)
+    : null;
 }
 
 type ContentGesture = "translateContent" | "scaleContent" | "rotateContent";
 
+/** How far (CSS px) a press travels before it is a drag: a click, or the
+ *  double-click that asks for Edit image, moves no picture. */
+const DRAG_THRESHOLD_PX = 3;
+
 interface Drag {
-  handle: Promise<number | null>;
+  /** The engine gesture, once the press became a drag. */
+  handle: Promise<number | null> | null;
   start: [number, number];
   delta: [number, number];
   modifiers: { shift: boolean; alt: boolean };
@@ -215,6 +219,8 @@ export function createImageContentContext(
     drag = null;
     d.release();
     const client = deps.client();
+    // A press that never travelled is a click: no gesture, no step.
+    if (!d.handle) return;
     void d.handle.then(async (handle) => {
       if (handle === null || !client) return;
       if (how === "cancel") {
@@ -275,10 +281,17 @@ export function createImageContentContext(
           : null;
         return client.beginGesture([frame], { kind }, anchor, modifiers);
       };
-      const handle = begin().catch(() => null);
+      const down = lastDown;
       const onMove = (ev: PointerEvent) => {
         const d = drag;
         if (!d) return;
+        if (!d.handle) {
+          const far =
+            Math.hypot(ev.clientX - down.x, ev.clientY - down.y) >=
+            DRAG_THRESHOLD_PX;
+          if (!far) return;
+          d.handle = begin().catch(() => null);
+        }
         d.delta = pageDelta(ev.clientX, ev.clientY);
         d.modifiers = { shift: ev.shiftKey, alt: ev.altKey };
         void d.handle.then((h) => {
@@ -299,7 +312,7 @@ export function createImageContentContext(
           resolve: () => end("cancel", frame),
         }) ?? (() => {});
       drag = {
-        handle,
+        handle: null,
         start: e.contentPoint,
         delta: [0, 0],
         modifiers,
@@ -313,7 +326,6 @@ export function createImageContentContext(
       };
     },
   };
-  DESCEND.set(contribution, (frame) => deps.descend(frame));
   return contribution;
 }
 
@@ -345,6 +357,8 @@ export interface ContentLevelWiring {
 export interface ContentLevel {
   readonly contribution: EditContextContribution;
   wire(wiring: ContentLevelWiring): void;
+  /** Enter the Edit level of `frame` (Enter on the content level). */
+  descend(frame: ElementId): void;
 }
 
 const CONTENT_LEVEL = scoped("imageContentLevel", (scope): ContentLevel => {
@@ -354,13 +368,13 @@ const CONTENT_LEVEL = scoped("imageContentLevel", (scope): ContentLevel => {
     cameraScale: () => cameraScaleOf(wired?.client ?? null),
     arbiter: () => escapeArbiterOf(scope),
     onCommitted: (geometry) => wired?.onCommitted(geometry),
-    descend: (frame) => wired?.descend(frame),
   });
   return {
     contribution,
     wire(next) {
       wired = next;
     },
+    descend: (frame) => wired?.descend(frame),
   };
 });
 

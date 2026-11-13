@@ -38,3 +38,11 @@ and end the context when the surface asks.
 - The surface follows the current camera. If a fast pan shows the surface ahead of the canvas,
   the host will position it with the camera of the last presented frame instead.
 - Full-screen presentation is a later decision (it builds on the shell's chrome regions).
+
+## Amendment 2026-11-13
+
+[ADR 1211](1211-one-way-out-of-a-context.md): a press outside the surface leaves the context
+through the exit resolver (`leave("click-outside")`), not a plain commit; the selection moving
+away leaves it the same way (`leaveAll("selection-change")`), and only when the selection lies
+outside the context's scope. A dirty context whose module asks to be asked puts up the resolve
+prompt instead.

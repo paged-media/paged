@@ -190,9 +190,22 @@ tool switch, a failed worker and unmount end it once, rolled back; a begin the e
 Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
 a failed worker is said so (`UXI-T10`, `UXI-T61`). Without the flag the canvas behaves as before.
 
+Track CM's first part has landed (CM1–CM3; [ADR 1211](adr/1211-one-way-out-of-a-context.md),
+[ADR 1212](adr/1212-frame-content-edit.md), extensions ADR 1106): every way out of an edit
+context — Escape, the breadcrumb, another tool, another selection, a document switch — goes
+through one exit resolver that weighs the reason, whether the context holds unfinished work and
+the module's declared `exitPolicy`; a dirty context whose module asks puts up a small Keep /
+Discard / Cancel question, and a document switch asks it before the replace question
+(`UXI-T40` to `UXI-T44`). The stack runs each context hook once, after it changed; the breadcrumb
+shows entered groups and lives in the context toolbar's fixed bar, so entering a context moves
+nothing (F-48); contexts and module-owned frames are named as their modules name them (F-45). A
+double-click on a picture frame positions the picture inside it first; Edit image (the level
+control, Enter, or a second double-click) enters paged.image (D-05). The canvas's press outside
+a context still commits until track IC calls the resolver there.
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
-the marquee takes what it intersects, and a double-click on an image frame enters paged.image.
+and the marquee takes what it intersects.
 Wave 0's interaction inventory
 (`scripts/interaction-inventory.json`, with the one exception ledger), the coverage report for
 the `UXI-T` tests and the test harness are being built.

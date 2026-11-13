@@ -68,6 +68,7 @@ import {
   useRegistries,
   useScreenMode,
   useSelection,
+  useSelectionObjectType,
   useTool,
   useToolSettings,
 } from "@paged-media/shell";
@@ -361,6 +362,9 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
   const opacity = useObjectProperty({ path: "frameOpacity" });
   const { commands } = useRegistries();
   const model = useObjectModel();
+  // F-45 — content a module owns is named as the module names it ("Web
+  // frame", "Spreadsheet"), not by the host kind it is drawn with.
+  const owned = useSelectionObjectType()?.editContext?.label ?? null;
   const multi = ids.length >= 2;
   const isGroup =
     ids.length === 1 &&
@@ -384,7 +388,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
           whiteSpace: "nowrap",
         }}
       >
-        {kindLabel(strings, ids)}
+        {(!multi && owned) || kindLabel(strings, ids)}
       </span>
       <Sep />
       <NumField

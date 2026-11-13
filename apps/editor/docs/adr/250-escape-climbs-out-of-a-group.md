@@ -48,3 +48,9 @@ Until those tasks land the body describes the code.
 at the top level Escape clears the selection (the `selection` tier). Until the drawing tools'
 gestures join the arbiter (track IC) both answer only while the tool in hand has no gesture
 handler.
+
+## Amendment 2026-11-13 (one way out)
+
+[ADR 1211](1211-one-way-out-of-a-context.md): Escape in a clean context leaves it through the one
+exit resolver, as every other exit does; an entered group is now a level of the breadcrumb (the
+group path is kept from the hit's chain), and its crumb climbs back to that level.

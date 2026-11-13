@@ -151,7 +151,7 @@ export function EditContextController() {
       // Editor ADR 1212 (D-05) — Enter on a picture's content level goes
       // one level in: Edit image. Without this the key reached path
       // editing on the frame below.
-      const descend = descendOf(contribution);
+      const descend = descendOf(scope, contribution ?? null);
       const frame = activeRef.current;
       if (
         descend &&

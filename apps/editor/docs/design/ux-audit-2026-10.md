@@ -1112,6 +1112,11 @@ Live adjustments work: dragging Exposure updates the frame while the slider move
 
 **Screenshots:** `F-43-image-context-toolsets.png`
 
+**Partly fixed (2026-11-13, editor ADR 1212).** A picture frame now shows its levels, Frame ·
+Content · Edit image, in the context toolbar: a double-click positions the picture first, and
+the image tools appear only once Edit image is entered. The two tool sets inside the raster
+context, the uncounted embedded image and the "Colour" spelling are not changed.
+
 <a id="f-44"></a>
 
 #### F-44 · Doc: the imported heading overlaps the next paragraph; health counts go stale
@@ -1159,6 +1164,11 @@ A web frame shows as "Rectangle" in the control bar and a placed sheet range as 
 **Recommendation:** Let a module provide the selection label. Remove the ellipsis or add placement by drawing.
 
 **Screenshots:** `F-45-web-frame-labelled-rectangle.png`
+
+**Fixed (2026-11-13, editor ADR 1212, extensions ADR 1106).** A module names its edit context
+(`label`): the breadcrumb, the context toolbar and the control bar's selection label read "Web
+frame", "Spreadsheet", "Image", "Chart" in the editor's language, not the host kind. The Insert ▸
+Web frame… ellipsis is not changed.
 
 <a id="f-46"></a>
 
@@ -1498,6 +1508,10 @@ Entering a sheet, vector or raster context inserts an "EDITING …" breadcrumb r
 **Recommendation:** Render the breadcrumb in the canvas title bar ("Untitled document › Sheet").
 
 **Screenshots:** `F-48-context-layout-shift.png`
+
+**Fixed (2026-11-13, editor ADR 1212).** The trail is in the context toolbar, whose height is
+fixed; entering or leaving a context (or a group) inserts no row and moves nothing. Where a
+profile shows no context toolbar the trail floats over the work area.
 
 <a id="f-57"></a>
 

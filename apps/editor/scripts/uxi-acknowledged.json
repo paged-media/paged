@@ -44,26 +44,6 @@
     "task": "CM4",
     "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T39 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T40": {
-    "task": "CM1",
-    "reason": "No test claims it yet: the edit-context stack runs hooks inside state updaters and isInScope checks the root only; CM1 (over EN5) fixes both. Claim it in a test title (UXI-T40 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T41": {
-    "task": "CM2",
-    "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T41 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T42": {
-    "task": "CM2",
-    "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T42 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T43": {
-    "task": "CM2",
-    "reason": "No test claims it yet: an edit context ends three ways with three meanings (Escape cancels, a press outside commits, the breadcrumb pops); CM2 brings one exit resolver. Claim it in a test title (UXI-T43 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T44": {
-    "task": "CM1",
-    "reason": "No test claims it yet: the edit-context stack runs hooks inside state updaters and isInScope checks the root only; CM1 (over EN5) fixes both. Claim it in a test title (UXI-T44 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T45": {
     "task": "CM4",
     "reason": "No test claims it yet: the module conformance suite over all seven module contexts and the profiles does not exist yet (CM4). Claim it in a test title (UXI-T45 — …) when that lands, or sooner where today's code already passes (W0.7)."
