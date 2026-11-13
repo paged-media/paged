@@ -97,7 +97,9 @@ export async function loadDocumentFile(
   const loads = cb.scope.get(LOADS);
   const load = ++loads.newest;
   cb.setStatus(`loading ${file.name} (${file.size.toLocaleString()} bytes)…`);
-  cb.setLoading({ name: file.name, bytes: file.size });
+  // UXI-PRF-003 — the stages of the load, each set when it is reached.
+  const loading: LoadingState = { name: file.name, bytes: file.size };
+  cb.setLoading({ ...loading, stage: "recognized" });
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const fontBytes = await fetchDefaultFont();
@@ -142,11 +144,11 @@ export async function loadDocumentFile(
       : sourceOfFile(file),
   );
   cb.setHandle(handle);
-  cb.setLoading(null);
+  cb.setLoading({ ...loading, stage: "geometry", pageCount: handle.pageCount });
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}; snapshotting…`,
   );
-  await snapshotAllPages(client, handle, cb, load);
+  await snapshotAllPages(client, handle, cb, load, loading);
 }
 
 /** Size of a new blank document in points, [width, height]. */
@@ -172,7 +174,8 @@ export async function createBlankDocument(
   const loads = cb.scope.get(LOADS);
   const load = ++loads.newest;
   cb.setStatus("creating new document…");
-  cb.setLoading({ name: "Untitled", bytes: 0 });
+  const loading: LoadingState = { name: "Untitled", bytes: 0 };
+  cb.setLoading({ ...loading, stage: "recognized" });
   cb.resetForNewDocument();
   // U14 — a blank document has no source file; the title bar's
   // "Untitled document" fallback is the honest name.
@@ -200,9 +203,9 @@ export async function createBlankDocument(
 
   declareDocumentSource(cb.scope, handle.docId, { kind: "transient" });
   cb.setHandle(handle);
-  cb.setLoading(null);
+  cb.setLoading({ ...loading, stage: "geometry", pageCount: handle.pageCount });
   cb.setStatus(`new ${handle.pageCount}-page document; snapshotting…`);
-  await snapshotAllPages(client, handle, cb, load);
+  await snapshotAllPages(client, handle, cb, load, loading);
   return handle;
 }
 
@@ -331,15 +334,23 @@ export async function requestPageThumbnail(
  * one stops it between pages. Sequential because the worker is
  * single-threaded; parallel requests would only queue. A missing
  * snapshot is a warning, not a hard failure.
+ *
+ * The pass is also the load's last two stages (UXI-PRF-003): the first
+ * page's snapshot is the first page composed — the first useful paint —
+ * and each one after it a page prepared while the user already works.
+ * Pages go first to last, so the opening view (the first page) is the
+ * first one ready.
  */
 async function snapshotAllPages(
   client: CanvasClient,
   handle: DocumentHandle,
   cb: DocumentLoaderCallbacks,
   load: number,
+  loading: LoadingState,
 ): Promise<void> {
   const loads = cb.scope.get(LOADS);
-  for (const pageId of handle.pageIds) {
+  const pageCount = handle.pageIds.length;
+  for (const [i, pageId] of handle.pageIds.entries()) {
     if (load !== loads.newest) return;
     try {
       const url = await requestPageThumbnail(client, pageId);
@@ -352,9 +363,18 @@ async function snapshotAllPages(
       if (load !== loads.newest) return;
       cb.pushWarning(`snapshot ${pageId}: ${String(err)}`);
     }
+    if (i + 1 < pageCount) {
+      cb.setLoading({
+        ...loading,
+        stage: i === 0 ? "firstPaint" : "refining",
+        pageCount,
+        pagesReady: i + 1,
+      });
+    }
   }
   if (load !== loads.newest) return;
 
+  cb.setLoading(null);
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}`,
   );

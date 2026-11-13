@@ -170,6 +170,48 @@
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
+
+  /* ── density (Professional, the default) ───────────────────── */
+  /* Editor ADR "Density presets": the interface's sizing, re-pointed by
+     [data-density] on the editor's root (state/density.ts). The canvas,
+     the document and its overlays never read these. */
+  --density-control-h: 30px; /* a chrome button or pill */
+  --density-row-h: 28px; /* an input row, a small button */
+  --density-icon: 18px; /* a chrome glyph */
+  --density-pad: 14px; /* a panel's side padding */
+  --density-section-gap: 12px; /* the space under a panel section */
+  --chrome-header-h: 46px; /* the header */
+  --chrome-toolbar-h: 44px; /* the context toolbar */
+  --chrome-tabstrip-h: 36px; /* the right dock's tab strip */
+  --chrome-titlebar-h: 34px; /* the canvas's document title bar */
+  --chrome-modebar-h: 48px; /* the mode bar */
+}
+
+/* ── density presets — Comfortable and Compact over the default ──── */
+[data-paged-editor][data-density="comfortable"] {
+  --density-control-h: 36px;
+  --density-row-h: 34px;
+  --density-icon: 20px;
+  --density-pad: 18px;
+  --density-section-gap: 18px;
+  --chrome-header-h: 52px;
+  --chrome-toolbar-h: 50px;
+  --chrome-tabstrip-h: 40px;
+  --chrome-titlebar-h: 38px;
+  --chrome-modebar-h: 54px;
+}
+
+[data-paged-editor][data-density="compact"] {
+  --density-control-h: 26px;
+  --density-row-h: 24px;
+  --density-icon: 16px;
+  --density-pad: 10px;
+  --density-section-gap: 8px;
+  --chrome-header-h: 40px;
+  --chrome-toolbar-h: 36px;
+  --chrome-tabstrip-h: 30px;
+  --chrome-titlebar-h: 28px;
+  --chrome-modebar-h: 40px;
 }
 
 /* ── DARK — the default editor surface (deep zinc, lifted violet,

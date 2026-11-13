@@ -25,7 +25,11 @@ import { useStrings } from "@paged-media/strings";
 import { Icon } from "../../icons/Icon";
 import { DIALOG } from "../messages";
 import { cn } from "../../lib/utils";
-import { usePortalContainer } from "../../state/editor-root";
+import {
+  useEditorEscapeGuard,
+  usePortalContainer,
+} from "../../state/editor-root";
+import { useFocusReturn } from "../../focus/focus-return";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -55,31 +59,33 @@ function DialogContent({
   children,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
-  // ADR 234 — focus returns to whatever opened the dialog. Radix gives it
+  // An Escape typed in another editor on the page is not this dialog's.
+  const escapeGuard = useEditorEscapeGuard(onEscapeKeyDown);
+  // ADR 234, ADR 1206 — focus returns to whatever opened the dialog, and to
+  // the canvas when that is gone (a menu item, `<body>`). Radix gives it
   // back to a Dialog TRIGGER only, and most of the editor's dialogs open
   // from a command (a menu item, a shortcut), so focus fell to <body>.
   // The opener is read as the dialog opens, before focus moves in.
-  const openerRef = React.useRef<Element | null>(null);
+  const surface = React.useId();
+  const focusReturn = useFocusReturn();
   const strings = useStrings();
   return (
     <DialogPortal container={usePortalContainer()}>
       <DialogOverlay />
       <DialogPrimitive.Content
+        onEscapeKeyDown={escapeGuard}
         onOpenAutoFocus={(event) => {
-          openerRef.current = document.activeElement;
+          focusReturn.open(surface);
           onOpenAutoFocus?.(event);
         }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
           if (event.defaultPrevented) return;
           event.preventDefault();
-          const opener = openerRef.current;
-          openerRef.current = null;
-          if (opener instanceof HTMLElement && opener.isConnected) {
-            opener.focus({ preventScroll: true });
-          }
+          focusReturn.close(surface);
         }}
         className={cn(
           "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",

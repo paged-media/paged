@@ -546,6 +546,15 @@ Window ▸ Styles holds Color, Color settings, Color Wheel, Gradients, Swatches 
 
 **Screenshots:** `F-18-window-styles-category.png`, `F-17-window-menu-casing.png`
 
+**Fixed (2026-11-13, editor ADR 1208).** Each editor panel carries its Window-menu category
+(`windowCategory`, from `apps/canvas/src/panels/window-categories.ts`): Color, Styles, Type &
+Tables, Object & Layout, Interactive, Output and Utilities, with eight panels one click deep
+(Properties, Pages, Layers, Links, Document map, Stories, Library, Comments). Every panel is listed
+once and every name once: the component library is "Components", the Content mode's inspector
+"Story status", the page list "Page list"; a plugin's panel row that its own menu row opens ("Data
+query" beside "Data query…") is dropped. INV-REG-4 in `tests/e2e/registry-invariants.spec.ts`
+holds the rules.
+
 <a id="f-19"></a>
 
 #### F-19 · Module commands appear outside their context
@@ -612,6 +621,9 @@ A readout over the canvas shows "GPU 60 fps · 20 pages · cache 100% (20/20) ·
 
 **Screenshots:** `F-21-debug-hud.png`
 
+**Fixed (2026-11-13, editor ADR 1208).** The readout shows only with `?debug=hud`; zoom and page
+stay in the mode bar and the status bar.
+
 <a id="f-23"></a>
 
 #### F-23 · Two of six modes are mostly placeholders
@@ -632,6 +644,11 @@ Review is "Approve soon", "Request changes soon", "Compare versions soon", "No c
 
 **Screenshots:** `F-23-review-mode-placeholders.png`, `F-22-internal-ids.png`
 
+**Fixed (2026-11-13, editor ADRs 1208 and 207 amended).** Review declares `placeholder: true`
+and the mode bar no longer offers it (it shows while it is the active mode). Content opens on the
+Stories list with Character and Paragraph in the dock; the story inspector is the last tab, named
+"Story status". Export keeps its live PDF and image targets and its three honest seams.
+
 <a id="f-24"></a>
 
 #### F-24 · The disabled Share button is the loudest control; the tab title is "IDML canvas"
@@ -651,6 +668,10 @@ Share is disabled (opacity 0.45 on the brand fill), but on the dark header it st
 **Recommendation:** Use a ghost style for the disabled Share. Set `document.title` from the document chip.
 
 **Screenshots:** `F-24-share-button-prominence.png`
+
+**Fixed (2026-11-13, editor ADR 1208).** The disabled Share is a ghost button in the muted text
+colour, and the browser tab reads "<document> — paged" while a document is open, when the editor
+is the page (an embedded editor leaves its host's title alone).
 
 <a id="f-25"></a>
 
@@ -896,6 +917,8 @@ sideways.
 
 #### F-34 · Type-size and style shortcuts do nothing
 
+> **Resolved (2026-11-13).** The text chords are host commands over the shared text verbs (`apps/canvas/src/text-format-commands.ts`, `@paged-media/helpers`), bound while a caret or a range is in a story outside an edit context: ⌘B / ⌘I / ⌘U, ⌘⇧> and ⌘⇧< (also ⌘⇧. and ⌘⇧,) for the size, ⌥↑ / ⌥↓ for the leading by 2 pt (from Auto at 120 %), ⌥← / ⌥→ for the tracking by 20/1000 em, and InDesign's alignment, case, strikethrough and position chords, each with its Ctrl twin. The Type ▸ Format menu lists them with their chords. On the canvas's text input the Alt arrows are the verbs' while a binding takes them, otherwise they move the caret. Tests: `tests/e2e/shell-keybindings.spec.ts` (every chord runs its verb with a caret, none with only a frame), `test/unit/commands/text-format-commands.test.ts`, `platform/shared/helpers/test/text-format.test.ts`. The original text follows for the record.
+
 **Severity:** minor · **Effort:** S · **Affects:** Text-heavy users.
 
 With text selected, ⌘⇧> (size up) left the size at 12 pt. No keybinding exists for size, leading, tracking, or bold, italic and underline (none is registered in the editor or the modules). The Type menu shows no shortcuts at all.
@@ -1038,6 +1061,11 @@ During `dragover` the canvas shows no outline, overlay or cursor change, so the 
 **Recommendation:** Add a drop overlay. It is also the place to resolve F-01 and F-03.
 
 **Screenshots:** `F-40-no-drop-indicator.png`
+
+**Fixed (2026-11-13, `f2a5f111e`).** While a file is dragged over the canvas a label at the pointer
+says what the drop will do ("Place photo.png in this frame", "Open Annual.idml in place of this
+document", or a refusal with its reason), the frame that would take a picture is outlined, and
+the drop does exactly that (editor ADR 1205; `UXI-T62` to `UXI-T64`).
 
 ### Built-in modules
 
@@ -1309,6 +1337,13 @@ The editor reports ready after 1.1 s (a 54 MB, 8-page real-world IDML template) 
 
 **Screenshots:** `F-53-heavy-doc-blank-canvas.png`
 
+**Fixed (2026-11-13, editor ADR 1208; ADR 237 amended).** A load reports its real stages —
+recognized, geometry, first paint, refining, ready — on the canvas and in the header, in words and
+counts, never a percentage; until the first page is composed the canvas outlines every page where
+it will be. UXI-T49 asserts the stages and the first-page fit on a 20-page document. How fast the
+first page itself is composed (rendering it before its images resolve) is a performance matter,
+plan task AP5.
+
 <a id="f-54"></a>
 
 #### F-54 · Memory reaches 1.7–3.6 GB on large documents
@@ -1353,6 +1388,13 @@ Both docks have fixed widths and never collapse. The canvas gets 25% of a 1280 �
 
 **Screenshots:** `F-55-viewport-1280x720.png`, `F-55-viewport-1024x768.png`, `F-55-viewport-800x600.png`
 
+**Fixed (2026-11-13, editor ADR 1208).** The docks are resizable (240–480 px) and the cockpit
+adapts to the width it is given: wide docks both; a laptop width (about 1095–1575 px of window)
+collapses the left dock to a rail with a flyout; a narrow one makes both docks overlays that the
+next canvas press closes. No docked column takes the canvas below 640 px. The header's menus
+scroll in their zone and the mode bar drops its labels when narrow, so at 800 × 600 nothing
+scrolls sideways (`tests/e2e/uxi-workspace.spec.ts`).
+
 <a id="f-56"></a>
 
 #### F-56 · Fast typing queues up
@@ -1396,6 +1438,16 @@ The Window menu mixes Title Case ("Document Map", "Export Center") with sentence
 **Recommendation:** Lint menu and panel titles in `registry-invariants.spec.ts`: case, ellipsis and duplicate names.
 
 **Screenshots:** `F-17-window-menu-casing.png`
+
+**Fixed (2026-11-13, editor ADR 1208).** The editor's panel names are sentence case ("Document
+map", "Export center", "Paragraph styles" …) and one name per thing: "Bullets and numbering" and
+"Numbering and section options" in the Window menu as in Type and Layout, "Type on a path" in Draw
+as in Object, "Color" in paged.image and the host's panels alike. Insert ▸ "Web frame" lost the
+ellipsis of a dialog it never opened; File ▸ "New document…" keeps its own for the New document
+dialog the interaction plan adds (DF5). The renamed menu ids are deprecated aliases until 0.80.0
+(`apps/canvas/deprecated-ids.json`). Help's trailing separator no longer occurs (the menu bar
+draws a separator only between groups). INV-REG-4 checks case, ellipsis and duplicate names for the
+Window menu.
 
 <a id="f-22"></a>
 
@@ -1535,7 +1587,7 @@ The Object menu has no Lock (⌘L), Unlock all on spread, Hide (⌘3) or Show al
 | Floating, dockable panels                        | Fixed docks with tabs                     | Yes (ADR 002)                                            | —             |
 | Save / Don't save / Cancel on close              | Native OK/Cancel                          | Yes, in code, as interim                                 | [F-05](#f-05) |
 | Autosave and recent files                        | None                                      | Yes (status.md, Limits)                                  | [F-06](#f-06) |
-| Text shortcuts (⌘⇧> size, ⌥←/→ tracking)         | Not bound                                 | No                                                       | [F-34](#f-34) |
+| Text shortcuts (⌘⇧> size, ⌥←/→ tracking)         | Bound (resolved 2026-11-13)               | No                                                       | [F-34](#f-34) |
 
 ## Not tested, and why
 

@@ -72,7 +72,7 @@ function input(
 const png: DropFile = { name: "photo.png", type: "image/png" };
 
 describe("resolveDropIntent", () => {
-  test("a picture over an empty page is placed, nothing replaced", () => {
+  test("UXI-T62: a picture over an empty page is placed, nothing replaced", () => {
     const r = resolveDropIntent(input([png]));
     expect(r.intent).toBe("place");
     expect(r.label).toBe("Place photo.png");
@@ -110,7 +110,7 @@ describe("resolveDropIntent", () => {
     );
   });
 
-  test("a document over a dirty document replaces it after the question", () => {
+  test("UXI-T63: a document over a dirty document replaces it after the question", () => {
     const r = resolveDropIntent(
       input([{ name: "Annual.idml", type: "" }], PAGE, { needsSave: true }),
     );
@@ -141,7 +141,7 @@ describe("resolveDropIntent", () => {
     expect(r.intent).toBe("import");
   });
 
-  test("an unsupported file is refused with the reason", () => {
+  test("UXI-T64: an unsupported file is refused with the reason", () => {
     const r = resolveDropIntent(
       input([{ name: "notes.txt", type: "text/plain" }], PAGE),
     );

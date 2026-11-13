@@ -83,6 +83,14 @@ dockview dependency
 `"iconLibrary": "lucide"`, which the shell no longer depends on; `apps/devtools/package.json:28`
 still lists `lucide-react`.
 
+## Amendment 2026-11-13
+
+The token file also carries the interface's sizes: control and row heights, icon size, panel
+padding, section spacing and the chrome bars' heights, as Professional in the default block and
+re-pointed by `[data-paged-editor][data-density="comfortable" | "compact"]`; the chrome reads them
+instead of numbers. `docs/theme-tokens.json` lists each one's value per preset
+([ADR 1209](1209-density-presets.md)).
+
 ## Related
 
 - [ADR 002](002-cockpit-over-dockview.md) — the layout substrate that replaced dockview

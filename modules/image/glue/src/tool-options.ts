@@ -81,7 +81,7 @@ const M = defineMessages("image.toolOptions", {
   area: "Area",
   sampling: "Sampling",
   limits: "Limits",
-  protectForeground: "Protect foreground colour",
+  protectForeground: "Protect foreground color",
   mode: "Mode",
   antiAlias: "Anti-alias",
 });

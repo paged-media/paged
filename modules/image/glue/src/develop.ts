@@ -55,7 +55,7 @@ export const D = defineMessages("image.develop", {
   blue: "Blue",
   purple: "Purple",
   magenta: "Magenta",
-  grading: "Colour grading",
+  grading: "Color grading",
   gradeShadows: "Shadows",
   gradeMidtones: "Midtones",
   gradeHighlights: "Highlights",
@@ -75,7 +75,7 @@ export const D = defineMessages("image.develop", {
   masking: "Masking",
   noiseReduction: "Noise reduction",
   nrLuminance: "Luminance",
-  nrColour: "Colour",
+  nrColour: "Color",
   reset: "Reset",
 });
 

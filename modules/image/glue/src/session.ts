@@ -1851,19 +1851,19 @@ const S = defineMessages("image.status", {
   modeColorSet: "Mode → {mode}. One undo step.",
   modeColorAlready: "The image is already in {mode}.",
   modeCmykNoProfile:
-    "CMYK Color without a CMYK profile: the plain ink formula changes no colour. Choose a CMYK profile in Export as… to convert through a press.",
+    "CMYK Color without a CMYK profile: the plain ink formula changes no color. Choose a CMYK profile in Export as… to convert through a press.",
   proofOn: "Proof view on (the document is unchanged).",
   proofOff: "Proof view off.",
   proofFailed: "Proof view failed: {error}",
   modeNameGray: "Greyscale",
-  modeNameRgb: "RGB colour",
-  modeNameCmyk: "CMYK colour",
-  modeNameLab: "Lab colour",
-  modeNameIndexed: "Indexed colour",
+  modeNameRgb: "RGB color",
+  modeNameCmyk: "CMYK color",
+  modeNameLab: "Lab color",
+  modeNameIndexed: "Indexed color",
   modeNameMultichannel: "Multichannel",
   modeNameDuotone: "Duotone",
   modeIndexedSet:
-    "Mode → Indexed colour, {count} colours. The image was flattened. One undo step.",
+    "Mode → Indexed color, {count} colors. The image was flattened. One undo step.",
   psdSaveBack: "PSD save-back — {shape}.",
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
@@ -1883,10 +1883,10 @@ const S = defineMessages("image.status", {
   exportNoteAlphaDropped: "JPEG has no transparency; it was dropped.",
   exportNoteGrayUntagged: "Grayscale is written without a profile.",
   exportNoteGifPalette:
-    "GIF holds 256 colours and one bit of transparency: the colours were reduced.",
+    "GIF holds 256 colors and one bit of transparency: the colors were reduced.",
   exportNoteJxlLossless: "JPEG XL is written lossless.",
   exportNoteNoMetadata:
-    "This format carries no metadata or colour profile; none was written.",
+    "This format carries no metadata or color profile; none was written.",
   layeredTiffNeedsPsd:
     "A TIFF with layers is written from a PSD: open the image from a PSD first.",
   layeredTiffExported:
@@ -1910,7 +1910,7 @@ const S = defineMessages("image.status", {
   sampledNothing:
     "The current layer has no pixels there (an adjustment layer, or transparent) — nothing sampled.",
   samplersFull:
-    "{max} colour samplers are placed already — Alt-click one to remove it.",
+    "{max} color samplers are placed already — Alt-click one to remove it.",
   bakedTooLarge:
     "The baked image is {size} MB; the host takes at most 8 MB per image until it accepts binary transfers. Nothing was committed.",
   committed:
@@ -2055,7 +2055,7 @@ const BS = defineMessages("image.brushEngine", {
   unknownDynamicsKeys: "The engine has settings this panel cannot set: {keys}.",
   historyFailed: "History brush: {error}",
   magicEraseFailed: "Magic eraser: {error}",
-  magicErased: "Erased the colour region at {x},{y}.",
+  magicErased: "Erased the color region at {x},{y}.",
   noEngine: "The image engine could not start.",
 });
 
@@ -2103,7 +2103,7 @@ const E = defineMessages("image.effect", {
   lensBlur: "Lens blur",
   reduceNoise: "Reduce noise",
   smartSharpen: "Smart sharpen",
-  selectiveColour: "Selective colour",
+  selectiveColour: "Selective color",
   addLayer: "Add layer",
   duplicateLayer: "Duplicate layer",
   removeLayer: "Remove layer",
@@ -2150,7 +2150,7 @@ const L = defineMessages("image.layerOps", {
   blendIf: "Blend If",
   knockout: "Knockout",
   lock: "Lock layer",
-  colorLabel: "Colour label",
+  colorLabel: "Color label",
   link: "Link layers",
   unlink: "Unlink layer",
   mergeDown: "Merge down",
@@ -5837,7 +5837,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             : engine.tile(src.handle, win.x, win.y, win.w, win.h);
         return averageRgba8(px);
       } catch (err) {
-        host.log.debug("colour sample failed", err);
+        host.log.debug("color sample failed", err);
         return null;
       }
     },

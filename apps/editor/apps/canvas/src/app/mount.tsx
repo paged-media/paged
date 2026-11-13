@@ -362,6 +362,7 @@ import { appCatalogRegistry } from "../panels/catalog-registry";
 import { CanvasPanel } from "../panels/canvas-panel";
 import { problemsOf, type ProblemsStore } from "../panels/problems-store";
 import { BUILT_IN_PANELS } from "../panels/built-in-panels";
+import { withWindowCategories } from "../panels/window-categories";
 import { applyHistoryDepthPreference } from "../panels/history-panel";
 import { PlaygroundController } from "../playground/PlaygroundController";
 import { debugFlag } from "../debug-flags";
@@ -978,10 +979,6 @@ function CanvasAppIntegration() {
     setSelection: setContentSelection,
     // useTextEditing calls these through the latest render's context.
     undoOwnedByContext: () => !!editContextStack?.activeContribution?.onUndo,
-    // Editor ADR 301 — inside a header edited in place, Escape takes the
-    // caret out of the header (which leaves it), not the context.
-    escapeOwnedByContext: () =>
-      !!editContextStack?.active && !registries.subContexts.current(),
     // ED-1 — Escape out of the text is InDesign's: the frame that held
     // the caret becomes the selection and the Selection tool is in hand,
     // so the next key is a shortcut again rather than more text.
@@ -2062,7 +2059,8 @@ export function createEditorInstance(
   // is absent from a preset until someone puts it there deliberately
   // (`scripts/profile-presets-guard.mjs` catches a renamed id).
   const surfaces = applyProfile(profile, {
-    panels: BUILT_IN_PANELS,
+    // UX audit F-18 — each panel's Window-menu category.
+    panels: withWindowCategories(BUILT_IN_PANELS),
     tools: BUILT_IN_TOOLS,
     panelRail: PANEL_RAIL,
     modes: COCKPIT_MODES,

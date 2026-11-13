@@ -18,7 +18,10 @@
  */
 
 // The header's collaboration seam: one Share button, disabled with an
-// honest tooltip until there is a multiplayer backend.
+// honest tooltip until there is a multiplayer backend. Quiet while it is
+// disabled (UX audit F-24): a ghost button in the muted text colour, not
+// the brand fill — at 45 % opacity on the dark header the filled one still
+// read as the primary call to action.
 //
 // It used to be the kit's whole cluster — three placeholder avatar
 // seats, Share, Comments and Notifications — every control inert. Four
@@ -42,17 +45,17 @@ export function ShareButton() {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        height: 30,
-        padding: "0 13px",
+        height: "var(--density-control-h)",
+        padding: "0 12px",
         borderRadius: "var(--radius-lg)",
-        border: "none",
+        border: "1px solid var(--pg-border)",
         cursor: "default",
-        background: "var(--pg-primary)",
-        color: "var(--pg-primary-fg)",
+        background: "transparent",
+        color: "var(--pg-muted-fg)",
         fontFamily: "var(--font-sans)",
         fontSize: 13,
-        fontWeight: 600,
-        opacity: 0.45,
+        fontWeight: 500,
+        opacity: 0.7,
         flexShrink: 0,
       }}
     >

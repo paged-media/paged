@@ -31,7 +31,7 @@ export const MK = defineMessages("image.masking", {
   colorRange: "Color Range",
   colorRangeApplied: "Color Range: {percent}% of the image selected.",
   outOfGamut:
-    "Out of Gamut needs a soft-proofing CMYK profile, which the image module's colour settings do not have yet.",
+    "Out of Gamut needs a soft-proofing CMYK profile, which the image module's color settings do not have yet.",
   grown: "Grow: {percent}% of the image selected.",
   similar: "Similar: {percent}% of the image selected.",
   focusArea: "Focus Area: {percent}% of the image selected.",
@@ -48,7 +48,7 @@ export const MK = defineMessages("image.masking", {
   refineDone: "Select and Mask: output to {output}.",
   refineCancelled: "Select and Mask cancelled; the selection is unchanged.",
   matting:
-    "No matting model is installed; the classical colour solve refines the edge.",
+    "No matting model is installed; the classical color solve refines the edge.",
   refineFirst:
     "The Refine Edge brush works inside Select and Mask — choose Select ▸ Select and Mask first.",
   noChannel: "Save a selection as a channel first.",

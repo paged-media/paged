@@ -896,24 +896,24 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Draw/Type on path/Attach — runs attachTextToPath; the selection holds no text frame, so it changes nothing", async () => {
-    covers("menu:Draw/Type on path/Attach");
-    await expectGreyedAndInert(bare, "Draw/Type on path/Attach");
+  test("Draw/Type on a path/Attach — runs attachTextToPath; the selection holds no text frame, so it changes nothing", async () => {
+    covers("menu:Draw/Type on a path/Attach");
+    await expectGreyedAndInert(bare, "Draw/Type on a path/Attach");
     const out = await clickEntry(
       live,
-      "Draw/Type on path/Attach",
+      "Draw/Type on a path/Attach",
       "media.paged.draw.command.attachTextToPath",
     );
     expect(out.shell).toEqual([]);
     expect(out.after, "the selection holds no text frame").toBe(out.before);
   });
 
-  test("Draw/Type on path/Detach — runs detachTextFromPath; the selection holds no type on a path, so it changes nothing", async () => {
-    covers("menu:Draw/Type on path/Detach");
-    await expectGreyedAndInert(bare, "Draw/Type on path/Detach");
+  test("Draw/Type on a path/Detach — runs detachTextFromPath; the selection holds no type on a path, so it changes nothing", async () => {
+    covers("menu:Draw/Type on a path/Detach");
+    await expectGreyedAndInert(bare, "Draw/Type on a path/Detach");
     const out = await clickEntry(
       live,
-      "Draw/Type on path/Detach",
+      "Draw/Type on a path/Detach",
       "media.paged.draw.command.detachTextFromPath",
     );
     expect(out.shell).toEqual([]);

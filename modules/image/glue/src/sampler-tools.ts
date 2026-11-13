@@ -91,7 +91,7 @@ export function makeColorSamplerGesture(
         layer = host.overlay.layer();
       }
       off = session.onDidChange(draw);
-      void resolveFrameFit(host, session.state().source, "colour sampler").then(
+      void resolveFrameFit(host, session.state().source, "color sampler").then(
         (f) => {
           fit = f;
           draw();

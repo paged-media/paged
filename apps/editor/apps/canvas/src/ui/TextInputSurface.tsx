@@ -34,6 +34,7 @@
 
 import { useState, type CSSProperties } from "react";
 
+import { docToViewport } from "@paged-media/client";
 import type { Camera, CaretGeometry, PageId } from "@paged-media/client";
 import {
   CANVAS_SURFACE_ATTR,
@@ -66,21 +67,33 @@ export function textInputSurface(
   );
 }
 
-/** Where the caret is on screen, in the viewport's CSS pixels. */
+/** Where the caret is on screen, in the viewport's CSS pixels: the top of
+ *  the caret line through the full camera transform (scale, pan and the
+ *  view's rotation, editor ADR 287), its height on screen, and the
+ *  rotation the line stands at, in radians clockwise. The surface sits
+ *  there, turned with the view, so an input method's marked text and its
+ *  candidate window open at the caret however the view is turned
+ *  (UXI-TXT-008). */
 export function caretScreenBox(
   caret: CaretGeometry | null,
   camera: Camera,
   pageIds: ReadonlyArray<PageId>,
   pageRects: ReadonlyArray<PageRect>,
-): { left: number; top: number; height: number } | null {
+): { left: number; top: number; height: number; rotation: number } | null {
   if (!caret) return null;
   const index = pageIds.indexOf(caret.pageId);
   const page = index >= 0 ? pageRects[index] : undefined;
   if (!page) return null;
+  const [left, top] = docToViewport(
+    camera,
+    page.x + caret.xPt,
+    page.y + caret.topPt,
+  );
   return {
-    left: (page.x + caret.xPt) * camera.scale + camera.tx,
-    top: (page.y + caret.topPt) * camera.scale + camera.ty,
+    left,
+    top,
     height: Math.max(caret.heightPt * camera.scale, 8),
+    rotation: camera.rotation ?? 0,
   };
 }
 
@@ -118,6 +131,9 @@ export function TextInputSurface(props: TextInputSurfaceProps) {
         ...surfaceStyle,
         left: box?.left ?? 0,
         top: box?.top ?? 0,
+        // Turned about the caret's top, with the view (Rotate View).
+        transform: box?.rotation ? `rotate(${box.rotation}rad)` : undefined,
+        transformOrigin: "0 0",
         height,
         fontSize,
         lineHeight: `${height}px`,

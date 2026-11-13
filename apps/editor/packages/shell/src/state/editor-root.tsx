@@ -56,15 +56,25 @@ import {
   type EditorScope,
 } from "./editor-scope";
 import { useOptionalTheme } from "./theme-context";
+import { useDensity } from "./density";
 
 const ROOT = scoped("editorRoot", () => ({
   element: null as HTMLElement | null,
+  ownsPage: false,
 }));
 
 /** `scope`'s root element; null before it mounts (and for a shell rendered
  *  without one: a standalone panel, a unit test). */
 export function editorRootOf(scope: EditorScope): HTMLElement | null {
   return scope.get(ROOT).element;
+}
+
+/** Whether `scope`'s editor is the page (the app entry's), so it may set
+ *  page-level things like the browser tab's title; an embedded editor
+ *  never does. False before its root mounts. */
+export function editorOwnsPage(scope: EditorScope): boolean {
+  const store = scope.get(ROOT);
+  return store.element !== null && store.ownsPage;
 }
 
 // The page's keyboard: the editors' roots on it (and whether each owns the
@@ -91,6 +101,12 @@ export function ownsEvent(root: HTMLElement | null, event: Event): boolean {
   const nothingFocused =
     !node || node === doc.body || node === doc.documentElement || node === doc;
   return nothingFocused && active === root;
+}
+
+/** Is the editor whose root is `root` the page's active editor (the one
+ *  last pointed at or focused)? A root-less editor is the page's. */
+export function isActiveEditor(root: HTMLElement | null): boolean {
+  return root === null || active === null || active === root;
 }
 
 /** Listen on the window for `type` events meant for `scope`'s editor;
@@ -142,6 +158,7 @@ function attachRoot(
 ): () => void {
   const store = scope.get(ROOT);
   store.element = element;
+  store.ownsPage = ownsPage;
   roots.set(element, { ownsPage });
   const claim = () => {
     active = element;
@@ -164,6 +181,27 @@ const PortalContext = createContext<HTMLElement | null>(null);
 /** The editor's root element (null outside one). */
 export function useEditorRoot(): HTMLElement | null {
   return useContext(RootContext);
+}
+
+/**
+ * A layer's Escape for this editor only (ADR 277; UXI-T33). Radix's menus,
+ * popovers and dialogs listen for Escape on the page's document, so a
+ * press typed in another editor on the page closed this one's layer: the
+ * returned handler, given as the content's `onEscapeKeyDown`, refuses such
+ * a press (Radix dismisses only when the event is not prevented) and hands
+ * this editor's own on to `onEscapeKeyDown`.
+ */
+export function useEditorEscapeGuard(
+  onEscapeKeyDown?: (event: KeyboardEvent) => void,
+): (event: KeyboardEvent) => void {
+  const root = useEditorRoot();
+  return (event) => {
+    if (!ownsEvent(root, event)) {
+      event.preventDefault();
+      return;
+    }
+    onEscapeKeyDown?.(event);
+  };
 }
 
 /** Where the editor's popovers, menus, dialogs and tooltips portal to: a
@@ -199,6 +237,9 @@ export function EditorRoot({
   // The theme is the editor's: the `.dark` class on its root, not the
   // page's <html> (styles/theme.css).
   const dark = useOptionalTheme()?.theme === "dark";
+  // The interface density (state/density.ts): the attribute re-points the
+  // density tokens of styles/theme.css for everything inside the root.
+  const density = useDensity();
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [portals, setPortals] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -209,6 +250,7 @@ export function EditorRoot({
     <div
       ref={setRoot}
       data-paged-editor=""
+      data-density={density}
       className={dark ? "dark" : undefined}
       tabIndex={-1}
       style={rootStyle}

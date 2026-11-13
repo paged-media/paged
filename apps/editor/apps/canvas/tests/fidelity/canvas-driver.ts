@@ -29,7 +29,7 @@
 
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { FIDELITY_DPI } from "./fixtures";
 import { loadPackFonts } from "./fonts";
@@ -101,6 +101,12 @@ export interface OpenCanvasOptions {
    *  appears (default true). A spec that asserts the question itself
    *  passes false and answers it. */
   answerReplacePrompts?: boolean;
+  /** Let the cockpit adapt to the window (editor ADR 1208): at the suite's
+   *  1280 px window the left dock would be a rail. Off by default, so the
+   *  specs about panels read the docked layout they were written against
+   *  (the user's "Adapt the workspace to the window" switch, set before
+   *  boot); a spec about the workspace passes true. */
+  adaptiveWorkspace?: boolean;
 }
 
 /** Open `file` through the React file input (`useDocumentMeta` and the
@@ -130,6 +136,27 @@ export async function loadViaFileInput(
       return now !== "" && now !== before;
     })
     .toBe(true);
+}
+
+/** The project's debug flags (`metadata.debugFlags` in
+ *  playwright.config.ts) added to a page's query: the `uxi-coordinator`
+ *  project runs the interaction specs with `?debug=coordinator` this way. */
+function withProjectDebugFlags(search: string): string {
+  let flags: readonly string[] = [];
+  try {
+    flags =
+      (test.info().project.metadata as { debugFlags?: string[] } | undefined)
+        ?.debugFlags ?? [];
+  } catch {
+    // Not inside a running test: no project, no flags.
+  }
+  if (flags.length === 0) return search;
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const have = (params.get("debug") ?? "").split(",").filter(Boolean);
+  params.set("debug", [...new Set([...have, ...flags])].join(","));
+  return `?${params.toString().replaceAll("%2C", ",")}`;
 }
 
 /** Pages whose dialog listener `openCanvas` registered, and the options
@@ -203,7 +230,16 @@ export async function openCanvas(
       }, 50);
     });
   }
-  await page.goto(`/${options.search ?? ""}`);
+  // The adaptive workspace's preference, before the editor reads it. A
+  // later call on the same page adds a later script, which wins.
+  await page.addInitScript((on: boolean) => {
+    try {
+      localStorage.setItem("paged.adaptiveWorkspace", on ? "on" : "off");
+    } catch {
+      /* no storage: the editor's default */
+    }
+  }, options.adaptiveWorkspace === true);
+  await page.goto(`/${withProjectDebugFlags(options.search ?? "")}`);
   // Pull console output into the Playwright test log so render
   // panics surface in the test report instead of vanishing.
   page.on("console", (msg) => {

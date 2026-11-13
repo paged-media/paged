@@ -207,12 +207,22 @@ test.describe("Concept 1 — tool rail", () => {
     await expect(page.locator('[data-well="stroke"]')).toBeVisible();
   });
 
-  test("AC-RAIL-9 — Tab hides the chrome and Tab restores it @feat:editor-shell.tool-rail @level:happy", async ({
+  test('AC-RAIL-9 — with "Tab hides panels (InDesign)" on, Tab hides the chrome and Tab restores it @feat:editor-shell.tool-rail @level:happy', async ({
     page,
   }) => {
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
-    // Tab hides the chrome on the canvas the user clicked into (ADR 234):
-    // a pointerdown on the viewport surface, as a click in it delivers.
+    // Tab hides the chrome on the canvas the user clicked into only with the
+    // opt-in preference on (ADR 234, amended by ADR 1201 D-03): a
+    // pointerdown on the viewport surface, as a click in it delivers.
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: { commands: { invoke(id: string): Promise<unknown> } };
+          };
+        }
+      ).__canvas.registries.commands.invoke("paged.preferences.tabHidesPanels"),
+    );
     await page.evaluate(() =>
       document
         .querySelector('[data-canvas-surface="viewport"]')

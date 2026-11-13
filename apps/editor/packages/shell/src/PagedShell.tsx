@@ -41,6 +41,7 @@ import { EditorRoot } from "./state/editor-root";
 import {
   createEditorScope,
   EditorScopeProvider,
+  scopeOf,
   useEditorScope,
   type EditorScope,
 } from "./state/editor-scope";
@@ -67,6 +68,8 @@ import {
   useCanvasClient,
 } from "./state/canvas-client-context";
 import { CameraProvider } from "./state/camera-context";
+import { InteractionProvider } from "./interaction/interaction-provider";
+import { EngineFailureNotice } from "./chrome/EngineFailureNotice";
 import {
   ContentSelectionProvider,
   useContentSelection,
@@ -139,6 +142,16 @@ import { ScreenModeSelector } from "./chrome/ScreenModeSelector";
 import { FillStrokeCluster } from "./chrome/FillStrokeCluster";
 import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
+import { useDensityCommands } from "./state/density";
+import {
+  useFocusWorkspace,
+  useFocusWorkspaceCommand,
+} from "./cockpit/focus-workspace";
+import {
+  useAdaptiveWorkspaceCommand,
+  useRightDrawer,
+  useWorkspaceClass,
+} from "./cockpit/workspace-class";
 import {
   CockpitStateProvider,
   useCockpitActions,
@@ -172,11 +185,22 @@ import {
   contentSelectionInactive,
 } from "./state/commands/tool-commands";
 import { canvasHasPointerFocus } from "./focus/canvas-surface";
+import {
+  TAB_HIDES_PANELS_COMMAND,
+  TOGGLE_CHROME_COMMAND,
+  setTabHidesPanels,
+  tabHidesPanels,
+} from "./focus/tab-hides-panels";
 import { installRegistryDerivedContributions } from "./state/commands/registry-derived";
 import { useSpringLoadedTools } from "./tools/use-spring-loaded-tools";
 import type { PagedEditor } from "./state/paged-editor";
 import type { OverlayContribution } from "./registries/overlay";
-import type { PanelContribution, PanelProps } from "./registries/panel";
+import {
+  WINDOW_CATEGORIES,
+  type PanelContribution,
+  type PanelProps,
+  type WindowCategory,
+} from "./registries/panel";
 import { panelBelongsHere } from "./registries/types";
 import type { ToolContribution } from "./registries/tool";
 import type { Disposable } from "./registries/types";
@@ -355,54 +379,55 @@ export function PagedShell({
             >
               <ThemeProvider>
                 <EditorRoot ownsPage={ownsPage}>
-                  <CameraProvider>
-                    <DocumentProvider>
-                      {/* ToolProvider above SelectionProvider: the selection
-                       *  context's `activeTool` facade reads the tool stack. */}
-                      <ToolProvider>
-                        <WorkflowModeProvider initialMode={initialMode}>
-                          <ScreenModeProvider>
-                            <ToolSettingsProvider>
-                              <FormattingAffectsProvider>
-                                <SelectionProvider>
-                                  <ContentSelectionProvider>
-                                    <OverlaySignalsProvider>
-                                      {/* W2.8 — guide creation/drag state, shared
+                  <InteractionProvider>
+                    <CameraProvider>
+                      <DocumentProvider>
+                        {/* ToolProvider above SelectionProvider: the selection
+                         *  context's `activeTool` facade reads the tool stack. */}
+                        <ToolProvider>
+                          <WorkflowModeProvider initialMode={initialMode}>
+                            <ScreenModeProvider>
+                              <ToolSettingsProvider>
+                                <FormattingAffectsProvider>
+                                  <SelectionProvider>
+                                    <ContentSelectionProvider>
+                                      <OverlaySignalsProvider>
+                                        {/* W2.8 — guide creation/drag state, shared
                                   by the ruler hit zones, the controller,
                                   and the guide overlay. */}
-                                      <GuideDragProvider>
-                                        {/* W2.9 — text-frame threading state
+                                        <GuideDragProvider>
+                                          {/* W2.9 — text-frame threading state
                                     (ports + loaded cursor + controller). */}
-                                        <ThreadingProvider>
-                                          {/* W3.A2 — table cell selection,
+                                          <ThreadingProvider>
+                                            {/* W3.A2 — table cell selection,
                                       shared by the canvas hit handler,
                                       the Table panel, and the cell
                                       overlay. */}
-                                          <TableSelectionProvider>
-                                            <InstrumentationProvider>
-                                              {/* W3.2 — the edit-context stack
+                                            <TableSelectionProvider>
+                                              <InstrumentationProvider>
+                                                {/* W3.2 — the edit-context stack
                                         (B-02/W-03): the active scoped-
                                         editing-mode stack + breadcrumb +
                                         write-scope. Above PagedEditor so
                                         chrome + canvas integration can
                                         read it. */}
-                                              <EditContextStackProvider>
-                                                {/* ADR 023 phase C — the binding-
+                                                <EditContextStackProvider>
+                                                  {/* ADR 023 phase C — the binding-
                                         provider seam. Deliberately
                                         INSIDE the edit-context stack:
                                         a provider's lifetime is that
                                         stack's, and reading them in
                                         that order is the point. */}
-                                                <BindingProviderProvider
-                                                  host={
-                                                    bindingProviders ?? null
-                                                  }
-                                                >
-                                                  <ObjectModelProvider
-                                                    host={objectModel ?? null}
+                                                  <BindingProviderProvider
+                                                    host={
+                                                      bindingProviders ?? null
+                                                    }
                                                   >
-                                                    <PagedEditorProvider>
-                                                      {/* Actions — the command recorder.
+                                                    <ObjectModelProvider
+                                                      host={objectModel ?? null}
+                                                    >
+                                                      <PagedEditorProvider>
+                                                        {/* Actions — the command recorder.
                                         INSIDE PagedEditorProvider (it
                                         needs the registries) and OUTSIDE
                                         ShellChrome, because the right
@@ -411,55 +436,58 @@ export function PagedShell({
                                         would stop recording the moment
                                         the user switched tabs to do the
                                         thing they were recording. */}
-                                                      <ActionsProvider>
-                                                        <SeedFeatures
-                                                          features={features}
-                                                        />
-                                                        {/* Editor ADR 287 — the View menu's
+                                                        <ActionsProvider>
+                                                          <SeedFeatures
+                                                            features={features}
+                                                          />
+                                                          {/* Editor ADR 287 — the View menu's
                                         mode and snapping, handed to the
                                         engine. */}
-                                                        <ViewSettingsSync />
-                                                        <ShellChrome
-                                                          panels={panels}
-                                                          overlays={overlays}
-                                                          tools={tools}
-                                                          headerExtras={
-                                                            headerExtras
-                                                          }
-                                                          notices={notices}
-                                                          modes={modes}
-                                                          panelRail={panelRail}
-                                                          canvasComponent={
-                                                            canvasComponent
-                                                          }
-                                                          initialDocumentSizePt={
-                                                            initialDocumentSizePt
-                                                          }
-                                                          guardUnload={
-                                                            guardUnload
-                                                          }
-                                                        >
-                                                          {children}
-                                                        </ShellChrome>
-                                                      </ActionsProvider>
-                                                    </PagedEditorProvider>
-                                                  </ObjectModelProvider>
-                                                </BindingProviderProvider>
-                                              </EditContextStackProvider>
-                                            </InstrumentationProvider>
-                                          </TableSelectionProvider>
-                                        </ThreadingProvider>
-                                      </GuideDragProvider>
-                                    </OverlaySignalsProvider>
-                                  </ContentSelectionProvider>
-                                </SelectionProvider>
-                              </FormattingAffectsProvider>
-                            </ToolSettingsProvider>
-                          </ScreenModeProvider>
-                        </WorkflowModeProvider>
-                      </ToolProvider>
-                    </DocumentProvider>
-                  </CameraProvider>
+                                                          <ViewSettingsSync />
+                                                          <ShellChrome
+                                                            panels={panels}
+                                                            overlays={overlays}
+                                                            tools={tools}
+                                                            headerExtras={
+                                                              headerExtras
+                                                            }
+                                                            notices={notices}
+                                                            modes={modes}
+                                                            panelRail={
+                                                              panelRail
+                                                            }
+                                                            canvasComponent={
+                                                              canvasComponent
+                                                            }
+                                                            initialDocumentSizePt={
+                                                              initialDocumentSizePt
+                                                            }
+                                                            guardUnload={
+                                                              guardUnload
+                                                            }
+                                                          >
+                                                            {children}
+                                                          </ShellChrome>
+                                                        </ActionsProvider>
+                                                      </PagedEditorProvider>
+                                                    </ObjectModelProvider>
+                                                  </BindingProviderProvider>
+                                                </EditContextStackProvider>
+                                              </InstrumentationProvider>
+                                            </TableSelectionProvider>
+                                          </ThreadingProvider>
+                                        </GuideDragProvider>
+                                      </OverlaySignalsProvider>
+                                    </ContentSelectionProvider>
+                                  </SelectionProvider>
+                                </FormattingAffectsProvider>
+                              </ToolSettingsProvider>
+                            </ScreenModeProvider>
+                          </WorkflowModeProvider>
+                        </ToolProvider>
+                      </DocumentProvider>
+                    </CameraProvider>
+                  </InteractionProvider>
                 </EditorRoot>
               </ThemeProvider>
             </SessionPolicyProvider>
@@ -470,51 +498,47 @@ export function PagedShell({
   );
 }
 
-// U11 — Window-menu grouping. Panels cluster under a category label
-// derived from the contribution's `defaultGroup` (the dock-group
-// vocabulary the apps already register with), or — when a plugin
-// bundle stamps its display name on the contribution (`source`, being
-// added platform-side; read defensively) — under that bundle's name.
-// MenuBar sorts a menu's items by `order` and renders a separator
-// whenever the adjacent `group` label changes, so encoding the
-// category's rank in `order` yields visually grouped sections in the
-// table's order; unknown categories (plugin sources / the "Plugins"
-// fallback) land after the named ones in approximate alphabetical
-// order (first three characters — ties keep registration order).
-const WINDOW_MENU_CATEGORIES: ReadonlyArray<readonly [string, string]> = [
-  ["cockpit", "Workspace"],
-  ["chrome", "Workspace"],
-  ["workspace", "Workspace"],
-  ["structure", "Structure"],
-  ["styles", "Styles"],
-  ["text", "Text"],
-  ["properties", "Properties"],
-  ["inspector", "Properties"],
-  ["object", "Object"],
-  ["output", "Output"],
-  ["console", "Developer"],
-];
-
-const WINDOW_MENU_LABEL_ORDER: ReadonlyArray<string> = Array.from(
-  new Set(WINDOW_MENU_CATEGORIES.map(([, label]) => label)),
-);
+// U11, UX audit F-18 — Window-menu grouping. A host panel is listed under
+// its `windowCategory` (InDesign's categories: Color, Styles, Type &
+// Tables, Object & Layout, Interactive, Output, Utilities; `Workspace`
+// for the few one click deep), else under the category its
+// `defaultGroup` (the dock-group vocabulary) maps to; a plugin panel —
+// one whose bundle stamped its display name on it (`source`) — under that
+// bundle's name in Plugins. MenuBar sorts a menu's items by `order` and
+// renders a separator whenever the adjacent `group` label changes, so
+// encoding the category's rank in `order` yields visually grouped
+// sections in WINDOW_CATEGORIES' order; plugin sources land after the
+// named ones in approximate alphabetical order (first three characters —
+// ties keep registration order).
+const DEFAULT_GROUP_CATEGORY: Readonly<Record<string, WindowCategory>> = {
+  cockpit: "Workspace",
+  chrome: "Workspace",
+  workspace: "Workspace",
+  structure: "Object & Layout",
+  styles: "Styles",
+  text: "Type & Tables",
+  properties: "Object & Layout",
+  inspector: "Utilities",
+  object: "Object & Layout",
+  output: "Output",
+  console: "Utilities",
+};
 
 function windowMenuGroup(p: PanelContribution): {
   label: string;
   order: number;
 } {
   const source = (p as { source?: string }).source;
-  const fromTable = p.defaultGroup
-    ? WINDOW_MENU_CATEGORIES.find(([g]) => g === p.defaultGroup)?.[1]
-    : undefined;
-  const label =
-    (typeof source === "string" && source.trim()) || fromTable || "Other";
-  if (!source) {
-    const idx = WINDOW_MENU_LABEL_ORDER.indexOf(label);
-    if (idx >= 0) return { label, order: idx * 10 };
+  if (typeof source === "string" && source.trim()) {
+    const label = source.trim();
+    const c = (i: number) => (label.toUpperCase().charCodeAt(i) || 0) & 0x7f;
+    return { label, order: 1000 + c(0) * 0x4000 + c(1) * 0x80 + c(2) };
   }
-  const c = (i: number) => (label.toUpperCase().charCodeAt(i) || 0) & 0x7f;
-  return { label, order: 1000 + c(0) * 0x4000 + c(1) * 0x80 + c(2) };
+  const label: WindowCategory =
+    p.windowCategory ??
+    (p.defaultGroup ? DEFAULT_GROUP_CATEGORY[p.defaultGroup] : undefined) ??
+    "Utilities";
+  return { label, order: WINDOW_CATEGORIES.indexOf(label) * 10 };
 }
 
 /** "paged.draw" / "media.paged.draw" → "Draw"; a display name passes. */
@@ -561,6 +585,19 @@ function ShellChrome({
   // A fill shape on a phone (editor ADR 294): one finger pans and a tap
   // selects, so the tool rail gives way to the canvas.
   const compactLayout = useCompactLayout();
+  // The Focus workspace (cockpit/focus-workspace.ts): only the canvas and
+  // the tool rail stay; the chrome below is hidden, not unmounted, so
+  // leaving it brings the layout back as it was.
+  useFocusWorkspaceCommand();
+  // Edit ▸ Settings ▸ Interface density (state/density.ts) and the
+  // adaptive workspace's switch (cockpit/workspace-class.ts).
+  useDensityCommands();
+  useAdaptiveWorkspaceCommand();
+  const focus = useFocusWorkspace();
+  // A narrow workspace (cockpit/workspace-class.ts) shows the right dock as
+  // a drawer: the panel rail opens it.
+  const narrow = useWorkspaceClass() === "narrow";
+  const [drawerOpen, setDrawerOpen] = useRightDrawer();
   const actionsRegion = chrome.region("actions-bar");
   const actionsItems =
     actionsRegion === null
@@ -712,9 +749,11 @@ function ShellChrome({
   // viewport component (the canvas is a SLOT, not a panel).
   const cockpitActive = Boolean(canvasComponent);
 
-  // Concept 1 — Tab / Shift+Tab chrome hide. Tab toggles panels + the
-  // tool rail; Shift+Tab toggles panels only. Pure state — the fixed
-  // slots simply unmount (canvas column stays).
+  // Concept 1 — the chrome hide: `paged.view.toggleChrome` (Cmd/Ctrl+\)
+  // toggles the panels and the tool rail, `paged.chrome.togglePanels` the
+  // panels only; with the "Tab hides panels (InDesign)" preference on, Tab
+  // and Shift+Tab on a clicked-into canvas run them (ADR 1201, D-03). Pure
+  // state — the fixed slots simply unmount (canvas column stays).
   const [railHidden, setRailHidden] = useState(false);
   const [panelsHidden, setPanelsHidden] = useState(false);
 
@@ -816,22 +855,26 @@ function ShellChrome({
   }, [cockpitActive, registries]);
 
   useEffect(() => {
-    // F-49 (ADR 234) — Tab is the chrome toggle only on the canvas the
-    // user clicked into (InDesign's convention). Everywhere else it moves
-    // focus: the registry's `targetOwnsKey` hands Tab to a binding only
-    // from a canvas surface, and this guard narrows that to a viewport
-    // that holds pointer focus with no caret in a story (a caret's Tab is
-    // a tab character). Reached by keyboard, the viewport passes Tab on,
-    // so it is never a trap; Cmd/Ctrl+\ toggles from anywhere. Inside an
-    // active edit context that claims Tab (a sheet's grid moves its cell
-    // cursor) the toggle never sees the key: EditContextController offers
-    // it to the context in the capture phase and stops a claimed key.
+    // D-03 (ADR 1201, amending ADR 234's decision 2) — Tab and Shift+Tab
+    // move focus, the canvas included; the chrome toggle is the command
+    // `paged.view.toggleChrome` on Cmd/Ctrl+\, from anywhere. With the
+    // opt-in preference "Tab hides panels (InDesign)" on, Tab is the toggle
+    // again on the canvas the user clicked into (F-49): the registry's
+    // `targetOwnsKey` hands Tab to a binding only from a canvas surface, and
+    // this guard narrows that to the preference, a viewport that holds
+    // pointer focus, and no caret in a story (a caret's Tab is a tab
+    // character). Reached by keyboard, the viewport passes Tab on either
+    // way, so it is never a trap. Inside an active edit context that claims
+    // Tab (a sheet's grid moves its cell cursor) the toggle never sees the
+    // key: EditContextController offers it to the context in the capture
+    // phase and stops a claimed key.
     const chromeKeyGuard = (state: unknown) =>
+      tabHidesPanels(scope) &&
       canvasHasPointerFocus() &&
       (contentSelectionInactive as (s: unknown) => boolean)(state);
     const disposables = [
       registries.commands.register({
-        id: "paged.chrome.toggleAll",
+        id: TOGGLE_CHROME_COMMAND,
         title: t(COMMANDS.toggleAll),
         category: "View",
         handler: (paged) => onToggleAll(paged as PagedEditor),
@@ -842,9 +885,25 @@ function ShellChrome({
         category: "View",
         handler: (paged) => onTogglePanels(paged as PagedEditor),
       }),
+      registries.commands.register({
+        id: TAB_HIDES_PANELS_COMMAND,
+        title: t(COMMANDS.tabHidesPanels),
+        category: "View",
+        handler: (paged) => {
+          const at = scopeOf(paged);
+          setTabHidesPanels(at, !tabHidesPanels(at));
+        },
+      }),
+      registries.menus.register({
+        path: "Edit/Settings/Tab hides panels (InDesign)",
+        command: TAB_HIDES_PANELS_COMMAND,
+        group: "settings",
+        order: 80,
+        checked: (paged) => tabHidesPanels(scopeOf(paged)),
+      }),
       registries.keybindings.register({
         key: "tab",
-        command: "paged.chrome.toggleAll",
+        command: TOGGLE_CHROME_COMMAND,
         when: chromeKeyGuard,
       }),
       registries.keybindings.register({
@@ -852,20 +911,22 @@ function ShellChrome({
         command: "paged.chrome.togglePanels",
         when: chromeKeyGuard,
       }),
-      // The chord a keyboard user hides the chrome with, from anywhere.
+      // The chord the chrome hides with, from anywhere: Primary+\ (Cmd on
+      // macOS, Ctrl elsewhere), taken by no browser or system shortcut and
+      // reserved by the host (no scoped binding may take it, ADR 299).
       registries.keybindings.register({
         key: "cmd+\\",
-        command: "paged.chrome.toggleAll",
+        command: TOGGLE_CHROME_COMMAND,
       }),
       registries.keybindings.register({
         key: "ctrl+\\",
-        command: "paged.chrome.toggleAll",
+        command: TOGGLE_CHROME_COMMAND,
       }),
     ];
     return () => {
       for (const d of disposables) d.dispose();
     };
-  }, [registries]);
+  }, [registries, scope]);
 
   // B-15 host-side fix (2026-06-06): tool activation commands +
   // guarded single-key shortcuts and panel show/hide pairs derive
@@ -1432,21 +1493,27 @@ function ShellChrome({
   };
 
   const shellBody = (
-    <div style={shellStyle}>
-      {chrome.has("header") && (
-        <Header onFile={onFile} headerExtras={headerExtras} status={status} />
-      )}
+    <div style={shellStyle} data-focus-workspace={focus || undefined}>
+      {/* The Focus workspace hides the bars above the body row. Hidden by
+          style, not an <Activity>: a menu that ran the command closes in
+          the same event, and a hidden <Activity> would hold that close
+          (and its portalled menu) back until the bars came back. */}
+      <div style={{ display: focus ? "none" : "contents" }}>
+        {chrome.has("header") && (
+          <Header onFile={onFile} headerExtras={headerExtras} status={status} />
+        )}
 
-      {/* The actions bar: host actions and commands a template shape
-       *  shows under the header (docs/composable-editor.md §5.2). */}
-      {actionsItems.length > 0 && <ActionsBar items={actionsItems} />}
+        {/* The actions bar: host actions and commands a template shape
+         *  shows under the header (docs/composable-editor.md §5.2). */}
+        {actionsItems.length > 0 && <ActionsBar items={actionsItems} />}
 
-      {/* Cockpit — the mode-aware context toolbar (only when the
-       *  app contributed modes; chrome stays lean otherwise). */}
-      {chrome.has("context-toolbar") &&
-        modes &&
-        modes.length > 0 &&
-        !railHidden && <ContextToolbar paged={paged} />}
+        {/* Cockpit — the mode-aware context toolbar (only when the
+         *  app contributed modes; chrome stays lean otherwise). */}
+        {chrome.has("context-toolbar") &&
+          modes &&
+          modes.length > 0 &&
+          !railHidden && <ContextToolbar paged={paged} />}
+      </div>
 
       {!sabSupported && (
         <div style={warningStyle}>{strings.t(LOAD.reducedMode)}</div>
@@ -1467,6 +1534,7 @@ function ShellChrome({
       <EditContextController />
       <SubContextController />
       <EditContextBreadcrumb />
+      <EngineFailureNotice />
       {notices}
 
       {/* Body row: the left tool rail (shell chrome, OUTSIDE the
@@ -1499,12 +1567,17 @@ function ShellChrome({
         )}
         {chrome.has("panel-rail") &&
           !railHidden &&
+          !focus &&
           panelRail &&
           panelRail.length > 0 && (
             <PanelRail
               items={panelRail}
-              panelsHidden={panelsHidden}
-              onRevealPanels={() => setPanelsHidden(false)}
+              // A closed drawer is a hidden dock: a rail button opens it.
+              panelsHidden={panelsHidden || (narrow && !drawerOpen)}
+              onRevealPanels={() => {
+                setPanelsHidden(false);
+                if (narrow) setDrawerOpen(true);
+              }}
             />
           )}
       </div>
@@ -1515,9 +1588,11 @@ function ShellChrome({
           dead affordance is worse than an absent one — the user reads it
           as a fault in their own input. Solo mode registers exactly one
           mode; the six-mode editor is unaffected. */}
-      {chrome.has("mode-bar") && modes && modes.length > 1 && !railHidden && (
-        <ModeSwitcher />
-      )}
+      {chrome.has("mode-bar") &&
+        modes &&
+        modes.length > 1 &&
+        !railHidden &&
+        !focus && <ModeSwitcher />}
 
       {chrome.has("palette") && <CommandPalette />}
       <DemoSpotlight />

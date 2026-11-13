@@ -226,7 +226,7 @@ describe("Filter ▸ … opens the Filter dialog", () => {
 
   it("filterSelectiveColour opens the Selective colour dialog at its defaults", async () => {
     covers("command:media.paged.image.command.filterSelectiveColour");
-    await opensTheDialog("selectiveColour", /Selective\scolour/);
+    await opensTheDialog("selectiveColour", /Selective\scolor/);
   });
 });
 

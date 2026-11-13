@@ -289,7 +289,7 @@ describe("Color panel: the paint target (WP7.2)", () => {
     expect(
       h.root.querySelector('[data-paint-target="paged.tool.mesh"]')
         ?.textContent,
-    ).toBe("Apply colours the selection: 2 mesh points.");
+    ).toBe("Apply colors the selection: 2 mesh points.");
     await h.typeInto(channelInputs(h)[0], "60");
     const from = h.mark();
     await h.click(h.root.querySelector("[data-mixer-apply]")!);

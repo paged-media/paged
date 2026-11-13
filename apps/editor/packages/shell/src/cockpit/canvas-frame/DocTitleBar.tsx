@@ -49,7 +49,8 @@ export function DocTitleBar() {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        height: 34,
+        // The density's title-bar height (styles/theme.css).
+        height: "var(--chrome-titlebar-h)",
         padding: "0 14px",
         background: "var(--chrome-panel-bg)",
         borderBottom: "1px solid var(--chrome-border)",

@@ -29,7 +29,6 @@
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import {
-  canvasKeyYields,
   useCanvasClient,
   useCamera,
   useContentSelection,
@@ -49,8 +48,8 @@ import {
   type PanelProps,
   type SelectionState,
   type TableCellSelection,
-  useEditorKeys,
   useChromeRegions,
+  useEscapeHandler,
   useSessionRole,
 } from "@paged-media/shell";
 
@@ -83,7 +82,6 @@ function cellAabb(item: {
 }
 
 export function CanvasPanel(_props: PanelProps) {
-  const keys = useEditorKeys();
   // Phase 2 — the gesture spine. `toolGesture` is non-null only while
   // the effective tool carries a handler (Rectangle, …); select/text
   // keep `null` and run ViewportCanvas's proven legacy pointer path.
@@ -109,8 +107,9 @@ export function CanvasPanel(_props: PanelProps) {
   const directSelect = effectiveTool === "paged.tool.directSelect";
   const zoomClick = effectiveTool === "paged.tool.zoom";
   const client = useCanvasClient();
-  const { camera, setCamera, setViewportSize } = useCamera();
-  const { handle, resolution } = useDocument();
+  const { camera, setCamera, setViewportSize, anchorViewportResize } =
+    useCamera();
+  const { handle, resolution, loading } = useDocument();
   const {
     elementSelection,
     setElementSelection,
@@ -264,7 +263,7 @@ export function CanvasPanel(_props: PanelProps) {
   // leaves the group (it stays selected). The key is the canvas's only
   // where the key-ownership rule says so (ADR 234), and path-edit mode
   // owns its own Escape.
-  const climbOut = useEffectEvent(() => {
+  const climbOut = () => {
     if (activeGroup === null) return;
     const chain = groupChainRef.current;
     const selected = elementSelection.length === 1 ? elementSelection[0] : null;
@@ -286,17 +285,44 @@ export function CanvasPanel(_props: PanelProps) {
         setElementGeometry(await client.elementGeometry(ids));
       })
       .catch(() => {});
+  };
+
+  // The canvas's Escape handlers (editor ADR 1207, §12.1). Path editing
+  // is a transient mode whose own listener (usePathEditMode) leaves it or
+  // cancels the drag in it; it joins the arbiter with the rest of the
+  // canvas's gestures (track IC). An entered group climbs one level. At
+  // the top level Escape clears the selection (ADR 1201, amending ADR 250
+  // decision 3). The group climb and the clear answer only while the tool
+  // in hand has no gesture handler of its own: a drawing tool's handler
+  // hears every key (the Pen cancels the path it is drawing), and until it
+  // tells the arbiter whether a gesture is under way the press stays its.
+  const objectLevelEscape = toolGesture === null;
+  useEscapeHandler({
+    id: "paged.pathEdit",
+    tier: "transient",
+    isActive: () => pathEditMode,
+    resolve: () => "defer",
   });
-  useEffect(() => {
-    if (activeGroup === null) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (canvasKeyYields(e) || pathEditMode) return;
-      e.preventDefault();
-      climbOut();
-    };
-    return keys.listen("keydown", onKey);
-  }, [activeGroup, keys, pathEditMode]);
+  useEscapeHandler({
+    id: "paged.group.climb",
+    tier: "group",
+    isActive: () => objectLevelEscape && activeGroup !== null,
+    resolve: () => climbOut(),
+  });
+  useEscapeHandler({
+    id: "paged.selection.clear",
+    tier: "selection",
+    isActive: () => objectLevelEscape && elementSelection.length > 0,
+    resolve: () => {
+      void client
+        .setElementSelection([], "replace")
+        .then(() => {
+          setElementSelection([]);
+          setElementGeometry([]);
+        })
+        .catch(() => {});
+    },
+  });
 
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onHit = useCallback(
@@ -550,8 +576,10 @@ export function CanvasPanel(_props: PanelProps) {
   );
 
   // UX audit F-10 (editor ADR 1205): New, Open, recent documents and the
-  // formats the editor opens.
-  if (!handle || handle.pageCount === 0) return <EmptyCanvas />;
+  // formats the editor opens. While a document opens, the cockpit shows
+  // its stage over this surface instead (UXI-PRF-003).
+  if (!handle || handle.pageCount === 0)
+    return loading ? <div style={loadingStyle} /> : <EmptyCanvas />;
 
   return (
     <div ref={containerRef} style={containerStyle}>
@@ -563,6 +591,9 @@ export function CanvasPanel(_props: PanelProps) {
         pageOriginsPt={handle.pageOriginsPt}
         camera={camera}
         onCameraChange={setCamera}
+        // UXI-CAM-003 — a dock that opens, closes or is dragged keeps the
+        // document point at the viewport's centre.
+        onViewportResize={anchorViewportResize}
         activeTool={activeTool}
         toolGesture={toolGesture}
         toolSharedAcrossContexts={CONTEXT_SHARED_TOOL_IDS.includes(
@@ -595,6 +626,13 @@ export function CanvasPanel(_props: PanelProps) {
     </div>
   );
 }
+
+/** The empty surface a first open's stages are shown over. */
+const loadingStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  background: "var(--canvas-surround)",
+};
 
 const containerStyle: React.CSSProperties = {
   position: "relative",

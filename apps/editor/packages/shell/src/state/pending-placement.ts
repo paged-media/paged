@@ -45,6 +45,7 @@
 import { scoped, type EditorScope } from "./editor-scope";
 import { queryEditor } from "./editor-dom";
 import { editorRootOf } from "./editor-root";
+import { escapeArbiterOf } from "../interaction/escape-arbiter";
 
 /** A client-space point the user clicked, or `null` when they cancelled. */
 export interface PlacementPoint {
@@ -125,7 +126,7 @@ export function awaitPlacementPoint(
       window.removeEventListener("pointermove", onMove, true);
       window.removeEventListener("pointerup", onUp, true);
       window.removeEventListener("pointercancel", onPointerCancel, true);
-      window.removeEventListener("keydown", onKey, true);
+      offEscape();
       if (dragging) options.onDrag?.(pressed!, null);
       resolve(value);
     };
@@ -192,12 +193,15 @@ export function awaitPlacementPoint(
       if (pressed) finish(pressed);
     };
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      finish(null);
-    };
+    // Escape cancels: a transient mode of the Escape arbiter (ADR 1207),
+    // so the same press neither leaves a context nor clears the selection.
+    // Registered last here, after `finish` exists.
+    const offEscape = escapeArbiterOf(scope).register({
+      id: "paged.placement",
+      tier: "transient",
+      isActive: () => !settled,
+      resolve: () => finish(null),
+    });
 
     armed.cancel = () => finish(null);
     root.setAttribute(ARMED_ATTR, "armed");
@@ -208,7 +212,6 @@ export function awaitPlacementPoint(
     window.addEventListener("pointermove", onMove, true);
     window.addEventListener("pointerup", onUp, true);
     window.addEventListener("pointercancel", onPointerCancel, true);
-    window.addEventListener("keydown", onKey, true);
   });
 }
 

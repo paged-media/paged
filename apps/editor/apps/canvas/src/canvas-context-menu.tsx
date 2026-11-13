@@ -40,6 +40,7 @@ import {
   openCanvasContextMenu,
   ownsEvent,
   queryEditor,
+  interactionCoordinatorOf,
   scopeOf,
   usePaged,
   type CommandContribution,
@@ -115,6 +116,10 @@ async function selectUnder(
     (p) => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h,
   );
   if (i < 0) return;
+  // IC3 — the menu's answer applies only while no newer press, document or
+  // context came first (the interaction specification's UXI-OWN-008).
+  const interactions = interactionCoordinatorOf(scopeOf(paged));
+  const token = interactions.token("context-menu");
   const reply = await paged.client.send({
     kind: "hitTest",
     payload: {
@@ -123,6 +128,7 @@ async function selectUnder(
       filter: "any",
     },
   });
+  if (!interactions.confirm(token)) return;
   if (reply.kind !== "hitResult") return;
   const element = reply.payload.element;
   if (!element) return;
@@ -130,6 +136,7 @@ async function selectUnder(
   if (paged.selection.elementSelection.some((s) => JSON.stringify(s) === key))
     return;
   const ids = await paged.client.setElementSelection([element], "replace");
+  if (!interactions.confirm(token)) return;
   paged.selection.setElementSelection(ids);
   paged.selection.setElementGeometry(await paged.client.elementGeometry(ids));
 }

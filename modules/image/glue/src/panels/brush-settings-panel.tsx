@@ -228,7 +228,7 @@ const M = defineMessages("image.brushSettings", {
   // single-flag panes
   noiseNote: "Adds grain to the soft edge of every dab.",
   wetEdgesNote:
-    "Paint builds up along the edges of the stroke, like watercolour.",
+    "Paint builds up along the edges of the stroke, like watercolor.",
   buildUpNote: "Airbrush: a held pointer keeps depositing paint.",
   protectTextureNote:
     "Keeps this texture when you switch between textured presets.",
@@ -291,14 +291,14 @@ const M = defineMessages("image.brushSettings", {
   backgroundEraser: "Background eraser",
   sampling: "Sampling",
   limits: "Limits",
-  protectForeground: "Protect foreground colour",
+  protectForeground: "Protect foreground color",
   samplingContinuous: "Continuous",
   samplingOnce: "Once",
   samplingSwatch: "Background swatch",
   limitsDiscontiguous: "Discontiguous",
   limitsContiguous: "Contiguous",
   limitsFindEdges: "Find edges",
-  colorReplace: "Colour replacement",
+  colorReplace: "Color replacement",
   replaceHue: "Hue",
   replaceSaturation: "Saturation",
   replaceColor: "Color",

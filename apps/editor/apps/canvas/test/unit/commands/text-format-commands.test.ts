@@ -189,6 +189,10 @@ describe("the host text-format verbs", () => {
       "command:paged.text.lineSpacing1",
       "command:paged.text.lineSpacing15",
       "command:paged.text.lineSpacing2",
+      "command:paged.text.increaseLeading",
+      "command:paged.text.decreaseLeading",
+      "command:paged.text.increaseTracking",
+      "command:paged.text.decreaseTracking",
     );
     // What each command writes, from a plain 10 pt left-aligned paragraph.
     const expected: Record<string, [string, unknown]> = {
@@ -226,6 +230,12 @@ describe("the host text-format verbs", () => {
       lineSpacing1: ["characterLeading", { type: "length", value: 12 }],
       lineSpacing15: ["characterLeading", { type: "length", value: 18 }],
       lineSpacing2: ["characterLeading", { type: "length", value: 24 }],
+      // F-34: Auto leading reads as 120 % of the 10 pt size, ±2 pt.
+      increaseLeading: ["characterLeading", { type: "length", value: 14 }],
+      decreaseLeading: ["characterLeading", { type: "length", value: 10 }],
+      // F-34: tracking from 0 by InDesign's 20/1000 em.
+      increaseTracking: ["characterTracking", { type: "length", value: 20 }],
+      decreaseTracking: ["characterTracking", { type: "length", value: -20 }],
     };
     for (const verb of TEXT_FORMAT_VERBS) {
       const { deps, mutations } = fake(

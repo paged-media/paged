@@ -613,6 +613,8 @@ export class CanvasClient {
   private editCount = 0;
   private savedAtEdit: number | null = null;
   private readonly savedListeners = new Set<() => void>();
+  /** See {@link onFatal}. */
+  private readonly fatalListeners = new Set<(error: Error) => void>();
   /** The engine's document font registry as this client filled it, in
    *  order. The engine keeps ONE such registry, seeds every later load from
    *  it and can only empty it whole, so this is what lets a load drop the
@@ -1535,6 +1537,21 @@ export class CanvasClient {
   onSaved(listener: () => void): () => void {
     this.savedListeners.add(listener);
     return () => this.savedListeners.delete(listener);
+  }
+
+  /** Why the worker can no longer answer (it failed, or the client was
+   *  disposed), or null while it can. */
+  get failure(): Error | null {
+    return this.fatal;
+  }
+
+  /** Notified once, when the worker can no longer answer: every pending
+   *  request has been rejected, and every later one rejects at once. The
+   *  editor ends its gestures and says so (the interaction contract's
+   *  `UXI-ASY-005`). */
+  onFatal(listener: (error: Error) => void): () => void {
+    this.fatalListeners.add(listener);
+    return () => this.fatalListeners.delete(listener);
   }
 
   private trackEdits(msg: WorkerToMain): void {
@@ -3303,7 +3320,8 @@ export class CanvasClient {
    * documented failure value. With `fatal`, later requests reject at once.
    */
   private failAll(err: Error, fatal: boolean): void {
-    if (fatal && !this.fatal) this.fatal = err;
+    const becameFatal = fatal && !this.fatal;
+    if (becameFatal) this.fatal = err;
     const sends = [...this.pending.values()];
     const loads = [...this.loadDocPending.values()];
     const journals = [...this.journalPending.values()];
@@ -3322,6 +3340,7 @@ export class CanvasClient {
     for (const cb of journals) cb(null);
     for (const cb of vellos) cb(null);
     for (const cb of backendInfos) cb(null);
+    if (becameFatal) for (const l of [...this.fatalListeners]) l(err);
   }
 
   /** An uncaught error in the worker scope, or the worker script failing to

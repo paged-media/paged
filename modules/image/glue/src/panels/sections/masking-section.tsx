@@ -42,7 +42,7 @@ const M = defineMessages("image.maskingPanel", {
   similar: "Similar",
   focusArea: "Focus Area…",
   select: "Select",
-  sampled: "Sampled colours",
+  sampled: "Sampled colors",
   reds: "Reds",
   yellows: "Yellows",
   greens: "Greens",
@@ -58,7 +58,7 @@ const M = defineMessages("image.maskingPanel", {
   range: "Range",
   lower: "Lower limit",
   upper: "Upper limit",
-  localized: "Localized colour clusters",
+  localized: "Localized color clusters",
   invert: "Invert",
   samples: "{count, plural, one {# sample} other {# samples}}",
   sampleMode: "Click the preview to",
@@ -74,13 +74,13 @@ const M = defineMessages("image.maskingPanel", {
   ok: "OK",
   cancel: "Cancel",
   colorRangeNote:
-    "Sampled colours select by their distance in Lab, so a fuzziness of F " +
+    "Sampled colors select by their distance in Lab, so a fuzziness of F " +
     "reaches F/3 Lab units; the presets select by hue, by luminance or by " +
     "the classical skin-tone cluster. The preview is the selection: white " +
     "is selected.",
   outOfGamutNote:
     "Out of gamut needs a soft-proofing CMYK profile, which the image " +
-    "module's colour settings do not have yet.",
+    "module's color settings do not have yet.",
   focusRange: "In-focus range",
   noise: "Image noise level",
   focusNote:
@@ -107,7 +107,7 @@ const M = defineMessages("image.maskingPanel", {
   feather: "Feather",
   contrast: "Contrast",
   shiftEdge: "Shift edge",
-  decontaminate: "Decontaminate colours",
+  decontaminate: "Decontaminate colors",
   amount: "Amount",
   output: "Output to",
   outSelection: "Selection",
@@ -133,7 +133,7 @@ const M = defineMessages("image.maskingPanel", {
   saveSelection: "Save selection",
   newSpot: "New spot channel",
   solidity: "Solidity",
-  spotColour: "Ink colour",
+  spotColour: "Ink color",
   noChannels: "No saved selections yet.",
   quickMaskChannel: "Quick Mask",
   spotsShown: "Show spot channels on the image",
@@ -155,7 +155,7 @@ const VP = defineMessages("image.vectorsPanel", {
   workPath: "work path",
   target: "Edit {name} with the Pen and the path tools",
   fill: "Fill",
-  fillTitle: "Fill {name} with the foreground colour",
+  fillTitle: "Fill {name} with the foreground color",
   stroke: "Stroke",
   strokeTitle: "Stroke {name} with the brush",
   save: "Save path",

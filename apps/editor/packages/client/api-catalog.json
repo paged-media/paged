@@ -3,7 +3,7 @@
   "package": "@paged-media/client",
   "protocol": 80,
   "counts": {
-    "clientMembers": 111,
+    "clientMembers": 113,
     "wireKinds": 71,
     "exports": 98
   },
@@ -326,6 +326,18 @@
           "kind": "method",
           "signature": "onSaved(listener: ()",
           "summary": "Notified after {@link markSaved}: the dirty flag may have flipped without any worker message to say so."
+        },
+        {
+          "name": "CanvasClient.failure",
+          "kind": "property",
+          "signature": "get failure(): Error | null",
+          "summary": "Why the worker can no longer answer (it failed, or the client was disposed), or null while it can."
+        },
+        {
+          "name": "CanvasClient.onFatal",
+          "kind": "method",
+          "signature": "onFatal(listener: (error: Error)",
+          "summary": "Notified once, when the worker can no longer answer: every pending request has been rejected, and every later one rejects at once."
         },
         {
           "name": "CanvasClient.setActivePage",

@@ -27,7 +27,7 @@ import { defineMessages } from "@paged-media/strings";
 export const MESH_TOOL = defineMessages("tools.mesh", {
   title: "Mesh",
   description:
-    "Click inside a shape to add a mesh point; drag a point or its handles; colour the selected points in the Color panel.",
+    "Click inside a shape to add a mesh point; drag a point or its handles; color the selected points in the Color panel.",
   points: "{count, plural, one {# mesh point} other {# mesh points}}",
 });
 
@@ -39,7 +39,7 @@ export const POLYGON_TOOL = defineMessages("tools.polygon", {
 
 export const EYEDROPPER_TOOL = defineMessages("tools.eyedropper", {
   mode: "Sample",
-  pixel: "Pixel colour",
+  pixel: "Pixel color",
   object: "Object appearance",
   sampleSize: "Sample size",
   pointSample: "Point sample",

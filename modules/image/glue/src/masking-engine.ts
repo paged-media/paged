@@ -303,7 +303,7 @@ function rangeArgs(opts: ColorRangeOptions, w: number, h: number) {
             : -1;
   if (kind < 0)
     throw new Error(
-      "Out of Gamut needs a soft-proofing CMYK profile, which the image module's colour settings do not have yet",
+      "Out of Gamut needs a soft-proofing CMYK profile, which the image module's color settings do not have yet",
     );
   const samples = new Float32Array(opts.samples.length * 5);
   opts.samples.forEach((s, i) => {

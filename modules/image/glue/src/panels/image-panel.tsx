@@ -616,7 +616,7 @@ const BRUSH = defineMessages("image.brush", {
   spacing: "Spacing (× diameter)",
   blend: "Blend",
   engineNotStarted: "{blend} (engine not started)",
-  colour: "Colour",
+  colour: "Color",
   pressure: "Pen pressure drives",
   stroke: "Stroke",
   stats: "{dabs} dabs · {x},{y} {w}×{h}",
@@ -624,7 +624,7 @@ const BRUSH = defineMessages("image.brush", {
   needsGpu: "Painting needs WebGPU, so the paint tools are disabled here.",
   undo: "Strokes paint the active layer, and Undo takes them back.",
   shortlist:
-    "The colours are a shortlist, and the blend list comes from the engine " +
+    "The colors are a shortlist, and the blend list comes from the engine " +
     "itself. Settings are fixed for a stroke when it starts.",
 });
 
@@ -811,7 +811,7 @@ const TYPE = defineMessages("image.type", {
   size: "Size (px)",
   note:
     "Click the canvas for point type, drag for a text box: either makes an " +
-    "editable type layer in the foreground colour, laid out by the " +
+    "editable type layer in the foreground color, laid out by the " +
     "document's text engine. Click a type layer's text to edit it; the " +
     "Character and Paragraph panels style it.",
   shaping:
@@ -2010,13 +2010,13 @@ const P = defineMessages("image.panel", {
     "The image engine could not start. Diagnostics, at the bottom of the " +
     "panel, has the reason.",
   image: "Image",
-  colour: "Colour",
+  colour: "Color",
   cmykConverted:
     "This CMYK image was converted to sRGB through its embedded profile; " +
     "edits and save-back are RGB.",
   cmykUnmanaged:
     "This CMYK image has no usable profile, so it was converted to sRGB " +
-    "without colour management; edits and save-back are RGB.",
+    "without color management; edits and save-back are RGB.",
   cmykAbout:
     "The conversion follows Photoshop's default view: relative colorimetric " +
     "with black-point compensation, approximated by the profile's " +
@@ -2082,8 +2082,8 @@ const P = defineMessages("image.panel", {
   generateSelection: "Generate — fills the selection",
   generateImage: "Generate — fills the whole image",
   gradient: "Gradient",
-  startColour: "Start colour",
-  endColour: "End colour",
+  startColour: "Start color",
+  endColour: "End color",
   fillGradientTitle: "Paint the gradient into the selection",
   generatorsGpuOnly: "Generators are GPU-only — no WebGPU device",
   fill: "Fill",
@@ -2099,10 +2099,10 @@ const P = defineMessages("image.panel", {
   invert: "Invert colors",
   gradientMapDistort: "Gradient map & distort",
   gradientMapTitle:
-    "Map luminance through a two-stop colour ramp (shadows to highlights)",
+    "Map luminance through a two-stop color ramp (shadows to highlights)",
   gradientMap: "Gradient map",
   gradientMapNote:
-    "A gradient map replaces colour with a ramp read from luminance; the " +
+    "A gradient map replaces color with a ramp read from luminance; the " +
     "distortions resample through one backward map, so they share a " +
     "reconstruction filter and edge rule with the crop straighten.",
   stylize: "Stylize, blur & pixelate",
@@ -2110,9 +2110,9 @@ const P = defineMessages("image.panel", {
     "Each opens its dialog: every parameter of its kernel, previewed live on " +
     "the canvas, applied with OK as one undo step. Median, Maximum and " +
     "Minimum are with the rank filters; Average fills the selection with " +
-    "its average colour at once.",
+    "its average color at once.",
   average: "Average",
-  averageTitle: "Fill the selection (or the layer) with its average colour",
+  averageTitle: "Fill the selection (or the layer) with its average color",
   imageSizeOpen: "Image size…",
   trimOpen: "Trim…",
   rotateOpen: "Rotate…",
@@ -2175,7 +2175,7 @@ const GALLERY = defineMessages("image.gallery", {
   findEdges: "Find edges",
   findEdgesTitle:
     "Sobel magnitude, inverted — dark lines on white, and run per channel " +
-    "so an equal-luminance colour edge still registers.",
+    "so an equal-luminance color edge still registers.",
   motionBlur: "Motion blur",
   motionBlurTitle:
     "Directional blur along a line, centred on the pixel so the subject " +
@@ -2198,11 +2198,11 @@ const GALLERY = defineMessages("image.gallery", {
     "flattens toward paint while its boundary stays put.",
   posterEdges: "Poster edges",
   posterEdgesTitle:
-    "Posterised colour plus a darkened outline. The two halves are " +
+    "Posterised color plus a darkened outline. The two halves are " +
     "independent — that is what separates Cutout from Ink Outlines.",
   glowingEdges: "Glowing edges",
   glowingEdgesTitle:
-    "Edge magnitude colourised and boosted; keeps the source hue instead of " +
+    "Edge magnitude colorised and boosted; keeps the source hue instead of " +
     "going grey.",
   halftone: "Halftone",
   halftoneTitle:
@@ -2256,14 +2256,14 @@ const GALLERY = defineMessages("image.gallery", {
     "ball, not a dim smudge.",
   reduceNoise: "Reduce noise",
   reduceNoiseTitle:
-    "Bilateral denoise: taps are weighted by colour distance as well as " +
+    "Bilateral denoise: taps are weighted by color distance as well as " +
     "distance, so it refuses to average across an edge.",
   smartSharpen: "Smart sharpen",
   smartSharpenTitle:
     "Unsharp with two gates: local contrast below the threshold is left " +
     "alone as noise, and the correction is clamped so a strong edge cannot " +
     "ring into a halo.",
-  selectiveColour: "Selective colour",
+  selectiveColour: "Selective color",
   selectiveColourTitle:
     "Per-range CMYK shift — this button targets the reds. Range membership " +
     "goes by channel ORDER, so there is no seam at a hue boundary and no " +

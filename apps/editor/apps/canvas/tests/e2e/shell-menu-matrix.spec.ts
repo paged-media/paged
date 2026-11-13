@@ -115,6 +115,15 @@ const HOST_MENU = [
   "Edit/Go to page…",
   // Editor ADR 290 — the ML service's Models settings page.
   "Edit/Settings/Models…",
+  // ADR 1201 D-03 — the opt-in "Tab hides panels (InDesign)".
+  "Edit/Settings/Tab hides panels (InDesign)",
+  // Editor ADRs 1208 and 1209 — the workspace's switch, the density
+  // presets and the Focus workspace.
+  "Edit/Settings/Adapt the workspace to the window",
+  "Edit/Settings/Interface density/Comfortable",
+  "Edit/Settings/Interface density/Professional",
+  "Edit/Settings/Interface density/Compact",
+  "View/Focus workspace",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
@@ -232,6 +241,10 @@ const HOST_MENU = [
   "Type/Format/Line spacing 1",
   "Type/Format/Line spacing 1.5",
   "Type/Format/Line spacing 2",
+  "Type/Format/Increase leading",
+  "Type/Format/Decrease leading",
+  "Type/Format/Increase tracking",
+  "Type/Format/Decrease tracking",
   "Object/Transform/Transform each…",
   "Object/Transform/Reflect horizontally",
   "Object/Transform/Reflect vertically",
@@ -575,6 +588,10 @@ test.describe("the host menu bar", () => {
         "menu:Type/Format/Line spacing 1",
         "menu:Type/Format/Line spacing 1.5",
         "menu:Type/Format/Line spacing 2",
+        "menu:Type/Format/Increase leading",
+        "menu:Type/Format/Decrease leading",
+        "menu:Type/Format/Increase tracking",
+        "menu:Type/Format/Decrease tracking",
         "menu:Object/Transform/Transform each…",
         "menu:Object/Transform/Reflect horizontally",
         "menu:Object/Transform/Reflect vertically",
@@ -817,6 +834,10 @@ test.describe("the host menu bar", () => {
       "menu:Type/Format/Line spacing 1",
       "menu:Type/Format/Line spacing 1.5",
       "menu:Type/Format/Line spacing 2",
+      "menu:Type/Format/Increase leading",
+      "menu:Type/Format/Decrease leading",
+      "menu:Type/Format/Increase tracking",
+      "menu:Type/Format/Decrease tracking",
       "menu:Object/Transform/Transform each…",
       "menu:Object/Transform/Reflect horizontally",
       "menu:Object/Transform/Reflect vertically",
@@ -996,6 +1017,10 @@ test.describe("the host menu bar", () => {
         "menu:Type/Format/Line spacing 1",
         "menu:Type/Format/Line spacing 1.5",
         "menu:Type/Format/Line spacing 2",
+        "menu:Type/Format/Increase leading",
+        "menu:Type/Format/Decrease leading",
+        "menu:Type/Format/Increase tracking",
+        "menu:Type/Format/Decrease tracking",
         "menu:Object/Transform/Transform each…",
         "menu:Object/Transform/Reflect horizontally",
         "menu:Object/Transform/Reflect vertically",
@@ -1178,6 +1203,11 @@ test.describe("the derived menu families", () => {
           row = await menuRow(page, candidate, { click: true });
           if (row) break;
         }
+        // UX audit F-18 — a plugin's own row that opens the panel through
+        // its dialog ("Data query…") stands for the panel's row ("Data
+        // query"), which the bar drops: one entry per panel.
+        if (!row && family === "Plugins/*" && (await menuRow(page, `${at}…`)))
+          continue;
         if (!row) {
           problems.push(`${m.path}: not on the bar`);
           continue;

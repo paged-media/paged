@@ -259,7 +259,7 @@ export const F = defineMessages("image.filter", {
   findEdges: "Find edges",
   glowingEdges: "Glowing edges",
   mosaic: "Mosaic",
-  halftone: "Colour halftone",
+  halftone: "Color halftone",
   paintDaubs: "Paint daubs",
   posterEdges: "Poster edges",
   filmGrain: "Film grain",
@@ -271,7 +271,7 @@ export const F = defineMessages("image.filter", {
   glass: "Glass",
   texturizer: "Texturizer",
   gradientMap: "Gradient map",
-  selectiveColour: "Selective colour",
+  selectiveColour: "Selective color",
 
   // Parameter labels.
   radius: "Radius",
@@ -327,7 +327,7 @@ export const F = defineMessages("image.filter", {
   light: "Light direction",
   shadow: "Shadows",
   highlight: "Highlights",
-  colours: "Colours",
+  colours: "Colors",
   reds: "Reds",
   yellows: "Yellows",
   greens: "Greens",

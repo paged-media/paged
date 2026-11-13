@@ -47,7 +47,7 @@ import {
 export const FG = defineMessages("image.filter", {
   halftonePattern: "Halftone pattern",
   filterGallery: "Filter gallery",
-  coloredPencil: "Coloured pencil",
+  coloredPencil: "Colored pencil",
   cutout: "Cutout",
   dryBrush: "Dry brush",
   fresco: "Fresco",
@@ -101,7 +101,7 @@ export const FG = defineMessages("image.filter", {
   textureAmount: "Texture",
   glowSize: "Glow size",
   glowBrightness: "Glow brightness",
-  glowColour: "Glow colour",
+  glowColour: "Glow color",
   strokeSize: "Stroke size",
   strokeDetail: "Stroke detail",
   softnessLabel: "Softness",

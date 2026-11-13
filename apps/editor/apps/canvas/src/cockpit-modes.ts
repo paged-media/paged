@@ -41,7 +41,7 @@ const M = defineMessages("app.cockpitModes", {
   content: "Content",
   contentBlurb: "Safe text editing, stories, review flow",
   prepress: "Prepress",
-  prepressBlurb: "Preflight, bleed, colour, output readiness",
+  prepressBlurb: "Preflight, bleed, color, output readiness",
   dataLayout: "Data layout",
   dataLayoutBlurb: "Structured data → repeatable pages",
   review: "Review",
@@ -91,9 +91,12 @@ export const COCKPIT_MODES: ModeContribution[] = [
     get blurb() {
       return t(M.contentBlurb);
     },
+    // UX audit F-23 — the mode leads with what works: the Stories list on
+    // the left, Character and Paragraph in the dock; the story inspector
+    // (a "coming soon" card beside a live story count) is the last tab.
     slots: {
       left: "paged.stories",
-      inspector: "paged.story-inspector",
+      tabs: ["paged.character", "paged.paragraph", "paged.story-inspector"],
     },
   },
   {
@@ -148,6 +151,10 @@ export const COCKPIT_MODES: ModeContribution[] = [
   {
     id: "review",
     toolbarLeft: ReviewToolbar,
+    // UX audit F-23 — Approve, Request changes, Compare versions and the
+    // approvals are all "soon": the mode waits for its backend off the
+    // mode bar (still reachable as a mode, e.g. `__canvas.setMode`).
+    placeholder: true,
     get title() {
       return t(M.review);
     },

@@ -17,11 +17,12 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Design system (publishing cockpit) — the 44px context toolbar
-// between the header and the body row. The LEFT segment is
-// mode-aware (the active ModeContribution's `toolbarLeft`); the
-// RIGHT side carries the app's view controls and Focus mode (REAL —
-// it invokes the Tab chrome-hide command).
+// Design system (publishing cockpit) — the context toolbar between the
+// header and the body row (`--chrome-toolbar-h`, the density's). The LEFT
+// segment is mode-aware (the active ModeContribution's `toolbarLeft`);
+// the RIGHT side carries the app's view controls and the Focus workspace
+// pill (cockpit/focus-workspace.ts: everything but the canvas and the
+// tool rail hides; the same command brings the layout back).
 
 import type { ReactNode } from "react";
 import { useStrings } from "@paged-media/strings";
@@ -36,6 +37,11 @@ import {
   type EditContextFrame,
 } from "../state/edit-context-stack";
 import { CONTEXT_TOOLBAR } from "./messages";
+import { prettyKey } from "./MenuBar";
+import {
+  FOCUS_WORKSPACE_COMMAND,
+  FOCUS_WORKSPACE_KEYS,
+} from "../cockpit/focus-workspace";
 import { ContributedControlBarGroups } from "./ContributedBarItems";
 
 export interface ContextToolbarProps {
@@ -97,8 +103,10 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
         {right != null && <span style={sepStyle} />}
         <ViewPill
           name="ui-expand"
-          title={strings.t(CONTEXT_TOOLBAR.focusMode)}
-          onClick={() => void commands.invoke("paged.chrome.toggleAll")}
+          title={strings.t(CONTEXT_TOOLBAR.focusWorkspace, {
+            key: prettyKey(FOCUS_WORKSPACE_KEYS[0]),
+          })}
+          onClick={() => void commands.invoke(FOCUS_WORKSPACE_COMMAND)}
         />
       </div>
     </div>
@@ -234,8 +242,8 @@ function ViewPill({
       aria-pressed={toolId ? Boolean(active) : undefined}
       onClick={onClick}
       style={{
-        width: 30,
-        height: 30,
+        width: "var(--density-control-h)",
+        height: "var(--density-control-h)",
         borderRadius: "var(--radius-md)",
         border: "none",
         background: active ? "var(--selected-bg)" : "transparent",
@@ -250,7 +258,14 @@ function ViewPill({
       }}
     >
       {hasIcon(name) ? (
-        <Icon name={name} size={18} />
+        <Icon
+          name={name}
+          size={18}
+          style={{
+            width: "var(--density-icon)",
+            height: "var(--density-icon)",
+          }}
+        />
       ) : (
         // A bundle glyph the shell does not know: the title's initial, as
         // the tool rail falls back.
@@ -274,7 +289,7 @@ const barStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  height: 44,
+  height: "var(--chrome-toolbar-h)",
   padding: "0 10px",
   gap: 12,
   background: "var(--chrome-panel-bg)",

@@ -167,7 +167,7 @@ export function createFreeformGradientEditor(
         if (!now || !target || !sameElement(target.id, id)) return false;
         return commit(
           recolorFreeformPoints(now, [index], paintToMeshColor(color)),
-          "gradient point colour",
+          "gradient point color",
           index,
         );
       },

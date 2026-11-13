@@ -47,16 +47,17 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 
 ## 0a. Progress (2026-11-13)
 
-| Part                                                    | State                                                                                                                                                                   | Where                                                  |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| W0.1 the two documents                                  | Done: stored as written                                                                                                                                                 | `apps/editor/docs/specs/ideas/`                        |
-| W0.2 the ADR ranges                                     | Done                                                                                                                                                                    | PM-0019 (editor 1200–1299), PM-0020 (engine 1300–1399) |
-| W0.3 adoption and decisions                             | Done: adopted and decided, nothing implemented                                                                                                                          | ADR 1200, ADR 1201                                     |
-| W0.8 this plan and the status block                     | Done                                                                                                                                                                    | this file, `status.md`                                 |
-| W0.4–W0.7 inventory, coverage report, harness, baseline | In progress                                                                                                                                                             | §3                                                     |
-| EN1–EN4, the engine and protocol 79                     | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview | §6; engine ADR 1300, amendments to 125, 193, 1011      |
-| EN5–EN8, the engine and protocol 80                     | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)              | §6; engine ADRs 1301–1305, amendment 2 to 193          |
-| Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX               | Not started                                                                                                                                                             | §4–§12                                                 |
+| Part                                                           | State                                                                                                                                                                   | Where                                                  |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| W0.1 the two documents                                         | Done: stored as written                                                                                                                                                 | `apps/editor/docs/specs/ideas/`                        |
+| W0.2 the ADR ranges                                            | Done                                                                                                                                                                    | PM-0019 (editor 1200–1299), PM-0020 (engine 1300–1399) |
+| W0.3 adoption and decisions                                    | Done: adopted and decided, nothing implemented                                                                                                                          | ADR 1200, ADR 1201                                     |
+| W0.8 this plan and the status block                            | Done                                                                                                                                                                    | this file, `status.md`                                 |
+| W0.4–W0.7 inventory, coverage report, harness, baseline        | In progress                                                                                                                                                             | §3                                                     |
+| EN1–EN4, the engine and protocol 79                            | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview | §6; engine ADR 1300, amendments to 125, 193, 1011      |
+| EN5–EN8, the engine and protocol 80                            | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)              | §6; engine ADRs 1301–1305, amendment 2 to 193          |
+| IC1–IC3 the coordinator, the terminal events, the stale guards | Done, behind `?debug=coordinator` until IC4: sessions, epochs, the trace, `abortAll` on every terminal event, no pan fallback, late hit tests dropped                   | ADR 1210                                               |
+| Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                      | Not started                                                                                                                                                             | §4–§12                                                 |
 
 ## 1. Facts in the code that shape the plan
 
@@ -313,6 +314,12 @@ Two protocol versions: EN1–EN4 in the first, EN5–EN8 in the second. Engine r
 - **EN fuzz findings** at `PAGED_GESTURE_FUZZ_N=200`: GF-5 (seeds 48, 141, 155, an Alt-drag across spreads) and GF-6 (seed 31, a resized path's copy moved on save → load) fixed by engine ADR 1302; the seeds replay as regression tests.
 
 ## 7. Track WS — Workspace and camera (the strategy's Phase 1 workspace; the spec's CAM)
+
+WS0–WS7 landed on 2026-11-13 ([ADR 1208](adr/1208-docks-are-resizable-and-the-workspace-adapts.md),
+[ADR 1209](adr/1209-density-presets.md)). Two choices the bullets below leave open: the classes
+are measured on the cockpit's own element against canvas budgets beside the default docks (about
+1575 / 1095 px of window with the editor's rails), and the browser suite boots with the adaptive
+workspace off (its window is 1280 px) unless a spec is about the workspace.
 
 - **WS0** Drop handling moves out of `SH/cockpit/CockpitLayout.tsx:168-193` into
   `SH/cockpit/drop-zone.tsx`; DF3 owns it from there.

@@ -97,7 +97,7 @@ test.describe("C1 — the Insert menu reaches plugin content", () => {
     }
 
     for (const p of [
-      "Object/Insert web frame…",
+      "Object/Insert web frame",
       "Object/Insert spreadsheet…",
       "Object/Insert Word document…",
       "Object/Insert data binding…",

@@ -60,13 +60,13 @@ import type {
 import { usePortalContainer } from "@paged-media/shell";
 
 const M = defineMessages("app.swatchRow", {
-  unresolved: "No document swatch carries this id — colour unresolved",
+  unresolved: "No document swatch carries this id — color unresolved",
   reserved: "Reserved swatch",
-  editColour: "Edit colour",
+  editColour: "Edit color",
   noEdits: "The active content type does not serve swatch edits",
   doubleClickRename: "Double-click to rename",
   clickApplies:
-    "Click sets the fill colour (in an image: the foreground); Alt-click the stroke (the background)",
+    "Click sets the fill color (in an image: the foreground); Alt-click the stroke (the background)",
   noRenames: "The active content type does not serve swatch renames",
   outOfGamut: "Out of gamut",
   colorGroup: "Color group",
@@ -79,7 +79,7 @@ const M = defineMessages("app.swatchRow", {
   gradient: "gradient",
   pattern: "pattern",
   patternChip:
-    "Pattern swatch: apply it as a fill or a stroke like a colour; edit it in pattern editing mode",
+    "Pattern swatch: apply it as a fill or a stroke like a color; edit it in pattern editing mode",
 });
 
 /** The swatch kinds the row names in words; another kind shows as is. */

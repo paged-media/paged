@@ -61,6 +61,7 @@ export {
   listenForEditorKeys,
   ownsEvent,
   queryEditor,
+  useEditorEscapeGuard,
   useEditorKeys,
   useEditorRoot,
   usePortalContainer,
@@ -72,6 +73,35 @@ export {
   setDebugHandle,
   type DebugHandles,
 } from "./state/debug-handles";
+// The interaction coordinator (editor ADR "The interaction coordinator").
+export {
+  INTERACTION_COORDINATOR,
+  STALE,
+  createInteractionCoordinator,
+  interactionCoordinatorOf,
+  interactionDebugView,
+  useInteractionCoordinator,
+  type ActiveSessionView,
+  type EndResult,
+  type GuardToken,
+  type InteractionCoordinator,
+  type InteractionSession,
+  type InteractionSnapshot,
+  type SessionSpec,
+  type Stale,
+} from "./interaction/coordinator";
+export {
+  INTERACTION_OWNERS,
+  INTERACTION_PHASES,
+  OWNER_PRIORITY,
+  ownerOfTool,
+  ownerRank,
+  type InteractionOwner,
+  type InteractionPhase,
+} from "./interaction/owners";
+export type { EpochSnapshot } from "./interaction/epochs";
+export type { TraceEntry } from "./interaction/trace";
+export { InteractionProvider } from "./interaction/interaction-provider";
 
 export {
   CanvasClientProvider,
@@ -80,7 +110,17 @@ export {
 } from "./state/canvas-client-context";
 
 export {
+  DEFAULT_DENSITY,
+  DENSITIES,
+  DENSITY_COMMANDS,
+  getDensity,
+  setDensity,
+  useDensity,
+  type Density,
+} from "./state/density";
+export {
   CameraProvider,
+  cameraKeepingCentre,
   useCamera,
   type ViewportSize,
 } from "./state/camera-context";
@@ -354,6 +394,8 @@ export {
   type PanelProps,
   type PanelRegistry,
   type PanelRegistryEvent,
+  WINDOW_CATEGORIES,
+  type WindowCategory,
   type SemanticGroupRegistry,
   type Tool,
   type ToolContribution,
@@ -645,10 +687,26 @@ export {
   type InspectorContext,
   type PageNavigator,
   type SpreadEntry,
+  CANVAS_MIN_WORKING_PX,
+  DOCK_DEFAULT_PX,
+  DOCK_MAX_PX,
+  DOCK_MIN_PX,
+  ADAPTIVE_WORKSPACE_COMMAND,
+  FOCUS_WORKSPACE_COMMAND,
+  isAdaptiveWorkspace,
+  isFocusWorkspace,
+  setAdaptiveWorkspace,
+  useAdaptiveWorkspace,
+  setFocusWorkspace,
+  useFocusWorkspace,
+  useWorkspaceClass,
+  workspaceClassOf,
+  type DockId,
+  type WorkspaceClass,
 } from "./cockpit";
 
 // ── Chrome ─────────────────────────────────────────────────────
-export { CommandPalette } from "./chrome/CommandPalette";
+export { CommandPalette, notifyPalette } from "./chrome/CommandPalette";
 export {
   MenuBar,
   CONTEXT_MENU_ROOT,
@@ -672,6 +730,20 @@ export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
 // ── Keyboard focus (ADR 234) ───────────────────────────────────
 export * from "./focus";
+// ── One Escape (ADR 1207) ──────────────────────────────────────
+export {
+  ESCAPE_TIERS,
+  escapeArbiterOf,
+  isEscapeKey,
+  useEscapeArbiter,
+  useEscapeHandler,
+  type EscapeArbiter,
+  type EscapeHandler,
+  type EscapeHandlerSpec,
+  type EscapeOutcome,
+  type EscapeResolution,
+  type EscapeTier,
+} from "./interaction/escape-arbiter";
 export {
   ContributedControlBarGroups,
   StatusBar,

@@ -47,6 +47,7 @@ import { useWorkflowMode } from "../state/workflow-mode-context";
 import { entryApplies, type VisibilityPredicate } from "../registries/types";
 import { Icon, hasIcon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
+import { useFocusReturn } from "../focus/focus-return";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
 import { MENU_BAR, menuLabel } from "./messages";
@@ -55,6 +56,9 @@ import {
   useEditorKeys,
   useEditorRoot,
 } from "../state/editor-root";
+
+/** The menu bar's name with the focus-return service. */
+const MENU_SURFACE = "menuBar";
 
 /**
  * Top-level menu bar. Reads from `MenuRegistry` and renders each
@@ -145,6 +149,7 @@ export function MenuBar() {
   // degrades to "everything enabled" rather than throwing.
   const paged = useOptionalPaged();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const focusReturn = useFocusReturn();
   // How the open menu was opened and where focus was before it: read
   // and written by the event handlers below, never during render.
   // F-50 (ADR 259): F10 puts focus on the menu bar's first menu, the
@@ -325,11 +330,11 @@ export function MenuBar() {
           }
           if (nav.origin !== "pointer") return;
           e.preventDefault();
+          // ADR 1206 — to where focus was, or the canvas when that is gone.
           const back = nav.returnTo;
           nav.returnTo = null;
-          if (back instanceof HTMLElement && back.isConnected) {
-            back.focus({ preventScroll: true });
-          }
+          focusReturn.open(MENU_SURFACE, back);
+          focusReturn.close(MENU_SURFACE);
         }}
       >
         {renderNodes(nodes, ctx)}
@@ -508,6 +513,7 @@ export function buildMenuTree(
     n.order = 0;
     n.group = "plugins";
     n.groupLabel = undefined;
+    dropPanelsTheMenuOpens(n.children);
     nestPanelsUnderNamesakes(n.children);
   }
   if (plugins.length > 0) tops.set("Plugins", plugins);
@@ -576,6 +582,27 @@ function nestPanelsUnderNamesakes(nodes: MenuNode[]): void {
       groupLabel: undefined,
       order: first - 1,
     });
+  }
+}
+
+/** UX audit F-18 — a plugin's own menu row that opens one of its panels
+ *  ("Data query…") and the panel's row ("Data query") were two entries
+ *  for one panel. The plugin's row stays (it is the plugin's word for it);
+ *  the panel row named like it, less the ellipsis, goes. */
+function dropPanelsTheMenuOpens(nodes: MenuNode[]): void {
+  const named = new Set(
+    nodes
+      .filter(
+        (n): n is MenuLeaf =>
+          n.type === "leaf" && !n.command.startsWith(PANEL_SHOW),
+      )
+      .map((n) => n.label.replace(/…$/, "")),
+  );
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (n.type === "leaf" && n.command.startsWith(PANEL_SHOW)) {
+      if (named.has(n.label)) nodes.splice(i, 1);
+    }
   }
 }
 

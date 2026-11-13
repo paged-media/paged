@@ -32,6 +32,9 @@
 //   INV-REG-2  at most one isGroupDefault per flyout slot (group)
 //   INV-REG-3  no duplicate keybindings (key+command pairs unique;
 //              one key may fan out only to DIFFERENT guarded commands)
+//   INV-REG-4  the Window menu (UX audit F-17, F-18): one entry per
+//              editor panel, under InDesign's categories, few one click
+//              deep, every name once, in sentence case, no ellipsis
 //
 // This conflict class (two pens in one slot, duplicate "p") was hit
 // once for real — it never reaches a human again.
@@ -255,5 +258,77 @@ test.describe("registry invariants (built-ins + bundles)", () => {
       seen.add(sig);
     }
     expect(dupes, `duplicate keybindings: ${dupes.join("; ")}`).toEqual([]);
+  });
+
+  test("INV-REG-4 — the Window menu lists each editor panel once, by category, in sentence case @feat:editor-shell.menus @level:happy", async ({
+    page,
+  }) => {
+    const { panels, window } = await page.evaluate(() => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            registries: {
+              panels: {
+                list: () => Array<{
+                  id: string;
+                  title: string;
+                  devOnly?: boolean;
+                  source?: string;
+                }>;
+              };
+              menus: { list: () => Array<{ path: string; command: string }> };
+            };
+          };
+        }
+      ).__canvas;
+      return {
+        panels: c.registries.panels
+          .list()
+          .filter((p) => !p.devOnly && !(p.source ?? "").trim())
+          .filter((p) => p.id !== "paged.canvas")
+          .map((p) => ({ id: p.id, title: p.title })),
+        window: c.registries.menus
+          .list()
+          .filter((m) => m.path.startsWith("Window/"))
+          .map((m) => ({ path: m.path, command: m.command })),
+      };
+    });
+    const CATEGORIES = [
+      "Color",
+      "Styles",
+      "Type & Tables",
+      "Object & Layout",
+      "Interactive",
+      "Output",
+      "Utilities",
+    ];
+    const SHOW = "paged.panel.show.";
+    const panelEntries = window.filter((m) => m.command.startsWith(SHOW));
+    // One entry per panel.
+    for (const p of panels) {
+      const entries = panelEntries.filter((m) => m.command === SHOW + p.id);
+      expect(entries.length, `Window entries for ${p.id}`).toBe(1);
+      const segments = entries[0]!.path.split("/");
+      // One click deep, or under one of InDesign's categories.
+      if (segments.length === 3) expect(CATEGORIES).toContain(segments[1]);
+      else expect(segments.length).toBe(2);
+    }
+    // A short top level: the panels a designer reaches for all day.
+    const top = panelEntries.filter((m) => m.path.split("/").length === 2);
+    expect(top.length).toBeLessThanOrEqual(10);
+    // Every name once, in sentence case, without an ellipsis (a panel
+    // opens, no dialog asks).
+    const names = panelEntries.map((m) => m.path.split("/").pop()!);
+    const twice = names.filter((n, i) => names.indexOf(n) !== i);
+    expect(twice, `names listed twice: ${twice.join(", ")}`).toEqual([]);
+    for (const name of names) {
+      expect(name.endsWith("…"), `${name} has an ellipsis`).toBe(false);
+      const [, ...rest] = name.split(/\s+/);
+      for (const word of rest) {
+        // A later word is lower case, unless it is an acronym (AI, PDF).
+        const ok = word === word.toLowerCase() || /^[A-Z0-9&]{1,}$/.test(word);
+        expect(ok, `"${name}" is not in sentence case`).toBe(true);
+      }
+    }
   });
 });

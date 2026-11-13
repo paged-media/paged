@@ -26,3 +26,12 @@ see page 1 fitted.
 
 Fit whole document is on Alt+Shift+Cmd+0 now; Cmd+0 fits the page, as in InDesign
 ([ADR 257](257-indesigns-fits-and-page-keys.md)).
+
+## Amendment 2026-11-13
+
+The open now reports its stages while it runs — recognized, geometry (the pages outlined where
+they will be), first paint, refining — in words and real counts on the canvas and in the header,
+never a percentage (UXI-PRF-003, UX audit F-53). The fit is unchanged: page 1, fitted, once the
+canvas attaches; a later change of the canvas's size keeps the document point at the centre
+instead of fitting again
+([ADR 1208](1208-docks-are-resizable-and-the-workspace-adapts.md)).

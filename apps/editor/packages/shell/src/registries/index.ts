@@ -27,6 +27,8 @@ export {
   type PanelProps,
   type PanelRegistry,
   type PanelRegistryEvent,
+  WINDOW_CATEGORIES,
+  type WindowCategory,
 } from "./panel";
 
 export {

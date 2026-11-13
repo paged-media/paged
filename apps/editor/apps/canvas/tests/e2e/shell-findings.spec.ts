@@ -100,11 +100,19 @@ const railVisible = (page: Page) =>
   page.locator('nav[aria-label="Tools"]').isVisible();
 
 test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
-  test("control: Tab on the canvas the user clicked into toggles the chrome (the binding works)", async ({
+  test('control: with the "Tab hides panels (InDesign)" preference on, Tab on the canvas the user clicked into toggles the chrome (the binding works)', async ({
     page,
   }) => {
-    covers("keybinding:tab→paged.chrome.toggleAll");
+    covers(
+      "keybinding:tab→paged.view.toggleChrome",
+      "command:paged.preferences.tabHidesPanels",
+    );
     await openShell(page, { doc: true });
+    await page.evaluate(() =>
+      (globalThis as unknown as G).__canvas.registries.commands.invoke(
+        "paged.preferences.tabHidesPanels",
+      ),
+    );
     // A real click on the pasteboard, as a user makes it.
     await page
       .locator("[data-paged-canvas]")
@@ -119,26 +127,27 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
   test("Tab from the page enters the chrome and walks it; the chrome stays", async ({
     page,
   }) => {
-    covers("keybinding:tab→paged.chrome.toggleAll");
+    covers("keybinding:tab→paged.view.toggleChrome");
     await openShell(page, { doc: true });
     await blurAll(page);
     await page.keyboard.press("Tab");
     // The first stop is the menu bar's (one stop for all its menus).
     await expect(page.locator('[data-menu-trigger="File"]')).toBeFocused();
     const seen: Array<{ name: string; tools: boolean }> = [];
-    // Thirteen stops: the save status after the menus is one (editor ADR
-    // 1203).
-    for (let i = 0; i < 13; i++) {
+    // Walk until the canvas, at most twenty stops: the header's stops come
+    // and go with the chrome (the save status, ADR 1203; the workspace
+    // controls), and what is asserted is the order, not their number.
+    for (let i = 0; i < 20; i++) {
       await page.keyboard.press("Tab");
-      seen.push(
-        await page.evaluate(() => {
-          const el = document.activeElement;
-          return {
-            name: el?.getAttribute("aria-label") ?? "",
-            tools: el?.closest('[role="toolbar"][aria-label="Tools"]') != null,
-          };
-        }),
-      );
+      const stop = await page.evaluate(() => {
+        const el = document.activeElement;
+        return {
+          name: el?.getAttribute("aria-label") ?? "",
+          tools: el?.closest('[role="toolbar"][aria-label="Tools"]') != null,
+        };
+      });
+      seen.push(stop);
+      if (stop.name === "Document canvas") break;
     }
     expect(await railVisible(page)).toBe(true);
     // The tools are one stop, on the tool in hand, and the canvas is one.
@@ -151,7 +160,7 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
   test("the canvas reached by Tab passes Tab on: it is not a trap", async ({
     page,
   }) => {
-    covers("keybinding:tab→paged.chrome.toggleAll");
+    covers("keybinding:tab→paged.view.toggleChrome");
     await openShell(page, { doc: true });
     const viewport = page.locator('[data-canvas-surface="viewport"]');
     await viewport.focus();
@@ -170,8 +179,8 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
     page,
   }) => {
     covers(
-      "keybinding:cmd+\\→paged.chrome.toggleAll",
-      "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "keybinding:cmd+\\→paged.view.toggleChrome",
+      "keybinding:ctrl+\\→paged.view.toggleChrome",
     );
     await openShell(page, { doc: true });
     await page.locator('[data-menu-trigger="File"]').focus();
@@ -184,7 +193,7 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
   test("SH-2: Tab moves focus between a dialog's controls and leaves the chrome alone", async ({
     page,
   }) => {
-    covers("keybinding:tab→paged.chrome.toggleAll");
+    covers("keybinding:tab→paged.view.toggleChrome");
     await openShell(page, { doc: true });
     await page.evaluate(() =>
       (globalThis as unknown as G).__canvas.registries.commands.invoke(

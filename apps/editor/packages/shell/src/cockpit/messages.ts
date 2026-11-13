@@ -41,6 +41,11 @@ export const COCKPIT = defineMessages("shell.cockpit", {
   showPreview: "Show preview",
   hidePreview: "Hide preview",
   zoom: "Zoom",
+  resizeLeft: "Resize left panels",
+  resizePanels: "Resize panels",
+  resizeFields: "Resize fields",
+  pinPanel: "Keep panel open",
+  unpinPanel: "Collapse panel to the rail",
 });
 
 export const PAGES = defineMessages("shell.pages", {

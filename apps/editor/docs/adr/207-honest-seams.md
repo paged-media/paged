@@ -87,3 +87,12 @@ pinned commit. Three entries carry a reason instead of an operation and are not 
 - [ADR 215](215-measured-capability-table.md) — the table the guard reads
 - [ADR 023](023-shared-panels-binding-providers.md) — `absent` from a binding provider
 - [ADR 024](024-context-sensitivity-is-a-core-concept.md) — an item that does not apply here
+
+## Amendment 2026-11-13
+
+A whole workflow mode whose surfaces are mostly seams is not offered on the mode bar beside the
+working ones (UX audit F-23): it declares `placeholder: true` (`ModeContribution`), stays
+registered and reachable (a profile, `setMode`, a stored mode), and shows on the bar only while it
+is the active mode. Review is such a mode. The rule for single controls is unchanged: they are
+rendered, disabled, and say so
+([ADR 1208](1208-docks-are-resizable-and-the-workspace-adapts.md)).

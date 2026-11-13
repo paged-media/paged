@@ -83,6 +83,11 @@ export interface ModeContribution {
    *  selection (Data layout keeps "Data"). By top-level label; `"*"`
    *  keeps every one (a solo app, whose one plugin is the product). */
   menus?: string[];
+  /** The mode's surfaces are still mostly "coming soon" stubs (UX audit
+   *  F-23): it stays registered — `setMode`, a profile, a stored mode reach
+   *  it — but the mode bar does not offer it beside the working modes,
+   *  unless it is the active one. */
+  placeholder?: boolean;
 }
 
 export type ModeRegistryEvent =

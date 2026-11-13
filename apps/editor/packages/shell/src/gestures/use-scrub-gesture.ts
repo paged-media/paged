@@ -41,6 +41,8 @@ import {
   useState,
 } from "react";
 
+import { useEscapeArbiter } from "../interaction/escape-arbiter";
+
 export interface ScrubGestureOptions {
   /** Current value when the scrub begins. */
   initial: number;
@@ -104,6 +106,7 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
   const [value, setValue] = useState<number>(initial);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+  const escapeArbiter = useEscapeArbiter();
   // Options + latest computed value tracked via refs so the pointer
   // handlers (registered once per element) see fresh values without
   // re-binding on every render.
@@ -207,28 +210,29 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
     const onPointerUp = () => finish(true);
     const onPointerCancel = () => finish(false);
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!dragRef.current) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        finish(false);
-      }
-    };
+    // Escape mid-scrub reverts to the value the scrub began from: a
+    // gesture of the Escape arbiter (ADR 1207), so the press does nothing
+    // else (it used to reach every other window listener too).
+    const offEscape = escapeArbiter.register({
+      id: "paged.scrub",
+      tier: "gesture",
+      isActive: () => dragRef.current !== null,
+      resolve: () => finish(false),
+    });
 
     element.addEventListener("pointerdown", onPointerDown);
     element.addEventListener("pointermove", onPointerMove);
     element.addEventListener("pointerup", onPointerUp);
     element.addEventListener("pointercancel", onPointerCancel);
-    window.addEventListener("keydown", onKeyDown);
 
     return () => {
       element.removeEventListener("pointerdown", onPointerDown);
       element.removeEventListener("pointermove", onPointerMove);
       element.removeEventListener("pointerup", onPointerUp);
       element.removeEventListener("pointercancel", onPointerCancel);
-      window.removeEventListener("keydown", onKeyDown);
+      offEscape();
     };
-  }, [element]);
+  }, [element, escapeArbiter]);
 
   return { bind, isScrubbing, value };
 }

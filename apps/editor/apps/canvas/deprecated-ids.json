@@ -450,6 +450,150 @@
       "replacement": "tool:paged.tool.select",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:paged.chrome.toggleAll",
+      "replacement": "command:paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:tab→paged.chrome.toggleAll",
+      "replacement": "keybinding:tab→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:cmd+\\→paged.chrome.toggleAll",
+      "replacement": "keybinding:cmd+\\→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "keybinding:ctrl+\\→paged.chrome.toggleAll",
+      "replacement": "keybinding:ctrl+\\→paged.view.toggleChrome",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Type on path/Attach",
+      "replacement": "menu:Draw/Type on a path/Attach",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Type on path/Detach",
+      "replacement": "menu:Draw/Type on a path/Detach",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Fill/Foreground colour",
+      "replacement": "menu:Image/Fill/Foreground color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Adjust/Match colour…",
+      "replacement": "menu:Image/Filter/Adjust/Match color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Adjust/Replace colour…",
+      "replacement": "menu:Image/Filter/Adjust/Replace color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Adjust/Selective colour…",
+      "replacement": "menu:Image/Filter/Adjust/Selective color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Filter Gallery/Coloured pencil…",
+      "replacement": "menu:Image/Filter/Filter Gallery/Colored pencil…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Filter Gallery/Watercolour…",
+      "replacement": "menu:Image/Filter/Filter Gallery/Watercolor…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Filter/Pixelate/Colour halftone…",
+      "replacement": "menu:Image/Filter/Pixelate/Color halftone…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/Layer style/Colour overlay…",
+      "replacement": "menu:Image/Layer/Layer style/Color overlay…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Colour balance…",
+      "replacement": "menu:Image/Layer/New adjustment layer/Color balance…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Colour lookup…",
+      "replacement": "menu:Image/Layer/New adjustment layer/Color lookup…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Selective colour…",
+      "replacement": "menu:Image/Layer/New adjustment layer/Selective color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Layer/New fill layer/Solid colour…",
+      "replacement": "menu:Image/Layer/New fill layer/Solid color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/CMYK colour",
+      "replacement": "menu:Image/Mode/CMYK color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/Indexed colour…",
+      "replacement": "menu:Image/Mode/Indexed color…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/Lab colour",
+      "replacement": "menu:Image/Mode/Lab color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Mode/RGB colour",
+      "replacement": "menu:Image/Mode/RGB color",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Image/Proof/Proof colours",
+      "replacement": "menu:Image/Proof/Proof colors",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Object/Insert web frame…",
+      "replacement": "menu:Object/Insert web frame",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

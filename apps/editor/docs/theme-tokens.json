@@ -46,6 +46,15 @@
       "light": "#d4d4d8",
       "dark": "#34343b"
     },
+    "--chrome-header-h": {
+      "group": "density",
+      "light": "46px",
+      "dark": "46px",
+      "densities": {
+        "comfortable": "52px",
+        "compact": "40px"
+      }
+    },
     "--chrome-icon": {
       "group": "chrome neutrals — tool rail / menu bar / panel chrome",
       "light": "#3f3f46",
@@ -66,6 +75,15 @@
       "light": "#374151",
       "dark": "#c7c7d0"
     },
+    "--chrome-modebar-h": {
+      "group": "density",
+      "light": "48px",
+      "dark": "48px",
+      "densities": {
+        "comfortable": "54px",
+        "compact": "40px"
+      }
+    },
     "--chrome-panel-bg": {
       "group": "chrome neutrals — tool rail / menu bar / panel chrome",
       "light": "#fafafa",
@@ -80,6 +98,78 @@
       "group": "chrome neutrals — tool rail / menu bar / panel chrome",
       "light": "#1f2937",
       "dark": "hsl(263 90% 72%)"
+    },
+    "--chrome-tabstrip-h": {
+      "group": "density",
+      "light": "36px",
+      "dark": "36px",
+      "densities": {
+        "comfortable": "40px",
+        "compact": "30px"
+      }
+    },
+    "--chrome-titlebar-h": {
+      "group": "density",
+      "light": "34px",
+      "dark": "34px",
+      "densities": {
+        "comfortable": "38px",
+        "compact": "28px"
+      }
+    },
+    "--chrome-toolbar-h": {
+      "group": "density",
+      "light": "44px",
+      "dark": "44px",
+      "densities": {
+        "comfortable": "50px",
+        "compact": "36px"
+      }
+    },
+    "--density-control-h": {
+      "group": "density",
+      "light": "30px",
+      "dark": "30px",
+      "densities": {
+        "comfortable": "36px",
+        "compact": "26px"
+      }
+    },
+    "--density-icon": {
+      "group": "density",
+      "light": "18px",
+      "dark": "18px",
+      "densities": {
+        "comfortable": "20px",
+        "compact": "16px"
+      }
+    },
+    "--density-pad": {
+      "group": "density",
+      "light": "14px",
+      "dark": "14px",
+      "densities": {
+        "comfortable": "18px",
+        "compact": "10px"
+      }
+    },
+    "--density-row-h": {
+      "group": "density",
+      "light": "28px",
+      "dark": "28px",
+      "densities": {
+        "comfortable": "34px",
+        "compact": "24px"
+      }
+    },
+    "--density-section-gap": {
+      "group": "density",
+      "light": "12px",
+      "dark": "12px",
+      "densities": {
+        "comfortable": "18px",
+        "compact": "8px"
+      }
     },
     "--destructive": {
       "group": "shadcn variable bridge",

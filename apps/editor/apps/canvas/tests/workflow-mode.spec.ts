@@ -25,10 +25,12 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { openCanvas } from "./fidelity/canvas-driver";
 
-const MODES = ["design", "content", "prepress", "data", "review", "export"];
+// UX audit F-23 — Review is registered but mostly "soon": the bar does not
+// offer it beside the working modes (it shows while it is the active one).
+const MODES = ["design", "content", "prepress", "data", "export"];
 
 test.describe("Cockpit — workflow modes", () => {
-  test("the switcher lists six modes; design is default and active @feat:editor-shell.cockpit-modes @level:happy", async ({
+  test("the switcher lists the five working modes, not the placeholder Review; design is default and active @feat:editor-shell.cockpit-modes @level:happy", async ({
     page,
   }) => {
     await openCanvas(page);
@@ -36,6 +38,15 @@ test.describe("Cockpit — workflow modes", () => {
     for (const m of MODES) {
       await expect(page.locator(`[data-mode-option="${m}"]`)).toBeVisible();
     }
+    await expect(page.locator('[data-mode-option="review"]')).toHaveCount(0);
+    // Still a mode: switching to it shows it, active, on the bar.
+    await page.evaluate(() => window.__canvas.setMode("review"));
+    await expect(page.locator('[data-mode-option="review"]')).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    await page.evaluate(() => window.__canvas.setMode("design"));
+    await expect(page.locator('[data-mode-option="review"]')).toHaveCount(0);
     await expect(page.locator('[data-mode-option="design"]')).toHaveAttribute(
       "data-active",
       "true",
@@ -72,10 +83,10 @@ test.describe("Cockpit — workflow modes", () => {
     page,
   }) => {
     await openCanvas(page);
-    await page.locator('[data-mode-option="review"]').click();
+    await page.locator('[data-mode-option="data"]').click();
     await page.reload();
     await openCanvas(page);
-    await expect(page.locator('[data-mode-option="review"]')).toHaveAttribute(
+    await expect(page.locator('[data-mode-option="data"]')).toHaveAttribute(
       "data-active",
       "true",
     );

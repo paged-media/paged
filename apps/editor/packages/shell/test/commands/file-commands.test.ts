@@ -378,7 +378,7 @@ describe("a resolved drop does what its label said (editor ADR 1205)", () => {
   const png = () =>
     new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" });
 
-  test("a refusal reports its reason and changes nothing", async () => {
+  test("UXI-T64: a refusal reports its reason and changes nothing", async () => {
     covers("command:paged.file.openIdml");
     const h = harness({ dirty: true });
     await dropFileAs(
@@ -435,7 +435,7 @@ describe("a resolved drop does what its label said (editor ADR 1205)", () => {
     ]);
   });
 
-  test("a document over an edited one opens through the replace question", async () => {
+  test("UXI-T63: a document over an edited one opens through the replace question", async () => {
     covers("command:paged.file.openIdml");
     const h = harness({ dirty: true, confirm: false });
     await dropFileAs(

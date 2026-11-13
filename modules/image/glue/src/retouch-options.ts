@@ -71,7 +71,7 @@ const M = defineMessages("image.retouchOptions", {
   move: "Move",
   extend: "Extend",
   structure: "Structure",
-  colour: "Colour",
+  colour: "Color",
   transformOnDrop: "Transform on drop",
   sampleAll: "Sample all layers",
 });

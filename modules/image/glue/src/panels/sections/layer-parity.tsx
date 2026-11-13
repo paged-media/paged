@@ -47,7 +47,7 @@ const M = defineMessages("image.layerParity", {
   kindSmart: "Smart objects",
   colorAll: "All labels",
   filterKind: "Filter by kind",
-  filterColor: "Filter by colour label",
+  filterColor: "Filter by color label",
   filtered: "{shown} of {total} layers shown",
   fill: "Fill",
   fillTitle:
@@ -57,7 +57,7 @@ const M = defineMessages("image.layerParity", {
   lockPixels: "Lock image pixels",
   lockPosition: "Lock position",
   lockAll: "Lock all",
-  label: "Colour label",
+  label: "Color label",
   link: "Link with the layer below",
   unlink: "Unlink",
   linked: "linked",
@@ -66,7 +66,7 @@ const M = defineMessages("image.layerParity", {
   rasterize: "Rasterize",
   newFill: "New fill layer…",
   newAdjustment: "New adjustment layer…",
-  solid: "Solid colour",
+  solid: "Solid color",
   gradient: "Gradient",
   pattern: "Pattern",
   mergeDown: "Merge down",
@@ -138,7 +138,7 @@ const M = defineMessages("image.layerParity", {
   cyanRed: "Cyan – Red",
   magentaGreen: "Magenta – Green",
   yellowBlue: "Yellow – Blue",
-  filterColour: "Colour",
+  filterColour: "Color",
   density: "Density",
   preserveLuminosity: "Preserve luminosity",
   output: "Output channel",
@@ -147,7 +147,7 @@ const M = defineMessages("image.layerParity", {
   levels: "Levels",
   threshold: "Threshold level",
   reverse: "Reverse",
-  stops: "Colour stops",
+  stops: "Color stops",
   addStop: "Add stop",
   removeStop: "Remove stop",
   position: "Position",
@@ -232,7 +232,7 @@ const ADJ_LABELS = defineMessages("image.adjustmentKind", {
 });
 
 const COLOR_WORDS = defineMessages("image.colorLabel", {
-  none: "No colour",
+  none: "No color",
   red: "Red",
   orange: "Orange",
   yellow: "Yellow",

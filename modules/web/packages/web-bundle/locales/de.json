@@ -155,7 +155,7 @@
   "web.templateFields.notAllowedValue": "„{value}“ ist keiner der Werte, die dieses Feld zulässt.",
   "web.templateFields.notCssValue": "Der Wert ist kein CSS-Wert: {problem}.",
   "menu.Web": "Web",
-  "menu.Insert web frame…": "Webrahmen einfügen …",
+  "menu.Insert web frame": "Webrahmen einfügen",
   "menu.Render frame": "Rahmen rendern",
   "menu.Render flow across frames": "Textfluss über Rahmen rendern",
   "menu.Thread flow into frames": "Textfluss in Rahmen verketten",

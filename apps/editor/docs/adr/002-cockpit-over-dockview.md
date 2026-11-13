@@ -104,3 +104,11 @@ registers six (`apps/canvas/src/cockpit-modes.ts:37-127`). Solo mode registers e
 the id `design` (`apps/canvas/src/solo/mode.ts:44-46`, `apps/canvas/src/main.tsx:1842`), and the
 mode switcher is then not rendered (`packages/shell/src/PagedShell.tsx:1239`). See
 [ADR 213](213-solo-mode.md).
+
+## Amendment 2026-11-13
+
+The columns are no longer fixed. Each dock is resizable (240–480 px, remembered per mode), and
+the cockpit adapts to the width it is given: the left dock collapses to a rail with a flyout on a
+laptop-width workspace, and both docks become overlays on a narrow one; the Focus workspace hides
+everything but the canvas and the tool rail. The modes and their slots are unchanged; panels
+still do not float or pop out ([ADR 1208](1208-docks-are-resizable-and-the-workspace-adapts.md)).

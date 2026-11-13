@@ -76,7 +76,23 @@ function recorder() {
   const log: string[] = [];
   const cb: DocumentLoaderCallbacks = {
     setHandle: (h) => log.push(`handle ${h?.docId ?? null}`),
-    setLoading: (l) => log.push(`loading ${l ? l.name : null}`),
+    // UXI-PRF-003 — each stage, with its real counts.
+    setLoading: (l) =>
+      log.push(
+        `loading ${
+          l
+            ? [
+                l.name,
+                l.stage,
+                l.pageCount === undefined
+                  ? null
+                  : `${l.pagesReady ?? 0}/${l.pageCount}`,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : null
+        }`,
+      ),
     setStatus: (s) => log.push(`status ${s}`),
     setSnapshotsReady: (r) => log.push(`ready ${r}`),
     addSnapshot: (p) => log.push(`snapshot ${p}`),
@@ -134,14 +150,18 @@ describe("loading a file", () => {
     expect(loads).toEqual([{ bytes: 10, font: true }]);
     expect(log).toEqual([
       "status loading Annual report.idml (10 bytes)…",
-      "loading Annual report.idml",
+      // UXI-PRF-003 — recognized, then the geometry, then the first page
+      // composed, then ready: real stages, real counts, no percentage.
+      "loading Annual report.idml recognized",
       "reset",
       "name Annual report",
       "handle d1",
-      "loading null",
+      "loading Annual report.idml geometry 0/2",
       "status loaded 2 pages; snapshotting…",
       "snapshot p1",
+      "loading Annual report.idml firstPaint 1/2",
       "snapshot p2",
+      "loading null",
       "status loaded 2 pages",
       "ready true",
     ]);
@@ -261,13 +281,15 @@ describe("File > New", () => {
     expect(currentLibraryDocument(scope)).toBeNull();
     expect(log).toEqual([
       "status creating new document…",
-      "loading Untitled",
+      "loading Untitled recognized",
       "reset",
       "name null",
       "handle blank",
-      "loading null",
+      "loading Untitled geometry 0/1",
       "status new 1-page document; snapshotting…",
       "snapshot b1",
+      // One page: its first paint is the document ready.
+      "loading null",
       "status loaded 1 page",
       "ready true",
     ]);

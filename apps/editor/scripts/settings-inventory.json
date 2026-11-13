@@ -34,6 +34,21 @@
       ]
     },
     {
+      "id": "paged.density",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.density",
+      "default": "professional",
+      "values": ["comfortable", "professional", "compact"],
+      "effect": "the interface density: `data-density` on the editor's root element, which re-points the density tokens (control and row heights, icon size, panel padding, section spacing, the chrome bars' heights); never the canvas zoom or the document (Edit ▸ Settings ▸ Interface density; editor ADR \"Density presets\")",
+      "source": "apps/editor/packages/shell/src/state/density.ts",
+      "marker": "\"paged.density\"",
+      "sites": [
+        ["getItem", "STORAGE_KEY"],
+        ["setItem", "STORAGE_KEY"]
+      ]
+    },
+    {
       "id": "paged.units",
       "kind": "preference",
       "storage": "localStorage",
@@ -79,6 +94,36 @@
         ["removeItem", "k"],
         ["getItem", "KEY(scope)"],
         ["setItem", "KEY(scope)"]
+      ]
+    },
+    {
+      "id": "paged.cockpit.docks.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.cockpit.docks.v1",
+      "scoped": true,
+      "default": {},
+      "effect": "per workflow mode: the widths the left dock, the right dock and the form column were dragged to (240–480 px; a missing one is its default, 262 / 320 / 340) and whether the left dock stays pinned open on a laptop-width workspace (editor ADR \"Docks are resizable and the workspace adapts\")",
+      "source": "apps/editor/packages/shell/src/cockpit/cockpit-persistence.ts",
+      "marker": "\"paged.cockpit.docks.v1\"",
+      "sites": [
+        ["getItem", "DOCKS_KEY(scope)"],
+        ["setItem", "DOCKS_KEY(scope)"]
+      ]
+    },
+    {
+      "id": "paged.adaptiveWorkspace",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.adaptiveWorkspace",
+      "default": "on",
+      "values": ["on", "off"],
+      "effect": "whether the cockpit adapts to the width it is given (wide, laptop, narrow: the left dock a rail with a flyout, the docks overlays) or keeps its docks docked at every width (Edit ▸ Settings ▸ Adapt the workspace to the window; editor ADR \"Docks are resizable and the workspace adapts\")",
+      "source": "apps/editor/packages/shell/src/cockpit/workspace-class.ts",
+      "marker": "\"paged.adaptiveWorkspace\"",
+      "sites": [
+        ["getItem", "ADAPTIVE_KEY"],
+        ["setItem", "ADAPTIVE_KEY"]
       ]
     },
     {
@@ -189,6 +234,22 @@
       "sites": [
         ["getItem", "HISTORY_DEPTH_KEY"],
         ["setItem", "HISTORY_DEPTH_KEY"]
+      ]
+    },
+    {
+      "id": "paged.keyboard.tabHidesPanels",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.keyboard.tabHidesPanels",
+      "default": false,
+      "values": [false, true],
+      "effect": "Edit ▸ Settings ▸ Tab hides panels (InDesign) (ADR 1201, D-03): Tab and Shift+Tab on a canvas the user clicked into toggle the panels and the tool rail instead of moving focus; stored as \"true\" while on, removed when off",
+      "source": "apps/editor/packages/shell/src/focus/tab-hides-panels.ts",
+      "marker": "\"paged.keyboard.tabHidesPanels\"",
+      "sites": [
+        ["getItem", "TAB_HIDES_PANELS_KEY"],
+        ["setItem", "TAB_HIDES_PANELS_KEY"],
+        ["removeItem", "TAB_HIDES_PANELS_KEY"]
       ]
     },
     {
@@ -433,7 +494,7 @@
       "storage": "url",
       "key": "?debug=<flag>[,<flag>…]",
       "default": "absent: no diagnostics",
-      "effect": "turns on per-load developer diagnostics (`debugFlag(name)`)",
+      "effect": "turns on per-load developer diagnostics (`debugFlag(name)`): `hits` marks hit tests, `hud` shows the viewport's developer readout (renderer, fps, cache, camera; UX audit F-21)",
       "source": "apps/editor/apps/canvas/src/debug-flags.ts",
       "marker": "get(\"debug\",)",
       "sites": []

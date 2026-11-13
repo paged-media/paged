@@ -28,10 +28,17 @@ import {
   render,
   waitFor,
 } from "@testing-library/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { CommandPalette, notifyPalette } from "../../src/chrome/CommandPalette";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../src/components/ui/tooltip";
+import { escapeArbiterOf } from "../../src/interaction/escape-arbiter";
 import { detachedEditorScope } from "../../src/state/editor-scope";
 import {
   resetAiAvailability,
@@ -165,5 +172,80 @@ describe("command palette rows", () => {
     expect(ai.querySelector("[data-palette-ai-unavailable]")).not.toBeNull();
     fireEvent.click(ai);
     expect(asked).toBe(0);
+  });
+
+  // Issue #32: on the real-Chrome lane Escape left the palette open. The
+  // palette relied on Radix's Escape, which belongs to whichever dismissable
+  // layer registered last and listens on the document, after the window's
+  // capture listeners: a layer that opened after the palette (a tooltip
+  // whose delay ran out under a resting pointer, a toast) took the press,
+  // and the palette never heard it. The palette is now a handler of the
+  // Escape arbiter (ADR 1207), which hears every Escape typed in its editor.
+  test("UXI-T23 — Escape closes the palette whichever layer Radix holds on top, and focus returns to the opener (issue #32) @feat:editor-shell.command-palette @level:edge", async () => {
+    setAiAvailability("available");
+    let showTip: (on: boolean) => void = () => {};
+    function LateTooltip() {
+      const [on, setOn] = useState(false);
+      useEffect(() => {
+        showTip = setOn;
+      }, []);
+      if (!on) return null;
+      return (
+        <TooltipProvider>
+          <Tooltip open>
+            <TooltipTrigger asChild>
+              <span>tip</span>
+            </TooltipTrigger>
+            <TooltipContent data-late-tooltip>hint</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    render(
+      <RegistriesProvider getEditor={() => null}>
+        <Grab />
+        <button type="button" data-opener>
+          opener
+        </button>
+        <CommandPalette />
+        <LateTooltip />
+      </RegistriesProvider>,
+    );
+    const opener = document.body.querySelector<HTMLElement>("[data-opener]")!;
+    act(() => opener.focus());
+    act(() => notifyPalette(detachedEditorScope(), "open"));
+    const input = await waitFor(() => {
+      const el = document.body.querySelector<HTMLInputElement>("[cmdk-input]");
+      if (!el) throw new Error("no input");
+      return el;
+    });
+    // A layer that opened after the palette: Radix's top layer now.
+    act(() => showTip(true));
+    await waitFor(() => {
+      if (!document.body.querySelector("[data-late-tooltip]"))
+        throw new Error("no tooltip");
+    });
+    const press = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      input.dispatchEvent(press);
+    });
+    await waitFor(() => {
+      if (document.body.querySelector("[cmdk-input]"))
+        throw new Error("the palette is still open");
+    });
+    expect(escapeArbiterOf(detachedEditorScope()).resolutionOf(press)).toEqual({
+      id: "paged.palette",
+      tier: "palette",
+      outcome: "handled",
+    });
+    // Focus is back where the palette was opened from.
+    await waitFor(() => {
+      if (document.activeElement !== opener)
+        throw new Error("focus did not return to the opener");
+    });
   });
 });

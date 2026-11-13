@@ -254,6 +254,50 @@ describe("paged.text.* on a selected word", () => {
     );
   });
 
+  test("UX audit F-34: the leading and tracking steps (Alt+arrows) write the story's leading and tracking", async () => {
+    covers(
+      "command:paged.text.increaseLeading",
+      "command:paged.text.decreaseLeading",
+      "command:paged.text.increaseTracking",
+      "command:paged.text.decreaseTracking",
+    );
+    const { e, read } = await withWord();
+    const size = (await read("characterFontSize")) as number;
+    const set = await read("characterLeading");
+    const leading = typeof set === "number" ? set : size * 1.2;
+    await expectVerb(
+      e,
+      read,
+      "increaseLeading",
+      "characterLeading",
+      (v) => typeof v === "number" && Math.abs(v - (leading + 2)) < 0.011,
+    );
+    await expectVerb(
+      e,
+      read,
+      "decreaseLeading",
+      "characterLeading",
+      // Each verb is left applied: the step back lands where it began.
+      (v) => typeof v === "number" && Math.abs(v - leading) < 0.011,
+    );
+    const tracking = await read("characterTracking");
+    const base = typeof tracking === "number" ? tracking : 0;
+    await expectVerb(
+      e,
+      read,
+      "increaseTracking",
+      "characterTracking",
+      (v) => v === base + 20,
+    );
+    await expectVerb(
+      e,
+      read,
+      "decreaseTracking",
+      "characterTracking",
+      (v) => v === base,
+    );
+  });
+
   test("without a text selection a verb writes nothing and says why", async () => {
     covers("command:paged.text.bold", "command:paged.text.alignCenter");
     const { e } = await withWord();

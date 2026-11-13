@@ -317,15 +317,15 @@ test.describe("chrome commands", () => {
   test("toggle panels and tool rail hides both, and brings both back", async ({
     page,
   }) => {
-    covers("command:paged.chrome.toggleAll");
+    covers("command:paged.view.toggleChrome");
     await openShell(page, { doc: true });
     await expect(rail(page)).toBeVisible();
     await expect(leftPanel(page)).toBeVisible();
-    await invoke(page, "paged.chrome.toggleAll");
+    await invoke(page, "paged.view.toggleChrome");
     await expect(rail(page)).toBeHidden();
     // Hidden, and kept mounted for the way back (ADR 240).
     await expect(leftPanel(page)).toBeHidden();
-    await invoke(page, "paged.chrome.toggleAll");
+    await invoke(page, "paged.view.toggleChrome");
     await expect(rail(page)).toBeVisible();
     await expect(leftPanel(page)).toBeVisible();
   });

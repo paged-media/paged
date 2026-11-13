@@ -21,26 +21,26 @@ import { defineMessages, t } from "@paged-media/strings";
 import { gradientKindLabel } from "../../words";
 
 const M = defineMessages("image.color", {
-  title: "Colour",
+  title: "Color",
   foreground: "Foreground",
   background: "Background",
-  foregroundColour: "Foreground colour",
-  backgroundColour: "Background colour",
+  foregroundColour: "Foreground color",
+  backgroundColour: "Background color",
   swap: "Swap",
   blackWhite: "Black / white",
   fill: "Fill",
   gradientTool: "Gradient tool",
   note:
     "The brush and pencil paint the foreground. Alt-click with either takes " +
-    "the image's colour under the pointer (a 3×3 average) as the new " +
+    "the image's color under the pointer (a 3×3 average) as the new " +
     "foreground.",
   eyedropper: "Eyedropper",
   sample: "Sample",
   currentLayer: "Current layer",
   allLayers: "All layers",
-  samplers: "Colour samplers",
+  samplers: "Color samplers",
   noSamplers:
-    "None placed. The Color Sampler tool fixes up to four points; their colours show here.",
+    "None placed. The Color Sampler tool fixes up to four points; their colors show here.",
   samplerAt: "#{id} at {x}, {y}",
   offImage: "off the image",
   removeSampler: "Remove sampler {id}",

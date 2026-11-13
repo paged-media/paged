@@ -152,7 +152,7 @@ describe("Image ▸ Mode ▸ 32 bits, Indexed and Multichannel [image.io.depth-c
     expect(k.session.state().dialog).toBeNull();
     expect(k.session.state().mode.color).toBe("indexed");
     expect(k.session.state().history?.undoSteps).toEqual(["Indexed Color"]);
-    expect(k.session.state().status).toMatch(/216 colours/);
+    expect(k.session.state().status).toMatch(/216 colors/);
     const px = await sourcePixels(k.session);
     for (let i = 0; i < px.px.length; i += 4)
       for (let c = 0; c < 3; c++) expect(px.px[i + c]! % 51).toBe(0);
