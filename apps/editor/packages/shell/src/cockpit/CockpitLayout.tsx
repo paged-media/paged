@@ -259,19 +259,21 @@ export function CockpitLayout({
   const cockpit = useOptionalCockpitState();
   const activeTab = cockpit?.activeTab ?? null;
   const tabCount = cockpit?.rightTabs.length ?? 0;
-  const seenTabs = useRef({ active: activeTab, count: tabCount });
+  const seenTabs = useRef({ active: activeTab, count: tabCount, mode });
   useEffect(() => {
     const seen = seenTabs.current;
-    seenTabs.current = { active: activeTab, count: tabCount };
+    seenTabs.current = { active: activeTab, count: tabCount, mode };
+    // A mode switch brings its own tabs: that is no panel being opened.
     if (
       rightDrawer &&
+      mode === seen.mode &&
       activeTab !== null &&
       activeTab !== seen.active &&
       tabCount >= seen.count
     ) {
       setDrawerOpen(true);
     }
-  }, [activeTab, tabCount, rightDrawer, setDrawerOpen]);
+  }, [activeTab, tabCount, mode, rightDrawer, setDrawerOpen]);
   const closeOverlays = () => {
     if (flyoutFor !== null) setFlyoutFor(null);
     if (drawerOpen) setDrawerOpen(false);
