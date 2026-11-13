@@ -1774,6 +1774,11 @@ export interface CreateBundleHostOptions {
    *  `supports("editContext.historySteps@1")` true; the SDK passes the
    *  contribution through either way. */
   editContextHistorySteps?: boolean;
+  /** Extensions ADR 1106 — the host resolves every way out of an edit
+   *  context by its `exitPolicy` (and shows its `label`). Only makes
+   *  `supports("editContext.exitPolicy@1")` true; the SDK passes the
+   *  contribution through either way. */
+  editContextExitPolicy?: boolean;
   /** The host's tool-options store. When absent, `host.tools.settings`
    *  answers `{}` and `supports("tools.settings@1")` is false. */
   toolSettings?: ToolSettingsBackend;
@@ -6504,6 +6509,11 @@ export function createBundleHost(
     // Editor ADR 285 — the host's History panel reads a context's
     // `historySteps` (see the option).
     featureSet.add("editContext.historySteps@1");
+  }
+  if (options?.editContextExitPolicy === true) {
+    // Extensions ADR 1106 — the host's one exit resolver reads a context's
+    // `exitPolicy` (see the option).
+    featureSet.add("editContext.exitPolicy@1");
   }
   if (hostDrawsHandles(getEditor())) {
     // ADR 339 — the host draws the handle primitive on the same layer

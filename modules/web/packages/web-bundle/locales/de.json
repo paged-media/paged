@@ -1,4 +1,5 @@
 {
+  "web.edit.contextLabel": "Webrahmen",
   "web.source.title": "Web-Quelltext",
   "web.source.startFromTemplate": "Mit einer Vorlage beginnen",
   "web.source.threadInto": "{count, plural, one {# ausgewählten Rahmen in einen Textfluss verketten:} other {# ausgewählte Rahmen in einen Textfluss verketten:}}",

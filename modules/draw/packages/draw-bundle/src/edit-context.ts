@@ -65,4 +65,8 @@ export const vectorGraphicEditContext: EditContextContribution = {
   // object's draw settings (its path points first). It was the Vector
   // stroke panel, now merged into the host's Stroke panel.
   panelIds: [DRAW_PROPERTIES_PANEL_ID],
+  // Editor ADR 1211 — every anchor edit is an engine mutation the moment it
+  // lands, so leaving keeps it without asking: there is nothing in flight
+  // to commit or to lose.
+  exitPolicy: "commit-if-safe",
 };

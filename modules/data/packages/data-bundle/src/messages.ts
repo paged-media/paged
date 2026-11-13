@@ -71,6 +71,7 @@ export const CATEGORY = defineMessages("commandCategory", {
 
 /** The Bindings panel. */
 export const BINDINGS = defineMessages("data.bindings", {
+  contextLabel: "Data binding",
   kindVariable: "variable field",
   fieldVariable: "field (column name)",
   kindImage: "image",

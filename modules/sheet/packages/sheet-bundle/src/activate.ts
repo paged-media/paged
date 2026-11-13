@@ -664,6 +664,13 @@ export function activate(host: BundleHost): BundleHandle {
   host.contribute.editContext({
     type: "sheet",
     entry: "doubleClick",
+    // Extensions ADR 1106 — the breadcrumb's name (F-45). Committed cell
+    // edits are the workbook's at once (the session's journal), so leaving
+    // keeps them without asking; a cell still being typed is the context's
+    // sub-edit (Escape cancels it, ADR 1207) and asks before a document
+    // switch.
+    label: t(PANELS.contextLabel),
+    exitPolicy: "commit-if-safe",
     // ADR 024 — NO CANVAS TOOL EDITS A SPREADSHEET, and saying so is
     // now possible: a declared-empty list restricts to nothing, where
     // it used to collapse into "unrestricted" and leave the whole rail

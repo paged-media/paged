@@ -272,6 +272,7 @@ export type {
   EditContextCandidate,
   EnteredEditContext,
   EditContextHistory,
+  EditContextExitPolicy,
   ContentPointerEvent,
   ContentWheelEvent,
   EditContextDescriptor,

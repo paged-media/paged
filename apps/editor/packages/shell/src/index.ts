@@ -451,14 +451,60 @@ export {
 } from "./registries/document-io";
 export {
   EditContextStackProvider,
+  useContextExit,
   useEditContextStack,
   useOptionalEditContextStack,
+  type ContextExit,
+  type ContextLeave,
   type EditContextFrame,
   type EditContextStackValue,
   type EnterPoint,
 } from "./state/edit-context-stack";
+// Editor ADR 1211 — one way out of an edit context.
+export {
+  DEFAULT_EXIT_POLICY,
+  askContextExit,
+  attachContextExitPromptSurface,
+  contextExitPrompts,
+  resolveContextExit,
+  resolutionOfAnswer,
+  type ContextExitAnswer,
+  type ContextExitPolicy,
+  type ContextExitReason,
+  type ContextExitResolution,
+  type ContextExitState,
+  type PendingContextExit,
+} from "./state/context-exit";
+export {
+  createEditContextStore,
+  reduceEditContexts,
+  scopeQueryOf,
+  type EditContextAction,
+  type EditContextEffect,
+  type EditContextState,
+  type EditContextStore,
+  type ScopeQuery,
+} from "./state/edit-context-store";
+export { ContextExitPrompt } from "./chrome/ContextExitPrompt";
+// Editor ADR 1212 — Frame, Content, Edit.
+export {
+  IMAGE_CONTENT_CONTEXT,
+  contentToPage,
+  createImageContentContext,
+  currentFrameLevel,
+  frameLevelDepth,
+  frameLevels,
+  imageEditorOf,
+  type FrameContentFacts,
+  type FrameLevel,
+  type FrameLevelId,
+} from "./state/frame-content";
+export { FrameLevelControl } from "./chrome/FrameLevelControl";
 export { pageToContentPoint } from "./state/content-point";
-export { EditContextBreadcrumb } from "./chrome/EditContextBreadcrumb";
+export {
+  ContextTrail,
+  EditContextBreadcrumb,
+} from "./chrome/EditContextBreadcrumb";
 export {
   useEditContextEntry,
   type DoubleClickHit,

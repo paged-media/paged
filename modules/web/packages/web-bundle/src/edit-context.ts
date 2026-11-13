@@ -53,6 +53,7 @@ import type { InFrameEditSession } from "./in-frame-edit";
 import type { DraftSession } from "./panels/draft-store";
 
 const M = defineMessages("web.edit", {
+  contextLabel: "Web frame",
   undoSource: "Undo source edit",
   redoSource: "Redo source edit",
   undoTyping: "Undo typing",
@@ -173,6 +174,12 @@ export function makeWebFrameEditContext(
     ...inFrameHooks,
     type: WEB_FRAME_TYPE,
     entry: "doubleClick",
+    // Extensions ADR 1106 — the name the breadcrumb shows (F-45), and how
+    // the host leaves: typed source is committed by every exit but an
+    // explicit cancel (Escape mid-typing cancels the typing as a sub-edit,
+    // ADR 1207); a dirty frame on a document switch asks first.
+    label: t(M.contextLabel),
+    exitPolicy: "commit-if-safe",
     // No `matches` here: the OBJECT TYPE already routes the double-click
     // to this context (path 1 of resolveDoubleClick). A bare-kind match
     // would be wrong — every rectangle is not a webFrame. The context is

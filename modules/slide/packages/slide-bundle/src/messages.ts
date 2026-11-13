@@ -77,6 +77,7 @@ export const COMMENTS = defineMessages("slide.comments", {
 
 export const PANELS = defineMessages("slide.panels", {
   slide: "Slide",
+  chart: "Chart",
   transition: "Transition",
   notes: "Speaker notes",
   placeholder: "Placeholder",

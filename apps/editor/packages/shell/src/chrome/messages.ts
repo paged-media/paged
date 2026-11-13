@@ -249,6 +249,25 @@ export const EDIT_CONTEXT = defineMessages("shell.editContext", {
   label: "Edit context",
   editing: "Editing",
   exit: "Exit edit context (Esc)",
+  group: "Group",
+});
+
+export const FRAME_CONTENT = defineMessages("shell.frameContent", {
+  label: "Edit level",
+  frame: "Frame",
+  content: "Content",
+  imageContent: "Image content",
+  editImage: "Edit image",
+});
+
+export const CONTEXT_EXIT = defineMessages("shell.contextExit", {
+  title: "Keep the changes in {label}?",
+  body: "{label} has changes that are not finished yet.",
+  bodyDocument:
+    "Another document is about to open. {label} has changes that are not finished yet.",
+  commit: "Keep changes",
+  discard: "Discard changes",
+  cancel: "Cancel",
 });
 
 export const TOOL_OPTIONS = defineMessages("shell.toolOptions", {

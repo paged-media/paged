@@ -244,7 +244,12 @@ import {
   DRAW_PROPERTIES_PANEL_ID,
   publishDrawPropertyLists,
 } from "./panels/properties-panel";
-import { defineTranslations } from "@paged-media/strings";
+import { defineMessages, defineTranslations, t } from "@paged-media/strings";
+
+/** Extensions ADR 1106 — the vector-graphic context's user-facing name. */
+const DRAW_CONTEXT = defineMessages("draw.editContext", {
+  label: "Vector graphic",
+});
 
 // The bundle's translations (`locales/<locale>.json`), registered beside
 // its English messages whenever the bundle loads.
@@ -646,6 +651,9 @@ export function activate(host: BundleHost): BundleHandle {
   // its matcher / tool set / panel set) are untouched.
   contributeEditContext(host, {
     ...vectorGraphicEditContext,
+    // Extensions ADR 1106 — the context's name in the editor's language
+    // (the breadcrumb and the context toolbar show it, F-45).
+    label: t(DRAW_CONTEXT.label),
     onEnter: (ctx) => {
       vectorGraphicEditContext.onEnter?.(ctx);
       layersProvider.enter(ctx.id);

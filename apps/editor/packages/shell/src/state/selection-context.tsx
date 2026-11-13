@@ -130,8 +130,31 @@ interface SelectionContextValue {
    * handler — keeping it as a plain string sidesteps cross-package
    * ElementId imports for state-only consumers. */
   activeGroup: string | null;
-  setActiveGroup: (groupId: string | null) => void;
+  /** Enter `groupId` (null leaves every group). `chain` is the hit's
+   *  group chain, outermost first, when the caller has it: the entered
+   *  path is its prefix up to `groupId`. */
+  setActiveGroup: (groupId: string | null, chain?: readonly string[]) => void;
+  /** The entered groups, outermost first, ending at `activeGroup` (empty
+   *  when none is): the breadcrumb's group levels (editor ADR 1211). */
+  activeGroupPath: readonly string[];
 }
+
+/** The entered path after entering `groupId`: the prefix of `chain` (else
+ *  of the previous path) up to it, else the group alone. */
+export function groupPathFor(
+  groupId: string | null,
+  chain: readonly string[] | undefined,
+  previous: readonly string[],
+): readonly string[] {
+  if (groupId === null) return NO_GROUPS;
+  const inChain = chain ? chain.indexOf(groupId) : -1;
+  if (chain && inChain >= 0) return chain.slice(0, inChain + 1);
+  const inPrevious = previous.indexOf(groupId);
+  if (inPrevious >= 0) return previous.slice(0, inPrevious + 1);
+  return [groupId];
+}
+
+const NO_GROUPS: readonly string[] = [];
 
 const Context = createContext<SelectionContextValue | null>(null);
 
@@ -203,7 +226,17 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   );
   const [pathEditSession, setPathEditSession] =
     useState<PathEditSession | null>(null);
-  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [activeGroup, setActiveGroupState] = useState<string | null>(null);
+  const [activeGroupPath, setActiveGroupPath] =
+    useState<readonly string[]>(NO_GROUPS);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setActiveGroup = useCallback(
+    (groupId: string | null, chain?: readonly string[]) => {
+      setActiveGroupState(groupId);
+      setActiveGroupPath((prev) => groupPathFor(groupId, chain, prev));
+    },
+    [],
+  );
 
   // A selection belongs to its document. When another document replaces
   // it, the engine starts with nothing selected; the mirror must too, or
@@ -243,6 +276,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
       setPathEditSession,
       activeGroup,
       setActiveGroup,
+      activeGroupPath,
     }),
     [
       elementSelection,
@@ -258,6 +292,8 @@ export function SelectionProvider({ children }: PropsWithChildren) {
       setSelectedAnchorIndex,
       pathEditSession,
       activeGroup,
+      setActiveGroup,
+      activeGroupPath,
     ],
   );
 

@@ -263,6 +263,51 @@ export interface EditContextContribution {
   /** K-1 — modal CANCEL (Esc): revert the in-flight edits. Fires before
    *  `onExit`. */
   onCancel?(): void;
+  /**
+   * Extensions ADR 1106 (the interaction contract's D-04) — how the host
+   * may leave this context while it holds unfinished work. One exit
+   * resolver decides every way out — Escape, a press outside the frame,
+   * the breadcrumb, another tool, another selection, another document, a
+   * profile change — from the reason, whether {@link isDirty} answers
+   * true, and this policy:
+   *
+   *  - `"commit-if-safe"`: committing is always safe here ({@link onCommit}
+   *    keeps the work, and the document can undo it), so every exit that
+   *    is not an explicit cancel commits without asking, and Escape commits
+   *    a clean context too. A dirty context asks on Escape and on a
+   *    document switch.
+   *  - `"ask"`: a dirty context is never left without the user's answer:
+   *    the host asks Commit, Discard or Cancel (Cancel keeps the context).
+   *  - `"discard-allowed"`: the in-flight work may be thrown away on an
+   *    explicit cancel: Escape and a document switch cancel without asking;
+   *    every other exit still commits. Nothing is ever discarded silently.
+   *
+   * A clean context is left at once whatever the reason. Absent ⇒
+   * `"discard-allowed"`, which is what the host did before the field
+   * existed (Escape cancels, a press outside commits). Probe
+   * `supports("editContext.exitPolicy@1")`: true when the host resolves
+   * exits by it.
+   */
+  exitPolicy?: EditContextExitPolicy;
+  /**
+   * Extensions ADR 1106 — the context's name as the user reads it, in the
+   * editor's language (`host.strings.t`): "Spreadsheet", "Web frame",
+   * "Image". The host shows it in the breadcrumb, the context toolbar and
+   * the Frame / Content / Edit control instead of the type, which is an
+   * identifier. Absent ⇒ the type, title-cased.
+   */
+  label?: string;
+  /**
+   * Extensions ADR 1106 (the interaction contract's D-05) — this context
+   * edits the pixels of a placed image. A double-click on a frame that
+   * holds an image positions the image inside its frame first (the host's
+   * content level); the host offers the first registered context that
+   * declares this as the frame's explicit "Edit" level: the context
+   * toolbar's button, Enter, or a second double-click enter it on that
+   * frame, whether or not its matcher claims the frame (a placed image
+   * carries no metadata of the bundle's yet; `onEnter` takes it in).
+   */
+  editsPlacedImages?: boolean;
   /** ADR-012 Tier 1 — in-session undo OWNERSHIP. While this context is
    *  active and declares these hooks, the shell routes Cmd-Z /
    *  Cmd-Shift-Z HERE (the plugin's own op-log — for sheets, workbook
@@ -304,6 +349,11 @@ export interface EditContextContribution {
    *  bundle's manifest at registration; authors leave it undefined. */
   metadataKey?: string;
 }
+
+/** Extensions ADR 1106 — how the host may leave a dirty edit context
+ *  ({@link EditContextContribution.exitPolicy}). */
+export type EditContextExitPolicy =
+  "commit-if-safe" | "ask" | "discard-allowed";
 
 /** Editor ADR 285 — an edit context's own history ({@link
  *  EditContextContribution.historySteps}). */

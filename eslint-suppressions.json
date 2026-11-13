@@ -183,11 +183,6 @@
       "count": 1
     }
   },
-  "apps/editor/packages/shell/src/state/edit-context-stack.tsx": {
-    "react-hooks/refs": {
-      "count": 2
-    }
-  },
   "apps/editor/packages/shell/src/state/paged-editor.tsx": {
     "react-hooks/refs": {
       "count": 1

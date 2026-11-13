@@ -126,6 +126,7 @@ import {
 } from "./object-model/contribute";
 
 const CMD = defineMessages("image.command", {
+  contextLabel: "Image",
   image: "Image",
   openImagePanel: "Open image panel",
   adjustImage: "Adjust image",
@@ -2234,6 +2235,14 @@ export function activate(host: BundleHost): BundleHandle {
     },
     type: "rasterImage",
     entry: "doubleClick",
+    // Extensions ADR 1106 — the breadcrumb's name (F-45); leaving hands
+    // the pixels to the document whichever way (onExit commits), so the
+    // host never asks; and this is the context that edits a placed image's
+    // pixels: the host offers it as a picture frame's explicit "Edit
+    // image" level (D-05).
+    label: t(CMD.contextLabel),
+    exitPolicy: "commit-if-safe",
+    editsPlacedImages: true,
     // Claimed by OUR OWN METADATA, never by kind. The candidate is a
     // pure snapshot (id / kind / groupChain / this plugin's envelope)
     // and cannot be asked "does this rectangle hold placed raster
@@ -2299,9 +2308,16 @@ export function activate(host: BundleHost): BundleHandle {
     // from the value lane, and the host already infers "serves" from
     // `provides` to decide whether to withhold a raise.
     panelIds: [PANEL_ID],
-    onEnter: () => {
+    onEnter: (ctx) => {
       host.log.debug("rasterImage context entered");
       workspaceSub.setContextActive(true);
+      // D-05 (editor ADR 1212) — the host's "Edit image" enters this
+      // context on any frame holding a picture, also one this session has
+      // not taken in (no marker of ours yet): take it in now, as Adjust
+      // image does. The host selected the frame before entering.
+      const source = session.sourceElement() as { id?: unknown } | null;
+      const entered = ctx.id as unknown as { id?: unknown };
+      if (source?.id !== entered.id) void session.ingestSelection();
     },
     onExit: () => {
       host.log.debug("rasterImage context exited");

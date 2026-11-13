@@ -139,6 +139,7 @@
   "draw.cut.shapeBuilder": "Formerstellung entlang eines Pfads",
   "draw.dxf.exporterTitle": "DXF (Auswahl oder Seite)",
   "draw.dxf.importerTitle": "DXF (AutoCAD-Zeichnungsaustausch)",
+  "draw.editContext.label": "Vektorgrafik",
   "draw.envelope.editContents": "Verzerrungshülle: Inhalt bearbeiten",
   "draw.envelope.expand": "Verzerrungshülle: Umwandeln",
   "draw.envelope.expandAppearance": "Aussehen umwandeln",
