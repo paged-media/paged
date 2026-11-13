@@ -84,7 +84,7 @@ paged.slide's import and export diagnostics and `paged-ps`'s `Report.unsupported
    | charts   | `pptx.chart.sheetLayout`, `pptx.chart.notLive` (approximated), `pptx.chart.missing` (dropped)        |
    | comments | `pptx.comments.{authors,unreadable}` (dropped)                                                       |
    | fonts    | `pptx.font.embedded` (approximated: drawn in a substitute)                                          |
-   | export   | `pptx.export.{document,editorSlide,foreignSlide,contentEdits,slide,notes,timing,mediaTiming,chart,chartData,theme,unreadablePart,masterDelete,layoutDelete,masterShapes,placeholderStyle,shape,smartartText,properties,link,pictureFrame,media,tableGrid,copy,group}` (dropped); `pptx.export.{text,mediaPlay,deadLinks}` and `pptx.export.media` for a medium written as a picture (approximated); `pptx.export.picture` (as `look`) |
+   | export   | `pptx.export.{document,editorSlide,foreignSlide,contentEdits,slide,notes,timing,mediaTiming,chart,chartData,theme,unreadablePart,masterDelete,layoutDelete,masterShapes,placeholderStyle,shape,smartartText,properties,link,pictureFrame,media,tableGrid,copy,group}` (dropped); `pptx.export.{text,mediaPlay,deadLinks}` and `pptx.export.media` for a medium written as a picture (approximated) |
 
 2. **Older reports read.** A document keeps its import report as a container part
    (`import/report.json`); one written before the codes holds sentences. `pptx_core::loss::read_losses`
@@ -155,9 +155,13 @@ The IDML export's `lost` lines and the DrawingML mapper's sentences are loss ent
    | lines | `dml.line.triple`, `dml.line.gradient`, `dml.line.translucent` (approximated) |
    | effects | `dml.shadow.preset`, `dml.blur.grow` (approximated); `dml.shadow.distorted`, `dml.shadow.presetBeside`, `dml.reflection.distorted`, `dml.3d.camera`, `dml.3d.bevelBottom`, `dml.3d.contour`, `dml.effect.unread` (dropped) |
    | pictures | `dml.picture.blurWide` (approximated); `dml.picture.clrReplAlpha`, `dml.picture.blur`, `dml.picture.tint`, `dml.picture.effect`, `dml.picture.adjustment` (dropped) |
+   | pictures, saved | `dml.picture.grayWeights`, `dml.picture.clrChangeTolerance` (approximated); `dml.picture.hslRanges`, `dml.picture.blurScale`, `dml.picture.unsaved` (dropped) |
 
-   The save direction (`dml_native::picture::effects_of`, an engine filter stack written back as
-   DrawingML) still answers sentences; paged.slide's export wraps them as `pptx.export.picture`.
+   The save direction (`dml_native::picture::effects_of` / `blip_xml` / `splice_blip`, an engine
+   filter stack written back as DrawingML) answers entries too (2026-11-13): paged.slide's export
+   records them with their own codes, the slide and shape in the message (the wrapper code
+   `pptx.export.picture` is gone); paged.doc's save-back ledger, a list of lines, carries the code
+   on each line.
 4. **Ratchet.** The `loss-report` baseline is empty: no `losses` / `lost` / `unsupported` /
    `not_exported` field of `Vec<String>` is left.
 
