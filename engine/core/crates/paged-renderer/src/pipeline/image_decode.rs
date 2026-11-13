@@ -238,7 +238,7 @@ pub(super) fn decode_image_bytes_with_target_max(
 /// Decode at a caller-supplied longest-edge cap, converting a CMYK raster
 /// with `rendering`.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(super) fn decode_image_bytes_with(
+pub(crate) fn decode_image_bytes_with(
     bytes: &[u8],
     max_px: u32,
     rendering: paged_color::cms::Rendering,

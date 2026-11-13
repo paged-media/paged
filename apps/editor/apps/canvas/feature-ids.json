@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 924,
+    "command": 925,
     "keybinding": 201,
-    "menu": 668,
+    "menu": 669,
     "panel": 151,
     "tool": 123
   },
@@ -2517,6 +2517,11 @@
     },
     {
       "id": "command:media.paged.image.command.pathToSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.placeLayersAsFrames",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -7462,6 +7467,11 @@
     },
     {
       "id": "menu:Image/Layer/New/Layer via cut",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Place layers as frames",
       "kind": "menu",
       "owner": "media.paged.image"
     },

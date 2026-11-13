@@ -1,6 +1,8 @@
 # ADR 480 — The fold tile by tile past the device's limits, and on the CPU without one
 
-- **Status:** Accepted, 2026-10-29 (WP5.13, second part; amends 450, 454 and 465).
+- **Status:** Accepted, 2026-10-29 (WP5.13, second part; amends 450, 454 and 465). Amended 2026-11-12 by engine ADR 1099: the CPU fold draws
+  LAYER STYLES too, through the engine's layer-style evaluator on its CPU device (the kernels' shipped
+  twins), held to the same Photoshop table as the GPU fold.
 - **Scope:** `image-js/src/layers/fold/tiled.rs` (the tiled fold, its halo, the damage
   between composites), `layers/fold/cpu.rs` (the CPU fold), `layers/fold.rs` (`Frame`,
   `run_steps` at a frame), `layers/styles.rs` (effects drawn in canvas coordinates),

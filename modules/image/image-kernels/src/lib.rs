@@ -27,10 +27,10 @@
 //! scalar Rust twin from a single expression — one source of truth.
 
 pub mod abi;
-/// The compose family's scalar twins: the test-only reference and (feature
-/// `cpu`) the layer fold's CPU path (image ADR 480).
+/// The compose family's scalar twins (in `paged-kernels`): the test-only
+/// reference and (feature `cpu`) the layer fold's CPU path (image ADR 480).
 #[cfg(any(feature = "reference", feature = "cpu"))]
-pub mod compose_twin;
+pub use paged_kernels::compose_twin;
 /// The shipped CPU twins of the adjustment chain's kernels (feature
 /// `cpu`; ADR 465). The `reference` feature stays test-only.
 #[cfg(feature = "cpu")]

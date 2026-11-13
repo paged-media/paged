@@ -765,6 +765,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //   → `SvgExported { svg, report }` / `ExportSvgFailed { error }`. The
 //   additive PropertyPath `frameGradientFillStart` rides it. New message
 //   kinds an older worker cannot answer, hence the bump.
+// v78 (rider) — "Place PSD layers as frames" (engine ADR 1099):
+//   `RequestPsdLayersPlace { pageId, bytes, options }` → `PsdLayersPlanned`
+//   (the one batch to apply, one undo step, and the losses). The effect
+//   kind `patternOverlay` rides it. A new message kind an older worker
+//   cannot answer.
 // v77 (rider) — view modes and snapping v2 (editor ADR 287):
 //   - `SetViewSettings { settings }` → `ViewSettingsApplied { settings }`:
 //     the screen's mode (Preview, Outline, Overprint Preview, Pixel
@@ -1732,6 +1737,20 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         options: paged_svg::SvgImportOptions,
     },
+    /// v78 rider (engine ADR 1099) — plan placing the layers of a PSD (or
+    /// PSB) file onto `page_id` as frames: each pixel layer a frame with
+    /// its pixels, blend mode, opacity, fill opacity and layer style (as
+    /// the frame's effect stack, drawn by the layer-style evaluator). Pure
+    /// READ: the reply `PsdLayersPlanned` carries the batch for the caller
+    /// to apply with `Mutate` (one undo step) and what the frames could
+    /// not carry.
+    RequestPsdLayersPlace {
+        page_id: PageId,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        #[serde(default)]
+        options: crate::psd_io::PsdPlaceOptions,
+    },
     /// v77 (engine ADR 1031) — write the page `page_id` as an SVG
     /// document; with `element_ids`, nothing but those items, the view
     /// box fitted to what they draw. Pure READ. Reply: `SvgExported`, or
@@ -2277,6 +2296,10 @@ pub enum WorkerToMainKind {
     /// (absent when the file draws nothing or could not be read, `error`
     /// then says why), `report` what was approximated or left out.
     SvgImportPlanned(paged_svg::SvgImportPlan),
+    /// v78 rider — `RequestPsdLayersPlace` reply: `mutation` is the batch
+    /// to apply (absent when nothing could be placed, `error` then says
+    /// why), `losses` what the frames could not carry.
+    PsdLayersPlanned(crate::psd_io::PsdPlacePlan),
     /// v77 — `ExportSvg` reply: the document and its report.
     SvgExported {
         svg: String,

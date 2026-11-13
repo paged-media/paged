@@ -58,6 +58,7 @@ pub(crate) fn parse_drop_shadow(e: &quick_xml::events::BytesStart) -> Option<Dro
         knocked_out: attr(e, b"KnockedOut").and_then(|s| s.parse().ok()),
         honor_other_effects: attr(e, b"HonorOtherEffects").and_then(|s| s.parse().ok()),
         use_global_light: attr(e, b"UseGlobalLight").and_then(|s| s.parse().ok()),
+        ..Default::default()
     })
 }
 
@@ -111,6 +112,7 @@ pub(crate) fn effect_into(e: &quick_xml::events::BytesStart, bag: &mut FrameEffe
                 blend_mode: attr(e, b"BlendMode"),
                 noise_pct: parse_f(e, b"Noise"),
                 use_global_light: parse_bool(e, b"UseGlobalLight"),
+                ..Default::default()
             });
         }
         b"OuterGlowSetting" => {
@@ -122,6 +124,7 @@ pub(crate) fn effect_into(e: &quick_xml::events::BytesStart, bag: &mut FrameEffe
                 blend_mode: attr(e, b"BlendMode"),
                 noise_pct: parse_f(e, b"Noise"),
                 technique: attr(e, b"Technique"),
+                ..Default::default()
             });
         }
         b"InnerGlowSetting" => {
@@ -135,6 +138,7 @@ pub(crate) fn effect_into(e: &quick_xml::events::BytesStart, bag: &mut FrameEffe
                 source: attr(e, b"Source"),
                 noise_pct: parse_f(e, b"Noise"),
                 technique: attr(e, b"Technique"),
+                ..Default::default()
             });
         }
         b"BevelAndEmbossSetting" => {
@@ -154,6 +158,7 @@ pub(crate) fn effect_into(e: &quick_xml::events::BytesStart, bag: &mut FrameEffe
                 highlight_blend_mode: attr(e, b"HighlightBlendMode"),
                 shadow_blend_mode: attr(e, b"ShadowBlendMode"),
                 use_global_light: parse_bool(e, b"UseGlobalLight"),
+                ..Default::default()
             });
         }
         b"SatinSetting" => {
@@ -167,6 +172,7 @@ pub(crate) fn effect_into(e: &quick_xml::events::BytesStart, bag: &mut FrameEffe
                 invert: attr(e, b"InvertEffect")
                     .or_else(|| attr(e, b"Invert"))
                     .and_then(|s| s.parse::<bool>().ok()),
+                ..Default::default()
             });
         }
         b"FeatherSetting" => {

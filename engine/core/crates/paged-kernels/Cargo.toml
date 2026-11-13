@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Kernel definitions shared by the engine and paged.image (PM-0014, engine ADR 1013): the pixel type, the kernel model, the param blocks, the shipped CPU twins of the adjustment and convolution kernels, and the convolution family's definitions. Leaf crate: depends on nothing in the workspace."
+description = "Kernel definitions shared by the engine and paged.image (PM-0014, engine ADR 1013): the pixel type, the kernel model, the param blocks, the shipped CPU twins of the adjustment and convolution kernels, and the convolution family's definitions. Depends only on the leaf paged-blend."
 
 [lints]
 workspace = true
@@ -20,6 +20,8 @@ reference = []
 cpu = []
 
 [dependencies]
+# The blend formulas the compose twin shares with the engine (engine ADR 1034).
+paged-blend = { path = "../paged-blend" }
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 
 [dev-dependencies]

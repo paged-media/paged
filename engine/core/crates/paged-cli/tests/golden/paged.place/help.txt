@@ -24,6 +24,9 @@ Options:
       --transform <A,B,C,D,TX,TY>
           The placed image's own transform, `a,b,c,d,tx,ty` — how a crop is expressed exactly rather than approximated by a fit
 
+      --layers
+          A PSD's LAYERS as frames (engine ADR 1099): each pixel layer a frame with its pixels, blend mode, opacities and layer style, the canvas's top-left at the frame's; the frame goes
+
   -o, --out <OUT>
           Write the result here. The format follows the extension
 

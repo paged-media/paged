@@ -508,6 +508,11 @@ pub fn describe(kind: EffectKind) -> EffectKindRow {
                 ),
             ],
         ),
+        // Engine ADR 1099 — a layer style's: its pattern stays on the
+        // model (the wire form has no fields for it); a placed PSD layer's
+        // stack carries it, and an add menu does not offer a kind it could
+        // not fill.
+        K::PatternOverlay => stack_only(kind, "Pattern overlay (layer style)", "stylize", vec![]),
         K::Roughen => vector(
             kind,
             "Roughen",
@@ -867,10 +872,11 @@ mod tests {
                 );
             }
             // Outline Stroke outlines the item's own stroke: a vector kind
-            // without parameters.
+            // without parameters. A pattern overlay's pattern is not on the
+            // wire (engine ADR 1099).
             assert_eq!(
                 row.indesign,
-                row.params.is_empty() && row.kind != "outlinePath",
+                row.params.is_empty() && row.kind != "outlinePath" && row.kind != "patternOverlay",
                 "{}",
                 row.kind
             );

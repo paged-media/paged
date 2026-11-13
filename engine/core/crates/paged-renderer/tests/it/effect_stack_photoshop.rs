@@ -124,6 +124,7 @@ fn stroke(position: StrokePosition) -> EffectEntry {
         size_pt: 4.0,
         position,
         color: Some("Color/Red".into()),
+        ..Default::default()
     }))
 }
 

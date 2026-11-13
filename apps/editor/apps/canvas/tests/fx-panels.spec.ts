@@ -79,8 +79,17 @@ const CATALOG = JSON.parse(
     category: string;
     targets: string[];
     strokeStyle?: boolean;
+    indesign: boolean;
+    vector?: boolean;
+    params: unknown[];
   }>;
 };
+
+/** The Effect menu offers a kind with parameters to set (effect-stack.ts
+ *  `offered`): a layer style's pattern overlay, whose pattern the wire
+ *  form cannot carry (engine ADR 1099), has no row. */
+const offered = (k: (typeof CATALOG.effectKinds)[number]) =>
+  k.indesign || k.vector === true || k.params.length > 0;
 
 const SEGMENTS: Record<string, string> = {
   stylize: "Stylize",
@@ -151,7 +160,7 @@ test.describe("Effects, Transparency and Appearance (editor ADR 309)", () => {
     // The stroke styles (brush, width profile; engine ADR 1053) are the
     // Brushes panel's: the Effect menu has no row for them.
     const kinds = CATALOG.effectKinds.filter(
-      (k) => !k.strokeStyle && k.targets.includes("object"),
+      (k) => !k.strokeStyle && offered(k) && k.targets.includes("object"),
     );
     const groupKinds = CATALOG.effectKinds.filter(
       (k) => !k.targets.includes("object") && k.targets.includes("group"),

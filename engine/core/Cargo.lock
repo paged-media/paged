@@ -2771,6 +2771,7 @@ dependencies = [
  "paged-image-adjust",
  "paged-pixel",
  "paged-psd",
+ "paged-psd-fx",
  "paged-resample",
  "paged-test-resources",
  "paged-warp",
@@ -2831,6 +2832,7 @@ dependencies = [
  "paged-color",
  "paged-image-adjust",
  "paged-kernels",
+ "paged-layer-fx",
  "paged-model",
  "paged-pixel",
  "paged-psd",
@@ -2857,7 +2859,6 @@ dependencies = [
  "bytemuck",
  "half",
  "naga",
- "paged-blend",
  "paged-kernels",
  "paged-pixel",
  "paged-warp",
@@ -4118,6 +4119,8 @@ dependencies = [
  "paged-ocf",
  "paged-pixel",
  "paged-preset-geom",
+ "paged-psd",
+ "paged-psd-fx",
  "paged-raster",
  "paged-renderer",
  "paged-scene",
@@ -4570,6 +4573,19 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "naga",
+ "paged-blend",
+]
+
+[[package]]
+name = "paged-layer-fx"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "half",
+ "paged-blend",
+ "paged-kernels",
+ "paged-model",
+ "paged-pixel",
 ]
 
 [[package]]
@@ -4746,8 +4762,10 @@ dependencies = [
 name = "paged-psd-fx"
 version = "0.0.0"
 dependencies = [
+ "paged-blend",
  "paged-color",
  "paged-model",
+ "paged-pixel",
  "paged-psd",
 ]
 
@@ -4803,6 +4821,7 @@ dependencies = [
  "paged-geom",
  "paged-gpu",
  "paged-image-adjust",
+ "paged-layer-fx",
  "paged-math",
  "paged-model",
  "paged-mutate",

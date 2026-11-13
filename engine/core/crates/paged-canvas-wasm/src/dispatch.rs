@@ -899,6 +899,20 @@ impl WorkerCore {
                     model.svg_import_plan(&page_id, &bytes.0, &options),
                 )
             }
+            MainToWorkerKind::RequestPsdLayersPlace {
+                page_id,
+                bytes,
+                options,
+            } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                WorkerToMainKind::PsdLayersPlanned(
+                    model.psd_layers_place_plan(&page_id, &bytes.0, &options),
+                )
+            }
             MainToWorkerKind::ExportSvg {
                 page_id,
                 element_ids,

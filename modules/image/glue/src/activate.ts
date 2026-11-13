@@ -44,6 +44,7 @@ import {
   PROPERTIES_PANEL_ID,
   publishPropertyLists,
 } from "./panels/properties-panel";
+import { placeLayersAsFrames } from "./place-layers";
 import { contributeMenu } from "./menu";
 import { defineMessages, defineTranslations, t } from "@paged-media/strings";
 
@@ -168,6 +169,7 @@ const CMD = defineMessages("image.command", {
   smartEmbed: "Embed linked smart object",
   smartExportContents: "Export smart object contents…",
   smartPlacePageItems: "Place selected page items as a smart object",
+  placeLayersAsFrames: "Place the PSD's layers as frames",
   convertForSmartFilters: "Convert for smart filters",
   definePatternFromSelectionImage: "Define pattern from selection (image)",
   fillSelectionWithTheDefinedPattern: "Fill selection with the defined pattern",
@@ -1724,6 +1726,21 @@ export function activate(host: BundleHost): BundleHandle {
       },
     });
   }
+  // Engine ADR 1099 — the open PSD's layers as frames on the page.
+  command({
+    id: "media.paged.image.command.placeLayersAsFrames",
+    title: t(CMD.placeLayersAsFrames),
+    category: "Image",
+    handler: async () => {
+      host.shell.openPanel(PANEL_ID);
+      const o = await placeLayersAsFrames(host, session);
+      if (o.kind !== "placed") {
+        host.log.info(`place layers as frames: ${o.kind}`);
+      } else if (!o.result.applied) {
+        host.log.warn(`place layers as frames: ${o.result.error ?? "refused"}`);
+      }
+    },
+  });
   command({
     id: "media.paged.image.command.definePattern",
     title: t(CMD.definePatternFromSelectionImage),

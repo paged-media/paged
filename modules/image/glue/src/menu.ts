@@ -61,6 +61,7 @@ defineMessages("menu", {
   "Update from file…": "Update from file…",
   "Export contents…": "Export contents…",
   "Place selected page items": "Place selected page items",
+  "Place layers as frames": "Place layers as frames",
   "Convert for smart filters": "Convert for smart filters",
   "Gaussian blur…": "Gaussian blur…",
   Selection: "Selection",
@@ -419,6 +420,12 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
     "Image/Layer/Smart objects/Place selected page items",
     "smartPlacePageItems",
     "layer-smart-place",
+  ],
+  // Engine ADR 1099 — the open PSD's layers onto the page as frames.
+  [
+    "Image/Layer/Place layers as frames",
+    "placeLayersAsFrames",
+    "layer-place-frames",
   ],
   // Photoshop's Layer menu (WP5.3).
   ["Image/Layer/New/Layer via copy", "layerViaCopy", "layer"],

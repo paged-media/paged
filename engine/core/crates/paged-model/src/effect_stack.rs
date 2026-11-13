@@ -135,6 +135,23 @@ pub enum IndesignParams {
     GradientFeather(GradientFeatherParams),
 }
 
+impl IndesignParams {
+    /// The effect these parameters are of.
+    pub fn kind(&self) -> IndesignEffect {
+        match self {
+            IndesignParams::DropShadow(_) => IndesignEffect::DropShadow,
+            IndesignParams::InnerShadow(_) => IndesignEffect::InnerShadow,
+            IndesignParams::OuterGlow(_) => IndesignEffect::OuterGlow,
+            IndesignParams::InnerGlow(_) => IndesignEffect::InnerGlow,
+            IndesignParams::BevelEmboss(_) => IndesignEffect::BevelEmboss,
+            IndesignParams::Satin(_) => IndesignEffect::Satin,
+            IndesignParams::Feather(_) => IndesignEffect::Feather,
+            IndesignParams::DirectionalFeather(_) => IndesignEffect::DirectionalFeather,
+            IndesignParams::GradientFeather(_) => IndesignEffect::GradientFeather,
+        }
+    }
+}
+
 /// InDesign's dialog presets for its effects, the parameters an effect
 /// switched on without any of its own starts from. One definition: the
 /// mutation layer's per-field editors materialise the same values.
@@ -225,6 +242,7 @@ pub mod defaults {
             opacity_pct: Some(50.0),
             blend_mode: Some("Multiply".to_string()),
             invert: Some(true),
+            ..Default::default()
         }
     }
 
@@ -334,6 +352,9 @@ pub enum Effect {
     Noise(NoiseParams),
     /// A colour adjustment of everything painted so far.
     ColorAdjust(ColorAdjustParams),
+    /// Engine ADR 1099 — a raster pattern over the object's shape (a
+    /// layer style's Pattern Overlay). Drawn by the layer-style evaluator.
+    PatternOverlay(crate::layer_style::PatternOverlayParams),
     // Live vector effects (engine ADR 1042): they change the item's
     // geometry before anything paints it, in their order among
     // themselves; the paint and raster entries above act on the result.
@@ -363,7 +384,7 @@ pub enum Effect {
 }
 
 /// The stack-only effect kinds, by their serialised names.
-pub const STACK_ONLY_KINDS: [&str; 8] = [
+pub const STACK_ONLY_KINDS: [&str; 9] = [
     "gaussianBlur",
     "outlineStroke",
     "colorOverlay",
@@ -372,6 +393,7 @@ pub const STACK_ONLY_KINDS: [&str; 8] = [
     "softEdge",
     "noise",
     "colorAdjust",
+    "patternOverlay",
 ];
 
 impl Effect {
@@ -405,6 +427,7 @@ impl Effect {
             Effect::SoftEdge(_) => "softEdge",
             Effect::Noise(_) => "noise",
             Effect::ColorAdjust(_) => "colorAdjust",
+            Effect::PatternOverlay(_) => "patternOverlay",
             Effect::Roughen(_) => "roughen",
             Effect::ZigZag(_) => "zigZag",
             Effect::PuckerBloat(_) => "puckerBloat",
@@ -429,6 +452,32 @@ impl Effect {
     /// An InDesign effect's entry with nothing parked.
     pub fn slot(kind: IndesignEffect) -> Self {
         Self::with_parked(kind, None)
+    }
+
+    /// An InDesign effect's entry carrying its own parameters: parked
+    /// while it is disabled, or — engine ADR 1099 — a further INSTANCE of
+    /// an effect the slot already holds (a layer style may cast several
+    /// drop shadows; the first is the slot's, the others carry theirs).
+    pub fn carrying(params: IndesignParams) -> Self {
+        let kind = params.kind();
+        Self::with_parked(kind, Some(params))
+    }
+
+    /// The parameters an InDesign entry carries, if any.
+    pub fn carried(&self) -> Option<IndesignParams> {
+        use IndesignParams as P;
+        match self {
+            Effect::DropShadow { parked } => parked.clone().map(P::DropShadow),
+            Effect::InnerShadow { parked } => parked.clone().map(P::InnerShadow),
+            Effect::OuterGlow { parked } => parked.clone().map(P::OuterGlow),
+            Effect::InnerGlow { parked } => parked.clone().map(P::InnerGlow),
+            Effect::BevelEmboss { parked } => parked.clone().map(P::BevelEmboss),
+            Effect::Satin { parked } => parked.clone().map(P::Satin),
+            Effect::Feather { parked } => parked.clone().map(P::Feather),
+            Effect::DirectionalFeather { parked } => parked.clone().map(P::DirectionalFeather),
+            Effect::GradientFeather { parked } => parked.clone().map(P::GradientFeather),
+            _ => None,
+        }
     }
 
     fn with_parked(kind: IndesignEffect, params: Option<IndesignParams>) -> Self {
@@ -513,6 +562,7 @@ impl Effect {
             "softEdge" => Effect::SoftEdge(SoftEdgeParams::default()),
             "noise" => Effect::Noise(NoiseParams::default()),
             "colorAdjust" => Effect::ColorAdjust(ColorAdjustParams::default()),
+            "patternOverlay" => Effect::PatternOverlay(Default::default()),
             _ => return Self::vector_default(kind),
         })
     }
@@ -615,7 +665,23 @@ pub struct EffectEntry {
     /// kinds keep theirs in their parameters.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity_pct: Option<f32>,
+    /// Engine ADR 1099 — how the entry is drawn. `None` is the stack's own
+    /// convention (InDesign's, from the item's outline); `LayerStyle` is a
+    /// layer style's, drawn by the layer-style evaluator from the item's
+    /// rendered alpha with the parameters of [`crate::layer_style`]. An
+    /// entry with a convention is never canonical, so its stack is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub convention: Option<EffectConvention>,
     pub effect: Effect,
+}
+
+/// Engine ADR 1099 — which convention draws an entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectConvention {
+    /// A layer style's: Photoshop's falloffs, light and compositing
+    /// places, from the item's rendered alpha.
+    LayerStyle,
 }
 
 impl EffectEntry {
@@ -624,8 +690,14 @@ impl EffectEntry {
             enabled: true,
             blend_mode: None,
             opacity_pct: None,
+            convention: None,
             effect,
         }
+    }
+
+    /// Drawn by the layer-style evaluator (engine ADR 1099).
+    pub fn is_layer_style(&self) -> bool {
+        self.convention == Some(EffectConvention::LayerStyle)
     }
 
     /// The entry's opacity as a fraction.
@@ -681,6 +753,10 @@ pub struct OutlineStrokeParams {
     /// A swatch reference. `None` is black.
     #[serde(default)]
     pub color: Option<String>,
+    /// Engine ADR 1099 — a layer style's fill of the band: its colour, a
+    /// gradient or a pattern. Read by the layer-style evaluator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<crate::layer_style::FxFill>,
 }
 impl OutlineStrokeParams {
     fn default_size() -> f32 {
@@ -693,6 +769,7 @@ impl Default for OutlineStrokeParams {
             size_pt: Self::default_size(),
             position: StrokePosition::Outside,
             color: None,
+            fill: None,
         }
     }
 }
@@ -719,6 +796,11 @@ pub struct GradientOverlayParams {
     /// Run the gradient end to start.
     #[serde(default)]
     pub reverse: bool,
+    /// Engine ADR 1099 — a layer style's gradient: its ramp with opacity
+    /// stops, shape, scale, offset and alignment. Read by the layer-style
+    /// evaluator; `gradient` names a swatch of its colours for the rest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<crate::layer_style::FxGradientFill>,
 }
 
 /// PowerPoint's reflection.
@@ -919,7 +1001,8 @@ pub fn is_canonical(stack: &[EffectEntry]) -> bool {
         let Some(k) = e.effect.indesign() else {
             return false;
         };
-        if !e.enabled || e.blend_mode.is_some() || e.opacity_pct.is_some() {
+        if !e.enabled || e.blend_mode.is_some() || e.opacity_pct.is_some() || e.convention.is_some()
+        {
             return false;
         }
         if last.is_some_and(|l| l >= k.rank()) {
@@ -951,6 +1034,46 @@ impl<'a> SlotsRef<'a> {
             .iter()
             .filter(|k| self.is_present(**k))
             .map(|k| EffectEntry::new(Effect::slot(*k)))
+            .collect()
+    }
+
+    /// The parameters in `kind`'s slot.
+    pub fn slot_params(&self, kind: IndesignEffect) -> Option<IndesignParams> {
+        use IndesignParams as P;
+        if kind == IndesignEffect::DropShadow {
+            return self.drop_shadow?.clone().map(P::DropShadow);
+        }
+        let e = self.effects?;
+        match kind {
+            IndesignEffect::DropShadow => None,
+            IndesignEffect::InnerShadow => e.inner_shadow.clone().map(P::InnerShadow),
+            IndesignEffect::OuterGlow => e.outer_glow.clone().map(P::OuterGlow),
+            IndesignEffect::InnerGlow => e.inner_glow.clone().map(P::InnerGlow),
+            IndesignEffect::BevelEmboss => e.bevel.clone().map(P::BevelEmboss),
+            IndesignEffect::Satin => e.satin.clone().map(P::Satin),
+            IndesignEffect::Feather => e.feather.clone().map(P::Feather),
+            IndesignEffect::DirectionalFeather => {
+                e.directional_feather.clone().map(P::DirectionalFeather)
+            }
+            IndesignEffect::GradientFeather => e.gradient_feather.clone().map(P::GradientFeather),
+        }
+    }
+
+    /// Engine ADR 1099 — the resolved stack with each InDesign entry's
+    /// parameters: the slot's for the first enabled instance of a kind,
+    /// the entry's own for a disabled one or a further instance.
+    pub fn with_params(&self) -> Vec<(EffectEntry, Option<IndesignParams>)> {
+        let mut first = std::collections::HashSet::new();
+        self.resolved()
+            .into_iter()
+            .map(|e| {
+                let params = match e.effect.indesign() {
+                    Some(k) if first.insert(k) && e.enabled => self.slot_params(k),
+                    Some(_) => e.effect.carried(),
+                    None => None,
+                };
+                (e, params)
+            })
             .collect()
     }
 
@@ -1060,7 +1183,9 @@ impl<'a> SlotsMut<'a> {
         for e in &new {
             match e.effect.indesign() {
                 Some(k) => {
-                    if !seen.insert(k) {
+                    // Engine ADR 1099 — a further instance carries its own
+                    // parameters; only a bare duplicate is refused.
+                    if !seen.insert(k) && !e.effect.has_parked() {
                         return Err(StackError::Duplicate(k.kind_name()));
                     }
                     if !self.as_ref().has_slot(k) {
@@ -1092,8 +1217,15 @@ impl<'a> SlotsMut<'a> {
             }
         }
         let mut out = Vec::with_capacity(new.len());
+        let mut placed = std::collections::HashSet::new();
         for mut e in new {
             if let Some(k) = e.effect.indesign() {
+                if !placed.insert(k) {
+                    // A further instance keeps its own parameters, on the
+                    // stack; the slot is the first instance's.
+                    out.push(e);
+                    continue;
+                }
                 let params = e
                     .effect
                     .take_parked()
@@ -1121,15 +1253,18 @@ impl<'a> SlotsMut<'a> {
     pub fn unpark(&mut self) -> Vec<IndesignEffect> {
         let mut moved = Vec::new();
         let mut params = Vec::new();
+        let mut first = std::collections::HashSet::new();
         for e in self.stack.iter_mut() {
-            if e.enabled {
+            let Some(k) = e.effect.indesign() else {
+                continue;
+            };
+            // A further instance (engine ADR 1099) is not the slot's.
+            if !first.insert(k) || e.enabled {
                 continue;
             }
-            if let Some(k) = e.effect.indesign() {
-                if let Some(p) = e.effect.take_parked() {
-                    moved.push(k);
-                    params.push(p);
-                }
+            if let Some(p) = e.effect.take_parked() {
+                moved.push(k);
+                params.push(p);
             }
         }
         for p in params {
@@ -1386,6 +1521,52 @@ effect_bearing!(crate::Polygon, no);
 // Engine ADR 1045 — an anchored frame carries the free frames' slots.
 effect_bearing!(crate::AnchoredFrame, yes);
 
+/// Engine ADR 1099 — keep on a rewritten stack what its wire form
+/// (`EffectEntrySpec`) cannot carry: each entry of `new` takes, from the
+/// entry of `old` that is the same occurrence of the same kind, its
+/// convention, a further instance's own parameters, and a stack-only
+/// effect's layer-style parameters (a gradient overlay's or stroke's
+/// fill, a pattern overlay's pattern).
+pub fn carry_layer_style(old: &[EffectEntry], new: &mut [EffectEntry]) {
+    use std::collections::HashMap;
+    let mut seen_old: HashMap<&'static str, usize> = HashMap::new();
+    let mut by_kind: HashMap<(&'static str, usize), &EffectEntry> = HashMap::new();
+    for e in old {
+        let k = e.effect.kind_name();
+        let n = seen_old.entry(k).or_default();
+        by_kind.insert((k, *n), e);
+        *n += 1;
+    }
+    let mut seen_new: HashMap<&'static str, usize> = HashMap::new();
+    for e in new.iter_mut() {
+        let k = e.effect.kind_name();
+        let n = seen_new.entry(k).or_default();
+        let at = *n;
+        *n += 1;
+        let Some(o) = by_kind.get(&(k, at)) else {
+            continue;
+        };
+        if e.convention.is_none() {
+            e.convention = o.convention;
+        }
+        if at > 0 && e.effect.indesign().is_some() && !e.effect.has_parked() {
+            if let Some(p) = o.effect.carried() {
+                e.effect = Effect::carrying(p);
+            }
+        }
+        match (&mut e.effect, &o.effect) {
+            (Effect::GradientOverlay(n), Effect::GradientOverlay(o)) if n.fill.is_none() => {
+                n.fill = o.fill.clone();
+            }
+            (Effect::OutlineStroke(n), Effect::OutlineStroke(o)) if n.fill.is_none() => {
+                n.fill = o.fill.clone();
+            }
+            (Effect::PatternOverlay(n), Effect::PatternOverlay(o)) => *n = o.clone(),
+            _ => {}
+        }
+    }
+}
+
 /// The IDML label that carries a page item's effect stacks through an
 /// IDML round trip (engine ADR 1008): IDML has InDesign's nine effects in
 /// fixed slots and nothing else, so the writer keeps the stacks in the
@@ -1394,7 +1575,7 @@ effect_bearing!(crate::AnchoredFrame, yes);
 /// settings; the label adds only the order, the enabled flags (with a
 /// disabled effect's parked parameters) and the stack-only effects.
 pub mod label {
-    use super::{EffectBearing, EffectEntry, EffectTarget};
+    use super::{Effect, EffectBearing, EffectEntry, EffectTarget};
     use serde::{Deserialize, Serialize};
 
     /// The label key.
@@ -1413,8 +1594,31 @@ pub mod label {
     }
 
     /// The label value for `item`, `None` when every target is canonical.
+    ///
+    /// Engine ADR 1099 — a layer-style entry of an InDesign kind carries its
+    /// slot's parameters in the label: IDML writes InDesign's attributes
+    /// only, and the layer style's contour, range or light would be lost.
     pub fn encode(item: &impl EffectBearing) -> Option<String> {
-        let get = |t| item.effect_slots(t).stack.to_vec();
+        let get = |t| {
+            let slots = item.effect_slots(t);
+            let mut first = std::collections::HashSet::new();
+            slots
+                .stack
+                .iter()
+                .map(|e| match e.effect.indesign() {
+                    Some(k) if first.insert(k) && e.enabled && e.is_layer_style() => {
+                        match slots.slot_params(k) {
+                            Some(p) => EffectEntry {
+                                effect: Effect::carrying(p),
+                                ..e.clone()
+                            },
+                            None => e.clone(),
+                        }
+                    }
+                    _ => e.clone(),
+                })
+                .collect::<Vec<_>>()
+        };
         let s = Stacks {
             object: get(EffectTarget::Object),
             fill: get(EffectTarget::Fill),
@@ -1445,6 +1649,15 @@ pub mod label {
                 continue;
             }
             let mut slots = item.effect_slots_mut(t);
+            // Engine ADR 1099 — a layer-style stack brings its parameters
+            // with it and is set as it was.
+            if stack.iter().any(EffectEntry::is_layer_style) {
+                let before = slots.as_ref().stack.to_vec();
+                if slots.set_stack(stack).is_err() {
+                    *slots.stack = before;
+                }
+                continue;
+            }
             // Entries for InDesign effects keep only their place and
             // their flag: an enabled one is whatever the IDML says now,
             // a disabled one keeps what was parked.
@@ -1739,6 +1952,7 @@ mod tests {
                 size_pt: 4.0,
                 position: StrokePosition::Inside,
                 color: Some("Color/Red".into()),
+                fill: None,
             })),
             EffectEntry {
                 enabled: false,
@@ -1788,6 +2002,138 @@ mod tests {
         assert!(!twin.effect_stack[0].enabled);
         assert!(twin.effect_stack[0].effect.has_parked());
         assert!(label::encode(&rect_with_shadow_and_glow()).is_none());
+    }
+
+    /// Engine ADR 1099 — the layer-style fields are absent on everything
+    /// InDesign wrote: an item with every InDesign effect and a stored
+    /// stack of the stack-only kinds serialises as it did before they
+    /// existed (the JSON below is the pre-1099 form, field for field), so
+    /// documents read, hash and render identically.
+    #[test]
+    fn an_indesign_item_serialises_without_the_layer_style_fields() {
+        let mut r = Rectangle {
+            drop_shadow: Some(defaults::drop_shadow()),
+            effects: Some(FrameEffects {
+                inner_shadow: Some(defaults::inner_shadow()),
+                outer_glow: Some(defaults::outer_glow()),
+                inner_glow: Some(defaults::inner_glow()),
+                bevel: Some(defaults::bevel()),
+                satin: Some(defaults::satin()),
+                ..Default::default()
+            }),
+            ..Rectangle::new("r", crate::Bounds::ZERO)
+        };
+        let mut stack = r.effect_slots(EffectTarget::Object).resolved();
+        stack.reverse();
+        stack.push(EffectEntry::new(
+            Effect::GradientOverlay(Default::default()),
+        ));
+        stack.push(EffectEntry::new(Effect::OutlineStroke(Default::default())));
+        r.effect_slots_mut(EffectTarget::Object)
+            .set_stack(stack)
+            .unwrap();
+        let slots = serde_json::to_string(&(&r.drop_shadow, &r.effects)).unwrap();
+        assert_eq!(
+            slots,
+            concat!(
+                r#"[{"mode":"Drop","x_offset":3.0,"y_offset":3.0,"size":4.0,"opacity_pct":30.0,"#,
+                r#""effect_color":null,"blend_mode":null,"spread_pct":null,"noise_pct":null,"#,
+                r#""knocked_out":null,"honor_other_effects":null,"use_global_light":null},"#,
+                r#"{"inner_shadow":{"x_offset":null,"y_offset":null,"size":5.0,"opacity_pct":75.0,"#,
+                r#""effect_color":null,"angle_deg":120.0,"distance":5.0,"choke_pct":0.0,"#,
+                r#""blend_mode":"Multiply","noise_pct":0.0,"use_global_light":null},"#,
+                r#""outer_glow":{"size":5.0,"opacity_pct":75.0,"effect_color":null,"spread_pct":0.0,"#,
+                r#""blend_mode":"Screen","noise_pct":0.0,"technique":null},"#,
+                r#""inner_glow":{"size":5.0,"opacity_pct":75.0,"effect_color":null,"choke_pct":0.0,"#,
+                r#""blend_mode":"Screen","source":"EdgeGlow","noise_pct":0.0,"technique":null},"#,
+                r#""bevel":{"depth_pct":100.0,"size":5.0,"angle_deg":120.0,"altitude_deg":30.0,"#,
+                r#""highlight_color":null,"shadow_color":null,"highlight_opacity_pct":75.0,"#,
+                r#""shadow_opacity_pct":75.0,"style":"InnerBevel","direction":"Up","#,
+                r#""technique":"Smooth","soften":0.0,"highlight_blend_mode":null,"#,
+                r#""shadow_blend_mode":null,"use_global_light":null},"#,
+                r#""satin":{"size":14.0,"angle_deg":19.0,"distance":11.0,"effect_color":null,"#,
+                r#""opacity_pct":50.0,"blend_mode":"Multiply","invert":true},"#,
+                r#""feather":null,"directional_feather":null,"gradient_feather":null}]"#
+            )
+        );
+        let stack = serde_json::to_string(&r.effect_stack).unwrap();
+        assert_eq!(
+            stack,
+            concat!(
+                r#"[{"effect":{"kind":"satin"}},{"effect":{"kind":"bevelEmboss"}},"#,
+                r#"{"effect":{"kind":"innerGlow"}},{"effect":{"kind":"outerGlow"}},"#,
+                r#"{"effect":{"kind":"innerShadow"}},{"effect":{"kind":"dropShadow"}},"#,
+                r#"{"effect":{"kind":"gradientOverlay","gradient":null,"angleDeg":null,"reverse":false}},"#,
+                r#"{"effect":{"kind":"outlineStroke","sizePt":3.0,"position":"Outside","color":null}}]"#
+            )
+        );
+    }
+
+    /// Engine ADR 1099 — a layer style casts several drop shadows: the
+    /// first is the slot's, the others carry their parameters on the
+    /// stack; a layer-style stack is never canonical, and the IDML label
+    /// carries the slot parameters' layer-style fields.
+    #[test]
+    fn a_layer_style_keeps_its_instances_and_its_contours() {
+        let ls = |effect| EffectEntry {
+            convention: Some(EffectConvention::LayerStyle),
+            ..EffectEntry::new(effect)
+        };
+        let shadow = |size: f32| DropShadowSetting {
+            size,
+            contour: Some(crate::layer_style::FxContour {
+                name: "Cone".into(),
+                points: vec![],
+            }),
+            ..defaults::drop_shadow()
+        };
+        let mut r = Rectangle::new("r", crate::Bounds::ZERO);
+        r.effect_slots_mut(EffectTarget::Object)
+            .set_stack(vec![
+                ls(Effect::carrying(IndesignParams::DropShadow(shadow(2.0)))),
+                ls(Effect::carrying(IndesignParams::DropShadow(shadow(9.0)))),
+            ])
+            .unwrap();
+        assert_eq!(r.drop_shadow.as_ref().unwrap().size, 2.0);
+        assert_eq!(r.effect_stack.len(), 2);
+        let with = r.effect_slots(EffectTarget::Object).with_params();
+        let sizes: Vec<f32> = with
+            .iter()
+            .map(|(_, p)| match p {
+                Some(IndesignParams::DropShadow(d)) => d.size,
+                _ => -1.0,
+            })
+            .collect();
+        assert_eq!(sizes, [2.0, 9.0]);
+        // A bare duplicate is still refused.
+        let mut q = Rectangle::new("q", crate::Bounds::ZERO);
+        assert!(q
+            .effect_slots_mut(EffectTarget::Object)
+            .set_stack(vec![
+                EffectEntry::new(Effect::slot(IndesignEffect::Satin)),
+                EffectEntry::new(Effect::slot(IndesignEffect::Satin)),
+            ])
+            .is_err());
+        // Through the IDML label: the slot comes back with its contour.
+        let v = label::encode(&r).expect("stored");
+        let mut twin = Rectangle {
+            drop_shadow: Some(defaults::drop_shadow()),
+            ..Rectangle::new("r", crate::Bounds::ZERO)
+        };
+        assert!(label::decode_into(&mut twin, &v));
+        let d = twin.drop_shadow.as_ref().unwrap();
+        assert_eq!(d.size, 2.0);
+        assert_eq!(d.contour.as_ref().unwrap().name, "Cone");
+        assert_eq!(twin.effect_stack.len(), 2);
+        // The wire form drops the instance's parameters; the carry keeps them.
+        let mut rewritten = vec![
+            EffectEntry::new(Effect::slot(IndesignEffect::DropShadow)),
+            EffectEntry::new(Effect::slot(IndesignEffect::DropShadow)),
+        ];
+        carry_layer_style(&r.effect_stack, &mut rewritten);
+        assert!(rewritten.iter().all(EffectEntry::is_layer_style));
+        assert!(rewritten[1].effect.has_parked());
+        assert!(!rewritten[0].effect.has_parked());
     }
 
     #[test]

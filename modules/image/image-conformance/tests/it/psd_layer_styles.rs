@@ -32,8 +32,15 @@
 //! falloff is approximated (its blur, its bevel shading), with the
 //! measured error recorded rather than hidden.
 //!
-//! `PAGED_STYLE_DUMP=<dir>` writes each render (`<id>.rgba`, raw RGBA8)
-//! for a side-by-side look while calibrating.
+//! The effects are the engine's layer-style evaluator's (`paged-layer-fx`,
+//! engine ADR 1099), the style crossing onto the effect stack at the PSD
+//! boundary (`paged-psd-fx`). The same table holds for both of its
+//! devices: the GPU fold (where an adapter exists) and the CPU fold (on
+//! every machine, CI included).
+//!
+//! `PAGED_STYLE_DUMP=<dir>` writes each render (`<id>.rgba` from the GPU,
+//! `<id>.cpu.rgba` from the CPU, raw RGBA8) for a side-by-side look while
+//! calibrating.
 
 use std::path::PathBuf;
 
@@ -187,13 +194,88 @@ const EXPECT: &[(&str, u8, u32)] = &[
 ];
 
 fn flatten(file: &PsdFile) -> Result<Vec<u8>, String> {
-    let import = file.layer_plates_rgba8().map_err(|e| e.to_string())?;
     let ctx = image_conformance::device::test_device().ok_or("no-gpu")?;
+    flatten_on(file, Some(ctx))
+}
+
+/// The composite on `ctx`'s GPU, or (`None`) the CPU fold.
+fn flatten_on(file: &PsdFile, ctx: Option<&image_gpu::GpuContext>) -> Result<Vec<u8>, String> {
+    let import = file.layer_plates_rgba8().map_err(|e| e.to_string())?;
     let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
         .map_err(|e| e.to_string())?;
-    pollster::block_on(stack.composite(Some(ctx), None))
+    pollster::block_on(stack.composite(ctx, None))
         .map(|p| p.to_vec())
         .map_err(|e| e.to_string())
+}
+
+/// Each fixture's composite against Photoshop's, held to [`EXPECT`].
+fn check(id: &str, ours: &[u8], theirs: &[u8], report: &mut Vec<String>) -> Option<String> {
+    let d = compare_rgba8(ours, theirs, Reference::Straight);
+    let max = d.channels[..3].iter().map(|c| c.max).max().unwrap_or(0);
+    let mean = d.channels[..3].iter().map(|c| c.mean).fold(0.0, f64::max);
+    let mean100 = (mean * 100.0).round() as u32;
+    report.push(format!(
+        "    (\"{id}\", {max}, {mean100}), // p99 {}",
+        d.channels[..3].iter().map(|c| c.p99).max().unwrap_or(0)
+    ));
+    match EXPECT.iter().find(|(e, _, _)| *e == id) {
+        None => Some(format!(
+            "{id}: no expectation recorded (max {max}, mean {mean:.2})"
+        )),
+        Some((_, wmax, wmean)) if max > *wmax || mean100 > *wmean => Some(format!(
+            "{id}: expected max ≤ {wmax}, mean ≤ {:.2}; got max {max}, mean {mean:.2}",
+            *wmean as f64 / 100.0
+        )),
+        Some(_) => None,
+    }
+}
+
+/// THE CPU LANE: the same fixtures through the CPU fold, the evaluator on
+/// its CPU device (the kernels' shipped twins), held to the same table —
+/// on every machine, so CI measures the layer styles against Photoshop.
+#[test]
+#[allow(non_snake_case)]
+fn photoshop_layer_styles_composite_as_recorded_on_the_cpu__feat__image_layers_styles() {
+    let dump = std::env::var_os("PAGED_STYLE_DUMP").map(PathBuf::from);
+    let mut report = Vec::new();
+    let mut problems = Vec::new();
+    for id in ids() {
+        let bytes = std::fs::read(dir().join(format!("{id}.psd"))).expect("read fixture");
+        let file = PsdFile::parse(&bytes).expect("parse");
+        let theirs = file.composite_rgba8().expect("merged composite decodes");
+        let ours = match flatten_on(&file, None) {
+            Ok(o) => o,
+            Err(e) => {
+                problems.push(format!("{id}: refused on the CPU: {e}"));
+                continue;
+            }
+        };
+        if let Some(d) = &dump {
+            std::fs::create_dir_all(d).ok();
+            std::fs::write(d.join(format!("{id}.cpu.rgba")), &ours).ok();
+        }
+        problems.extend(check(&id, &ours, &theirs.rgba, &mut report));
+    }
+    println!("{}", report.join("\n"));
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Engine ADR 1099 — every Photoshop-written style crosses onto the effect
+/// stack and back unchanged (the descriptors it was read from aside): the
+/// map the fold draws through loses nothing.
+#[test]
+#[allow(non_snake_case)]
+fn photoshop_styles_cross_the_effect_stack_losslessly__feat__image_layers_styles() {
+    for id in ids() {
+        let style = style_of(&id);
+        let m = paged_psd_fx::map_layer_style(&style, &paged_psd_fx::MapOptions::default());
+        assert!(m.losses.is_empty(), "{id}: {:?}", m.losses);
+        let (back, losses) = paged_psd_fx::unmap_layer_style(&m.entries(), 1.0, &|c| m.color(c));
+        assert!(losses.is_empty(), "{id}: {losses:?}");
+        // The model's wire form: everything but the descriptors read.
+        let form = |s: &LayerStyle| serde_json::to_value(s).expect("serialises");
+        assert_eq!(form(&back), form(&style), "{id}");
+    }
 }
 
 fn ids() -> Vec<String> {
@@ -240,24 +322,7 @@ fn photoshop_layer_styles_composite_as_recorded__feat__image_layers_styles() {
             std::fs::create_dir_all(d).ok();
             std::fs::write(d.join(format!("{id}.rgba")), &ours).ok();
         }
-        let d = compare_rgba8(&ours, &theirs.rgba, Reference::Straight);
-        let max = d.channels[..3].iter().map(|c| c.max).max().unwrap_or(0);
-        let mean = d.channels[..3].iter().map(|c| c.mean).fold(0.0, f64::max);
-        let mean100 = (mean * 100.0).round() as u32;
-        report.push(format!(
-            "    (\"{id}\", {max}, {mean100}), // p99 {}",
-            d.channels[..3].iter().map(|c| c.p99).max().unwrap_or(0)
-        ));
-        match EXPECT.iter().find(|(e, _, _)| *e == id) {
-            None => problems.push(format!(
-                "{id}: no expectation recorded (max {max}, mean {mean:.2})"
-            )),
-            Some((_, wmax, wmean)) if max > *wmax || mean100 > *wmean => problems.push(format!(
-                "{id}: expected max ≤ {wmax}, mean ≤ {:.2}; got max {max}, mean {mean:.2}",
-                *wmean as f64 / 100.0
-            )),
-            Some(_) => {}
-        }
+        problems.extend(check(&id, &ours, &theirs.rgba, &mut report));
     }
     println!("{}", report.join("\n"));
     if have_gpu {

@@ -50,6 +50,7 @@ import type {
   Value,
   SvgExportOptions,
   SvgImportOptions,
+  PsdPlaceOptions,
   SvgReport,
   LossEntry,
 } from "./wire.js";
@@ -1405,6 +1406,29 @@ export interface SvgImportResult {
   error?: string;
 }
 
+/** `document.placePsdLayers` options (engine ADR 1099). */
+export interface PsdLayersPlaceRequest extends PsdPlaceOptions {
+  /** The page to place onto; the active page when absent. */
+  pageId?: PageId;
+}
+
+/** `document.placePsdLayers`'s answer. */
+export interface PsdLayersPlaceResult {
+  /** Whether the placing batch applied (one undo step). */
+  applied: boolean;
+  /** The batch's outcome: its `minted` items (the frames, then their
+   *  group when there are several). Absent when nothing applied. */
+  outcome?: MutationOutcome;
+  /** How many frames the batch makes. */
+  layers: number;
+  /** What a frame could not carry (an adjustment layer, clipping, a
+   *  vector mask, Blend If, …), one entry per kind of loss. */
+  losses: LossEntry[];
+  /** Why nothing applied: an unreadable file, no layer to place, a
+   *  refused batch, a host without the door. */
+  error?: string;
+}
+
 /** `document.exportSvg`'s request (engine ADR 1031). */
 export interface SvgExportRequest extends SvgExportOptions {
   /** The page; the active page when absent. */
@@ -1646,6 +1670,27 @@ export interface DocumentSurface {
     bytes: Uint8Array,
     options?: SvgImportRequest,
   ): Promise<SvgImportResult>;
+  /**
+   * Engine ADR 1099 (protocol v78) — place a PSD's (or PSB's) LAYERS as
+   * frames, as ONE undo step: each pixel layer a frame at its place on the
+   * canvas with its pixels (its layer mask applied), blend mode, opacity,
+   * fill opacity (the frame's content opacity) and layer style — the
+   * style as the frame's effect stack, drawn by the engine's layer-style
+   * evaluator as Photoshop draws it and editable as effects. Several
+   * frames are grouped (`options.group: false` keeps them apart). The
+   * batch is applied through `mutate` (gated on
+   * `capabilities.document.write`); `losses` names what a frame could not
+   * carry.
+   *
+   * Lands on `options.pageId` (else the active page); `options.origin` is
+   * where the canvas's top-left lands (page-local pt; else centred).
+   * Never throws: a host or engine without the door answers
+   * `{ applied: false, error }`. Probe `supports("document.placePsdLayers@1")`.
+   */
+  placePsdLayers(
+    bytes: Uint8Array,
+    options?: PsdLayersPlaceRequest,
+  ): Promise<PsdLayersPlaceResult>;
   /**
    * Engine ADR 1031 (protocol v77) — a page, or some of its items, as an
    * SVG document: paths with their fills and strokes, linear and radial

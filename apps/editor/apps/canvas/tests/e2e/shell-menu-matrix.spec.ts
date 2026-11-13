@@ -273,11 +273,20 @@ const EFFECT_ROWS: readonly string[] = (
       title: string;
       category: string;
       strokeStyle?: boolean;
+      indesign: boolean;
+      vector?: boolean;
+      params: unknown[];
     }>;
   }
 ).effectKinds
-  // The stroke styles (engine ADR 1053) have no Effect menu row.
-  .filter((k) => !k.strokeStyle)
+  // The stroke styles (engine ADR 1053) have no Effect menu row, nor has a
+  // kind without parameters to set (effect-stack.ts `offered`: a layer
+  // style's pattern overlay, engine ADR 1099).
+  .filter(
+    (k) =>
+      !k.strokeStyle &&
+      (k.indesign || k.vector === true || k.params.length > 0),
+  )
   .map(
     (k) =>
       `Object/Effects/${

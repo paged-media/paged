@@ -55,7 +55,7 @@ use paged_wire::ElementId;
 
 use crate::engine::Session;
 use crate::export::PdfOptions;
-use crate::link::{check_placeable, is_svg, place_bytes, place_svg};
+use crate::link::{check_placeable, is_svg, place_bytes, place_psd_layers, place_svg};
 use crate::options::DocumentOptions;
 
 /// `a,b,c,d,tx,ty` — the placed image's own transform, in the same
@@ -82,10 +82,13 @@ pub fn run(
     image: &Path,
     fit: Option<&str>,
     transform: Option<&str>,
+    layers: bool,
     out: Option<&PathBuf>,
     pdf: &PdfOptions,
 ) -> Result<()> {
-    check_placeable(image)?;
+    if !layers {
+        check_placeable(image)?;
+    }
     let bytes = std::fs::read(image).with_context(|| format!("read {}", image.display()))?;
     // Parsed before the session opens: a typo in the address should
     // cost a message, not a document load.
@@ -97,7 +100,15 @@ pub fn run(
     assets.open(&mut session, doc)?;
 
     let n = bytes.len();
-    let what = if is_svg(image) {
+    let what = if layers {
+        // A PSD's layers become frames; the frame they stood in for goes
+        // (`link::place_psd_layers`).
+        let done = place_psd_layers(&mut session, frame, bytes)?;
+        for note in &done.notes {
+            eprintln!("psd: {note}");
+        }
+        format!("PSD, {} layers", done.items)
+    } else if is_svg(image) {
         // An SVG becomes native page items in the frame's box; the
         // frame it stood in for goes (`link::place_svg`).
         let done = place_svg(&mut session, frame, bytes)?;

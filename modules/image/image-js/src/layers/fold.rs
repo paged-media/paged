@@ -170,29 +170,9 @@ pub(super) struct KnockoutStep {
 /// (origin 0, the canvas's size), or one tile of the tiled fold (ADR 480)
 /// — `w × h` texels whose first lies at `(ox, oy)` on a `cw × ch` canvas.
 /// Everything drawn in canvas coordinates (gradients, patterns, noise)
-/// reads it, so a tile shows what the whole fold shows there.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct Frame {
-    pub w: u32,
-    pub h: u32,
-    pub ox: i32,
-    pub oy: i32,
-    pub cw: u32,
-    pub ch: u32,
-}
-
-impl Frame {
-    pub fn whole(w: u32, h: u32) -> Frame {
-        Frame {
-            w,
-            h,
-            ox: 0,
-            oy: 0,
-            cw: w,
-            ch: h,
-        }
-    }
-}
+/// reads it, so a tile shows what the whole fold shows there. The layer
+/// styles' evaluator's own (engine ADR 1099).
+pub(super) use paged_layer_fx::Frame;
 
 /// The slot the Background layer's fold state is saved under.
 pub(super) const DEEP_SLOT: u32 = u32::MAX;
@@ -295,7 +275,7 @@ pub(super) enum Step {
         px: Pixels,
         cov: CovKey,
         interior: bool,
-        fx: Arc<super::styles::EffectStep>,
+        fx: Arc<paged_layer_fx::EffectStep>,
     },
     /// Start a styled layer's BODY: keep the accumulator (with the
     /// exterior effects) to mix the body into at `BodyClose`.
@@ -832,9 +812,9 @@ impl LayerStack {
                 .ext
                 .style
                 .as_ref()
-                .map(|s| (s, super::styles::StylePlan::of(s)))
-                .filter(|(_, p)| !p.is_empty());
-            if let Some((style, plan)) = style_plan {
+                .map(|s| super::styles::plan(s))
+                .filter(|p| !p.is_empty());
+            if let Some(plan) = style_plan {
                 let canvas_px = canvas_of((*index, plate));
                 let opts = layer.ext.style_options;
                 let hides = opts.hides() && cov.own.is_some();
@@ -842,32 +822,26 @@ impl LayerStack {
                     own: if hides { None } else { cov.own.clone() },
                     clip: None,
                 };
-                let needs_bounds = plan
-                    .exterior
-                    .iter()
-                    .chain(&plan.interior)
-                    .chain(&plan.interior_top)
-                    .chain(&plan.top)
-                    .any(super::styles::Fx::needs_bounds);
+                let needs_bounds = plan.all().any(paged_layer_fx::Fx::needs_bounds);
                 let bounds = if needs_bounds {
-                    super::styles::alpha_bounds(&canvas_px.to_rgba8(), self.width, self.height)
+                    paged_layer_fx::alpha_bounds(&canvas_px.to_rgba8(), self.width, self.height)
                 } else {
-                    Region::new(0, 0, self.width, self.height)
+                    paged_layer_fx::Rect::new(0, 0, self.width, self.height)
                 };
-                let effect = |fx: super::styles::Fx, interior: bool| Step::Effect {
+                let stroke_reach = plan.stroke_reach;
+                let effect = |fx: paged_layer_fx::Fx, interior: bool| Step::Effect {
                     layer: layer.id,
                     px: canvas_px.clone(),
                     cov: shape.clone(),
                     interior,
-                    fx: Arc::new(super::styles::EffectStep {
+                    fx: Arc::new(paged_layer_fx::EffectStep {
                         pattern: self.style_pattern(&fx),
                         fx,
-                        scale: style.scale,
-                        light: self.styles.global_light,
+                        light: super::styles::light(self.styles.global_light),
                         bounds,
                         seed: layer.id,
                         fill,
-                        stroke_reach: super::styles::stroke_reach(style),
+                        stroke_reach,
                     }),
                 };
                 let slot = STYLE_SLOT | layer.id;
@@ -1084,7 +1058,7 @@ impl LayerStack {
         let mut folded = 0u64;
         // Each styled layer's source alpha (and distance field), shared by
         // its effects within this composite.
-        let mut sources: Vec<(u32, Pixels, super::styles::Source)> = Vec::new();
+        let mut sources: Vec<(u32, Pixels, paged_layer_fx::Source<Resident>)> = Vec::new();
         for (i, step) in steps.iter().enumerate().skip(from) {
             if i == checkpoint {
                 snap = Some(st.clone());
@@ -1271,21 +1245,22 @@ impl LayerStack {
                     {
                         Some(i) => i,
                         None => {
-                            let a = super::styles::source_alpha(
-                                ctx,
-                                batch,
+                            let mut dev = super::styles::Gpu::new(ctx, batch, frame);
+                            let a = paged_layer_fx::source_alpha_native(
+                                &mut dev,
                                 &plate,
                                 mask.as_ref(),
-                                w,
-                                h,
-                            )?;
-                            sources.push((*layer, px.clone(), super::styles::Source::new(a)));
+                            )
+                            .map_err(super::styles::fx_err)?;
+                            sources.push((*layer, px.clone(), paged_layer_fx::Source::new(a)));
                             sources.len() - 1
                         }
                     };
                     let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    let mut dev = super::styles::Gpu::new(ctx, batch, frame);
                     let drawn =
-                        super::styles::draw(ctx, batch, &acc, &mut sources[src].2, fx, frame)?;
+                        paged_layer_fx::draw_native(&mut dev, &acc, &mut sources[src].2, fx)
+                            .map_err(super::styles::fx_err)?;
                     st.acc = Some(if *interior {
                         let shape = sources[src].2.alpha.clone();
                         take_through(batch, &acc, &drawn, &shape, w, h)?
@@ -1300,8 +1275,10 @@ impl LayerStack {
                 Step::BodyClose { layer, px, cov } => {
                     let plate = cache.plate(batch, *layer, px, w, h)?;
                     let mask = cache.mask(batch, *layer, cov, w, h);
+                    let mut dev = super::styles::Gpu::new(ctx, batch, frame);
                     let shape =
-                        super::styles::source_alpha(ctx, batch, &plate, mask.as_ref(), w, h)?;
+                        paged_layer_fx::source_alpha_native(&mut dev, &plate, mask.as_ref())
+                            .map_err(super::styles::fx_err)?;
                     let body = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
                     let kept = st.parked.pop().flatten().unwrap_or_else(|| ctx.zeros(w, h));
                     st.acc = Some(take_through(batch, &kept, &body, &shape, w, h)?);

@@ -66,6 +66,7 @@ pub mod model;
 pub mod mutate;
 mod paint_v2_export;
 mod pattern_export;
+pub mod psd_io;
 pub mod resolve;
 pub mod resource_tiles;
 pub mod review;

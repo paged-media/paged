@@ -119,6 +119,7 @@ fn stroke(size: f32, position: StrokePosition, color: &str) -> EffectEntry {
         size_pt: size,
         position,
         color: Some(color.into()),
+        ..Default::default()
     }))
 }
 

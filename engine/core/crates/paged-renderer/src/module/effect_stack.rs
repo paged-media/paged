@@ -72,6 +72,11 @@ pub(crate) fn stack_mode(stack: &[EffectEntry]) -> Option<StackMode> {
     if stack.is_empty() {
         return None;
     }
+    // Engine ADR 1099 — a layer style draws every effect itself: the body
+    // draws none.
+    if stack.iter().any(EffectEntry::is_layer_style) {
+        return Some(StackMode::Ordered);
+    }
     let mut seen_own = false;
     let mut last_rank = None;
     let mut indesign_first = true;
@@ -330,8 +335,59 @@ pub(crate) fn apply(
         hi,
         front: 0,
     };
+    // Engine ADR 1099 — the layer-style entries, drawn together by the
+    // layer-style evaluator in a layer style's places (under the run,
+    // inside it, on top), from the run's picture.
+    if stack.iter().any(|e| e.enabled && e.is_layer_style()) {
+        let entries = super::layer_style::with_params(stack, source.effects, source.drop_shadow);
+        let fill = source
+            .frame
+            .content_target
+            .and_then(|t| t.opacity)
+            .map_or(1.0, |o| (o / 100.0).clamp(0.0, 1.0));
+        let seed = source
+            .frame
+            .self_id
+            .map_or(0, |id| paged_pixel::fnv1a_32(id.as_bytes()));
+        if let Some(drawn) = super::layer_style::draw(
+            page,
+            run.lo..run.body_end,
+            &entries,
+            geom,
+            palette,
+            color_ctx,
+            fill,
+            seed,
+        ) {
+            // A fill opacity below 100 % is the content target's group
+            // around the picture; a layer style's effects are not faded by
+            // it (Photoshop's fill opacity spares them), so they go outside
+            // that group, under and over it.
+            let content_group = fill < 1.0
+                && lo == run_start + 1
+                && source.frame.opacity.is_none_or(|o| o >= 100.0)
+                && matches!(
+                    page.list.commands.get(run_start),
+                    Some(DisplayCommand::BeginBlendGroup { opacity, .. })
+                        if (opacity - fill).abs() < 1e-4
+                );
+            if content_group {
+                let n = drawn.under.len();
+                Run::put(page, run_start, drawn.under);
+                run.lo += n;
+                run.body_end += n;
+                run.hi += n;
+                run.front += n;
+                let end = page.list.commands.len();
+                Run::put(page, end, drawn.over);
+            } else {
+                run.front(page, drawn.under);
+                run.back(page, drawn.over);
+            }
+        }
+    }
     for e in stack {
-        if !e.enabled {
+        if !e.enabled || e.is_layer_style() {
             continue;
         }
         match &e.effect {

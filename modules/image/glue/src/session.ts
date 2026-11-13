@@ -713,6 +713,10 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Smart objects in full (image ADR 482): transform, smart filters,
    *  Edit Contents, links, vector smart objects. */
   smart(): SmartController;
+  /** Engine ADR 1099 — the PSD the session opened, as its bytes (Layer ▸
+   *  Place Layers as Frames hands them to the host); `null` when the
+   *  session's source is another format or nothing is open. */
+  sourcePsd(): Uint8Array | null;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -4447,6 +4451,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     vectors: () => vectors,
     workspace: () => workspace,
     smart: () => smart,
+    sourcePsd: () => (sourceFormat === "psd" ? sourceBytes : null),
     state: () => state,
 
     onDidChange(listener) {

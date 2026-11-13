@@ -246,6 +246,7 @@ fn stack_entry(e: &NativeEffect, needs: &mut LookNeeds) -> Result<EffectEntry, S
         } else {
             None
         },
+        convention: None,
         effect,
     })
 }

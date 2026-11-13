@@ -325,6 +325,46 @@ pub fn place_svg(session: &mut Session, frame: &str, bytes: Vec<u8>) -> Result<S
     })
 }
 
+/// Engine ADR 1099 — place the PSD `bytes`' layers as frames, the
+/// canvas's top-left at the frame `frame`'s, then remove that frame.
+pub fn place_psd_layers(session: &mut Session, frame: &str, bytes: Vec<u8>) -> Result<SvgPlaced> {
+    let element_id = ElementId::parse(frame)
+        .ok_or_else(|| anyhow!("{frame:?} is not an element address — try `rectangle:<id>`"))?;
+    let self_id = element_id.raw_id().to_string();
+    let (page_id, [t, l, _, _]) = frame_box(session, &self_id)?;
+    let plan = match session.send(MainToWorkerKind::RequestPsdLayersPlace {
+        page_id,
+        bytes: bytes.into(),
+        options: paged_canvas::psd_io::PsdPlaceOptions {
+            origin: Some([l, t]),
+            group: None,
+        },
+    })? {
+        WorkerToMainKind::PsdLayersPlanned(plan) => plan,
+        other => bail!("place the PSD's layers: the engine answered {other:?}"),
+    };
+    let mutation = plan.mutation.ok_or_else(|| {
+        anyhow!(
+            "place the PSD's layers: {}",
+            plan.error.unwrap_or_else(|| "nothing to place".into())
+        )
+    })?;
+    applied(
+        session.send(MainToWorkerKind::Mutate(mutation))?,
+        "place the PSD's layers",
+    )?;
+    applied(
+        session.send(MainToWorkerKind::Mutate(Mutation::DeleteFrame {
+            frame_id: self_id,
+        }))?,
+        "remove the frame the layers replaced",
+    )?;
+    Ok(SvgPlaced {
+        items: plan.layers,
+        notes: plan.losses.iter().map(ToString::to_string).collect(),
+    })
+}
+
 /// Embed every image link the document cannot resolve but the disk can:
 /// `bases` in order (the script's folder, the document's, the working
 /// directory). Returns one report line per placed file, and the links

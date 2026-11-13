@@ -33,6 +33,7 @@ import {
   entriesOf,
   isIndesign,
   move,
+  offered,
   paramsOf,
   remove,
   setEnabled,
@@ -102,15 +103,18 @@ describe("effect kinds come from core's catalog [effects-transparency.effect-sta
     // A kind an object takes is offered unless it is once-only and on the
     // stack already; a group-only kind (Pathfinder) is not offered here.
     for (const k of CORE_EFFECT_KINDS)
-      if (k.targets.includes("object"))
+      if (k.targets.includes("object") && offered(k))
         expect(object.includes(k.kind) || k.maxPerStack === 1).toBe(true);
       else expect(object).not.toContain(k.kind);
+    // A layer style's pattern overlay: its pattern is not on the wire, so
+    // no menu adds an empty one (engine ADR 1099).
+    expect(object).not.toContain("patternOverlay");
   });
 
   test("every kind core describes is in exactly one Effect menu group, the stroke styles aside", () => {
     const listed = effectMenu().flatMap((g) => g.kinds.map((k) => k.kind));
     expect(listed.sort()).toEqual(
-      CORE_EFFECT_KINDS.filter((k) => !k.strokeStyle)
+      CORE_EFFECT_KINDS.filter((k) => !k.strokeStyle && offered(k))
         .map((k) => k.kind)
         .sort(),
     );

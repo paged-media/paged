@@ -44,6 +44,10 @@ paged-svg = { path = "../paged-svg" }
 # Editor ADR 288 — a snapshot encoded as JPEG, WebP or TIFF (asset export):
 # the engine's one raster encoder.
 paged-raster = { path = "../paged-raster" }
+# Engine ADR 1099 — "Place PSD layers as frames": the file read, its layers
+# lowered and their styles mapped onto the effect stack at the PSD boundary.
+paged-psd = { path = "../paged-psd" }
+paged-psd-fx = { path = "../paged-psd-fx" }
 # ADR 132 — the property schemas and the virtual path table `Mutation::Set`
 # resolves against (and the v65 style-properties coverage gate).
 paged-introspect = { path = "../paged-introspect", default-features = false }

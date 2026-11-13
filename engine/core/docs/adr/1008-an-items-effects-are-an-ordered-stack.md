@@ -1,6 +1,8 @@
 # ADR 1008 — An item's effects are an ordered stack
 
-- **Status:** Accepted 2026-10-25.
+- **Status:** Accepted 2026-10-25. Amended by [ADR 1099](1099-a-layer-style-is-drawn-by-one-evaluator.md)
+  (2026-11-12): an entry may be drawn by the layer-style convention, a layer style may cast
+  further instances of a slot kind, and `patternOverlay` joins the stack-only kinds.
 - **Note 2026-10-29:** the catalog describes every kind (`effectKinds`: menu group, targets,
   parameter forms; `paged-introspect` `effect_kinds.rs`), which the editor's panels and Effect
   menu list from ([editor ADR 309](../../../../apps/editor/docs/adr/309-effects-transparency-and-appearance-panels.md));

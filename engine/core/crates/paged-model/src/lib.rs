@@ -39,6 +39,7 @@ pub mod equation;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
+pub mod layer_style;
 pub mod live_shape;
 pub mod media;
 pub mod mesh;
@@ -740,6 +741,21 @@ pub struct DropShadowSetting {
     /// its own offsets (cases 13–15). `None` is `false`.
     #[serde(default)]
     pub use_global_light: Option<bool>,
+    /// Engine ADR 1099 — a layer style's light ANGLE (degrees, the light's
+    /// direction; the shadow falls opposite) and DISTANCE (pt), the polar
+    /// form the offsets were computed from, kept exactly for the
+    /// layer-style evaluator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angle_deg: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<f32>,
+    /// Engine ADR 1099 — the layer style's CONTOUR of the shadow: the
+    /// falloff's transfer curve. Read by the layer-style evaluator only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<crate::layer_style::FxContour>,
+    /// Engine ADR 1099 — the contour's anti-aliasing switch (kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anti_aliased: Option<bool>,
 }
 
 impl DropShadowSetting {
@@ -2616,6 +2632,13 @@ pub struct InnerShadowParams {
     /// light. `None` is `false`.
     #[serde(default)]
     pub use_global_light: Option<bool>,
+    /// Engine ADR 1099 — the layer style's CONTOUR of the shadow: the
+    /// falloff's transfer curve. Read by the layer-style evaluator only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<crate::layer_style::FxContour>,
+    /// Engine ADR 1099 — the contour's anti-aliasing switch (kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anti_aliased: Option<bool>,
 }
 
 /// `<OuterGlowSetting>` parameters.
@@ -2631,6 +2654,25 @@ pub struct OuterGlowParams {
     /// halo) or `Precise` (follows the outline's corners).
     #[serde(default)]
     pub technique: Option<String>,
+    /// Engine ADR 1099 — the layer style's CONTOUR of the glow: the
+    /// falloff's transfer curve. Read by the layer-style evaluator only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<crate::layer_style::FxContour>,
+    /// Engine ADR 1099 — the contour's anti-aliasing switch (kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anti_aliased: Option<bool>,
+    /// Engine ADR 1099 — the glow's RANGE (percent of the falloff the
+    /// contour spans; 50 is the identity).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range_pct: Option<f32>,
+    /// Engine ADR 1099 — the glow's JITTER (percent; a gradient fill's
+    /// position varies by it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jitter_pct: Option<f32>,
+    /// Engine ADR 1099 — a GRADIENT fill across the falloff, its start at
+    /// the edge (`effect_color` then names its first colour).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<crate::layer_style::FxRamp>,
 }
 
 /// `<InnerGlowSetting>` parameters. `source` selects center-out vs
@@ -2648,6 +2690,25 @@ pub struct InnerGlowParams {
     /// R-11 — `Technique`; see [`OuterGlowParams::technique`].
     #[serde(default)]
     pub technique: Option<String>,
+    /// Engine ADR 1099 — the layer style's CONTOUR of the glow: the
+    /// falloff's transfer curve. Read by the layer-style evaluator only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<crate::layer_style::FxContour>,
+    /// Engine ADR 1099 — the contour's anti-aliasing switch (kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anti_aliased: Option<bool>,
+    /// Engine ADR 1099 — the glow's RANGE (percent of the falloff the
+    /// contour spans; 50 is the identity).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range_pct: Option<f32>,
+    /// Engine ADR 1099 — the glow's JITTER (percent; a gradient fill's
+    /// position varies by it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jitter_pct: Option<f32>,
+    /// Engine ADR 1099 — a GRADIENT fill across the falloff, its start at
+    /// the edge (`effect_color` then names its first colour).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<crate::layer_style::FxRamp>,
 }
 
 /// `<BevelAndEmbossSetting>` parameters. `style` (Inner/Outer/Emboss/
@@ -2680,6 +2741,17 @@ pub struct BevelEmbossParams {
     /// light. `None` is `false`.
     #[serde(default)]
     pub use_global_light: Option<bool>,
+    /// Engine ADR 1099 — the layer style's GLOSS contour of the shading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gloss_contour: Option<crate::layer_style::FxContour>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gloss_anti_aliased: Option<bool>,
+    /// Engine ADR 1099 — the Contour pane: the profile across the band.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<crate::layer_style::FxBevelContour>,
+    /// Engine ADR 1099 — the Texture pane (kept; not drawn).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<crate::layer_style::FxBevelTexture>,
 }
 
 /// `<SatinSetting>` parameters. `Distance` + `Angle` set the wave
@@ -2693,6 +2765,13 @@ pub struct SatinParams {
     pub opacity_pct: Option<f32>,
     pub blend_mode: Option<String>,
     pub invert: Option<bool>,
+    /// Engine ADR 1099 — the layer style's CONTOUR of the satin: the
+    /// falloff's transfer curve. Read by the layer-style evaluator only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<crate::layer_style::FxContour>,
+    /// Engine ADR 1099 — the contour's anti-aliasing switch (kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anti_aliased: Option<bool>,
 }
 
 /// `<FeatherSetting>` parameters. `corner_type` is `Sharp`/`Rounded`/

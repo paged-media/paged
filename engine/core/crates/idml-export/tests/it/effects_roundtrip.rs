@@ -177,6 +177,7 @@ fn effect_enumerators_and_attribute_names_are_indesigns() {
             opacity_pct: Some(55.0),
             blend_mode: Some("Multiply".into()),
             invert: Some(false),
+            ..Default::default()
         }),
         directional_feather: Some(idml_import::DirectionalFeatherParams {
             left_width: Some(14.0),

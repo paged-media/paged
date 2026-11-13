@@ -33,10 +33,12 @@
 //!
 //! It covers pixel layers (every blend mode, opacity, fill opacity, Blend
 //! If, knockout, the text layers' gamma), bounded layers, masks, isolated
-//! and pass-through groups, clipping groups and adjustment layers built
-//! from the chain. A LAYER STYLE and the direct adjustments (Gradient
-//! Map, Selective Color, Color Lookup) are refused by name: their kernels
-//! have no shipped twin.
+//! and pass-through groups, clipping groups, adjustment layers built from
+//! the chain, and LAYER STYLES: their effects are the engine's layer-style
+//! evaluator's (`paged-layer-fx`, engine ADR 1099) on its CPU device, the
+//! same dispatches the GPU fold runs. The direct adjustments (Gradient
+//! Map, Selective Color, Color Lookup) and Dissolve are refused by name:
+//! their kernels have no shipped twin.
 
 use half::f16;
 use image_kernels::compose_twin::{composite, composite_normal_gamma, from_kernel_id, Blend};
@@ -49,6 +51,9 @@ use image_kernels::families::cast::{
 };
 use image_kernels::reference_prelude::Px;
 use image_kernels::KernelDef;
+
+use paged_layer_fx::cpu::{CpuDevice, CpuTex};
+use paged_layer_fx::{source_alpha_native as source_alpha, FxError, Source};
 
 use super::{CovKey, Frame, Step};
 use crate::ingest::IngestError;
@@ -105,10 +110,14 @@ impl crate::layers::LayerStack {
 pub(super) fn supported(steps: &[Step]) -> Result<(), IngestError> {
     for s in steps {
         let why = match s {
-            Step::Effect { .. }
-            | Step::BodyOpen
-            | Step::BodyClose { .. }
-            | Step::StyleClose { .. } => "a layer style",
+            Step::Effect { fx, .. }
+                if fx
+                    .fx
+                    .blends()
+                    .any(|b| from_kernel_id(paged_layer_fx::blend_def(b).id).is_none()) =>
+            {
+                "a layer style's Dissolve"
+            }
             Step::Direct { .. } => "a Gradient Map, Selective Color or Color Lookup layer",
             Step::Pixel {
                 blend, gamma: None, ..
@@ -126,7 +135,7 @@ pub(super) fn supported(steps: &[Step]) -> Result<(), IngestError> {
         };
         return Err(IngestError::Unsupported(format!(
             "compositing {why} needs a GPU — call init_gpu first (the CPU fold covers pixel, \
-             adjustment, group and clipping layers)"
+             adjustment, group and clipping layers and layer styles)"
         )));
     }
     Ok(())
@@ -153,6 +162,32 @@ fn tex_f16(t: &Tex) -> Vec<u8> {
         }
     }
     out
+}
+
+/// A texture as the evaluator's CPU device holds it.
+fn tex(t: &Tex, w: u32, h: u32) -> CpuTex {
+    CpuTex {
+        w,
+        h,
+        px: std::sync::Arc::new(t.iter().map(|p| p.0).collect()),
+    }
+}
+
+fn untex(t: &CpuTex) -> Tex {
+    t.px.iter().map(|&p| Px(p)).collect()
+}
+
+/// A mask as the device's coverage texture (`.r`, broadcast).
+fn mask_tex(m: &Mask, w: u32, h: u32) -> CpuTex {
+    CpuTex {
+        w,
+        h,
+        px: std::sync::Arc::new(m.iter().map(|&v| [v; 4]).collect()),
+    }
+}
+
+fn style_err(e: FxError) -> IngestError {
+    IngestError::Unsupported(e.0)
 }
 
 fn zeros(n: usize) -> Tex {
@@ -269,6 +304,9 @@ pub(super) fn fold_window(
     let (w, h) = (frame.w, frame.h);
     let n = w as usize * h as usize;
     let mut st = State::default();
+    // Each styled layer's source alpha (and distance field), shared by
+    // its effects within this window.
+    let mut sources: Vec<(u32, Pixels, Source<CpuTex>)> = Vec::new();
     for step in steps {
         match step {
             Step::Open { .. } => {
@@ -446,11 +484,74 @@ pub(super) fn fold_window(
                 }
                 st.acc = Some(premultiply(&f16_tex(&adjusted)));
             }
-            Step::Direct { .. }
-            | Step::Effect { .. }
-            | Step::BodyOpen
-            | Step::BodyClose { .. }
-            | Step::StyleClose { .. } => {
+            Step::Effect {
+                layer,
+                px,
+                cov,
+                interior,
+                fx,
+            } => {
+                let mut dev = CpuDevice::new(frame);
+                let src = match sources
+                    .iter()
+                    .position(|(id, p, _)| *id == *layer && p.same(px))
+                {
+                    Some(i) => i,
+                    None => {
+                        let plate = tex(&plate(px, n)?, w, h);
+                        let mask = mask_of(cov, w, h).map(|m| mask_tex(&m, w, h));
+                        let a = source_alpha(&mut dev, &plate, mask.as_ref()).map_err(style_err)?;
+                        sources.push((*layer, px.clone(), Source::new(a)));
+                        sources.len() - 1
+                    }
+                };
+                let acc = st.acc.take().unwrap_or_else(|| zeros(n));
+                let drawn = paged_layer_fx::draw_native(
+                    &mut dev,
+                    &tex(&acc, w, h),
+                    &mut sources[src].2,
+                    fx,
+                )
+                .map_err(style_err)?;
+                let drawn = untex(&drawn);
+                st.acc = Some(if *interior {
+                    let shape: Mask = sources[src].2.alpha.px.iter().map(|p| p[0]).collect();
+                    take(&acc, &drawn, &shape)
+                } else {
+                    drawn
+                });
+            }
+            Step::BodyOpen => {
+                let keep = st.acc.clone();
+                st.parked.push(keep);
+            }
+            Step::BodyClose { px, cov, .. } => {
+                let mut dev = CpuDevice::new(frame);
+                let plate = tex(&plate(px, n)?, w, h);
+                let mask = mask_of(cov, w, h).map(|m| mask_tex(&m, w, h));
+                let shape = source_alpha(&mut dev, &plate, mask.as_ref()).map_err(style_err)?;
+                let shape: Mask = shape.px.iter().map(|p| p[0]).collect();
+                let body = st.acc.take().unwrap_or_else(|| zeros(n));
+                let kept = st.parked.pop().flatten().unwrap_or_else(|| zeros(n));
+                st.acc = Some(take(&kept, &body, &shape));
+            }
+            Step::StyleClose {
+                slot, opacity, cov, ..
+            } => {
+                let backdrop = st
+                    .saved
+                    .iter()
+                    .find(|(s, _)| s == slot)
+                    .and_then(|(_, r)| r.clone())
+                    .unwrap_or_else(|| zeros(n));
+                st.saved.retain(|(s, _)| s != slot);
+                let acc = st.acc.take().unwrap_or_else(|| zeros(n));
+                st.acc = Some(match scaled(mask_of(cov, w, h), *opacity, n) {
+                    None => acc,
+                    Some(m) => take(&backdrop, &acc, &m),
+                });
+            }
+            Step::Direct { .. } => {
                 // `supported` refused the plan before any window ran.
                 return Err(IngestError::Unsupported(
                     "this step needs a GPU (see `supported`)".into(),

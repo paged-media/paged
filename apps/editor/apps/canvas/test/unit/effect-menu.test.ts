@@ -31,6 +31,7 @@ import {
   buildEffectMenuItems,
   planAddEffect,
 } from "../../src/effect-menu";
+import { offered } from "../../src/panels/effect-stack";
 import { withFutureKind } from "./support/future-effect-kind";
 
 describe("Effect menu [editor-shell.panels.appearance-transparency]", () => {
@@ -41,7 +42,14 @@ describe("Effect menu [editor-shell.panels.appearance-transparency]", () => {
     const commands = buildEffectMenuCommands();
     // The stroke styles (engine ADR 1053) are applied from the stroke and
     // brushes panels: no Effect menu row.
-    const menuKinds = CORE_EFFECT_KINDS.filter((k) => !k.strokeStyle);
+    // A layer style's pattern overlay is offered by no menu (ADR 1099).
+    const menuKinds = CORE_EFFECT_KINDS.filter(
+      (k) => !k.strokeStyle && offered(k),
+    );
+    expect(CORE_EFFECT_KINDS.some((k) => k.kind === "patternOverlay")).toBe(
+      true,
+    );
+    expect(menuKinds.some((k) => k.kind === "patternOverlay")).toBe(false);
     expect(items.length).toBe(menuKinds.length);
     expect(commands.map((c) => c.id).sort()).toEqual(
       menuKinds.map((k) => `${EFFECT_COMMAND_PREFIX}${k.kind}`).sort(),

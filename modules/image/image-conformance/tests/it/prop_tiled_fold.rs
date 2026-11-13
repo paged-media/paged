@@ -742,8 +742,8 @@ proptest! {
     }
 }
 
-/// Without a device a styled layer is refused by name, and a plain
-/// stack folds: the CPU fold is what a headless template gets.
+/// Without a device a plain stack and a styled one fold (the CPU fold is
+/// what a headless template gets), and a mode without a CPU twin is named.
 #[test]
 fn the_cpu_fold_runs_without_a_device_and_names_what_it_cannot__feat__image_io_depth_color_modes() {
     let (w, h) = (40u32, 30u32);
@@ -770,8 +770,16 @@ fn the_cpu_fold_runs_without_a_device_and_names_what_it_cannot__feat__image_io_d
     .expect("fill");
     let k = s.active_index();
     s.set_style(k, Some(style(0, 0.0))).expect("style");
-    let err = pollster::block_on(s.composite(None, None)).expect_err("a style needs a GPU");
-    assert!(err.to_string().contains("layer style"), "{err}");
+    // Engine ADR 1099: a layer style composites on the CPU too (the
+    // engine's layer-style evaluator on its CPU device).
+    let styled = pollster::block_on(s.composite(None, None)).expect("a styled CPU composite");
+    assert_eq!(styled.len(), (w * h * 4) as usize);
+    // What it cannot: a mode whose kernel has no CPU twin (Dissolve).
+    let mut dissolve = style(0, 0.0);
+    dissolve.drop_shadows[0].blend = image_psd::effects::BlendMode::Dissolve;
+    s.set_style(k, Some(dissolve)).expect("style");
+    let err = pollster::block_on(s.composite(None, None)).expect_err("Dissolve needs a GPU");
+    assert!(err.to_string().contains("Dissolve"), "{err}");
 }
 
 /// A found case: a transparent dab on the background, then a translucent

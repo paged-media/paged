@@ -1,0 +1,28 @@
+[package]
+name = "paged-layer-fx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The layer-style evaluator of the effect stack (engine ADR 1099): the one implementation of a layer style's effects (shadows, glows, satin, overlays, stroke, bevel) over a layer's alpha, as kernel dispatches a device runs — paged.image's GPU fold, or the CPU device here (feature `cpu`), which the engine renderer and paged.image's CPU fold use."
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# The CPU device: the kernels' shipped scalar twins over f16-quantised
+# textures (paged.image's CPU fold and the engine renderer).
+cpu = ["paged-kernels/cpu"]
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+paged-kernels = { path = "../paged-kernels" }
+paged-blend = { path = "../paged-blend" }
+# Contour LUTs: the Curves dialog's natural spline (`curve_natural_f32`).
+paged-pixel = { path = "../paged-pixel" }
+bytemuck = { workspace = true }
+# The rgba16float texels a pattern tile is uploaded as, and the CPU
+# device's stores.
+half = { workspace = true }

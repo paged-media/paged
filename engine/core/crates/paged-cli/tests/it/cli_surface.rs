@@ -47,7 +47,9 @@
 //! with v77's two SVG kinds, engine ADR 1031, which the CLI has no subcommand for yet; 42 of 86
 //! with v77's `SetViewSettings`, which only a live canvas has a use for); 43
 //! of 86 once `paged place` and `paged script` import SVG through
-//! `RequestSvgImport`; what remains is almost entirely the first kind.
+//! `RequestSvgImport`; 44 of 87 with engine ADR 1099's
+//! `RequestPsdLayersPlace`, which `paged place --layers` sends; what
+//! remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
 //! `Mutate` has been one of them since the colour-profile activation in
@@ -310,9 +312,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_43_of_86() {
-    assert_eq!(kinds_the_cli_sends().len(), 43);
-    assert_eq!(every_kind().len(), 86);
+fn the_cli_reaches_44_of_87() {
+    assert_eq!(kinds_the_cli_sends().len(), 44);
+    assert_eq!(every_kind().len(), 87);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names

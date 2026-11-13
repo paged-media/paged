@@ -136,6 +136,8 @@ export type {
   SvgExportResult,
   SvgImportRequest,
   SvgImportResult,
+  PsdLayersPlaceRequest,
+  PsdLayersPlaceResult,
   MutateOptions,
   UndoLog,
   UndoLogStep,
@@ -391,6 +393,8 @@ export type { RasterOp } from "./wire.js";
 // Extensions ADR 345, amendment 1 (C6) — movie and sound frames (engine ADR 1027).
 export type { MediaItem, MediaKind, MediaPlay, MediaSource } from "./wire.js";
 
+// Engine ADR 1099 — `host.document.placePsdLayers`' options.
+export type { PsdPlaceOptions } from "./wire.js";
 // Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and
 // their report.
 export type {
