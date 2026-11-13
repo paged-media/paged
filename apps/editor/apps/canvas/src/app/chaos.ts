@@ -44,11 +44,18 @@ export interface ReplyChaos {
   held(): number;
   /** Settle everything held, in arrival order, and drop every rule. */
   clear(): void;
+  /** The next reply to a `kind` request fails as if the worker had: its
+   *  caller is rejected (the worker itself goes on). */
+  failNext(kind: string): void;
+  /** The worker fails (`UXI-T61`): the client turns fatal, as on an
+   *  uncaught worker error, and every caller still held is rejected. */
+  failWorker(): void;
 }
 
 interface Held {
   reply: WorkerToMain;
   settle: (reply: WorkerToMain) => void;
+  fail: (error: Error) => void;
 }
 
 /** The chaos of the editor whose client `client()` returns (read at each
@@ -59,11 +66,16 @@ export function createReplyChaos(
   const delays = new Map<string, { ms: ChaosDelay; nth: number }>();
   const waiting = new Map<Held, ReturnType<typeof setTimeout>>();
   let order: { kinds: readonly string[]; held: Held[] } | null = null;
+  const failing = new Set<string>();
 
   const gate: ReplyGate = (kind, reply) =>
-    new Promise<WorkerToMain>((settle) => {
+    new Promise<WorkerToMain>((settle, fail) => {
+      if (failing.delete(kind)) {
+        fail(new Error("canvas worker failed: simulated reply"));
+        return;
+      }
       if (order && order.kinds[order.held.length] === kind) {
-        order.held.push({ reply, settle });
+        order.held.push({ reply, settle, fail });
         if (order.held.length === order.kinds.length) {
           const held = order.held;
           order = null;
@@ -81,7 +93,7 @@ export function createReplyChaos(
         settle(reply);
         return;
       }
-      const held: Held = { reply, settle };
+      const held: Held = { reply, settle, fail };
       waiting.set(
         held,
         setTimeout(() => {
@@ -106,11 +118,30 @@ export function createReplyChaos(
     clear() {
       client()?.setReplyGate(null);
       delays.clear();
+      failing.clear();
       const held = [...(order?.held ?? []), ...waiting.keys()];
       for (const timer of waiting.values()) clearTimeout(timer);
       waiting.clear();
       order = null;
       for (const h of held) h.settle(h.reply);
+    },
+    failNext(kind) {
+      failing.add(kind);
+      install();
+    },
+    failWorker() {
+      const error = new Error("canvas worker failed: simulated");
+      // The client's own handler of an uncaught worker error (private: a
+      // test seam reached only on a `?debug=chaos` page).
+      (
+        client() as unknown as
+          { onWorkerError?: (e: { message: string }) => void } | undefined
+      )?.onWorkerError?.({ message: "simulated" });
+      const held = [...(order?.held ?? []), ...waiting.keys()];
+      for (const timer of waiting.values()) clearTimeout(timer);
+      waiting.clear();
+      order = null;
+      for (const h of held) h.fail(error);
     },
   };
 }

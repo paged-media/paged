@@ -54,6 +54,15 @@ import {
   type MarqueeRectPageLocal,
   type SelectionState,
   useEditorKeys,
+  createInteractionCoordinator,
+  ownerOfTool,
+  useInteractionCoordinator,
+  type EndResult,
+  type GuardToken,
+  type InteractionCoordinator,
+  type InteractionPhase,
+  type InteractionSession,
+  type SessionSpec,
 } from "@paged-media/shell";
 
 import type { CanvasClient } from "@paged-media/client";
@@ -90,6 +99,13 @@ import { pinchCamera, startPinch, type Pinch } from "./pinch";
 import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
+
+// The interaction coordinator (editor ADR 1210; `UXI-MIG-003`): with
+// `?debug=coordinator` the canvas's pointer sessions are the editor's — a
+// window blur, a hidden page, a document or tool switch and unmount end
+// them — and the terminal events of the interaction contract apply. Without it, the canvas keeps its
+// sessions to itself and behaves as it always has.
+const COORDINATED = debugFlag("coordinator");
 
 // Re-export the (now shell-owned) overlay state types so existing
 // imports from this module continue to work.
@@ -191,6 +207,8 @@ export interface ViewportCanvasProps {
     onCancel: () => void;
     /** Per-position cursor refinement from the handler's `cursorAt`. */
     hoverCursor?: (e: CanvasPointerEvent) => string | undefined;
+    /** The effective tool's id (the session's owner and trace). */
+    toolId?: string;
   } | null;
   /** Editor ADR 311 — the tool in hand works on the frame an edit context
    *  was entered on (Free Transform): a press over that frame goes to the
@@ -267,6 +285,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
      *  for its hit test to say whether the drag moves an item or draws a
      *  marquee. */
     press?: PressState;
+    /** A press released before its hit test answered: its session, ended
+     *  once the press is finished. */
+    pressSession?: InteractionSession | null;
   } | null>(null);
   type DragState = NonNullable<typeof dragStateRef.current>;
 
@@ -301,6 +322,24 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // anchor is two of those, and must not also run the canvas's
   // double-click (enter an edit context / a group) underneath it.
   const pathEditConsumedRef = useRef(false);
+
+  // The interaction coordinator (editor ADR "The interaction
+  // coordinator"): every pointer sequence on the canvas is a SESSION —
+  // with the flag, a session of the editor's coordinator, which ends it
+  // on a window blur, a hidden page, a document or tool switch and
+  // unmount; without it, one of the canvas's own that nothing outside
+  // ends. `sessionRef` is the session holding the pointer; a gesture
+  // that was released and still commits keeps its own (`committing`).
+  const editorInteractions = useInteractionCoordinator();
+  const [ownInteractions] = useState(() => createInteractionCoordinator());
+  const interactions: InteractionCoordinator = COORDINATED
+    ? editorInteractions
+    : ownInteractions;
+  const sessionRef = useRef<InteractionSession | null>(null);
+  // What undoes each open session when something outside ends it, by
+  // session id: the drag it holds while it holds the pointer, the commit
+  // in flight once it is released.
+  const rollBacksRef = useRef(new Map<string, (reason: string) => void>());
 
   // Phase A / E — marquee + snap guides live on OverlaySignalsContext.
   // ViewportCanvas writes (pointer plumbing); the marquee + snap-lines
@@ -617,6 +656,97 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return true;
   };
 
+  /** Open the session of the press that just began (`UXI-INV-001`: one
+   *  owner per pointer sequence). `rollBack` undoes what the press began
+   *  when the session is ended from outside. */
+  const openSession = (
+    e: React.PointerEvent<HTMLDivElement>,
+    spec: Omit<SessionSpec, "pointerId" | "pointerType" | "onAbort">,
+    rollBack: (reason: string) => void,
+  ): InteractionSession | null => {
+    const prev = sessionRef.current;
+    if (prev) {
+      sessionRef.current = null;
+      rollBacksRef.current.delete(prev.id);
+      interactions.end(prev, "abort", "superseded");
+    }
+    const target = e.currentTarget;
+    const pointerId = e.pointerId;
+    const s = interactions.begin({
+      ...spec,
+      pointerId,
+      pointerType: e.pointerType,
+      onAbort: (reason) => {
+        const holding = sessionRef.current === s;
+        if (holding) sessionRef.current = null;
+        if (holding && target.hasPointerCapture?.(pointerId)) {
+          target.releasePointerCapture(pointerId);
+        }
+        const undo = s ? rollBacksRef.current.get(s.id) : undefined;
+        if (s) rollBacksRef.current.delete(s.id);
+        undo?.(reason);
+      },
+    });
+    if (s) rollBacksRef.current.set(s.id, rollBack);
+    sessionRef.current = s;
+    return s;
+  };
+
+  /** Move the session holding the pointer to `phase`. */
+  const sessionTo = (phase: InteractionPhase) => {
+    const s = sessionRef.current;
+    if (s && s.phase !== phase) interactions.transition(s, phase);
+  };
+
+  /** End the session holding the pointer, as its owner decided. */
+  const closeSession = (result: EndResult, reason?: string) => {
+    const s = sessionRef.current;
+    if (!s) return;
+    sessionRef.current = null;
+    rollBacksRef.current.delete(s.id);
+    interactions.end(s, result, reason);
+  };
+
+  /** The pointer was let go and the session's work goes on (a commit in
+   *  flight): it stops holding the pointer, and `rollBack` now undoes
+   *  that work. Returns the session, for `finishSession`. */
+  const releaseSession = (
+    rollBack: (reason: string) => void,
+  ): InteractionSession | null => {
+    const s = sessionRef.current;
+    if (!s) return null;
+    sessionRef.current = null;
+    if (s.phase !== "previewing") interactions.transition(s, "previewing");
+    interactions.transition(s, "committing");
+    rollBacksRef.current.set(s.id, rollBack);
+    return s;
+  };
+
+  /** End a released session once its work is done. */
+  const finishSession = (
+    s: InteractionSession | null | undefined,
+    result: EndResult,
+    reason?: string,
+  ) => {
+    if (!s || s.ended) return;
+    rollBacksRef.current.delete(s.id);
+    interactions.end(s, result, reason);
+  };
+
+  /** IC3 — a late answer is applied only while the epochs it was asked
+   *  under hold (`UXI-OWN-008`, `UXI-ASY-002`): no newer press, no other
+   *  document, no other context, its session not aborted. With the flag
+   *  off every answer applies, as before. */
+  const stillCurrent = (token: GuardToken): boolean =>
+    !COORDINATED || interactions.confirm(token);
+
+  /** What a session that holds the pointer undoes when it is ended from
+   *  outside: whatever drag the canvas has open (INV-8). */
+  const rollBackPointer = () => {
+    abortActiveDrag();
+    contentGestureRef.current = false;
+  };
+
   // Begin a worker gesture. Fire-and-forget — the handle returns
   // asynchronously; pointer moves that arrive before it does are
   // accumulated into `pendingDelta` and flushed on resolve. A pointer
@@ -639,14 +769,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         gs.handle = handle;
         const pending = gs.pendingDelta;
         if (gs.release === "commit") {
+          const session = gs.session;
           void props.client
             .updateGesture(handle, pending, gs.modifiers, "json")
             .then(() => props.client.commitGesture(handle))
             .then(() => {
               setSnapLines([]);
               props.onGestureCommitted?.();
+              finishSession(session, "commit");
             })
-            .catch(() => {});
+            .catch(() => finishSession(session, "abort", "commit failed"));
           return;
         }
         if (pending[0] !== 0 || pending[1] !== 0) {
@@ -658,12 +790,28 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             .catch(() => {});
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        const drag = dragStateRef.current;
+        const holding = drag !== null && drag.gestureState === gs;
+        if (COORDINATED) {
+          // The engine refused the begin (a locked item, a gesture it
+          // still holds, a worker that failed): the drag ends here, with
+          // no mutation, and never turns into a pan (`UXI-STATE-002`,
+          // the interaction contract's IC2). What follows the press is
+          // inert until the pointer is let go.
+          const reason = gestureFailureReason(err);
+          if (holding) {
+            dragStateRef.current = null;
+            setSnapLines([]);
+            closeSession("abort", reason);
+          }
+          finishSession(gs.session, "abort", reason);
+          return;
+        }
         // Worker rejected — typically a rotated frame in Phase B.
         // Downgrade to pan so the drag still does *something*
         // sensible.
-        const drag = dragStateRef.current;
-        if (drag && drag.gestureState === gs) drag.mode = "pan";
+        if (holding) drag.mode = "pan";
       });
   };
 
@@ -683,11 +831,22 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (pinchHeldRef.current) return true;
     if (touches.size < 2) return false;
     // The second finger: roll back what the first one began, then pinch.
-    abortActiveDrag();
+    const first = sessionRef.current;
+    if (first) interactions.cancel(first, "pinch");
+    else abortActiveDrag();
     contentGestureRef.current = false;
     const [a, b] = [...touches.values()];
     pinchRef.current = startPinch(props.camera, a!, b!);
     pinchHeldRef.current = true;
+    openSession(
+      e,
+      { owner: "canvas-camera", kind: "pinch", preempt: true },
+      () => {
+        pinchRef.current = null;
+        pinchHeldRef.current = false;
+        touchesRef.current.clear();
+      },
+    );
     e.currentTarget.setPointerCapture(e.pointerId);
     return true;
   };
@@ -714,7 +873,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     if (touches.size < 2) pinchRef.current = null;
-    if (touches.size === 0) pinchHeldRef.current = false;
+    if (touches.size === 0) {
+      pinchHeldRef.current = false;
+      closeSession("commit");
+    }
     return true;
   };
 
@@ -737,6 +899,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       if (dispatchContentPointer(e, "down")) {
         e.currentTarget.setPointerCapture(e.pointerId);
         contentGestureRef.current = true;
+        openSession(
+          e,
+          { owner: "frame-content", kind: "content" },
+          rollBackPointer,
+        );
         return;
       }
       editContextStack.commit();
@@ -759,6 +926,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         startPointer: [e.clientX, e.clientY],
         maxDelta: 0,
       };
+      const toolId = props.toolGesture.toolId;
+      openSession(
+        e,
+        {
+          owner: toolId ? ownerOfTool(toolId) : "canvas-draw",
+          kind: "tool",
+          ...(toolId ? { toolId } : {}),
+          mutating: true,
+        },
+        rollBackPointer,
+      );
       props.toolGesture.onDown(buildToolPointer(e, 0));
       return;
     }
@@ -796,6 +974,15 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             startPointer: [e.clientX, e.clientY],
             maxDelta: 0,
           };
+          openSession(
+            e,
+            {
+              owner: "canvas-transform",
+              kind: "bundle-handle",
+              mutating: true,
+            },
+            rollBackPointer,
+          );
           return;
         }
       }
@@ -1031,6 +1218,30 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       gestureState,
       press,
     };
+    const pathEditing = pathEditDragRef.current;
+    openSession(
+      e,
+      {
+        owner: pathEditing
+          ? "canvas-path"
+          : legacyAlso
+            ? "canvas-text"
+            : mode === "gesture"
+              ? "canvas-transform"
+              : mode === "pan"
+                ? tool === "text" && e.button === 0
+                  ? "canvas-text"
+                  : "canvas-camera"
+                : "canvas-select",
+        kind: pathEditing ? "path-edit" : mode,
+        mutating: mode === "gesture" || pathEditing || legacyAlso,
+        phase: mode === "press" ? "pending-hit" : "pressed",
+        ...(props.toolGesture?.toolId
+          ? { toolId: props.toolGesture.toolId }
+          : {}),
+      },
+      rollBackPointer,
+    );
     if (press) resolvePress(dragStateRef.current);
   };
 
@@ -1040,6 +1251,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const resolvePress = (drag: DragState) => {
     const press = drag.press;
     if (!press) return;
+    const token = interactions.token("press-hit", sessionRef.current);
     void props.client
       .send({
         kind: "hitTest",
@@ -1059,6 +1271,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         press.hit = null;
       })
       .then(() => {
+        if (!stillCurrent(token)) {
+          // A newer press, another document or an aborted session: this
+          // press is over, whatever its hit was.
+          finishSession(drag.pressSession, "abort", "stale press-hit");
+          return;
+        }
         const live = dragStateRef.current === drag;
         if (press.releaseDoc) finishPress(drag);
         else if (live && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
@@ -1071,6 +1289,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const startPressDrag = (drag: DragState, docDelta: Pt = [0, 0]) => {
     const press = drag.press;
     if (!press || press.hit === undefined || drag.mode !== "press") return;
+    if (dragStateRef.current === drag) sessionTo("previewing");
     if (!press.hit) {
       drag.mode = "marquee";
       return;
@@ -1083,6 +1302,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // Engine ADR 193, amendment 1 — the live Alt: an Alt press-drag on an
       // unselected item duplicates it, as one on a selected item does.
       modifiers: { shift: drag.modifiers.shift, alt: press.alt },
+      session: drag.pressSession ?? null,
     };
     drag.mode = "gesture";
     drag.gestureState = gs;
@@ -1097,7 +1317,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       ),
     ).then((ids) => {
       if (!ids || ids.length === 0) {
-        if (dragStateRef.current === drag) drag.mode = "pan";
+        if (dragStateRef.current === drag) {
+          // Nothing was selected to move. With the coordinator the drag
+          // ends; without, it pans (the legacy fallback).
+          if (COORDINATED) {
+            dragStateRef.current = null;
+            closeSession("abort", "nothing to move");
+          } else {
+            drag.mode = "pan";
+          }
+        }
+        finishSession(drag.pressSession, "commit");
         return;
       }
       gs.target = ids.slice();
@@ -1119,6 +1349,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       if (drag.gestureState) drag.gestureState.release = "commit";
       return;
     }
+    // Nothing under the press: the released drag was a marquee.
+    finishSession(drag.pressSession, "commit");
     const anchor = drag.marqueeAnchor;
     const pageRect = anchor
       ? rects[props.pageIds.indexOf(anchor.pageId)]
@@ -1175,6 +1407,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         e.clientY - toolDrag.startPointer[1],
       );
       if (d > toolDrag.maxDelta) toolDrag.maxDelta = d;
+      if (toolDrag.maxDelta > CLICK_DRAG_THRESHOLD_PX) sessionTo("previewing");
       props.toolGesture.onMove(buildToolPointer(e, toolDrag.maxDelta));
       return;
     }
@@ -1186,6 +1419,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         e.clientY - handleDrag.startPointer[1],
       );
       if (d > handleDrag.maxDelta) handleDrag.maxDelta = d;
+      if (handleDrag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
+        sessionTo("previewing");
       handleDrag.router.move(buildToolPointer(e, handleDrag.maxDelta));
       return;
     }
@@ -1241,6 +1476,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     const dy = e.clientY - drag.startPointer[1];
     const delta = Math.hypot(dx, dy);
     if (delta > drag.maxDelta) drag.maxDelta = delta;
+    if (drag.maxDelta > CLICK_DRAG_THRESHOLD_PX && drag.mode !== "press")
+      sessionTo("previewing");
     if (drag.mode === "press" && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX) {
       // The hit test has answered: become the move or the marquee.
       if (drag.press) drag.press.alt = e.altKey;
@@ -1340,6 +1577,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       contentGestureRef.current = false;
       e.currentTarget.releasePointerCapture(e.pointerId);
       dispatchContentPointer(e, "up");
+      closeSession("commit");
       return;
     }
     // Phase 2 — commit the active tool handler's gesture.
@@ -1360,6 +1598,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // it might have been). Left armed, every later button-less
         // move panned the view until the next press (ED-3).
         dragStateRef.current = null;
+        closeSession("commit");
         return;
       }
     }
@@ -1370,6 +1609,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       handleDragRef.current = null;
       e.currentTarget.releasePointerCapture(e.pointerId);
       handleDrag.router.up(buildToolPointer(e, handleDrag.maxDelta));
+      closeSession("commit");
       return;
     }
     // Path-edit mode — hand the release to the session. Whatever it
@@ -1389,13 +1629,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           e.currentTarget.releasePointerCapture(e.pointerId);
           dragStateRef.current = null;
         }
+        closeSession("commit");
         return;
       }
     } else {
       pathEditConsumedRef.current = false;
     }
     const drag = dragStateRef.current;
-    if (!drag) return;
+    if (!drag) {
+      closeSession("commit");
+      return;
+    }
     e.currentTarget.releasePointerCapture(e.pointerId);
     dragStateRef.current = null;
     // Modifier state can change between down and up (user lifts
@@ -1411,6 +1655,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // threshold), cancel it so the worker doesn't hold a stale
     // handle.
     if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) {
+      // A click: the press settles; what it selects is answered later.
+      closeSession("commit");
       setMarqueeRect(null);
       if (drag.mode === "gesture" && drag.gestureState) {
         const stale = drag.gestureState.handle;
@@ -1451,6 +1697,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           docY - pageRect.y,
         ];
         const filter = isText ? "text" : "any";
+        // IC3 — the click's answer applies only if no newer press, document
+        // or context came first (UXI-T57, UXI-T59).
+        const token = interactions.token("hit-test");
         // A promise chain, not a try: the compiler does not lower
         // conditionals inside a try (ADR 229).
         const resolveHit = async () => {
@@ -1458,6 +1707,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             kind: "hitTest",
             payload: { pageId, docPoint, filter },
           });
+          if (!stillCurrent(token)) return;
           if (reply.kind !== "hitResult") return;
           const hit = reply.payload;
           // C-4 — owned-content interception: a Type-tool click on
@@ -1468,6 +1718,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           // empty objectType registry early-outs, so documents
           // without plugins pay nothing.
           if (isText && hit.element) {
+            if (!stillCurrent(token)) return;
             const owned = await tryEnterOwnedContent({
               element: hit.element,
               groupChain: [],
@@ -1490,10 +1741,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
               hit.storyId,
               hit.offsetWithinStory,
               clickCount,
-              setContentSelection,
+              (sel) => {
+                if (stillCurrent(token)) setContentSelection(sel);
+              },
             );
             return;
           }
+          if (!stillCurrent(token)) return;
           props.onHit?.({ pageId, docPoint, hit }, modifiers);
         };
         void resolveHit().catch((err: unknown) => {
@@ -1515,27 +1769,50 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         e.clientX - rect.left,
         e.clientY - rect.top,
       );
+      drag.pressSession = releaseSession(() => {
+        drag.press = undefined;
+        const gs = drag.gestureState;
+        if (!gs) return;
+        gs.release = undefined;
+        if (gs.handle !== null) {
+          void props.client.cancelGesture(gs.handle).catch(() => {});
+        }
+      });
       finishPress(drag);
     } else if (drag.mode === "marquee") {
       if (marqueeRect && props.onMarquee) {
         props.onMarquee(marqueeRect.pageId, marqueeRect.rect, modifiers);
       }
       setMarqueeRect(null);
+      closeSession("commit");
     } else if (drag.mode === "gesture" && drag.gestureState) {
-      const handle = drag.gestureState.handle;
+      const gs = drag.gestureState;
+      const handle = gs.handle;
+      // The pointer is let go; the commit is still to land. Ended from
+      // outside before it does, the gesture is cancelled instead.
+      gs.session = releaseSession(() => {
+        gs.release = undefined;
+        if (gs.handle !== null) {
+          void props.client.cancelGesture(gs.handle).catch(() => {});
+        }
+      });
       if (handle === null) {
         // Begin hasn't resolved (a fast drag, or one Alt re-began):
         // the resolver commits once the handle lands.
-        drag.gestureState.release = "commit";
+        gs.release = "commit";
       } else {
+        const session = gs.session;
         void props.client
           .commitGesture(handle)
           .then(() => {
             setSnapLines([]);
             props.onGestureCommitted?.();
+            finishSession(session, "commit");
           })
-          .catch(() => {});
+          .catch(() => finishSession(session, "abort", "commit failed"));
       }
+    } else {
+      closeSession("commit");
     }
   };
 
@@ -1586,16 +1863,66 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     }
   };
 
+  // The interaction contract (IC2, §7.2, §12.1 case 3): Escape cancels
+  // the canvas's own session that holds the pointer — a move, a handle
+  // drag, a marquee or a press still waiting for its hit — and the rest of
+  // the drag does nothing: it never turns into a pan. A registered tool's
+  // drag is cancelled by its handler (the gesture spine hears the key);
+  // the canvas only lets go of it. A pan, a content gesture and path edit
+  // keep their own Escape.
+  const escapeSession = () => {
+    const s = sessionRef.current;
+    if (!s) return;
+    if (s.kind === "tool") {
+      toolDragRef.current = null;
+      closeSession("cancel", "escape");
+      return;
+    }
+    if (
+      s.kind === "press" ||
+      s.kind === "marquee" ||
+      s.kind === "gesture" ||
+      s.kind === "bundle-handle"
+    ) {
+      interactions.cancel(s, "escape", "cancel");
+    }
+  };
+
+  // A lost pointer capture ends the session that held it (§7.2,
+  // `UXI-INV-014`): an element that took the capture, a browser that
+  // dropped it. Not a pinch's: a lifted finger hands the pinch on.
+  const onLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!COORDINATED) return;
+    const s = sessionRef.current;
+    if (!s || s.kind === "pinch" || s.pointerId !== e.pointerId) return;
+    interactions.cancel(s, "capture-lost");
+  };
+
+  // Unmount ends the session the canvas holds (§7.2): its engine gesture
+  // is cancelled, not left open for the next canvas to trip over.
+  useEffect(() => {
+    if (!COORDINATED) return;
+    return () => {
+      const s = sessionRef.current;
+      if (s) interactions.cancel(s, "unmount");
+    };
+  }, [interactions]);
+
   // Phase B — Escape cancels the active gesture. Listen at document
   // level so it works while pointer capture is in flight on the
   // wrapper.
   const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.key !== "Escape") return;
+    if (COORDINATED) {
+      escapeSession();
+      return;
+    }
     const handleDrag = handleDragRef.current;
     if (handleDrag) {
       // The release that follows finds no drag and does nothing.
       handleDragRef.current = null;
       handleDrag.router.cancel();
+      closeSession("cancel", "escape");
       return;
     }
     const drag = dragStateRef.current;
@@ -1624,8 +1951,15 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // delta — the classic "alt-tab mid-drag leaves a stuck gesture" bug
   // (gestures.md E2E-11). pointercancel covers capture *theft*; blur
   // covers the case where the pointer never sends a cancel.
-  const onWindowBlur = useEffectEvent(() => abortActiveDrag());
+  // With the coordinator the editor's InteractionProvider hears the blur
+  // and ends the session; this listener is the canvas's own without it.
+  const onWindowBlur = useEffectEvent(() => {
+    const s = sessionRef.current;
+    if (s) interactions.cancel(s, "blur");
+    else abortActiveDrag();
+  });
   useEffect(() => {
+    if (COORDINATED) return;
     const onBlur = () => onWindowBlur();
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
@@ -1643,9 +1977,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // state; no tool drag to abort).
     if (contentGestureRef.current) {
       contentGestureRef.current = false;
+      closeSession("abort", "pointercancel");
       return;
     }
-    abortActiveDrag();
+    const s = sessionRef.current;
+    if (s) interactions.cancel(s, "pointercancel");
+    else abortActiveDrag();
   };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1720,8 +2057,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // document context's) sub-context providers may take the double-click
     // for a header, footer or note edited in place. None answering leaves
     // it to what follows.
+    // IC3 — the chain's answers apply only while no newer press, document
+    // or context came first.
+    const token = interactions.token("double-click");
     const offerFirst = async () => {
       if (await trySubContext({ pageId, pagePoint })) return;
+      if (!stillCurrent(token)) return;
       // Phase H — double-click on a frame nested inside a group →
       // select the whole outermost containing group as a unit.
       if (!props.onDoubleClickGroup || typeTool) return;
@@ -1737,6 +2078,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           filter: "any",
         },
       });
+      if (!stillCurrent(token)) return;
       if (reply.kind !== "hitResult") return;
       const chain = reply.payload.groupChain ?? [];
       const element = reply.payload.element ?? null;
@@ -1765,7 +2107,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           pageId,
           pagePoint,
         });
-        if (owned) return;
+        if (owned || !stillCurrent(token)) return;
         const tc = hit.tableContext ?? null;
         tool?.setBaseTool(TEXT_TOOL_ID);
         setContentSelection({
@@ -1797,6 +2139,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           .elementGeometry([element])
           .then((items) => items[0]?.hasImage === true)
           .catch(() => false));
+      if (!stillCurrent(token)) return;
       const at = {
         element,
         groupChain: chain,
@@ -1832,6 +2175,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       onPointerLeave={onPointerLeave}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onLostPointerCapture}
       onWheel={onWheel}
       onDoubleClick={onDoubleClick}
     >
@@ -1913,6 +2257,8 @@ interface PressState {
 
 interface GestureState {
   handle: GestureHandle | null;
+  /** The released gesture's session, while its commit is in flight. */
+  session?: InteractionSession | null;
   pendingDelta: [number, number];
   target: ElementId[];
   spec: GestureType;
@@ -2321,6 +2667,15 @@ const hudSelStyle: React.CSSProperties = {
 
 // Pure helpers of the pointer path (module scope: the component reads
 // them before their place in its body, ADR 229).
+
+/** A refused gesture begin, as a fixed diagnostic (the trace records no
+ *  free text, `UXI-OBS-002`). */
+function gestureFailureReason(err: unknown): string {
+  const message = err instanceof Error ? err.message : "";
+  if (message.startsWith("canvas worker failed")) return "worker-failed";
+  if (message.startsWith("beginGesture failed")) return "begin refused";
+  return "begin failed";
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;

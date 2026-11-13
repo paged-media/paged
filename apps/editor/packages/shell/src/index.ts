@@ -73,6 +73,35 @@ export {
   setDebugHandle,
   type DebugHandles,
 } from "./state/debug-handles";
+// The interaction coordinator (editor ADR "The interaction coordinator").
+export {
+  INTERACTION_COORDINATOR,
+  STALE,
+  createInteractionCoordinator,
+  interactionCoordinatorOf,
+  interactionDebugView,
+  useInteractionCoordinator,
+  type ActiveSessionView,
+  type EndResult,
+  type GuardToken,
+  type InteractionCoordinator,
+  type InteractionSession,
+  type InteractionSnapshot,
+  type SessionSpec,
+  type Stale,
+} from "./interaction/coordinator";
+export {
+  INTERACTION_OWNERS,
+  INTERACTION_PHASES,
+  OWNER_PRIORITY,
+  ownerOfTool,
+  ownerRank,
+  type InteractionOwner,
+  type InteractionPhase,
+} from "./interaction/owners";
+export type { EpochSnapshot } from "./interaction/epochs";
+export type { TraceEntry } from "./interaction/trace";
+export { InteractionProvider } from "./interaction/interaction-provider";
 
 export {
   CanvasClientProvider,

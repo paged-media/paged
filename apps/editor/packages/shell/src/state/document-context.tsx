@@ -21,6 +21,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useState,
   type PropsWithChildren,
@@ -31,6 +32,8 @@ import type {
   PageId,
   ResolutionResult,
 } from "@paged-media/client";
+
+import { useInteractionCoordinator } from "../interaction/coordinator";
 
 /**
  * Where a document load is (UXI-PRF-003; strategy §9.1; editor ADR "Docks
@@ -108,9 +111,19 @@ export function DocumentProvider({ children }: PropsWithChildren) {
   const [snapshots, setSnapshots] = useState<Map<PageId, string>>(new Map());
   const [snapshotsReady, setSnapshotsReady] = useState(false);
   const [resolution, setResolution] = useState<ResolutionResult | null>(null);
+  // The interaction contract (§7.2, `UXI-INV-015`): a document replaced or
+  // closed ends every open gesture first, and an answer asked of the old
+  // document is never applied to the new one (the document epoch).
+  const interactions = useInteractionCoordinator();
+  const docId = handle?.docId ?? null;
+  useLayoutEffect(() => {
+    interactions.documentChanged(docId ? "document-open" : "document-close");
+  }, [interactions, docId]);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const resetForNewDocument = useCallback(() => {
+    // A load is starting: what was asked of the open document is stale.
+    interactions.documentChanged("document-load");
     setSnapshots((prev) => {
       for (const url of prev.values()) URL.revokeObjectURL(url);
       return new Map();
@@ -120,7 +133,7 @@ export function DocumentProvider({ children }: PropsWithChildren) {
     // The loader re-sets sourceName right after this reset; clearing
     // here keeps a failed load from wearing the previous file's name.
     setSourceName(null);
-  }, []);
+  }, [interactions]);
 
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<DocumentContextValue>(

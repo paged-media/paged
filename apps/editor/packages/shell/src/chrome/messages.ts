@@ -204,6 +204,12 @@ export const RECOVERY_PROMPT = defineMessages("shell.recoveryPrompt", {
   unknownPages: "?",
 });
 
+export const ENGINE_FAILURE = defineMessages("shell.engineFailure", {
+  title: "The canvas engine stopped",
+  body: "Nothing more can be changed in this session, and the change in progress was not applied. Work since the last save is kept in this browser's recovery copy: reload to get it back.",
+  reload: "Reload",
+});
+
 export const COLLAB = defineMessages("shell.collab", {
   share: "Share",
   soon: "Sharing and collaboration are coming soon",

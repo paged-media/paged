@@ -57,6 +57,8 @@ export interface ToolGestureDispatch {
   /** Per-position cursor from the handler's `cursorAt`, resolved to a
    *  CSS string; undefined falls back to the tool's base cursor. */
   hoverCursor?: (e: CanvasPointerEvent) => string | undefined;
+  /** The effective tool's id: the canvas's session names it. */
+  toolId?: string;
 }
 
 export function useGestureSpine(): {
@@ -136,6 +138,7 @@ export function useGestureSpine(): {
                   return spec ? resolveCursorCss(spec) : undefined;
                 }
               : undefined,
+            toolId: effectiveTool,
           }
         : null,
       cursor,
