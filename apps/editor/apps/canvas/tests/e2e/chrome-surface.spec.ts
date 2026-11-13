@@ -185,7 +185,7 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
       .toBeLessThan(zoomed);
   });
 
-  test("AC-CHROME-5 — Tab hides the whole chrome, Shift+Tab keeps the tool rail @feat:editor-shell.panel-rail @feat:editor-shell.tool-rail @level:happy", async ({
+  test('AC-CHROME-5 — with "Tab hides panels (InDesign)" on, Tab hides the whole chrome, Shift+Tab keeps the tool rail @feat:editor-shell.panel-rail @feat:editor-shell.tool-rail @level:happy', async ({
     page,
   }) => {
     const rail = page.locator("[data-tool-rail]");
@@ -195,7 +195,18 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
     // Focus mode. Note this hides the ONLY mode-switching affordance in
     // the app (the bottom mode bar goes too), and the way back is Tab
     // again — which nothing on screen says once the chrome is gone. Tab
-    // is the toggle on the canvas the user clicked into (ADR 234).
+    // is the toggle on the canvas the user clicked into only with the
+    // opt-in preference on (ADR 234, amended by ADR 1201 D-03); otherwise
+    // it moves focus and Cmd/Ctrl+\ is the toggle.
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: { commands: { invoke(id: string): Promise<unknown> } };
+          };
+        }
+      ).__canvas.registries.commands.invoke("paged.preferences.tabHidesPanels"),
+    );
     await page
       .locator("[data-paged-canvas]")
       .click({ position: { x: 8, y: 8 } });
