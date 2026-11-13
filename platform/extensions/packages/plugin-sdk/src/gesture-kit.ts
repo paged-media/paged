@@ -75,7 +75,10 @@ export {
   type ZoomTapeSample,
 } from "./pointer-tape.js";
 export {
+  channelLog,
   checkCancel,
+  checkLiveness,
+  checkNoInterleave,
   checkUndoRedo,
   commitsSince,
   engineModelChannel,
@@ -85,9 +88,13 @@ export {
   firstDifference,
   InvariantError,
   stableJson,
+  type ChannelLogEntry,
   type CommitSummary,
   type EngineModelChannelOptions,
   type InvariantId,
+  type LivenessInterrupt,
+  type LivenessOptions,
   type ModelChannel,
+  type NoInterleaveOptions,
   type UndoRedoReport,
 } from "./gesture-invariants.js";

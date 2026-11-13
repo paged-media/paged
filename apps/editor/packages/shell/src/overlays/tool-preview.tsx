@@ -63,18 +63,20 @@ function ToolPreviewRender(props: OverlayProps) {
     ? (slot as readonly ToolPreviewShape[])
     : [slot as ToolPreviewShape];
   if (shapes.length === 0) return null;
-  // The single-shape case renders EXACTLY the node it always did — no
-  // wrapper — so every existing preview keeps its DOM.
-  if (shapes.length === 1) return renderPreviewShape(shapes[0], props);
+  // One plain group marks the live preview (`data-gesture-preview`: the
+  // interaction contract's specs prove a cancelled gesture leaves none);
+  // the shapes inside keep their own DOM.
   return (
-    <>
-      {shapes.map((shape, i) => (
-        // Positional key: the list is republished wholesale on every
-        // pointermove, so there is no identity to preserve across
-        // renders.
-        <g key={i}>{renderPreviewShape(shape, props)}</g>
-      ))}
-    </>
+    <g data-gesture-preview="tool">
+      {shapes.length === 1
+        ? renderPreviewShape(shapes[0], props)
+        : shapes.map((shape, i) => (
+            // Positional key: the list is republished wholesale on every
+            // pointermove, so there is no identity to preserve across
+            // renders.
+            <g key={i}>{renderPreviewShape(shape, props)}</g>
+          ))}
+    </g>
   );
 }
 
