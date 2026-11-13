@@ -77,7 +77,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [259](259-landmarks-tabs-and-headings.md) | Landmarks, the dock's tabs and panel headings | Accepted 2026-10-20 |
 | [261](261-the-insert-menu-draws-what-the-tools-draw.md) | Insert ▸ Rectangle and Ellipse draw what the drawing tools draw | Accepted 2026-10-20 |
 | [262](262-a-file-opened-with-nothing-open-becomes-a-document.md) | A file opened with nothing open becomes a document | Accepted 2026-10-20 |
-| [263](263-ruler-labels-thin-as-you-zoom-out.md) | Ruler labels thin as you zoom out | Accepted 2026-10-20 |
+| [263](263-ruler-labels-thin-as-you-zoom-out.md) | Ruler labels thin as you zoom out | Accepted 2026-10-20 (amended 2026-11-13 by 1213) |
 | [264](264-a-remembered-grant-is-the-documents-own.md) | A remembered grant is the document's own, keyed by what the host opened | Accepted 2026-10-20 |
 | [265](265-dock-tabs-fit-the-dock.md) | The dock's tabs fit the dock | Accepted 2026-10-20 |
 | [266](266-one-source-for-the-print-output-facts.md) | One source for the print-output facts | Accepted 2026-10-20 |
@@ -136,6 +136,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1210](1210-the-interaction-coordinator.md) | The interaction coordinator: one per editor, with sessions (owners ranked by §3.4, legal phase edges, ended exactly once), epochs and guarded tokens for late answers, and a trace with no user text; the terminal events (blur, a hidden page, a lost capture, a document or tool switch, a failed worker, unmount) end every session; no refused begin and no Escape turns a drag into a pan; behind the `coordinator` flag first | Accepted 2026-11-13 |
 | [1211](1211-navigation-history-and-one-current-page.md) | Navigation history and one current page: one rule for the current page (rotation included), Back and Forward through explicit navigations, every zoom route in the one range, an editable zoom field, Actual size and a calibrated size, reduced motion and tweens that yield | Accepted 2026-11-13; amends 246, 257 |
 | [1212](1212-editing-aids-and-proof-view.md) | Editing aids and Proof view: eight aids each remembered on its own (two disabled until the engine supports them), one overlay rule in the host, hidden guides do not snap, Proof view masks the pasteboard at the trim or the bleed and keeps the selection | Accepted 2026-11-13; amends 287 |
+| [1213](1213-page-lenses-and-semantic-zoom.md) | Page lenses and semantic zoom: the document map as Pages, Structure, Layers, Issues and Data lenses with one search, every jump recorded for Back; overview, page and detail tiers decide which handles and ruler ticks draw, never the selection or the tool; page names off the pages | Accepted 2026-11-13; amends 263 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

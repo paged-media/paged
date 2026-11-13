@@ -120,6 +120,8 @@ export interface ObjectNode {
   /** The layer it is on (a group: its first member's). */
   layerId: string | null;
   appearance: boolean;
+  /** The name the user gave it (Object options ▸ Name), or null. */
+  name?: string | null;
   /** Front first. */
   children: ObjectNode[];
 }
@@ -140,15 +142,19 @@ export const elementKey = (id: ElementId): string =>
 export function readItem(entries: ReadonlyArray<PropertyEntry> | null): {
   layerId: string | null;
   appearance: boolean;
+  name: string | null;
 } {
   let layerId: string | null = null;
   let appearance = false;
+  let name: string | null = null;
   for (const e of entries ?? []) {
     const v = e.value as { type?: string; value?: unknown } | null | undefined;
     if (!v) continue;
     const path = e.path as string;
     if (path === "itemLayer" && v.type === "text") {
       layerId = (v.value as string) || null;
+    } else if (path === "itemName" && v.type === "text") {
+      name = (v.value as string) || null;
     } else if (path === "frameOpacity" && typeof v.value === "number") {
       if (v.value < 100) appearance = true;
     } else if (
@@ -170,12 +176,12 @@ export function readItem(entries: ReadonlyArray<PropertyEntry> | null): {
       appearance = true;
     }
   }
-  return { layerId, appearance };
+  return { layerId, appearance, name };
 }
 
 type Facts = ReadonlyMap<
   string,
-  { layerId: string | null; appearance: boolean }
+  { layerId: string | null; appearance: boolean; name?: string | null }
 >;
 
 function toNode(
@@ -200,6 +206,7 @@ function toNode(
     slot,
     layerId,
     appearance: own?.appearance ?? false,
+    name: own?.name ?? null,
     children: kids.reverse(),
   };
 }
@@ -340,8 +347,9 @@ export function dropMutation(
 }
 
 /** The scene tree joined with each item's facts, re-read after every edit
- *  (debounced: a burst of edits costs one read). */
-function useObjectTree(enabled: boolean) {
+ *  (debounced: a burst of edits costs one read). The Layers panel and the
+ *  document map's Layers lens read it. */
+export function useObjectTree(enabled: boolean) {
   const client = useCanvasClient();
   const [state, setState] = useState<{
     roots: SceneTreeNode[];
@@ -359,7 +367,7 @@ function useObjectTree(enabled: boolean) {
       );
       const facts = new Map<
         string,
-        { layerId: string | null; appearance: boolean }
+        { layerId: string | null; appearance: boolean; name: string | null }
       >();
       ids.forEach((id, i) =>
         facts.set(elementKey(id), readItem(entries[i]?.entries ?? null)),

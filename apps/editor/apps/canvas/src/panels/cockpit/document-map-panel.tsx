@@ -64,6 +64,7 @@ import {
   Icon,
   StatusPill,
   groupSpreads,
+  useSelection,
   printOutputFacts,
   statusColor,
   useCamera,
@@ -92,6 +93,19 @@ import type {
 import { layoutPages, fitCamera } from "../../ui/layout";
 import { exportReadiness, exportTargetById } from "./export-targets";
 import { useAnimatedCamera } from "../../ui/useAnimatedCamera";
+import {
+  DataLens,
+  IssuesLens,
+  LayersLens,
+  lensesFor,
+  LensTabs,
+  M as LENS,
+  matches,
+  StructureLens,
+  useHasDataBinding,
+  type LensActions,
+  type LensId,
+} from "./page-lenses";
 
 const M = defineMessages("app.cockpitDocumentMapPanel", {
   title: "Document Map",
@@ -265,6 +279,12 @@ export function DocumentMapPanel(_props: PanelProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // Editor ADR "Page lenses and semantic zoom": the lens shown; Data only
+  // while the document has a data binding.
+  const [lensChoice, setLens] = useState<LensId>("pages");
+  const lenses = lensesFor(useHasDataBinding());
+  const lens = lenses.includes(lensChoice) ? lensChoice : "pages";
+  const selection = useSelection();
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const entries = useMemo(
@@ -320,10 +340,14 @@ export function DocumentMapPanel(_props: PanelProps) {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return entries;
+    // A spread's name, its page range, or a page's own name (its folio).
     return entries.filter(
-      (e) => e.name.toLowerCase().includes(q) || e.range.includes(q),
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.range.includes(q) ||
+        e.pageIndices.some((i) => matches(q, pageByIndex.get(i)?.name)),
     );
-  }, [entries, query]);
+  }, [entries, query, pageByIndex]);
 
   const jumpToIndices = (pageIndices: number[]) => {
     // `layoutPages` stacks ALL pages vertically (spreads are not
@@ -333,7 +357,34 @@ export function DocumentMapPanel(_props: PanelProps) {
     // side by side) is the structural fix (follow-up).
     const first = pageIndices.map((i) => rects[i]).find((r) => r != null);
     if (!first) return;
-    animateCamera(fitCamera(viewportSize[0], viewportSize[1], first));
+    animateCamera(
+      fitCamera(
+        viewportSize[0],
+        viewportSize[1],
+        first,
+        40,
+        camera.rotation ?? 0,
+      ),
+    );
+  };
+
+  // What a lens does on a click: a page jump, or a selection shown on its
+  // page — an explicit navigation either way (Back returns), never an edit.
+  const lensActions: LensActions = {
+    goToPage: (index) => jumpToIndices([index]),
+    selectAndShow: (ids) => {
+      void (async () => {
+        const applied = await client.setElementSelection(ids, "replace");
+        selection.setElementSelection(applied);
+        const geometry = await client.elementGeometry(applied);
+        selection.setElementGeometry(geometry);
+        const pageId = geometry.find((g) => g.pageId != null)?.pageId;
+        const index = pageId && handle ? handle.pageIds.indexOf(pageId) : -1;
+        if (index >= 0) jumpToIndices([index]);
+      })().catch(() => {
+        /* the item went away meanwhile: nothing to show */
+      });
+    },
   };
 
   const jumpTo = (entry: SpreadEntry) => {
@@ -363,6 +414,7 @@ export function DocumentMapPanel(_props: PanelProps) {
           {strings.t(M.title)}
         </span>
       </div>
+      <LensTabs lens={lens} lenses={lenses} onLens={setLens} />
       <div style={{ padding: "0 12px 8px" }}>
         <label
           style={{
@@ -379,7 +431,10 @@ export function DocumentMapPanel(_props: PanelProps) {
           <Icon name="ui-search" size={15} />
           <input
             data-document-map-search
-            placeholder={strings.t(M.searchPages)}
+            aria-label={strings.t(LENS.search)}
+            placeholder={strings.t(
+              lens === "pages" ? M.searchPages : LENS.search,
+            )}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{
@@ -396,8 +451,24 @@ export function DocumentMapPanel(_props: PanelProps) {
         </label>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "2px 6px" }}>
-        {!handle || handle.pageCount === 0 ? (
+      <div
+        role="tabpanel"
+        data-lens-panel={lens}
+        style={{ flex: 1, overflowY: "auto", padding: "2px 6px" }}
+      >
+        {handle && handle.pageCount > 0 && lens === "structure" && (
+          <StructureLens query={query} actions={lensActions} />
+        )}
+        {handle && handle.pageCount > 0 && lens === "layers" && (
+          <LayersLens query={query} actions={lensActions} />
+        )}
+        {handle && handle.pageCount > 0 && lens === "issues" && (
+          <IssuesLens query={query} actions={lensActions} />
+        )}
+        {handle && handle.pageCount > 0 && lens === "data" && (
+          <DataLens query={query} actions={lensActions} />
+        )}
+        {lens !== "pages" ? null : !handle || handle.pageCount === 0 ? (
           <div className="pg-ui-xs" style={{ padding: "10px 8px" }}>
             {strings.t(M.noDocument)}
           </div>
@@ -477,7 +548,7 @@ export function DocumentMapPanel(_props: PanelProps) {
             ))}
           </>
         )}
-        {handle && handle.pageCount > 0 && (
+        {lens === "pages" && handle && handle.pageCount > 0 && (
           <button
             type="button"
             data-add-section

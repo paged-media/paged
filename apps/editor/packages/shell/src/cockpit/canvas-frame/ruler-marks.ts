@@ -116,3 +116,38 @@ export function rulerMarks(
   }
   return marks;
 }
+
+/** The least distance between two minor ticks, px. */
+export const RULER_MINOR_MIN_SPACING = 4;
+
+/**
+ * The minor ticks between the labelled marks (editor ADR "Page lenses and
+ * semantic zoom": drawn in the detail tier, a precision aid): a tenth of a
+ * step of 1, a fifth of a step of 5, a quarter of a step of 2, each a
+ * round number; none when they would be closer than
+ * `RULER_MINOR_MIN_SPACING`. Positions in px from the ruler's start, the
+ * labelled marks' own positions left out.
+ */
+export function rulerMinorTicks(
+  scale: number,
+  translate: number,
+  length: number,
+): number[] {
+  if (!(length > 0) || !(scale > 0)) return [];
+  const docStart = -translate / scale;
+  const docEnd = (length - translate) / scale;
+  const step = rulerStep(scale, docStart, docEnd);
+  const mantissa = Math.round(step / 10 ** Math.floor(Math.log10(step)));
+  const parts = mantissa === 2 ? 4 : mantissa === 5 ? 5 : 10;
+  const minor = step / parts;
+  if (minor * scale < RULER_MINOR_MIN_SPACING) return [];
+  const out: number[] = [];
+  const first = Math.floor(docStart / step) * step;
+  for (let i = 0; ; i++) {
+    const d = first + i * minor;
+    const px = d * scale + translate;
+    if (px >= length) break;
+    if (i % parts !== 0 && px >= 0) out.push(px);
+  }
+  return out;
+}

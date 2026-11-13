@@ -357,6 +357,9 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   mode completed; hidden characters and nonprinting items wait for engine view options (recorded
   there).
 - **WS10 Page lenses** (Pages, Structure, Layers, Issues, Data) and semantic zoom. Closes F-57.
+  **Done** ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the lenses live in the
+  document map (`CV/panels/cockpit/page-lenses.tsx`); the tiers in `SH/state/semantic-zoom.ts`
+  join the overlay host's rule; the Issues lens is the page data DF7's markers draw on.
 
 ## 8. Track DF — Documents, files and feedback (spec wave 5)
 

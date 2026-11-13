@@ -83,13 +83,13 @@ export function OverlayHost(props: OverlayHostProps) {
   // An overlay draws while its `when` holds, the editor offers it (a
   // feature, `overlay:<id>`), and the editing aids and Proof view show it
   // (`overlayShown`: an aid's overlay while its aid is on, the editing
-  // chrome outside a proof).
+  // chrome outside a proof, the handles not zoomed far out).
   const sorted = overlays
     .list()
     .filter(
       (c) =>
         features.allows("overlay", c.id) &&
-        overlayShown(c.id, aidOn, screenMode) &&
+        overlayShown(c.id, aidOn, screenMode, props.camera.scale) &&
         isEnabled(c.when, () => paged),
     )
     .sort((a, b) => (a.z ?? 100) - (b.z ?? 100));

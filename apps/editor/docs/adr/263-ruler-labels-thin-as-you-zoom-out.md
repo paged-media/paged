@@ -24,3 +24,10 @@ wide the numbers are. InDesign thins its ruler numbers as you zoom out so they n
 - F-31 closes (`packages/shell/test/chrome/rulers.test.ts`, `rulers.dom.test.tsx`,
   `apps/canvas/tests/e2e/ux-audit-open.spec.ts`).
 - Minor (unlabelled) ticks between the labelled ones are not drawn yet.
+
+## Amendment 2026-11-13 (ADR 1213)
+
+[ADR 1213](1213-page-lenses-and-semantic-zoom.md): zoomed in to the detail tier (from 400 %) the
+rulers draw minor ticks between the labelled marks (a tenth, a fifth or a quarter of the step for
+steps of 1, 5 and 2), and the page captions move beside a page when the gap under it is too small
+to hold them (the rest of F-57).

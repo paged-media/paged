@@ -1523,6 +1523,11 @@ At 11% the "page N" labels sit on top of the next page's content. The leftmost r
 
 **Screenshots:** `F-57-page-labels-overlap.png`, `F-57-ruler-minus-clipped.png`
 
+**Fixed (2026-11-13).** A page's caption sits under the page only while the gap below it has room
+on screen, else beside the page's top-left corner, so it never lies on the next page; zoomed far
+out the handles give way while page names, the selection's outline and markers stay (editor ADR
+1213; the ruler half closed with ADR 263).
+
 ### DTP expectations
 
 <a id="f-39"></a>

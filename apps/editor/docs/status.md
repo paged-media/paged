@@ -192,7 +192,13 @@ baseline grid, text threads, overset markers on every overset frame; hidden char
 nonprinting items are listed but disabled until the engine supports them), hidden ruler guides no
 longer snap, and Proof view (the former Preview screen mode, W) hides every aid and the selection's
 handles, masks the pasteboard at the trim or the bleed with crop marks and a badge, and keeps the
-selection. WS10 (page lenses and semantic zoom) is planned.
+selection. WS10 has landed ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the
+document map navigates through five lenses with one search — Pages, Structure (sections,
+headings, bookmarks, stories), Layers (named objects), Issues (pages with missing or
+low-resolution images, overset stories and preflight findings) and Data (placed records, with a
+binding) — each jump recorded for Back; zoomed below 15 % the handles and points give way while
+the selection outline, markers and page names (now beside a page when the gap under it is too
+small) stay, and from 400 % the rulers draw minor ticks (F-57).
 
 Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
 interaction coordinator that holds the session owning the pointer, the epochs a late answer is

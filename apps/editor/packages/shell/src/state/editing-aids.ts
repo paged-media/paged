@@ -43,6 +43,7 @@
 import { defineMessages, t } from "@paged-media/strings";
 
 import type { ScreenMode } from "./screen-mode-context";
+import { OVERVIEW_HIDDEN_OVERLAYS, zoomTier } from "./semantic-zoom";
 import type { EditingAidToggle, ViewToggle } from "./view-toggles";
 
 /** The aids' names: one per aid, the same in the View menu and the
@@ -130,17 +131,25 @@ export const PROOF_HIDDEN_OVERLAYS: ReadonlySet<string> = new Set([
 export const PROOF_SURFACE_OVERLAY = "paged.overlay.proofSurface";
 
 /**
- * Does overlay `id` draw, given the toggles (`toggle(aid)`) and the screen
- * mode? An aid's overlay draws while its aid is on and the view is not a
- * proof; the editing chrome draws outside a proof; the proof surface only
- * in one; every other overlay always.
+ * Does overlay `id` draw, given the toggles (`toggle(aid)`), the screen
+ * mode and the camera's scale? An aid's overlay draws while its aid is on
+ * and the view is not a proof; the editing chrome draws outside a proof;
+ * the proof surface only in one; the handles not in an overview (semantic
+ * zoom, `semantic-zoom.ts`); every other overlay always.
  */
 export function overlayShown(
   id: string,
   toggle: (which: ViewToggle) => boolean,
   mode: ScreenMode | null | undefined,
+  scale?: number,
 ): boolean {
   const proof = isProofMode(mode);
+  if (
+    scale !== undefined &&
+    zoomTier(scale) === "overview" &&
+    OVERVIEW_HIDDEN_OVERLAYS.has(id)
+  )
+    return false;
   if (id === PROOF_SURFACE_OVERLAY) return proof;
   const aid = AID_OVERLAYS[id];
   if (aid) return !proof && toggle(aid);

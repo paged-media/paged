@@ -23,7 +23,11 @@ export { hitMarkerContribution } from "./hit-marker";
 export { marqueeContribution } from "./marquee";
 export { toolPreviewContribution, renderPreviewShape } from "./tool-preview";
 export { pluginOverlayLayersContribution } from "./plugin-layers";
-export { pageDecorationsContribution } from "./page-decorations";
+export {
+  CAPTION_ROOM_PX,
+  captionPlace,
+  pageDecorationsContribution,
+} from "./page-decorations";
 export {
   isolationDimContribution,
   isolationOutline,

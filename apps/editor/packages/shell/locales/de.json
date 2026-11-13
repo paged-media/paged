@@ -555,5 +555,6 @@
   "shell.proofBadge.showsTrim": "zeigt das Endformat",
   "shell.proofBadge.showsBleed": "zeigt den Anschnitt",
   "shell.proofBadge.colours": "Bildschirmfarben: kein farbverbindlicher Proof",
-  "shell.proofBadge.leave": "Proof-Ansicht verlassen"
+  "shell.proofBadge.leave": "Proof-Ansicht verlassen",
+  "shell.pageDecorations.caption": "Seite {n}"
 }

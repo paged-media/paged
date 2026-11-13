@@ -31,7 +31,9 @@ import {
   rulerLabel,
   rulerLabelWidth,
   rulerMarks,
+  rulerMinorTicks,
   rulerStep,
+  RULER_MINOR_MIN_SPACING,
 } from "../../src/cockpit/canvas-frame/ruler-marks";
 
 /** Every labelled pair leaves the first label room plus the gap. */
@@ -94,5 +96,33 @@ describe("ruler labels (F-31)", () => {
       expect(m.label).toBe(rulerLabel(m.value));
     }
     expect(marks.some((m) => m.label?.startsWith("−"))).toBe(true);
+  });
+});
+
+describe('minor ticks (editor ADR "Page lenses and semantic zoom")', () => {
+  test("between the labelled marks, round, never closer than their minimum", () => {
+    for (const scale of [4, 8, 16, 40]) {
+      const ticks = rulerMinorTicks(scale, -200, 1200);
+      const marks = new Set(rulerMarks(scale, -200, 1200).map((m) => m.px));
+      expect(ticks.length).toBeGreaterThan(0);
+      for (let i = 1; i < ticks.length; i++)
+        expect(ticks[i]! - ticks[i - 1]!).toBeGreaterThanOrEqual(
+          RULER_MINOR_MIN_SPACING - 1e-9,
+        );
+      for (const px of ticks) expect(marks.has(px)).toBe(false);
+      // Each tick stands for a round document coordinate.
+      const step = rulerStep(scale, 200 / scale, 1400 / scale);
+      for (const px of ticks) {
+        const d = (px + 200) / scale;
+        const parts = Math.round(step / 10 ** Math.floor(Math.log10(step)));
+        const minor = step / (parts === 2 ? 4 : parts === 5 ? 5 : 10);
+        expect(Math.abs(d / minor - Math.round(d / minor))).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  test("none for a ruler of no length or an unmeasured camera", () => {
+    expect(rulerMinorTicks(1, 0, 0)).toEqual([]);
+    expect(rulerMinorTicks(0, 0, 1000)).toEqual([]);
   });
 });

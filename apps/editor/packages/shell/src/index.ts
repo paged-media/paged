@@ -1225,6 +1225,13 @@ export {
 } from "./state/editing-aids";
 export { EditingAidsControl } from "./chrome/EditingAidsControl";
 export {
+  DETAIL_MIN_SCALE,
+  OVERVIEW_HIDDEN_OVERLAYS,
+  OVERVIEW_MAX_SCALE,
+  zoomTier,
+  type ZoomTier,
+} from "./state/semantic-zoom";
+export {
   DEFAULT_VIEW_PREFERENCES,
   gridStep,
   resetViewPreferences,

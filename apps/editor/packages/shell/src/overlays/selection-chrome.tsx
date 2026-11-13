@@ -82,6 +82,7 @@ function SelectionChromeRender(props: OverlayProps) {
         stroke="var(--overlay-selection)"
         strokeWidth={isKey ? 4 : 2}
         data-key-object={isKey ? "" : undefined}
+        data-selection-outline=""
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
       />,
