@@ -3745,7 +3745,7 @@
     },
     {
       "id": "chrome.tab-toggle",
-      "title": "Tab on a pointer-engaged canvas hides and shows the chrome",
+      "title": "Cmd/Ctrl+\\ toggles the chrome; Tab does on a clicked canvas only with \"Tab hides panels (InDesign)\" on",
       "owner": "panel",
       "eventClass": "key:Tab",
       "scope": "canvas/pointer-engaged",
@@ -3756,14 +3756,17 @@
       "permission": "Chrome only; no document change.",
       "cancel": "Pressing it again restores the chrome.",
       "surfaceIds": [
-        "command:paged.chrome.toggleAll",
+        "command:paged.view.toggleChrome",
         "command:paged.chrome.togglePanels",
-        "keybinding:tab→paged.chrome.toggleAll",
-        "keybinding:shift+tab→paged.chrome.togglePanels"
+        "command:paged.preferences.tabHidesPanels",
+        "keybinding:tab→paged.view.toggleChrome",
+        "keybinding:shift+tab→paged.chrome.togglePanels",
+        "keybinding:cmd+\\→paged.view.toggleChrome",
+        "keybinding:ctrl+\\→paged.view.toggleChrome"
       ],
       "uxi": ["UXI-KEY-017", "UXI-A11Y-002"],
-      "status": "legacy",
-      "notes": "ADR 1201 makes Tab move focus and the chrome toggle an explicit command with an opt-in preference (D-03, KF3)."
+      "status": "migrated",
+      "notes": "ADR 1201 D-03 is built (KF3, ADR 234's amendment): Tab moves focus by default; paged.view.toggleChrome replaces paged.chrome.toggleAll (deprecated 0.78 to 0.80); the opt-in setting is stored under paged.keyboard.tabHidesPanels."
     },
     {
       "id": "palette.escape",
@@ -3773,17 +3776,17 @@
       "scope": "modal:palette",
       "adapter": "none",
       "site": "apps/editor/packages/shell/src/chrome/CommandPalette.tsx",
-      "listener": "element",
+      "listener": "editor-root",
       "states": ["idle", "settled"],
       "permission": "No document change; the palette runs commands through applicability.",
-      "cancel": "Escape closes it; on real Chrome it does not (issue #32, EXC-002).",
+      "cancel": "The palette tier of the Escape arbiter (editor ADR 1203) closes it wherever focus is in the editor, whatever Radix layer is on top (issue #32); focus returns to the opener, else the canvas (ADR 1204).",
       "surfaceIds": [
         "command:paged.palette.toggle",
         "keybinding:cmd+k→paged.palette.toggle",
         "keybinding:ctrl+k→paged.palette.toggle"
       ],
       "uxi": ["UXI-CMD-006", "UXI-KEY-009", "UXI-ESC-001"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "text.input",
@@ -3796,7 +3799,7 @@
       "listener": "editor-root",
       "states": ["idle", "settled"],
       "permission": "Each accepted edit is one engine text operation; a story the role forbids refuses.",
-      "cancel": "Composition is the input method's; there is no composition session token yet (KF4).",
+      "cancel": "Composition is the input method's: a composition commits once per caret session (no echo from a trailing input event) and is dropped when the caret moved mid-composition (KF4).",
       "surfaceIds": ["tool:paged.tool.type"],
       "uxi": [
         "UXI-TXT-004",
@@ -3844,16 +3847,16 @@
       "title": "Escape leaves text editing for the frame",
       "owner": "canvas-text",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/text-caret",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/apps/canvas/src/ui/useTextEditing.ts",
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Leaves the caret unless the event is already handled or the context owns Escape.",
+      "cancel": "The text tier of the Escape arbiter (editor ADR 1203): leaves the caret for the frame that held it, after a gesture, a transient mode and an edit context, before an entered group and the selection; never during a composition (the IME's).",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-TXT-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.path-edit",
@@ -3876,118 +3879,115 @@
       "title": "Escape climbs out of the entered group",
       "owner": "canvas-select",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/entered-group",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/apps/canvas/src/panels/canvas-panel.tsx",
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Climbs one group level (ADR 250) unless a control owns the key or path edit is on.",
+      "cancel": "The group tier of the Escape arbiter (editor ADR 1203): climbs one level (ADR 250); answers only while the tool in hand has no gesture handler until track IC joins the gestures.",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-SEL-013", "UXI-CTX-003"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.edit-context",
       "title": "Escape cancels the active edit context",
       "owner": "frame-content",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/edit-context",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/packages/shell/src/state/edit-context-controller.tsx",
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Cancels the context unless a sub-context or a dirty sub-edit takes it.",
+      "cancel": "The context tiers of the Escape arbiter (editor ADR 1203): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand), a clean context pops one level; a header edited in place leaves its Escape to the text.",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-CTX-003", "UXI-CTX-007"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.guide-drag",
       "title": "Escape cancels a guide drag",
       "owner": "ruler-guide",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/guide-drag",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/packages/shell/src/cockpit/canvas-frame/GuideDragController.tsx",
-      "listener": "window",
+      "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Cancels the guide drag from a window capture listener.",
+      "cancel": "A transient mode of the Escape arbiter (editor ADR 1203): drops the live preview, nothing else answers the press.",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-GDE-002"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.threading",
       "title": "Escape unloads the threading cursor",
       "owner": "canvas-text",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/threading-loaded",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/packages/shell/src/cockpit/canvas-frame/ThreadingController.tsx",
-      "listener": "window",
+      "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Unloads the cursor from a window capture listener.",
+      "cancel": "A transient mode of the Escape arbiter (editor ADR 1203): unloads the cursor, nothing else answers the press.",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-TXT-019"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.placement",
       "title": "Escape cancels a pending placement",
       "owner": "drag-drop",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/placement-armed",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/packages/shell/src/state/pending-placement.ts",
-      "listener": "window",
+      "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Answers the placement with nothing, stopping propagation, from a window capture listener.",
+      "cancel": "A transient mode of the Escape arbiter (editor ADR 1203): answers the placement with nothing, nothing else answers the press.",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-DND-001"],
-      "status": "legacy"
+      "status": "migrated"
+    },
+    {
+      "id": "escape.selection",
+      "title": "Escape at the top level clears the selection",
+      "owner": "canvas-select",
+      "eventClass": "key:Escape",
+      "scope": "editor/selection",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/panels/canvas-panel.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "A selection change, not a document change and not an undo step (D-15).",
+      "cancel": "The selection tier of the Escape arbiter (editor ADR 1203), the last one: clears the selection when nothing else answers; only while the tool in hand has no gesture handler until track IC joins the gestures.",
+      "surfaceIds": [],
+      "uxi": ["UXI-ESC-001", "UXI-SEL-013"],
+      "status": "migrated"
     }
   ],
   "exceptions": [
     {
       "id": "EXC-001",
       "contract": ["UXI-ESC-001", "UXI-MIG-002", "UXI-KEY-004"],
-      "scope": "Escape on the canvas: the viewport, the gesture handlers, text editing, path edit, the group climb, the edit context, guide drag, threading and pending placement",
+      "scope": "Escape on the canvas while the viewport's drag cancel, the gesture handlers and path editing still listen on their own (they defer to the Escape arbiter, ADR 1203, until track IC registers them)",
       "interactions": [
         "escape.viewport",
         "escape.tool-handler",
-        "escape.text",
-        "escape.path-edit",
-        "escape.group-climb",
-        "escape.edit-context",
-        "escape.guide-drag",
-        "escape.threading",
-        "escape.placement"
+        "escape.path-edit"
       ],
-      "tests": ["UXI-T30", "UXI-T31"],
-      "why": "Nine listeners answer Escape at the document, the editor root or the window, each on its own condition; nothing orders them, so one press can cancel a drag and climb out of a group in the same press (the spec's §12.1 allows one resolution per press).",
-      "issue": "KF1",
+      "tests": ["UXI-T07", "UXI-T16"],
+      "why": "Three listeners still answer Escape at the document and the editor root on their own conditions; the arbiter defers to them (a pointer held on the canvas, path editing), so their press is theirs alone, but nothing yet orders the viewport's cancel against the gesture spine's.",
+      "issue": "IC4",
       "owner": "editor shell",
       "severity": "major",
       "expiry": "2027-01-31",
-      "repro": "Enter a group, begin a move inside it and press Escape: ViewportCanvas's onEscapeKey cancels the move and canvas-panel's listener climbs out of the group on the same keydown."
-    },
-    {
-      "id": "EXC-002",
-      "contract": ["UXI-CMD-006", "UXI-KEY-009"],
-      "scope": "the command palette on real Chrome (the journeys-gpu lane)",
-      "interactions": ["palette.escape"],
-      "tests": ["UXI-T23"],
-      "why": "Under real Chrome (channel chrome, new headless) Escape does not dismiss the command palette, while bundled Chromium and local macOS runs pass; the focus target after Ctrl+K is the suspect.",
-      "issue": "https://github.com/paged-media/paged/issues/32",
-      "owner": "editor shell",
-      "severity": "major",
-      "expiry": "2027-01-31",
-      "repro": "apps/editor/apps/canvas/tests/journey/focused/command-palette.journey.spec.ts on the journeys-gpu project: the footer stays visible after Escape."
+      "repro": "Begin a move with a drawing tool's handler in hand inside an entered group and press Escape: the handler and the viewport both see the key (the arbiter defers to the pointer held on the canvas)."
     }
   ],
   "enforcedGates": []
