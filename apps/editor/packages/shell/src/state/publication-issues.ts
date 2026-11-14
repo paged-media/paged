@@ -48,7 +48,7 @@ export type IssueKind =
   | "output-standard"
   // Editor ADR 1233 — a design constraint of the document that does not hold.
   | "constraint"
-  // A requirement of the publication contract not met (task PX8).
+  // Editor ADR 1236 — a requirement of the publication contract not met.
   | "contract";
 
 export type IssueSeverity = "error" | "warning" | "info";
@@ -80,7 +80,7 @@ export interface IssuesSnapshot {
 
 interface IssuesSlot extends IssuesSnapshot {
   /** Each gatherer's set, by source: the publication's own reads, the
-   *  design constraints (ADR 1233), the publication contract (task PX8). */
+   *  design constraints (ADR 1233), the publication contract (ADR 1236). */
   sources: Map<string, readonly PublicationIssue[]>;
   /** How the app goes to an issue (set by the canvas app). */
   activate: ((issue: PublicationIssue) => void) | null;

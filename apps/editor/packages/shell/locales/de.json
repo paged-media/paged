@@ -772,5 +772,10 @@
   "shell.contextToolbar.toolsInRail": "Werkzeuge wählen Sie in der Werkzeugleiste",
   "shell.contextToolbar.placement": "Platzierung · nicht destruktiv",
   "shell.contextToolbar.placementHint": "Verschiebt, skaliert oder dreht das Bild in seinem Rahmen; die Pixel des Bildes ändern sich nicht.",
-  "shell.editingAids.constraints": "Gestaltungsregeln"
+  "shell.editingAids.constraints": "Gestaltungsregeln",
+  "shell.readiness.label": "Publikationsvertrag: {state}",
+  "shell.readiness.blocked": "Blockiert",
+  "shell.readiness.attention": "Braucht Aufmerksamkeit",
+  "shell.readiness.ready": "Bereit",
+  "shell.readiness.approved": "Freigegeben"
 }

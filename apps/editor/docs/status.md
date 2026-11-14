@@ -381,6 +381,14 @@ the person's own checkpoints ref, so keeping one never moves the saved version. 
 previews read-only, compares with the open document side by side (the regions that differ boxed,
 the frames, pictures, text, formatting and styles that changed listed) in a second engine, and
 restores as a new version with the open state kept first. Bounded as the recovery journal is.
+The publication contract ([ADR 1236](adr/1236-the-publication-contract.md), PX8): Window ▸ Output ▸
+Publication contract keeps the publication's requirements with the document — PDF standard, trim
+size, bleed, output intent and profile, no RGB pictures, fonts, resolution, complete data — and
+its approval. The document is assessed against it continuously, with the export's own readiness
+check and the contract's additions; the header shows Blocked, Needs attention, Ready or Approved
+beside the save status, and an unmet requirement is an issue where it stands. Approving is an
+explicit step that keeps the approved state on the timeline; an edit after it reads "Approved,
+then edited".
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

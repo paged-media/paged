@@ -697,6 +697,16 @@ export {
 export { SaveStateController } from "./state/save-state-controller";
 export { SaveStatus, saveStatusLabel } from "./chrome/SaveStatus";
 export { openLibraryDocument } from "./state/open-library-document";
+// Editor ADR 1236 — the publication's readiness against its contract.
+export {
+  publicationReadinessOf,
+  setPublicationReadiness,
+  setReadinessOpener,
+  usePublicationReadiness,
+  type PublicationReadiness,
+  type ReadinessLevel as PublicationReadinessLevel,
+} from "./state/publication-readiness";
+export { ReadinessBadge } from "./chrome/ReadinessBadge";
 // Editor ADR "Operation feedback" — how an operation ended, said once:
 // inline, the one toast channel, or Problems (UXI-FBK-001/002,
 // UXI-ASY-009/010/011).

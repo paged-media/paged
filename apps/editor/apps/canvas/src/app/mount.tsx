@@ -403,6 +403,7 @@ import {
 } from "../constraints/overlay";
 import { useDesignConstraintsSource } from "../constraints/source";
 import { useAutomaticCheckpoints } from "../checkpoints/checkpoints";
+import { usePublicationContractSource } from "../contract/source";
 import { CompareDialog } from "../compare/compare-dialog";
 import { setSideEngineFactory } from "../compare/side-engine";
 import {
@@ -964,6 +965,9 @@ function CanvasAppIntegration() {
   useDesignConstraintsSource();
   // Editor ADR 1234 — a checkpoint after every export.
   useAutomaticCheckpoints();
+  // Editor ADR 1236 — the publication contract, assessed as the document
+  // changes: the header's readiness and its unmet requirements as issues.
+  usePublicationContractSource();
   // UX audit F-06 — the document open last comes back at the next start
   // (unless the recovery journal offers unsaved work first).
   useRememberLastDocument();

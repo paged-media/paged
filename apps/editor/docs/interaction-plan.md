@@ -523,7 +523,11 @@ In scope. They start after G2, and each lands with its own ADR.
   engines' facts) and Restore as new version (the open state kept first).
 - **PX8 A living publication contract.** The contract in the document's properties (output
   standard, dimensions, bleed, profile, fonts, image resolution, data completeness, approvals),
-  evaluated continuously through DF7 and preflight.
+  evaluated continuously through DF7 and preflight. **Done**
+  ([ADR 1236](adr/1236-the-publication-contract.md)): the label `x-paged:contract`; the
+  assessment reuses the export's `pdfReadiness` and adds the contract's own requirements;
+  readiness beside the save status; unmet requirements Publication health does not report join
+  its issues; approval by explicit actions, an approval kept as the checkpoint "Approved".
 - **PX9 Shared module verbs** (the strategy's Concept J): inspect, transform, copy, bind, style,
   version, validate and export as host commands in every context; conformance through CM4.
 

@@ -57,6 +57,7 @@ import { useChromeRegions } from "../state/chrome-regions";
 import { useCompactLayout } from "../state/compact";
 import { RegionItems } from "./RegionItems";
 import { SaveStatus } from "./SaveStatus";
+import { ReadinessBadge } from "./ReadinessBadge";
 import { HEADER } from "./messages";
 import { loadingWords } from "../cockpit/canvas-frame/LoadingStatus";
 import { editorOwnsPage } from "../state/editor-root";
@@ -99,10 +100,15 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
                 <MenuBar />
               </div>
               <SaveStatus />
+              {/* Editor ADR 1236 — the publication contract's readiness. */}
+              <ReadinessBadge />
             </span>
           </>
         ) : (
-          <SaveStatus />
+          <>
+            <SaveStatus />
+            <ReadinessBadge />
+          </>
         )}
       </div>
 
