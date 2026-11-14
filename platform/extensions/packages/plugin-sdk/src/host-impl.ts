@@ -78,6 +78,8 @@ import type {
   ContributionSurface,
   Diagnostic,
   DiagnosticsSurface,
+  Notification,
+  NotifySurface,
   JournalRecord,
   JournalSurface,
   Disposable,
@@ -760,6 +762,16 @@ function defaultStorageBacking(): StorageBacking {
 export interface DiagnosticsSink {
   publish(bundleId: string, key: string, diagnostics: Diagnostic[]): void;
   clear(bundleId: string, key?: string): void;
+}
+
+/**
+ * Extensions ADR 1107 — the host's operation feedback, injected like
+ * `DiagnosticsSink`: the editor routes every bundle's `host.notify` into
+ * its one feedback service (a toast, Problems), the bundle's id stamped
+ * as the source.
+ */
+export interface NotifySink {
+  notify(bundleId: string, notification: Notification): void;
 }
 
 /**
@@ -1818,6 +1830,10 @@ export interface CreateBundleHostOptions {
    *  `supports("diagnostics.publish@1")` answers true and every
    *  `host.diagnostics.set/clear` fans out to it. */
   diagnosticsSink?: DiagnosticsSink;
+  /** Host operation feedback (extensions ADR 1107). When present,
+   *  `supports("notify@1")` answers true and `host.notify` reaches it;
+   *  absent, a notification is written to the console. */
+  notifySink?: NotifySink;
   /** Host-provided ASSET byte source (W-06). When present,
    *  `host.assets.getFontFace` serves DOCUMENT font face bytes through
    *  it (capability-gated, budget-clamped) and
@@ -5074,6 +5090,28 @@ export function createBundleHost(
     },
   };
 
+  // --------------------------------------------------- notify
+  // Extensions ADR 1107 — an operation's end, through the host's feedback
+  // service; a host without one gets the console line.
+  const notify: NotifySurface = (notification) => {
+    if (options?.notifySink) {
+      options.notifySink.notify(manifest.id, notification);
+      return;
+    }
+    const line = `${tag} ${notification.outcome}: ${notification.title ?? notification.action}${notification.reason ? ` — ${notification.reason}` : ""}`;
+    if (
+      notification.outcome === "success" ||
+      notification.outcome === "canceled"
+    )
+      sink.info(line);
+    else if (
+      notification.outcome === "recoverable-failure" ||
+      notification.outcome === "fatal-failure"
+    )
+      sink.error(line);
+    else sink.warn(line);
+  };
+
   // --------------------------------------------------- diagnostics
   const diagnosticStore = new Map<string, Diagnostic[]>();
   const diagnosticListeners = new Set<(key: string) => void>();
@@ -6651,6 +6689,9 @@ export function createBundleHost(
   if (options?.diagnosticsSink) {
     featureSet.add("diagnostics.publish@1");
   }
+  if (options?.notifySink) {
+    featureSet.add("notify@1");
+  }
   if (options?.assetSource) {
     // The door always exists; the FEATURE flag means "a real byte
     // source is wired" — a bundle probes it to decide whether to
@@ -6888,6 +6929,7 @@ export function createBundleHost(
     comments,
     workbooks,
     diagnostics,
+    notify,
     journal,
     bindings,
     widgets,
