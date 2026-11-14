@@ -117,18 +117,23 @@ const bar = (page: Page) => page.locator('nav[aria-label="Main menu"]');
 /** Close every open menu level. */
 export async function closeMenus(page: Page): Promise<void> {
   const menus = page.locator('[role="menu"]');
+  // A menu that is closing (a clicked row's, fading out) is still in the
+  // DOM as `data-state="closed"` and leaves it on its own. An Escape
+  // pressed for it lands after it has gone when the runner is slow, and an
+  // Escape no menu holds reaches the canvas: it clears the selection the
+  // row just made (editor ADR 1207, decision 6) or leaves an entered
+  // context (image's rasterImage, which then rewrites the document under
+  // the rows' "document unchanged" checks). Only an open menu takes an
+  // Escape; a closing one is waited out below.
+  const open = page.locator('[role="menu"]:not([data-state="closed"])');
   for (let i = 0; i < 5; i++) {
-    const open = await menus.count();
-    if (open === 0) return;
+    const n = await open.count();
+    if (n === 0) break;
     await page.keyboard.press("Escape");
-    // Wait for this Escape to close a menu before the next: a menu still
-    // counted while it closes would take a second Escape, and an Escape no
-    // menu holds reaches the canvas, where it leaves an entered context
-    // (image's rasterImage, which then rewrites the document under the
-    // rows' "document unchanged" checks).
+    // Wait for this Escape to close a menu before the next.
     await expect
-      .poll(() => menus.count(), { timeout: 2_000 })
-      .toBeLessThan(open)
+      .poll(() => open.count(), { timeout: 2_000 })
+      .toBeLessThan(n)
       .catch(() => {});
   }
   await expect(menus).toHaveCount(0);
