@@ -78,6 +78,7 @@ and each one names the plugins that follow it and those that do not.
 | [1104](1104-the-eyedropper-lane.md) | The host Eyedropper's target: the binding provider's eyedropper lane, `bindings.eyedropper@1` | Accepted 2026-11-11 |
 | [1105](1105-the-decoded-pixels-door.md) | The decoded-pixels door: `host.assets.decodeImage`, `assets.decodeImage@1` | Accepted 2026-11-11 |
 | [1106](1106-an-edit-context-says-how-it-is-left.md) | An edit context says how it is left (`exitPolicy`), what it is called (`label`) and whether it edits placed pictures (`editsPlacedImages`); `editContext.exitPolicy@1` | Accepted 2026-11-13 |
+| [1107](1107-host-notify.md) | `host.notify`: an operation's end through the host's one feedback service (`notify@1`); `Diagnostic.loss` carries the loss entry a row words | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

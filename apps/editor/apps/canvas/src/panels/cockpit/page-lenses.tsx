@@ -44,9 +44,10 @@ import {
   useDataRevision,
   useDataService,
   useDocument,
+  usePublicationIssues,
+  type PublicationIssue,
 } from "@paged-media/shell";
 import type {
-  ElementGeometryItem,
   ElementId,
   LayerSummary,
   LinkSummary,
@@ -609,52 +610,41 @@ export function issuesByPage(
   return [...byIndex.values()].sort((a, b) => a.pageIndex - b.pageIndex);
 }
 
-/** The problems' page items and their pages, read through the client
- *  (outside the component: no conditional in a `try`, ADR 229). */
-async function locateProblems(
-  client: ReturnType<typeof useCanvasClient>,
-  links: ReadonlyArray<LinkSummary>,
-  stories: ReadonlyArray<StorySummary>,
-): Promise<
-  Array<{
+/** The located problems, from the editor's one gathering of the
+ *  publication's issues (editor ADR 1223): the issue markers, Publication
+ *  health and this lens read the same issues, so their counts agree and
+ *  the frames are placed once. A low-resolution picture whose link is
+ *  missing counts as missing here. */
+export function locatedFromIssues(
+  issues: ReadonlyArray<PublicationIssue>,
+): Array<{
+  kind: "missingLinks" | "lowRes" | "overset";
+  id: ElementId;
+  pageId: string | null;
+}> {
+  const KIND = {
+    "missing-link": "missingLinks",
+    "low-res": "lowRes",
+    overset: "overset",
+  } as const;
+  const missing = new Set(
+    issues
+      .filter((i) => i.kind === "missing-link" && i.element)
+      .map((i) => elementKey(i.element!)),
+  );
+  const out: Array<{
     kind: "missingLinks" | "lowRes" | "overset";
     id: ElementId;
     pageId: string | null;
-  }>
-> {
-  try {
-    const { missing, lowRes } = linkProblemHosts(links);
-    const overset: ElementId[] = [];
-    for (const s of stories) {
-      if (!s.overset) continue;
-      const chain = await client.frameChain(s.selfId);
-      const last = chain[chain.length - 1];
-      if (last)
-        overset.push({ kind: "textFrame", id: last.frameId } as ElementId);
-    }
-    const all = [...missing, ...lowRes, ...overset];
-    if (all.length === 0) return [];
-    const geometry: ElementGeometryItem[] = await client.elementGeometry(all);
-    const pageOf = new Map(
-      geometry.map((g) => [
-        elementKey(g.id),
-        g.pageId == null ? null : String(g.pageId),
-      ]),
-    );
-    const tag =
-      (kind: "missingLinks" | "lowRes" | "overset") => (id: ElementId) => ({
-        kind,
-        id,
-        pageId: pageOf.get(elementKey(id)) ?? null,
-      });
-    return [
-      ...missing.map(tag("missingLinks")),
-      ...lowRes.map(tag("lowRes")),
-      ...overset.map(tag("overset")),
-    ];
-  } catch {
-    return [];
+  }> = [];
+  for (const i of issues) {
+    if (!i.element) continue;
+    const kind = KIND[i.kind as keyof typeof KIND];
+    if (!kind) continue;
+    if (kind === "lowRes" && missing.has(elementKey(i.element))) continue;
+    out.push({ kind, id: i.element, pageId: i.pageId ?? null });
   }
+  return out;
 }
 
 export function IssuesLens({ query, actions }: LensProps) {
@@ -662,23 +652,9 @@ export function IssuesLens({ query, actions }: LensProps) {
   const client = useCanvasClient();
   const { handle } = useDocument();
   const pages = useCollection<PageSummary>("pages") ?? [];
-  const links = useCollection<LinkSummary>("links");
-  const stories = useCollection<StorySummary>("stories");
   const fonts = useCollection<{ isMissing?: boolean }>("fonts") ?? [];
   const preflight = usePreflightFindings(client);
-  const [located, setLocated] = useState<
-    Awaited<ReturnType<typeof locateProblems>>
-  >([]);
-  useEffect(() => {
-    if (!links || !stories) return;
-    let live = true;
-    void locateProblems(client, links, stories).then((l) => {
-      if (live) setLocated(l);
-    });
-    return () => {
-      live = false;
-    };
-  }, [client, links, stories]);
+  const located = locatedFromIssues(usePublicationIssues().issues);
 
   const pageIds = (handle?.pageIds ?? []).map(String);
   const rows = issuesByPage(pageIds, located, preflight.findings ?? []).filter(

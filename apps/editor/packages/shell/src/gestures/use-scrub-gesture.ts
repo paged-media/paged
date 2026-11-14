@@ -56,13 +56,27 @@ export interface ScrubGestureOptions {
   /** Modifier-key scalars applied to `step`. Setting either to `1`
    * disables that modifier; passing `null` disables both. */
   modifiers?: { shift?: number; alt?: number } | null;
-  /** Fires on begin + every pointer-move with the new value. */
-  onUpdate?: (value: number, phase: "begin" | "update") => void;
+  /** Fires on begin + every pointer-move with the new value, and once
+   *  more with the initial value (`"revert"`) when the scrub is cancelled. */
+  onUpdate?: (value: number, phase: ScrubPhase) => void;
   /** Fires on pointer-up if the gesture actually changed the value. */
   onCommit?: (value: number, initial: number) => void;
   /** Fires on Escape / pointer-cancel. */
   onCancel?: () => void;
+  /** Fires once when the scrub ends, however it ends: `"commit"` on
+   *  pointer-up (also when the value came back to where it started, which
+   *  `onCommit` skips), `"cancel"` on Escape or pointer-cancel. A field
+   *  that previewed while scrubbing closes its preview here (the one
+   *  numeric field: one scrub is one undo step, UXI-PNL-005). */
+  onEnd?: (
+    outcome: "commit" | "cancel",
+    value: number,
+    initial: number,
+  ) => void;
 }
+
+/** Where an `onUpdate` comes from in the scrub. */
+export type ScrubPhase = "begin" | "update" | "revert";
 
 export interface ScrubGesture {
   /** Ref callback — set on the draggable element. */
@@ -199,11 +213,13 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
         if (finalValue !== state.initial) {
           o.onCommit?.(finalValue, state.initial);
         }
+        o.onEnd?.("commit", finalValue, state.initial);
       } else {
         latestValueRef.current = state.initial;
         setValue(state.initial);
-        o.onUpdate?.(state.initial, "update");
+        o.onUpdate?.(state.initial, "revert");
         o.onCancel?.();
+        o.onEnd?.("cancel", state.initial, state.initial);
       }
     };
 

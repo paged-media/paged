@@ -165,6 +165,7 @@ export {
   type DataProviderBackend,
   type CreateBundleHostOptions,
   type DiagnosticsSink,
+  type NotifySink,
   type JournalSink,
   type BundleAssetProvider,
   type NativeDocumentBackend,

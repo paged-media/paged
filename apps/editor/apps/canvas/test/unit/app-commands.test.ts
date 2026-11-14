@@ -34,6 +34,7 @@ import {
   buildAppCommands,
   type AppCommandHandlers,
 } from "../../src/app-commands";
+import { isOpenRecentDialogOpen } from "../../src/panels/open-recent-dialog";
 
 type HandlerName = keyof AppCommandHandlers;
 
@@ -158,6 +159,36 @@ test("show data markers flips its own flag [editor-shell.data-panel]", async () 
   expect(getViewToggle(scope, "dataMarkers")).toBe(false);
 });
 
+test("show issue markers flips its own flag (editor ADR 1223) [editor-shell.panels.publication-health]", async () => {
+  covers("command:paged.view.toggleIssueMarkers");
+  const { registry, scope } = harness();
+  expect(getViewToggle(scope, "issueMarkers")).toBe(false);
+  await registry.invoke("paged.view.toggleIssueMarkers");
+  expect(getViewToggle(scope, "issueMarkers")).toBe(true);
+  expect(getViewToggle(scope, "dataMarkers")).toBe(false);
+  await registry.invoke("paged.view.toggleIssueMarkers");
+  expect(getViewToggle(scope, "issueMarkers")).toBe(false);
+});
+
+test("Open recent… opens its dialog; Close needs an open document (UX audit F-06) [editor-shell.file-intake]", async () => {
+  covers("command:paged.file.openRecent", "command:paged.file.close");
+  const { registry, scope } = harness();
+  expect(isOpenRecentDialogOpen(scope)).toBe(false);
+  await registry.invoke("paged.file.openRecent");
+  expect(isOpenRecentDialogOpen(scope)).toBe(true);
+  // With no document, Close does not apply (the registry refuses it).
+  const close = registry.get("paged.file.close")!;
+  expect(typeof close.when).toBe("function");
+  expect(
+    (close.when as (s: unknown) => boolean)({ document: { handle: null } }),
+  ).toBe(false);
+  expect(
+    (close.when as (s: unknown) => boolean)({
+      document: { handle: { pageCount: 2 } },
+    }),
+  ).toBe(true);
+});
+
 describe("Help opens the documentation in a new, unlinked tab", () => {
   const openedBy = async (id: string) => {
     const opened: unknown[][] = [];
@@ -190,6 +221,24 @@ describe("Help opens the documentation in a new, unlinked tab", () => {
     expect(opened[0].slice(1)).toEqual(["_blank", "noopener,noreferrer"]);
   });
 
+  // ADR 1218: "Help: …" topics the palette finds by their words.
+  test("the Help topics open their pages of the documentation", async () => {
+    covers(
+      "command:paged.help.topic.scripting",
+      "command:paged.help.topic.templates",
+      "command:paged.help.topic.plugins",
+    );
+    expect(await openedBy("paged.help.topic.scripting")).toEqual([
+      ["https://docs.paged.media/scripting/", "_blank", "noopener,noreferrer"],
+    ]);
+    expect(await openedBy("paged.help.topic.templates")).toEqual([
+      ["https://docs.paged.media/templates/", "_blank", "noopener,noreferrer"],
+    ]);
+    expect(await openedBy("paged.help.topic.plugins")).toEqual([
+      ["https://docs.paged.media/plugins/", "_blank", "noopener,noreferrer"],
+    ]);
+  });
+
   // Finding SH-1 (fixed): the product's code moved into the
   // paged-media/paged monorepo; the pre-monorepo editor repository is
   // archived, so an issue filed there would reach nobody.
@@ -202,5 +251,47 @@ describe("Help opens the documentation in a new, unlinked tab", () => {
         "noopener,noreferrer",
       ],
     ]);
+  });
+});
+
+describe("ADR 1218 — Help: Keyboard shortcuts and Go to page", () => {
+  test("Help: Keyboard shortcuts shows the shortcuts panel", async () => {
+    covers("command:paged.help.topic.shortcuts");
+    const shown: string[] = [];
+    const scope = createEditorScope();
+    const registry = createCommandRegistry(() => ({ scope }) as never);
+    for (const c of buildAppCommands({
+      showPanel: (id: string) => void shown.push(id),
+    } as unknown as AppCommandHandlers))
+      registry.register(c);
+    await registry.invoke("paged.help.topic.shortcuts");
+    expect(shown).toEqual(["paged.keyboard-shortcuts"]);
+  });
+
+  test("Go to page resolves a page by id, name or position", async () => {
+    covers("command:paged.view.goToPage");
+    const went: string[] = [];
+    const pages = [
+      { selfId: "p1", index: 1, name: "i" },
+      { selfId: "p2", index: 2, name: "B-1" },
+    ];
+    const registry = createCommandRegistry(
+      () =>
+        ({
+          document: { handle: { pageCount: 2 } },
+          client: { collection: async () => pages },
+        }) as never,
+    );
+    for (const c of buildAppCommands({
+      goToPageId: (id: string) => void went.push(id),
+    } as unknown as AppCommandHandlers))
+      registry.register(c);
+    await registry.invoke("paged.view.goToPage", { page: "B-1" });
+    await registry.invoke("paged.view.goToPage", { page: "1" });
+    await registry.invoke("paged.view.goToPage", { page: "p2" });
+    expect(went).toEqual(["p2", "p1", "p2"]);
+    await expect(
+      registry.invoke("paged.view.goToPage", { page: "9" }),
+    ).rejects.toThrow(/notFound/);
   });
 });

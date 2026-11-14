@@ -155,6 +155,20 @@
       ]
     },
     {
+      "id": "paged.inspector.disclosure.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.inspector.disclosure.v1",
+      "default": {},
+      "effect": "Properties' sections opened or collapsed by the user, per inspector kind (text, image, frame, page); a section not listed is open when common and collapsed when advanced (editor ADR 1217); read with a shape check (ADR 247)",
+      "source": "apps/editor/apps/canvas/src/panels/inspector/inspector-disclosure.ts",
+      "marker": "\"paged.inspector.disclosure.v1\"",
+      "sites": [
+        ["getItem", "DISCLOSURE_KEY"],
+        ["setItem", "DISCLOSURE_KEY"]
+      ]
+    },
+    {
       "id": "paged.demoGuide.v1",
       "kind": "persisted-ui-state",
       "storage": "localStorage",
@@ -181,7 +195,7 @@
         "standard": "pdfx4",
         "outputIntentProfile": "",
         "colorPolicy": "preserveNumbers",
-        "allPages": true,
+        "pageScope": "all",
         "pageFrom": "1",
         "pageTo": "1",
         "useDocumentBleed": true,
@@ -191,14 +205,59 @@
         "colorBars": false,
         "downsample": "off",
         "bookmarks": false,
-        "tagged": false
+        "headingOutline": false,
+        "tagged": false,
+        "comments": false
       },
-      "effect": "the Export PDF dialog's form, and the options the export sends",
+      "effect": "the Export PDF dialog's form, and the options the export sends (a form stored with allPages: false reads as a range; editor ADR 1221)",
       "source": "apps/editor/packages/shell/src/chrome/ExportPdfDialog.tsx",
       "marker": "\"paged.exportPdf.options.v1\"",
       "sites": [
         ["getItem", "OPTIONS_KEY"],
         ["setItem", "OPTIONS_KEY"]
+      ]
+    },
+    {
+      "id": "paged.exportPdf.presets.v1",
+      "kind": "export-option",
+      "storage": "localStorage",
+      "key": "paged.exportPdf.presets.v1",
+      "default": [],
+      "effect": "the Export PDF dialog's named presets (editor ADR 1221): up to 20 entries of a name and the options a preset sets (not the pages or the profile), read entry by entry with the form's shape check (ADR 247)",
+      "source": "apps/editor/packages/shell/src/chrome/ExportPdfDialog.tsx",
+      "marker": "\"paged.exportPdf.presets.v1\"",
+      "sites": [
+        ["getItem", "PRESETS_KEY"],
+        ["setItem", "PRESETS_KEY"]
+      ]
+    },
+    {
+      "id": "paged.newDocument.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.newDocument.v1",
+      "default": null,
+      "effect": "File ▸ New document… opens with the setup last created (preset, size, pages, unit, bleed, margins, columns, gutter), read field by field (editor ADR 1220, ADR 247); with none stored, one page of the locale's paper",
+      "source": "apps/editor/packages/shell/src/chrome/NewDocumentDialog.tsx",
+      "marker": "\"paged.newDocument.v1\"",
+      "sites": [
+        ["getItem", "NEW_DOCUMENT_KEY"],
+        ["setItem", "NEW_DOCUMENT_KEY"]
+      ]
+    },
+    {
+      "id": "paged.session.lastDocument.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.session.lastDocument.v1",
+      "default": null,
+      "effect": "the library document open last ({ id }), reopened at the next start when the recovery journal offers nothing and nothing else opened a document; forgotten when the document is closed (UX audit F-06, editor ADR 1224; read with a shape check, ADR 247)",
+      "source": "apps/editor/apps/canvas/src/session-continuity.ts",
+      "marker": "\"paged.session.lastDocument.v1\"",
+      "sites": [
+        ["getItem", "LAST_DOCUMENT_KEY"],
+        ["setItem", "LAST_DOCUMENT_KEY"],
+        ["removeItem", "LAST_DOCUMENT_KEY"]
       ]
     },
     {

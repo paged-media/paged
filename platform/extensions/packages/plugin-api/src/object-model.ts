@@ -683,6 +683,16 @@ export interface ObjectCommandInfo {
 }
 
 /** `host.objects` — the one registry over core and every plugin. */
+/** How an object write lands in the history. */
+export interface ObjectWriteOptions {
+  /** Names the undo step (engine ADR 1030). */
+  label?: string;
+  /** Consecutive writes with one key are ONE undo step (engine ADR 1304);
+   *  the run ends at a write with another key or none, an undo or a redo,
+   *  a gesture, or the host's end of the run. */
+  coalesce?: string;
+}
+
 export interface ObjectsSurface {
   /** The addresses a selector names; rejects (`invalidSelector`) when the
    *  selector does not parse, so a typo never reads as "nothing matched". */
@@ -695,19 +705,23 @@ export interface ObjectsSurface {
     opts?: { content?: boolean },
   ): Promise<Record<string, ObjectValue>>;
   /** `opts.label` names the undo step (engine ADR 1030; probe
-   *  `supports("document.undoLog@1")`, an older host ignores it). */
+   *  `supports("document.undoLog@1")`, an older host ignores it).
+   *  `opts.coalesce` joins consecutive writes with one key into ONE undo
+   *  step (engine ADR 1304, protocol 80): a numeric field's scrub sends
+   *  its previews and its release with one key. */
   set(
     address: Address,
     path: PropertyPathName,
     value: unknown,
-    opts?: { label?: string },
+    opts?: ObjectWriteOptions,
   ): Promise<ObjectWriteResult>;
   /** All-or-nothing: validated and planned before anything applies; core
    *  ops and plugin plans land as ONE engine batch = one undo step, named
-   *  `opts.label` when given (engine ADR 1030). */
+   *  `opts.label` when given (engine ADR 1030); writes with one
+   *  `opts.coalesce` key join one step (engine ADR 1304). */
   batch(
     ops: readonly ObjectOp[],
-    opts?: { label?: string },
+    opts?: ObjectWriteOptions,
   ): Promise<ObjectWriteResult>;
   /** The rows of an address's kind, or of a qualified kind name. Empty
    *  when the kind is unknown. */

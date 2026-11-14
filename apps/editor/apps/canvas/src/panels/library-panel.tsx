@@ -39,6 +39,7 @@ import {
   getLibrary,
   libraryVersion,
   openLibraryDocument,
+  saveStateOf,
   scoped,
   subscribeLibrary,
   transitionWith,
@@ -52,6 +53,7 @@ import {
   signOut,
 } from "@paged-media/repository";
 import type { CommitInfo, DocumentEntry } from "@paged-media/repository";
+import type { EditorScope } from "@paged-media/shell";
 
 import {
   connect as connectLive,
@@ -610,9 +612,11 @@ export function LibraryPanel() {
                 style={button}
                 title={strings.t(M.pushTitle)}
                 onClick={act(async () => {
-                  const r = await library.push(
-                    current.id,
+                  const r = await pushReported(
+                    editor.scope,
+                    current,
                     await remoteFor(current),
+                    (remote) => library.push(current.id, remote),
                   );
                   setSyncNote(
                     r.sent
@@ -950,4 +954,41 @@ export function LibraryPanel() {
       )}
     </div>
   );
+}
+
+/** A push of the open document to paged.server, reported to its save
+ *  status as the save's remote step (editor ADR 1203, decision 3: the
+ *  library holds the versions, the server is the target): syncing while it
+ *  runs, then synced, or saved locally · not synced with the server's
+ *  words when it fails. A push of another library document leaves the
+ *  open document's status alone. Outside the component: the compiler does
+ *  not lower a `try` with a conditional (ADR 229). */
+export async function pushReported<R>(
+  scope: EditorScope,
+  doc: DocumentEntry,
+  remote: { url: string; repo: string; token: string },
+  push: (remote: { url: string; repo: string; token: string }) => Promise<R>,
+): Promise<R> {
+  if (currentLibraryDocument(scope)?.id !== doc.id) return push(remote);
+  const store = saveStateOf(scope);
+  const target = { kind: "remote", repo: remote.repo } as const;
+  store.dispatch({ type: "save-started", at: Date.now() });
+  store.dispatch({ type: "stored", destination: { kind: "library" } });
+  store.dispatch({ type: "sync-started", target });
+  try {
+    const result = await push(remote);
+    store.dispatch({ type: "stored", destination: target });
+    store.dispatch({ type: "save-finished", at: Date.now() });
+    return result;
+  } catch (err) {
+    store.dispatch({
+      type: "sync-failed",
+      target,
+      code: "remote-failed",
+      detail: err instanceof Error ? err.message : String(err),
+      at: Date.now(),
+    });
+    store.dispatch({ type: "save-finished", at: Date.now() });
+    throw err;
+  }
 }

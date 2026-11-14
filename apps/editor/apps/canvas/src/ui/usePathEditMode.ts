@@ -73,6 +73,8 @@ import {
   useOptionalTool,
   useSelection,
   useEditorKeys,
+  isEscapeKey,
+  useEscapeHandler,
 } from "@paged-media/shell";
 import {
   DirectSelectSession,
@@ -244,15 +246,8 @@ export function usePathEditMode() {
         return;
       }
       if (!pathEditMode) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        // Mid-gesture, Escape is the gesture's: the drag is undone and
-        // the mode stays.
-        if (pathEditSession?.key(e)) return;
-        dismissedRef.current = elementSelection;
-        setPathEditMode(false);
-        return;
-      }
+      // Escape is the arbiter's (below).
+      if (isEscapeKey(e)) return;
       // Chords are somebody else's (Cmd+Backspace, Ctrl+Arrow).
       if (e.metaKey || e.ctrlKey || !isPathEditKey(e.key)) return;
       e.preventDefault();
@@ -276,6 +271,20 @@ export function usePathEditMode() {
     problemsSink,
     setPathEditMode,
   ]);
+
+  // Escape in path-edit mode (the Escape arbiter's transient tier, editor
+  // ADR 1207, §12.1 case 4): mid-gesture the drag is undone and the mode
+  // stays; otherwise the mode ends.
+  useEscapeHandler({
+    id: "paged.pathEdit",
+    tier: "transient",
+    isActive: () => pathEditMode,
+    resolve: (e) => {
+      if (pathEditSession?.key(e)) return;
+      dismissedRef.current = elementSelection;
+      setPathEditMode(false);
+    },
+  });
 
   // Auto-exit when the selection isn't a single path-bearing
   // element any more (cleared, or grew to a multi-select).

@@ -126,6 +126,7 @@ export const WINDOW_CATEGORY: Readonly<Record<string, WindowCategory>> = {
   "paged.script-editor": "Utilities",
   "paged.actions": "Utilities",
   "paged.problems": "Utilities",
+  "paged.import-report": "Utilities",
   "paged.journal": "Utilities",
   "paged.data": "Utilities",
   "paged.ai-assistant": "Utilities",

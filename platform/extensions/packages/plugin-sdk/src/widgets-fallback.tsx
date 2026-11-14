@@ -38,6 +38,7 @@
 import type {
   CodeEditorProps,
   ColorPickerProps,
+  NumericFieldProps,
   WidgetSurface,
 } from "@paged-media/plugin-api";
 
@@ -104,10 +105,59 @@ function NativeColorPicker(props: ColorPickerProps): ReturnType<CreateElement> {
   });
 }
 
-/** The default widget catalog: a textarea CodeEditor and a native colour
- *  input. Each member is replaced by the one the host app injects through
- *  `createBundleHost({ widgets })`; members it omits keep the fallback. */
+/** The plain decimal field — the honest fallback when the host injects no
+ *  numeric field: a text field that reads a number (a decimal comma too)
+ *  and commits it on blur or Enter, uncontrolled, keyed by the value so a
+ *  new value reseeds it. No units, expressions or scrub: those are the
+ *  host's (`widgets.numericField@1`). */
+function PlainNumericField(
+  props: NumericFieldProps,
+): ReturnType<CreateElement> {
+  const createElement = requireCreateElement(
+    "plugin-sdk: host.widgets.NumericField fell back to a plain text field, " +
+      "but React is not installed. Install react, or inject a widget catalog " +
+      "via createBundleHost({ widgets }).",
+  );
+  const commit = (raw: string) => {
+    const n = Number(raw.trim().replace(",", "."));
+    if (raw.trim() === "" || !Number.isFinite(n) || n === props.value) return;
+    if (props.min !== undefined && n < props.min) return;
+    if (props.max !== undefined && n > props.max) return;
+    props.onCommit?.(n, { source: "type", coalesceKey: null, relative: null });
+  };
+  return createElement("input", {
+    key: String(props.value),
+    type: "text",
+    inputMode: "decimal",
+    defaultValue: props.value === null ? "" : String(props.value),
+    placeholder: props.mixed ? "—" : props.placeholder,
+    disabled: props.disabled,
+    "aria-label": props.ariaLabel,
+    "data-numeric-field-fallback": "plain",
+    onBlur: (e: { currentTarget: { value: string } }) =>
+      commit(e.currentTarget.value),
+    onKeyDown: (e: { key: string; currentTarget: { value: string } }) => {
+      if (e.key === "Enter") commit(e.currentTarget.value);
+    },
+    style: {
+      width: 80,
+      height: 24,
+      padding: "0 6px",
+      font: "12px var(--font-mono, monospace)",
+      color: "var(--pg-fg)",
+      background: "var(--pg-bg)",
+      border: "1px solid var(--pg-border)",
+      borderRadius: "var(--radius-sm, 4px)",
+    },
+  });
+}
+
+/** The default widget catalog: a textarea CodeEditor, a native colour
+ *  input and a plain decimal field. Each member is replaced by the one the
+ *  host app injects through `createBundleHost({ widgets })`; members it
+ *  omits keep the fallback. */
 export const FALLBACK_WIDGETS: WidgetSurface = {
   CodeEditor: TextareaCodeEditor,
   ColorPicker: NativeColorPicker,
+  NumericField: PlainNumericField,
 };

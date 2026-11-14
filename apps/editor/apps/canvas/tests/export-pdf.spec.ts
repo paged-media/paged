@@ -257,10 +257,11 @@ test.describe("Concept 3 — Export PDF dialog", () => {
     await page.locator("[data-export-confirm]").click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.pdf$/);
-    // Done: the dialog closes and the notice names the file (ADR 272).
+    // Done: the dialog closes and the result names the file (ADR 272), in
+    // the editor's one feedback channel (editor ADRs 1219, 1221).
     await expect(page.locator("[data-export-dialog]")).toHaveCount(0);
-    await expect(page.locator("[data-export-notice]")).toContainText(
-      download.suggestedFilename(),
-    );
+    await expect(
+      page.locator('[data-feedback-key="paged.export.pdf"]'),
+    ).toContainText(download.suggestedFilename());
   });
 });

@@ -599,6 +599,10 @@ export function createPenHandler(): GestureHandler {
       const k = e.key;
       enqueue(() => key(k));
     },
+    busy() {
+      // A path under construction: Escape cancels its open run.
+      return page !== null && machine !== null;
+    },
     cursorAt(e: CanvasPointerEvent) {
       // What a press here would do, as the machine last resolved it,
       // named as a state (UXI-DRW-003): each state has its own cursor.

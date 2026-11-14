@@ -439,6 +439,44 @@ test.describe("help, assistant and effects commands", () => {
     expect(String(opened[2][0])).toMatch(/\/issues\/new$/);
   });
 
+  test("the Help topics open their pages; Help: Keyboard shortcuts shows the panel (ADR 1218)", async ({
+    page,
+  }) => {
+    covers(
+      "command:paged.help.topic.scripting",
+      "command:paged.help.topic.templates",
+      "command:paged.help.topic.plugins",
+      "command:paged.help.topic.shortcuts",
+    );
+    await openShell(page, { doc: true });
+    await page.evaluate(() => {
+      const g = globalThis as unknown as { __opened: unknown[][] };
+      g.__opened = [];
+      window.open = ((...args: unknown[]) => {
+        g.__opened.push(args);
+        return null;
+      }) as typeof window.open;
+    });
+    for (const id of [
+      "paged.help.topic.scripting",
+      "paged.help.topic.templates",
+      "paged.help.topic.plugins",
+    ])
+      await invoke(page, id);
+    const opened = await page.evaluate(
+      () => (globalThis as unknown as { __opened: unknown[][] }).__opened,
+    );
+    expect(opened.map((a) => a[0])).toEqual([
+      "https://docs.paged.media/scripting/",
+      "https://docs.paged.media/templates/",
+      "https://docs.paged.media/plugins/",
+    ]);
+    await invoke(page, "paged.help.topic.shortcuts");
+    await expect
+      .poll(() => openPanels(page))
+      .toContain("paged.keyboard-shortcuts");
+  });
+
   test("Ask Claude opens the assistant panel", async ({ page }) => {
     covers("command:paged.ai.ask");
     await openShell(page, { doc: true });

@@ -79,9 +79,10 @@ test.describe("Type size at the caret", () => {
     // The whole body paragraph as a range reads the same.
     await setSelection(page, FX.body.start, FX.body.end);
     await expect(sizeShown(page)).toHaveValue(String(FX.body.size));
-    // Across both paragraphs the sizes differ: mixed, not a default.
+    // Across both paragraphs the sizes differ: "Mixed", not a default
+    // (UXI-PNL-008, editor ADR 1216).
     await setSelection(page, 2, FX.body.start + 3);
-    await expect(sizeShown(page)).toHaveValue("—");
+    await expect(sizeShown(page)).toHaveValue("Mixed");
   });
 
   test("the Character panel shows the size the paragraph style sets @feat:editor-shell.panels.character @level:happy", async ({

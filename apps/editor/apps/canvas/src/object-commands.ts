@@ -171,6 +171,7 @@ import type {
   KeybindingContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { commandNeeds } from "@paged-media/shell";
 import type {
   CanvasClient,
   ElementId,
@@ -2284,6 +2285,7 @@ export function buildObjectCommands(
       title: t(M.bringToFront),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.bringToFront(),
     },
     {
@@ -2291,6 +2293,7 @@ export function buildObjectCommands(
       title: t(M.bringForward),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.bringForward(),
     },
     {
@@ -2298,6 +2301,7 @@ export function buildObjectCommands(
       title: t(M.sendBackward),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.sendBackward(),
     },
     {
@@ -2305,6 +2309,7 @@ export function buildObjectCommands(
       title: t(M.sendToBack),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.sendToBack(),
     },
     {
@@ -2312,6 +2317,7 @@ export function buildObjectCommands(
       title: t(M.group),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.group(),
     },
     {
@@ -2319,6 +2325,7 @@ export function buildObjectCommands(
       title: t(M.ungroup),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.ungroup(),
     },
     {
@@ -2326,6 +2333,7 @@ export function buildObjectCommands(
       title: t(M.selectParentGroup),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.selectParentGroup(),
     },
     {
@@ -2333,6 +2341,12 @@ export function buildObjectCommands(
       title: t(M.delete),
       category: "Object",
       when: onSelectionWhereKeysApply,
+      applicability: commandNeeds(
+        "outsideContext",
+        "noText",
+        "noPathEdit",
+        "selection",
+      ),
       handler: () => handlers.delete(),
     },
     ...NUDGE_COMMANDS.map(
@@ -2341,6 +2355,12 @@ export function buildObjectCommands(
         title: t(title),
         category: "Object",
         when: onSelectionWhereKeysApply,
+        applicability: commandNeeds(
+          "outsideContext",
+          "noText",
+          "noPathEdit",
+          "selection",
+        ),
         handler: () => handlers.nudge(direction, large),
       }),
     ),
@@ -2349,6 +2369,7 @@ export function buildObjectCommands(
       title: t(M.makeClippingMask),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.makeClippingMask(),
     },
     {
@@ -2356,6 +2377,7 @@ export function buildObjectCommands(
       title: t(M.releaseClippingMask),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.releaseClippingMask(),
     },
     {
@@ -2363,6 +2385,7 @@ export function buildObjectCommands(
       title: t(M.editClippingContents),
       category: "Object",
       when: onSelectedObjects,
+      applicability: commandNeeds("outsideContext", "selection"),
       handler: () => handlers.editClippingContents(),
     },
     {
@@ -2370,6 +2393,12 @@ export function buildObjectCommands(
       title: t(M.lock),
       category: "Object",
       when: onSelectionWhereKeysApply,
+      applicability: commandNeeds(
+        "outsideContext",
+        "noText",
+        "noPathEdit",
+        "selection",
+      ),
       handler: () => handlers.lock(),
     },
     {
@@ -2377,6 +2406,7 @@ export function buildObjectCommands(
       title: t(M.unlockAllOnSpread),
       category: "Object",
       when: notInsideAnEditContext,
+      applicability: commandNeeds("outsideContext"),
       handler: () => handlers.unlockAllOnSpread(),
     },
     {
@@ -2384,6 +2414,12 @@ export function buildObjectCommands(
       title: t(M.hide),
       category: "Object",
       when: onSelectionWhereKeysApply,
+      applicability: commandNeeds(
+        "outsideContext",
+        "noText",
+        "noPathEdit",
+        "selection",
+      ),
       handler: () => handlers.hide(),
     },
     {
@@ -2391,6 +2427,7 @@ export function buildObjectCommands(
       title: t(M.showAllOnSpread),
       category: "Object",
       when: notInsideAnEditContext,
+      applicability: commandNeeds("outsideContext"),
       handler: () => handlers.showAllOnSpread(),
     },
   ];

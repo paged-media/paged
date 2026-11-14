@@ -22,14 +22,19 @@
 // label + editable mono value with unit, one row. Ported as a
 // controlled component; drag (vertical) adjusts, Shift = fine,
 // Alt = coarse, wheel steps, click value to type. Disabled renders
-// at 45% — the Object panel mounts it as the rotation SEAM until
-// the engine's rotation/scale decompose primitive lands.
+// at 45%.
+//
+// The typed value is the ONE numeric field (`./NumericField`): the same
+// expressions, units, errors and Escape as every other number. A drag shows
+// its live angle on the dial and in `onChange`, and commits once, on
+// release (one drag is one undo step).
 //
 // StrictMode-safe dragging: pointer capture on the dial element —
 // no window listeners registered inside pointerdown.
 
 import { useStrings } from "@paged-media/strings";
 import { INPUT } from "../messages";
+import { NumericField } from "./NumericField";
 import {
   useEffect,
   useEffectEvent,
@@ -87,10 +92,11 @@ export function SmartDialMicro({
     precision ? v.toFixed(precision) : String(Math.round(v));
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const dragRef = useRef<{ y0: number; v0: number } | null>(null);
+  // The angle a drag has reached, shown until the commit re-reads.
+  const [live, setLive] = useState<number | null>(null);
+  const dragRef = useRef<{ y0: number; v0: number; last: number } | null>(null);
 
-  const v = value ?? 0;
+  const v = live ?? value ?? 0;
   const fr = (v - min) / (max - min);
   const hp = pol(13, 13, 10, START + Math.max(0.001, fr) * SWEEP);
 
@@ -101,20 +107,23 @@ export function SmartDialMicro({
       if (kind === "down") {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
-        dragRef.current = { y0: e.clientY, v0: v };
+        dragRef.current = { y0: e.clientY, v0: v, last: v };
       } else if (kind === "move") {
-        if (!dragRef.current) return;
+        const drag = dragRef.current;
+        if (!drag) return;
         const mult = e.shiftKey ? 0.25 : e.altKey ? 4 : 1;
-        onChange?.(
-          clamp(
-            dragRef.current.v0 +
-              (-(e.clientY - dragRef.current.y0) / 120) * (max - min) * mult,
-          ),
+        const next = clamp(
+          drag.v0 + (-(e.clientY - drag.y0) / 120) * (max - min) * mult,
         );
+        drag.last = next;
+        setLive(next);
+        onChange?.(next);
       } else {
-        if (!dragRef.current) return;
+        const drag = dragRef.current;
+        if (!drag) return;
         dragRef.current = null;
-        onCommit?.(clamp(v));
+        setLive(null);
+        if (drag.last !== drag.v0) onCommit?.(clamp(drag.last));
       }
     };
 
@@ -208,30 +217,20 @@ export function SmartDialMicro({
         {label}
       </span>
       {editing && !inert ? (
-        <input
+        <NumericField
+          variant="inline"
           autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            const n = Number.parseFloat(draft);
-            if (Number.isFinite(n)) {
-              const next = clamp(n);
-              onChange?.(next);
-              onCommit?.(next);
-            }
-            setEditing(false);
+          value={value}
+          suffix={unit || undefined}
+          min={min}
+          max={max}
+          precision={precision}
+          aria-label={label}
+          onCommit={(next) => {
+            onChange?.(next);
+            onCommit?.(next);
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            if (e.key === "Escape") setEditing(false);
-          }}
-          className="w-[50px] text-right rounded-[5px] px-1 py-px text-xs outline-none"
-          style={{
-            border: "1px solid var(--pg-primary)",
-            background: "var(--pg-bg)",
-            color: "var(--pg-fg)",
-            fontFamily: "var(--font-mono)",
-          }}
+          onEditEnd={() => setEditing(false)}
         />
       ) : (
         <button
@@ -239,7 +238,6 @@ export function SmartDialMicro({
           disabled={inert}
           onClick={() => {
             if (inert || value === null) return;
-            setDraft(fmt(value));
             setEditing(true);
           }}
           className="inline-flex items-baseline gap-[2px] rounded-[5px] border-0 bg-transparent px-[3px] py-px"
@@ -253,9 +251,9 @@ export function SmartDialMicro({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {value === null
+            {value === null && live === null
               ? "—"
-              : (signed && value > 0 ? "+" : "") + fmt(value)}
+              : (signed && v > 0 ? "+" : "") + fmt(v)}
           </span>
           {unit && (
             <span

@@ -73,6 +73,13 @@ export function isEscapeKey(event: Pick<KeyboardEvent, "key">): boolean {
   return event.key === "Escape";
 }
 
+/** A synthetic Escape keydown: for an owner that cancels through a
+ *  handler's key entry (the gesture spine's `onKey`) rather than a press
+ *  of its own. */
+export function escapeKeyEvent(): KeyboardEvent {
+  return new KeyboardEvent("keydown", { key: "Escape" });
+}
+
 /** The tiers, in the order a press visits them (§12.1). */
 export const ESCAPE_TIERS = [
   "ime",

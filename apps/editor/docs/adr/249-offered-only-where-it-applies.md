@@ -41,3 +41,11 @@ PN-101, PN-111, PN-258 and PN-302 close. A bundle that registers a menu entry be
 command now fails at activation in enforce mode; every built-in bundle registers its commands
 first. A mixed selection (a rectangle and an oval) stays live; a write that reaches the oval is
 refused as one batch and said in words (PN-4).
+
+## Amendment 2026-11-13
+
+[ADR 1218](1218-commands-say-why-they-do-not-apply.md) keeps `when` as the yes/no adapter and adds
+the reason: a command answers `applicability(state)` (a state and, when it is not `here`, why in
+words), the registry's `applicability(id)` is the one answer `invoke`, the menus and the palette
+use, and an entry that does not apply stays greyed but tells why (its tooltip in the menus, a
+"Not available here" row in the palette instead of being hidden).

@@ -46,3 +46,10 @@ default points, apart from the ruler unit.
   shown unit.
 - `LengthUnit` gains `pc`.
 - A field that shows a length outside the shared path is a bug of this ADR's kind.
+
+## Amendment 2026-11-13
+
+[ADR 1216](1216-one-numeric-field.md) makes the parser of decision 2 the length door of one
+expression parser (`packages/ui/src/inputs/expression.ts`): `parseLengthText` keeps its
+signature and results, and a field now also reads expressions and mixed units ("10 mm + 2 pt",
+resolved to the field's unit), relative changes ("+=5 mm") and the UI locale's decimal comma.

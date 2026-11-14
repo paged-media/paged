@@ -156,6 +156,12 @@ engine fails resets nothing and says so in the shell's warnings, and the chip's 
 a failed load (editor ADR 1205, `UXI-FIL-001`). Listing the failure in Problems waits for the
 operation feedback service (DF8).
 
+**Fixed (2026-11-14, editor ADR 1219).** A failed open is listed in Problems ("Could not open
+broken.idml: … Nothing changed.") until that file opens or the entry is dismissed, and says so in
+a toast — also when a bundle's importer opened it (paged.publish's `.idml`, through `host.notify`,
+extensions ADR 1107); an importer whose open did not land no longer marks the open document
+saved.
+
 <a id="f-03"></a>
 
 #### F-03 · Spreadsheets and images are accepted but lead to a dead end
@@ -205,6 +211,11 @@ File ▸ New document… carries an ellipsis but opens no dialog. It always crea
 **Recommendation:** Add a New Document dialog, or remove the ellipsis and add size presets to the command. Default to the locale's paper size.
 
 **Screenshots:** `F-04-new-document-no-dialog.png`
+
+**Fixed (2026-11-14, editor ADR 1220).** File ▸ New document… opens a dialog: purpose presets
+(Print, Digital, Structured) and a custom setup (size, orientation, unit, pages, bleed, margins,
+columns and gutter) with a live preview, the locale's paper by default, the last setup
+remembered. Facing pages are shown as not available yet: the engine has no spread layout to set.
 
 <a id="f-05"></a>
 
@@ -263,6 +274,11 @@ recovery journal keeps checkpoints in the browser and the next start offers Rest
 document, never over the saved version), Compare or Discard (editor ADR 1204;
 `tests/e2e/uxi-documents.spec.ts`). Reopening the last saved document, Open recent and Close
 stay open.
+
+**Fixed (2026-11-14, editor ADR 1224).** A reload reopens the library document open last when
+the recovery journal (ADR 1204) offers nothing; File ▸ Open recent… lists the library's documents
+and the files opened lately; File ▸ Close goes to the empty canvas, and a closed document is not
+reopened.
 
 <a id="f-07"></a>
 
@@ -347,6 +363,12 @@ In a document with two missing links, Publication health and the Document Map sh
 **Partly fixed (2026-10-20, `426912f45`).** Problems lists every missing link and missing font, and
 a click opens Links or Fonts (PN-350). The notice after opening is not built.
 
+**Fixed (2026-11-14, editor ADRs 1223 and 1222).** The publication's issues (missing links and
+fonts, low-resolution and RGB pictures, overset text, preflight findings, import losses) are one
+set: markers on the page (View ▸ Show issue markers), a page overview and a list in Publication
+health and the Issues lens, a click goes to the item and offers its fixes. After an open, what
+the file did not carry is said once with View report (the compatibility report).
+
 <a id="f-10"></a>
 
 #### F-10 · The first-run screen and the Open picker only know IDML
@@ -421,6 +443,10 @@ The dialog draws OS-styled checkboxes and selects that do not match the kit. Pag
 
 **Screenshots:** `F-12-export-dialog-controls.png`
 
+**Fixed (2026-11-14, editor ADR 1221).** The PDF export is one guided dialog in kit controls:
+pages as All, Current page or a range, presets (built in and saved by name), a readiness check
+before anything starts, what the file will be, named stages with Cancel, and a verified result.
+
 <a id="f-13"></a>
 
 #### F-13 · Library panel shows content hashes and uses browser prompts
@@ -494,6 +520,10 @@ Layout ▸ Margins and columns…, Ruler guides…, Create guides… and Numberi
 **Recommendation:** Replace the four `soon()` seams in `apps/canvas/src/cockpit-menus.ts` with `panel()` entries, as was done for the Type menu.
 
 **Screenshots:** `F-15-layout-menu-stale-soon.png`
+
+**Fixed (2026-11-14, editor ADR 1221).** Layout ▸ Margins and columns…, Ruler guides… and
+Numbering and section options… open their panels; Create guides… stays an honest stub (nothing
+creates guides by rows and columns yet).
 
 <a id="f-16"></a>
 
@@ -575,6 +605,15 @@ Edit ▸ Selection to path and Path to selection (paged.image) always show, even
 **Recommendation:** Give module menu contributions `when` clauses on the selection's content kind. Remove the host and module duplicates or alias them.
 
 **Screenshots:** `F-19-edit-menu-image-items.png`, `F-19-draw-menu-while-typing.png`
+
+**Fixed (2026-11-13).** One home per command: paged.draw's menu no longer repeats Close path,
+Outline stroke and Type on path (they are the host's, Object ▸ Path and Object ▸ Type on a path;
+the draw commands stay for the palette and scripts), so the two names are gone. An entry that
+does not apply where the user stands is greyed with its reason as the tooltip ("Not while
+typing: press Esc to leave the text.", "Select an object first."), and the palette lists it with
+why (editor ADR 1218). paged.image's Edit entries stay: with no image open they raise the Image
+panel, an action rather than a dead entry; a plugin's menu shows by its frame (the selection or
+the context it claims), not because a document is open.
 
 <a id="f-20"></a>
 

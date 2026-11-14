@@ -41,7 +41,6 @@ import {
 } from "./shape-suggestions";
 
 const M = defineMessages("app.shapeSuggestions", {
-  title: "Shape suggestions",
   roundCorners: "Round corners",
   roundCornersHint: "Round every corner of the shape (12 pt)",
   smooth: "Smooth",
@@ -138,11 +137,7 @@ export function ShapeSuggestionsSection({ id }: { id: ElementId }) {
   };
 
   return (
-    <div
-      data-properties-section="shape-suggestions"
-      className="flex flex-col gap-2"
-    >
-      <div className="pg-label">{strings.t(M.title)}</div>
+    <div data-shape-suggestions className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-[5px]" role="group">
         {suggestions.map((s) => (
           <button

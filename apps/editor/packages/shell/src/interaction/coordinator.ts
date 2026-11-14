@@ -76,13 +76,17 @@ export interface SessionSpec {
   mutating?: boolean;
   /** The first phase (default `pressed`). */
   phase?: "pressed" | "pending-hit";
+  /** A mode, not a press (a loaded text cursor, an armed placement): it
+   *  never holds the pointer, and a window blur or a hidden page leaves it
+   *  (`abortAll(…, { keepModes: true })`). */
+  transient?: boolean;
   /** Take the pointer from whoever holds it (a pinch over a pending
    *  press). Default: only a higher-ranked owner (§3.4) does. */
   preempt?: boolean;
   /** The owner's own roll-back, called when the session is ended from
    *  OUTSIDE (`cancel`, `abortAll`): a lost capture, Escape, a blur, a
    *  document or tool switch, unmount. Not called by `end`. */
-  onAbort?: (reason: string) => void;
+  onAbort?: (reason: string, session: InteractionSession) => void;
 }
 
 export interface InteractionSession {
@@ -93,6 +97,7 @@ export interface InteractionSession {
   readonly pointerId: number | undefined;
   readonly pointerType: string | undefined;
   readonly mutating: boolean;
+  readonly transient: boolean;
   /** The epochs when the session began. */
   readonly epochs: EpochSnapshot;
   /** Aborted when the session is cancelled or aborted. */
@@ -124,6 +129,8 @@ export interface InteractionSnapshot {
   readonly active: ActiveSessionView | null;
   /** Every open session, the committing ones included. */
   readonly open: number;
+  /** Their ids (an overlay drawn for a session that ended is dropped). */
+  readonly openIds: readonly string[];
   readonly doc: number;
   readonly context: number;
 }
@@ -147,8 +154,9 @@ export interface InteractionCoordinator {
     reason: string,
     result?: "cancel" | "abort",
   ): boolean;
-  /** End every open session from outside; returns how many ended. */
-  abortAll(reason: string): number;
+  /** End every open session from outside; returns how many ended.
+   *  `keepModes` leaves the transient ones (a blur, a hidden page). */
+  abortAll(reason: string, options?: { keepModes?: boolean }): number;
   /** The session holding the pointer, or null. */
   current(): InteractionSession | null;
   /** Every open session (a committing one has let the pointer go). */
@@ -188,7 +196,8 @@ interface MutableSession extends InteractionSession {
   ended: boolean;
   result: EndResult | null;
   readonly controller: AbortController;
-  readonly onAbort: ((reason: string) => void) | undefined;
+  readonly onAbort:
+    ((reason: string, session: InteractionSession) => void) | undefined;
   readonly startedAt: number;
 }
 
@@ -212,7 +221,7 @@ export function createInteractionCoordinator(
 
   const doc = () => epochs.now().doc;
   const holder = (): MutableSession | null =>
-    open.find((s) => POINTER_PHASES.has(s.phase)) ?? null;
+    open.find((s) => !s.transient && POINTER_PHASES.has(s.phase)) ?? null;
 
   const changed = () => {
     view = null;
@@ -248,7 +257,7 @@ export function createInteractionCoordinator(
 
   const coordinator: InteractionCoordinator = {
     begin(spec) {
-      const held = holder();
+      const held = spec.transient ? null : holder();
       if (held) {
         const takes =
           spec.preempt ?? ownerRank(spec.owner) < ownerRank(held.owner);
@@ -260,7 +269,7 @@ export function createInteractionCoordinator(
         }
         coordinator.cancel(held, `preempted by ${spec.owner}`);
       }
-      epochs.bump("input");
+      if (!spec.transient) epochs.bump("input");
       const controller = new AbortController();
       const s: MutableSession = {
         id: `i-${nextId++}`,
@@ -270,6 +279,7 @@ export function createInteractionCoordinator(
         pointerId: spec.pointerId,
         pointerType: spec.pointerType,
         mutating: spec.mutating ?? false,
+        transient: spec.transient ?? false,
         epochs: epochs.now(),
         controller,
         signal: controller.signal,
@@ -324,15 +334,17 @@ export function createInteractionCoordinator(
       const s = session as MutableSession;
       if (s.ended) return false;
       try {
-        s.onAbort?.(reason);
+        s.onAbort?.(reason, s);
       } finally {
         coordinator.end(s, result, reason);
       }
       return true;
     },
 
-    abortAll(reason) {
-      const all = open.slice();
+    abortAll(reason, options) {
+      const all = options?.keepModes
+        ? open.filter((s) => !s.transient)
+        : open.slice();
       if (all.length === 0) return 0;
       record("abort-all", null, { reason });
       let n = 0;
@@ -411,6 +423,7 @@ export function createInteractionCoordinator(
             }
           : null,
         open: open.length,
+        openIds: open.map((s) => s.id),
         doc: e.doc,
         context: e.context,
       };

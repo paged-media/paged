@@ -47,8 +47,8 @@ import { editorStorage } from "../state/storage";
 export const TAB_HIDES_PANELS_KEY = "paged.keyboard.tabHidesPanels";
 
 /** The chrome toggle: the panels and the tool rail (ADR 1201, D-03; the
- *  plan's `view.toggleChrome`). Its old id, `paged.chrome.toggleAll`, is
- *  a deprecated alias for two releases (apps/canvas/deprecated-ids.json). */
+ *  plan's `view.toggleChrome`). Its old id, `paged.chrome.toggleAll`, was
+ *  a deprecated alias from 0.78 until 0.80 (PM-0013, amendment 2). */
 export const TOGGLE_CHROME_COMMAND = "paged.view.toggleChrome";
 
 /** The command that flips the preference. */

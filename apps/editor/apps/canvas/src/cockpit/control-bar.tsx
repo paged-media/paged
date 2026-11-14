@@ -33,6 +33,10 @@
 // document controls (editor ADR 298): the Word user's Home group, on every
 // page and with the caret anywhere.
 //
+// The bar is an ACCELERATOR, not a second inspector (the UX strategy's
+// §5.6; editor ADR 1217): the common fields per selection type, and
+// "More…", which opens Properties at the matching field.
+//
 // The row used to repeat five of the rail's tools, the one place above
 // the canvas where the selection's numbers belong. Every field reads and
 // writes through the same doors the panels use — `host.objects`
@@ -45,7 +49,6 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { type ElementId, type FontSummary } from "@paged-media/client";
@@ -58,6 +61,13 @@ import {
   useCamera,
   useCanvasClient,
   useCollection,
+  ALIGN_SCOPE,
+  alignScopeArgs,
+  previewAlignReference,
+  useScoped,
+  editorRootOf,
+  queryEditor,
+  useEditorScope,
   useContentSelection,
   useDocument,
   useObjectModel,
@@ -80,13 +90,12 @@ import {
 } from "@paged-media/tools";
 import {
   formatLengthPair,
-  parseLengthText,
-  POINTS_PER_UNIT,
-  unitDigits,
+  NumericField,
   useDocumentUnit,
 } from "@paged-media/ui";
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
+import { focusInspectorField, INSPECTOR_TARGET } from "./inspector-focus";
 import { usePagePosition } from "../panels/page-position";
 import { layoutPages } from "../ui/layout";
 import { Chip, Sep, ToolPill } from "./toolbars";
@@ -166,6 +175,9 @@ const M = defineMessages("app.cockpitControlBar", {
   modePerspective: "Perspective",
   shearLabel: "Shear",
   shear: "Shear angle (degrees), about the reference point",
+  more: "More…",
+  moreObject: "Every property of the selection, in Properties",
+  moreText: "Every type setting, in Properties",
 });
 
 const REF_LABEL: Record<ReferenceKey, string> = {
@@ -364,10 +376,19 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
     (ids[0] as unknown as { kind?: string }).kind === "group";
   const run = (id: string, args?: unknown) =>
     void commands.invoke(id, args as never).catch(() => {});
+  // D-07 — the bar aligns against what the Align panel names (the key
+  // object, the page, …), as every align route does; hovering a button
+  // shows that reference on the canvas (UXI-SEL-018).
+  const alignStore = useScoped(ALIGN_SCOPE);
   const align = (kind: AlignKind) => {
     if (!model) return;
-    run(ALIGN_COMMAND, { kind, targets: ids.map((id) => model.addressOf(id)) });
+    run(ALIGN_COMMAND, {
+      kind,
+      targets: ids.map((id) => model.addressOf(id)),
+      ...alignScopeArgs(alignStore.get(), ids, (id) => model.addressOf(id)),
+    });
   };
+  const preview = (on: boolean) => previewAlignReference(alignStore, on);
   const resizeHint = strings.t(M.resizeHint);
   return (
     <>
@@ -474,13 +495,21 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
               ["bottom", "ui-obj-align-bottom", M.alignBottom],
             ] as const
           ).map(([kind, icon, title]) => (
-            <ToolPill
+            <span
               key={kind}
-              icon={icon}
-              title={strings.t(title)}
-              onClick={() => align(kind)}
-              testId={`align-${kind}`}
-            />
+              className="contents"
+              onPointerEnter={() => preview(true)}
+              onPointerLeave={() => preview(false)}
+              onFocus={() => preview(true)}
+              onBlur={() => preview(false)}
+            >
+              <ToolPill
+                icon={icon}
+                title={strings.t(title)}
+                onClick={() => align(kind)}
+                testId={`align-${kind}`}
+              />
+            </span>
           ))}
           <Sep />
         </>
@@ -515,7 +544,32 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
           {strings.t(M.ungroup)}
         </Chip>
       )}
+      <Sep />
+      <MoreChip target="object" />
     </>
+  );
+}
+
+/** "More…": the bar is an accelerator (the UX strategy's §5.6); the rest
+ *  is in Properties, opened at the matching field (ADR 1217). */
+function MoreChip({ target }: { target: keyof typeof INSPECTOR_TARGET }) {
+  const strings = useStrings();
+  const scope = useEditorScope();
+  const testId = `more-${target}`;
+  return (
+    <Chip
+      testId={testId}
+      title={strings.t(target === "text" ? M.moreText : M.moreObject)}
+      onClick={() => {
+        const opener = queryEditor(
+          editorRootOf(scope),
+          `[data-cockpit-action="${testId}"]`,
+        );
+        void focusInspectorField(scope, INSPECTOR_TARGET[target], opener);
+      }}
+    >
+      {strings.t(M.more)}
+    </Chip>
   );
 }
 
@@ -720,6 +774,8 @@ function TextControls() {
           testId={`justify-${value}`}
         />
       ))}
+      <Sep />
+      <MoreChip target="text" />
     </>
   );
 }
@@ -828,9 +884,11 @@ function PropertyNum(p: {
   );
 }
 
-/** A compact numeric field: label · value · unit on one line. Enter or
- *  blur commits, Escape reverts, ↑/↓ steps (⇧ ×10). Read-only (no
- *  commit) renders muted; a mixed selection shows an em-dash. */
+/** A compact numeric field: label · value · unit on one line — the one
+ *  numeric field's `bar` variant: expressions and units ("10mm + 2pt",
+ *  "+=5"), Enter or blur commits, Escape reverts, ↑/↓ steps (⇧ ×10), the
+ *  label scrubs (one commit on release), a mixed selection reads "Mixed".
+ *  Read-only (no commit) renders muted. */
 function NumField(p: {
   label: string;
   title: string;
@@ -853,122 +911,31 @@ function NumField(p: {
   length?: boolean;
 }) {
   const docUnit = useDocumentUnit();
-  const lengthUnit = p.length ? docUnit : null;
-  // Points per shown unit: 1 for every field that is not a geometry length.
-  const per = lengthUnit ? POINTS_PER_UNIT[lengthUnit] : 1;
-  const digits = lengthUnit ? unitDigits(lengthUnit) : (p.digits ?? 1);
-  const unitLabel = lengthUnit ?? p.unit;
-  const title = lengthUnit
-    ? p.title.replace("(pt)", `(${lengthUnit})`)
-    : p.title;
-  const shown =
-    p.value === "mixed"
-      ? "—"
-      : p.value === null
-        ? ""
-        : fmt(p.value / per, digits);
-  const [text, setText] = useState(shown);
-  const [editing, setEditing] = useState(false);
-  // Only TYPED text commits on blur — a step already wrote itself, and
-  // re-committing it against a not-yet-re-read position would move twice.
-  const [typed, setTyped] = useState(false);
-  useEffect(() => {
-    if (!editing) setText(shown);
-  }, [shown, editing]);
-  const clamp = (n: number) =>
-    Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, n));
-  // A length (and a point-valued field: a stroke, a type size) reads a
-  // typed unit, "10mm" or "1p"; anything else keeps its plain number.
-  const read = (raw: string): number =>
-    lengthUnit || p.unit === "pt"
-      ? (parseLengthText(raw, lengthUnit ?? "pt") ?? Number.NaN)
-      : Number(raw.replace(",", ".").replace(/[^\d.+-]/g, ""));
-  const commit = (raw: string) => {
-    const n = read(raw);
-    if (!p.onCommit || raw.trim() === "" || !Number.isFinite(n)) {
-      setText(shown);
-      return;
-    }
-    const next = clamp(n);
-    if (typeof p.value === "number" && Math.abs(next - p.value) < 1e-6) return;
-    p.onCommit(next);
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      commit(text);
-      setTyped(false);
-      (e.target as HTMLInputElement).blur();
-    } else if (e.key === "Escape") {
-      setTyped(false);
-      setText(shown);
-      (e.target as HTMLInputElement).blur();
-    } else if (
-      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
-      typeof p.value === "number" &&
-      p.onCommit
-    ) {
-      e.preventDefault();
-      // One step is one shown unit (a millimetre in a mm document).
-      const step =
-        (p.step ?? 1) *
-        per *
-        (e.shiftKey ? 10 : 1) *
-        (e.key === "ArrowUp" ? 1 : -1);
-      // Step from what the field SHOWS: a second press can land before
-      // the first one's re-read, and `p.value` would still be the old one.
-      const shownNow = Number(text);
-      const base =
-        Number.isFinite(shownNow) && text.trim() !== ""
-          ? shownNow * per
-          : p.value;
-      const next = clamp(base + step);
-      // The field is focused, so it is not following `shown`; show the
-      // stepped value now rather than when focus leaves.
-      setText(fmt(next / per, digits));
-      if (p.onStep) p.onStep(next - base);
-      else p.onCommit(next);
-    }
-    e.stopPropagation(); // tool shortcuts must not fire while typing
-  };
-  const readOnly = !p.onCommit || p.value === null;
+  const title = p.length ? p.title.replace("(pt)", `(${docUnit})`) : p.title;
+  const commit = p.onCommit;
   return (
-    <label
+    <NumericField
+      variant="bar"
+      label={p.label}
       title={title}
-      data-control-field={p.testId}
-      data-field-state={p.fieldState}
-      style={{
-        ...fieldBox,
-        opacity: p.value === null && !p.placeholder ? 0.45 : 1,
+      aria-label={title}
+      value={p.value === "mixed" ? null : p.value}
+      mixed={p.value === "mixed"}
+      length={p.length}
+      suffix={p.length ? undefined : p.unit}
+      precision={p.length ? undefined : (p.digits ?? 1)}
+      min={p.min}
+      max={p.max}
+      step={p.step ?? 1}
+      placeholder={p.placeholder}
+      readOnly={!commit || (p.value === null && !p.placeholder)}
+      onCommit={commit ? (n) => commit(n) : undefined}
+      onStep={p.onStep}
+      dataAttributes={{
+        "data-control-field": p.testId,
+        ...(p.fieldState ? { "data-field-state": p.fieldState } : {}),
       }}
-    >
-      <span style={fieldLabel}>{p.label}</span>
-      <input
-        value={text}
-        placeholder={p.placeholder}
-        readOnly={readOnly && !p.placeholder}
-        aria-label={title}
-        onFocus={(e) => {
-          setEditing(true);
-          setTyped(false);
-          e.currentTarget.select();
-        }}
-        onBlur={() => {
-          setEditing(false);
-          if (typed) commit(text);
-          setTyped(false);
-        }}
-        onChange={(e) => {
-          setTyped(true);
-          setText(e.target.value);
-        }}
-        onKeyDown={onKeyDown}
-        style={{
-          ...fieldInput,
-          color: readOnly ? "var(--pg-muted-fg)" : "var(--pg-fg)",
-        }}
-      />
-      <span style={fieldUnit}>{unitLabel}</span>
-    </label>
+    />
   );
 }
 
@@ -1025,53 +992,12 @@ function Label({ children }: { children: ReactNode }) {
   );
 }
 
-function fmt(n: number, digits: number): string {
-  const f = Number(n.toFixed(digits));
-  return String(Object.is(f, -0) ? 0 : f);
-}
-
 const valueText: CSSProperties = {
   fontFamily: "var(--font-mono)",
   fontVariantNumeric: "tabular-nums",
   fontSize: 12,
   color: "var(--pg-fg)",
   whiteSpace: "nowrap",
-};
-
-const fieldBox: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 4,
-  height: 28,
-  padding: "0 7px",
-  borderRadius: "var(--radius-md)",
-  border: "1px solid var(--chrome-divider)",
-  background: "var(--pg-muted)",
-  flexShrink: 0,
-  cursor: "text",
-};
-
-const fieldLabel: CSSProperties = {
-  fontSize: 11,
-  color: "var(--pg-muted-fg)",
-  whiteSpace: "nowrap",
-};
-
-const fieldInput: CSSProperties = {
-  width: 46,
-  border: "none",
-  outline: "none",
-  background: "transparent",
-  fontFamily: "var(--font-mono)",
-  fontVariantNumeric: "tabular-nums",
-  fontSize: 12,
-  textAlign: "right",
-  padding: 0,
-};
-
-const fieldUnit: CSSProperties = {
-  fontSize: 10.5,
-  color: "var(--pg-muted-fg)",
 };
 
 const selectBox: CSSProperties = {

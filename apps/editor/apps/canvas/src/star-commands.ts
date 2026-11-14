@@ -36,6 +36,7 @@
 //     selected, like every insert (`mutateGraphicAndSelect`).
 
 import {
+  commandNeeds,
   scopeOf,
   type CommandContribution,
   type MenuItemContribution,
@@ -136,6 +137,7 @@ export function buildStarCommands(
       },
       category: "Insert",
       when: insertApplies,
+      applicability: commandNeeds("document", "outsideContext"),
       handler: (paged, payload) => {
         if (!hasStarParams(payload)) {
           openStarDialog(scopeOf(paged));

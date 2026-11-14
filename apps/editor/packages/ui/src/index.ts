@@ -24,12 +24,28 @@ import "./translations";
 // bundles. Curated subset of shadcn primitives (re-exported from
 // @paged-media/shell) plus DTP composites built on top.
 
+export {
+  NumericField,
+  numericErrorText,
+  type NumericCommitMeta,
+  type NumericFieldProps,
+} from "./inputs/NumericField";
+export {
+  applyRelative,
+  decimalSeparator,
+  parseNumericExpression,
+  type ExpressionOptions,
+  type ExpressionResult,
+  type NumericParseError,
+  type RelativeEdit,
+} from "./inputs/expression";
 export { NumberInput, type NumberInputProps } from "./inputs/NumberInput";
 export { LengthInput, type LengthInputProps } from "./inputs/LengthInput";
 export { ScrubField, type ScrubFieldProps } from "./inputs/ScrubField";
 export { BoundsInput, type BoundsInputProps } from "./inputs/BoundsInput";
 export { ColorPicker, type ColorPickerProps } from "./inputs/ColorPicker";
 export { KitSelect, type KitSelectProps } from "./inputs/KitSelect";
+export { KitCheckbox, type KitCheckboxProps } from "./inputs/KitCheckbox";
 export {
   SmartDialMicro,
   type SmartDialMicroProps,

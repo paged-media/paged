@@ -36,6 +36,7 @@ import {
   type ShellObjectsSurface,
 } from "@paged-media/shell";
 import { t } from "@paged-media/strings";
+import { NumberInput } from "@paged-media/ui";
 
 import { FORM } from "./messages";
 
@@ -224,16 +225,17 @@ export function ModuleFieldControl({
       );
     case "number":
       return (
-        <FieldInput
-          type="number"
-          data-field-input={name}
-          defaultValue={typeof value === "number" ? String(value) : ""}
-          min={control.min}
-          max={control.max}
+        // The one numeric field; the module's own write says what it
+        // refuses (its words, in the row's problem line).
+        <NumberInput
+          value={typeof value === "number" ? value : null}
+          unsetText={typeof value === "number" ? undefined : ""}
           step={control.step}
-          onBlur={(e) => {
-            const n = Number(e.currentTarget.value);
-            if (e.currentTarget.value !== "" && n !== value) commit(n);
+          precision={4}
+          inputAttributes={{ "data-field-input": name }}
+          onChange={() => {}}
+          onCommit={(n) => {
+            if (n !== value) commit(n);
           }}
         />
       );

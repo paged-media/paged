@@ -106,11 +106,18 @@ export type BindingState = "value" | "mixed" | "absent" | "none";
  *  indeterminate / no selection. */
 export interface ResolvedBinding {
   value: Value | null;
-  onCommit?: (next: Value) => void;
+  /** `options.coalesce` joins the write to the run of that key: a scrub's
+   *  previews and release are one undo step (engine ADR 1304). */
+  onCommit?: (next: Value, options?: { coalesce?: string }) => void;
   /** The mutations `onCommit(next)` would send, for a caller that joins
    *  several commits into ONE batch, one undo step (Swap fill and
    *  stroke, SH-205). Present wherever `onCommit` writes through core. */
   plan?: (next: Value) => Mutation[];
+  /** A write that differs per target (UXI-PNL-010: "increase each width by
+   *  5 mm"): `next` gets each selected object's own value and answers its
+   *  new one (null leaves that object alone); all of them go as ONE batch,
+   *  one undo step. Present for an element-scope core binding. */
+  commitEach?: (next: (current: Value | null) => Value | null) => void;
   /** Concept 2 — disambiguates `value: null`: `true` means a
    *  heterogeneous MULTI-selection (the values disagree), as
    *  opposed to "uniformly null" (e.g. every fill is None) or "no
@@ -440,6 +447,14 @@ function buildResolved(
         value: collapsed,
         onCommit: makeOnCommitMany(client, addr.ids, sb.path),
         plan: (next) => planElementWrites(addr.ids, sb.path, next),
+        commitEach: (next) =>
+          sendAsOne(
+            client,
+            addr.ids.flatMap((id, i) => {
+              const v = next(values[i] ?? null);
+              return v === null ? [] : planElementWrites([id], sb.path, v);
+            }),
+          ),
         mixed,
         state: mixed ? "mixed" : collapsed === null ? "none" : "value",
         provider: null,
@@ -560,12 +575,15 @@ function makeOnCommit(
   client: CanvasClient,
   id: ElementId,
   path: string,
-): (next: Value) => void {
-  return (next) => {
-    void client.mutate({
-      op: "setElementProperty",
-      args: { elementId: id, path: path as never, value: next },
-    });
+): (next: Value, options?: { coalesce?: string }) => void {
+  return (next, options) => {
+    void client.mutate(
+      {
+        op: "setElementProperty",
+        args: { elementId: id, path: path as never, value: next },
+      },
+      options?.coalesce !== undefined ? { coalesce: options.coalesce } : {},
+    );
   };
 }
 
@@ -583,10 +601,15 @@ function planElementWrites(
 
 /** Send planned writes as one mutation: the write itself, or a batch —
  *  one undo step for the whole multi-write (R4). */
-export function sendAsOne(client: CanvasClient, ops: Mutation[]): void {
+export function sendAsOne(
+  client: CanvasClient,
+  ops: Mutation[],
+  options?: { coalesce?: string },
+): void {
   if (ops.length === 0) return;
   void client.mutate(
     ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } },
+    options?.coalesce !== undefined ? { coalesce: options.coalesce } : {},
   );
 }
 
@@ -596,6 +619,7 @@ function makeOnCommitMany(
   client: CanvasClient,
   ids: ElementId[],
   path: string,
-): (next: Value) => void {
-  return (next) => sendAsOne(client, planElementWrites(ids, path, next));
+): (next: Value, options?: { coalesce?: string }) => void {
+  return (next, options) =>
+    sendAsOne(client, planElementWrites(ids, path, next), options);
 }

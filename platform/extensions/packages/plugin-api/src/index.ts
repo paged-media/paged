@@ -95,6 +95,7 @@ export type {
   ObjectKindInfo,
   ObjectCommandInfo,
   ObjectsSurface,
+  ObjectWriteOptions,
   TemplateFieldControl,
   TemplateFieldRef,
   TemplateFieldWrite,
@@ -257,6 +258,9 @@ export type {
   ActionAsset,
   ActionValueKind,
   DiagnosticsSurface,
+  NotifySurface,
+  Notification,
+  NotifyOutcome,
   JournalSurface,
   JournalRecord,
   BindingsSurface,
@@ -318,6 +322,9 @@ export type {
   PropertyFieldProps,
   PropertyFrameProps,
   PropertyFieldTarget,
+  NumericFieldProps,
+  NumericFieldCommit,
+  NumericRelativeEdit,
 } from "./widgets.js";
 
 // ADR-023 phase A — BINDING PROVIDERS: one host-owned panel, and while

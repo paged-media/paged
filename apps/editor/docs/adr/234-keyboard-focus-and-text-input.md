@@ -98,7 +98,7 @@ on macOS, Ctrl+\ elsewhere): decision 2's keyboard chord, free in the keybinding
 by no browser or system shortcut on any platform, and a combo the host reserves (no edit
 context's scoped binding may take it, ADR 299); the Focus pill on the context toolbar runs it. `paged.chrome.toggleAll` and its three keybindings left the feature ids with a
 deprecation window, 0.78 to 0.80 (`apps/canvas/deprecated-ids.json`), read as
-`paged.view.toggleChrome`'s. The preference "Tab hides panels (InDesign)" (Edit ▸ Settings,
+`paged.view.toggleChrome`'s until the window closed: 0.80 builds without the alias. The preference "Tab hides panels (InDesign)" (Edit ▸ Settings,
 `paged.preferences.tabHidesPanels`, storage key `paged.keyboard.tabHidesPanels`, off by default)
 restores decision 2 exactly: with it on, Tab on a canvas the user clicked into toggles the
 panels and the tool rail and Shift+Tab the panels (`focus/tab-hides-panels.ts`); reached by

@@ -44,19 +44,30 @@ describe("lossDiagnostics", () => {
         word: (e) => `worded ${e.code}`,
       }),
     ).toEqual([
-      { severity: "warning", message: "x: a filter (2×)", source: "f.svg" },
-      { severity: "info", message: "x: a note", source: "f.svg" },
+      {
+        severity: "warning",
+        message: "x: a filter (2×)",
+        source: "f.svg",
+        loss: entries[0]!,
+      },
+      {
+        severity: "info",
+        message: "x: a note",
+        source: "f.svg",
+        loss: entries[1]!,
+      },
       {
         severity: "warning",
         message: "x: worded shading.sampled",
         source: "f.svg",
+        loss: entries[2]!,
       },
     ]);
   });
 
   it("falls back to the code and leaves the source off when absent", () => {
     expect(lossDiagnostics([entries[2]!])).toEqual([
-      { severity: "warning", message: "shading.sampled" },
+      { severity: "warning", message: "shading.sampled", loss: entries[2]! },
     ]);
   });
 

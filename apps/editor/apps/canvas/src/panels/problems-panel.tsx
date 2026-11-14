@@ -36,11 +36,15 @@ import { useSyncExternalStore } from "react";
 import {
   useCockpitActions,
   useCollection,
+  useFeedbackSnapshot,
+  useOperationFeedback,
   useRegistries,
+  type FeedbackAction,
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
 
 import { useProblems, type ProblemEntry } from "./problems-store";
+import { COMPAT_REPORT_PANEL } from "./compatibility-report-store";
 import { font, radius, space } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -49,6 +53,9 @@ const M = defineMessages("app.problemsPanel", {
   missingFont: "Missing font: {family}",
   title: "Problems",
   empty: "No problems detected.",
+  dismiss: "Dismiss",
+  differences:
+    "{count, plural, one {# difference from the source file} other {# differences from the source file}}: see the compatibility report",
   summary:
     "{errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}",
 });
@@ -67,8 +74,14 @@ const kicker: React.CSSProperties = {
   margin: `0 0 ${space[2]}`,
 };
 
-/** A problem the document itself has, with the panel that fixes it. */
-type ListedProblem = ProblemEntry & { panel?: string };
+/** A problem the document itself has, with the panel that fixes it; an
+ *  operation's unresolved failure (editor ADR "Operation feedback") with
+ *  its remedy and its key, to dismiss it. */
+type ListedProblem = ProblemEntry & {
+  panel?: string;
+  remedy?: FeedbackAction;
+  feedbackKey?: string;
+};
 
 /** The bundle id the document's own findings are listed under. */
 const DOCUMENT_SOURCE = "paged.document";
@@ -119,6 +132,44 @@ function useDocumentProblems(): ListedProblem[] {
   return out;
 }
 
+/** Editor ADR 1222 — a bundle's loss rows (one per loss entry) are one
+ *  row here, "N differences", that opens the compatibility report, where
+ *  each is explained and located. Other rows stay as they are. */
+function consolidateLosses(
+  entries: readonly ProblemEntry[],
+  t: (
+    key: string,
+    params?: Readonly<Record<string, string | number>>,
+  ) => string,
+): ListedProblem[] {
+  const out: ListedProblem[] = [];
+  const groups = new Map<string, ListedProblem & { count: number }>();
+  for (const e of entries) {
+    if (!e.loss) {
+      out.push(e);
+      continue;
+    }
+    const id = `${e.bundleId} ${e.key}`;
+    const group = groups.get(id);
+    if (group) {
+      group.count += Math.max(1, e.loss.count);
+      if (e.severity === "warning") group.severity = "warning";
+      continue;
+    }
+    const next = {
+      ...e,
+      severity: e.severity,
+      count: Math.max(1, e.loss.count),
+      panel: COMPAT_REPORT_PANEL,
+    };
+    groups.set(id, next);
+    out.push(next);
+  }
+  for (const g of groups.values())
+    g.message = t(M.differences, { count: g.count });
+  return out;
+}
+
 export function ProblemsPanel() {
   const cockpitActions = useCockpitActions();
   const strings = useStrings();
@@ -129,7 +180,25 @@ export function ProblemsPanel() {
     store.snapshot,
   );
   const documentProblems = useDocumentProblems();
-  const problems: ListedProblem[] = [...documentProblems, ...reported];
+  // UX audit F-02: an operation that failed and left an issue (a file that
+  // did not open, a failed save) is listed until resolved or dismissed.
+  const feedback = useOperationFeedback();
+  const operations: ListedProblem[] = useFeedbackSnapshot().problems.map(
+    (p) => ({
+      severity: p.report.outcome === "fatal-failure" ? "error" : "warning",
+      message: [p.text.headline, p.text.change].filter(Boolean).join(" "),
+      source: p.report.source,
+      bundleId: p.report.source ?? "paged.editor",
+      key: p.key,
+      remedy: p.report.remedy,
+      feedbackKey: p.key,
+    }),
+  );
+  const problems: ListedProblem[] = [
+    ...operations,
+    ...documentProblems,
+    ...consolidateLosses(reported, strings.t),
+  ];
   const registries = useRegistries();
 
   // The bundle's primary panel: first registered panel whose id sits
@@ -138,6 +207,10 @@ export function ProblemsPanel() {
     registries.panels.list().find((p) => p.id.startsWith(bundleId + "."))?.id;
 
   const focus = (entry: ListedProblem) => {
+    if (entry.remedy) {
+      feedback.runAction(entry.remedy);
+      return;
+    }
     const panelId = entry.panel ?? panelForBundle(entry.bundleId);
     if (panelId) cockpitActions.openPanel?.(panelId);
   };
@@ -177,7 +250,7 @@ export function ProblemsPanel() {
           </p>
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {problems.map((p, i) => (
-              <li key={i}>
+              <li key={i} style={{ display: "flex", alignItems: "baseline" }}>
                 <button
                   type="button"
                   data-problem
@@ -216,11 +289,23 @@ export function ProblemsPanel() {
                       data-problem-location
                       style={{ color: "var(--pg-muted-fg)", marginLeft: 6 }}
                     >
-                      {p.source ?? p.key}
+                      {p.feedbackKey ? "" : (p.source ?? p.key)}
                       {p.line !== undefined ? `:${p.line}` : ""}
                     </span>
                   </span>
                 </button>
+                {p.feedbackKey && (
+                  <button
+                    type="button"
+                    data-problem-dismiss
+                    aria-label={strings.t(M.dismiss)}
+                    title={strings.t(M.dismiss)}
+                    onClick={() => feedback.resolve(p.feedbackKey!)}
+                    style={dismissStyle}
+                  >
+                    ×
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -229,3 +314,12 @@ export function ProblemsPanel() {
     </div>
   );
 }
+
+const dismissStyle: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "var(--pg-muted-fg)",
+  cursor: "pointer",
+  padding: "0 4px",
+  font: `13px ${font.sans}`,
+};

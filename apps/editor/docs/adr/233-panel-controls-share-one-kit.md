@@ -62,3 +62,11 @@ named "✕" (PN-155), and refusals shown as wire JSON or a Rust variant name (PN
   and take the host's timers, which a panel helper does not need to model.
 - A visible change: the About notes of draw, image, sheet and web share one look, and the
   dialogs that named non-existent tokens follow the theme.
+
+## Amendment 2026-11-13
+
+[ADR 1216](1216-one-numeric-field.md) adds the kit's numeric member: one numeric field
+(`packages/ui` `NumericField`, with `NumberInput`, `LengthInput`, `BoundsInput` and
+`SmartDialMicro` as thin wrappers) reads every typed number through one parser, says why a value
+is refused, reads "Mixed" for a mixed selection and makes a scrub one undo step. Plugins get it
+as `host.widgets.NumericField`, which closes the panel audit's "shared primitives" item.

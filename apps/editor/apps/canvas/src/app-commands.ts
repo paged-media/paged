@@ -17,7 +17,18 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { getViewToggle, scopeOf, toggleViewToggle } from "@paged-media/shell";
+import {
+  closeDocument,
+  commandNeeds,
+  getViewToggle,
+  GO_TO_PAGE_COMMAND,
+  pageNamed,
+  scopeOf,
+  toggleViewToggle,
+  whenNeeds,
+  type PagedEditor,
+} from "@paged-media/shell";
+import { openRecentDialog } from "./panels/open-recent-dialog";
 
 // SDK Phase 4 — canvas-app-specific commands.
 //
@@ -50,6 +61,8 @@ const M = defineMessages("app.appCommands", {
   openPdf: "Open PDF…",
   saveAsIdml: "Save As IDML…",
   savePaged: "Save (.paged)",
+  openRecent: "Open recent…",
+  close: "Close",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   zoom100: "Zoom to 100%",
@@ -70,9 +83,23 @@ const M = defineMessages("app.appCommands", {
   snapToPoints: "Snap to points",
   showHeadingAnchors: "Show heading anchors",
   showDataMarkers: "Show data markers",
+  showIssueMarkers: "Show issue markers",
   docs: "Documentation",
   idmlReference: "IDML format reference",
   reportIssue: "Report an issue…",
+  goToPage: "Go to page…",
+  noPage: "There is no page {page} in this document.",
+  helpScripting: "Help: Scripting the editor",
+  helpScriptingWords:
+    "script, scripting, automate, automation, paged.set, javascript, macro",
+  helpTemplates: "Help: Templates and fields",
+  helpTemplatesWords:
+    "template, fields, fill, form, data merge, variable data, roles",
+  helpPlugins: "Help: Built-in modules",
+  helpPluginsWords:
+    "plugin, module, draw, image, sheet, spreadsheet, slide, word, data, web, pdf",
+  helpShortcuts: "Help: Keyboard shortcuts",
+  helpShortcutsWords: "keyboard, shortcut, keys, hotkey, chord, accelerator",
   undoNamed: "Undo {name}",
   redoNamed: "Redo {name}",
   about: "paged editor · engine {version}",
@@ -125,6 +152,9 @@ export const PAGED_EDITOR_REDO = "paged.editor.redo";
 export const PAGED_FILE_OPEN_PDF = "paged.file.openPdf";
 export const PAGED_FILE_SAVE_AS_IDML = "paged.file.saveAsIdml";
 export const PAGED_FILE_SAVE_PAGED = "paged.file.savePaged";
+/** UX audit F-06 — File ▸ Open recent… and File ▸ Close. */
+export const PAGED_FILE_OPEN_RECENT = "paged.file.openRecent";
+export const PAGED_FILE_CLOSE = "paged.file.close";
 export const PAGED_VIEW_ZOOM_IN = "paged.view.zoomIn";
 export const PAGED_VIEW_ZOOM_OUT = "paged.view.zoomOut";
 export const PAGED_VIEW_ZOOM_100 = "paged.view.zoom100";
@@ -147,6 +177,9 @@ export const PAGED_VIEW_FIRST_PAGE = "paged.view.firstPage";
 export const PAGED_VIEW_PREVIOUS_PAGE = "paged.view.previousPage";
 export const PAGED_VIEW_NEXT_PAGE = "paged.view.nextPage";
 export const PAGED_VIEW_LAST_PAGE = "paged.view.lastPage";
+/** ADR 1218 — "Go to page 14" / "Go to page B-3": the palette's page
+ *  navigation, `{ page }` a page's id, its name (folio) or its position. */
+export const PAGED_VIEW_GO_TO_PAGE = GO_TO_PAGE_COMMAND;
 /** B4 — View ▸ Show text threads. Flips a module-scope view toggle the
  *  thread-line overlay subscribes to. The menu item carries a tick while
  *  it is on (`checked`, SH-4), as InDesign's View ▸ Extras items do. */
@@ -159,6 +192,8 @@ export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS =
 /** View ▸ Show data markers — the frames the document's data is placed in,
  *  bracketed in their binding's sync state (editor ADR 291). */
 export const PAGED_VIEW_TOGGLE_DATA_MARKERS = "paged.view.toggleDataMarkers";
+/** Editor ADR 1223 — View ▸ Show issue markers. */
+export const PAGED_VIEW_TOGGLE_ISSUE_MARKERS = "paged.view.toggleIssueMarkers";
 
 /** Help — the places the app sends you to learn it. */
 const HELP_LINKS = [
@@ -185,6 +220,30 @@ const HELP_LINKS = [
     url: "https://github.com/paged-media/paged/issues/new",
     icon: "ui-warn",
     order: 30,
+  },
+] as const;
+
+/** ADR 1218 — "Help: …" entries the palette finds by their words (the
+ *  strategy's §5.7: "How do I …" → the relevant help). Each opens its
+ *  page of the documentation, or a panel of the editor's own. */
+const HELP_TOPICS = [
+  {
+    id: "paged.help.topic.scripting",
+    label: M.helpScripting,
+    words: M.helpScriptingWords,
+    url: "https://docs.paged.media/scripting/",
+  },
+  {
+    id: "paged.help.topic.templates",
+    label: M.helpTemplates,
+    words: M.helpTemplatesWords,
+    url: "https://docs.paged.media/templates/",
+  },
+  {
+    id: "paged.help.topic.plugins",
+    label: M.helpPlugins,
+    words: M.helpPluginsWords,
+    url: "https://docs.paged.media/plugins/",
   },
 ] as const;
 
@@ -228,6 +287,10 @@ export interface AppCommandHandlers {
   fitSpread: () => void | Promise<void>;
   fitSelection: () => void | Promise<void>;
   goToPage: (which: "first" | "previous" | "next" | "last") => void;
+  /** Fit the page with this id in the window (ADR 1218's "Go to page"). */
+  goToPageId?: (pageId: string) => void;
+  /** Show a registered panel (Help: Keyboard shortcuts). */
+  showPanel?: (panelId: string) => void;
 }
 
 /** How many places Back (or Forward) holds in the editor `state` is, 0
@@ -320,6 +383,23 @@ export function buildAppCommands(
       category: "File",
       handler: () => handlers.savePaged(),
     },
+    // UX audit F-06 — the library's and the recent files, and Close.
+    {
+      id: PAGED_FILE_OPEN_RECENT,
+      title: t(M.openRecent),
+      category: "File",
+      handler: (paged) => openRecentDialog(scopeOf(paged)),
+    },
+    {
+      id: PAGED_FILE_CLOSE,
+      title: t(M.close),
+      category: "File",
+      when: whenNeeds("document"),
+      applicability: commandNeeds("document"),
+      handler: async (paged) => {
+        await closeDocument(paged as PagedEditor);
+      },
+    },
     {
       id: PAGED_VIEW_ZOOM_IN,
       title: t(M.zoomIn),
@@ -395,6 +475,40 @@ export function buildAppCommands(
       handler: () => handlers.fitSelection(),
     },
     {
+      id: PAGED_VIEW_GO_TO_PAGE,
+      title: t(M.goToPage),
+      category: "Layout",
+      args: {
+        kind: "struct",
+        fields: { page: { kind: "text" } },
+      },
+      when: whenNeeds("document"),
+      applicability: commandNeeds("document"),
+      handler: async (paged, payload) => {
+        const page = String(
+          (payload as { page?: unknown } | undefined)?.page ?? "",
+        );
+        const client = (
+          paged as {
+            client?: {
+              collection<T>(name: "pages"): Promise<readonly T[]>;
+            };
+          } | null
+        )?.client;
+        const rows = client
+          ? await client.collection<{
+              selfId: string;
+              index: number;
+              name: string;
+            }>("pages")
+          : [];
+        const row =
+          rows.find((r) => r.selfId === page) ?? pageNamed(rows, page);
+        if (!row) throw new Error(`notFound: ${t(M.noPage, { page })}`);
+        handlers.goToPageId?.(row.selfId);
+      },
+    },
+    {
       id: PAGED_VIEW_FIRST_PAGE,
       title: t(M.firstPage),
       category: "Layout",
@@ -450,12 +564,34 @@ export function buildAppCommands(
         toggleViewToggle(scopeOf(paged), "dataMarkers");
       },
     },
+    {
+      id: PAGED_VIEW_TOGGLE_ISSUE_MARKERS,
+      title: t(M.showIssueMarkers),
+      category: "View",
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "issueMarkers");
+      },
+    },
     ...HELP_LINKS.map((l) => ({
       id: l.id,
       title: t(l.label),
       category: "Help",
       handler: () => openExternal(l.url),
     })),
+    ...HELP_TOPICS.map((h) => ({
+      id: h.id,
+      title: t(h.label),
+      category: "Help",
+      keywords: t(h.words),
+      handler: () => openExternal(h.url),
+    })),
+    {
+      id: "paged.help.topic.shortcuts",
+      title: t(M.helpShortcuts),
+      category: "Help",
+      keywords: t(M.helpShortcutsWords),
+      handler: () => handlers.showPanel?.("paged.keyboard-shortcuts"),
+    },
   ];
 }
 
@@ -497,6 +633,18 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
   // engine's protocol-51 export door got a caller; the MenuRegistry
   // dedupes by path and would throw on a collision, so the seam is
   // gone rather than shadowed.
+  {
+    path: "File/Open recent…",
+    command: PAGED_FILE_OPEN_RECENT,
+    order: 12,
+    group: "open",
+  },
+  {
+    path: "File/Close",
+    command: PAGED_FILE_CLOSE,
+    order: 30,
+    group: "save",
+  },
   {
     path: "File/Save (.paged)",
     command: PAGED_FILE_SAVE_PAGED,
@@ -666,6 +814,13 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     command: PAGED_VIEW_TOGGLE_DATA_MARKERS,
     checked: (paged) => getViewToggle(scopeOf(paged), "dataMarkers"),
     order: 66,
+    group: "extras",
+  },
+  {
+    path: "View/Show issue markers",
+    command: PAGED_VIEW_TOGGLE_ISSUE_MARKERS,
+    checked: (paged) => getViewToggle(scopeOf(paged), "issueMarkers"),
+    order: 67,
     group: "extras",
   },
 ];

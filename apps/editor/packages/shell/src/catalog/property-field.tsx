@@ -685,15 +685,18 @@ export function PropertyField(props: PropertyFieldProps) {
     (state.state === "absent" && field.provider !== null);
   const write = row && field.commit && !seam ? field.commit : null;
   const commitLeaf = write
-    ? (v: Value) => {
+    ? (v: Value, options?: { coalesce?: string }) => {
         const raw = (v as { value?: unknown }).value ?? null;
         // A select's option: the clear option of a nullable row writes
-        // null, a number row's numeric option the number.
-        void write(
+        // null, a number row's numeric option the number. The write's
+        // promise goes back to the caller: a scrub's step waits for it
+        // (catalog/scrub-preview.ts).
+        return write(
           (widget === "select" || widget === "segments") &&
             typeof raw === "string"
             ? optionValue(type, raw, row?.nullable === true)
             : raw,
+          options,
         );
       }
     : undefined;
@@ -701,13 +704,43 @@ export function PropertyField(props: PropertyFieldProps) {
   const label =
     props.label ??
     (props.autoLabel ? (row?.title ?? humanizePath(path)) : undefined);
-  const adornment = <Badges bound={field.bound} inferred={field.inferred} />;
+  // A numeric widget is the one numeric field: it carries the bound badge
+  // in the field (UXI-PNL-011) and reads "Mixed" (UXI-PNL-008); the label
+  // keeps the inferred badge only.
+  const numeric = widget === "length" || widget === "number";
+  const adornment = (
+    <Badges bound={numeric ? false : field.bound} inferred={field.inferred} />
+  );
   const chrome: Record<string, unknown> = {
     ...(props.chrome ?? {}),
     ...(label ? { label } : {}),
     ...(props.labelPosition ? { labelPosition: props.labelPosition } : {}),
     ...(label ? { labelAdornment: adornment } : {}),
     ...(seam ? { seam: true } : {}),
+    ...(numeric && field.bound ? { bound: true } : {}),
+    ...(numeric && state.state === "mixed" ? { mixed: true } : {}),
+    // A core write carries the scrub's coalesce key, so a scrub previews
+    // it as one undo step (ADR 1216, engine ADR 1304); an edit context's
+    // write commits on release only.
+    ...(numeric && field.provider === null && write
+      ? { previewable: true }
+      : {}),
+    ...(numeric && field.commitEach
+      ? {
+          commitEach: (next: (current: Value | null) => Value | null) => {
+            void field.commitEach?.((raw) => {
+              const out = next(
+                typeof raw === "number"
+                  ? ({ type: "length", value: raw } as Value)
+                  : null,
+              );
+              return out === null
+                ? undefined
+                : (out as { value?: unknown }).value;
+            });
+          },
+        }
+      : {}),
   };
   if (
     widget === "number" &&

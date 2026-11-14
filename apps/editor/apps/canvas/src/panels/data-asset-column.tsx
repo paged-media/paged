@@ -40,6 +40,7 @@ import type {
 } from "@paged-media/plugin-api";
 import { color, font, radius, space, status } from "@paged-media/panel-kit";
 import { useRegisteredActions, useDataRevision } from "@paged-media/shell";
+import { NumberInput } from "@paged-media/ui";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.dataPanel.assets", {
@@ -247,12 +248,12 @@ function ParamField({
     return (
       <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
         {label}
-        <input
-          type="number"
-          data-asset-param={name}
-          style={{ ...control, width: 80 }}
+        <NumberInput
           value={typeof v === "number" ? v : Number(v)}
-          onChange={(e) => onChange(Number(e.target.value))}
+          precision={4}
+          className="w-20"
+          inputAttributes={{ "data-asset-param": name }}
+          onChange={onChange}
         />
       </label>
     );

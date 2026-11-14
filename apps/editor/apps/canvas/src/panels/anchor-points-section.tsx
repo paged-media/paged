@@ -46,7 +46,6 @@ import {
 } from "./anchor-points";
 
 const M = defineMessages("app.anchorPoints", {
-  title: "Points",
   count: "{count, plural, one {# anchor selected} other {# anchors selected}}",
   x: "X",
   y: "Y",
@@ -133,7 +132,7 @@ export function AnchorPointsSection({
 
   return (
     <div
-      data-properties-section="points"
+      data-points-section
       data-points-count={summary.count}
       data-points-kind={summary.kind}
       className="flex flex-col gap-2"

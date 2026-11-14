@@ -257,7 +257,7 @@ test.describe("paged.draw ADR 370 — vector editing with feedback", () => {
     ).toHaveCount(1);
     await clickPt(page, [260, 120]);
     await openPanel(page, "paged.properties");
-    const points = page.locator('[data-properties-section="points"]');
+    const points = page.locator("[data-points-section]");
     await expect(points).toHaveAttribute("data-points-count", "1");
     await expect(points).toHaveAttribute("data-points-kind", "corner");
     await expect(

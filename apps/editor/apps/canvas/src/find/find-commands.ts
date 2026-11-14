@@ -25,6 +25,7 @@
 // these command ids rather than owning a find of their own.
 
 import {
+  commandNeeds,
   cockpitActionsOf,
   scopeOf,
   type CommandContribution,
@@ -82,6 +83,7 @@ export const FIND_COMMANDS: CommandContribution[] = [
     },
     category: "Edit",
     when: hasDocument,
+    applicability: commandNeeds("document"),
     handler: (paged) => openFind(paged as PagedEditor),
   },
   {
@@ -91,6 +93,7 @@ export const FIND_COMMANDS: CommandContribution[] = [
     },
     category: "Edit",
     when: hasDocument,
+    applicability: commandNeeds("document"),
     handler: (paged) =>
       patchFind(findStoreOf(scopeOf(paged)), { dialog: true, goTo: false }),
   },
@@ -101,6 +104,7 @@ export const FIND_COMMANDS: CommandContribution[] = [
     },
     category: "Edit",
     when: hasDocument,
+    applicability: commandNeeds("document"),
     handler: (paged) => {
       const scope = scopeOf(paged);
       return findNext(
@@ -116,6 +120,7 @@ export const FIND_COMMANDS: CommandContribution[] = [
     },
     category: "Edit",
     when: hasDocument,
+    applicability: commandNeeds("document"),
     handler: (paged) => {
       const scope = scopeOf(paged);
       return findNext(
@@ -132,6 +137,7 @@ export const FIND_COMMANDS: CommandContribution[] = [
     },
     category: "Edit",
     when: hasDocument,
+    applicability: commandNeeds("document"),
     handler: (paged) =>
       patchFind(findStoreOf(scopeOf(paged)), { goTo: true, dialog: false }),
   },

@@ -18,7 +18,7 @@
  */
 
 // The words of the input primitives: the colour mixer and wheel, the
-// bounds and length inputs (plan E10). Their German is `../locales/de.json`,
+// numeric field and the bounds and length inputs built on it (plan E10). Their German is `../locales/de.json`,
 // registered by `./translations`.
 
 import { defineMessages } from "@paged-media/strings";
@@ -76,4 +76,17 @@ export const INPUT = defineMessages("ui.input", {
   rightShort: "R",
   unit: "unit",
   dragToAdjust: "Drag to adjust",
+  mixed: "Mixed",
+  invalidSyntax: "Type a number or an expression, like 10 mm + 2 pt",
+  unclosed: "A bracket is not closed",
+  needsValue:
+    "The objects differ: type a value, or a change like +=5 that applies to each",
+  outOfRange: "Between {min} and {max}",
+  atLeast: "At least {min}",
+  atMost: "At most {max}",
+  notFinite: "Not a finite number",
+  unsupportedUnit: "This field does not take {unit}",
+  boundToData: "Bound to data",
+  boundTo: "Bound to {source}",
+  scrubbing: "Scrubbing: {value}",
 });

@@ -67,8 +67,14 @@ import type {
   MenuItemContribution,
   PagedEditor,
 } from "@paged-media/shell";
-import type { ElementId, Mutation, WorkerToMain } from "@paged-media/client";
+import type {
+  ElementId,
+  Mutation,
+  SvgReport,
+  WorkerToMain,
+} from "@paged-media/client";
 import { viewportToDoc } from "@paged-media/client";
+import { scoped, scopeOf } from "@paged-media/shell";
 
 import { objectVerbApplies, refusalOf } from "./object-commands";
 import { currentPageTarget, TEXT_FRAME_SIZE_PT } from "./insert-commands";
@@ -360,6 +366,9 @@ export function browserClipboard(): SystemClipboard {
 /** The deps the clipboard runners need beyond the live editor. */
 export interface ClipboardDeps {
   report: ClipboardReport;
+  /** A pasted SVG's losses for the compatibility report (editor ADR
+   *  1212). */
+  compat?: (losses: SvgReport["losses"]) => void;
   system: SystemClipboard;
   /** Delete the selection as Object ▸ Delete does (Cut's second half). */
   deleteSelection: () => Promise<void>;
@@ -646,6 +655,7 @@ export async function pasteSvg(
     deps.report("error", refusedText(verb, refusal));
     return reply;
   }
+  if (plan.report.losses.length > 0) deps.compat?.(plan.report.losses);
   for (const n of plan.report.losses) {
     deps.report(
       "warning",
@@ -707,6 +717,29 @@ export const clipboardSelectionApplies = (state: unknown): boolean =>
 export const pasteApplies = (state: unknown): boolean =>
   objectVerbApplies(state) && hasDocument(state);
 
+// The clipboard verbs of one editor run in the order they were given
+// (editor ADR 231, amendment; UXI-CLP-001, UXI-CLP-002). A copy takes
+// several round trips before its clip exists (the snippet, the items'
+// geometry, the SVG form of ADR 289); Cmd+C then Cmd+V typed quickly used
+// to start the paste while the copy was still in flight, so the paste
+// found no clip and pasted nothing (SH-201 seeing 7 items, not 8). Each
+// verb now waits for the one before it, and a failed one does not stop
+// the next.
+const CLIPBOARD_QUEUE = scoped("pageItemClipboardQueue", () => ({
+  tail: Promise.resolve() as Promise<unknown>,
+}));
+
+/** Run `verb` after every clipboard verb given before it in this editor. */
+export function inClipboardOrder<T>(
+  paged: unknown,
+  verb: () => Promise<T>,
+): Promise<T> {
+  const queue = scopeOf(paged).get(CLIPBOARD_QUEUE);
+  const run = queue.tail.then(verb, verb);
+  queue.tail = run.catch(() => undefined);
+  return run;
+}
+
 export function buildClipboardCommands(
   deps: ClipboardDeps,
 ): CommandContribution[] {
@@ -716,7 +749,8 @@ export function buildClipboardCommands(
       title: t(M.cut),
       category: "Edit",
       when: clipboardSelectionApplies,
-      handler: (paged) => cutSelection(paged as PagedEditor, deps),
+      handler: (paged) =>
+        inClipboardOrder(paged, () => cutSelection(paged as PagedEditor, deps)),
     },
     {
       id: PAGED_EDIT_COPY,
@@ -724,7 +758,9 @@ export function buildClipboardCommands(
       category: "Edit",
       when: clipboardSelectionApplies,
       handler: async (paged) => {
-        await copySelection(paged as PagedEditor, deps);
+        await inClipboardOrder(paged, () =>
+          copySelection(paged as PagedEditor, deps),
+        );
       },
     },
     {
@@ -732,21 +768,30 @@ export function buildClipboardCommands(
       title: t(M.paste),
       category: "Edit",
       when: pasteApplies,
-      handler: (paged) => pasteClipboard(paged as PagedEditor, deps, false),
+      handler: (paged) =>
+        inClipboardOrder(paged, () =>
+          pasteClipboard(paged as PagedEditor, deps, false),
+        ),
     },
     {
       id: PAGED_EDIT_PASTE_IN_PLACE,
       title: t(M.pasteInPlace),
       category: "Edit",
       when: pasteApplies,
-      handler: (paged) => pasteClipboard(paged as PagedEditor, deps, true),
+      handler: (paged) =>
+        inClipboardOrder(paged, () =>
+          pasteClipboard(paged as PagedEditor, deps, true),
+        ),
     },
     {
       id: PAGED_EDIT_DUPLICATE,
       title: t(M.duplicate),
       category: "Edit",
       when: clipboardSelectionApplies,
-      handler: (paged) => duplicateSelection(paged as PagedEditor, deps),
+      handler: (paged) =>
+        inClipboardOrder(paged, () =>
+          duplicateSelection(paged as PagedEditor, deps),
+        ),
     },
   ];
 }

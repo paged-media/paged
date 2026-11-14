@@ -1128,7 +1128,12 @@ export type ToolPreviewShape =
 // call. The editor's CanvasClient (100+ methods) stays assignable.
 
 export interface PagedClient {
-  mutate(mutation: Mutation): Promise<WorkerToMain>;
+  /** `options.coalesce` (protocol 80, engine ADR 1304): consecutive writes
+   *  with one key are one undo step. */
+  mutate(
+    mutation: Mutation,
+    options?: { coalesce?: string; label?: string },
+  ): Promise<WorkerToMain>;
   undo(): Promise<WorkerToMain>;
   redo(): Promise<WorkerToMain>;
   collection<T>(name: CollectionName): Promise<readonly T[]>;

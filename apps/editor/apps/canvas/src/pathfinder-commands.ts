@@ -50,6 +50,7 @@ import type {
   CommandContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { commandNeeds } from "@paged-media/shell";
 import type {
   CanvasClient,
   ElementId,
@@ -311,6 +312,7 @@ export function buildPathfinderCommands(
     title: t(v.title),
     category: "Pathfinder",
     when: objectVerbApplies,
+    applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
     handler: async () => {
       clear();
       const refusal = await v.run(deps, v.label);
@@ -327,5 +329,6 @@ export const PATHFINDER_MENU_ITEMS: MenuItemContribution[] = VERBS.map(
     order: 66 + (i + 1) / 100,
     group: "path",
     when: objectVerbApplies,
+    applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
   }),
 );

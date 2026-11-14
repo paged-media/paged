@@ -66,6 +66,7 @@ import {
   ActionsProvider,
   BindingProviderProvider,
   CameraProvider,
+  InteractionProvider,
   CanvasClientProvider,
   CockpitStateProvider,
   ContentSelectionProvider,
@@ -417,56 +418,58 @@ export function ShellProviders({
             policy={{ role: role ?? "editor", overrides: [] }}
           >
             <ThemeProvider>
-              <CameraProvider>
-                <DocumentProvider>
-                  <ToolProvider>
-                    <WorkflowModeProvider>
-                      <ScreenModeProvider>
-                        <ToolSettingsProvider>
-                          <FormattingAffectsProvider>
-                            <SelectionProvider>
-                              <ContentSelectionProvider>
-                                <OverlaySignalsProvider>
-                                  <GuideDragProvider>
-                                    <ThreadingProvider>
-                                      <TableSelectionProvider>
-                                        <InstrumentationProvider>
-                                          <EditContextStackProvider>
-                                            <BindingProviderProvider
-                                              host={
-                                                (bindingProviders ??
-                                                  createBindingProviderRegistry()) as never
-                                              }
-                                            >
-                                              <ObjectModelProvider
+              <InteractionProvider>
+                <CameraProvider>
+                  <DocumentProvider>
+                    <ToolProvider>
+                      <WorkflowModeProvider>
+                        <ScreenModeProvider>
+                          <ToolSettingsProvider>
+                            <FormattingAffectsProvider>
+                              <SelectionProvider>
+                                <ContentSelectionProvider>
+                                  <OverlaySignalsProvider>
+                                    <GuideDragProvider>
+                                      <ThreadingProvider>
+                                        <TableSelectionProvider>
+                                          <InstrumentationProvider>
+                                            <EditContextStackProvider>
+                                              <BindingProviderProvider
                                                 host={
-                                                  editorObjectsOf(scope).model
+                                                  (bindingProviders ??
+                                                    createBindingProviderRegistry()) as never
                                                 }
                                               >
-                                                <PagedEditorProvider>
-                                                  <ActionsProvider>
-                                                    <CockpitStateProvider>
-                                                      {children}
-                                                    </CockpitStateProvider>
-                                                  </ActionsProvider>
-                                                </PagedEditorProvider>
-                                              </ObjectModelProvider>
-                                            </BindingProviderProvider>
-                                          </EditContextStackProvider>
-                                        </InstrumentationProvider>
-                                      </TableSelectionProvider>
-                                    </ThreadingProvider>
-                                  </GuideDragProvider>
-                                </OverlaySignalsProvider>
-                              </ContentSelectionProvider>
-                            </SelectionProvider>
-                          </FormattingAffectsProvider>
-                        </ToolSettingsProvider>
-                      </ScreenModeProvider>
-                    </WorkflowModeProvider>
-                  </ToolProvider>
-                </DocumentProvider>
-              </CameraProvider>
+                                                <ObjectModelProvider
+                                                  host={
+                                                    editorObjectsOf(scope).model
+                                                  }
+                                                >
+                                                  <PagedEditorProvider>
+                                                    <ActionsProvider>
+                                                      <CockpitStateProvider>
+                                                        {children}
+                                                      </CockpitStateProvider>
+                                                    </ActionsProvider>
+                                                  </PagedEditorProvider>
+                                                </ObjectModelProvider>
+                                              </BindingProviderProvider>
+                                            </EditContextStackProvider>
+                                          </InstrumentationProvider>
+                                        </TableSelectionProvider>
+                                      </ThreadingProvider>
+                                    </GuideDragProvider>
+                                  </OverlaySignalsProvider>
+                                </ContentSelectionProvider>
+                              </SelectionProvider>
+                            </FormattingAffectsProvider>
+                          </ToolSettingsProvider>
+                        </ScreenModeProvider>
+                      </WorkflowModeProvider>
+                    </ToolProvider>
+                  </DocumentProvider>
+                </CameraProvider>
+              </InteractionProvider>
             </ThemeProvider>
           </SessionPolicyProvider>
         </ChromeRegionsProvider>

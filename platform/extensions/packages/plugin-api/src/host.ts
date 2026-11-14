@@ -3776,6 +3776,11 @@ export interface Diagnostic {
   source?: string;
   line?: number;
   column?: number;
+  /** The loss this row words, when it is one (extensions ADR 1107): its
+   *  code, count, severity, pages and items, so the host's compatibility
+   *  report can explain it and point at what it stood on. The SDK's
+   *  `lossDiagnostics` sets it. */
+  loss?: LossEntry;
 }
 
 /** The diagnostics channel (paged.web §9.1.4): per-plugin keyed
@@ -3787,6 +3792,56 @@ export interface DiagnosticsSurface {
   get(key: string): Diagnostic[];
   onDidChange(listener: (key: string) => void): Disposable;
 }
+
+// -------------------------------------------------------------- notify
+//
+// Extensions ADR 1107 — how an operation a bundle ran ended, said through
+// the host's one feedback service (editor ADR "Operation feedback"; the
+// interaction specification's UXI-FBK-002 and UXI-ASY-009/010/011): the
+// host words it ("Could not convert 3 frames: … Nothing changed."), routes
+// it (a toast, or Problems for an issue that stays) and coalesces repeats.
+// A diagnostic is a document's lasting state; a notification is one
+// operation's end. The host stamps the bundle's id as its source.
+
+/** How an operation ended (a UI taxonomy, not the wire's). */
+export type NotifyOutcome =
+  | "success"
+  | "canceled"
+  | "blocked"
+  | "unsupported"
+  | "invalid-input"
+  | "conflict"
+  | "recoverable-failure"
+  | "fatal-failure";
+
+/** One operation's end, as a bundle reports it. */
+export interface Notification {
+  /** The attempted action, a short lowercase verb phrase in the editor's
+   *  language ("convert 3 frames"). */
+  action: string;
+  outcome: NotifyOutcome;
+  /** Why, worded for the user; never a stack trace. */
+  reason?: string;
+  /** Whether the document changed: false promises "Nothing changed.". */
+  documentChanged?: boolean;
+  /** The next step, a command the bundle registered (shown as a button). */
+  remedy?: { label: string; command: string; args?: unknown };
+  /** Replaces the worded headline (a success that names its result). */
+  title?: string;
+  /** Technical detail, shown only behind "Details". */
+  detail?: string;
+  /** Repeats with one key update one toast (a count), not a new one. */
+  key?: string;
+  /** A success worth confirming (an import, an export). */
+  prominent?: boolean;
+  /** Keep a failure in Problems until the bundle reports the same key
+   *  with `success` or the user dismisses it. */
+  persistent?: boolean;
+}
+
+/** `host.notify` (feature `notify@1`, true where the host shows them; a
+ *  host without the service writes the notification to the console). */
+export type NotifySurface = (notification: Notification) => void;
 
 // ------------------------------------------------------------- journal
 //
@@ -4024,6 +4079,9 @@ export interface BundleHost {
    *  `available()` whether an editor is registered now. */
   readonly workbooks: WorkbooksSurface;
   readonly diagnostics: DiagnosticsSurface;
+  /** Extensions ADR 1107 — say how an operation ended, through the host's
+   *  feedback service (`supports("notify@1")`). Always callable. */
+  readonly notify: NotifySurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */
   readonly journal: JournalSurface;

@@ -28,7 +28,10 @@ import {
 import {
   GestureSpine,
   canvasKeyYields,
+  escapeKeyEvent,
+  isEscapeKey,
   resolveCursorCss,
+  useEscapeHandler,
   usePaged,
   useRegistryView,
   type CanvasPointerEvent,
@@ -42,8 +45,12 @@ import {
 // the effective tool carries a handler — otherwise null, so
 // ViewportCanvas runs its proven select/text path untouched.
 //
-// Also routes keyboard events to the active handler (`onKey` — e.g.
-// Escape cancels the Rectangle drag), skipping DOM editables.
+// Also routes keyboard events to the active handler (`onKey` — Enter
+// commits a Pen path), skipping DOM editables. Escape is the Escape
+// arbiter's (editor ADR 1207): a tool's drag is cancelled by the canvas's
+// gesture handler (through `onCancel`), and a handler that holds a
+// transient state between presses (a Pen path) answers in the transient
+// tier, §12.1 case 4.
 
 export interface ToolGestureDispatch {
   onDown: (e: CanvasPointerEvent) => void;
@@ -97,15 +104,25 @@ export function useGestureSpine(): {
     activate(effectiveTool, lastReason);
   }, [effectiveTool, lastReason]);
 
-  // Keyboard → active handler (Escape cancels an in-flight gesture).
+  // Keyboard → active handler (Enter commits a Pen path; Escape is the
+  // arbiter's, below).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!spine.hasActive()) return;
-      if (canvasKeyYields(e)) return;
+      if (isEscapeKey(e) || canvasKeyYields(e)) return;
       spine.key(e);
     };
     return keys.listen("keydown", onKeyDown);
   }, [keys, spine]);
+
+  // A transient state between presses (a Pen path under construction):
+  // Escape cancels its uncommitted part (§12.1 case 4).
+  useEscapeHandler({
+    id: "paged.tool.transient",
+    tier: "transient",
+    isActive: () => spine.busy(),
+    resolve: (e) => spine.key(e),
+  });
 
   // Tear the handler down on unmount.
   useEffect(() => () => spine.clear(), [spine]);
@@ -130,8 +147,7 @@ export function useGestureSpine(): {
             onDown: (e: CanvasPointerEvent) => spine.pointerDown(e),
             onMove: (e: CanvasPointerEvent) => spine.pointerMove(e),
             onUp: (e: CanvasPointerEvent) => spine.pointerUp(e),
-            onCancel: () =>
-              spine.key(new KeyboardEvent("keydown", { key: "Escape" })),
+            onCancel: () => spine.key(escapeKeyEvent()),
             hoverCursor: hasCursorAt
               ? (e: CanvasPointerEvent) => {
                   const spec = spine.cursorAt(e);

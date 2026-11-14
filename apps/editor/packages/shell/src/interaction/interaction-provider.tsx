@@ -40,9 +40,12 @@ export function InteractionProvider({ children }: PropsWithChildren) {
   );
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onBlur = () => coordinator.abortAll("blur");
+    // A blur or a hidden page ends the presses; a mode (a loaded text
+    // cursor, an armed placement) waits for the user to come back.
+    const onBlur = () => coordinator.abortAll("blur", { keepModes: true });
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") coordinator.abortAll("hidden");
+      if (document.visibilityState === "hidden")
+        coordinator.abortAll("hidden", { keepModes: true });
     };
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);

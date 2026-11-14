@@ -41,12 +41,9 @@ import {
   OverlayHost,
   pageToContentPoint,
   resolveCursorCss,
-  TEXT_TOOL_ID,
   useContentSelection,
   useEditContextEntry,
-  useSubContextEntry,
   useOptionalEditContextStack,
-  useOptionalTool,
   useOverlaySignals,
   useSelection,
   setDebugHandle,
@@ -54,6 +51,9 @@ import {
   type MarqueeRectPageLocal,
   type SelectionState,
   useEditorKeys,
+  currentPageIndex,
+  isEscapeKey,
+  useEscapeArbiter,
   createInteractionCoordinator,
   ownerOfTool,
   useInteractionCoordinator,
@@ -65,7 +65,7 @@ import {
   type SessionSpec,
 } from "@paged-media/shell";
 
-import type { CanvasClient } from "@paged-media/client";
+import type { CanvasClient, GesturePressResult } from "@paged-media/client";
 import { viewportToDoc, type Camera } from "@paged-media/client";
 import type { HostHandleRouter } from "@paged-media/plugin-api";
 import type {
@@ -83,6 +83,7 @@ import type {
   GestureType,
   LayoutCacheStats,
   PageId,
+  PressTarget,
   ResizeHandle,
   ResolutionResult,
   RunningHeader,
@@ -96,16 +97,19 @@ import {
   type PageRect,
 } from "./layout";
 import { pinchCamera, startPinch, type Pinch } from "./pinch";
+import { routePress, type PressRouteKind } from "./press-route";
 import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
 
-// The interaction coordinator (editor ADR 1210; `UXI-MIG-003`): with
-// `?debug=coordinator` the canvas's pointer sessions are the editor's — a
-// window blur, a hidden page, a document or tool switch and unmount end
-// them — and the terminal events of the interaction contract apply. Without it, the canvas keeps its
-// sessions to itself and behaves as it always has.
-const COORDINATED = debugFlag("coordinator");
+// The interaction coordinator (editor ADR 1210; `UXI-MIG-003`): the
+// canvas's pointer sessions are the editor's — a window blur, a hidden
+// page, a document or tool switch and unmount end them — and the terminal
+// events, the stale guards and the adapters of the interaction contract
+// apply. `?debug=legacy-pointer` keeps the canvas's sessions to itself and
+// its behaviour as it was before the coordinator, until the legacy path is
+// removed (IC6).
+const COORDINATED = !debugFlag("legacy-pointer");
 
 // Re-export the (now shell-owned) overlay state types so existing
 // imports from this module continue to work.
@@ -147,6 +151,20 @@ export interface ViewportCanvasProps {
     selection: SelectionState | null,
     modifiers?: PointerModifiers,
   ) => Promise<ReadonlyArray<ElementId> | null> | void;
+  /** IC5 (engine ADR 1303) — a plain Selection-tool press off the
+   *  selection asks the engine once: the hit, the selection it makes
+   *  (`target`: the outermost group, the leaf, or a member of the entered
+   *  group) and the move begun from the press point, in one round trip.
+   *  `onSelected` mirrors the selection it made. Absent: the press asks
+   *  for its hit, then selects, then begins (`onHit`). */
+  pressAt?: {
+    target: PressTarget;
+    onSelected: (
+      result: GesturePressResult,
+      pageId: PageId,
+      pagePoint: [number, number],
+    ) => void;
+  } | null;
   /** Phase A — called when the user finishes a marquee drag with the
    * select tool. Payload is page-local `[top, left, bottom, right]`. */
   onMarquee?: (
@@ -254,88 +272,35 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // draws it on the CPU.
   const [canvasGeneration, setCanvasGeneration] = useState(0);
 
-  const dragStateRef = useRef<{
-    /** `pan` is camera-translate; `marquee` is the element-selection
-     * rect drag; `gesture` is an in-flight worker gesture (translate,
-     * resize, …). Click-vs-drag still uses `maxDelta` for routing
-     * through the hit tester. */
-    mode: "pan" | "marquee" | "gesture" | "press";
-    startCam: Camera;
-    /** Anchor in doc-space pt (already camera-inverted) — used so the
-     * pointer→doc delta survives mid-gesture camera changes. */
-    startDoc: [number, number];
-    startPointer: [number, number];
-    /** Largest pointer-delta seen during this gesture, in CSS px. */
-    maxDelta: number;
-    /** Modifier state captured at pointerdown. */
-    modifiers: PointerModifiers;
-    /** Phase A — anchor + page for marquee mode. `null` when the
-     * pointer started outside any page (we still allow the drag to
-     * resolve as a pan-style cancellation on release). */
-    marqueeAnchor: {
-      pageId: PageId;
-      pageX: number;
-      pageY: number;
-    } | null;
-    /** Phase B — gesture-mode bookkeeping. `handle` is `null` until
-     * the worker confirms the gesture started; updates that arrive
-     * before then are buffered into `pendingDelta`. */
-    gestureState?: GestureState;
-    /** `press` mode: a Selection-tool press off the selection, waiting
-     *  for its hit test to say whether the drag moves an item or draws a
-     *  marquee. */
-    press?: PressState;
-    /** A press released before its hit test answered: its session, ended
-     *  once the press is finished. */
-    pressSession?: InteractionSession | null;
-  } | null>(null);
-  type DragState = NonNullable<typeof dragStateRef.current>;
-
-  // Phase 2 (Concept 1) — bookkeeping for a tool-gesture drag (the
-  // active GestureHandler owns the semantics; we only track the
-  // pointer + click-vs-drag delta).
-  const toolDragRef = useRef<{
-    startPointer: [number, number];
-    maxDelta: number;
-  } | null>(null);
-  // Extensions ADR 1103 — a Selection-tool drag of a bundle's handle: the
-  // router that took the press owns the drag until the release.
-  const handleDragRef = useRef<{
-    router: HostHandleRouter;
-    startPointer: [number, number];
-    maxDelta: number;
-  } | null>(null);
-
   // Editor ADR 294 — the touch points on the canvas, by pointer id, in
   // viewport px. Two of them are a pinch: it takes over from whatever the
   // first finger began (rolled back, never committed), and the touch
   // stays the pinch's until every finger has lifted.
   const touchesRef = useRef(new Map<number, [number, number]>());
-  const pinchRef = useRef<Pinch | null>(null);
-  const pinchHeldRef = useRef(false);
-
-  // Path-edit mode — true between a press the session took and its
-  // release. The session owns the semantics; this only remembers that
-  // the pointer is its, so move / up / cancel reach it too.
-  const pathEditDragRef = useRef(false);
   // Whether the session CONSUMED the last release. A double-click on an
   // anchor is two of those, and must not also run the canvas's
   // double-click (enter an edit context / a group) underneath it.
   const pathEditConsumedRef = useRef(false);
 
-  // The interaction coordinator (editor ADR "The interaction
-  // coordinator"): every pointer sequence on the canvas is a SESSION —
-  // with the flag, a session of the editor's coordinator, which ends it
-  // on a window blur, a hidden page, a document or tool switch and
-  // unmount; without it, one of the canvas's own that nothing outside
-  // ends. `sessionRef` is the session holding the pointer; a gesture
-  // that was released and still commits keeps its own (`committing`).
+  // The interaction coordinator (editor ADR 1210): every pointer
+  // sequence on the canvas is a SESSION — with the flag, a session of the
+  // editor's coordinator, which ends it on a window blur, a hidden page, a
+  // document or tool switch and unmount; without it, one of the canvas's
+  // own that nothing outside ends.
   const editorInteractions = useInteractionCoordinator();
   const [ownInteractions] = useState(() => createInteractionCoordinator());
   const interactions: InteractionCoordinator = COORDINATED
     ? editorInteractions
     : ownInteractions;
-  const sessionRef = useRef<InteractionSession | null>(null);
+  // IC4 — the press that holds the pointer, and everything the canvas
+  // keeps for it, in ONE record owned by ONE session. It replaces the six
+  // refs the canvas kept before (the legacy drag, a tool's drag, a
+  // bundle's handle drag, path edit, a content gesture, a pinch), whose
+  // precedence was the order of the `if`s in four handlers: the route is
+  // decided once, at pointerdown (`routePress`), and the move, the release
+  // and the cancel go to it. A gesture released and still committing has
+  // left the record (it keeps its own session).
+  const pointerRef = useRef<PointerRecord | null>(null);
   // What undoes each open session when something outside ends it, by
   // session id: the drag it holds while it holds the pointer, the commit
   // in flight once it is released.
@@ -360,10 +325,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // W3.2 — the edit-context entry resolver (B-02/W-03). A double-click
   // consults this BEFORE group descent: a polygon enters the
   // vectorGraphic context, a webFrame enters its source context.
-  const { tryEnterEditContext, tryEnterOwnedContent } = useEditContextEntry();
-  // Editor ADR 301 — headers, footers and notes edited in place.
-  const { trySubContext } = useSubContextEntry();
-  const tool = useOptionalTool();
+  const { tryEnterOwnedContent, enterByDoubleClick } = useEditContextEntry();
   const { activeGroup } = useSelection();
 
   // K-1 — the edit-context STACK (optional: the canvas mounts standalone
@@ -372,9 +334,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // (the canvas inverts the frame transform; §8.5 — the plugin never
   // compensates); a pointer OUTSIDE the active frame COMMITS the context.
   const editContextStack = useOptionalEditContextStack();
-  // True between a content pointerdown (consumed by the active context)
-  // and its matching up — so move/up route to the context, not the tools.
-  const contentGestureRef = useRef(false);
 
   // Native `detail` on pointerup is unreliable across browsers for the
   // 3rd click, so we track the click run ourselves: same screen point
@@ -469,25 +428,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     ro.observe(wrapper);
     return () => ro.disconnect();
   }, [props.client]);
-
-  // Step 5e — subscribe to out-of-band snap-line notifications. The
-  // SAB-mode `updateGesture` path doesn't await a reply, so the worker
-  // surfaces snap guides via an unsolicited `gestureSnapLines` after
-  // each drain. Empty `snapLines` is meaningful (gesture left a
-  // previously-snapped axis); the overlay clears stale guides on it.
-  useEffect(() => {
-    return props.client.subscribe((msg) => {
-      if (msg.kind === "gestureSnapLines") {
-        setSnapLines(msg.payload.snapLines);
-      } else if (
-        msg.kind === "warning" &&
-        msg.payload.kind === "canvasNeeded"
-      ) {
-        transferredRef.current = false;
-        setCanvasGeneration((g) => g + 1);
-      }
-    });
-  }, [props.client, setSnapLines]);
 
   // Re-fit the camera when the DOCUMENT changes, not when its page list
   // does. Keyed on the page-id signature, every inserted or deleted page
@@ -656,53 +596,88 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return true;
   };
 
+  /** The legacy path's drag of the press that holds the pointer. */
+  const currentDrag = (): DragState | null => pointerRef.current?.drag ?? null;
+  /** The press's drag is over; the record (and its session) may go on. */
+  const dropDrag = () => {
+    const p = pointerRef.current;
+    if (p) p.drag = null;
+  };
+
   /** Open the session of the press that just began (`UXI-INV-001`: one
-   *  owner per pointer sequence). `rollBack` undoes what the press began
-   *  when the session is ended from outside. */
+   *  owner per pointer sequence) and its record. Ended from outside, the
+   *  session rolls the record back (`rollBackRecord`). */
   const openSession = (
     e: React.PointerEvent<HTMLDivElement>,
+    route: PressRouteKind,
     spec: Omit<SessionSpec, "pointerId" | "pointerType" | "onAbort">,
-    rollBack: (reason: string) => void,
-  ): InteractionSession | null => {
-    const prev = sessionRef.current;
-    if (prev) {
-      sessionRef.current = null;
-      rollBacksRef.current.delete(prev.id);
-      interactions.end(prev, "abort", "superseded");
+  ): PointerRecord => {
+    const prev = pointerRef.current;
+    if (prev?.session) {
+      rollBacksRef.current.delete(prev.session.id);
+      interactions.end(prev.session, "abort", "superseded");
     }
+    pointerRef.current = null;
     const target = e.currentTarget;
     const pointerId = e.pointerId;
+    const record: PointerRecord = {
+      session: null,
+      route,
+      tool: null,
+      handle: null,
+      path: false,
+      content: false,
+      drag: null,
+      pinch: null,
+    };
+    // The abort finds its roll-back by the session's id (the closure the
+    // coordinator keeps holds nothing of the press itself).
     const s = interactions.begin({
       ...spec,
       pointerId,
       pointerType: e.pointerType,
-      onAbort: (reason) => {
-        const holding = sessionRef.current === s;
-        if (holding) sessionRef.current = null;
-        if (holding && target.hasPointerCapture?.(pointerId)) {
-          target.releasePointerCapture(pointerId);
-        }
-        const undo = s ? rollBacksRef.current.get(s.id) : undefined;
-        if (s) rollBacksRef.current.delete(s.id);
+      onAbort: (reason, session) => {
+        const undo = rollBacksRef.current.get(session.id);
+        rollBacksRef.current.delete(session.id);
         undo?.(reason);
       },
     });
-    if (s) rollBacksRef.current.set(s.id, rollBack);
-    sessionRef.current = s;
-    return s;
+    record.session = s;
+    if (s)
+      rollBacksRef.current.set(s.id, () =>
+        abortHeld(record, target, pointerId),
+      );
+    pointerRef.current = record;
+    return record;
+  };
+
+  /** A press's session was ended from outside while it held the pointer:
+   *  let the pointer go and roll the press back. */
+  const abortHeld = (
+    record: PointerRecord,
+    target: HTMLDivElement,
+    pointerId: number,
+  ) => {
+    if (pointerRef.current === record) {
+      pointerRef.current = null;
+      if (target.hasPointerCapture?.(pointerId))
+        target.releasePointerCapture(pointerId);
+    }
+    rollBackRecord(record);
   };
 
   /** Move the session holding the pointer to `phase`. */
   const sessionTo = (phase: InteractionPhase) => {
-    const s = sessionRef.current;
+    const s = pointerRef.current?.session;
     if (s && s.phase !== phase) interactions.transition(s, phase);
   };
 
   /** End the session holding the pointer, as its owner decided. */
   const closeSession = (result: EndResult, reason?: string) => {
-    const s = sessionRef.current;
+    const p = pointerRef.current;
+    pointerRef.current = null;
+    const s = p?.session;
     if (!s) return;
-    sessionRef.current = null;
     rollBacksRef.current.delete(s.id);
     interactions.end(s, result, reason);
   };
@@ -713,9 +688,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const releaseSession = (
     rollBack: (reason: string) => void,
   ): InteractionSession | null => {
-    const s = sessionRef.current;
+    const p = pointerRef.current;
+    pointerRef.current = null;
+    const s = p?.session;
     if (!s) return null;
-    sessionRef.current = null;
     if (s.phase !== "previewing") interactions.transition(s, "previewing");
     interactions.transition(s, "committing");
     rollBacksRef.current.set(s.id, rollBack);
@@ -740,11 +716,51 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const stillCurrent = (token: GuardToken): boolean =>
     !COORDINATED || interactions.confirm(token);
 
-  /** What a session that holds the pointer undoes when it is ended from
-   *  outside: whatever drag the canvas has open (INV-8). */
-  const rollBackPointer = () => {
-    abortActiveDrag();
-    contentGestureRef.current = false;
+  /** What a press undoes when its session is ended from outside — a lost
+   *  capture, Escape, a blur, a hidden page, a document or tool switch,
+   *  unmount, a pinch taking over (INV-8): a tool's drag is cancelled by
+   *  its handler, a bundle's handle drag writes nothing, path edit drops
+   *  its gesture, a worker gesture is cancelled, a marquee is cleared. A
+   *  pan has nothing to roll back; a content gesture just ends (the
+   *  context keeps its state). */
+  const rollBackRecord = (p: PointerRecord) => {
+    if (p.tool) {
+      p.tool = null;
+      props.toolGesture?.onCancel();
+    }
+    if (p.handle) {
+      const router = p.handle.router;
+      p.handle = null;
+      router.cancel();
+    }
+    if (p.path) {
+      p.path = false;
+      props.pathEdit?.cancel();
+    }
+    p.content = false;
+    if (p.route === "pinch") {
+      p.pinch = null;
+      touchesRef.current.clear();
+    }
+    const drag = p.drag;
+    p.drag = null;
+    if (!drag) return;
+    if (drag.mode === "gesture" && drag.gestureState) {
+      const handle = drag.gestureState.handle;
+      if (handle !== null) {
+        void props.client
+          .cancelGesture(handle)
+          .then(() => {
+            setSnapLines([]);
+            props.onGestureCommitted?.();
+          })
+          .catch(() => {});
+      }
+      // handle === null: begin hasn't resolved; the resolver sees the
+      // drag gone and cancels the handle itself.
+    } else if (drag.mode === "marquee") {
+      setMarqueeRect(null);
+    }
   };
 
   // Begin a worker gesture. Fire-and-forget — the handle returns
@@ -757,8 +773,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   ) => {
     void props.client
       .beginGesture(gs.target, gs.spec, anchor, gs.modifiers)
-      .then((handle) => {
-        const drag = dragStateRef.current;
+      .then((handle) => adoptHandle(gs, handle))
+      .catch((err: unknown) => refusedBegin(gs, err));
+  };
+
+  /** The engine began `gs`'s gesture: drive it if its drag is still
+   *  live, commit it if the pointer was let go past the threshold, else
+   *  cancel it. */
+  const adoptHandle = (gs: GestureState, handle: GestureHandle) => {
+    {
+      {
+        const drag = currentDrag();
         const live = drag?.mode === "gesture" && drag.gestureState === gs;
         if (!live && gs.release !== "commit") {
           // A click, Escape or a lost pointer before the worker
@@ -789,9 +814,15 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             .updateGesture(handle, pending, gs.modifiers, "sab")
             .catch(() => {});
         }
-      })
-      .catch((err: unknown) => {
-        const drag = dragStateRef.current;
+      }
+    }
+  };
+
+  /** The engine refused `gs`'s begin. */
+  const refusedBegin = (gs: GestureState, err: unknown) => {
+    {
+      {
+        const drag = currentDrag();
         const holding = drag !== null && drag.gestureState === gs;
         if (COORDINATED) {
           // The engine refused the begin (a locked item, a gesture it
@@ -801,7 +832,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           // inert until the pointer is let go.
           const reason = gestureFailureReason(err);
           if (holding) {
-            dragStateRef.current = null;
+            dropDrag();
             setSnapLines([]);
             closeSession("abort", reason);
           }
@@ -812,7 +843,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // Downgrade to pan so the drag still does *something*
         // sensible.
         if (holding) drag.mode = "pan";
-      });
+      }
+    }
   };
 
   const touchPoint = (
@@ -822,31 +854,29 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return [e.clientX - rect.left, e.clientY - rect.top];
   };
 
+  /** Is the pointer a pinch's (editor ADR 294)? */
+  const pinching = (): boolean => pointerRef.current?.route === "pinch";
+
   /** Editor ADR 294 — a touch pointer's part in a pinch. True when the
-   *  pinch took the event. */
+   *  pinch took the event. The second finger takes over from whatever the
+   *  first began (rolled back, never committed): the camera's claim
+   *  preempts (`UXI-CAM-012`). */
   const pinchDown = (e: React.PointerEvent<HTMLDivElement>): boolean => {
     if (e.pointerType !== "touch") return false;
     const touches = touchesRef.current;
     touches.set(e.pointerId, touchPoint(e));
-    if (pinchHeldRef.current) return true;
+    if (pinching()) return true;
     if (touches.size < 2) return false;
-    // The second finger: roll back what the first one began, then pinch.
-    const first = sessionRef.current;
+    const first = pointerRef.current?.session;
     if (first) interactions.cancel(first, "pinch");
     else abortActiveDrag();
-    contentGestureRef.current = false;
     const [a, b] = [...touches.values()];
-    pinchRef.current = startPinch(props.camera, a!, b!);
-    pinchHeldRef.current = true;
-    openSession(
-      e,
-      { owner: "canvas-camera", kind: "pinch", preempt: true },
-      () => {
-        pinchRef.current = null;
-        pinchHeldRef.current = false;
-        touchesRef.current.clear();
-      },
-    );
+    const record = openSession(e, "pinch", {
+      owner: "canvas-camera",
+      kind: "pinch",
+      preempt: true,
+    });
+    record.pinch = startPinch(props.camera, a!, b!);
     e.currentTarget.setPointerCapture(e.pointerId);
     return true;
   };
@@ -854,139 +884,154 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const pinchMove = (e: React.PointerEvent<HTMLDivElement>): boolean => {
     if (e.pointerType !== "touch") return false;
     const touches = touchesRef.current;
-    if (!touches.has(e.pointerId)) return pinchHeldRef.current;
+    if (!touches.has(e.pointerId)) return pinching();
     touches.set(e.pointerId, touchPoint(e));
-    const pinch = pinchRef.current;
+    const pinch = pointerRef.current?.pinch;
     if (pinch && touches.size >= 2) {
       const [a, b] = [...touches.values()];
       props.onCameraChange(pinchCamera(pinch, a!, b!));
     }
-    return pinchHeldRef.current;
+    return pinching();
   };
 
   const pinchUp = (e: React.PointerEvent<HTMLDivElement>): boolean => {
     if (e.pointerType !== "touch") return false;
     const touches = touchesRef.current;
     touches.delete(e.pointerId);
-    if (!pinchHeldRef.current) return false;
+    const p = pointerRef.current;
+    if (p?.route !== "pinch") return false;
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    if (touches.size < 2) pinchRef.current = null;
-    if (touches.size === 0) {
-      pinchHeldRef.current = false;
-      closeSession("commit");
-    }
+    if (touches.size < 2) p.pinch = null;
+    if (touches.size === 0) closeSession("commit");
     return true;
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return;
     if (pinchDown(e)) return;
-    // K-1 — while an edit context that OPTS INTO content pointers is
-    // active (has `onContentPointerDown` — sheet's "sheet" context; NOT
-    // draw/web, whose tools must keep working), a primary-button press
-    // over the active frame goes to the context in content coords; a
-    // press OUTSIDE the frame COMMITS the context and falls through so
-    // the same click can select what was under it. Contexts WITHOUT the
-    // handler skip this block entirely (unchanged tool behavior).
-    if (
-      e.button === 0 &&
+    const primary = e.button === 0;
+    const tool = props.activeTool ?? "select";
+    // K-1 — an edit context that OPTS INTO content pointers (has
+    // `onContentPointerDown` — sheet's "sheet" context; NOT draw/web, whose
+    // tools must keep working) takes a primary press over its frame, in
+    // content coordinates; a press OUTSIDE the frame COMMITS the context
+    // and goes on, so the same click can select what was under it. A tool
+    // shared across contexts (Free Transform, the Pen, …) keeps its press.
+    const contentContext =
+      primary &&
       !props.toolSharedAcrossContexts &&
       editContextStack?.active &&
       editContextStack.activeContribution?.onContentPointerDown
-    ) {
-      if (dispatchContentPointer(e, "down")) {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        contentGestureRef.current = true;
-        openSession(
-          e,
-          { owner: "frame-content", kind: "content" },
-          rollBackPointer,
-        );
-        return;
-      }
-      editContextStack.commit();
-    }
-    // Phase 2 — a handler-bearing tool (Rectangle, …) intercepts the
-    // pointer; the legacy select/text/pan path below is skipped.
-    //
-    // EXCEPT for a tool that declares BOTH a gesture and a legacyKey.
-    // The Type tool is the case: its DRAG pulls out a text frame
-    // (gesture) and its CLICK places a caret (legacy "text" path), and
-    // those are two halves of one tool rather than rival
-    // implementations. Without this, adding the gesture silently took
-    // the caret away — `onPointerUp` commits the tool drag and RETURNS
-    // before the click branch, so double-click word/line selection
-    // stopped selecting anything at all.
+        ? editContextStack
+        : null;
+    const overContent =
+      contentContext !== null &&
+      activeContentPointAt(e.currentTarget, e.clientX, e.clientY) !== null;
+    // One way out of a context (editor ADR 1214): a press outside leaves
+    // it; when the leaving asks (a dirty context), the question holds the
+    // press.
+    if (
+      contentContext &&
+      !overContent &&
+      contentContext.leave("click-outside").outcome === "asking"
+    )
+      return;
+    // The Type tool declares BOTH a gesture and a legacyKey: its DRAG
+    // pulls out a text frame (the handler) and its CLICK places a caret
+    // (the legacy text path) — two halves of one tool, so both are armed
+    // and the release decides (a click falls through to the caret).
     const legacyAlso = Boolean(props.toolGesture && props.legacyKeyForTool);
-    if (props.toolGesture && e.button === 0 && !legacyAlso) {
+    const cameraPress =
+      e.button === 1 ||
+      Boolean(props.forcePan) ||
+      Boolean(props.zoomClick) ||
+      (Boolean(props.touchPans) && e.pointerType === "touch");
+    // Extensions ADR 1103 — a bundle's handle (a preset's adjust handle)
+    // under a Selection-tool press: the router that accepts the press owns
+    // the drag until the release.
+    const handleRouter =
+      primary &&
+      tool === "select" &&
+      !cameraPress &&
+      !overContent &&
+      !props.toolGesture
+        ? (overlaySignals
+            .handleRouters()
+            .find((r) => r.down(buildToolPointer(e, 0))) ?? null)
+        : null;
+    // Path-edit mode — a primary Selection-tool press is the path's.
+    const pathEditPointer =
+      props.pathEdit &&
+      primary &&
+      tool === "select" &&
+      !props.forcePan &&
+      !props.zoomClick &&
+      !handleRouter
+        ? buildPathEditPointer(e)
+        : null;
+    // IC4 — the one arbitration decision (`UXI-OWN-001`; press-route.ts).
+    const route = routePress({
+      button: e.button,
+      pointerType: e.pointerType,
+      secondTouch: false,
+      overContent,
+      toolGesture: Boolean(props.toolGesture),
+      legacyAlso,
+      bundleHandle: handleRouter !== null,
+      pathEdit: pathEditPointer !== null,
+      forcePan: Boolean(props.forcePan),
+      zoomClick: Boolean(props.zoomClick),
+      touchPans: Boolean(props.touchPans),
+      tool,
+    });
+    if (route.kind === "content") {
       e.currentTarget.setPointerCapture(e.pointerId);
-      toolDragRef.current = {
-        startPointer: [e.clientX, e.clientY],
-        maxDelta: 0,
-      };
+      const record = openSession(e, "content", {
+        owner: "frame-content",
+        kind: "content",
+      });
+      record.content = true;
+      dispatchContentPointer(e, "down");
+      return;
+    }
+    if (route.kind === "tool" && props.toolGesture) {
+      // Phase 2 — a handler-bearing tool (Rectangle, …): the legacy
+      // select/text/pan path is skipped.
+      e.currentTarget.setPointerCapture(e.pointerId);
       const toolId = props.toolGesture.toolId;
-      openSession(
-        e,
-        {
-          owner: toolId ? ownerOfTool(toolId) : "canvas-draw",
-          kind: "tool",
-          ...(toolId ? { toolId } : {}),
-          mutating: true,
-        },
-        rollBackPointer,
-      );
+      const record = openSession(e, "tool", {
+        owner: toolId ? ownerOfTool(toolId) : "canvas-draw",
+        kind: "tool",
+        ...(toolId ? { toolId } : {}),
+        mutating: true,
+      });
+      record.tool = { startPointer: [e.clientX, e.clientY], maxDelta: 0 };
       props.toolGesture.onDown(buildToolPointer(e, 0));
       return;
     }
-    if (props.toolGesture && e.button === 0 && legacyAlso) {
-      // Feed the handler AND fall through, so both refs are armed.
-      toolDragRef.current = {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (route.kind === "bundle-handle" && handleRouter) {
+      const record = openSession(e, "bundle-handle", {
+        owner: "canvas-transform",
+        kind: "bundle-handle",
+        mutating: true,
+      });
+      record.handle = {
+        router: handleRouter,
         startPointer: [e.clientX, e.clientY],
         maxDelta: 0,
       };
+      return;
+    }
+    if (route.kind === "type" && props.toolGesture) {
       props.toolGesture.onDown(buildToolPointer(e, 0));
     }
-    e.currentTarget.setPointerCapture(e.pointerId);
     const modifiers: PointerModifiers = {
       shift: e.shiftKey,
       cmd: e.metaKey || e.ctrlKey,
     };
-    const tool = props.activeTool ?? "select";
-    // Extensions ADR 1103 — a bundle's handle (a preset's adjust handle)
-    // under a Selection-tool press is the bundle's drag: it wins over the
-    // path session, the resize handles, the body move and the marquee.
-    if (
-      e.button === 0 &&
-      tool === "select" &&
-      !props.forcePan &&
-      !props.zoomClick &&
-      !(props.touchPans && e.pointerType === "touch")
-    ) {
-      const routers = overlaySignals.handleRouters();
-      if (routers.length > 0) {
-        const pointer = buildToolPointer(e, 0);
-        const router = routers.find((r) => r.down(pointer));
-        if (router) {
-          handleDragRef.current = {
-            router,
-            startPointer: [e.clientX, e.clientY],
-            maxDelta: 0,
-          };
-          openSession(
-            e,
-            {
-              owner: "canvas-transform",
-              kind: "bundle-handle",
-              mutating: true,
-            },
-            rollBackPointer,
-          );
-          return;
-        }
-      }
-    }
     const rect = e.currentTarget.getBoundingClientRect();
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
@@ -999,8 +1044,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // pan so the existing typing UX is undisturbed.
     let mode: DragState["mode"] = "pan";
     let press: PressState | undefined;
-    let gestureState:
-      NonNullable<typeof dragStateRef.current>["gestureState"] | undefined;
+    let gestureState: GestureState | undefined;
     // Path-edit mode — a primary press is the path's. The session
     // takes it whatever it landed on (an empty press starts its
     // anchor marquee), so none of the element gestures below is even
@@ -1009,24 +1053,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // a move, because ONE outcome comes back to the code below — a
     // click on nothing falls through to the ordinary hit-test click
     // on release (the Type tool's dual-dispatch rule).
-    const pathEditPointer =
-      props.pathEdit &&
-      e.button === 0 &&
-      tool === "select" &&
-      !props.forcePan &&
-      !props.zoomClick
-        ? buildPathEditPointer(e)
-        : null;
-    if (props.pathEdit && pathEditPointer) {
-      pathEditDragRef.current = true;
+    if (route.kind === "path-edit" && props.pathEdit && pathEditPointer) {
       props.pathEdit.pointerDown(pathEditPointer);
-    } else if (e.button === 1) {
-      mode = "pan";
-    } else if (
-      props.forcePan ||
-      props.zoomClick ||
-      (props.touchPans && e.pointerType === "touch")
-    ) {
+    } else if (route.kind === "camera") {
       // Concept 1 — Hand (or a Space spring-load) pans on any drag;
       // the Zoom tool also pans on drag (its click action is handled
       // in onPointerUp's click branch).
@@ -1194,6 +1223,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           hit: undefined,
           releaseDoc: null,
           alt: e.altKey,
+          atomic: COORDINATED && Boolean(props.pressAt) && !modifiers.shift,
         };
       } else {
         mode = "marquee";
@@ -1207,20 +1237,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             pageY: docY - containing[1].y,
           }
         : null;
-    dragStateRef.current = {
-      mode,
-      startCam: props.camera,
-      startDoc: [docX, docY],
-      startPointer: [e.clientX, e.clientY],
-      maxDelta: 0,
-      modifiers,
-      marqueeAnchor,
-      gestureState,
-      press,
-    };
-    const pathEditing = pathEditDragRef.current;
-    openSession(
+    const pathEditing = route.kind === "path-edit";
+    const record = openSession(
       e,
+      route.kind === "type" || pathEditing || route.kind === "camera"
+        ? route.kind
+        : "legacy",
       {
         owner: pathEditing
           ? "canvas-path"
@@ -1240,9 +1262,119 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           ? { toolId: props.toolGesture.toolId }
           : {}),
       },
-      rollBackPointer,
     );
-    if (press) resolvePress(dragStateRef.current);
+    if (route.kind === "type") {
+      record.tool = { startPointer: [e.clientX, e.clientY], maxDelta: 0 };
+    }
+    record.path = pathEditing;
+    const drag: DragState = {
+      mode,
+      startCam: props.camera,
+      startDoc: [docX, docY],
+      startPointer: [e.clientX, e.clientY],
+      maxDelta: 0,
+      modifiers,
+      marqueeAnchor,
+      gestureState,
+      press,
+    };
+    record.drag = drag;
+    if (press?.atomic) beginPressAt(drag);
+    else if (press) resolvePress(drag);
+  };
+
+  // IC5 — the press in one call (engine ADR 1303, `UXI-OWN-006`,
+  // `UXI-OWN-007`, UXI-T58): the hit, the selection and the move begun
+  // from the press point. Moves that come before the answer are kept; the
+  // move starts where the pointer went down, never from where it was when
+  // the answer came. A click only selects (the move is cancelled); a press
+  // on nothing is a marquee; a refused press (a lock) is inert.
+  const beginPressAt = (drag: DragState) => {
+    const press = drag.press;
+    const pressAt = props.pressAt;
+    if (!press || !pressAt) return;
+    const token = interactions.token(
+      "press-hit",
+      pointerRef.current?.session ?? null,
+    );
+    const modifiers = { shift: drag.modifiers.shift, alt: press.alt };
+    void props.client
+      .beginGestureAt({
+        pageId: press.pageId,
+        point: press.pagePoint,
+        modifiers,
+        select: "replace",
+        target: pressAt.target,
+      })
+      .then((result) => {
+        const cancel = () => {
+          if (result.handle !== null)
+            void props.client.cancelGesture(result.handle).catch(() => {});
+        };
+        if (!stillCurrent(token)) {
+          // A newer press, another document or an aborted press (a pinch
+          // took over): nothing of this one stands — its move is
+          // cancelled and the selection it made in the engine is put back.
+          cancel();
+          if (result.selectionChanged)
+            void props.client
+              .setElementSelection(
+                [...(props.elementSelection ?? [])],
+                "replace",
+              )
+              .catch(() => {});
+          finishSession(drag.pressSession, "abort", "stale press-hit");
+          return;
+        }
+        if (!result.outOfScope)
+          pressAt.onSelected(result, press.pageId, press.pagePoint);
+        const live = currentDrag() === drag;
+        if (result.handle === null) {
+          // Nothing moves: on nothing the drag is a marquee; a press the
+          // engine took but would not move (a lock) is inert.
+          press.hit = result.marquee ? null : result.hit;
+          if (!result.marquee) {
+            if (live) {
+              dropDrag();
+              closeSession("abort", "begin refused");
+            }
+            finishSession(drag.pressSession, "abort", "begin refused");
+            return;
+          }
+          if (press.releaseDoc) finishPress(drag);
+          else if (live && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
+            startPressDrag(drag);
+          return;
+        }
+        if (press.clicked || (!live && !press.releaseDoc)) {
+          // A click: the press selected; nothing moves.
+          cancel();
+          return;
+        }
+        const end = press.releaseDoc ?? press.lastDoc ?? drag.startDoc;
+        const gs: GestureState = {
+          handle: null,
+          pendingDelta: [end[0] - drag.startDoc[0], end[1] - drag.startDoc[1]],
+          target: result.selection.slice(),
+          spec: { kind: "translate" },
+          modifiers,
+          session: drag.pressSession ?? null,
+        };
+        drag.mode = "gesture";
+        drag.gestureState = gs;
+        if (press.releaseDoc) gs.release = "commit";
+        else sessionTo("previewing");
+        adoptHandle(gs, result.handle);
+      })
+      .catch((err: unknown) => {
+        press.hit = null;
+        const live = currentDrag() === drag;
+        if (live && COORDINATED) {
+          dropDrag();
+          closeSession("abort", gestureFailureReason(err));
+        }
+        finishSession(drag.pressSession, "abort", gestureFailureReason(err));
+      });
   };
 
   // F-26 — the press's hit test. Fire-and-forget: the answer lands in
@@ -1251,7 +1383,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const resolvePress = (drag: DragState) => {
     const press = drag.press;
     if (!press) return;
-    const token = interactions.token("press-hit", sessionRef.current);
+    const token = interactions.token(
+      "press-hit",
+      pointerRef.current?.session ?? null,
+    );
     void props.client
       .send({
         kind: "hitTest",
@@ -1277,7 +1412,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           finishSession(drag.pressSession, "abort", "stale press-hit");
           return;
         }
-        const live = dragStateRef.current === drag;
+        const live = currentDrag() === drag;
         if (press.releaseDoc) finishPress(drag);
         else if (live && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
           startPressDrag(drag);
@@ -1289,7 +1424,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const startPressDrag = (drag: DragState, docDelta: Pt = [0, 0]) => {
     const press = drag.press;
     if (!press || press.hit === undefined || drag.mode !== "press") return;
-    if (dragStateRef.current === drag) sessionTo("previewing");
+    if (currentDrag() === drag) sessionTo("previewing");
     if (!press.hit) {
       drag.mode = "marquee";
       return;
@@ -1317,11 +1452,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       ),
     ).then((ids) => {
       if (!ids || ids.length === 0) {
-        if (dragStateRef.current === drag) {
+        if (currentDrag() === drag) {
           // Nothing was selected to move. With the coordinator the drag
           // ends; without, it pans (the legacy fallback).
           if (COORDINATED) {
-            dragStateRef.current = null;
+            dropDrag();
             closeSession("abort", "nothing to move");
           } else {
             drag.mode = "pan";
@@ -1393,44 +1528,38 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     publishPointer(e);
     if (pinchMove(e)) return;
-    // K-1 — while a content gesture owns the pointer, route moves to the
-    // active context (content coords) and skip tool/hover logic.
-    if (contentGestureRef.current) {
+    // The route the press took owns its moves (IC4): a content gesture
+    // (content coords), a tool's drag, a bundle's handle, path edit, then
+    // the legacy drag.
+    const held = pointerRef.current;
+    if (held?.content) {
       dispatchContentPointer(e, "move");
       return;
     }
     // Phase 2 — route to the active tool handler while it owns the drag.
-    const toolDrag = toolDragRef.current;
+    const toolDrag = held?.tool ?? null;
     if (toolDrag && props.toolGesture) {
-      const d = Math.hypot(
-        e.clientX - toolDrag.startPointer[0],
-        e.clientY - toolDrag.startPointer[1],
-      );
-      if (d > toolDrag.maxDelta) toolDrag.maxDelta = d;
+      growDelta(toolDrag, e.clientX, e.clientY);
       if (toolDrag.maxDelta > CLICK_DRAG_THRESHOLD_PX) sessionTo("previewing");
       props.toolGesture.onMove(buildToolPointer(e, toolDrag.maxDelta));
       return;
     }
     // ADR 1103 — a bundle's handle drag.
-    const handleDrag = handleDragRef.current;
+    const handleDrag = held?.handle ?? null;
     if (handleDrag) {
-      const d = Math.hypot(
-        e.clientX - handleDrag.startPointer[0],
-        e.clientY - handleDrag.startPointer[1],
-      );
-      if (d > handleDrag.maxDelta) handleDrag.maxDelta = d;
+      growDelta(handleDrag, e.clientX, e.clientY);
       if (handleDrag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
         sessionTo("previewing");
       handleDrag.router.move(buildToolPointer(e, handleDrag.maxDelta));
       return;
     }
     // Path-edit mode — the session owns this drag.
-    if (pathEditDragRef.current) {
+    if (held?.path) {
       const pointer = buildPathEditPointer(e);
       if (pointer) props.pathEdit?.pointerMove(pointer);
       return;
     }
-    const drag = dragStateRef.current;
+    const drag = held?.drag ?? null;
     if (!drag) {
       // plugin-draw D2 — forward HOVER moves to the active handler
       // too (the Pen's rubber band tracks them between clicks).
@@ -1474,13 +1603,25 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     }
     const dx = e.clientX - drag.startPointer[0];
     const dy = e.clientY - drag.startPointer[1];
-    const delta = Math.hypot(dx, dy);
-    if (delta > drag.maxDelta) drag.maxDelta = delta;
+    growDelta(drag, e.clientX, e.clientY);
     if (drag.maxDelta > CLICK_DRAG_THRESHOLD_PX && drag.mode !== "press")
       sessionTo("previewing");
-    if (drag.mode === "press" && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX) {
+    if (drag.mode === "press" && drag.press) {
+      drag.press.alt = e.altKey;
+      // The press's answer may be out: keep where the pointer is.
+      const rect = e.currentTarget.getBoundingClientRect();
+      drag.press.lastDoc = viewportToDoc(
+        props.camera,
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+    }
+    if (
+      drag.mode === "press" &&
+      drag.maxDelta > CLICK_DRAG_THRESHOLD_PX &&
+      drag.press?.hit !== undefined
+    ) {
       // The hit test has answered: become the move or the marquee.
-      if (drag.press) drag.press.alt = e.altKey;
       const rect = e.currentTarget.getBoundingClientRect();
       const [docX, docY] = viewportToDoc(
         props.camera,
@@ -1488,6 +1629,33 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         e.clientY - rect.top,
       );
       startPressDrag(drag, [docX - drag.startDoc[0], docY - drag.startDoc[1]]);
+    }
+    // CameraNavigationAdapter (IC4) — a spring-loaded Hand taken while a
+    // press or a marquee is under way (nothing has changed yet: D-09 holds
+    // the Hand back only from a document-changing drag) turns the rest of
+    // the drag into a pan from here; the selection's session ends.
+    if (
+      COORDINATED &&
+      props.forcePan &&
+      (drag.mode === "marquee" || drag.mode === "press") &&
+      !held?.path
+    ) {
+      setMarqueeRect(null);
+      closeSession("cancel", "spring-load");
+      const record = openSession(e, "camera", {
+        owner: "canvas-camera",
+        kind: "pan",
+      });
+      record.drag = {
+        ...drag,
+        mode: "pan",
+        startCam: props.camera,
+        startPointer: [e.clientX, e.clientY],
+        maxDelta: CLICK_DRAG_THRESHOLD_PX + 1,
+        marqueeAnchor: null,
+        press: undefined,
+      };
+      return;
     }
     if (drag.mode === "pan") {
       props.onCameraChange({
@@ -1571,19 +1739,20 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pinchUp(e)) return;
+    const held = pointerRef.current;
     // K-1 — end a content gesture: deliver the up to the active context
     // and stop (don't run the tool/click path that would re-select).
-    if (contentGestureRef.current) {
-      contentGestureRef.current = false;
+    if (held?.content) {
+      held.content = false;
       e.currentTarget.releasePointerCapture(e.pointerId);
       dispatchContentPointer(e, "up");
       closeSession("commit");
       return;
     }
     // Phase 2 — commit the active tool handler's gesture.
-    const toolDrag = toolDragRef.current;
-    if (toolDrag && props.toolGesture) {
-      toolDragRef.current = null;
+    const toolDrag = held?.tool ?? null;
+    if (held && toolDrag && props.toolGesture) {
+      held.tool = null;
       const wasClick = toolDrag.maxDelta <= CLICK_DRAG_THRESHOLD_PX;
       const legacyAlso = Boolean(props.legacyKeyForTool);
       props.toolGesture.onUp(buildToolPointer(e, toolDrag.maxDelta));
@@ -1597,16 +1766,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // armed the legacy drag state too (as a "pan", for the click
         // it might have been). Left armed, every later button-less
         // move panned the view until the next press (ED-3).
-        dragStateRef.current = null;
+        dropDrag();
         closeSession("commit");
         return;
       }
     }
     // ADR 1103 — the release of a bundle's handle drag: the bundle
     // writes its change (one undo step); nothing else runs.
-    const handleDrag = handleDragRef.current;
-    if (handleDrag) {
-      handleDragRef.current = null;
+    const handleDrag = held?.handle ?? null;
+    if (held && handleDrag) {
+      held.handle = null;
       e.currentTarget.releasePointerCapture(e.pointerId);
       handleDrag.router.up(buildToolPointer(e, handleDrag.maxDelta));
       closeSession("commit");
@@ -1616,8 +1785,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // did with the gesture (moved anchors, selected some, inserted
     // one) ends here; only a click on NOTHING is not its business,
     // and that one runs the ordinary click below.
-    if (pathEditDragRef.current) {
-      pathEditDragRef.current = false;
+    if (held?.path) {
+      held.path = false;
       const pointer = buildPathEditPointer(e);
       const release =
         pointer && props.pathEdit
@@ -1625,9 +1794,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           : "consumed";
       pathEditConsumedRef.current = release === "consumed";
       if (release === "consumed") {
-        if (dragStateRef.current) {
+        if (currentDrag()) {
           e.currentTarget.releasePointerCapture(e.pointerId);
-          dragStateRef.current = null;
+          dropDrag();
         }
         closeSession("commit");
         return;
@@ -1635,13 +1804,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     } else {
       pathEditConsumedRef.current = false;
     }
-    const drag = dragStateRef.current;
+    const drag = currentDrag();
     if (!drag) {
       closeSession("commit");
       return;
     }
     e.currentTarget.releasePointerCapture(e.pointerId);
-    dragStateRef.current = null;
+    dropDrag();
     // Modifier state can change between down and up (user lifts
     // Shift before releasing). Take whichever was held at either
     // edge — matches industry convention.
@@ -1656,6 +1825,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // handle.
     if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) {
       // A click: the press settles; what it selects is answered later.
+      if (drag.press) drag.press.clicked = true;
       closeSession("commit");
       setMarqueeRect(null);
       if (drag.mode === "gesture" && drag.gestureState) {
@@ -1672,7 +1842,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         const cy = e.clientY - rect.top;
         const factor = e.altKey ? 1 / 1.25 : 1.25;
         // About the clicked point; the same formula at any view rotation.
-        props.onCameraChange(zoomAt(props.camera, cx, cy, factor, 0.01, 64));
+        // One zoom range for every input (ADR 1211): the camera context's.
+        props.onCameraChange(zoomAt(props.camera, cx, cy, factor));
         return;
       }
       // GT-5 — the Hand (and its Space spring-load) only pans: a click
@@ -1826,41 +1997,14 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // gesture (cancel the handle), and a marquee (drop the rect). A pan
   // has nothing to roll back.
   const abortActiveDrag = () => {
-    // Tool-spine draw drag (Rectangle/Pen/…): cancel, don't commit.
-    if (toolDragRef.current && props.toolGesture) {
-      toolDragRef.current = null;
-      props.toolGesture.onCancel();
+    const p = pointerRef.current;
+    if (!p) return;
+    pointerRef.current = null;
+    if (p.session) {
+      rollBacksRef.current.delete(p.session.id);
+      interactions.end(p.session, "abort", "aborted");
     }
-    // A bundle's handle drag (ADR 1103): the bundle writes nothing.
-    const handleDrag = handleDragRef.current;
-    if (handleDrag) {
-      handleDragRef.current = null;
-      handleDrag.router.cancel();
-    }
-    // Path-edit drag: the session drops the gesture, nothing is sent.
-    if (pathEditDragRef.current) {
-      pathEditDragRef.current = false;
-      props.pathEdit?.cancel();
-    }
-    const drag = dragStateRef.current;
-    if (!drag) return;
-    dragStateRef.current = null;
-    if (drag.mode === "gesture" && drag.gestureState) {
-      const handle = drag.gestureState.handle;
-      if (handle !== null) {
-        void props.client
-          .cancelGesture(handle)
-          .then(() => {
-            setSnapLines([]);
-            props.onGestureCommitted?.();
-          })
-          .catch(() => {});
-      }
-      // handle === null: begin hasn't resolved; the resolver sees the
-      // dragState gone and cancels the handle itself.
-    } else if (drag.mode === "marquee") {
-      setMarqueeRect(null);
-    }
+    rollBackRecord(p);
   };
 
   // The interaction contract (IC2, §7.2, §12.1 case 3): Escape cancels
@@ -1871,10 +2015,14 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // the canvas only lets go of it. A pan, a content gesture and path edit
   // keep their own Escape.
   const escapeSession = () => {
-    const s = sessionRef.current;
-    if (!s) return;
+    const held = pointerRef.current;
+    const s = held?.session;
+    if (!held || !s) return;
     if (s.kind === "tool") {
-      toolDragRef.current = null;
+      // The tool's handler cancels its drag (its Escape), and the canvas
+      // lets go of the pointer.
+      held.tool = null;
+      props.toolGesture?.onCancel();
       closeSession("cancel", "escape");
       return;
     }
@@ -1893,77 +2041,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // dropped it. Not a pinch's: a lifted finger hands the pinch on.
   const onLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!COORDINATED) return;
-    const s = sessionRef.current;
+    const s = pointerRef.current?.session;
     if (!s || s.kind === "pinch" || s.pointerId !== e.pointerId) return;
     interactions.cancel(s, "capture-lost");
   };
-
-  // Unmount ends the session the canvas holds (§7.2): its engine gesture
-  // is cancelled, not left open for the next canvas to trip over.
-  useEffect(() => {
-    if (!COORDINATED) return;
-    return () => {
-      const s = sessionRef.current;
-      if (s) interactions.cancel(s, "unmount");
-    };
-  }, [interactions]);
-
-  // Phase B — Escape cancels the active gesture. Listen at document
-  // level so it works while pointer capture is in flight on the
-  // wrapper.
-  const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
-    if (e.key !== "Escape") return;
-    if (COORDINATED) {
-      escapeSession();
-      return;
-    }
-    const handleDrag = handleDragRef.current;
-    if (handleDrag) {
-      // The release that follows finds no drag and does nothing.
-      handleDragRef.current = null;
-      handleDrag.router.cancel();
-      closeSession("cancel", "escape");
-      return;
-    }
-    const drag = dragStateRef.current;
-    if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
-    const handle = drag.gestureState.handle;
-    drag.mode = "pan";
-    drag.gestureState = undefined;
-    if (handle !== null) {
-      void props.client
-        .cancelGesture(handle)
-        .then(() => {
-          setSnapLines([]);
-          props.onGestureCommitted?.();
-        })
-        .catch(() => {});
-    }
-  });
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
-    return keys.listen("keydown", onKeyDown, undefined, document);
-  }, [keys]);
-
-  // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
-  // drag is in flight must abort it. Without this the gesture stays
-  // open until the next pointer event, which then commits a stale
-  // delta — the classic "alt-tab mid-drag leaves a stuck gesture" bug
-  // (gestures.md E2E-11). pointercancel covers capture *theft*; blur
-  // covers the case where the pointer never sends a cancel.
-  // With the coordinator the editor's InteractionProvider hears the blur
-  // and ends the session; this listener is the canvas's own without it.
-  const onWindowBlur = useEffectEvent(() => {
-    const s = sessionRef.current;
-    if (s) interactions.cancel(s, "blur");
-    else abortActiveDrag();
-  });
-  useEffect(() => {
-    if (COORDINATED) return;
-    const onBlur = () => onWindowBlur();
-    window.addEventListener("blur", onBlur);
-    return () => window.removeEventListener("blur", onBlur);
-  }, []);
 
   // GSM-07 / INV-8 — pointer-capture loss (`pointercancel`: capture
   // stolen, touch cancelled, element removed mid-drag). The browser has
@@ -1975,12 +2056,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (pinchUp(e)) return;
     // K-1 — a cancelled content gesture just ends (the context keeps its
     // state; no tool drag to abort).
-    if (contentGestureRef.current) {
-      contentGestureRef.current = false;
+    const held = pointerRef.current;
+    if (held?.content) {
+      held.content = false;
       closeSession("abort", "pointercancel");
       return;
     }
-    const s = sessionRef.current;
+    const s = held?.session;
     if (s) interactions.cancel(s, "pointercancel");
     else abortActiveDrag();
   };
@@ -2053,110 +2135,153 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // granularity (handled in onPointerUp's click branch); skip the
     // group-descent path so the two don't fight over the same click.
     const typeTool = (props.activeTool ?? "select") === "text";
-    // Editor ADR 301 — FIRST, with any tool: the active context's (or the
-    // document context's) sub-context providers may take the double-click
-    // for a header, footer or note edited in place. None answering leaves
-    // it to what follows.
     // IC3 — the chain's answers apply only while no newer press, document
     // or context came first.
     const token = interactions.token("double-click");
-    const offerFirst = async () => {
-      if (await trySubContext({ pageId, pagePoint })) return;
-      if (!stillCurrent(token)) return;
-      // Phase H — double-click on a frame nested inside a group →
-      // select the whole outermost containing group as a unit.
-      if (!props.onDoubleClickGroup || typeTool) return;
-      await resolveDoubleClick();
-    };
-    // A promise chain, not a try (ADR 229).
-    const resolveDoubleClick = async () => {
-      const reply = await props.client.send({
-        kind: "hitTest",
-        payload: {
-          pageId,
-          docPoint: pagePoint,
-          filter: "any",
-        },
-      });
-      if (!stillCurrent(token)) return;
-      if (reply.kind !== "hitResult") return;
-      const chain = reply.payload.groupChain ?? [];
-      const element = reply.payload.element ?? null;
-      // TEXT FIRST, as in InDesign: a double-click on a text frame's
-      // text switches to the Type tool with the caret at the point —
-      // in the cell, when the point is in a table cell. Without this
-      // the first claim to answer was paged.draw's, which takes every
-      // path-bearing kind including text frames, so double-clicking a
-      // table entered vector editing. Content a plugin OWNS (a lowered
-      // sheet table, a web frame) still goes to that plugin.
-      const hit = reply.payload;
-      // A grouped frame descends into its group first (Track L); the
-      // next double-click, inside the group, reaches the text.
-      const inGroupScope =
-        chain.length === 0 ||
-        (activeGroup !== null && chain.includes(activeGroup));
-      if (
-        element?.kind === "textFrame" &&
-        inGroupScope &&
-        hit.storyId &&
-        hit.offsetWithinStory != null
-      ) {
-        const owned = await tryEnterOwnedContent({
-          element,
-          groupChain: chain,
-          pageId,
-          pagePoint,
-        });
-        if (owned || !stillCurrent(token)) return;
-        const tc = hit.tableContext ?? null;
-        tool?.setBaseTool(TEXT_TOOL_ID);
-        setContentSelection({
-          storyId: hit.storyId,
-          start: hit.offsetWithinStory,
-          end: hit.offsetWithinStory,
-          affinity: false,
-          cell: tc
-            ? { tableId: tc.tableId, row: tc.row, col: tc.col }
-            : undefined,
-        });
-        return;
-      }
-      // F-29 — resolve by what was double-clicked (ADR 235), as in
-      // InDesign. A shape inside a group the user is not yet in selects
-      // that shape (entering the group) before anything claims it; the
-      // next double-click, inside the group, reaches its content.
-      if (!inGroupScope) {
-        props.onDoubleClickGroup?.(chain[0], element, chain);
-        return;
-      }
-      // A frame holding a placed image is content, not vector artwork:
-      // only the plugin that OWNS it (paged.image's raster context, by
-      // its metadata) may claim it. paged.draw's vector-graphic context
-      // claims every path-bearing kind, and used to take placed photos.
-      const holdsImage =
-        element != null &&
-        (await props.client
-          .elementGeometry([element])
-          .then((items) => items[0]?.hasImage === true)
-          .catch(() => false));
-      if (!stillCurrent(token)) return;
-      const at = {
-        element,
-        groupChain: chain,
-        // W-19 — the entered context's onEnter gets the point too.
-        pageId,
-        pagePoint,
-      };
-      // W3.2 — consult the edit-context / object-type registries: a
-      // webFrame (object type) opens its source context, a polygon (edit
-      // context by kind) enters vectorGraphic.
-      await (holdsImage ? tryEnterOwnedContent(at) : tryEnterEditContext(at));
-    };
-    void offerFirst().catch((err: unknown) => {
+    // IC4 — the ContentContextAdapter: the canvas's one double-click path
+    // is the shell's (use-edit-context-entry.tsx).
+    void enterByDoubleClick({
+      pageId,
+      pagePoint,
+      typeTool,
+      activeGroup,
+      ...(props.onDoubleClickGroup
+        ? { descend: props.onDoubleClickGroup }
+        : {}),
+      isCurrent: () => stillCurrent(token),
+    }).catch((err: unknown) => {
       // Same fail-quiet approach as the click hitTest.
       console.warn("doubleClick hitTest failed:", err);
     });
   };
+
+  // The effects that read the press record come after every handler
+  // that changes it (the React Compiler reads the component in order).
+  /** Does the press holding the pointer drive a worker gesture? */
+  const holdsGesture = useEffectEvent(() =>
+    Boolean(pointerRef.current?.drag?.gestureState),
+  );
+
+  // Step 5e — subscribe to out-of-band snap-line notifications. The
+  // SAB-mode `updateGesture` path doesn't await a reply, so the worker
+  // surfaces snap guides via an unsolicited `gestureSnapLines` after
+  // each drain. Empty `snapLines` is meaningful (gesture left a
+  // previously-snapped axis); the overlay clears stale guides on it.
+  useEffect(() => {
+    return props.client.subscribe((msg) => {
+      if (msg.kind === "gestureSnapLines") {
+        // OverlayRevisionAdapter (IC4): snap lines are the gesture's; a late
+        // notify after the gesture ended draws nothing (`UXI-SNP-006`).
+        const lines = msg.payload.snapLines;
+        if (COORDINATED && lines.length > 0 && !holdsGesture()) return;
+        setSnapLines(lines);
+      } else if (
+        msg.kind === "warning" &&
+        msg.payload.kind === "canvasNeeded"
+      ) {
+        transferredRef.current = false;
+        setCanvasGeneration((g) => g + 1);
+      }
+    });
+  }, [props.client, setSnapLines]);
+
+  // Unmount ends the session the canvas holds (§7.2): its engine gesture
+  // is cancelled, not left open for the next canvas to trip over.
+  const cancelHeldSession = useEffectEvent(() => {
+    const s = pointerRef.current?.session;
+    if (s) interactions.cancel(s, "unmount");
+  });
+  useEffect(() => {
+    if (!COORDINATED) return;
+    return () => cancelHeldSession();
+  }, []);
+
+  // Escape on the canvas's own gesture is the Escape arbiter's gesture tier
+  // (editor ADR 1207, §12.1 case 3): one press, one resolution — it never
+  // also climbs a group or clears the selection. A pan, a content gesture
+  // and path edit (its own transient handler) are not cancelled here.
+  const arbiter = useEscapeArbiter();
+  const escapeTakes = useEffectEvent(() => {
+    const kind = pointerRef.current?.session?.kind;
+    return (
+      kind === "tool" ||
+      kind === "press" ||
+      kind === "marquee" ||
+      kind === "gesture" ||
+      kind === "bundle-handle"
+    );
+  });
+  const escapeResolves = useEffectEvent(() => escapeSession());
+  useEffect(() => {
+    if (!COORDINATED) return;
+    return arbiter.register({
+      id: "paged.canvas.gesture",
+      tier: "gesture",
+      isActive: () => escapeTakes(),
+      resolve: () => {
+        escapeResolves();
+      },
+    });
+  }, [arbiter]);
+
+  // The legacy pointer path (`?debug=legacy-pointer`): Escape cancels the
+  // active gesture from a document listener of the canvas's own.
+  const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
+    if (!isEscapeKey(e)) return;
+    const held = pointerRef.current;
+    // A tool's drag: its handler cancels it (the spine's Escape).
+    if (held?.tool) {
+      props.toolGesture?.onCancel();
+      return;
+    }
+    const handleDrag = held?.handle ?? null;
+    if (held && handleDrag) {
+      // The release that follows finds no drag and does nothing.
+      held.handle = null;
+      handleDrag.router.cancel();
+      closeSession("cancel", "escape");
+      return;
+    }
+    const drag = currentDrag();
+    if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
+    const handle = drag.gestureState.handle;
+    drag.mode = "pan";
+    drag.gestureState = undefined;
+    if (handle !== null) {
+      void props.client
+        .cancelGesture(handle)
+        .then(() => {
+          setSnapLines([]);
+          props.onGestureCommitted?.();
+        })
+        .catch(() => {});
+    }
+  });
+  useEffect(() => {
+    if (COORDINATED) return;
+    const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
+    return keys.listen("keydown", onKeyDown, undefined, document);
+  }, [keys]);
+
+  // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
+  // drag is in flight must abort it. Without this the gesture stays
+  // open until the next pointer event, which then commits a stale
+  // delta — the classic "alt-tab mid-drag leaves a stuck gesture" bug
+  // (gestures.md E2E-11). pointercancel covers capture *theft*; blur
+  // covers the case where the pointer never sends a cancel.
+  // With the coordinator the editor's InteractionProvider hears the blur
+  // and ends the session; this listener is the canvas's own without it.
+  const onWindowBlur = useEffectEvent(() => {
+    const s = pointerRef.current?.session;
+    if (s) interactions.cancel(s, "blur");
+    else abortActiveDrag();
+  });
+  useEffect(() => {
+    if (COORDINATED) return;
+    const onBlur = () => onWindowBlur();
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, []);
 
   return (
     <div
@@ -2231,10 +2356,69 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           footnoteCount={props.resolution?.footnoteCount ?? 0}
           runningHeaders={props.resolution?.runningHeaders ?? []}
           layoutCacheStats={props.layoutCacheStats ?? null}
+          viewportSize={[hostSize.width, hostSize.height]}
         />
       )}
     </div>
   );
+}
+
+/** The legacy path's drag: a pan, a marquee, a press waiting for its hit,
+ *  or a worker gesture. */
+interface DragState {
+  /** `pan` is camera-translate; `marquee` is the element-selection rect
+   *  drag; `gesture` is an in-flight worker gesture (translate, resize,
+   *  …); `press` waits for its hit test. Click-vs-drag uses `maxDelta`. */
+  mode: "pan" | "marquee" | "gesture" | "press";
+  startCam: Camera;
+  /** Anchor in doc-space pt (already camera-inverted) — used so the
+   *  pointer→doc delta survives mid-gesture camera changes. */
+  startDoc: [number, number];
+  startPointer: [number, number];
+  /** Largest pointer-delta seen during this gesture, in CSS px. */
+  maxDelta: number;
+  /** Modifier state captured at pointerdown. */
+  modifiers: PointerModifiers;
+  /** The marquee's anchor and page; `null` when the pointer started
+   *  outside any page. */
+  marqueeAnchor: {
+    pageId: PageId;
+    pageX: number;
+    pageY: number;
+  } | null;
+  /** Gesture-mode bookkeeping. */
+  gestureState?: GestureState;
+  /** `press` mode: a Selection-tool press off the selection, waiting for
+   *  its hit test to say whether the drag moves an item or draws a
+   *  marquee. */
+  press?: PressState;
+  /** A press released before its hit test answered: its session, ended
+   *  once the press is finished. */
+  pressSession?: InteractionSession | null;
+}
+
+/** The press that holds the pointer (IC4): its session, the route it took
+ *  (`routePress`), and what that route keeps. */
+interface PointerRecord {
+  session: InteractionSession | null;
+  route: PressRouteKind;
+  /** A registered tool's drag (the `tool` route, and the `type` route
+   *  until its release). */
+  tool: { startPointer: [number, number]; maxDelta: number } | null;
+  /** A bundle's handle drag (extensions ADR 1103). */
+  handle: {
+    router: HostHandleRouter;
+    startPointer: [number, number];
+    maxDelta: number;
+  } | null;
+  /** Path edit owns the press until its release. */
+  path: boolean;
+  /** The active edit context's content gesture (K-1). */
+  content: boolean;
+  /** The legacy path's drag (and path edit's inert one). */
+  drag: DragState | null;
+  /** The pinch (editor ADR 294). */
+  pinch: Pinch | null;
 }
 
 /** A worker gesture in flight (Phase B). `handle` is `null` until the
@@ -2253,6 +2437,12 @@ interface PressState {
   releaseDoc: [number, number] | null;
   /** Alt (Option) as the pointer last reported it. */
   alt: boolean;
+  /** IC5 — the press asked the engine in one call (`pressAt`). */
+  atomic?: boolean;
+  /** The pointer's last document point while the answer was out. */
+  lastDoc?: [number, number];
+  /** Let go as a click before the answer: the press only selects. */
+  clicked?: boolean;
 }
 
 interface GestureState {
@@ -2485,6 +2675,8 @@ function ViewportHud(props: {
   footnoteCount: number;
   runningHeaders: ReadonlyArray<RunningHeader>;
   layoutCacheStats: LayoutCacheStats | null;
+  /** The measured viewport, CSS px. */
+  viewportSize: readonly [number, number];
 }) {
   const sel = props.selection;
   const gpuBadge =
@@ -2526,30 +2718,13 @@ function ViewportHud(props: {
         </span>
       )}
       {(() => {
-        // Show the running header for the page closest to viewport
-        // centre — gives a "where am I" anchor for long documents.
-        const [vw, vh] = [
-          // approximate viewport size from camera scale + canvas dims
-          800, 600,
-        ];
-        const cx = vw / 2;
-        const cy = vh / 2;
-        const docX =
-          (cx - props.camera.tx) / Math.max(1e-6, props.camera.scale);
-        const docY =
-          (cy - props.camera.ty) / Math.max(1e-6, props.camera.scale);
-        let currentIdx = 0;
-        let bestDistSq = Infinity;
-        for (let i = 0; i < props.pageRects.length; i++) {
-          const r = props.pageRects[i];
-          const px = r.x + r.w / 2;
-          const py = r.y + r.h / 2;
-          const dsq = (px - docX) ** 2 + (py - docY) ** 2;
-          if (dsq < bestDistSq) {
-            bestDistSq = dsq;
-            currentIdx = i;
-          }
-        }
+        // The running header of the current page (the one shell rule,
+        // `state/current-page.ts`) — a "where am I" anchor for long
+        // documents.
+        const currentIdx = Math.max(
+          0,
+          currentPageIndex(props.pageRects, props.camera, props.viewportSize),
+        );
         const header = props.runningHeaders[currentIdx];
         if (header?.text) {
           const truncated =
@@ -2675,6 +2850,17 @@ function gestureFailureReason(err: unknown): string {
   if (message.startsWith("canvas worker failed")) return "worker-failed";
   if (message.startsWith("beginGesture failed")) return "begin refused";
   return "begin failed";
+}
+
+/** The largest pointer travel of a press so far, CSS px (click vs drag):
+ *  kept on the press's record, which the canvas's handlers share. */
+function growDelta(
+  t: { startPointer: [number, number]; maxDelta: number },
+  x: number,
+  y: number,
+): void {
+  const d = Math.hypot(x - t.startPointer[0], y - t.startPointer[1]);
+  if (d > t.maxDelta) t.maxDelta = d;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
