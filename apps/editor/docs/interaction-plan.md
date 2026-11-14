@@ -498,7 +498,13 @@ In scope. They start after G2, and each lands with its own ADR.
   preview through a sandboxed operation.
 - **PX3 Design constraints.** Constraint records in the document's metadata (equal spacing,
   align to, maximum lines, minimum gap, fits), evaluated as DF7 health rules with suggested fixes
-  and a preview; no solver.
+  and a preview; no solver. **Done** ([ADR 1233](adr/1233-constraints-are-validated-intent.md)):
+  six kinds (align — edges, centres, first baselines — equal spacing, minimum gap, maximum
+  lines, must fit, align to margin) in the document label `x-paged:constraints`, kept by `.paged`
+  and IDML; Object ▸ Add constraint… and the context menu; evaluated after each change, the pages
+  in view first, from the engine's geometry, lines and overset (nothing new on the wire); a broken
+  one is a Publication health issue whose fix previews dashed boxes and applies as one undo step;
+  glyphs as the editing aid Design constraints; Window ▸ Output ▸ Design constraints.
 - **PX4 Visual action automation.** Semantic commands recorded from the coordinator's trace
   (`UXI-MUT-013`) become a named action with parameters; a preview of the affected objects; one
   undo batch; export as a `paged.*` script (on `actions@1`, PM-0015).

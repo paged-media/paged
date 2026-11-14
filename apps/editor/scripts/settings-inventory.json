@@ -509,6 +509,16 @@
       "sites": []
     },
     {
+      "id": "view.constraints",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Editing aids > Design constraints: the document's design constraints drawn as glyphs where they stand (editor ADR 1233; remembered in paged.view.editingAids)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "constraints: true",
+      "sites": []
+    },
+    {
       "id": "view.outline",
       "kind": "view-option",
       "storage": "memory",

@@ -771,5 +771,6 @@
   "shell.contextToolbar.toolInHand": "Werkzeug in der Hand: {tool}",
   "shell.contextToolbar.toolsInRail": "Werkzeuge wählen Sie in der Werkzeugleiste",
   "shell.contextToolbar.placement": "Platzierung · nicht destruktiv",
-  "shell.contextToolbar.placementHint": "Verschiebt, skaliert oder dreht das Bild in seinem Rahmen; die Pixel des Bildes ändern sich nicht."
+  "shell.contextToolbar.placementHint": "Verschiebt, skaliert oder dreht das Bild in seinem Rahmen; die Pixel des Bildes ändern sich nicht.",
+  "shell.editingAids.constraints": "Gestaltungsregeln"
 }

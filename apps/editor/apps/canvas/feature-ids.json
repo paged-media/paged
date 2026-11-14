@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 971,
+    "command": 974,
     "keybinding": 216,
-    "menu": 706,
-    "panel": 153,
+    "menu": 709,
+    "panel": 154,
     "tool": 123
   },
   "features": [
@@ -4231,6 +4231,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.object.addConstraint",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.object.bringForward",
       "kind": "command",
       "owner": "editor"
@@ -4417,6 +4422,11 @@
     },
     {
       "id": "command:paged.pathfinder.unite",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.preferences.modifierHints",
       "kind": "command",
       "owner": "editor"
     },
@@ -4802,6 +4812,11 @@
     },
     {
       "id": "command:paged.view.toggleChrome",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleConstraints",
       "kind": "command",
       "owner": "editor"
     },
@@ -6621,6 +6636,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Edit/Settings/Keep modifier hints visible",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Edit/Settings/Models…",
       "kind": "menu",
       "owner": "editor"
@@ -8226,6 +8246,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Add constraint…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Appearance/Add fill",
       "kind": "menu",
       "owner": "editor"
@@ -9191,6 +9216,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Editing aids/Design constraints",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Editing aids/Frame edges",
       "kind": "menu",
       "owner": "editor"
@@ -9857,6 +9887,11 @@
     },
     {
       "id": "panel:paged.conditions",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.constraints",
       "kind": "panel",
       "owner": "editor"
     },

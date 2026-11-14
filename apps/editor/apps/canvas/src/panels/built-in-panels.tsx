@@ -115,6 +115,7 @@ import { HistoryPanel } from "./history-panel";
 import { GenerateImagePanel } from "./generate-image-panel";
 import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
+import { ConstraintsPanel } from "./constraints-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
 import { PreflightPanel } from "./cockpit/preflight-panel";
@@ -231,6 +232,7 @@ const M = defineMessages("app.builtInPanels", {
   data: "Data",
   history: "History",
   library: "Library",
+  constraints: "Design constraints",
   table: "Table",
   tabs: "Tabs",
   glyphs: "Glyphs",
@@ -330,6 +332,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "left",
     defaultGroup: "cockpit",
     icon: "ui-warn",
+  },
+  {
+    // Editor ADR 1233 — the document's design constraints.
+    id: "paged.constraints",
+    get title() {
+      return t(M.constraints);
+    },
+    component: ConstraintsPanel,
+    defaultDock: "left",
+    defaultGroup: "cockpit",
+    icon: "ui-target",
   },
   {
     id: "paged.stories",

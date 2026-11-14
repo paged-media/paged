@@ -67,6 +67,7 @@ import {
   SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
 } from "../../../src/canvas-context-menu";
+import { ADD_CONSTRAINT_COMMAND } from "../../../src/constraints/add-constraint";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildEffectMenuCommands } from "../../../src/effect-menu";
 import { buildViewCommands } from "../../../src/view-commands";
@@ -205,6 +206,7 @@ function tableIds(): string[] {
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
     SELECT_ABOVE_COMMAND,
+    ADD_CONSTRAINT_COMMAND,
     ...buildObjectCommands(noop),
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
@@ -307,6 +309,7 @@ describe("the host command inventory", () => {
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
       "SELECT_ABOVE_COMMAND",
+      "ADD_CONSTRAINT_COMMAND",
       "objectCommands",
       "pathfinderCommands",
       "cornerCommands",

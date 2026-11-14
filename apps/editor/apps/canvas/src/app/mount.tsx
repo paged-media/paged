@@ -393,6 +393,16 @@ import {
 } from "../panels/compatibility-report-store";
 import { usePublicationIssuesSource } from "../publication-issues";
 import {
+  ADD_CONSTRAINT_COMMAND,
+  AddConstraintDialog,
+  CONSTRAINT_MENU_ITEMS,
+} from "../constraints/add-constraint";
+import {
+  constraintGlyphsContribution,
+  fixPreviewContribution,
+} from "../constraints/overlay";
+import { useDesignConstraintsSource } from "../constraints/source";
+import {
   markStartDecided,
   useRememberLastDocument,
   useReopenLastDocument,
@@ -492,6 +502,10 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 1223 — View ▸ Show issue markers: the publication's issues
   // where they stand. Draws nothing until toggled on.
   issueMarkersContribution,
+  // Editor ADR 1233 — the design constraints' glyphs (an editing aid) and
+  // where a previewed fix would move things.
+  constraintGlyphsContribution,
+  fixPreviewContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,
@@ -942,6 +956,9 @@ function CanvasAppIntegration() {
   // Editor ADR 1223 — the publication's issues, gathered for the markers,
   // the page overview and Publication health.
   usePublicationIssuesSource();
+  // Editor ADR 1233 — the design constraints, evaluated as the document
+  // changes; what does not hold joins those issues.
+  useDesignConstraintsSource();
   // UX audit F-06 — the document open last comes back at the next start
   // (unless the recovery journal offers unsaved work first).
   useRememberLastDocument();
@@ -1852,6 +1869,8 @@ function CanvasAppIntegration() {
       CANVAS_CONTEXT_MENU_COMMAND,
       SELECT_BELOW_COMMAND,
       SELECT_ABOVE_COMMAND,
+      // Editor ADR 1233 — Object ▸ Add constraint….
+      ADD_CONSTRAINT_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
@@ -1890,6 +1909,7 @@ function CanvasAppIntegration() {
       ...SVG_MENU_ITEMS,
       ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
+      ...CONSTRAINT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
       ...TEXT_FORMAT_MENU_ITEMS,
@@ -2132,6 +2152,8 @@ function CanvasAppRoot() {
       <ViewPreferencesDialog />
       {/* UX audit F-06 — File ▸ Open recent… */}
       <OpenRecentDialog />
+      {/* Editor ADR 1233 — Object ▸ Add constraint… */}
+      <AddConstraintDialog />
       <ScreenCalibrationDialog />
       <TransformEachDialog />
       <ReflectDialog />

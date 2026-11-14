@@ -361,6 +361,18 @@ viewport's centre first, one tile per tick, within a 64 MB tile budget; typing t
 engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
 yet (inventory exception `EXC-003`).
 
+Track PX (the strategy's Phase 3 concepts), design constraints
+([ADR 1233](adr/1233-constraints-are-validated-intent.md), PX3): Object ▸ Add constraint… (and the
+canvas context menu) keeps an intent of the selection in the document — aligned edges, centres or
+first baselines to a key object, even spacing, a minimum gap, at most so many lines, text that
+must fit, an edge on a page margin — as the document label `x-paged:constraints`, which a `.paged`
+save and an IDML export keep. Each constraint is evaluated after every change, the pages in view
+first, deterministically from the engine's own geometry, lines and overset; one that does not hold
+is an issue in Publication health whose fix says what it will do, draws where it will put things
+while it has the pointer or the focus, and applies as one undo step. Nothing moves by itself. The
+constraints draw as faint glyphs (View ▸ Editing aids ▸ Design constraints) and are listed in
+Window ▸ Output ▸ Design constraints.
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
 and the marquee takes what it intersects.

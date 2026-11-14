@@ -148,6 +148,9 @@ const HOST_MENU = [
   "View/Editing aids/Hidden characters",
   "View/Editing aids/Nonprinting items",
   "View/Editing aids/Data bindings",
+  // Editor ADR 1233 — the design constraints.
+  "View/Editing aids/Design constraints",
+  "Object/Add constraint…",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
