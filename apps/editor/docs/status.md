@@ -252,6 +252,13 @@ turns (`UXI-T14`); guides and handles follow the full camera transform with the 
 (`UXI-T56`); and a live shape's corner widget takes only its own 12 px target, 20 px inside the
 corner, so a press beside it moves and one on the corner's square resizes, at 100 % and 800 %.
 
+Snapping says what it snaps to (IC8, [ADR 1226](adr/1226-snapping-says-what-it-snaps-to.md)):
+every snap line names its target — guide, margin, column, page edge, page centre, grid, an
+item's edge or centre, a point, equal spacing — and one key bypasses snapping for a move, a
+handle drag and the point tools alike: the platform's primary modifier (Cmd on macOS, Ctrl
+elsewhere; a move read Ctrl before). A snap holds within the release reach and commits exactly
+(`UXI-T12`).
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
@@ -295,11 +302,7 @@ paged.web (ADR 416): the Web source panel inspects the element in focus — pick
 or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
 rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts
 never run, names the sandboxed browser preview and the native publication rendering, and offers
-the placeholders without a value as sample data beside the source. paged.slide (ADR 725): a deck
-of several slides opens in the slide sorter, its navigation — Play from the selection, speaker
-notes, the slide on the canvas marked, the arrow keys, Enter to open a slide, Delete as one undo
-step — and the Slides panel shows a thumbnail's actions on hover and focus (UX audit F-47; the
-Document Map's page nouns stay the host's).
+the placeholders without a value as sample data beside the source.
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,

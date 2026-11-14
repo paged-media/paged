@@ -133,8 +133,7 @@ Read from the code on 2026-10-30.
   bytes. Shape click actions are also the engine's page-item hyperlinks.
 - **Slides and Notes panels** (M3, first part). A sorter with a thumbnail per slide from the
   engine's renderer: click to go to the slide, drag to reorder, duplicate, delete, hide from the
-  slideshow, each one undo step; a thumbnail's actions show on hover and focus (ADR 725). A notes
-  panel edits the active slide's speaker notes.
+  slideshow, each one undo step. A notes panel edits the active slide's speaker notes.
 - **Palette commands and menus** (`src/commands.ts`, `src/menu.ts`). The user's verbs as
   palette commands (category Slide) with a menu entry each: File ▸ Open PowerPoint deck… (the
   importer, through the host's file picker) and File ▸ Export PowerPoint deck… (the exporter,
@@ -180,12 +179,7 @@ Read from the code on 2026-10-30.
   WebGPU the show cuts and says so once.
 - **Slide Sorter** (View ▸ Slide Sorter, ADR 716): a module view in place of the canvas;
   select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
-  open a slide. Since [ADR 725](adr/725-a-deck-opens-in-the-slide-sorter.md) it is a deck's
-  navigation: a deck of two or more slides opens in it (the bar's "Open decks in the sorter"
-  switch turns that off); the bar plays the show from the first selected slide and shows the
-  speaker notes; the slide on the canvas is marked; the arrow keys move through the slides
-  (Shift extends), Home / End go to the ends, Enter opens a slide in Normal view, Delete removes
-  the selection as one undo step; a portrait deck gets narrower columns.
+  open a slide.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`; `slide_js_bg.wasm` is 6.64 MiB (release, 2026-10-30), with paged.sheet's workbook engine for live charts and the WebP decoder) returns the package and a report; the host opens the package, and the source deck and the report are kept as container
   parts.

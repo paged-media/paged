@@ -220,6 +220,11 @@ Model each gesture as an explicit typed state machine. Test the machine exhausti
 
 #### 4.1.3 Snapping engine / Smart Guides (`crates/snap`)
 
+Since IC8 ([ADR 1226](../adr/1226-snapping-says-what-it-snaps-to.md)) SNAP-07's modifier is
+decided: the platform's primary modifier (Cmd on macOS, Ctrl elsewhere) bypasses snapping for
+every drag and point tool, and every snap line names its target (`UXI-T12`,
+`tests/e2e/uxi-snap.spec.ts`).
+
 | ID                 | Test                                                                             | Assertion                                                                                                                                                   |
 | ------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SNAP-01            | Edge-to-edge snap within threshold (e.g. 6 screen px)                            | Snapped position exact to target edge; emitted SnapIndicator describes the pair                                                                             |

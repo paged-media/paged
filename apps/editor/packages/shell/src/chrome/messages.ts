@@ -230,6 +230,22 @@ export const HOVER = defineMessages("shell.hover", {
   locked: "{kind} · locked",
 });
 
+/** What a snap line snaps to (editor ADR 1226, IC8). */
+export const SNAP = defineMessages("shell.snap", {
+  guide: "guide",
+  margin: "margin",
+  column: "column",
+  pageEdge: "page edge",
+  pageCenter: "page centre",
+  grid: "grid",
+  baseline: "baseline",
+  objectEdge: "edge",
+  objectCenter: "centre",
+  point: "point",
+  equalSpacing: "equal spacing",
+  pixel: "pixel",
+});
+
 export const COLLAB = defineMessages("shell.collab", {
   share: "Share",
   soon: "Sharing and collaboration are coming soon",

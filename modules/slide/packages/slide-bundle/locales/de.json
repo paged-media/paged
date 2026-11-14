@@ -361,10 +361,5 @@
   "slide.masters.phMedia": "Medien",
   "slide.masters.phDt": "Datum",
   "slide.masters.phFtr": "Fußzeile",
-  "slide.masters.phSldNum": "Foliennummer",
-  "slide.show.sorterPlay": "Abspielen",
-  "slide.show.sorterPlayTitle": "Die Bildschirmpräsentation ab der ersten ausgewählten Folie abspielen, sonst von Beginn an",
-  "slide.show.sorterNotes": "Notizen",
-  "slide.show.sorterOpenOnLoad": "Präsentationen in der Foliensortierung öffnen",
-  "slide.show.sorterOpenOnLoadTitle": "Eine Präsentation mit mehreren Folien beim Öffnen in der Foliensortierung zeigen"
+  "slide.masters.phSldNum": "Foliennummer"
 }

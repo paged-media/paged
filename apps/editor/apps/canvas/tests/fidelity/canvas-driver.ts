@@ -107,12 +107,6 @@ export interface OpenCanvasOptions {
    *  (the user's "Adapt the workspace to the window" switch, set before
    *  boot); a spec about the workspace passes true. */
   adaptiveWorkspace?: boolean;
-  /** Open a deck of several slides in paged.slide's slide sorter (slide
-   *  ADR 725), its default for users. Off by default, so the deck specs
-   *  edit on the canvas they were written against (the sorter's "Open
-   *  decks in the sorter" switch, set before boot); a spec about the
-   *  sorter passes true. */
-  slideSorterOnOpen?: boolean;
 }
 
 /** Open `file` through the React file input (`useDocumentMeta` and the
@@ -224,17 +218,6 @@ export async function openCanvas(
       /* no storage: the editor's default */
     }
   }, options.adaptiveWorkspace === true);
-  // paged.slide's "Open decks in the sorter" (its bundle storage key).
-  await page.addInitScript((on: boolean) => {
-    try {
-      localStorage.setItem(
-        "paged.plugin.media.paged.slide.sorterOnOpen",
-        JSON.stringify(on),
-      );
-    } catch {
-      /* no storage: the bundle's default */
-    }
-  }, options.slideSorterOnOpen === true);
   await page.goto(`/${options.search ?? ""}`);
   // Pull console output into the Playwright test log so render
   // panics surface in the test report instead of vanishing.

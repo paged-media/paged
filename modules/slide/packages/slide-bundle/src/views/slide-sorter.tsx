@@ -24,14 +24,6 @@
 // double-click opens the slide in the normal view. Sections (slide ADR
 // 720) head their slides: add one at the selection, rename it in place,
 // move it with its slides, remove it (its slides join the one before).
-//
-// Slide ADR 725 — the sorter is a deck's navigation: a deck of several
-// slides opens here (`show/sorter-on-open.ts`, with the bar's switch); the
-// bar plays the show and shows the speaker notes; the slide shown on the
-// canvas is marked; the arrow keys move through the slides (Shift
-// extends), Home / End go to the ends, Enter opens the slide in Normal
-// view, Delete removes the selection in one batch; a portrait deck gets
-// narrower columns.
 
 import type {
   BundleHost,
@@ -54,13 +46,11 @@ import {
   type Section,
 } from "../sections.js";
 import {
-  deleteMutation,
   setStateMutation,
   type Slide,
   type SlideState,
   type SlidesStore,
 } from "../slides-model.js";
-import { setSorterOnOpen, sorterOnOpen } from "../show/sorter-on-open.js";
 
 /** The transitions the bar offers (PowerPoint's names). */
 export const SORTER_TRANSITIONS = [
@@ -159,44 +149,9 @@ const bar: React.CSSProperties = {
   zIndex: 1,
 };
 
-/** The ops of deleting `ids` from `slides` in one batch: each deletion as
- *  `deleteMutation` plans it against the deck as the earlier ones left it
- *  (a section a deleted slide starts moves to the next one kept). */
-export function deleteManyOps(
-  slides: readonly Slide[],
-  ids: readonly string[],
-): MutationInput[] {
-  let left = slides.slice();
-  const ops: MutationInput[] = [];
-  for (const id of ids) {
-    if (left.length < 2) break;
-    ops.push(deleteMutation(id, left));
-    const i = left.findIndex((s) => s.pageId === id);
-    const next = left[i + 1];
-    left = left
-      .filter((s) => s.pageId !== id)
-      .map((s) =>
-        next &&
-        s.pageId === next.pageId &&
-        !s.state.section &&
-        left[i]?.state.section
-          ? { ...s, state: { ...s.state, section: left[i]!.state.section } }
-          : s,
-      );
-  }
-  return ops;
-}
-
-/** What the sorter needs beyond the host and the store. */
-export interface SorterDeps {
-  /** Play the show from `pageId`, or from the beginning (null). */
-  play?: (pageId: string | null) => void;
-}
-
 export function makeSlideSorter(
   host: BundleHost,
   store: SlidesStore,
-  deps: SorterDeps = {},
 ): React.ComponentType<ViewProps> {
   const mutate = (m: MutationInput | null) => {
     if (!m) return;
@@ -212,22 +167,6 @@ export function makeSlideSorter(
           ? ops[0]
           : ({ op: "batch", args: { ops } } as MutationInput),
     );
-
-  const subscribeActive = (listener: () => void) => {
-    try {
-      const sub = host.viewport.onDidChangeActivePage(() => listener());
-      return () => sub.dispose();
-    } catch {
-      return () => {};
-    }
-  };
-  const readActive = (): string | null => {
-    try {
-      return host.viewport.activePage();
-    } catch {
-      return null;
-    }
-  };
 
   const Thumb: React.FC<{ slide: Slide }> = ({ slide }) => {
     const thumbs = useLive(store, subscribeOf);
@@ -332,16 +271,6 @@ export function makeSlideSorter(
     const [anchor, setAnchor] = React.useState<string | null>(null);
     const [dragging, setDragging] = React.useState(false);
     const [over, setOver] = React.useState<number | null>(null);
-    const [showNotes, setShowNotes] = React.useState(false);
-    const [openOnLoad, setOpenOnLoad] = React.useState(() =>
-      sorterOnOpen(host),
-    );
-    const current = React.useSyncExternalStore(
-      subscribeActive,
-      readActive,
-      readActive,
-    );
-    const listRef = React.useRef<HTMLDivElement | null>(null);
     const chosen = slides.filter((s) => selected.includes(s.pageId));
     const allHidden = chosen.length > 0 && chosen.every((s) => s.state.hidden);
     const kinds = new Set(chosen.map((s) => s.state.transition?.kind ?? ""));
@@ -362,102 +291,12 @@ export function makeSlideSorter(
       close();
     };
 
-    // The keys of the grid (slide ADR 725).
-    const focusIndex = Math.max(
-      0,
-      order.indexOf(anchor ?? selected[selected.length - 1] ?? current ?? ""),
-    );
-    const moveTo = (index: number, extend: boolean) => {
-      const i = Math.max(0, Math.min(order.length - 1, index));
-      const id = order[i]!;
-      setSelected(
-        nextSelection(order, selected, anchor, id, {
-          shift: extend,
-          toggle: false,
-        }),
-      );
-      if (!extend) setAnchor(id);
-      listRef.current
-        ?.querySelector<HTMLElement>(`[data-sorter-slide="${id}"]`)
-        ?.scrollIntoView?.({ block: "nearest" });
-    };
-    const onKeyDown = (e: React.KeyboardEvent) => {
-      const step =
-        e.key === "ArrowRight" || e.key === "ArrowDown"
-          ? 1
-          : e.key === "ArrowLeft" || e.key === "ArrowUp"
-            ? -1
-            : 0;
-      if (step !== 0) {
-        e.preventDefault();
-        const from =
-          selected.length === 0
-            ? focusIndex - step
-            : order.indexOf(
-                selected[selected.length - 1] === anchor && selected.length > 1
-                  ? selected[0]!
-                  : selected[selected.length - 1]!,
-              );
-        moveTo((from < 0 ? focusIndex : from) + step, e.shiftKey);
-        return;
-      }
-      if (e.key === "Home" || e.key === "End") {
-        e.preventDefault();
-        moveTo(e.key === "Home" ? 0 : order.length - 1, e.shiftKey);
-        return;
-      }
-      if (e.key === "Enter") {
-        const id = selected[selected.length - 1] ?? order[focusIndex];
-        if (id) {
-          e.preventDefault();
-          open(id);
-        }
-        return;
-      }
-      if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        chosen.length > 0
-      ) {
-        e.preventDefault();
-        batch(
-          deleteManyOps(
-            slides,
-            chosen.map((s) => s.pageId),
-          ),
-        );
-        setSelected([]);
-      }
-    };
-    const portrait = slides.some((s) => s.sizePt[1] > s.sizePt[0]);
-
     return (
       <div data-slide-sorter="ready" style={{ minHeight: "100%" }}>
         <div style={bar} role="toolbar" aria-label={t(SHOW.slideSorter)}>
           <button type="button" data-sorter="normal" onClick={close}>
             {t(SHOW.normalView)}
           </button>
-          {deps.play ? (
-            <button
-              type="button"
-              data-sorter="play"
-              title={t(SHOW.sorterPlayTitle)}
-              onClick={() => deps.play?.(chosen[0]?.pageId ?? null)}
-            >
-              {t(SHOW.sorterPlay)}
-            </button>
-          ) : null}
-          <label style={{ fontSize: 12 }}>
-            <input
-              type="checkbox"
-              data-sorter="notes"
-              checked={showNotes}
-              onChange={(e) => setShowNotes(e.target.checked)}
-            />{" "}
-            {t(SHOW.sorterNotes)}
-          </label>
           <span style={{ flex: 1, fontSize: 12, opacity: 0.7 }}>
             {chosen.length > 0
               ? t(SHOW.selected, { count: chosen.length })
@@ -520,29 +359,14 @@ export function makeSlideSorter(
               ))}
             </select>
           </label>
-          <label style={{ fontSize: 12 }} title={t(SHOW.sorterOpenOnLoadTitle)}>
-            <input
-              type="checkbox"
-              data-sorter-open-on-load
-              checked={openOnLoad}
-              onChange={(e) => {
-                setSorterOnOpen(host, e.target.checked);
-                setOpenOnLoad(e.target.checked);
-              }}
-            />{" "}
-            {t(SHOW.sorterOpenOnLoad)}
-          </label>
         </div>
         <div
-          ref={listRef}
           role="listbox"
-          tabIndex={0}
           aria-multiselectable="true"
           aria-label={t(SHOW.slideSorter)}
-          onKeyDown={onKeyDown}
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(auto-fill, minmax(${portrait ? 140 : 200}px, 1fr))`,
+            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
             gap: 20,
             padding: 20,
           }}
@@ -565,7 +389,6 @@ export function makeSlideSorter(
                   aria-selected={isSelected}
                   data-sorter-slide={slide.pageId}
                   data-number={slide.number}
-                  data-current={slide.pageId === current ? "true" : undefined}
                   draggable
                   onClick={(e) => {
                     setSelected(
@@ -606,9 +429,7 @@ export function makeSlideSorter(
                     cursor: "pointer",
                     outline: isSelected
                       ? "3px solid var(--overlay-selection, #e0218a)"
-                      : slide.pageId === current
-                        ? "2px solid var(--pg-primary, #6d28d9)"
-                        : `1px solid ${color.border}`,
+                      : `1px solid ${color.border}`,
                     borderLeft:
                       over === i && dragging
                         ? "4px solid var(--overlay-selection, #e0218a)"
@@ -640,21 +461,6 @@ export function makeSlideSorter(
                       </span>
                     )}
                   </div>
-                  {showNotes && slide.state.notes ? (
-                    <div
-                      data-sorter-notes
-                      style={{
-                        fontSize: 11,
-                        opacity: 0.8,
-                        padding: "0 2px 4px",
-                        whiteSpace: "pre-wrap",
-                        maxHeight: 64,
-                        overflow: "hidden",
-                      }}
-                    >
-                      {slide.state.notes}
-                    </div>
-                  ) : null}
                 </div>
               </React.Fragment>
             );
