@@ -308,7 +308,7 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
     const bad = await h.objects.writeTemplateField(fields.colour!, swatchOff);
     expect(bad).toEqual({
       ok: false,
-      problem: `"${swatchOff}" is not one of this field's colours`,
+      problem: `"${swatchOff}" is not one of this field's colors`,
     });
   });
 

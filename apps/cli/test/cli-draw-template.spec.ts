@@ -167,7 +167,7 @@ describe("paged template — a paged.draw paint field", () => {
       error: { problems: { name: string; problem: string }[] };
     };
     expect(err.error.problems).toEqual([
-      { name: "colour", problem: `"Green" is not one of this field's colours` },
+      { name: "colour", problem: `"Green" is not one of this field's colors` },
     ]);
     expect(existsSync(join(tmp.dir, "never.paged"))).toBe(false);
   });
