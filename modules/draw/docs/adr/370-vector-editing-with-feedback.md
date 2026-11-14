@@ -1,6 +1,7 @@
 # ADR 370 — Vector editing with feedback: the Pen's named states, a precision magnifier, point-level controls, shape suggestions, and saying what a path operation takes
 
-- **Status:** Accepted 2026-11-14.
+- **Status:** Accepted 2026-11-14. Amended 2026-11-14: the Pathfinder previews its result through
+  the engine's dry run (engine ADR 1310); see "Amendment (2026-11-14): the Pathfinder previews its result".
 - **Scope:** the editor's half of drawing, which this module's machines drive:
   `apps/editor/packages/tools/src/handlers/pen-states.ts` and `pen-tool.ts` (the Pen's states, cursors,
   hints and the finish click), `apps/editor/packages/shell/src/overlays/precision-magnifier.tsx` and
@@ -60,24 +61,25 @@ and the engine offers no dry run of a Boolean or region operation to preview its
    `simplifyPath`), Offset path (closed; `offsetPath`), Repeat and Mirror (`makeRadialRepeat`,
    `makeMirrorRepeat`). Only operations the editor already has, each shown only while its command is
    registered, each one undo step, each labelled as applying on click.
-6. **Before a Pathfinder click.** With no engine dry run there is no honest preview of the result,
-   so the panel says that a button applies on click, to how many objects, as one undo step, and while
-   a button is hovered or focused it outlines on the canvas what the button takes: the object that
-   keeps the result of a shape mode (the first selected) or that Crop cuts with and Minus back keeps
-   (the frontmost by the scene tree's order) solid and named, the others dashed. A dry run in the
-   engine would turn this into a result preview; until then nothing is drawn that the click would
-   not do.
+6. **Before a Pathfinder click** (as amended: the Pathfinder previews its result). While a button is hovered or
+   focused, the canvas shows the operation's result from the engine's dry run — solid and named
+   "Result", the operands it consumes dashed — and the click applies it as one undo step. Where no
+   preview can be made (the engine refuses the write, the read fails) the canvas outlines what the
+   button takes instead — the object that keeps the result of a shape mode (the first selected) or
+   that Crop cuts with and Minus back keeps (the frontmost by the scene tree's order) solid and
+   named, the others dashed — and the panel says the button applies on click, with the engine's
+   reason. Nothing is drawn that the click would not do.
 
 ## Interaction contract (the specification's §21.3)
 
-| Item | Pen | Magnifier | Points / suggestions | Pathfinder outline |
+| Item | Pen | Magnifier | Points / suggestions | Pathfinder preview |
 |---|---|---|---|---|
 | Owner | `canvas-draw` (the gesture spine's Pen handler) | none: a view, it owns no pointer | the inspector (a panel) | the panel |
 | Cursor | a state cursor per state (point 1) | unchanged | n/a | n/a |
 | Cancel | Escape drops the run, nothing commits (`UXI-DRW-001`, `UXI-DRW-004`) | releasing Control, a window blur | n/a (each edit is immediate) | leaving the button |
-| Undo | one step per run or per edit (`UXI-DRW-006`) | none | one step per edit | none until the click |
+| Undo | one step per run or per edit (`UXI-DRW-006`) | none | one step per edit | none until the click; the click is one step |
 | Permission refusal | the engine refuses the insert; the run is dropped and logged | none needed (a read) | the engine's refusal is shown in words (`data-points-error`) | the panel's status line (as before) |
-| Keyboard | Enter finishes, Escape cancels, Shift / Alt modify | Control | the fields and buttons are focusable | focus shows the outline as hover does |
+| Keyboard | Enter finishes, Escape cancels, Shift / Alt modify | Control | the fields and buttons are focusable | focus shows the preview as hover does |
 
 ## Consequences
 
@@ -89,8 +91,8 @@ and the engine offers no dry run of a Boolean or region operation to preview its
 - The close and join cursors are no longer the plain pointer; a test that compared them to it now
   compares to the state cursor.
 - When track IC's cursor controller lands, the Pen's `cursorAt` answers through it unchanged.
-- A dry-run door in the engine (a mutation applied to a copy and answered as geometry) would let the
-  Pathfinder and the suggestions preview their results; it is not built.
+- The engine's dry run (engine ADR 1310) lets the Pathfinder preview its result (its amendment below); the
+  shape suggestions still apply on click and could preview through the same door.
 
 ## Amendment (2026-11-14): the Pen's nine states on the cursor controller
 
@@ -105,3 +107,19 @@ was in flight, and `dragHandle` never reached the screen. `pressCursor` is a she
 the gesture handler (as `busy` is), not the contract's. Test:
 `apps/editor/apps/canvas/test/tools/pen-cursor.dom.test.tsx` (the mounted canvas over the real
 engine: the session layer and the host's cursor during the pull, cleared on release).
+
+## Amendment (2026-11-14): the Pathfinder previews its result
+
+The engine now has the dry run point 6 waited for: `RequestPreview` (protocol 82, engine ADR 1310)
+applies any write to a copy of the document in a model of its own, through the whole write path,
+and answers the items it would create and remove and the outlines it would leave, the document and
+its history untouched. The Pathfinder sends it the very write the button sends
+(`shapeModeMutation`, `regionVerbMutation` in `apps/editor/apps/canvas/src/pathfinder-commands.ts`,
+one value for both) and draws the answer on the panel's overlay layer (`resultPreview` in
+`pathfinder-preview.ts`): every result contour solid, the first named "Result", the consumed
+operands dashed. The panel's line reads "point at a button to preview its result; a click applies
+it as one undo step". The operand outline and the "applies on click" wording stay only where no
+preview can be made: a refused write (its reason shown) or a failed read. Tests:
+`apps/editor/apps/canvas/tests/e2e/draw-precision.spec.ts` (the preview's contours are the engine's
+dry run's, the consumed operand dashed, Divide's regions, the model and the history unchanged
+before the click, the click one undo step) and the engine's `paged-canvas` `it::dry_run`.

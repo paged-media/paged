@@ -431,6 +431,26 @@ selection or inside any context; each runs the module's own where its context na
 Copy, Export; image: Transform, Save a version, Export; data: Bind to data) and the editor's
 otherwise.
 
+Document X-Ray (PX1) is built
+([ADR 1237](adr/1237-document-x-ray-answers-from-the-model.md), engine ADR 1309): a "Why?"
+inspector (Window ▸ Utilities ▸ X-Ray) shows the engine's facts on the text at the caret or the
+selected item — per property the style level that wins (a style, a style through based-on, a
+local override, the default) and what it overrides, the lock and visibility reasons with Unlock,
+the picture's link with its status, resolution, fitting and the frames sharing it, data bindings
+and template fields, the thread with its overset count, the object style's fill and stroke, and
+what editing each applied style changes (uses, pages, styles based on it); what the document does
+not store (a binding's record) is said so. View ▸ X-Ray outlines every item by the style that
+shapes it, with a label, a hover and a legend per page. The Typography Debugger is built
+([ADR 1238](adr/1238-typography-debugger.md), engine ADR 1310): the build keeps every line's
+composition record, and a panel lists the story's lines with their tightness, word spacing and
+why each broke (the dictionary's hyphenation points included); View ▸ Typography debugger tints
+the lines on the canvas and marks hyphens, forced breaks and the overset end; a change
+(tracking, hyphenation, the zone, the composer) is previewed in a copy of the document — the
+document and its history untouched — and Apply makes it one undo step. The copy is the engine's
+general dry run (`client.preview`: any write applied to a sandbox copy of the document, answered as
+what it would create, remove and leave), which the Pathfinder now uses to show a button's result on
+the canvas before the click (paged.draw ADR 370, amendment 1). Protocol 82.
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
 and the marquee takes what it intersects.

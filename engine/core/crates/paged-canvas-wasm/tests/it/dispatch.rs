@@ -2884,3 +2884,122 @@ fn document_loaded_carries_the_import_losses() {
         "{reply}"
     );
 }
+
+/// Engine ADR 1309 over the wire: `requestExplain` answers `explained` for
+/// a page item and for the editor's caret, and is a read.
+#[test]
+fn the_wire_explains_an_item_and_the_text_at_a_caret() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let reply = send(
+        &mut core,
+        3,
+        "requestExplain",
+        serde_json::json!({ "item": { "kind": "textFrame", "id": "tf1" } }),
+    );
+    assert_eq!(reply["kind"], "explained", "{reply}");
+    let x = &reply["payload"];
+    assert_eq!(x["found"], true, "{x}");
+    assert_eq!(x["kind"], "textFrame");
+    assert_eq!(x["flow"]["frames"][0], "tf1", "{x}");
+    assert!(x["text"]["paragraphStyle"]["chain"].is_array(), "{x}");
+    assert!(x["text"]["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["property"] == "pointSize"));
+    let caret = send(
+        &mut core,
+        4,
+        "requestExplain",
+        serde_json::json!({
+            "item": { "kind": "textFrame", "id": "tf1" },
+            "aspect": "overview",
+            "selection": { "storyId": "story1", "start": 2, "end": 2, "affinity": false }
+        }),
+    );
+    assert_eq!(caret["kind"], "explained", "{caret}");
+    assert_eq!(caret["payload"]["text"]["offset"], 1, "{caret}");
+    assert_eq!(undo_len(&mut core, 5), steps, "a read");
+}
+
+/// Engine ADR 1310 over the wire: `requestLineEvidence` answers the lines
+/// of a story, and a preview leaves the document as it was.
+#[test]
+fn the_wire_answers_line_evidence_and_a_preview_changes_nothing() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let reply = send(
+        &mut core,
+        3,
+        "requestLineEvidence",
+        serde_json::json!({ "story": "story1" }),
+    );
+    assert_eq!(reply["kind"], "lineEvidence", "{reply}");
+    assert_eq!(reply["payload"]["found"], true, "{reply}");
+    // The fixture registers no face, so its text sets no lines here; the
+    // engine tests read the lines themselves (`typography_evidence.rs`).
+    assert!(reply["payload"]["lines"].is_array(), "{reply}");
+    let preview = send(
+        &mut core,
+        4,
+        "requestLineEvidence",
+        serde_json::json!({
+            "story": "story1",
+            "preview": {
+                "op": "setElementProperty",
+                "args": {
+                    "elementId": { "kind": "storyRange", "id": { "story_id": "story1", "start": 0, "end": 5 } },
+                    "path": "characterTracking",
+                    "value": { "type": "length", "value": -40.0 }
+                }
+            }
+        }),
+    );
+    assert_eq!(preview["kind"], "lineEvidence", "{preview}");
+    assert_eq!(preview["payload"]["preview"], true, "{preview}");
+    assert_eq!(undo_len(&mut core, 5), steps, "a preview is not a step");
+    let again = send(
+        &mut core,
+        6,
+        "requestLineEvidence",
+        serde_json::json!({ "story": "story1" }),
+    );
+    assert_eq!(
+        again["payload"], reply["payload"],
+        "the document is unchanged"
+    );
+}
+
+/// Engine ADR 1310 over the wire: `requestPreview` dry-runs any write and
+/// answers the geometry it would leave; the document does not move.
+#[test]
+fn the_wire_previews_a_write_without_making_it() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let geometry = |core: &mut WorkerCore, seq| {
+        let g = send(
+            core,
+            seq,
+            "requestElementGeometry",
+            serde_json::json!({ "ids": [{ "kind": "textFrame", "id": "tf1" }] }),
+        );
+        g["payload"]["items"][0]["itemTransform"].clone()
+    };
+    let before = geometry(&mut core, 3);
+    let reply = send(
+        &mut core,
+        4,
+        "requestPreview",
+        serde_json::json!({
+            "mutation": move_tf1(40.0),
+            "items": [{ "kind": "textFrame", "id": "tf1" }]
+        }),
+    );
+    assert_eq!(reply["kind"], "previewed", "{reply}");
+    let p = &reply["payload"];
+    assert_eq!(p["applied"], true, "{p}");
+    assert_eq!(p["geometry"][0]["itemTransform"][4], 40.0, "{p}");
+    assert_eq!(undo_len(&mut core, 5), steps, "a dry run is not a step");
+    assert_eq!(geometry(&mut core, 6), before, "the document did not move");
+}

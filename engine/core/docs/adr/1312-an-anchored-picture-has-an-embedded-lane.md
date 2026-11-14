@@ -1,7 +1,7 @@
 # ADR 1312 — An anchored picture has an embedded lane, and an embedded picture is a link
 
 - **Status:** Accepted 2026-11-14.
-- **Scope:** protocol v82. `paged-model` (`AnchoredFrame.image_bytes`), `idml-import` (an anchored
+- **Scope:** protocol v83. `paged-model` (`AnchoredFrame.image_bytes`), `idml-import` (an anchored
   `<Image>`'s `<Contents>`), `idml-export` (`inline_objects.rs` writes them), `paged-renderer`
   (`pipeline/anchored.rs` draws them), `paged-mutate` (`apply/relink_image.rs`), `paged-canvas`
   (`links()`, `LinkSummary.embedded`), the editor (the Links panel, Publication health, the

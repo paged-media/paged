@@ -119,6 +119,9 @@ export const PROOF_HIDDEN_OVERLAYS: ReadonlySet<string> = new Set([
   "paged.overlay.commentPins",
   "paged.marginBand",
   "paged.hit-marker",
+  // Editor ADRs 1237 and 1238 — diagnostic views over the page.
+  "paged.overlay.xray",
+  "paged.overlay.typography",
 ]);
 
 /** The overlay that draws the proof surface (shown only in a proof). */

@@ -1,7 +1,7 @@
 # ADR 1311 — Facing pages on an existing document
 
 - **Status:** Accepted 2026-11-14.
-- **Scope:** protocol v82. `paged-wire` (`Mutation::SetFacingPages`), `idml-export` (a re-laid-out
+- **Scope:** protocol v83. `paged-wire` (`Mutation::SetFacingPages`), `idml-export` (a re-laid-out
   spread written whole), `paged-mutate`
   (`Operation::SetFacingPages`, `Operation::RestoreSpreads`, `apply/page_layout.rs`, the facing
   paths of `InsertPage` and `RemovePage` in `apply/batch_page.rs`, the permit classes),

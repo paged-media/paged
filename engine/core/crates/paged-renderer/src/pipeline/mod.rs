@@ -145,6 +145,7 @@ pub use color_paint::{
 #[cfg(test)]
 use color_paint::{color_lerp, linear_gradient_endpoints, midpoint_blend};
 use compose_opts::*;
+pub use compose_opts::{hyphenation_language, hyphenation_limits};
 use decorations::*;
 use deltas::*;
 use font_table::*;
@@ -1009,6 +1010,87 @@ pub struct LineLayout {
     /// the clusters above are upright, before it; whoever draws at them
     /// (the hidden characters) maps through it.
     pub turn: Option<[f32; 6]>,
+    /// How the composer set the line (engine ADR 1310): the measure, the
+    /// natural width, the adjustment ratio, the hyphen. The Typography
+    /// Debugger's evidence; a blank line and a table cell's line carry
+    /// what they know.
+    pub composition: LineComposition,
+}
+
+/// The composer's record of one line (engine ADR 1310), kept from the
+/// build that set it: nothing here is recomputed, so a reader sees what
+/// the composer decided, not an estimate of it.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct LineComposition {
+    /// The measure the line was composed into, pt: the column less the
+    /// paragraph's indents, narrowed for this line by a wrap or a drop
+    /// cap.
+    pub available_pt: f32,
+    /// The line's width at its natural (desired) spacing, pt, before
+    /// justification.
+    pub natural_pt: f32,
+    /// The breaker's adjustment ratio as it computed it: 0 natural, above
+    /// 0 stretched, below 0 shrunk. Its scale is the breaker's own (the
+    /// justified breaker's is unbounded and reads 100 for a line it could
+    /// only letter-space); a ragged line reads 0.
+    pub ratio: f32,
+    /// The line ends at a hyphenation point and the composer added the
+    /// hyphen.
+    pub hyphenated: bool,
+    /// The composer that set the paragraph.
+    pub composer: LineComposer,
+    /// The paragraph is justified (its lines but the last are stretched
+    /// to the measure).
+    pub justified: bool,
+    /// The baseline was moved onto the baseline grid by this much, pt
+    /// (0 when it already stood on it); `None` when the line does not
+    /// align to the grid.
+    pub grid_shift_pt: Option<f32>,
+}
+
+/// Which composer set a paragraph (IDML's `Composer`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LineComposer {
+    /// The Paragraph Composer (Knuth-Plass over the whole paragraph).
+    #[default]
+    Paragraph,
+    /// The Single-line Composer: one line at a time.
+    SingleLine,
+    /// Word's first-fit, a line at a time (engine ADR 1016).
+    WordFirstFit,
+}
+
+impl LineComposer {
+    /// The composer `options` set a paragraph with.
+    pub fn of(options: &paged_text::LayoutOptions<'_>) -> Self {
+        match &options.compose.single_line {
+            Some(s) if s.word => Self::WordFirstFit,
+            Some(_) => Self::SingleLine,
+            None => Self::Paragraph,
+        }
+    }
+}
+
+impl LineComposition {
+    /// The record of `line`, the `index`-th line `options` composed;
+    /// `grid_shift_pt` as for the field.
+    pub fn of(
+        options: &paged_text::LayoutOptions<'_>,
+        index: usize,
+        line: &paged_text::LaidOutLine,
+        grid_shift_pt: Option<f32>,
+    ) -> Self {
+        let pt = |v: i32| v as f32 / paged_text::shape::ADVANCE_PRECISION;
+        Self {
+            available_pt: pt(options.line_measure(index)),
+            natural_pt: pt(line.width),
+            ratio: line.ratio,
+            hyphenated: line.hyphenated,
+            composer: LineComposer::of(options),
+            justified: options.alignment == paged_text::Alignment::Justify,
+            grid_shift_pt,
+        }
+    }
 }
 
 /// One glyph cluster's page-local position. Cluster bytes are

@@ -129,6 +129,56 @@ pub(super) fn apply_no_break(
     }
 }
 
+/// The paragraph's own hyphenation limits, IDML's factory values (2 / 2 /
+/// 5, capitalised and last words hyphenatable, no ladder limit) where an
+/// attribute is absent. The composer's and the Typography Debugger's
+/// (engine ADR 1310) one reading.
+pub fn hyphenation_limits(
+    resolved: &paged_scene::ResolvedParagraphAttrs,
+) -> paged_text::HyphenationLimits {
+    let d = paged_text::HyphenationLimits::default();
+    paged_text::HyphenationLimits {
+        after_first: resolved
+            .hyphenate_after_first
+            .map(|n| n as usize)
+            .unwrap_or(d.after_first),
+        before_last: resolved
+            .hyphenate_before_last
+            .map(|n| n as usize)
+            .unwrap_or(d.before_last),
+        words_longer_than: resolved
+            .hyphenate_words_longer_than
+            .map(|n| n as usize)
+            .unwrap_or(d.words_longer_than),
+        capitalized_words: resolved
+            .hyphenate_capitalized_words
+            .unwrap_or(d.capitalized_words),
+        last_word: resolved.hyphenate_last_word.unwrap_or(d.last_word),
+        ladder_limit: resolved
+            .hyphenate_ladder_limit
+            .map(|n| n as usize)
+            .unwrap_or(d.ladder_limit),
+    }
+}
+
+/// The language a paragraph is hyphenated in: its first run's that names
+/// one (a run naming none inherited the paragraph's, and through it the
+/// document default, in `merge_below_paragraph`), else the paragraph's.
+///
+/// Hyphenation is character-level in InDesign and a paragraph may mix
+/// languages; composing the whole paragraph with its first run's
+/// dictionary is an approximation, and a stated one. The run is where
+/// InDesign writes it — 1,003 times across the corpus's real packages,
+/// against 314 on a `<ParagraphStyle>` and 271 on `<TextDefault>`.
+pub fn hyphenation_language<'r>(
+    resolved: &'r paged_scene::ResolvedParagraphAttrs,
+    runs: &'r [paged_scene::ResolvedRunAttrs],
+) -> Option<&'r str> {
+    runs.iter()
+        .find_map(|r| r.applied_language.as_deref())
+        .or(resolved.applied_language.as_deref())
+}
+
 /// Apply IDML paragraph-style attributes that drive the line breaker
 /// onto a fresh `LayoutOptions`. Hyphenation defaults to *on* (IDML's
 /// own default) when the cascade leaves the field unset; explicit
@@ -183,29 +233,7 @@ pub(super) fn apply_paragraph_compose_options<'a>(
     // composer until the attributes were modelled, so a paragraph that
     // asked for four letters before the hyphen, or protected its
     // capitalised words, got the defaults anyway.
-    let d = paged_text::HyphenationLimits::default();
-    lopts.compose.hyphenation_limits = paged_text::HyphenationLimits {
-        after_first: resolved
-            .hyphenate_after_first
-            .map(|n| n as usize)
-            .unwrap_or(d.after_first),
-        before_last: resolved
-            .hyphenate_before_last
-            .map(|n| n as usize)
-            .unwrap_or(d.before_last),
-        words_longer_than: resolved
-            .hyphenate_words_longer_than
-            .map(|n| n as usize)
-            .unwrap_or(d.words_longer_than),
-        capitalized_words: resolved
-            .hyphenate_capitalized_words
-            .unwrap_or(d.capitalized_words),
-        last_word: resolved.hyphenate_last_word.unwrap_or(d.last_word),
-        ladder_limit: resolved
-            .hyphenate_ladder_limit
-            .map(|n| n as usize)
-            .unwrap_or(d.ladder_limit),
-    };
+    lopts.compose.hyphenation_limits = hyphenation_limits(resolved);
     // `HyphenWeight` is InDesign's "Better Spacing ↔ Fewer Hyphens"
     // slider (0..=10, default 5). It trades line-fit quality against
     // hyphen count, which is exactly what Knuth–Plass's hyphen penalty

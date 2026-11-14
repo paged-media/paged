@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 983,
+    "command": 985,
     "keybinding": 216,
-    "menu": 709,
-    "panel": 156,
+    "menu": 711,
+    "panel": 158,
     "tool": 123
   },
   "features": [
@@ -4926,6 +4926,16 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.toggleTypographyDebugger",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleXray",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.zoom100",
       "kind": "command",
       "owner": "editor"
@@ -9521,6 +9531,16 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "menu:View/Typography debugger",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/X-Ray",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Zoom in",
       "kind": "menu",
       "owner": "editor"
@@ -10346,7 +10366,17 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.typography",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.variants",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.xray",
       "kind": "panel",
       "owner": "editor"
     },
