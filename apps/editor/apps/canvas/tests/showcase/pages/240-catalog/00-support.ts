@@ -469,7 +469,7 @@ export async function wizardMapSingle(
  *  unawaited handler — callers settle on their own oracle after). */
 export async function clickLower(page: Page): Promise<void> {
   await openPanel(page, BINDINGS_PANEL);
-  await page.getByRole("button", { name: /^lower to document$/i }).click();
+  await page.getByRole("button", { name: /^place on page$/i }).click();
 }
 
 /** Author one binding through the panel's authoring row (kind picker +

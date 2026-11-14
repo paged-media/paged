@@ -93,7 +93,6 @@ const HOST_MENU = [
   "View/Editing aids/Text threads",
   "View/Snap to points",
   "View/Show heading anchors",
-  "View/Show data markers",
   // Editor ADR 1223.
   "View/Show issue markers",
   // Editor ADR 287.
@@ -125,6 +124,12 @@ const HOST_MENU = [
   "Edit/Settings/Interface density/Comfortable",
   "Edit/Settings/Interface density/Professional",
   "Edit/Settings/Interface density/Compact",
+  // Editor ADR 1231 — the contrast preference.
+  "Edit/Settings/Contrast/As the system",
+  "Edit/Settings/Contrast/Standard",
+  "Edit/Settings/Contrast/High",
+  // Editor ADR 1230 — the object tree, from the canvas.
+  "View/Go to object tree",
   "View/Focus workspace",
   // Editor ADR 1211 — the named views beside 100 %, the calibration, and
   // Back / Forward through the navigation history.
@@ -142,6 +147,7 @@ const HOST_MENU = [
   "View/Editing aids/Overset markers",
   "View/Editing aids/Hidden characters",
   "View/Editing aids/Nonprinting items",
+  "View/Editing aids/Data bindings",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
@@ -149,6 +155,9 @@ const HOST_MENU = [
   "Object/Group",
   "Object/Ungroup",
   "Object/Select parent group",
+  // Editor ADR 1230 — the selection cycle through overlapping objects.
+  "Object/Select next object below",
+  "Object/Select next object above",
   "Object/Nudge left",
   "Object/Nudge right",
   "Object/Nudge up",
@@ -268,6 +277,13 @@ const HOST_MENU = [
   "Object/Transform/Reflect vertically",
   "Object/Transform/Reflect…",
   "Object/Transform/Transform again",
+  // Editor ADR 1230 — the keyboard's rotate and scale steps.
+  "Object/Transform/Rotate 90° clockwise",
+  "Object/Transform/Rotate 90° counterclockwise",
+  "Object/Transform/Rotate 15° clockwise",
+  "Object/Transform/Rotate 15° counterclockwise",
+  "Object/Transform/Scale up 10%",
+  "Object/Transform/Scale down 10%",
   "Object/Effects/Effects…",
   "Object/Effects/Picture adjustments…",
   "File/Open…",
@@ -1161,28 +1177,24 @@ test.describe("the host menu bar", () => {
     ).toHaveAttribute("aria-checked", "true", { timeout: 2_000 });
   });
 
-  test("View/Show data markers toggles its checked state", async ({ page }) => {
-    covers("menu:View/Show data markers");
+  test("View/Editing aids/Data bindings toggles the binding badges and is remembered", async ({
+    page,
+  }) => {
+    // Data ADR 566 — the data markers are an editing aid (they moved from
+    // View ▸ Show data markers).
+    covers("menu:View/Editing aids/Data bindings");
     await openShell(page, { doc: true });
-    const trigger = page.locator('[data-menu-trigger="View"]');
-    const row = page.getByRole("menuitemcheckbox", {
-      name: /Show data markers/,
-    });
-    // Open the View menu from closed: whether a click on a checkbox row
-    // closes the menu is the menu's business, so close it ourselves first.
-    const openView = async () => {
-      await page.keyboard.press("Escape");
-      await expect(row).toBeHidden();
-      await trigger.click();
-      await expect(row).toBeVisible();
-    };
-    await openView();
-    // Off by default; a click turns it on, and the row shows it checked.
-    await expect(row).toHaveAttribute("aria-checked", "false");
-    await row.click();
-    await openView();
-    await expect(row).toHaveAttribute("aria-checked", "true");
-    await page.keyboard.press("Escape");
+    const stored = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("paged.view.editingAids") ?? "{}")
+            .dataMarkers ?? false,
+      );
+    expect(await stored()).toBe(false);
+    await clickMenuRow(page, "View/Editing aids/Data bindings");
+    await expect.poll(stored).toBe(true);
+    await clickMenuRow(page, "View/Editing aids/Data bindings");
+    await expect.poll(stored).toBe(false);
   });
 });
 

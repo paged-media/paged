@@ -157,6 +157,8 @@ import {
   sectionTitle,
   swatch,
 } from "./sections/styles";
+import { LayerKindBadge } from "./sections/edit-kind-badge";
+import { PixelViewSection } from "./sections/pixel-view";
 
 interface SliderSpec {
   label: string;
@@ -1723,6 +1725,8 @@ export function LayersSection({
                 {l.link !== null ? " ⛓" : ""}
                 {l.index === active ? " ●" : ""}
               </button>
+              {/* Image ADR 487 — what an edit to this layer changes. */}
+              <LayerKindBadge layer={l} />
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <select
@@ -2574,6 +2578,7 @@ export function makeImagePanel(session: ImageSession) {
             onChange={(patch) => session.setFilterValues(patch)}
             onPreview={(on) => void session.setFilterPreview(on)}
             onBefore={(b) => void session.setFilterBefore(b)}
+            onSplit={(sp) => void session.setFilterSplit(sp)}
             onOk={() => void session.commitFilterDialog()}
             onCancel={() => void session.cancelFilterDialog()}
             onChooseImage={(key, choice) =>
@@ -3765,6 +3770,9 @@ export function makeImagePanel(session: ImageSession) {
         {/* WORKSPACE (WP5.12) — rulers, guides, the Ruler, Count, Note
             and Slice tools' data. */}
         <WorkspaceSection session={session} disabled={disabled} />
+
+        {/* Image ADR 487 — the image's own pixels at 100 %. */}
+        <PixelViewSection session={session} />
 
         {/* BRUSH — the paint tools' frozen-at-pointer-down parameters
             (paged.image's RASTER brush/pencil/eraser, distinct from

@@ -1,0 +1,120 @@
+name: editor / performance (nightly)
+# The editor's performance budgets (apps/editor/docs/adr/1232-performance-budgets.md,
+# apps/editor/docs/reference/performance.md): selection and typing latency at
+# p50 / p95 / p99, a generated 40-page document's first paint and memory —
+# the stress suite — measured in the running editor on a production build.
+# Nightly and on demand, never on a push: the numbers of a shared runner are
+# noisy, so this job REPORTS them (the JSON is an artifact and the summary a
+# table) and FAILS only on the egregious budgets of tests/perf/budgets.perf.spec.ts
+# (several times the measured baseline), never on jitter.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: apps/editor
+
+jobs:
+  budgets:
+    name: performance budgets (selection, typing, first paint, memory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+
+      - name: install chromium
+        timeout-minutes: 10
+        working-directory: apps/editor/apps/canvas
+        run: bunx --no-install playwright install chromium
+
+      # The budgets are for what users run: the production build, served
+      # by `vite preview` on the port Playwright's webServer would use (it
+      # reuses a server that answers there outside CI only, so the job
+      # names the server itself and points the suite at it).
+      - name: production build
+        working-directory: apps/editor/apps/canvas
+        run: bunx --bun vite build --mode demo
+
+      - name: performance budgets
+        working-directory: apps/editor/apps/canvas
+        env:
+          PAGED_PERF_BUDGETS: "1"
+          PAGED_PERF_OUT: ${{ runner.temp }}/editor-perf.json
+          IDML_CANVAS_TEST_PORT: "5180"
+        run: |
+          node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5180 --strictPort &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:5180/ >/dev/null && break
+            sleep 2
+          done
+          CI= npx playwright test --project=perf tests/perf/budgets.perf.spec.ts --reporter=line
+
+      - name: summary
+        if: always()
+        working-directory: apps/editor/apps/canvas
+        env:
+          PERF: ${{ runner.temp }}/editor-perf.json
+        run: |
+          if [ -f "$PERF" ]; then
+            {
+              echo "### Editor performance (nightly)"
+              echo
+              echo '```json'
+              cat "$PERF"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: upload the numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-perf
+          path: ${{ runner.temp }}/editor-perf.json
+          if-no-files-found: ignore

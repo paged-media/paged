@@ -808,7 +808,7 @@ function renderNodes(nodes: MenuNode[], ctx: RenderCtx): ReactNode[] {
           key={`grouplabel-${idx}`}
           data-menu-group-label={node.groupLabel}
           className="pg-mono-meta"
-          style={{ padding: "4px 8px 2px", opacity: 0.55 }}
+          style={{ padding: "4px 8px 2px" }}
         >
           {menuLabel(ctx.strings, node.groupLabel)}
         </div>,
@@ -856,7 +856,6 @@ function renderLeaf(
           alignItems: "center",
           gap: 8,
           padding: "5px 8px",
-          opacity: 0.55,
         }}
       >
         {iconSlot}
@@ -912,7 +911,9 @@ function renderLeaf(
     accel && (
       <span
         className="pg-mono-meta"
-        style={{ marginLeft: "auto", paddingLeft: 16, opacity: 0.6 }}
+        // F-51: the hint's own token colour (4.5:1 or more on a menu, ADR
+        // "High contrast and AA"), never a faded one.
+        style={{ marginLeft: "auto", paddingLeft: 16 }}
         data-menu-accelerator={item.command}
       >
         {accel}

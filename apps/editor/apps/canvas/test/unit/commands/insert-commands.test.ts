@@ -46,6 +46,7 @@ import {
   deleteCurrentPage,
   insertEllipse,
   insertLine,
+  boundsInView,
   insertRectangle,
   insertTable,
   insertTextFrame,
@@ -794,5 +795,36 @@ describe("enablement: a document is open and the user is at the document root", 
     expect(report2[0]?.[1]).toBe(
       "Add page inserts page items, and you are editing inside a webFrame. Leave the frame (Esc) to insert into the document.",
     );
+  });
+});
+
+// Editor ADR "An accessible object tree" (UXI-A11Y-006): a keyboard insert
+// lands where the user is looking. While the page's centre is on screen it
+// is the page's centre, as above; zoomed in on a corner, it is the
+// viewport's centre on that page, kept inside the page.
+describe("an insert lands in view", () => {
+  const target = { pageId: "p1", rect: { x: 0, y: 0, w: 612, h: 792 } };
+  test("the page's centre on screen: centred on the page", () => {
+    covers("command:paged.insert.rectangle");
+    expect(
+      boundsInView(target, { scale: 1, tx: 0, ty: 0 }, [1000, 800], 160, 160),
+    ).toEqual([316, 226, 476, 386]);
+  });
+  test("zoomed in on the top-left corner: centred on the viewport, inside the page", () => {
+    covers("command:paged.insert.rectangle");
+    // 400 %: the viewport (1000 × 800) shows the page from (0, 0) to (250, 200).
+    expect(
+      boundsInView(target, { scale: 4, tx: 0, ty: 0 }, [1000, 800], 160, 160),
+    ).toEqual([20, 45, 180, 205]);
+    // Past the page's right edge: clamped onto the page.
+    expect(
+      boundsInView(
+        target,
+        { scale: 4, tx: -4 * 600, ty: 0 },
+        [1000, 800],
+        160,
+        160,
+      ),
+    ).toEqual([20, 452, 180, 612]);
   });
 });

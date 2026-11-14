@@ -38,7 +38,7 @@ export const color = {
   /** A quiet surface: a well, a chip, a code block. */
   muted: "var(--pg-muted, #f5f5f5)",
   /** Secondary text: notes, captions, an empty state. */
-  mutedFg: "var(--pg-muted-fg, #737373)",
+  mutedFg: "var(--pg-muted-fg, #6b6b6b)",
   /** Hairlines. */
   border: "var(--pg-border, #e3e3e3)",
   /** The primary action. */

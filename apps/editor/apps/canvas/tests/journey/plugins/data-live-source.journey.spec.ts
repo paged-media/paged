@@ -152,7 +152,7 @@ test.describe("journey · paged.data live remote source", () => {
     await expect(page.locator("[data-data-bind-msg]")).toContainText(
       "variable binding",
     );
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    await page.getByRole("button", { name: /^place on page$/i }).click();
     await expect
       .poll(() => values(page), { timeout: 20_000 })
       .toEqual(["Ada Lovelace"]);

@@ -17,114 +17,139 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The CPU lane's compositing (engine ADR 1306): the paper over the trim,
-// the tile at the page's screen extent (its bleed and pasteboard artwork
-// drawn past the trim, as the GPU lane draws them), and the page edge only
-// outside a proof (editor ADR 1212).
+// The worker's CPU render schedule (editor ADR "Performance budgets";
+// UXI-PRF-001, PRF-004, PRF-005): one tile per draw, the page nearest the
+// viewport's centre first, the neighbours after the visible pages, nothing
+// rendered for a page the camera left before its turn, and the tile cache
+// held to its byte budget without ever dropping a tile on screen.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import { CameraBuffer } from "@paged-media/client";
 
 import { WorkerRenderer, type RendererWasm } from "../../src/worker/render";
 
-type Call = [string, ...unknown[]];
+const PAGE: [number, number] = [612, 792];
 
-function fakeCanvas() {
-  const calls: Call[] = [];
-  const state: Record<string, unknown> = {};
-  const ctx = new Proxy(state, {
-    get(target, prop) {
-      if (prop in target) return target[prop as string];
-      return (...args: unknown[]) => {
-        calls.push([String(prop), ...args]);
-      };
+const realBitmap = (globalThis as { createImageBitmap?: unknown })
+  .createImageBitmap;
+beforeAll(() => {
+  // A tile's decode, as the browser's would answer it: a bitmap the size
+  // the renderer asked for (a Letter page at 256 px is 256 × 331).
+  (globalThis as { createImageBitmap?: unknown }).createImageBitmap = async (
+    blob: Blob,
+  ) => {
+    const width = Number((await blob.text()).split(":")[1]);
+    return {
+      width,
+      height: Math.round((width * PAGE[1]) / PAGE[0]),
+      close() {},
+    };
+  };
+});
+afterAll(() => {
+  (globalThis as { createImageBitmap?: unknown }).createImageBitmap =
+    realBitmap;
+});
+
+function rig(pages: number, budget?: number, failing: string[] = []) {
+  const rendered: string[] = [];
+  const wasm: RendererWasm = {
+    pageCount: () => pages,
+    pageInfo: (i) => (i < pages ? [`p${i}`, PAGE[0], PAGE[1]] : undefined),
+    renderTilePng: (pageId, width) => {
+      rendered.push(pageId);
+      if (failing.includes(pageId)) throw new Error("cannot render");
+      // Not a PNG: the stub decode above reads the width back.
+      return new TextEncoder().encode(`${pageId}:${width}`);
     },
-    set(target, prop, value) {
-      target[prop as string] = value;
-      return true;
-    },
-  });
+  };
+  const ctx = new Proxy(
+    {},
+    { get: () => () => {}, set: () => true },
+  ) as unknown as OffscreenCanvasRenderingContext2D;
   const canvas = {
     width: 0,
     height: 0,
     getContext: () => ctx,
   } as unknown as OffscreenCanvas;
-  return { canvas, calls };
-}
-
-/** One 100 × 80 pt page whose artwork bleeds 10 pt past the top-left. */
-function wasm(extent: number[] | undefined): RendererWasm {
-  return {
-    pageCount: () => 1,
-    pageInfo: () => ["p1", 100, 80, 0, 0],
-    renderTilePng: () => new Uint8Array([1, 2, 3]),
-    screenExtent: () => extent,
-  };
-}
-
-const camera = { scale: 1, tx: 0, ty: 0, rotation: 0 };
-
-let restore: typeof globalThis.createImageBitmap | undefined;
-beforeEach(() => {
-  restore = globalThis.createImageBitmap;
-  globalThis.createImageBitmap = (async () => ({
-    width: 110,
-    height: 90,
-    close() {},
-  })) as unknown as typeof globalThis.createImageBitmap;
-});
-afterEach(() => {
-  globalThis.createImageBitmap = restore!;
-});
-
-async function rendered(extent: number[] | undefined) {
-  const { canvas, calls } = fakeCanvas();
-  const r = new WorkerRenderer(
-    canvas,
-    wasm(extent),
-    CameraBuffer.allocate(),
-    1,
-    400,
-    300,
-  );
+  const camera = CameraBuffer.allocate();
+  const r = new WorkerRenderer(canvas, wasm, camera, 1, 800, 900, {
+    tileBudgetBytes: budget,
+  });
   r.refreshLayout();
-  const internals = r as unknown as {
-    draw(c: typeof camera): void;
-    loadTile(pageId: string, widthPx: number): Promise<void>;
+  /** Point the camera at page `i`'s centre, at `scale`. */
+  const lookAt = (i: number, scale = 1) => {
+    // The default stack: pages 24 pt apart, in one column.
+    const cx = PAGE[0] / 2;
+    const cy = i * (PAGE[1] + 24) + PAGE[1] / 2;
+    camera.write({ scale, tx: 400 - cx * scale, ty: 450 - cy * scale });
   };
-  await internals.loadTile("p1", 256);
-  calls.length = 0;
-  return { r, calls, draw: () => internals.draw(camera) };
+  /** One draw, then the decode it started. */
+  const frame = async () => {
+    r.drawNow();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await new Promise((res) => setTimeout(res, 0));
+  };
+  return { r, rendered, lookAt, frame };
 }
 
-describe("the CPU lane's page", () => {
-  test("the tile goes at the page's screen extent, over the paper of the trim", async () => {
-    const { calls, draw } = await rendered([-10, -10, 110, 90]);
-    draw();
-    const fills = calls.filter((c) => c[0] === "fillRect");
-    // The background, then the paper over the trim.
-    expect(fills[fills.length - 1]).toEqual(["fillRect", 0, 0, 100, 80]);
-    const image = calls.find((c) => c[0] === "drawImage");
-    expect(image?.slice(2)).toEqual([-10, -10, 110, 90]);
-    expect(calls.some((c) => c[0] === "strokeRect")).toBe(true);
+describe("the worker's CPU render schedule", () => {
+  test("one page per draw, the one at the viewport's centre first, then outwards", async () => {
+    const { rendered, lookAt, frame } = rig(10);
+    // At 30 % five pages fit the height: 2..6 around page 4.
+    lookAt(4, 0.3);
+    await frame();
+    expect(rendered).toEqual(["p4"]);
+    await frame();
+    await frame();
+    expect(rendered.slice(1).sort()).toEqual(["p3", "p5"]);
+    await frame();
+    await frame();
+    await frame();
+    // The visible ones done, the neighbours come next.
+    expect(rendered.slice(0, 5).sort()).toEqual(["p2", "p3", "p4", "p5", "p6"]);
+    expect(["p1", "p7"]).toContain(rendered[5]);
   });
 
-  test("an engine that reports no extent draws its tile over the trim", async () => {
-    const { calls, draw } = await rendered(undefined);
-    draw();
-    const image = calls.find((c) => c[0] === "drawImage");
-    expect(image?.slice(2)).toEqual([0, 0, 100, 80]);
+  test("a page the camera left before its turn is never rendered", async () => {
+    const { rendered, lookAt, frame } = rig(30);
+    lookAt(2, 0.3);
+    await frame();
+    // Jump far away before the rest of the first screen was drawn.
+    lookAt(25, 0.3);
+    for (let i = 0; i < 4; i++) await frame();
+    expect(rendered[0]).toBe("p2");
+    expect(rendered.slice(1, 4)).toContain("p25");
+    expect(rendered.slice(1)).not.toContain("p1");
+    expect(rendered.slice(1)).not.toContain("p3");
   });
 
-  test("a proof draws the page without its edge, and leaving it draws it again", async () => {
-    const { r, calls, draw } = await rendered([0, 0, 100, 80]);
-    r.setViewSettings({ mode: "preview", proof: true }, false);
-    draw();
-    expect(calls.some((c) => c[0] === "strokeRect")).toBe(false);
-    r.setViewSettings({ mode: "preview" }, false);
-    calls.length = 0;
-    draw();
-    expect(calls.some((c) => c[0] === "strokeRect")).toBe(true);
+  test("the tile cache keeps to its budget, never dropping a tile on screen", async () => {
+    // One Letter tile at 256 px is 256 × 331 × 4 = 338,944 bytes: room for 3.
+    const { r, rendered, lookAt, frame } = rig(20, 3 * 338_944);
+    for (const page of [0, 5, 10, 15]) {
+      lookAt(page, 1);
+      await frame();
+      await frame();
+    }
+    expect(r.tileBytes()).toBeLessThanOrEqual(3 * 338_944);
+    // The page on screen kept its tile: no render on the next draw.
+    const before = rendered.length;
+    await frame();
+    expect(rendered.slice(before)).not.toContain("p15");
+    // The oldest went first: coming back to page 0 renders it again.
+    lookAt(0, 1);
+    await frame();
+    expect(rendered.at(-1)).toBe("p0");
+  });
+
+  test("a page the engine cannot render is not asked again every draw, and the others go on", async () => {
+    const { rendered, lookAt, frame } = rig(10, undefined, ["p4"]);
+    lookAt(4, 0.3);
+    for (let i = 0; i < 8; i++) await frame();
+    expect(rendered.filter((p) => p === "p4")).toHaveLength(1);
+    expect(rendered).toContain("p3");
+    expect(rendered).toContain("p5");
   });
 });

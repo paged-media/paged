@@ -39,7 +39,10 @@
 //     page-layout convention `ViewportCanvas` resolves pointer events
 //     with (`layoutPages` + containing-page walk). Off every page (a
 //     pasteboard view) the NEAREST page wins; an uninitialised camera
-//     falls back to page 0. The insert then centres on that page.
+//     falls back to page 0. The insert then centres on that page — or,
+//     when the page's centre is out of view (zoomed in on a corner), on the
+//     viewport's centre inside that page, so a keyboard insert always lands
+//     where the user is looking (`boundsInView`, UXI-A11Y-006).
 //
 //  2. THE POST-INSERT FLOW IS THE TOOLS'. `mutateAndSelect`
 //     (@paged-media/tools) is the same mutate → select-created →
@@ -89,7 +92,7 @@ import {
   scopeOf,
 } from "@paged-media/shell";
 import type { ElementId, Mutation, PageId } from "@paged-media/client";
-import { viewportToDoc } from "@paged-media/client";
+import { docToViewport, viewportToDoc } from "@paged-media/client";
 import {
   mutateAndSelect,
   mutateGraphicAndSelect,
@@ -354,6 +357,31 @@ export function centeredBoundsOn(
   return [top, left, top + h, left + w];
 }
 
+/** Where a `w × h` insert lands on `target`: centred on the page while the
+ *  page's centre is in view (the default the menus have always had), else
+ *  centred on the viewport's centre mapped into the page, clamped so it
+ *  never leaves the page. Page-local `[top, left, bottom, right]`. */
+export function boundsInView(
+  target: PageTarget,
+  camera: PagedEditor["camera"]["camera"],
+  viewportSize: PagedEditor["camera"]["viewportSize"],
+  widthPt: number,
+  heightPt: number,
+): [number, number, number, number] {
+  const page = centeredBoundsOn(target.rect, widthPt, heightPt);
+  const [vw, vh] = viewportSize ?? [0, 0];
+  if (!camera || !(vw > 0 && vh > 0)) return page;
+  const r = target.rect;
+  const [sx, sy] = docToViewport(camera, r.x + r.w / 2, r.y + r.h / 2);
+  if (sx >= 0 && sx <= vw && sy >= 0 && sy <= vh) return page;
+  const [dx, dy] = viewportToDoc(camera, vw / 2, vh / 2);
+  const w = Math.min(widthPt, r.w);
+  const h = Math.min(heightPt, r.h);
+  const left = Math.min(Math.max(0, dx - r.x - w / 2), r.w - w);
+  const top = Math.min(Math.max(0, dy - r.y - h / 2), r.h - h);
+  return [top, left, top + h, left + w];
+}
+
 /** `cols` equal column widths over `totalPt` — the "even column
  *  widths" the insert-table default promises. */
 export function evenColumnWidths(totalPt: number, cols: number): number[] {
@@ -460,7 +488,13 @@ async function insertCenteredShape(
   if (blockedFor(paged, report, verb)) return REFUSED;
   const target = currentPageTarget(paged);
   if (!target) return REFUSED;
-  const bounds = centeredBoundsOn(target.rect, size[0], size[1]);
+  const bounds = boundsInView(
+    target,
+    paged.camera.camera,
+    paged.camera.viewportSize,
+    size[0],
+    size[1],
+  );
   const reply = await commit(
     paged,
     build(target.pageId, bounds),
@@ -524,8 +558,15 @@ export async function insertLine(
   const target = currentPageTarget(paged);
   if (!target) return REFUSED;
   const len = Math.min(LINE_LENGTH_PT, target.rect.w);
-  const cx = target.rect.w / 2;
-  const cy = target.rect.h / 2;
+  const [top, left, bottom, right] = boundsInView(
+    target,
+    paged.camera.camera,
+    paged.camera.viewportSize,
+    len,
+    0,
+  );
+  const cx = (left + right) / 2;
+  const cy = (top + bottom) / 2;
   const reply = await mutateGraphicAndSelect(
     paged,
     {
@@ -638,8 +679,10 @@ export async function insertTable(
 
   const target = currentPageTarget(paged);
   if (!target) return REFUSED;
-  const bounds = centeredBoundsOn(
-    target.rect,
+  const bounds = boundsInView(
+    target,
+    paged.camera.camera,
+    paged.camera.viewportSize,
     TABLE_FRAME_SIZE_PT[0],
     TABLE_FRAME_SIZE_PT[1],
   );

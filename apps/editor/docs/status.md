@@ -237,7 +237,48 @@ wheel takes the camera from an animation (`UXI-T52`); a pinch takes over a pendi
 (`UXI-T71`); an Alt-drag commits the copy it previewed (`UXI-T06`); a Type-tool drag that starts
 over text selects text. A press off the selection is answered in one call (hit, selection and
 move), and a drag that outruns the answer moves from the press point (`UXI-T58`). The guide drag, the loaded thread cursor and an armed placement are
-sessions too. `?debug=legacy-pointer` keeps the old path until IC6 removes it.
+sessions too. Since IC6 it is the one pointer path (`UXI-MIG-002`; ADR 1210, amendment 4).
+
+The selection model of ADR 1201 has landed (IC6; [ADR 235](adr/235-the-selection-tools-pointer-model.md),
+amendment 2026-11-14): Shift-click toggles; a marquee drawn left to right takes what it wholly
+contains and right to left what it touches, starts on the pasteboard and takes the group at the
+top level, the members inside an entered group (`UXI-T03`, `UXI-T04`); hovering outlines what a
+click would select and names it; the context menu's Select ▸ lists the objects under the pointer
+and `paged.edit.selectBelow` cycles down through them; the context menu selects the group as a
+click does (`UXI-T29`); a locked item is dashed, carries a padlock and hollow handles, stays
+selectable and does not move (`UXI-T13`).
+
+What the user sees is what a press takes (IC7; [ADR 310](adr/310-live-shape-widgets.md), amendment
+2026-11-14): a turned item's body is its oriented box, so a press in the empty corner of its
+bounding box selects nothing; a resize handle's cursor points the way it pulls through the item's
+transform and the view's rotation; the rotate zone shows the angle beside the pointer while it
+turns (`UXI-T14`); guides and handles follow the full camera transform with the view turned
+(`UXI-T56`); and a live shape's corner widget takes only its own 12 px target, 20 px inside the
+corner, so a press beside it moves and one on the corner's square resizes, at 100 % and 800 %.
+
+Snapping says what it snaps to (IC8, [ADR 1226](adr/1226-snapping-says-what-it-snaps-to.md)):
+every snap line names its target — guide, margin, column, page edge, page centre, grid, an
+item's edge or centre, a point, equal spacing — and one key bypasses snapping for a move, a
+handle drag and the point tools alike: the platform's primary modifier (Cmd on macOS, Ctrl
+elsewhere; a move read Ctrl before). A snap holds within the release reach and commits exactly
+(`UXI-T12`).
+
+The cursor contract (IC9, [ADR 1227](adr/1227-cursor-contract.md)): one controller per editor
+holds the canvas's cursor in layers — the session's (a handle's for the whole of its drag, the
+closed hand while panning), a modifier's (the copy cursor while an Alt move duplicates), the
+hover's and the tool's — and is the only writer of it; the scrub fields, the loaded thread and an
+armed placement write theirs through the same two functions, and the single-owner rule
+`cursor-write` keeps it so.
+
+Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
+Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
+print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
+Story view — the same story as continuous text, written into the engine's story — and the Story
+Map of every thread with overset and unplaced stories (doc ADR 630). paged.data shows its
+workflow as six steps, a record scrubber and an outlier finder; its binding badges are the
+editing aid Data bindings (data ADR 566; F-46). Template fill says Required or Optional, the
+progress and the next field, blocks Finish on missing content and then offers export and save,
+on phones too (ADR 1225, `UXI-T73`).
 
 Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
 [ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit
@@ -254,6 +295,26 @@ every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, 
 gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
 resolver there.
 
+Track CM's module streams (CM5) have begun. paged.draw (ADR 370 in its range): the Pen names its
+state — start, draw, continue, close, join, pulling a handle, finish, add, delete — with its cursor
+and a hint beside the pointer, and a click on the run's last anchor finishes the open path;
+holding Control with a tool that places or drags anchors shows a precision magnifier (a loupe at
+four times the view, read from an engine snapshot, no document change); with anchors selected the
+Properties panel edits the points, not the frame; one selected path offers Shape suggestions; the
+Pathfinder says that it applies on click and outlines what a button takes.
+paged.image (ADR 487 in its range; UX audit F-43's two tool sets): inside any module's context the
+tools are the rail's, and the context toolbar names the tool in hand and carries its options
+instead of repeating every tool as an icon; the layer rows and the toolbar say what an edit
+changes — pixels, a non-destructive adjustment, smart, fill or type layer, the mask, or (on a
+picture frame's Content level) the placement; the filter dialog shows a before/after split and
+says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
+panel shows the picture's own pixels at 100–800 %.
+paged.web (ADR 416): the Web source panel inspects the element in focus — picked on the canvas
+or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
+rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts
+never run, names the sandboxed browser preview and the native publication rendering, and offers
+the placeholders without a value as sample data beside the source.
+
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
 the control bar and (as `host.widgets.NumericField`) the plugins' panels reads units,
@@ -268,6 +329,26 @@ greyed in the menus with its reason, listed with it in the palette, which also g
 ("go to page 14") and offers "Help: …" ([ADR 1218](adr/1218-commands-say-why-they-do-not-apply.md));
 every align route honours the key object, and an align control's hover shows its reference
 (D-07).
+
+Track AP has landed. The Tree panel is the document's object tree
+([ADR 1230](adr/1230-an-accessible-object-tree.md)): a virtualized WAI-ARIA tree of the spreads
+and their page items, each row named with its type, name, page and whether it is locked or
+hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
+the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
+and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping objects. Every text
+token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
+variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
+7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
+([ADR 1231](adr/1231-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
+palette, and the editor works at 200 % zoom (`UXI-T69`, `T70`, `T74`, `T75`). A pen's pressure
+shapes only the tools that read it, and only for a pen (a mouse stroke keeps its width to the end);
+a pinch over a press still waiting for its hit test changes the camera and nothing else
+(`UXI-T71` to `T73`). The performance budgets are measured with the audit's methods and asserted
+nightly ([ADR 1232](adr/1232-performance-budgets.md),
+[`reference/performance.md`](reference/performance.md)): the CPU render draws the page at the
+viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
+engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
+yet (inventory exception `EXC-003`).
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

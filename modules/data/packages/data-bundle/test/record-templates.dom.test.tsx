@@ -228,11 +228,12 @@ describe.skipIf(!gate.ready && !gate.required)(
       expect(perPage()).toBe("Records per page: 3");
 
       // Taller lines: two lines of 300 pt are a 600 pt record, one per page.
-      fireEvent.change(q(root, "[data-data-flow-line-height]"), {
+      // The host's numeric field (editor ADR 1216) commits when left.
+      fireEvent.change(q(root, "[data-data-flow-line-height] input"), {
         target: { value: "300" },
       });
       await act(async () => {
-        fireEvent.blur(q(root, "[data-data-flow-line-height]"));
+        fireEvent.blur(q(root, "[data-data-flow-line-height] input"));
       });
       await settle(env);
       await waitFor(() => expect(perPage()).toBe("Records per page: 1, 1, 1"));

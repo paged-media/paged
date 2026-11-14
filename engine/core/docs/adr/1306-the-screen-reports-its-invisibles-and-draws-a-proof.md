@@ -109,7 +109,7 @@ colour of its own.
   rebuild without the nonprinting item and the hit test, the proof without markers, the CPU tile
   over the bleed, the frame grid) and `invisibles` unit tests; `paged-canvas-wasm`
   `it::dispatch` (the wire, the cache effect, the settings across a load); `paged-gpu`
-  `screen` unit tests and `it::screen_parity`; the editor's `worker-render` unit test, overlay
+  `screen` unit tests and `it::screen_parity`; the editor's `worker-render-extent` unit test, overlay
   units and `tests/e2e/editing-aids.spec.ts`.
 
 ## Related

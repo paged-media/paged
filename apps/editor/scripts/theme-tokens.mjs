@@ -8,7 +8,9 @@
  * `docs/theme-tokens.json`: every token `packages/shell/src/styles/theme.css`
  * defines, its group (the section comment above it), its light and dark
  * values and, for a density token, its value in each density preset other
- * than the default (`[data-density]`, editor ADR "Density presets").
+ * than the default (`[data-density]`, editor ADR "Density presets"), and
+ * its high-contrast values (`[data-contrast="more"]`, editor ADR "High
+ * contrast and AA").
  * `--check` regenerates and fails when the committed file differs.
  *
  *   bun scripts/theme-tokens.mjs           # write
@@ -68,10 +70,27 @@ function densities(css) {
   return out;
 }
 
+/** A high-contrast block's declarations (editor ADR "High contrast and
+ *  AA"): `[data-paged-editor][data-contrast="more"]…`, light or dark. */
+function contrastBlock(css, head) {
+  const at = css.indexOf(head);
+  if (at < 0) throw new Error(`theme-tokens: no ${head} block in theme.css`);
+  const open = css.indexOf("{", at);
+  const close = css.indexOf("}", open);
+  return tokens(css.slice(open + 1, close));
+}
+
 const css = readFileSync(CSS, "utf8");
 const light = tokens(block(css, ":root"));
 const dark = tokens(block(css, ".dark"));
 const presets = densities(css);
+const highContrast = {
+  light: contrastBlock(
+    css,
+    '[data-paged-editor][data-contrast="more"]:not(.dark) {',
+  ),
+  dark: contrastBlock(css, '[data-paged-editor].dark[data-contrast="more"] {'),
+};
 if (presets.size === 0)
   throw new Error("theme-tokens: no [data-density] preset in theme.css");
 const names = [...new Set([...light.keys(), ...dark.keys()])].sort();
@@ -90,6 +109,22 @@ for (const name of names) {
     if (v) byDensity[density] = v.value;
   }
   if (Object.keys(byDensity).length > 0) contract[name].densities = byDensity;
+  const hcLight = highContrast.light.get(name)?.value;
+  const hcDark = highContrast.dark.get(name)?.value;
+  if (hcLight || hcDark) {
+    contract[name].highContrast = {
+      light: hcLight ?? contract[name].light,
+      dark: hcDark ?? contract[name].dark,
+    };
+  }
+}
+for (const [theme, values] of Object.entries(highContrast)) {
+  for (const name of values.keys()) {
+    if (!light.has(name))
+      throw new Error(
+        `theme-tokens: high contrast (${theme}) sets ${name}, which the default does not define`,
+      );
+  }
 }
 for (const [density, values] of presets) {
   for (const name of values.keys()) {

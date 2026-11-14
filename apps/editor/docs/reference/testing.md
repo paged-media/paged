@@ -186,8 +186,8 @@ pointer streams of the legacy Selection, Type, Hand and Zoom tools with what eac
 document (`uxi-legacy-tapes.spec.ts` replays them): the parity baseline a reworked pointer
 coordinator must reproduce (UXI-MIG-001). Re-record them, deliberately, with
 `UXI_TAPES=record npx playwright test tests/e2e/uxi-legacy-tapes.spec.ts`. They replay on the
-coordinator (the default since IC4, editor ADR 1210) and on the legacy path
-(`?debug=legacy-pointer`, the `uxi-legacy-pointer` project) to the same outcome. One tape was
+coordinator (editor ADR 1210) to the outcome the legacy tools recorded; until IC6 removed the
+legacy path (`UXI-MIG-002`) they replayed on both, to the same outcome. One tape was
 added, not re-recorded: `type-drag-text`, a Type-tool drag that starts over text, which selects
 text since IC4 (`UXI-TXT-011`) and did nothing before — the old `type-drag` recorded a frame
 pulled out on empty canvas because that was the only Type drag that worked, and it still does.

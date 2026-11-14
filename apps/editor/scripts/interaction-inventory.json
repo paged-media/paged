@@ -3212,7 +3212,7 @@
     },
     {
       "id": "tool.pen",
-      "title": "Pen: clicks set corner anchors, drags set curves, Enter or the first anchor finishes",
+      "title": "Pen: clicks set corner anchors, drags set curves, Enter, the first anchor or the last anchor finishes",
       "owner": "canvas-draw",
       "eventClass": "pointer:primary-click",
       "scope": "canvas/tool:pen",
@@ -3228,11 +3228,11 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4). Enter or a click on the run's last anchor commits one insertPath; Control shows the precision magnifier, which only reads.",
       "surfaceIds": ["tool:paged.tool.pen"],
-      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004", "UXI-DRW-006"],
       "status": "migrated",
-      "notes": "The Pen returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
+      "notes": "The Pen names its state (start, draw, continue, close, join, dragHandle, finish, add, delete) with a cursor and a hint beside the pointer (paged.draw ADR 370). It returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
     },
     {
       "id": "tool.pencil",
@@ -3979,6 +3979,38 @@
       "status": "migrated"
     },
     {
+      "id": "object-tree.select",
+      "title": "The object tree selects the item of a row (Enter, Space, a click; Shift toggles)",
+      "owner": "panel",
+      "eventClass": "key:Enter",
+      "scope": "editor/object-tree",
+      "adapter": "none",
+      "site": "apps/editor/apps/canvas/src/ui/A11yObjectTree.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "A selection change through the engine, as a canvas click makes it; not a document change and not an undo step (D-15).",
+      "cancel": "Nothing to cancel: one request, its answer is the selection the canvas and the inspector show.",
+      "surfaceIds": ["panel:paged.tree"],
+      "uxi": ["UXI-A11Y-003", "UXI-A11Y-004", "UXI-A11Y-008"],
+      "status": "migrated"
+    },
+    {
+      "id": "escape.object-tree",
+      "title": "Escape in the object tree gives focus back to the canvas",
+      "owner": "panel",
+      "eventClass": "key:Escape",
+      "scope": "editor/object-tree",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/ui/A11yObjectTree.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Moves focus only; the selection stays.",
+      "cancel": "The focused tier of the Escape arbiter (editor ADR 1207): the tree owns the press while it has focus, so the selection tier below never clears the selection.",
+      "surfaceIds": ["panel:paged.tree"],
+      "uxi": ["UXI-ESC-001", "UXI-A11Y-002", "UXI-KEY-009"],
+      "status": "migrated"
+    },
+    {
       "id": "field.scrub",
       "title": "A numeric field's label scrubs its value (Shift fine, Alt coarse)",
       "owner": "panel",
@@ -4034,6 +4066,20 @@
       "status": "migrated"
     }
   ],
-  "exceptions": [],
+  "exceptions": [
+    {
+      "id": "EXC-003",
+      "contract": ["UXI-PRF-004"],
+      "scope": "The engine's decoded-image cache (`image_decode_cache` in engine/core/crates/paged-canvas/src/model.rs) holds every image of the open document at full resolution for as long as it is open; the editor's own caches (the worker's CPU tiles, the GPU scene cache, the page thumbnails) have budgets and eviction rules (editor ADR 1232)",
+      "interactions": [],
+      "tests": [],
+      "why": "Every rebuild composes every page, so a decoded image the budget evicted would be decoded again on the next edit; a budget that holds needs images decoded at the resolution they are shown (proxies), and the visible pages composed first — engine work with its own record and protocol.",
+      "issue": "AP5",
+      "owner": "engine",
+      "severity": "major",
+      "expiry": "2027-03-31",
+      "repro": "Open a large real-world IDML template with many placed images and measure page + worker memory (measureUserAgentSpecificMemory): it stays in proportion to the document's images, not to what is on screen (UX audit F-54; docs/reference/performance.md)."
+    }
+  ],
   "enforcedGates": ["G2"]
 }

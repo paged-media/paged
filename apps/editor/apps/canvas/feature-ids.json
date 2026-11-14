@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 952,
-    "keybinding": 211,
-    "menu": 690,
-    "panel": 151,
+    "command": 971,
+    "keybinding": 216,
+    "menu": 706,
+    "panel": 153,
     "tool": 123
   },
   "features": [
@@ -201,6 +201,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.nextOverset",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.pasteRtf",
       "kind": "command",
       "owner": "media.paged.doc"
@@ -302,6 +307,16 @@
     },
     {
       "id": "command:media.paged.doc.command.saveAsDocx",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.storyMap",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.storyView",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -3916,7 +3931,17 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.edit.selectAbove",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.edit.selectAll",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.selectBelow",
       "kind": "command",
       "owner": "editor"
     },
@@ -3946,6 +3971,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.file.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.file.exportPdf",
       "kind": "command",
       "owner": "editor"
@@ -3971,6 +4001,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.file.newDialog",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.file.newFromBrief",
       "kind": "command",
       "owner": "editor"
@@ -3982,6 +4017,11 @@
     },
     {
       "id": "command:paged.file.openPdf",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.openRecent",
       "kind": "command",
       "owner": "editor"
     },
@@ -4556,6 +4596,36 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.transform.rotate90Clockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.rotate90Counterclockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.rotateStepClockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.rotateStepCounterclockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.scaleDown",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.scaleUp",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.actualSize",
       "kind": "command",
       "owner": "editor"
@@ -4572,6 +4642,21 @@
     },
     {
       "id": "command:paged.view.calibratedSize",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.contrast.high",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.contrast.standard",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.contrast.system",
       "kind": "command",
       "owner": "editor"
     },
@@ -4642,6 +4727,11 @@
     },
     {
       "id": "command:paged.view.nextPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.objectTree",
       "kind": "command",
       "owner": "editor"
     },
@@ -4737,6 +4827,11 @@
     },
     {
       "id": "command:paged.view.toggleHiddenCharacters",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleIssueMarkers",
       "kind": "command",
       "owner": "editor"
     },
@@ -4916,6 +5011,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:alt+shift+o→paged.view.objectTree",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:arrowdown→paged.object.nudgeDown",
       "kind": "keybinding",
       "owner": "editor"
@@ -5009,6 +5109,16 @@
       "id": "keybinding:cmd+alt+3→media.paged.doc.command.word.heading3",
       "kind": "keybinding",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+alt+[→paged.edit.selectBelow",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+alt+]→paged.edit.selectAbove",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:cmd+alt+c→media.paged.doc.command.word.copyFormat",
@@ -5377,6 +5487,16 @@
     },
     {
       "id": "keybinding:ctrl+]→paged.object.bringForward",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+alt+[→paged.edit.selectBelow",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+alt+]→paged.edit.selectAbove",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -6471,6 +6591,21 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Edit/Settings/Contrast/As the system",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Settings/Contrast/High",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Settings/Contrast/Standard",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Edit/Settings/Interface density/Comfortable",
       "kind": "menu",
       "owner": "editor"
@@ -6591,7 +6726,7 @@
       "owner": "editor"
     },
     {
-      "id": "menu:File/Open recent",
+      "id": "menu:File/Open recent…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -8496,6 +8631,16 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Object/Select next object above",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Select next object below",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Select parent group",
       "kind": "menu",
       "owner": "editor"
@@ -8537,6 +8682,36 @@
     },
     {
       "id": "menu:Object/Transform/Reflect…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Rotate 15° clockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Rotate 15° counterclockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Rotate 90° clockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Rotate 90° counterclockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Scale down 10%",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Scale up 10%",
       "kind": "menu",
       "owner": "editor"
     },
@@ -9011,6 +9186,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Editing aids/Data bindings",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Editing aids/Frame edges",
       "kind": "menu",
       "owner": "editor"
@@ -9067,6 +9247,16 @@
     },
     {
       "id": "menu:View/Focus workspace",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Go to next overset story",
+      "kind": "menu",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "menu:View/Go to object tree",
       "kind": "menu",
       "owner": "editor"
     },
@@ -9181,11 +9371,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:View/Show data markers",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:View/Show grid",
       "kind": "menu",
       "owner": "editor"
@@ -9197,6 +9382,11 @@
     },
     {
       "id": "menu:View/Show heading anchors",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show issue markers",
       "kind": "menu",
       "owner": "editor"
     },
@@ -9244,6 +9434,16 @@
       "id": "menu:View/Snap to points",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Story map",
+      "kind": "menu",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "menu:View/Story view",
+      "kind": "menu",
+      "owner": "media.paged.doc"
     },
     {
       "id": "menu:View/Zoom in",
@@ -9352,6 +9552,11 @@
     },
     {
       "id": "panel:media.paged.doc.panel.review",
+      "kind": "panel",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "panel:media.paged.doc.panel.storyMap",
       "kind": "panel",
       "owner": "media.paged.doc"
     },
@@ -9757,6 +9962,11 @@
     },
     {
       "id": "panel:paged.hyperlinks",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.import-report",
       "kind": "panel",
       "owner": "editor"
     },
@@ -10676,6 +10886,18 @@
     {
       "id": "menu:Draw/Path/Outline stroke",
       "replacement": "menu:Object/Path/Outline stroke…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:File/Open recent",
+      "replacement": "menu:File/Open recent…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:View/Show data markers",
+      "replacement": "menu:View/Editing aids/Data bindings",
       "deprecatedIn": "0.80.0",
       "removeIn": "0.82.0"
     },

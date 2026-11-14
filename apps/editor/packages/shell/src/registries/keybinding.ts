@@ -203,14 +203,17 @@ const PUNCTUATION_CODES: Readonly<Record<string, string>> = {
   "=": "equal",
   "-": "minus",
   "'": "quote",
+  "[": "bracketleft",
+  "]": "bracketright",
 };
 
-/** A letter, digit, `=`, `-` or `'` binding with Alt or Shift in it
+/** A letter, digit, `=`, `-`, `'`, `[` or `]` binding with Alt or Shift in it
  *  matches by the physical key as well: on a Mac, Option changes `key`
  *  (Option+Shift+V types "◊", Option+= types "≠"), and Shift turns a digit
  *  or `'` into its symbol (Shift+1 types "!"), so InDesign's ⌥⇧⌘V and
  *  ⌥⌘=, and Illustrator's ⇧⌘1 and ⇧⌘' (editor ADR 287), would otherwise
- *  never match. */
+ *  never match; nor would InDesign's ⌥⌘[ and ⌥⌘] (Select next object
+ *  below / above), where Option turns the bracket into a quote mark. */
 function codeMatches(combo: KeyCombo, event: KeyEventLike): boolean {
   if (!(combo.alt || combo.shift) || !event.code) return false;
   const code = event.code.toLowerCase();

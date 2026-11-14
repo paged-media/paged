@@ -23,7 +23,7 @@
 // For each context (doc, slide, sheet, draw, image, web, data) and for a
 // publish (IDML) document with no context, on a frame placing a picture:
 //
-//   Gradient            Window ▸ Styles ▸ Gradients opens; the
+//   Gradient            Window ▸ Color ▸ Gradients opens; the
 //                       panel's select fills the frame with a document
 //                       gradient — one engine undo step (inside an
 //                       image's pixels the row is the foreground colour
@@ -183,6 +183,23 @@ async function enter(page: Page, type: string, ref: Ref): Promise<void> {
   );
   expect(entered, `entered ${type}`).toBe(true);
   await expect.poll(() => contextType(page)).toBe(type);
+  // paged.image takes the picture in on entry (editor ADR 1215), which
+  // lands as a document step of its own a moment later: wait for the
+  // history to settle, so the steps counted after this are the test's.
+  if (type === "rasterImage") {
+    let last = -1;
+    await expect
+      .poll(
+        async () => {
+          const now = await undoLen(page);
+          const steady = now === last;
+          last = now;
+          return steady;
+        },
+        { intervals: [500, 500, 500, 1000, 1000, 2000] },
+      )
+      .toBe(true);
+  }
 }
 
 /** A two-colour PNG, drawn in the page realm, as bytes. */
@@ -325,7 +342,7 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         "tool:paged.tool.measure",
         "menu:Edit/History",
         "menu:Object/Effects/Picture adjustments…",
-        "menu:Window/Styles/Gradients",
+        "menu:Window/Color/Gradients",
       );
       const ref = await setUp(page);
       if (ctx.type) await enter(page, ctx.type, ref);
@@ -333,7 +350,7 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         expect(await contextType(page), "still in the context").toBe(ctx.type);
 
       // GRADIENT — through the Window menu, which offers it here.
-      await clickMenuRow(page, "Window/Styles/Gradients");
+      await clickMenuRow(page, "Window/Color/Gradients");
       const gradients = page.locator('[data-gradients-panel="ready"]');
       await expect(gradients).toBeVisible();
       const select = gradients.locator('select[data-collection="gradients"]');
@@ -431,27 +448,37 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
       }
 
       // HISTORY — Edit ▸ History lists the document's steps; a click on
-      // the one before the last goes back one step.
+      // the one before the last goes back one step. Inside an image it
+      // lists the image's own journal (editor ADR 285): paged.image takes
+      // the picture in when its context is entered (editor ADR 1215), so
+      // the panel's source is the context's from the start there.
       await clickMenuRow(page, "Edit/History");
       const history = page.locator("[data-history-panel]");
       await expect(history).toBeVisible();
-      await expect(history).toHaveAttribute("data-history-source", "document");
-      const steps = history.locator("[data-history-step]");
-      const n = await steps.count();
-      expect(n).toBeGreaterThanOrEqual(3);
-      await expect(steps.nth(n - 1)).toHaveAttribute(
-        "data-history-state",
-        "current",
-      );
-      const before = await undoLen(page);
-      await steps.nth(n - 2).click();
-      await expect.poll(() => undoLen(page)).toBe(before - 1);
-      await expect(steps.nth(n - 1)).toHaveAttribute(
-        "data-history-state",
-        "undone",
-      );
-      // The step undone was the Free Transform move.
-      await expect.poll(() => bounds(page, ref)).toEqual(start);
+      if (ctx.type === "rasterImage") {
+        await expect(history).toHaveAttribute("data-history-source", "context");
+      } else {
+        await expect(history).toHaveAttribute(
+          "data-history-source",
+          "document",
+        );
+        const steps = history.locator("[data-history-step]");
+        const n = await steps.count();
+        expect(n).toBeGreaterThanOrEqual(3);
+        await expect(steps.nth(n - 1)).toHaveAttribute(
+          "data-history-state",
+          "current",
+        );
+        const before = await undoLen(page);
+        await steps.nth(n - 2).click();
+        await expect.poll(() => undoLen(page)).toBe(before - 1);
+        await expect(steps.nth(n - 1)).toHaveAttribute(
+          "data-history-state",
+          "undone",
+        );
+        // The step undone was the Free Transform move.
+        await expect.poll(() => bounds(page, ref)).toEqual(start);
+      }
       await stillHere();
 
       // EYEDROPPER (last: its ingest makes the image the History's

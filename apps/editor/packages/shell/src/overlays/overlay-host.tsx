@@ -30,6 +30,7 @@ import { useOptionalPaged } from "../state/paged-editor";
 import { useEditorScope } from "../state/editor-scope";
 import { overlayShown } from "../state/editing-aids";
 import { useOptionalScreenMode } from "../state/screen-mode-context";
+import { PrecisionMagnifier } from "./precision-magnifier";
 import {
   EDITING_AID_TOGGLES,
   getViewToggle,
@@ -110,14 +111,23 @@ export function OverlayHost(props: OverlayHostProps) {
   const overlayProps: OverlayProps = { paged, camera: props.camera, pageRects };
 
   return (
-    <svg width={props.width} height={props.height} style={overlayStyle}>
-      <g transform={transform}>
-        {sorted.map((c) => {
-          const Render = c.render;
-          return <Render key={c.id} {...overlayProps} />;
-        })}
-      </g>
-    </svg>
+    <>
+      <svg width={props.width} height={props.height} style={overlayStyle}>
+        <g transform={transform}>
+          {sorted.map((c) => {
+            const Render = c.render;
+            return <Render key={c.id} {...overlayProps} />;
+          })}
+        </g>
+      </svg>
+      {/* paged.draw ADR 370 — the loupe while an anchor is placed or
+          dragged (Control held). */}
+      <PrecisionMagnifier
+        camera={props.camera}
+        width={props.width}
+        height={props.height}
+      />
+    </>
   );
 }
 

@@ -50,16 +50,14 @@ import {
   useEditorScope,
   type MarqueeRectPageLocal,
   type SelectionState,
-  useEditorKeys,
   currentPageIndex,
-  isEscapeKey,
+  snapBypassHeld,
   useEscapeArbiter,
-  createInteractionCoordinator,
+  useCursorController,
   ownerOfTool,
   useInteractionCoordinator,
   type EndResult,
   type GuardToken,
-  type InteractionCoordinator,
   type InteractionPhase,
   type InteractionSession,
   type SessionSpec,
@@ -101,15 +99,6 @@ import { routePress, type PressRouteKind } from "./press-route";
 import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
-
-// The interaction coordinator (editor ADR 1210; `UXI-MIG-003`): the
-// canvas's pointer sessions are the editor's — a window blur, a hidden
-// page, a document or tool switch and unmount end them — and the terminal
-// events, the stale guards and the adapters of the interaction contract
-// apply. `?debug=legacy-pointer` keeps the canvas's sessions to itself and
-// its behaviour as it was before the coordinator, until the legacy path is
-// removed (IC6).
-const COORDINATED = !debugFlag("legacy-pointer");
 
 // Re-export the (now shell-owned) overlay state types so existing
 // imports from this module continue to work.
@@ -171,6 +160,9 @@ export interface ViewportCanvasProps {
     pageId: PageId,
     rect: [number, number, number, number],
     modifiers?: PointerModifiers,
+    /** D-01 — drawn left to right it contains, right to left it
+     *  intersects. */
+    mode?: "contain" | "intersect",
   ) => void;
   /** Current selection; used by the overlay to highlight the hit point + page. */
   selection?: SelectionState | null;
@@ -259,7 +251,6 @@ const CLICK_DRAG_THRESHOLD_PX = 4;
 const WHEEL_LINE_PX = 16;
 
 export function ViewportCanvas(props: ViewportCanvasProps) {
-  const keys = useEditorKeys();
   const scope = useEditorScope();
   const pointerStore = scope.get(CANVAS_POINTER);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -283,15 +274,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const pathEditConsumedRef = useRef(false);
 
   // The interaction coordinator (editor ADR 1210): every pointer
-  // sequence on the canvas is a SESSION — with the flag, a session of the
-  // editor's coordinator, which ends it on a window blur, a hidden page, a
-  // document or tool switch and unmount; without it, one of the canvas's
-  // own that nothing outside ends.
-  const editorInteractions = useInteractionCoordinator();
-  const [ownInteractions] = useState(() => createInteractionCoordinator());
-  const interactions: InteractionCoordinator = COORDINATED
-    ? editorInteractions
-    : ownInteractions;
+  // sequence on the canvas is a SESSION of the editor's coordinator, which
+  // ends it on a window blur, a hidden page, a document or tool switch and
+  // unmount.
+  const interactions = useInteractionCoordinator();
+  // IC9 — the canvas's cursor, in layers (editor ADR 1227):
+  // the session's, a modifier's, the hover's, the tool's. The controller
+  // is the one writer of the host's cursor.
+  const cursors = useCursorController();
+  /** The session whose cursor the session layer shows. */
+  const sessionCursorRef = useRef<string | null>(null);
   // IC4 — the press that holds the pointer, and everything the canvas
   // keeps for it, in ONE record owned by ONE session. It replaces the six
   // refs the canvas kept before (the legacy drag, a tool's drag, a
@@ -651,6 +643,43 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return record;
   };
 
+  // TRN-004 — the angle of a rotation, beside the pointer, while it turns:
+  // written straight onto its element (no render per move).
+  const readoutRef = useRef<HTMLDivElement | null>(null);
+  const showRotateReadout = (
+    pivot: [number, number],
+    from: [number, number],
+    to: [number, number],
+    shift: boolean,
+    x: number,
+    y: number,
+  ) => {
+    const el = readoutRef.current;
+    if (!el) return;
+    let deg =
+      ((Math.atan2(to[1] - pivot[1], to[0] - pivot[0]) -
+        Math.atan2(from[1] - pivot[1], from[0] - pivot[0])) *
+        180) /
+      Math.PI;
+    deg = ((((deg + 180) % 360) + 360) % 360) - 180;
+    if (shift) deg = Math.round(deg / 15) * 15;
+    el.textContent = `${deg.toFixed(1)}°`;
+    el.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+    el.hidden = false;
+  };
+  const hideRotateReadout = () => {
+    const el = readoutRef.current;
+    if (el) el.hidden = true;
+  };
+
+  /** IC9 — show `css` in the cursor's session layer for as long as
+   *  `record`'s session is open (the subscription below clears it). */
+  const showSessionCursor = (record: PointerRecord, css: string | null) => {
+    if (!css || !record.session) return;
+    sessionCursorRef.current = record.session.id;
+    cursors.set("session", css);
+  };
+
   /** A press's session was ended from outside while it held the pointer:
    *  let the pointer go and roll the press back. */
   const abortHeld = (
@@ -711,10 +740,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   /** IC3 — a late answer is applied only while the epochs it was asked
    *  under hold (`UXI-OWN-008`, `UXI-ASY-002`): no newer press, no other
-   *  document, no other context, its session not aborted. With the flag
-   *  off every answer applies, as before. */
+   *  document, no other context, its session not aborted. */
   const stillCurrent = (token: GuardToken): boolean =>
-    !COORDINATED || interactions.confirm(token);
+    interactions.confirm(token);
 
   /** What a press undoes when its session is ended from outside — a lost
    *  capture, Escape, a blur, a hidden page, a document or tool switch,
@@ -724,6 +752,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
    *  pan has nothing to roll back; a content gesture just ends (the
    *  context keeps its state). */
   const rollBackRecord = (p: PointerRecord) => {
+    hideRotateReadout();
     if (p.tool) {
       p.tool = null;
       props.toolGesture?.onCancel();
@@ -820,31 +849,20 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   /** The engine refused `gs`'s begin. */
   const refusedBegin = (gs: GestureState, err: unknown) => {
-    {
-      {
-        const drag = currentDrag();
-        const holding = drag !== null && drag.gestureState === gs;
-        if (COORDINATED) {
-          // The engine refused the begin (a locked item, a gesture it
-          // still holds, a worker that failed): the drag ends here, with
-          // no mutation, and never turns into a pan (`UXI-STATE-002`,
-          // the interaction contract's IC2). What follows the press is
-          // inert until the pointer is let go.
-          const reason = gestureFailureReason(err);
-          if (holding) {
-            dropDrag();
-            setSnapLines([]);
-            closeSession("abort", reason);
-          }
-          finishSession(gs.session, "abort", reason);
-          return;
-        }
-        // Worker rejected — typically a rotated frame in Phase B.
-        // Downgrade to pan so the drag still does *something*
-        // sensible.
-        if (holding) drag.mode = "pan";
-      }
+    const drag = currentDrag();
+    const holding = drag !== null && drag.gestureState === gs;
+    // The engine refused the begin (a locked item, a gesture it still
+    // holds, a worker that failed): the drag ends here, with no mutation,
+    // and never turns into a pan (`UXI-STATE-002`, the interaction
+    // contract's IC2). What follows the press is inert until the pointer is
+    // let go.
+    const reason = gestureFailureReason(err);
+    if (holding) {
+      dropDrag();
+      setSnapLines([]);
+      closeSession("abort", reason);
     }
+    finishSession(gs.session, "abort", reason);
   };
 
   const touchPoint = (
@@ -1044,6 +1062,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // pan so the existing typing UX is undisturbed.
     let mode: DragState["mode"] = "pan";
     let press: PressState | undefined;
+    let rotatePivot: [number, number] | null = null;
     let gestureState: GestureState | undefined;
     // Path-edit mode — a primary press is the path's. The session
     // takes it whatever it landed on (an empty press starts its
@@ -1109,6 +1128,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       if (handleAttr === "rotate" && (selectedGeom || isMultiSelect)) {
         gestureSpec = { kind: "rotate" };
         targets = selectedGeom ? [selectedGeom.id] : selection.slice();
+        // The angle readout turns about the selection's centre (TRN-004).
+        const box = selectedGeom
+          ? itemHandleBox(selectedGeom)
+          : gesturePage
+            ? unionHandleBox(geometry.filter((g) => g.pageId === gesturePage))
+            : null;
+        const pr = gesturePage
+          ? rects[props.pageIds.indexOf(gesturePage)]
+          : null;
+        rotatePivot =
+          box && pr ? [pr.x + box.centre[0], pr.y + box.centre[1]] : null;
       } else if (handleAttr && handleAttr !== "rotate") {
         if (isMultiSelect) {
           // Phase G — multi-select handle drag is always matrix
@@ -1209,6 +1239,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           spec: gestureSpec,
           modifiers: { shift: e.shiftKey, alt: e.altKey },
           scale: scale ?? undefined,
+          ...(rotatePivot ? { pivot: rotatePivot } : {}),
         };
         beginWorkerGesture(gestureState, scale ? scaleAnchor(scale) : anchor);
       } else if (containing && props.onHit && !modifiers.cmd) {
@@ -1223,18 +1254,23 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           hit: undefined,
           releaseDoc: null,
           alt: e.altKey,
-          atomic: COORDINATED && Boolean(props.pressAt) && !modifiers.shift,
+          atomic: Boolean(props.pressAt) && !modifiers.shift,
         };
       } else {
         mode = "marquee";
       }
     }
+    // D-01 — a marquee may start on the pasteboard: it is measured from
+    // the nearest page, and its rectangle may leave that page (engine ADR
+    // 1011, amendment 1).
+    const anchorPage =
+      containing ?? nearestPage(rects, props.pageIds, docX, docY);
     const marqueeAnchor =
-      (mode === "marquee" || mode === "press") && containing
+      (mode === "marquee" || mode === "press") && anchorPage
         ? {
-            pageId: containing[0],
-            pageX: docX - containing[1].x,
-            pageY: docY - containing[1].y,
+            pageId: anchorPage[0],
+            pageX: docX - anchorPage[1].x,
+            pageY: docY - anchorPage[1].y,
           }
         : null;
     const pathEditing = route.kind === "path-edit";
@@ -1279,6 +1315,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       press,
     };
     record.drag = drag;
+    // IC9 — the session's cursor: a handle's for the whole of its drag
+    // (the pointer may outrun the handle), the closed hand for a pan.
+    showSessionCursor(
+      record,
+      mode === "gesture"
+        ? cursorOfElement(e.target)
+        : route.kind === "camera"
+          ? "grabbing"
+          : null,
+    );
     if (press?.atomic) beginPressAt(drag);
     else if (press) resolvePress(drag);
   };
@@ -1369,7 +1415,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       .catch((err: unknown) => {
         press.hit = null;
         const live = currentDrag() === drag;
-        if (live && COORDINATED) {
+        if (live) {
           dropDrag();
           closeSession("abort", gestureFailureReason(err));
         }
@@ -1453,14 +1499,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     ).then((ids) => {
       if (!ids || ids.length === 0) {
         if (currentDrag() === drag) {
-          // Nothing was selected to move. With the coordinator the drag
-          // ends; without, it pans (the legacy fallback).
-          if (COORDINATED) {
-            dropDrag();
-            closeSession("abort", "nothing to move");
-          } else {
-            drag.mode = "pan";
-          }
+          // Nothing was selected to move: the drag ends (no pan fallback).
+          dropDrag();
+          closeSession("abort", "nothing to move");
         }
         finishSession(drag.pressSession, "commit");
         return;
@@ -1491,8 +1532,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       ? rects[props.pageIds.indexOf(anchor.pageId)]
       : null;
     if (!anchor || !pageRect || !props.onMarquee) return;
-    const x = clamp(end[0] - pageRect.x, 0, pageRect.w);
-    const y = clamp(end[1] - pageRect.y, 0, pageRect.h);
+    const x = end[0] - pageRect.x;
+    const y = end[1] - pageRect.y;
     props.onMarquee(
       anchor.pageId,
       [
@@ -1502,6 +1543,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         Math.max(anchor.pageX, x),
       ],
       drag.modifiers,
+      marqueeMode(anchor.pageX, x),
     );
   };
 
@@ -1523,7 +1565,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       docPoint: [docX, docY],
     });
   };
-  const onPointerLeave = () => pointerStore.set(null);
+  const onPointerLeave = () => {
+    pointerStore.set(null);
+    cursors.set("hover", null);
+  };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     publishPointer(e);
@@ -1573,31 +1618,28 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // handler refine the cursor per pointer position (Pen near an
       // anchor ≠ Pen over empty canvas). Imperative style write so a
       // hover doesn't re-render the canvas.
+      // The hover layer of the cursor contract (IC9).
       const hover = props.toolGesture?.hoverCursor;
       if (hover) {
-        const refined = hover(buildToolPointer(e, 0));
-        const el = wrapperRef.current;
-        if (el) el.style.cursor = refined ?? props.cursor ?? "grab";
+        cursors.set("hover", hover(buildToolPointer(e, 0)) ?? null);
       } else if ((props.activeTool ?? "select") === "select") {
         // ADR 1103 — over a bundle's handle the Selection tool shows the
         // handle's cursor (the pointer is the default).
         const routers = overlaySignals.handleRouters();
-        const el = wrapperRef.current;
-        if (el && (routers.length > 0 || el.dataset.handleCursor)) {
-          const p = buildToolPointer(e, 0);
-          const over = routers
-            .map((r) => r.hit(p.pageId, p.pagePoint))
-            .find((h) => h !== null);
-          if (over) {
-            el.style.cursor = over.cursor
+        const p = routers.length > 0 ? buildToolPointer(e, 0) : null;
+        const over = p
+          ? routers
+              .map((r) => r.hit(p.pageId, p.pagePoint))
+              .find((h) => h !== null)
+          : undefined;
+        cursors.set(
+          "hover",
+          over
+            ? over.cursor
               ? resolveCursorCss(over.cursor)
-              : "pointer";
-            el.dataset.handleCursor = "1";
-          } else if (el.dataset.handleCursor) {
-            el.style.cursor = props.cursor ?? "grab";
-            delete el.dataset.handleCursor;
-          }
-        }
+              : "pointer"
+            : null,
+        );
       }
       return;
     }
@@ -1635,7 +1677,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // the Hand back only from a document-changing drag) turns the rest of
     // the drag into a pan from here; the selection's session ends.
     if (
-      COORDINATED &&
       props.forcePan &&
       (drag.mode === "marquee" || drag.mode === "press") &&
       !held?.path
@@ -1677,14 +1718,27 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       ];
       const gs = drag.gestureState;
       if (!gs) return;
-      // Plan-2 §8.4 — Ctrl bypasses snap. Read `e.ctrlKey`
-      // independently of `metaKey`; on macOS the Ctrl key is its own
-      // thing (not Cmd), matching InDesign's "hold Ctrl to ignore
-      // snap targets" convention.
+      if (gs.pivot) {
+        showRotateReadout(
+          gs.pivot,
+          drag.startDoc,
+          [docX, docY],
+          e.shiftKey,
+          cx,
+          cy,
+        );
+      }
+      // IC8 — the one snapping bypass: the platform's primary modifier
+      // (Cmd on macOS, Ctrl elsewhere), as for the point-placing tools.
+      // IC9 — an Alt move duplicates: the copy cursor while Alt is held.
+      cursors.set(
+        "modifier",
+        gs.spec?.kind === "translate" && e.altKey ? "copy" : null,
+      );
       gs.modifiers = {
         shift: e.shiftKey,
         alt: e.altKey,
-        disableSnap: e.ctrlKey,
+        disableSnap: snapBypassHeld({ cmd: e.metaKey, ctrl: e.ctrlKey }),
       };
       if (gs.scale && gs.handle !== null && e.altKey !== gs.scale.alt) {
         // Alt/Option moves the pivot between the opposite handle and
@@ -1720,24 +1774,27 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-      // Clamp the marquee to the anchor's page so the rect we
-      // commit is page-local. The hit-tester only knows pages.
+      // Measured from the anchor's page; it may leave the page, across the
+      // spread's pages and the pasteboard (D-01).
       const pageRect = rects[props.pageIds.indexOf(anchor.pageId)];
       if (!pageRect) return;
-      const currentX = clamp(docX - pageRect.x, 0, pageRect.w);
-      const currentY = clamp(docY - pageRect.y, 0, pageRect.h);
-      const top = Math.min(anchor.pageY, currentY);
-      const left = Math.min(anchor.pageX, currentX);
-      const bottom = Math.max(anchor.pageY, currentY);
-      const right = Math.max(anchor.pageX, currentX);
+      const currentX = docX - pageRect.x;
+      const currentY = docY - pageRect.y;
       setMarqueeRect({
         pageId: anchor.pageId,
-        rect: [top, left, bottom, right],
+        rect: [
+          Math.min(anchor.pageY, currentY),
+          Math.min(anchor.pageX, currentX),
+          Math.max(anchor.pageY, currentY),
+          Math.max(anchor.pageX, currentX),
+        ],
+        mode: marqueeMode(anchor.pageX, currentX),
       });
     }
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    hideRotateReadout();
     if (pinchUp(e)) return;
     const held = pointerRef.current;
     // K-1 — end a content gesture: deliver the up to the active context
@@ -1952,7 +2009,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       finishPress(drag);
     } else if (drag.mode === "marquee") {
       if (marqueeRect && props.onMarquee) {
-        props.onMarquee(marqueeRect.pageId, marqueeRect.rect, modifiers);
+        props.onMarquee(
+          marqueeRect.pageId,
+          marqueeRect.rect,
+          modifiers,
+          marqueeRect.mode,
+        );
       }
       setMarqueeRect(null);
       closeSession("commit");
@@ -2040,7 +2102,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // `UXI-INV-014`): an element that took the capture, a browser that
   // dropped it. Not a pinch's: a lifted finger hands the pinch on.
   const onLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!COORDINATED) return;
     const s = pointerRef.current?.session;
     if (!s || s.kind === "pinch" || s.pointerId !== e.pointerId) return;
     interactions.cancel(s, "capture-lost");
@@ -2173,7 +2234,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // OverlayRevisionAdapter (IC4): snap lines are the gesture's; a late
         // notify after the gesture ended draws nothing (`UXI-SNP-006`).
         const lines = msg.payload.snapLines;
-        if (COORDINATED && lines.length > 0 && !holdsGesture()) return;
+        if (lines.length > 0 && !holdsGesture()) return;
         setSnapLines(lines);
       } else if (
         msg.kind === "warning" &&
@@ -2192,7 +2253,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (s) interactions.cancel(s, "unmount");
   });
   useEffect(() => {
-    if (!COORDINATED) return;
     return () => cancelHeldSession();
   }, []);
 
@@ -2213,7 +2273,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   });
   const escapeResolves = useEffectEvent(() => escapeSession());
   useEffect(() => {
-    if (!COORDINATED) return;
     return arbiter.register({
       id: "paged.canvas.gesture",
       tier: "gesture",
@@ -2224,64 +2283,30 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     });
   }, [arbiter]);
 
-  // The legacy pointer path (`?debug=legacy-pointer`): Escape cancels the
-  // active gesture from a document listener of the canvas's own.
-  const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
-    if (!isEscapeKey(e)) return;
-    const held = pointerRef.current;
-    // A tool's drag: its handler cancels it (the spine's Escape).
-    if (held?.tool) {
-      props.toolGesture?.onCancel();
-      return;
-    }
-    const handleDrag = held?.handle ?? null;
-    if (held && handleDrag) {
-      // The release that follows finds no drag and does nothing.
-      held.handle = null;
-      handleDrag.router.cancel();
-      closeSession("cancel", "escape");
-      return;
-    }
-    const drag = currentDrag();
-    if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
-    const handle = drag.gestureState.handle;
-    drag.mode = "pan";
-    drag.gestureState = undefined;
-    if (handle !== null) {
-      void props.client
-        .cancelGesture(handle)
-        .then(() => {
-          setSnapLines([]);
-          props.onGestureCommitted?.();
-        })
-        .catch(() => {});
-    }
-  });
+  // IC9 — the cursor contract: the controller writes the host's cursor;
+  // the tool's cursor is its bottom layer (a new tool drops the old one's
+  // hover), and the session and modifier layers end with their session.
   useEffect(() => {
-    if (COORDINATED) return;
-    const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
-    return keys.listen("keydown", onKeyDown, undefined, document);
-  }, [keys]);
-
-  // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
-  // drag is in flight must abort it. Without this the gesture stays
-  // open until the next pointer event, which then commits a stale
-  // delta — the classic "alt-tab mid-drag leaves a stuck gesture" bug
-  // (gestures.md E2E-11). pointercancel covers capture *theft*; blur
-  // covers the case where the pointer never sends a cancel.
-  // With the coordinator the editor's InteractionProvider hears the blur
-  // and ends the session; this listener is the canvas's own without it.
-  const onWindowBlur = useEffectEvent(() => {
-    const s = pointerRef.current?.session;
-    if (s) interactions.cancel(s, "blur");
-    else abortActiveDrag();
-  });
+    cursors.attach(wrapperRef.current);
+    return () => cursors.attach(null);
+  }, [cursors]);
   useEffect(() => {
-    if (COORDINATED) return;
-    const onBlur = () => onWindowBlur();
-    window.addEventListener("blur", onBlur);
-    return () => window.removeEventListener("blur", onBlur);
-  }, []);
+    cursors.set("hover", null);
+    cursors.set("tool", props.cursor ?? null);
+  }, [cursors, props.cursor]);
+  useEffect(
+    () =>
+      interactions.subscribe(() => {
+        const open = interactions.snapshot().openIds;
+        const id = sessionCursorRef.current;
+        if (id !== null && !open.includes(id)) {
+          sessionCursorRef.current = null;
+          cursors.set("session", null);
+        }
+        if (open.length === 0) cursors.set("modifier", null);
+      }),
+    [interactions, cursors],
+  );
 
   return (
     <div
@@ -2292,9 +2317,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       data-testid="viewport-canvas-host"
       // Phase 3 — the active tool's base cursor overrides the default
       // pan affordance; the gesture handler may refine it per position.
-      style={
-        props.cursor ? { ...wrapperStyle, cursor: props.cursor } : wrapperStyle
-      }
+      style={wrapperStyle}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
@@ -2331,6 +2354,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       />
       {/* F-36 — where typed and composed text arrives while a caret is
           in a story (ADR 234). */}
+      <div
+        ref={readoutRef}
+        hidden
+        data-rotate-readout=""
+        aria-live="polite"
+        style={rotateReadoutStyle}
+      />
       <TextInputSurface
         camera={props.camera}
         pageIds={props.pageIds}
@@ -2458,6 +2488,8 @@ interface GestureState {
   scale?: HandleScale;
   /** The pointer went up before the begin was confirmed: commit when it is. */
   release?: "commit";
+  /** A rotation: the centre it turns about, document pt (the readout). */
+  pivot?: [number, number];
 }
 
 type Pt = [number, number];
@@ -2804,9 +2836,22 @@ const wrapperStyle: React.CSSProperties = {
   height: "100%",
   overflow: "hidden",
   background: "var(--canvas-surround)",
-  cursor: "grab",
   touchAction: "none",
   userSelect: "none",
+};
+
+const rotateReadoutStyle: React.CSSProperties = {
+  position: "absolute",
+  left: 0,
+  top: 0,
+  padding: "2px 6px",
+  borderRadius: 3,
+  background: "var(--elevated)",
+  color: "var(--fg)",
+  border: "1px solid var(--border)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  pointerEvents: "none",
 };
 
 const canvasStyle: React.CSSProperties = {
@@ -2863,18 +2908,48 @@ function growDelta(
   if (d > t.maxDelta) t.maxDelta = d;
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
+/** The cursor an element under the pointer shows (a handle's), or null
+ *  when it sets none of its own. */
+function cursorOfElement(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) return null;
+  const css = getComputedStyle(target).cursor;
+  return css && css !== "auto" && css !== "default" ? css : null;
 }
 
-/** Phase B — return the first selected element whose AABB
- * (transformed corners → axis-aligned bbox) contains the pointer,
- * with the page it was hit on. `pointerOn` gives the pointer in a
- * page's local space. AABB rather than oriented-rect: fast, no
- * transform math in TS, and a false positive at the AABB corner of a
- * rotated frame is acceptable since the worker's `begin_gesture` then
- * rejects it. Matches what the renderer paints for the selection
- * chrome at the same point in time. */
+/** D-01 (editor ADR 1201): a marquee drawn left to right takes what it
+ *  wholly contains, right to left what it touches. */
+function marqueeMode(fromX: number, toX: number): "contain" | "intersect" {
+  return toX >= fromX ? "contain" : "intersect";
+}
+
+/** The page nearest a document point (a press on the pasteboard). */
+function nearestPage(
+  rects: ReadonlyArray<PageRect>,
+  ids: ReadonlyArray<PageId>,
+  docX: number,
+  docY: number,
+): [PageId, PageRect] | null {
+  let best: [PageId, PageRect] | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i]!;
+    const dx = Math.max(r.x - docX, 0, docX - (r.x + r.w));
+    const dy = Math.max(r.y - docY, 0, docY - (r.y + r.h));
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = [ids[i]!, r];
+    }
+  }
+  return best;
+}
+
+/** The first selected element whose ORIENTED box (its bounds through its
+ *  item transform) holds the pointer, with the page it was hit on
+ *  (`UXI-TRN-005`, IC7): the pointer is taken back into the item's own
+ *  space and tested against its bounds, so the empty corners of a turned
+ *  item's axis-aligned box are not its body. `pointerOn` gives the pointer
+ *  in a page's local space. */
 function findSelectedElementUnderPointer(
   selection: ReadonlyArray<ElementId>,
   geometry: ReadonlyArray<ElementGeometryItem>,
@@ -2886,28 +2961,16 @@ function findSelectedElementUnderPointer(
     if (!inSel.has(`${g.id.kind}:${g.id.id}`)) continue;
     const pageLocal = pointerOn(g.pageId);
     if (!pageLocal) continue;
+    const local = invertAffinePoint(g.itemTransform, pageLocal);
+    if (!local) continue;
     const [top, left, bottom, right] = g.bounds;
-    const corners: Array<[number, number]> = [
-      applyAffineLocal(g.itemTransform, left, top),
-      applyAffineLocal(g.itemTransform, right, top),
-      applyAffineLocal(g.itemTransform, right, bottom),
-      applyAffineLocal(g.itemTransform, left, bottom),
-    ];
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    for (const [x, y] of corners) {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
+    // Half a point of slack for the edge itself.
+    const e = 0.5;
     if (
-      pageLocal[0] >= minX &&
-      pageLocal[0] <= maxX &&
-      pageLocal[1] >= minY &&
-      pageLocal[1] <= maxY
+      local[0] >= Math.min(left, right) - e &&
+      local[0] <= Math.max(left, right) + e &&
+      local[1] >= Math.min(top, bottom) - e &&
+      local[1] <= Math.max(top, bottom) + e
     ) {
       return { id: g.id, pageId: g.pageId };
     }
@@ -2915,13 +2978,18 @@ function findSelectedElementUnderPointer(
   return null;
 }
 
-function applyAffineLocal(
+/** `p` taken back through the affine `m` (null for a singular one). */
+function invertAffinePoint(
   m: [number, number, number, number, number, number] | null | undefined,
-  x: number,
-  y: number,
-): [number, number] {
-  if (!m) return [x, y];
-  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  p: [number, number],
+): [number, number] | null {
+  if (!m) return p;
+  const [a, b, c, d, tx, ty] = m;
+  const det = a * d - b * c;
+  if (Math.abs(det) < 1e-12) return null;
+  const x = p[0] - tx;
+  const y = p[1] - ty;
+  return [(d * x - c * y) / det, (-b * x + a * y) / det];
 }
 
 /** Phase C/D — read the `data-handle` attribute from a pointer

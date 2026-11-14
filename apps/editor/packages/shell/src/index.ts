@@ -102,6 +102,15 @@ export {
 export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
+export { snapBypassHeld } from "./tools/snap-bypass";
+export { hoverPreselectContribution } from "./overlays/hover-preselect";
+export {
+  nextAbove,
+  nextBelow,
+  objectsOver,
+  objectsUnder,
+} from "./state/objects-under";
+export { isLockedEntries, useLockedKeys } from "./state/locked";
 
 export {
   CanvasClientProvider,
@@ -118,6 +127,18 @@ export {
   useDensity,
   type Density,
 } from "./state/density";
+export {
+  CONTRAST_COMMANDS,
+  CONTRAST_PREFERENCES,
+  DEFAULT_CONTRAST,
+  effectiveContrast,
+  getContrastPreference,
+  setContrastPreference,
+  useContrast,
+  useContrastPreference,
+  type Contrast,
+  type ContrastPreference,
+} from "./state/contrast";
 export {
   CameraProvider,
   cameraKeepingCentre,
@@ -193,6 +214,7 @@ export {
 export {
   SelectionProvider,
   SelectionSubset,
+  useOptionalSelection,
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
@@ -279,7 +301,17 @@ export {
   type ScreenMode,
 } from "./state/screen-mode-context";
 
-export { resolveCursorCss } from "./tools/cursor";
+export {
+  CURSOR_CONTROLLER,
+  CURSOR_LAYERS,
+  createCursorController,
+  holdCursor,
+  resolveCursorCss,
+  useCursorController,
+  writeCursor,
+  type CursorController,
+  type CursorLayer,
+} from "./tools/cursor";
 export type { CursorSpec, CssCursorToken } from "./tools/cursor";
 export type {
   GestureHandler,
@@ -768,6 +800,7 @@ export {
   closeCanvasContextMenu,
   openCanvasContextMenu,
   type ContextMenuEntry,
+  type PickableObject,
 } from "./chrome/CanvasContextMenu";
 export {
   buildExportAseCommand,
@@ -962,6 +995,16 @@ export {
 } from "@paged-media/client";
 
 // ── Overlay layer ──────────────────────────────────────────────
+// paged.draw ADR 370 — the precision magnifier's rules.
+export {
+  MAGNIFIER_FACTOR,
+  MAGNIFIER_KEY,
+  MAGNIFIER_SIZE_PX,
+  PRECISION_TOOL_IDS,
+  magnifierPlacement,
+  magnifierRegion,
+  pointInLoupe,
+} from "./overlays/precision-magnifier-geometry";
 export {
   OverlayHost,
   caretContribution,

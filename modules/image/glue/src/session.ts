@@ -163,6 +163,7 @@ import {
   resolveFrameFit,
   type FitTransform,
 } from "./frame-fit";
+import { FILTER_SPLIT, composeSplit, splitShapes } from "./filter-split";
 import {
   emptyRender,
   fitRuns,
@@ -379,6 +380,14 @@ export interface FilterDialogState {
   /** The before/after toggle: the canvas shows the image without the
    *  filter while the dialog stays open. */
   before: boolean;
+  /** Image ADR 487 — the before/after SPLIT: the frame shows the image
+   *  without the filter left of this fraction of its width (0–1) and with
+   *  it to the right; null when off. A view, never the document. */
+  split: number | null;
+  /** What the frame shows of the filter: a `draft` on the reduced copy,
+   *  the full-resolution pass `rendering`, or the `full` result; null
+   *  when nothing is previewed (Preview off, Before showing). */
+  quality: "draft" | "rendering" | "full" | null;
   applied: boolean;
   /** The file each `image` parameter resolved to (its name), when one
    *  was chosen (`chooseFilterImage`). */
@@ -717,6 +726,21 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
    *  Place Layers as Frames hands them to the host); `null` when the
    *  session's source is another format or nothing is open. */
   sourcePsd(): Uint8Array | null;
+  /** Image ADR 487 — the image's own pixels (what the frame shows, the
+   *  composite) in a rectangle of image px, RGBA8, clamped to the image;
+   *  null without an image. A read for the panel's pixel view. */
+  readPixels(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): {
+    rgba: Uint8Array;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -962,6 +986,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   setFilterPreview(on: boolean): Promise<void>;
   /** The before/after toggle. */
   setFilterBefore(before: boolean): Promise<void>;
+  /** Image ADR 487 — the before/after split at `split` (0–1 of the
+   *  image's width), or off (null). */
+  setFilterSplit(split: number | null): Promise<void>;
   /** OK: the filter at the dialog's values, kept as ONE undo step. */
   commitFilterDialog(): Promise<boolean>;
   /** Cancel: the image as it was before the dialog opened. */
@@ -3856,6 +3883,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     warpBrushAt = null;
     drawBlurGallery(null);
     appliedKey = null;
+    splitBefore = null;
+    splitAfter = null;
+    splitLayer?.clear();
   };
 
   // ── the Blur Gallery's geometry on the canvas ───────────────────────
@@ -3950,7 +3980,13 @@ export function createImageSession(host: BundleHost): ImageSession {
     const key = JSON.stringify(d.values);
     const wanted = d.preview && !d.before;
     if (d.applied && (!wanted || appliedKey !== key)) await unapplyFilter(d);
-    if (!wanted || d.applied) return true;
+    if (!wanted) setQuality(d, null);
+    if (!wanted || d.applied) {
+      if (wanted && d.split !== null) await renderSplit();
+      return true;
+    }
+    // Image ADR 487 — the full-resolution pass says it is running.
+    setQuality(d, "rendering");
     const def = filterDef(d.id);
     const values = { ...d.values };
     const eng = engine;
@@ -3966,7 +4002,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     }
     d.applied = ok;
     appliedKey = ok ? key : null;
+    d.quality = ok ? "full" : null;
+    state.dialog = { kind: "filter", filter: d };
     emit();
+    if (ok && d.split !== null) await renderSplit();
     return ok;
   };
   const filterPassLatest = latestWins(filterPassNow);
@@ -3998,15 +4037,28 @@ export function createImageSession(host: BundleHost): ImageSession {
       }
       if (openFilter() !== d || !filterProxy) return false;
       const box = await frameBox(target);
+      // Image ADR 487 — with the split on, the frame shows the image as
+      // it was left of the line and the draft right of it.
+      splitAfter = {
+        rgba,
+        width: filterProxy.width,
+        height: filterProxy.height,
+      };
+      const shown =
+        d.split !== null
+          ? await splitComposite(d.split, filterProxy.width, filterProxy.height)
+          : null;
       await submitLayer(
         target,
-        rgba,
+        shown ?? rgba,
         filterProxy.width,
         filterProxy.height,
         box,
         src.width,
         src.height,
       );
+      if (shown) await drawSplit(d);
+      setQuality(d, "draft");
       return true;
     } catch (err) {
       host.log.debug("filter proxy preview failed", err);
@@ -4014,6 +4066,148 @@ export function createImageSession(host: BundleHost): ImageSession {
     }
   };
   const filterProxyLatest = latestWins(filterProxyNow);
+
+  // ── the before/after SPLIT (image ADR 487) ──────────────────────────
+  //
+  // Both halves are what the frame shows — the display adjustments
+  // applied — at the preview's resolution (the reduced copy's size, about
+  // what the frame shows): `splitBefore` is the image without the filter,
+  // taken once; `splitAfter` the newest preview with it (the draft, then
+  // the full pass read back). The composite goes to the frame like any
+  // preview and is never the document; the line is an overlay layer.
+  let splitBefore: { rgba: Uint8Array; width: number; height: number } | null =
+    null;
+  let splitAfter: { rgba: Uint8Array; width: number; height: number } | null =
+    null;
+  let splitLayer: ReturnType<typeof host.overlay.layer> | null = null;
+
+  /** Say what the frame shows of the filter (draft / rendering / full). */
+  const setQuality = (
+    d: FilterDialogState,
+    quality: FilterDialogState["quality"],
+  ) => {
+    if (d.quality === quality) return;
+    d.quality = quality;
+    if (openFilter() === d) {
+      state.dialog = { kind: "filter", filter: d };
+      emit();
+    }
+  };
+
+  /** What the frame shows of `handle` at `width` × `height`. */
+  const displayPixels = async (
+    handle: number,
+    srcW: number,
+    srcH: number,
+    width: number,
+    height: number,
+  ): Promise<Uint8Array> => {
+    const eng = engine!;
+    if (width === srcW && height === srcH)
+      return eng.adjust(handle, state.params);
+    const r = await eng.resize(handle, width, height, "lanczos3");
+    try {
+      return await eng.adjust(r.handle, state.params);
+    } finally {
+      eng.freeImage(r.handle);
+    }
+  };
+
+  /** The split composite at `width` × `height`, or null when a half is
+   *  missing (it is then taken first where it can be). */
+  const splitComposite = async (
+    split: number,
+    width: number,
+    height: number,
+  ): Promise<Uint8Array | null> => {
+    const src = state.source;
+    if (!src || !engine) return null;
+    if (
+      !splitBefore ||
+      splitBefore.width !== width ||
+      splitBefore.height !== height
+    ) {
+      // The reduced copy taken at open IS the image without the filter;
+      // without one the image itself is, while no preview step is in it.
+      const d = openFilter();
+      if (filterProxy && filterProxy.width === width) {
+        splitBefore = {
+          rgba: await engine.adjust(filterProxy.handle, state.params),
+          width,
+          height,
+        };
+      } else if (d && !d.applied) {
+        splitBefore = {
+          rgba: await displayPixels(
+            src.handle,
+            src.width,
+            src.height,
+            width,
+            height,
+          ),
+          width,
+          height,
+        };
+      } else return null;
+    }
+    if (
+      !splitAfter ||
+      splitAfter.width !== width ||
+      splitAfter.height !== height
+    )
+      return null;
+    return composeSplit(
+      splitBefore.rgba,
+      splitAfter.rgba,
+      width,
+      height,
+      split,
+    );
+  };
+
+  /** Draw (or clear) the split line over the frame. */
+  const drawSplit = async (d: FilterDialogState | null) => {
+    const src = state.source;
+    if (!d || d.split === null || !src?.elementId) {
+      splitLayer?.clear();
+      return;
+    }
+    const fit = await resolveFrameFit(host, src, "split");
+    if (openFilter() !== d) return;
+    splitLayer ??= host.overlay.layer("filter-split");
+    if (!fit) splitLayer.clear();
+    else
+      splitLayer.set(
+        splitShapes(fit, src.width, src.height, d.split, {
+          before: t(FILTER_SPLIT.before),
+          after: t(FILTER_SPLIT.after),
+        }) as never,
+      );
+  };
+
+  /** Show the split from the image as it is now: after the full pass
+   *  (the filter is IN the image), read the result back at the preview's
+   *  size and put the composite in the frame. */
+  const renderSplit = async (): Promise<void> => {
+    const d = openFilter();
+    const src = state.source;
+    const target = src?.elementId;
+    if (!d || d.split === null || !src || !engine || !target || !scene())
+      return;
+    const box = await frameBox(target);
+    const { w, h } = proxySize(box, src);
+    if (d.applied) {
+      splitAfter = {
+        rgba: await displayPixels(src.handle, src.width, src.height, w, h),
+        width: w,
+        height: h,
+      };
+    }
+    const shown = await splitComposite(d.split, w, h);
+    if (!shown || openFilter() !== d) return;
+    await submitLayer(target, shown, w, h, box, src.width, src.height);
+    await drawSplit(d);
+  };
 
   /** After a value change: the proxy at once (where it can), the full
    *  pass when the values have rested. */
@@ -4452,6 +4646,26 @@ export function createImageSession(host: BundleHost): ImageSession {
     workspace: () => workspace,
     smart: () => smart,
     sourcePsd: () => (sourceFormat === "psd" ? sourceBytes : null),
+    readPixels(x, y, width, height) {
+      const src = state.source;
+      if (!src || !engine) return null;
+      const x0 = Math.max(0, Math.min(src.width - 1, Math.floor(x)));
+      const y0 = Math.max(0, Math.min(src.height - 1, Math.floor(y)));
+      const w = Math.max(1, Math.min(Math.floor(width), src.width - x0));
+      const h = Math.max(1, Math.min(Math.floor(height), src.height - y0));
+      try {
+        return {
+          rgba: engine.tile(src.handle, x0, y0, w, h),
+          x: x0,
+          y: y0,
+          width: w,
+          height: h,
+        };
+      } catch (err) {
+        host.log.debug("pixel view read failed", err);
+        return null;
+      }
+    },
     state: () => state,
 
     onDidChange(listener) {
@@ -4676,6 +4890,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         },
         preview: true,
         before: false,
+        split: null,
+        quality: null,
         applied: false,
         files: {},
       };
@@ -4901,6 +5117,67 @@ export function createImageSession(host: BundleHost): ImageSession {
       await lastFilterPass;
     },
 
+    async setFilterSplit(split) {
+      const d = openFilter();
+      if (!d) return;
+      const next =
+        split === null ? null : Math.max(0, Math.min(1, Number(split) || 0));
+      const wasOff = d.split === null;
+      d.split = next;
+      state.dialog = { kind: "filter", filter: d };
+      emit();
+      if (next === null) {
+        splitLayer?.clear();
+        // The whole result back in the frame.
+        if (d.applied) await api.apply();
+        else scheduleFilterPreview();
+        await lastFilterPass;
+        return;
+      }
+      if (wasOff && !splitBefore && !filterProxy && d.applied) {
+        // The image without the filter is taken once, with the preview
+        // step out of it; the preview then comes back.
+        await lastFilterPass.catch(() => false);
+        await unapplyFilter(d);
+        const src = state.source;
+        const target = src?.elementId;
+        if (src && target && engine) {
+          const { w, h } = proxySize(await frameBox(target), src);
+          splitBefore = {
+            rgba: await displayPixels(src.handle, src.width, src.height, w, h),
+            width: w,
+            height: h,
+          };
+        }
+        scheduleFilterPreview();
+        await lastFilterPass;
+        return;
+      }
+      if (d.applied) await renderSplit();
+      else if (splitAfter) {
+        const src = state.source;
+        const target = src?.elementId;
+        if (!src || !target) return;
+        const shown = await splitComposite(
+          next,
+          splitAfter.width,
+          splitAfter.height,
+        );
+        if (shown) {
+          await submitLayer(
+            target,
+            shown,
+            splitAfter.width,
+            splitAfter.height,
+            await frameBox(target),
+            src.width,
+            src.height,
+          );
+          await drawSplit(d);
+        }
+      } else scheduleFilterPreview();
+    },
+
     async commitFilterDialog() {
       const d = openFilter();
       if (!d) return false;
@@ -4916,8 +5193,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       lastFilterValues.set(d.id, { ...d.values });
       // The step stays: it IS the filter, one undo step.
       d.applied = false;
+      const wasSplit = d.split !== null;
       state.dialog = null;
       dropFilterDialog();
+      // The split was a view: the whole result goes back in the frame.
+      if (wasSplit && state.source?.elementId) await api.apply();
       setStatus(t(S.applied, { label: t(filterDef(d.id).label) }));
       return true;
     },

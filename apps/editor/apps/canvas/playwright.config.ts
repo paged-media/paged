@@ -254,23 +254,6 @@ export default defineConfig({
       },
     },
     {
-      // The interaction contract's parity baseline on the legacy pointer
-      // path (`?debug=legacy-pointer`, editor ADR 1210, UXI-MIG-003): the
-      // UXI-MIG-001 tapes and the baseline come out the same with and
-      // without the interaction coordinator until IC6 removes the legacy
-      // path. Added to the query by `openCanvas`.
-      name: "uxi-legacy-pointer",
-      testMatch: [
-        "**/e2e/uxi-legacy-tapes.spec.ts",
-        "**/e2e/uxi-baseline.spec.ts",
-      ],
-      metadata: { debugFlags: ["legacy-pointer"] },
-      use: {
-        ...devices["Desktop Chrome"],
-        headless: true,
-      },
-    },
-    {
       // Cross-component round trips (/tests/integration): a module's state
       // saved into the editor's .paged container and read back on reopen.
       // The same browser and settings as `journeys`; CI runs it beside the

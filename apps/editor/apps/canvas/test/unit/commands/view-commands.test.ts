@@ -214,6 +214,7 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       "Overset markers",
       "Hidden characters",
       "Nonprinting items",
+      "Data bindings",
     ]);
     for (const r of rows)
       expect({

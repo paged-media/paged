@@ -37,7 +37,14 @@ import {
   PAGED_TRANSFORM_REFLECT_HORIZONTAL,
   PAGED_TRANSFORM_REFLECT_OPTIONS,
   PAGED_TRANSFORM_REFLECT_VERTICAL,
+  PAGED_TRANSFORM_ROTATE_90_CCW,
+  PAGED_TRANSFORM_ROTATE_90_CW,
+  PAGED_TRANSFORM_ROTATE_STEP_CCW,
+  PAGED_TRANSFORM_ROTATE_STEP_CW,
+  PAGED_TRANSFORM_SCALE_DOWN,
+  PAGED_TRANSFORM_SCALE_UP,
   planTransform,
+  rotationRecord,
   reflectPayloadOf,
   REFLECT_MENU_ITEMS,
   spreadPivotOf,
@@ -384,6 +391,63 @@ describe("the commands through the registry [editor-shell.transform-reflect]", (
       ["Object/Transform/Reflect vertically", PAGED_TRANSFORM_REFLECT_VERTICAL],
       ["Object/Transform/Reflect…", PAGED_TRANSFORM_REFLECT_OPTIONS],
       ["Object/Transform/Transform again", PAGED_TRANSFORM_AGAIN],
+      ["Object/Transform/Rotate 90° clockwise", PAGED_TRANSFORM_ROTATE_90_CW],
+      [
+        "Object/Transform/Rotate 90° counterclockwise",
+        PAGED_TRANSFORM_ROTATE_90_CCW,
+      ],
+      ["Object/Transform/Rotate 15° clockwise", PAGED_TRANSFORM_ROTATE_STEP_CW],
+      [
+        "Object/Transform/Rotate 15° counterclockwise",
+        PAGED_TRANSFORM_ROTATE_STEP_CCW,
+      ],
+      ["Object/Transform/Scale up 10%", PAGED_TRANSFORM_SCALE_UP],
+      ["Object/Transform/Scale down 10%", PAGED_TRANSFORM_SCALE_DOWN],
     ]);
+  });
+
+  // Editor ADR "An accessible object tree" (UXI-A11Y-006): the keyboard's
+  // turn and size, about the selection's centre, one batch each.
+  test("Rotate 90° clockwise turns about the selection's centre, one batch named rotate, remembered", async () => {
+    covers("command:paged.transform.rotate90Clockwise");
+    const h = harness();
+    const r = await h.registry.invoke(PAGED_TRANSFORM_ROTATE_90_CW);
+    expect(r).toEqual({ applied: true, undoSteps: 1 });
+    expect(h.batches).toHaveLength(1);
+    expect(h.batches[0]!.label).toBe("rotate");
+    // +x turns toward +y (clockwise on screen); the centre (5, 5) stays.
+    near(valueOf(h.batches[0]!.ops[0]), [0, 1, -1, 0, 10, 0]);
+    expect(h.memory.last()).toEqual(rotationRecord(90));
+  });
+
+  test("the rotate steps and quarter turns undo each other; the scale steps scale about the centre", async () => {
+    covers("command:paged.transform.rotate90Counterclockwise");
+    covers("command:paged.transform.rotateStepClockwise");
+    covers("command:paged.transform.rotateStepCounterclockwise");
+    covers("command:paged.transform.scaleUp");
+    covers("command:paged.transform.scaleDown");
+    const h = harness();
+    await h.registry.invoke(PAGED_TRANSFORM_ROTATE_90_CCW);
+    near(valueOf(h.batches[0]!.ops[0]), [0, -1, 1, 0, 0, 10]);
+    await h.registry.invoke(PAGED_TRANSFORM_ROTATE_STEP_CW);
+    await h.registry.invoke(PAGED_TRANSFORM_ROTATE_STEP_CCW);
+    const cw = valueOf(h.batches[1]!.ops[0]);
+    const ccw = valueOf(h.batches[2]!.ops[0]);
+    near(cw.slice(0, 4), [
+      Math.cos(Math.PI / 12),
+      Math.sin(Math.PI / 12),
+      -Math.sin(Math.PI / 12),
+      Math.cos(Math.PI / 12),
+    ]);
+    near(ccw.slice(0, 4), [cw[0]!, -cw[1]!, -cw[2]!, cw[3]!]);
+    await h.registry.invoke(PAGED_TRANSFORM_SCALE_UP);
+    near(valueOf(h.batches[3]!.ops[0]), [1.1, 0, 0, 1.1, -0.5, -0.5]);
+    expect(h.batches[3]!.label).toBe("scale");
+    await h.registry.invoke(PAGED_TRANSFORM_SCALE_DOWN);
+    near(valueOf(h.batches[4]!.ops[0]), [0.9, 0, 0, 0.9, 0.5, 0.5]);
+    // Nothing selected: nothing written.
+    h.select([], {});
+    await h.registry.invoke(PAGED_TRANSFORM_SCALE_UP);
+    expect(h.batches).toHaveLength(5);
   });
 });

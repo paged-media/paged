@@ -42,6 +42,7 @@ import {
 } from "./files.js";
 import { DOC, FILES, OUTLINE } from "./messages.js";
 import { contributeMenu } from "./menu";
+import { contributeStory } from "./story/contribute.js";
 import { createDocStore, paragraphRange } from "./panels/outline-model.js";
 import {
   INSERT_LABEL,
@@ -719,6 +720,8 @@ function activateDoc(
   // F1 — the menu bar. Before plugin-api 0.2.33 there was no menu door,
   // so every command in this bundle lived behind Cmd+K and nowhere else.
   const menuSub = contributeMenu(host);
+  // Doc ADR 630 — the Story view, the Story Map and overset navigation.
+  disposers.push(contributeStory(host));
 
   return {
     dispose() {

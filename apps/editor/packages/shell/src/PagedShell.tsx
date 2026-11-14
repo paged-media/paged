@@ -148,6 +148,7 @@ import { FillStrokeCluster } from "./chrome/FillStrokeCluster";
 import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
 import { useDensityCommands } from "./state/density";
+import { useContrastCommands } from "./state/contrast";
 import {
   useFocusWorkspace,
   useFocusWorkspaceCommand,
@@ -602,6 +603,8 @@ function ShellChrome({
   // Edit ▸ Settings ▸ Interface density (state/density.ts) and the
   // adaptive workspace's switch (cockpit/workspace-class.ts).
   useDensityCommands();
+  // Edit ▸ Settings ▸ Contrast (state/contrast.ts).
+  useContrastCommands();
   useAdaptiveWorkspaceCommand();
   const focus = useFocusWorkspace();
   // A narrow workspace (cockpit/workspace-class.ts) shows the right dock as

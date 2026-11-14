@@ -1130,6 +1130,13 @@ Insert ▸ Spreadsheet… imports the file but places nothing: "Place on page" i
 
 **Screenshots:** `F-42-sheet-session.png`, `F-42-sheet-typed-nowhere.png`
 
+**Fixed (2026-11-14, sheet ADR 532, extensions ADR 1108).** The entered frame is the grid (the
+frame surface of sheet ADR 510): a cell cursor on the canvas, typing edits the active cell, Tab and
+Enter commit and move, the arrows never nudge the frame. A selected sheet frame offers **Frame ·
+Edit cells**; inside, the bar reads **Editing cells** and has **Done**; it says whether the
+selected cells print in the frame and warns when rows or columns overflow it, with a print preview
+of the selection (`UXI-T38`).
+
 <a id="f-43"></a>
 
 #### F-43 · Image: two tool sets at once, and placed images are uncounted
@@ -1155,6 +1162,11 @@ Live adjustments work: dragging Exposure updates the frame while the slider move
 Content · Edit image, in the context toolbar: a double-click positions the picture first, and
 the image tools appear only once Edit image is entered. The two tool sets inside the raster
 context, the uncounted embedded image and the "Colour" spelling are not changed.
+
+**Two tool sets fixed (2026-11-14, paged.image ADR 487).** The rail is the one tool set: the
+context toolbar no longer repeats the context's tools as icon pills; it names the tool in hand,
+carries its options and says what the next edit changes ("Editing: Pixels", "Editing: Mask ·
+non-destructive"). The uncounted embedded image and the "Colour" spelling remain open.
 
 <a id="f-44"></a>
 
@@ -1228,6 +1240,13 @@ Bindings shows "bindings: [sync states] none", "preview record: ‹ prev –/–
 **Recommendation:** Apply the October panel-audit wording rules to Bindings. Rename "Lower to document".
 
 **Screenshots:** `F-46-data-bindings-wording.png`
+
+**Fixed (2026-11-14, data ADR 566).** The Bindings panel speaks product language in sentence
+case: "Place on page" (was "Lower to document"), "Column", "Bindings", "Sync states", "None";
+the stepper ("preview record: ‹ prev –/– next ›", "jump to:") is a record scrubber ("Record 3 of
+120", Previous, Next, a slider, the host's numeric field); the checkboxes take the editor's
+accent. Plugins ▸ Data shows one Data query entry (the F-18 rule). The panel also gained the six
+workflow steps and an outlier finder.
 
 <a id="f-47"></a>
 
@@ -1338,6 +1357,14 @@ The 11 px shortcut hints in menus measure 2.94:1 in the dark theme and 2.30:1 in
 
 **Screenshots:** `F-51-menu-hint-contrast.png`
 
+**Fixed (2026-11-14, editor ADR 1231).** The hints are drawn in the muted token, never faded
+again with opacity; the muted tokens moved so every text token meets 4.5:1 on every surface it
+is drawn on in both themes (light hints now 5.3:1 on a menu, dark 6.1:1; the search placeholder
+4.9:1); "soon" rows are disabled controls, outside the contrast rule. A token test
+(`packages/shell/test/styles/theme-contrast.test.ts`) holds the pairs, and axe runs over the
+chrome, the Object, Edit and View menus and the palette in both themes and in High contrast
+(`tests/e2e/uxi-accessibility.spec.ts`, `UXI-T74`).
+
 <a id="f-52"></a>
 
 #### F-52 · Camera animations ignore "reduce motion"
@@ -1419,6 +1446,15 @@ plan task AP5.
 
 **Screenshots:** none (a measured finding)
 
+**Measured again (2026-11-14, editor ADR 1232; open).** Every cache now has a stated owner and
+budget (`docs/reference/performance.md`): the CPU tiles 64 MB with LRU eviction, the GPU page
+scenes 200 pages, the thumbnails one per page, the undo log its depth. The two templates opened
+as files alone (linked images unresolved) take 341 MB and 443 MB, page and workers; the
+decoded-image cache, where the audit's gigabytes were, has no budget yet: the interaction
+inventory's exception EXC-003 (engine work: images decoded at the size they are shown, the
+visible pages composed first), with an expiry. The nightly performance job measures the
+generated stress document's memory against a 3 GB budget.
+
 <a id="f-55"></a>
 
 #### F-55 · Small windows leave almost no canvas, and below 1025 px the layout breaks
@@ -1469,6 +1505,15 @@ At normal typing speeds (2.5–8 characters/s) a character is in the model and o
 **Evidence:** `client.mutate` wrapped in the page; keydown timestamps from a capture listener installed before the app's.
 
 **Screenshots:** `F-56-typing-burst.png`
+
+**Addressed (2026-11-14, editor ADR 1232; not yet proven).** Inserts no longer queue one per
+key: while one is in flight the keys behind it fold into one insert at the advancing caret, sent
+with the reply, and every other request of the text editor sends what is pending first, so the
+order is kept (`apps/canvas/src/ui/typing-coalescer.ts`). In a burst of 55 keys a second, 88
+keys went as 58 to 72 inserts in a 40-page document. On the shared development machine the
+latency (p50 186–233 ms before, 227–232 ms after; p95 433–509 ms before, 443–473 ms after) did
+not move beyond its noise, so the finding stays open until the nightly job's quiet runner shows
+the burst flat (`docs/reference/performance.md`).
 
 ### Visual consistency
 

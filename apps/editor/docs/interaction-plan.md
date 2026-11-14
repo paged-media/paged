@@ -47,19 +47,20 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 
 ## 0a. Progress (2026-11-13)
 
-| Part                                                                                                | State                                                                                                                                                                                                                                                      | Where                                                  |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| W0.1 the two documents                                                                              | Done: stored as written                                                                                                                                                                                                                                    | `apps/editor/docs/specs/ideas/`                        |
-| W0.2 the ADR ranges                                                                                 | Done                                                                                                                                                                                                                                                       | PM-0019 (editor 1200–1299), PM-0020 (engine 1300–1399) |
-| W0.3 adoption and decisions                                                                         | Done: adopted and decided, nothing implemented                                                                                                                                                                                                             | ADR 1200, ADR 1201                                     |
-| W0.8 this plan and the status block                                                                 | Done                                                                                                                                                                                                                                                       | this file, `status.md`                                 |
-| W0.4–W0.7 inventory, coverage report, harness, baseline                                             | In progress                                                                                                                                                                                                                                                | §3                                                     |
-| EN1–EN4, the engine and protocol 79                                                                 | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview                                                                                    | §6; engine ADR 1300, amendments to 125, 193, 1011      |
-| EN5–EN8, the engine and protocol 80                                                                 | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)                                                                                                 | §6; engine ADRs 1301–1305, amendment 2 to 193          |
-| IC1–IC5 the coordinator, the terminal events, the stale guards, the adapters, the press in one call | Done; the coordinator is the default (`?debug=legacy-pointer` keeps the old path until IC6)                                                                                                                                                                | ADR 1210                                               |
-| CM1–CM4 contexts and modules                                                                        | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced | editor ADRs 1214, 1215; extensions ADR 1106            |
-| DF1–DF9, documents, files and feedback                                                              | Done: save status, recovery, drop intent, compatibility report, new document, guided export, issues on the page, operation feedback, clipboard order; F-06 continuity                                                                                      | ADRs 1203–1205, 1219–1224, 231 (amended)               |
-| Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                                                           | Not started                                                                                                                                                                                                                                                | §4–§12                                                 |
+| Part                                                                                                                                                                             | State                                                                                                                                                                                                                                                                                                    | Where                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| W0.1 the two documents                                                                                                                                                           | Done: stored as written                                                                                                                                                                                                                                                                                  | `apps/editor/docs/specs/ideas/`                        |
+| W0.2 the ADR ranges                                                                                                                                                              | Done                                                                                                                                                                                                                                                                                                     | PM-0019 (editor 1200–1299), PM-0020 (engine 1300–1399) |
+| W0.3 adoption and decisions                                                                                                                                                      | Done: adopted and decided, nothing implemented                                                                                                                                                                                                                                                           | ADR 1200, ADR 1201                                     |
+| W0.8 this plan and the status block                                                                                                                                              | Done                                                                                                                                                                                                                                                                                                     | this file, `status.md`                                 |
+| W0.4–W0.7 inventory, coverage report, harness, baseline                                                                                                                          | In progress                                                                                                                                                                                                                                                                                              | §3                                                     |
+| EN1–EN4, the engine and protocol 79                                                                                                                                              | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview                                                                                                                                  | §6; engine ADR 1300, amendments to 125, 193, 1011      |
+| EN5–EN8, the engine and protocol 80                                                                                                                                              | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)                                                                                                                                               | §6; engine ADRs 1301–1305, amendment 2 to 193          |
+| IC1–IC9 the coordinator, the terminal events, the stale guards, the adapters, the press in one call, the selection model, the geometry pressed, named snaps, the cursor contract | Done; the coordinator is the one pointer path (the legacy path removed)                                                                                                                                                                                                                                  | ADR 1210; ADRs 235 and 310 amended; ADRs 1226, 1227    |
+| CM1–CM4 contexts and modules                                                                                                                                                     | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced                                               | editor ADRs 1214, 1215; extensions ADR 1106            |
+| DF1–DF9, documents, files and feedback                                                                                                                                           | Done: save status, recovery, drop intent, compatibility report, new document, guided export, issues on the page, operation feedback, clipboard order; F-06 continuity                                                                                                                                    | ADRs 1203–1205, 1219–1224, 231 (amended)               |
+| AP1–AP5 accessibility, devices, performance                                                                                                                                      | Done: the object tree, keyboard-only inserts and transforms, the selection cycle, AA tokens, high contrast, axe, 200 % zoom; pen pressure for pens only, the pinch over a pending press; the performance budgets, a progressive CPU render, typing folded, the nightly suite (decoded images: `EXC-003`) | ADR 1230, ADR 1231, ADR 1232                           |
+| Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                                                                                                                                        | Not started                                                                                                                                                                                                                                                                                              | §4–§12                                                 |
 
 ## 1. Facts in the code that shape the plan
 
@@ -436,18 +437,53 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   cells, T38; a publication preview; F-42), doc (a story view and a story map), data (a record
   scrubber, an outlier finder, wording; F-46), web (source and render in sync), slide (the sorter
   as the default navigation; F-47), template fill (role-aware UX, forms on phones; T73).
+  **Draw done** (paged.draw ADR 370): the Pen's named states with their cursors and hints, a click
+  on the last anchor finishes the open path; a precision magnifier on Control; Points in the
+  inspector for selected anchors; Shape suggestions; the Pathfinder says it applies on click and
+  outlines its operands (no engine dry run exists for a result preview).
+  **Image done** (paged.image ADR 487; closes F-43's two tool sets): the rail is the one tool set
+  and the context toolbar names the tool in hand with its options (every module's context); what
+  an edit changes is said in the layer rows and the toolbar (pixels, adjustment, mask, placement);
+  the filter dialog's before/after split, its draft / rendering / full line; the pixels at 100 %.
+  **Web done** (paged.web ADR 416): the element in focus inspected in the source panel (line,
+  open tag, path, rendered size, the rules that reach it, its diagnostics), publication notes for
+  what a page cannot show and why no script runs, the browser preview and the publication
+  rendering named, sample data beside the source.
+  **Built, part b (2026-11-14):** sheet — **Frame · Edit cells** (extensions ADR 1108), the bar's
+  Editing cells and Done, the publication preview of the selection with overflow warnings, T38
+  extended (sheet ADR 532; F-42 closed); doc — Story view (a module view writing the engine's
+  story, no second text model) and the Story Map with overset and unplaced stories, Go to next
+  overset story (doc ADR 630); data — the six workflow steps, the record scrubber, the outlier
+  finder, the binding badges as the editing aid Data bindings, F-46's wording (data ADR 566);
+  template fill — Required / Optional, progress, Next field, missing content, Finish with export
+  and save, T73 on a phone (editor ADR 1225). The modules' raw number inputs of sheet, doc and data
+  left the `raw-number-input` baseline.
 
 ## 11. Track AP — Accessibility, devices and performance (spec wave 6)
 
 - **AP1 The object tree (D-13).** `CV/ui/A11yObjectTree.tsx`, virtualized and synchronised with
-  the selection; `@axe-core/playwright` in the journeys. Tests: T69.
-- **AP2 Keyboard-only creation and transforms** as commands. Tests: T70.
+  the selection; `@axe-core/playwright` in the journeys. Tests: T69. **Done**
+  ([ADR 1230](adr/1230-an-accessible-object-tree.md)): the Tree panel (`paged.tree`) is the tree;
+  `paged.view.objectTree` (Alt+Shift+O) reaches it; axe runs in `TESTS/e2e/uxi-accessibility.spec.ts`.
+- **AP2 Keyboard-only creation and transforms** as commands. Tests: T70. **Done** (ADR 1230):
+  inserts land in view, Object ▸ Transform's rotate and scale steps, and
+  `paged.edit.selectBelow` / `.selectAbove` (⌥⌘[ / ⌥⌘], IC6’s cycle with a keyboard half) for overlapping objects — the
+  cycle IC6's object picker reuses.
 - **AP3 High contrast**, the contrast fixes, 200 % UI zoom (tokens). Tests: T74, T75. Closes F-51.
+  **Done** ([ADR 1231](adr/1231-high-contrast-and-aa.md)).
 - **AP4 Touch and pen.** Pressure and tilt reach the draw tools; a pinch over a pending selection
-  candidate changes the camera only. Tests: T71, T72.
+  candidate changes the camera only. Tests: T71, T72. **Done** (ADR 1230, decision 8): pen
+  pressure is read only for a pen (the brushes tapered every mouse stroke's end); the pinch
+  takeover of ADR 294 and the coordinator's preempting session already held, now proven over a
+  pending hit test through real CDP input; T73 (the fill shape on a phone) is claimed too. No
+  change to VC was needed.
 - **AP5 Performance.** Progressive first paint, cache and memory budgets, typing coalescing, p95
   and p99 budgets; performance probes in a nightly job; a stress suite (chaos and large files).
-  Closes F-54, F-56; raises G3.
+  Closes F-54, F-56; raises G3. **Done** ([ADR 1232](adr/1232-performance-budgets.md);
+  [`reference/performance.md`](reference/performance.md)): the CPU render one tile per tick from
+  the viewport's centre, a 64 MB tile budget, typing folded per round trip, the budgets suite
+  and its nightly workflow. The engine's decoded-image cache stays unbudgeted as the inventory's
+  `EXC-003`.
 
 ## 12. Track PX — The strategy's Phase 3 concepts
 
