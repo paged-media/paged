@@ -2054,6 +2054,23 @@ fn frame_cases(c: &mut Vec<Case>) {
             fit: Some("FitContentToFrame".into()),
         }
     }));
+    c.push(paints("RelinkImage", "images", |m| {
+        // Engine ADR 1308 — a placed picture relinked to other bytes shows
+        // them in the same frame.
+        let frame = m
+            .scene()
+            .spreads
+            .iter()
+            .flat_map(|s| s.spread.rectangles.iter())
+            .find(|r| r.image_link.is_some())
+            .and_then(|r| r.self_id.clone())
+            .expect("images fixture places a picture");
+        Mutation::RelinkImage {
+            element_id: frame,
+            uri: "relinked.png".into(),
+            bytes: Some(ByteBuf(tiny_png())),
+        }
+    }));
     c.push(paints("ReplaceImageBytes", "geometry", |m| {
         let host = add_rect(m, (40.0, 40.0, 240.0, 240.0));
         Mutation::ReplaceImageBytes {
@@ -2512,6 +2529,13 @@ fn page_cases(c: &mut Vec<Case>) {
     c.push(paints("DuplicatePage", "layout", |m| {
         Mutation::DuplicatePage {
             page: first_page(m),
+        }
+    }));
+    c.push(paints("SetFacingPages", "layout", |m| {
+        // Engine ADR 1312 — the other layout than the fixture's: every page
+        // moves to its side of the spine.
+        Mutation::SetFacingPages {
+            facing: m.scene().designmap.document_preference.facing_pages != Some(true),
         }
     }));
     c.push(paints("ApplyMasterToPage", "masters", |m| {
