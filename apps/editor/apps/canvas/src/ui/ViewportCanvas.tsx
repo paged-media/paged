@@ -50,16 +50,12 @@ import {
   useEditorScope,
   type MarqueeRectPageLocal,
   type SelectionState,
-  useEditorKeys,
   currentPageIndex,
-  isEscapeKey,
   useEscapeArbiter,
-  createInteractionCoordinator,
   ownerOfTool,
   useInteractionCoordinator,
   type EndResult,
   type GuardToken,
-  type InteractionCoordinator,
   type InteractionPhase,
   type InteractionSession,
   type SessionSpec,
@@ -101,15 +97,6 @@ import { routePress, type PressRouteKind } from "./press-route";
 import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
-
-// The interaction coordinator (editor ADR 1210; `UXI-MIG-003`): the
-// canvas's pointer sessions are the editor's — a window blur, a hidden
-// page, a document or tool switch and unmount end them — and the terminal
-// events, the stale guards and the adapters of the interaction contract
-// apply. `?debug=legacy-pointer` keeps the canvas's sessions to itself and
-// its behaviour as it was before the coordinator, until the legacy path is
-// removed (IC6).
-const COORDINATED = !debugFlag("legacy-pointer");
 
 // Re-export the (now shell-owned) overlay state types so existing
 // imports from this module continue to work.
@@ -171,6 +158,9 @@ export interface ViewportCanvasProps {
     pageId: PageId,
     rect: [number, number, number, number],
     modifiers?: PointerModifiers,
+    /** D-01 — drawn left to right it contains, right to left it
+     *  intersects. */
+    mode?: "contain" | "intersect",
   ) => void;
   /** Current selection; used by the overlay to highlight the hit point + page. */
   selection?: SelectionState | null;
@@ -259,7 +249,6 @@ const CLICK_DRAG_THRESHOLD_PX = 4;
 const WHEEL_LINE_PX = 16;
 
 export function ViewportCanvas(props: ViewportCanvasProps) {
-  const keys = useEditorKeys();
   const scope = useEditorScope();
   const pointerStore = scope.get(CANVAS_POINTER);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -283,15 +272,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const pathEditConsumedRef = useRef(false);
 
   // The interaction coordinator (editor ADR 1210): every pointer
-  // sequence on the canvas is a SESSION — with the flag, a session of the
-  // editor's coordinator, which ends it on a window blur, a hidden page, a
-  // document or tool switch and unmount; without it, one of the canvas's
-  // own that nothing outside ends.
-  const editorInteractions = useInteractionCoordinator();
-  const [ownInteractions] = useState(() => createInteractionCoordinator());
-  const interactions: InteractionCoordinator = COORDINATED
-    ? editorInteractions
-    : ownInteractions;
+  // sequence on the canvas is a SESSION of the editor's coordinator, which
+  // ends it on a window blur, a hidden page, a document or tool switch and
+  // unmount.
+  const interactions = useInteractionCoordinator();
   // IC4 — the press that holds the pointer, and everything the canvas
   // keeps for it, in ONE record owned by ONE session. It replaces the six
   // refs the canvas kept before (the legacy drag, a tool's drag, a
@@ -711,10 +695,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   /** IC3 — a late answer is applied only while the epochs it was asked
    *  under hold (`UXI-OWN-008`, `UXI-ASY-002`): no newer press, no other
-   *  document, no other context, its session not aborted. With the flag
-   *  off every answer applies, as before. */
+   *  document, no other context, its session not aborted. */
   const stillCurrent = (token: GuardToken): boolean =>
-    !COORDINATED || interactions.confirm(token);
+    interactions.confirm(token);
 
   /** What a press undoes when its session is ended from outside — a lost
    *  capture, Escape, a blur, a hidden page, a document or tool switch,
@@ -820,31 +803,20 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   /** The engine refused `gs`'s begin. */
   const refusedBegin = (gs: GestureState, err: unknown) => {
-    {
-      {
-        const drag = currentDrag();
-        const holding = drag !== null && drag.gestureState === gs;
-        if (COORDINATED) {
-          // The engine refused the begin (a locked item, a gesture it
-          // still holds, a worker that failed): the drag ends here, with
-          // no mutation, and never turns into a pan (`UXI-STATE-002`,
-          // the interaction contract's IC2). What follows the press is
-          // inert until the pointer is let go.
-          const reason = gestureFailureReason(err);
-          if (holding) {
-            dropDrag();
-            setSnapLines([]);
-            closeSession("abort", reason);
-          }
-          finishSession(gs.session, "abort", reason);
-          return;
-        }
-        // Worker rejected — typically a rotated frame in Phase B.
-        // Downgrade to pan so the drag still does *something*
-        // sensible.
-        if (holding) drag.mode = "pan";
-      }
+    const drag = currentDrag();
+    const holding = drag !== null && drag.gestureState === gs;
+    // The engine refused the begin (a locked item, a gesture it still
+    // holds, a worker that failed): the drag ends here, with no mutation,
+    // and never turns into a pan (`UXI-STATE-002`, the interaction
+    // contract's IC2). What follows the press is inert until the pointer is
+    // let go.
+    const reason = gestureFailureReason(err);
+    if (holding) {
+      dropDrag();
+      setSnapLines([]);
+      closeSession("abort", reason);
     }
+    finishSession(gs.session, "abort", reason);
   };
 
   const touchPoint = (
@@ -1223,18 +1195,23 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           hit: undefined,
           releaseDoc: null,
           alt: e.altKey,
-          atomic: COORDINATED && Boolean(props.pressAt) && !modifiers.shift,
+          atomic: Boolean(props.pressAt) && !modifiers.shift,
         };
       } else {
         mode = "marquee";
       }
     }
+    // D-01 — a marquee may start on the pasteboard: it is measured from
+    // the nearest page, and its rectangle may leave that page (engine ADR
+    // 1011, amendment 1).
+    const anchorPage =
+      containing ?? nearestPage(rects, props.pageIds, docX, docY);
     const marqueeAnchor =
-      (mode === "marquee" || mode === "press") && containing
+      (mode === "marquee" || mode === "press") && anchorPage
         ? {
-            pageId: containing[0],
-            pageX: docX - containing[1].x,
-            pageY: docY - containing[1].y,
+            pageId: anchorPage[0],
+            pageX: docX - anchorPage[1].x,
+            pageY: docY - anchorPage[1].y,
           }
         : null;
     const pathEditing = route.kind === "path-edit";
@@ -1369,7 +1346,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       .catch((err: unknown) => {
         press.hit = null;
         const live = currentDrag() === drag;
-        if (live && COORDINATED) {
+        if (live) {
           dropDrag();
           closeSession("abort", gestureFailureReason(err));
         }
@@ -1453,14 +1430,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     ).then((ids) => {
       if (!ids || ids.length === 0) {
         if (currentDrag() === drag) {
-          // Nothing was selected to move. With the coordinator the drag
-          // ends; without, it pans (the legacy fallback).
-          if (COORDINATED) {
-            dropDrag();
-            closeSession("abort", "nothing to move");
-          } else {
-            drag.mode = "pan";
-          }
+          // Nothing was selected to move: the drag ends (no pan fallback).
+          dropDrag();
+          closeSession("abort", "nothing to move");
         }
         finishSession(drag.pressSession, "commit");
         return;
@@ -1491,8 +1463,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       ? rects[props.pageIds.indexOf(anchor.pageId)]
       : null;
     if (!anchor || !pageRect || !props.onMarquee) return;
-    const x = clamp(end[0] - pageRect.x, 0, pageRect.w);
-    const y = clamp(end[1] - pageRect.y, 0, pageRect.h);
+    const x = end[0] - pageRect.x;
+    const y = end[1] - pageRect.y;
     props.onMarquee(
       anchor.pageId,
       [
@@ -1502,6 +1474,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         Math.max(anchor.pageX, x),
       ],
       drag.modifiers,
+      marqueeMode(anchor.pageX, x),
     );
   };
 
@@ -1635,7 +1608,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // the Hand back only from a document-changing drag) turns the rest of
     // the drag into a pan from here; the selection's session ends.
     if (
-      COORDINATED &&
       props.forcePan &&
       (drag.mode === "marquee" || drag.mode === "press") &&
       !held?.path
@@ -1720,19 +1692,21 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-      // Clamp the marquee to the anchor's page so the rect we
-      // commit is page-local. The hit-tester only knows pages.
+      // Measured from the anchor's page; it may leave the page, across the
+      // spread's pages and the pasteboard (D-01).
       const pageRect = rects[props.pageIds.indexOf(anchor.pageId)];
       if (!pageRect) return;
-      const currentX = clamp(docX - pageRect.x, 0, pageRect.w);
-      const currentY = clamp(docY - pageRect.y, 0, pageRect.h);
-      const top = Math.min(anchor.pageY, currentY);
-      const left = Math.min(anchor.pageX, currentX);
-      const bottom = Math.max(anchor.pageY, currentY);
-      const right = Math.max(anchor.pageX, currentX);
+      const currentX = docX - pageRect.x;
+      const currentY = docY - pageRect.y;
       setMarqueeRect({
         pageId: anchor.pageId,
-        rect: [top, left, bottom, right],
+        rect: [
+          Math.min(anchor.pageY, currentY),
+          Math.min(anchor.pageX, currentX),
+          Math.max(anchor.pageY, currentY),
+          Math.max(anchor.pageX, currentX),
+        ],
+        mode: marqueeMode(anchor.pageX, currentX),
       });
     }
   };
@@ -1952,7 +1926,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       finishPress(drag);
     } else if (drag.mode === "marquee") {
       if (marqueeRect && props.onMarquee) {
-        props.onMarquee(marqueeRect.pageId, marqueeRect.rect, modifiers);
+        props.onMarquee(
+          marqueeRect.pageId,
+          marqueeRect.rect,
+          modifiers,
+          marqueeRect.mode,
+        );
       }
       setMarqueeRect(null);
       closeSession("commit");
@@ -2040,7 +2019,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // `UXI-INV-014`): an element that took the capture, a browser that
   // dropped it. Not a pinch's: a lifted finger hands the pinch on.
   const onLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!COORDINATED) return;
     const s = pointerRef.current?.session;
     if (!s || s.kind === "pinch" || s.pointerId !== e.pointerId) return;
     interactions.cancel(s, "capture-lost");
@@ -2173,7 +2151,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // OverlayRevisionAdapter (IC4): snap lines are the gesture's; a late
         // notify after the gesture ended draws nothing (`UXI-SNP-006`).
         const lines = msg.payload.snapLines;
-        if (COORDINATED && lines.length > 0 && !holdsGesture()) return;
+        if (lines.length > 0 && !holdsGesture()) return;
         setSnapLines(lines);
       } else if (
         msg.kind === "warning" &&
@@ -2192,7 +2170,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (s) interactions.cancel(s, "unmount");
   });
   useEffect(() => {
-    if (!COORDINATED) return;
     return () => cancelHeldSession();
   }, []);
 
@@ -2213,7 +2190,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   });
   const escapeResolves = useEffectEvent(() => escapeSession());
   useEffect(() => {
-    if (!COORDINATED) return;
     return arbiter.register({
       id: "paged.canvas.gesture",
       tier: "gesture",
@@ -2223,65 +2199,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       },
     });
   }, [arbiter]);
-
-  // The legacy pointer path (`?debug=legacy-pointer`): Escape cancels the
-  // active gesture from a document listener of the canvas's own.
-  const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
-    if (!isEscapeKey(e)) return;
-    const held = pointerRef.current;
-    // A tool's drag: its handler cancels it (the spine's Escape).
-    if (held?.tool) {
-      props.toolGesture?.onCancel();
-      return;
-    }
-    const handleDrag = held?.handle ?? null;
-    if (held && handleDrag) {
-      // The release that follows finds no drag and does nothing.
-      held.handle = null;
-      handleDrag.router.cancel();
-      closeSession("cancel", "escape");
-      return;
-    }
-    const drag = currentDrag();
-    if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
-    const handle = drag.gestureState.handle;
-    drag.mode = "pan";
-    drag.gestureState = undefined;
-    if (handle !== null) {
-      void props.client
-        .cancelGesture(handle)
-        .then(() => {
-          setSnapLines([]);
-          props.onGestureCommitted?.();
-        })
-        .catch(() => {});
-    }
-  });
-  useEffect(() => {
-    if (COORDINATED) return;
-    const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
-    return keys.listen("keydown", onKeyDown, undefined, document);
-  }, [keys]);
-
-  // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
-  // drag is in flight must abort it. Without this the gesture stays
-  // open until the next pointer event, which then commits a stale
-  // delta — the classic "alt-tab mid-drag leaves a stuck gesture" bug
-  // (gestures.md E2E-11). pointercancel covers capture *theft*; blur
-  // covers the case where the pointer never sends a cancel.
-  // With the coordinator the editor's InteractionProvider hears the blur
-  // and ends the session; this listener is the canvas's own without it.
-  const onWindowBlur = useEffectEvent(() => {
-    const s = pointerRef.current?.session;
-    if (s) interactions.cancel(s, "blur");
-    else abortActiveDrag();
-  });
-  useEffect(() => {
-    if (COORDINATED) return;
-    const onBlur = () => onWindowBlur();
-    window.addEventListener("blur", onBlur);
-    return () => window.removeEventListener("blur", onBlur);
-  }, []);
 
   return (
     <div
@@ -2863,8 +2780,32 @@ function growDelta(
   if (d > t.maxDelta) t.maxDelta = d;
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
+/** D-01 (editor ADR 1201): a marquee drawn left to right takes what it
+ *  wholly contains, right to left what it touches. */
+function marqueeMode(fromX: number, toX: number): "contain" | "intersect" {
+  return toX >= fromX ? "contain" : "intersect";
+}
+
+/** The page nearest a document point (a press on the pasteboard). */
+function nearestPage(
+  rects: ReadonlyArray<PageRect>,
+  ids: ReadonlyArray<PageId>,
+  docX: number,
+  docY: number,
+): [PageId, PageRect] | null {
+  let best: [PageId, PageRect] | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i]!;
+    const dx = Math.max(r.x - docX, 0, docX - (r.x + r.w));
+    const dy = Math.max(r.y - docY, 0, docY - (r.y + r.h));
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = [ids[i]!, r];
+    }
+  }
+  return best;
 }
 
 /** Phase B — return the first selected element whose AABB

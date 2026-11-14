@@ -90,10 +90,19 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
     const model = await modelSnapshot(page);
     const depth = await undoDepth(page);
     // The press is answered in one call (beginGestureAt, IC5); the click
-    // asks for its hit on release. Hold A's click hit (the first hitTest)
-    // until B is done.
+    // asks for its hit on release. The pointer comes to rest over A first
+    // and its hover preselection (IC6) has asked its own hit; then A's
+    // click hit — the next hitTest — is held until B is done.
+    const a = await clientPointOfTarget(page, A.back.id);
+    await page.mouse.move(a.x, a.y);
+    await expect(
+      page.locator(
+        `[data-hover-preselect="${A.back.id.kind}:${A.back.id.id}"]`,
+      ),
+    ).toHaveCount(1);
     await delayNthReply(page, "hitTest", 0, 1_500);
-    await clickOn(page, A.back.id);
+    await page.mouse.down();
+    await page.mouse.up();
     await clickOn(page, A.free.id);
     await expect
       .poll(async () => (await selectionSnapshot(page)).elements)
@@ -103,7 +112,9 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
       (await selectionSnapshot(page)).elements,
       "the late answer for A changes nothing",
     ).toEqual([A.free.id]);
-    expect(await staleDiscards(page, "hit-test")).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => staleDiscards(page, "hit-test"))
+      .toBeGreaterThanOrEqual(1);
     expect(await modelSnapshot(page)).toBe(model);
     expect(await undoDepth(page)).toBe(depth);
   });
@@ -173,7 +184,9 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
     const fresh = await modelSnapshot(page);
     await chaosIdle(page);
     expect((await selectionSnapshot(page)).elements).toEqual([]);
-    expect(await staleDiscards(page, "hit-test")).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => staleDiscards(page, "hit-test"))
+      .toBeGreaterThanOrEqual(1);
     expect(await modelSnapshot(page), "the new document is untouched").toBe(
       fresh,
     );
@@ -197,7 +210,9 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
     // No caret was placed in the note's story by the stale chain.
     const sel = await selectionSnapshot(page);
     expect(sel.text).toBeNull();
-    expect(await staleDiscards(page, "double-click")).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => staleDiscards(page, "double-click"))
+      .toBeGreaterThanOrEqual(1);
     expect(await modelSnapshot(page)).toBe(model);
     expect(await undoDepth(page)).toBe(depth);
   });
@@ -215,7 +230,9 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
     await clickOn(page, A.free.id);
     await chaosIdle(page);
     expect((await selectionSnapshot(page)).elements).toEqual([A.free.id]);
-    expect(await staleDiscards(page, "context-menu")).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => staleDiscards(page, "context-menu"))
+      .toBeGreaterThanOrEqual(1);
     expect(await modelSnapshot(page)).toBe(model);
     expect(await undoDepth(page)).toBe(depth);
   });

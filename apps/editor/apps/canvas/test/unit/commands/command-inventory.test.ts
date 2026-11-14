@@ -61,7 +61,10 @@ import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
-import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
+import {
+  CANVAS_CONTEXT_MENU_COMMAND,
+  SELECT_BELOW_COMMAND,
+} from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildEffectMenuCommands } from "../../../src/effect-menu";
 import { buildViewCommands } from "../../../src/view-commands";
@@ -191,6 +194,7 @@ function tableIds(): string[] {
     ...buildSvgCommands(noop),
     ...buildAssetExportCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
+    SELECT_BELOW_COMMAND,
     ...buildObjectCommands(noop),
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
@@ -290,6 +294,7 @@ describe("the host command inventory", () => {
       "svgCommands",
       "buildAssetExportCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
+      "SELECT_BELOW_COMMAND",
       "objectCommands",
       "pathfinderCommands",
       "cornerCommands",

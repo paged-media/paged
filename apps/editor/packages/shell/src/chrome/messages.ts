@@ -217,6 +217,19 @@ export const ENGINE_FAILURE = defineMessages("shell.engineFailure", {
   reload: "Reload",
 });
 
+/** Hover preselection and the locked mark (editor ADR 235, amended by
+ *  IC6): the type of the item a click would select. */
+export const HOVER = defineMessages("shell.hover", {
+  rectangle: "Rectangle",
+  oval: "Ellipse",
+  polygon: "Polygon",
+  line: "Line",
+  textFrame: "Text frame",
+  group: "Group",
+  item: "Item",
+  locked: "{kind} · locked",
+});
+
 export const COLLAB = defineMessages("shell.collab", {
   share: "Share",
   soon: "Sharing and collaboration are coming soon",
@@ -296,6 +309,7 @@ export const TOOL_OPTIONS = defineMessages("shell.toolOptions", {
 
 export const CONTEXT_MENU = defineMessages("shell.contextMenu", {
   label: "Canvas",
+  selectUnder: "Select",
 });
 
 export const PANEL_RAIL = defineMessages("shell.panelRail", {

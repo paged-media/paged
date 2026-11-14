@@ -34,18 +34,22 @@ function MarqueeRender(props: OverlayProps) {
   const pr = props.pageRects.get(m.pageId);
   if (!pr) return null;
   const [top, left, bottom, right] = m.rect;
+  // D-01 — the two directions look different: a containing marquee (left
+  // to right) is solid, an intersecting one (right to left) dashed.
+  const contain = m.mode === "contain";
   return (
     <rect
       data-gesture-preview="marquee"
+      data-marquee-mode={m.mode ?? "intersect"}
       x={pr.x + left}
       y={pr.y + top}
       width={Math.max(0, right - left)}
       height={Math.max(0, bottom - top)}
       fill="var(--overlay-selection)"
-      fillOpacity={0.08}
+      fillOpacity={contain ? 0.1 : 0.05}
       stroke="var(--overlay-selection)"
       strokeWidth={1}
-      strokeDasharray="4 2"
+      strokeDasharray={contain ? undefined : "4 2"}
       vectorEffect="non-scaling-stroke"
       pointerEvents="none"
     />

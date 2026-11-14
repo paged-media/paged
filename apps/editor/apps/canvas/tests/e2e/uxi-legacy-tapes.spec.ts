@@ -29,9 +29,9 @@
 //
 // Recording is deliberate: `UXI_TAPES=record` re-runs each script and
 // rewrites the tape (`--grep` one tape to record only it). A replay never
-// sleeps on the tape's timestamps. Since IC4 they replay on the
-// interaction coordinator, and in the `uxi-legacy-pointer` project on the
-// old path, to the same outcome (editor ADR 1210).
+// sleeps on the tape's timestamps. They replay on the interaction
+// coordinator (editor ADR 1210), the one pointer path since IC6 removed the
+// legacy one (`UXI-MIG-002`), to the outcome the legacy tools recorded.
 
 import { expect, test, type Page } from "@playwright/test";
 
