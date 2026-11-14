@@ -130,10 +130,13 @@ test.describe("library panel @feat:editor-shell.panels.library", () => {
     await openPanel(page, "paged.library");
     const docs = page.locator("[data-library-panel] [data-library-document]");
     await expect(docs).toHaveCount(1);
-    await docs.first().locator("[data-library-open]").click();
+    // The document open last comes back by itself after the reload (editor
+    // ADR 1224, decision 1), with all four versions; being the open one, its
+    // row offers no Open.
     await expect(
       page.locator("[data-library-panel] [data-library-version]"),
-    ).toHaveCount(4);
+    ).toHaveCount(4, { timeout: 30_000 });
+    await expect(docs.first().locator("[data-library-open]")).toHaveCount(0);
     await clearLibrary(page);
   });
 });
