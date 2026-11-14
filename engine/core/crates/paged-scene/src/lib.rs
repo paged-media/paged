@@ -2267,7 +2267,7 @@ pub struct ResolvedParagraphAttrs {
 /// composed zero lines — the annual's poured DOCX report (page 116,
 /// 29 paragraphs, every range bare) rendered as an empty table grid
 /// while InDesign set the whole story.
-fn applied_paragraph_style(paragraph: &Paragraph) -> &str {
+pub fn applied_paragraph_style(paragraph: &Paragraph) -> &str {
     paragraph
         .paragraph_style
         .as_deref()

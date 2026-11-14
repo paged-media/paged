@@ -120,6 +120,9 @@ pub struct LaidOutLine {
     /// Paragraph-breaker ratio. 0 = natural, >0 = stretched (would be
     /// justified), <0 = shrunk.
     pub ratio: f32,
+    /// The line ends at a hyphenation point (a dictionary point or a
+    /// discretionary hyphen): the composer added the hyphen it ends on.
+    pub hyphenated: bool,
     pub glyphs: Vec<PositionedGlyph>,
 }
 
@@ -431,6 +434,7 @@ pub fn layout_paragraph<S: TextShaper>(
             baseline_exact: exact,
             width: shaped.total_advance,
             ratio: line.ratio,
+            hyphenated: line.ends_with_hyphen,
             glyphs,
         });
         exact += options.line_height as f64;
@@ -467,6 +471,18 @@ impl LayoutOptions<'_> {
     /// Column width in 1/64 pt (convenience for layout passes).
     pub fn column_width(&self) -> i32 {
         self.compose.column_width
+    }
+
+    /// The measure line `line` is set in, 1/64 pt: its slot of
+    /// `column_widths` (the last slot past the end, as the breaker reads
+    /// it), else the column.
+    pub fn line_measure(&self, line: usize) -> i32 {
+        self.compose
+            .column_widths
+            .as_deref()
+            .filter(|w| !w.is_empty())
+            .map(|w| w[line.min(w.len() - 1)])
+            .unwrap_or_else(|| self.column_width())
     }
 
     /// How a justified paragraph sets this line when it is its last
@@ -1616,9 +1632,8 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
     // Per-line widths drive both Knuth-Plass and post-layout
     // alignment: when an obstacle carves a line down to ~half-column
     // width, the right/center/justify alignments should snap glyphs
-    // against THAT width, not the original scalar column. Defaults
-    // to the scalar width when no per-line override is configured.
-    let per_line_widths: Option<&[i32]> = opts.column_widths.as_deref().filter(|v| !v.is_empty());
+    // against THAT width, not the original scalar column
+    // (`LayoutOptions::line_measure`).
     for (i, bp) in breaks.iter().enumerate() {
         let Some(&end) = byte_ends.get(bp.index) else {
             continue;
@@ -1736,6 +1751,7 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
                 baseline_exact: baseline as f64,
                 width: natural_width,
                 ratio: bp.ratio,
+                hyphenated,
                 glyphs,
             };
             for g in &mut snapped.glyphs {
@@ -1789,9 +1805,7 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
         // center / justify therefore align against the line's
         // *available* width, which is what the wrap-around-objects
         // pass needs.
-        let line_column = per_line_widths
-            .map(|w| w[i.min(w.len() - 1)])
-            .unwrap_or_else(|| options.column_width());
+        let line_column = options.line_measure(i);
         apply_alignment(
             &mut glyphs,
             natural_width,
@@ -1825,6 +1839,7 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
             baseline_exact: exact_baseline,
             width: natural_width,
             ratio: bp.ratio,
+            hyphenated,
             glyphs,
         });
         byte_cursor = end;
@@ -2032,6 +2047,7 @@ impl TabBreakInput<'_> {
             baseline_exact: 0.0,
             width: pen - x0,
             ratio: 0.0,
+            hyphenated: false,
             glyphs,
         };
         apply_tab_stops(
@@ -3530,6 +3546,7 @@ mod tests {
             baseline_exact: 0.0,
             width: pen,
             ratio: 0.0,
+            hyphenated: false,
             glyphs,
         }
     }
@@ -3747,6 +3764,7 @@ mod tests {
             baseline_exact: 0.0,
             width: x,
             ratio: 0.0,
+            hyphenated: false,
             glyphs,
         }
     }

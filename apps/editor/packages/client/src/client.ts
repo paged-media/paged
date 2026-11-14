@@ -53,6 +53,10 @@ import {
   type FrameChainLink,
   type GestureType,
   type GesturePress,
+  type ExplainAspect,
+  type Explanation,
+  type LineEvidenceQuery,
+  type LineEvidenceReport,
   type HitResult,
   type LossEntry,
   type ExportedLinkWire,
@@ -1360,6 +1364,53 @@ export class CanvasClient {
     }
     this.scopeCache.set(key, scope);
     return scope;
+  }
+
+  /**
+   * Protocol 82 (engine ADR 1307) — Document X-Ray: why `item` (a page
+   * item, or a story range for text) looks and behaves as it does, from the
+   * model alone: per text property the winning level of the style cascade
+   * and the levels it shadows (a local override shows as one), the layer,
+   * why it is locked or hidden, its link, its bindings, its thread and
+   * overset, its object style and effects, what editing its styles changes,
+   * and what the document does not store (`unknown`). `aspect: "overview"`
+   * answers only what the canvas's X-Ray mode colours by; `selection` (a
+   * content selection, in caret units) explains the text it covers, `item`
+   * then naming its frame. A read.
+   */
+  async explain(
+    item: ElementId,
+    options: { aspect?: ExplainAspect; selection?: ContentSelection } = {},
+  ): Promise<Explanation> {
+    const reply = await this.send({
+      kind: "requestExplain",
+      payload: {
+        item,
+        ...(options.aspect ? { aspect: options.aspect } : {}),
+        ...(options.selection ? { selection: options.selection } : {}),
+      },
+    });
+    if (reply.kind === "explained") return reply.payload;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 82 (engine ADR 1308) — the Typography Debugger's evidence for
+   * a story's composed lines (`frame`: one frame's; `range`: those touching
+   * story character offsets `[start, end)`): the measure, the natural
+   * width, the adjustment ratio, the word and letter spacing as set, why
+   * the line broke, the hyphenation points, the baseline grid. With
+   * `preview` (a property write), the evidence of a copy of the document
+   * with that write applied: the document, its history and its revision
+   * stay as they are, and applying it is an ordinary `mutate`.
+   */
+  async lineEvidence(query: LineEvidenceQuery): Promise<LineEvidenceReport> {
+    const reply = await this.send({
+      kind: "requestLineEvidence",
+      payload: query,
+    });
+    if (reply.kind === "lineEvidence") return reply.payload;
+    throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
   /**

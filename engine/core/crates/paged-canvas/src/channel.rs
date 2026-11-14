@@ -894,7 +894,25 @@ export type WorkerToMain = WorkerToMainKind & {
 //   - Import losses (engine ADR 1305): `DocumentHandle.losses` (additive,
 //     `LossEntry[]`) on every `DocumentLoaded` (`UXI-FIL-002`).
 //   New message kinds an older worker cannot answer, hence the bump.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(80);
+// v82 — Document X-Ray and the Typography Debugger (editor ADRs 1226 and
+//   1227, tasks PX1 and PX2 of the editor's interaction plan):
+//   - X-Ray (engine ADR 1307): `RequestExplain { item, aspect?,
+//     selection? }` answers
+//     `Explained(Explanation)` — the provenance of an item's look and
+//     behaviour from the model: the style cascade per property with the
+//     winning source and the levels it shadows, the layer, why it is
+//     locked or hidden, its link, its bindings, its thread and overset,
+//     its object style and effects, what editing its styles changes, and
+//     what the document does not store (`unknown`).
+//   - Line evidence (engine ADR 1308): `RequestLineEvidence { story,
+//     frame?, range?, preview? }` answers `LineEvidence(LineEvidenceReport)`
+//     — per composed line the measure, the natural width, the ratio, the
+//     word and letter spacing, why it broke, the hyphenation points, the
+//     grid; with `preview`, a copy's, the document untouched.
+//     `LineLayout` keeps the composer's record of each line
+//     (`LineComposition`) on every build.
+//   New message kinds an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(82);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -2233,6 +2251,28 @@ pub enum MainToWorkerKind {
         #[tsify(optional)]
         coalesce: Option<String>,
     },
+    /// v82 (engine ADR 1307) — Document X-Ray: why `item` (a page item or
+    /// a story range) looks and behaves as it does, from the model alone.
+    /// `aspect` `overview` answers only what the canvas's X-Ray mode
+    /// colours by. A read. Reply: `Explained`.
+    RequestExplain {
+        item: crate::element_selection::ElementId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        aspect: Option<crate::explain::ExplainAspect>,
+        /// Text the editor has selected, in its caret units (UTF-8 bytes,
+        /// one separator per paragraph): when given, it is explained as
+        /// the story range it covers, and `item` names its frame.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        selection: Option<crate::selection::ContentSelection>,
+    },
+    /// v82 (engine ADR 1308) — the Typography Debugger's evidence for a
+    /// story's composed lines (one frame's, those touching a range); with
+    /// `preview`, the evidence of a copy of the document with that write
+    /// applied — the document, its history and its revision untouched. A
+    /// read. Reply: `LineEvidence`.
+    RequestLineEvidence(crate::line_evidence::LineEvidenceQuery),
 }
 
 /// Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -3174,6 +3214,10 @@ pub enum WorkerToMainKind {
     /// v80 (engine ADR 1304) — `EndCoalesce` reply: the step the run ended
     /// in, null when no run was open.
     CoalesceEnded { applied_seq: Option<u64> },
+    /// v82 (engine ADR 1307) — `RequestExplain` reply.
+    Explained(crate::explain::Explanation),
+    /// v82 (engine ADR 1308) — `RequestLineEvidence` reply.
+    LineEvidence(crate::line_evidence::LineEvidenceReport),
 }
 
 impl From<crate::hit::HitTestResult> for HitResult {

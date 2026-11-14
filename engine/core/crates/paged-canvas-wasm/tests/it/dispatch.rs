@@ -2759,3 +2759,89 @@ fn document_loaded_carries_the_import_losses() {
         "{reply}"
     );
 }
+
+/// Engine ADR 1307 over the wire: `requestExplain` answers `explained` for
+/// a page item and for the editor's caret, and is a read.
+#[test]
+fn the_wire_explains_an_item_and_the_text_at_a_caret() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let reply = send(
+        &mut core,
+        3,
+        "requestExplain",
+        serde_json::json!({ "item": { "kind": "textFrame", "id": "tf1" } }),
+    );
+    assert_eq!(reply["kind"], "explained", "{reply}");
+    let x = &reply["payload"];
+    assert_eq!(x["found"], true, "{x}");
+    assert_eq!(x["kind"], "textFrame");
+    assert_eq!(x["flow"]["frames"][0], "tf1", "{x}");
+    assert!(x["text"]["paragraphStyle"]["chain"].is_array(), "{x}");
+    assert!(x["text"]["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["property"] == "pointSize"));
+    let caret = send(
+        &mut core,
+        4,
+        "requestExplain",
+        serde_json::json!({
+            "item": { "kind": "textFrame", "id": "tf1" },
+            "aspect": "overview",
+            "selection": { "storyId": "story1", "start": 2, "end": 2, "affinity": false }
+        }),
+    );
+    assert_eq!(caret["kind"], "explained", "{caret}");
+    assert_eq!(caret["payload"]["text"]["offset"], 1, "{caret}");
+    assert_eq!(undo_len(&mut core, 5), steps, "a read");
+}
+
+/// Engine ADR 1308 over the wire: `requestLineEvidence` answers the lines
+/// of a story, and a preview leaves the document as it was.
+#[test]
+fn the_wire_answers_line_evidence_and_a_preview_changes_nothing() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let reply = send(
+        &mut core,
+        3,
+        "requestLineEvidence",
+        serde_json::json!({ "story": "story1" }),
+    );
+    assert_eq!(reply["kind"], "lineEvidence", "{reply}");
+    assert_eq!(reply["payload"]["found"], true, "{reply}");
+    // The fixture registers no face, so its text sets no lines here; the
+    // engine tests read the lines themselves (`typography_evidence.rs`).
+    assert!(reply["payload"]["lines"].is_array(), "{reply}");
+    let preview = send(
+        &mut core,
+        4,
+        "requestLineEvidence",
+        serde_json::json!({
+            "story": "story1",
+            "preview": {
+                "op": "setElementProperty",
+                "args": {
+                    "elementId": { "kind": "storyRange", "id": { "story_id": "story1", "start": 0, "end": 5 } },
+                    "path": "characterTracking",
+                    "value": { "type": "length", "value": -40.0 }
+                }
+            }
+        }),
+    );
+    assert_eq!(preview["kind"], "lineEvidence", "{preview}");
+    assert_eq!(preview["payload"]["preview"], true, "{preview}");
+    assert_eq!(undo_len(&mut core, 5), steps, "a preview is not a step");
+    let again = send(
+        &mut core,
+        6,
+        "requestLineEvidence",
+        serde_json::json!({ "story": "story1" }),
+    );
+    assert_eq!(
+        again["payload"], reply["payload"],
+        "the document is unchanged"
+    );
+}

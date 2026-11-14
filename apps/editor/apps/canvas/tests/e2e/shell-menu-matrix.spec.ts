@@ -96,6 +96,9 @@ const HOST_MENU = [
   "View/Show data markers",
   // Editor ADR 1223.
   "View/Show issue markers",
+  // Editor ADRs 1226, 1227.
+  "View/X-Ray",
+  "View/Typography debugger",
   // Editor ADR 287.
   "View/Outline view",
   "View/Overprint Preview",
@@ -568,6 +571,8 @@ test.describe("the host menu bar", () => {
         "menu:File/New from a brief…",
         "menu:File/Open recent…",
         "menu:View/Show issue markers",
+        "menu:View/X-Ray",
+        "menu:View/Typography debugger",
         "menu:File/Close",
         "menu:File/Package…",
         "menu:File/Print…",
@@ -815,6 +820,8 @@ test.describe("the host menu bar", () => {
       "menu:File/New from a brief…",
       "menu:File/Open recent…",
       "menu:View/Show issue markers",
+      "menu:View/X-Ray",
+      "menu:View/Typography debugger",
       "menu:File/Close",
       "menu:File/Package…",
       "menu:File/Print…",
@@ -999,6 +1006,8 @@ test.describe("the host menu bar", () => {
         "menu:File/New from a brief…",
         "menu:File/Open recent…",
         "menu:View/Show issue markers",
+        "menu:View/X-Ray",
+        "menu:View/Typography debugger",
         "menu:File/Close",
         "menu:File/Package…",
         "menu:File/Print…",

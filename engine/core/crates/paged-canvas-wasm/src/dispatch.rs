@@ -2048,6 +2048,32 @@ impl WorkerCore {
                     root,
                 }
             }
+            // v82 (engine ADR 1307) — Document X-Ray.
+            MainToWorkerKind::RequestExplain {
+                item,
+                aspect,
+                selection,
+            } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let aspect = aspect.unwrap_or_default();
+                WorkerToMainKind::Explained(match &selection {
+                    Some(sel) => model.explain_selection(sel, aspect),
+                    None => model.explain(&item, aspect),
+                })
+            }
+            // v82 (engine ADR 1308) — the Typography Debugger's evidence.
+            MainToWorkerKind::RequestLineEvidence(query) => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                WorkerToMainKind::LineEvidence(model.line_evidence(&query))
+            }
             // v80 (engine ADR 1304) — a write that joins the run of its key.
             MainToWorkerKind::MutateCoalesced {
                 coalesce,

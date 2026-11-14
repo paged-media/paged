@@ -411,6 +411,8 @@ import {
 } from "../select-all";
 import { CorpusPicker } from "../ui/CorpusPicker";
 import { templateFieldsContribution } from "../overlays/template-fields";
+import { xrayOverlayContribution } from "../overlays/xray-overlay";
+import { typographyOverlayContribution } from "../overlays/typography-overlay";
 import { liveShapeHandlesContribution } from "../overlays/live-shape-handles";
 import {
   EditorInstanceProvider,
@@ -480,6 +482,11 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 1223 — View ▸ Show issue markers: the publication's issues
   // where they stand. Draws nothing until toggled on.
   issueMarkersContribution,
+  // Editor ADRs 1226 and 1227 — View ▸ X-Ray (every item outlined by
+  // what shapes it) and View ▸ Typography debugger (the selected story's
+  // lines by how tightly they are set). Draw nothing until toggled on.
+  xrayOverlayContribution,
+  typographyOverlayContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,

@@ -109,6 +109,8 @@ import { ScriptEditorPanel } from "./script-editor";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { ImportReportPanel } from "./import-report-panel";
+import { XRayPanel } from "./xray-panel";
+import { TypographyPanel } from "./typography-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
 import { HistoryPanel } from "./history-panel";
@@ -227,6 +229,8 @@ const M = defineMessages("app.builtInPanels", {
   generateImage: "Generate image",
   problems: "Problems",
   importReport: "Compatibility report",
+  xray: "X-Ray",
+  typography: "Typography debugger",
   journal: "Journal",
   data: "Data",
   history: "History",
@@ -1274,6 +1278,29 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: ImportReportPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
+  },
+  {
+    // Editor ADR 1226 — Document X-Ray, the "Why?" inspector: the engine's
+    // facts on why the selection looks and behaves as it does.
+    id: "paged.xray",
+    get title() {
+      return t(M.xray);
+    },
+    component: XRayPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
+    // Editor ADR 1227 — the Typography Debugger: the story's lines, how
+    // tightly each is set and why it broke there; a change previewed in a
+    // copy before it is applied.
+    id: "paged.typography",
+    get title() {
+      return t(M.typography);
+    },
+    component: TypographyPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
   },
   {
     // ADR 025 — the journal: a LOCAL flight recorder. Sits beside Problems

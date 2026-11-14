@@ -47,6 +47,10 @@ export type ViewToggle =
   | "dataMarkers"
   // Editor ADR 1223 — the publication's issues on the page.
   | "issueMarkers"
+  // Editor ADRs 1226 and 1227 — Document X-Ray and the Typography
+  // Debugger's lines on the canvas.
+  | "xray"
+  | "typography"
   // Editor ADR 287 — the screen modes and the grids / snapping of the
   // View menu. `outline` / `overprintPreview` / `pixelPreview` resolve to
   // ONE engine view mode (`viewModeOf`); Overprint Preview and Pixel
@@ -115,6 +119,11 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   // a diagnostic view, opened from Publication health or the View menu
   // (editor ADR 1223), and it never prints.
   issueMarkers: false,
+  // Off by default: X-Ray outlines every item by the style that shapes it
+  // and the Typography Debugger colours every line of the selected story
+  // (editor ADRs 1226, 1227). Both are diagnostic views, never printed.
+  xray: false,
+  typography: false,
   // Preview is the default screen: overprints knock out, as Illustrator's
   // and InDesign's screens draw them until Overprint Preview is on.
   outline: false,

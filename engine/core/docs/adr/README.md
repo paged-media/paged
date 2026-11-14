@@ -210,6 +210,8 @@ is not written yet.
 | [1303](1303-a-press-is-one-call.md) | A press is one call: `BeginGestureAt` hit-tests, changes the selection and begins the gesture against one document state, answering the hit, the selection and the handle, or a marquee | Accepted 2026-11-13 |
 | [1304](1304-writes-with-one-coalesce-key-are-one-undo-step.md) | Writes with one coalesce key are one undo step, until another key, no key, a gesture, an undo or `EndCoalesce` | Accepted 2026-11-13 |
 | [1305](1305-an-opened-document-reports-its-losses.md) | An opened document reports its losses: `DocumentHandle.losses` (`idml.import.<what>`), and the client's `exportIdml` answers the export's | Accepted 2026-11-13 |
+| [1307](1307-an-item-explains-itself-from-the-model.md) | An item explains itself from the model: `RequestExplain` answers, per text property, the level of the style cascade that wins and the levels it shadows, the lock and visibility reasons, the link, the bindings, the thread and overset, the object style, and what editing a style changes; what the document does not store is said so | Accepted 2026-11-14 |
+| [1308](1308-a-composed-line-keeps-its-evidence.md) | A composed line keeps its evidence: `LineLayout::composition` records the measure, natural width, ratio, hyphen, composer and grid shift on every build; `RequestLineEvidence` reads it with the spacing, the break, the hyphenation points and the tightness, and a preview builds a copy of the document | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

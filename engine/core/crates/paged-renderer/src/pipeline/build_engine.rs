@@ -4729,20 +4729,7 @@ impl<'a> StoryEmitter<'a> {
         resolved: &paged_scene::ResolvedParagraphAttrs,
         runs: &[paged_scene::ResolvedRunAttrs],
     ) -> Option<&'a paged_text::Hyphenator> {
-        // The RUN's language, because that is where InDesign writes it
-        // — 1,003 times across the corpus's real packages, against 314
-        // on a `<ParagraphStyle>` and 271 on `<TextDefault>`. A run
-        // naming none has already inherited the paragraph's (and
-        // through it the document default) in `merge_below_paragraph`,
-        // so the first run's resolved value IS the whole cascade.
-        //
-        // Hyphenation is character-level in InDesign and a paragraph
-        // may mix languages; composing the whole paragraph with its
-        // first run's dictionary is an approximation, and a stated one.
-        let named = runs
-            .iter()
-            .find_map(|r| r.applied_language.as_deref())
-            .or(resolved.applied_language.as_deref());
+        let named = super::compose_opts::hyphenation_language(resolved, runs);
         match self.hyphenators {
             Some(set) => set.resolve(named),
             None => self.hyphenator,
@@ -7090,6 +7077,9 @@ fn emit_paragraph_lines(
                         advance_pt: 0.0,
                     }],
                     marker: Vec::new(),
+                    // A blank line is composed of nothing: no measure was
+                    // filled, no ratio taken.
+                    composition: Default::default(),
                 });
             }
         }
@@ -8996,8 +8986,11 @@ fn emit_paragraph_lines(
             &resolved_paragraph,
             em.segment.opens_paragraph && current_line_idx == 0,
         );
+        // Engine ADR 1308 — how far the grid moved the line, for its record.
+        let mut grid_shift_64: Option<i32> = grid_aligned.then_some(0);
         if grid_aligned {
             let d = em.grid_snap_64(pages, line.baseline_y);
+            grid_shift_64 = Some(d);
             if d != 0 {
                 chain_shift_64 += d;
                 line.baseline_y += d;
@@ -9135,7 +9128,9 @@ fn emit_paragraph_lines(
             }
             // …and on the continuation frame's grid.
             if grid_aligned {
-                new_baseline += em.grid_snap_64(pages, new_baseline);
+                let d = em.grid_snap_64(pages, new_baseline);
+                new_baseline += d;
+                grid_shift_64 = Some(d);
             }
             let dy = new_baseline - prev_baseline;
             chain_shift_64 += dy;
@@ -9419,6 +9414,12 @@ fn emit_paragraph_lines(
                     ..seg.byte_base + model_byte(line.byte_range.end as u32),
                 clusters,
                 marker,
+                composition: super::LineComposition::of(
+                    &lopts,
+                    line_k,
+                    &line,
+                    grid_shift_64.map(|d| d as f32 / paged_text::shape::ADVANCE_PRECISION),
+                ),
             });
         }
         // The notes whose reference stands on this line go to its frame; all

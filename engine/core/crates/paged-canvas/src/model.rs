@@ -972,7 +972,7 @@ fn node_address(node: &paged_mutate::NodeId) -> String {
 /// element kind including Oval / Group; the apply layer may refuse
 /// some `(NodeId, PropertyPath)` combinations, but routing decides
 /// that at apply time.
-fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate::NodeId {
+pub(crate) fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate::NodeId {
     use crate::element_selection::ElementId;
     use paged_mutate::NodeId;
     match id {
@@ -15585,6 +15585,29 @@ impl CanvasModel {
     /// hint left out. The registries (fonts, profiles, scene layers) are
     /// inputs, not caches, and are shared.
     fn cold_build(&self) -> Result<BuiltDocument, crate::channel::LoadError> {
+        self.cold_build_of(&self.scene)
+    }
+
+    /// Engine ADR 1308 — the operation a previewed write lowers to, as the
+    /// write itself would; `None` for one the operation layer does not
+    /// apply on its own (or no caller may author).
+    pub(crate) fn preview_operation(
+        &self,
+        mutation: &Mutation,
+        mint: &mut u64,
+    ) -> Option<paged_mutate::Operation> {
+        refuse_unauthorable(mutation).ok()?;
+        self.try_translate_frame_mutation_to_operation(mutation, mint)
+    }
+
+    /// A cold build of `scene` with this model's fonts, profiles and
+    /// settings: [`Self::cold_build`] for the document, and the build of a
+    /// preview's copy (engine ADR 1308). Shares no cache a build writes
+    /// back, so the live build is untouched.
+    pub(crate) fn cold_build_of(
+        &self,
+        scene: &Document,
+    ) -> Result<BuiltDocument, crate::channel::LoadError> {
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
         let resource_providers = self.resource_tiles.provider_entries();
         let fresh_hint: std::cell::RefCell<HashMap<String, u32>> = Default::default();
@@ -15609,7 +15632,7 @@ impl CanvasModel {
         options.emission_prints = None;
         let (built, _) =
             paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
-                pipeline::build_document(&self.scene, &options)
+                pipeline::build_document(scene, &options)
             });
         built.map_err(|e| crate::channel::LoadError::Build(e.to_string()))
     }

@@ -3508,6 +3508,8 @@ pub(super) fn emit_cell_paragraph(
                     ..model_byte(placeholder_bytes, line.byte_range.end as u32),
                 clusters,
                 marker: Vec::new(),
+                // Engine ADR 1308 — a cell's lines align to no baseline grid.
+                composition: super::LineComposition::of(&lopts, skip + line_idx, line, None),
             });
         }
     }
