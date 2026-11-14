@@ -55,14 +55,13 @@ const SURFACES = [
   },
   {
     file: "packages/shell/src/chrome/MenuBar.tsx",
-    why: "greys items whose `when` is false, and badges `soon` for items that do not exist",
-    // MenuBar already draws the exact distinction the module encodes —
-    // `disabled` (absent) vs a false `when` (elsewhere) — in its own
-    // words. It is the SOURCE of the vocabulary rather than a consumer of
-    // it, which is why it does not import.
-    participates: false,
-    reason:
-      "already distinguishes `soon` from `when:false` deliberately; the module encodes ITS rule, so importing would be circular",
+    why: "greys items that do not apply here with the command's reason as the tooltip (ADR 1218), and badges `soon` for items that do not exist",
+    participates: true,
+  },
+  {
+    file: "packages/shell/src/chrome/CommandPalette.tsx",
+    why: "lists a match that does not apply here, greyed, with the command's reason, instead of hiding it (ADR 1218)",
+    participates: true,
   },
 ];
 
@@ -84,6 +83,20 @@ for (const s of SURFACES) {
     continue;
   }
   const imports = src.includes('from "./applicability"');
+  // ADR 1218: a surface that renders a command's state reads its reason
+  // through the registry (`applicability`), not by asking `when` alone.
+  if (
+    s.participates &&
+    /CommandPalette|MenuBar/.test(s.file) &&
+    !/applicability\(|entryApplicability\(/.test(src)
+  ) {
+    failed = true;
+    console.error(
+      `${s.file} shows commands that do not apply here and does NOT read ` +
+        `their reason (CommandRegistry.applicability / entryApplicability, ` +
+        `ADR 1218).`,
+    );
+  }
   if (s.participates && !imports) {
     failed = true;
     console.error(

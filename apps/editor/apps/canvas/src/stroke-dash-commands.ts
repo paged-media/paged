@@ -39,6 +39,7 @@ import type {
   CommandContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { commandNeeds } from "@paged-media/shell";
 import type { CanvasClient, ElementId, Mutation } from "@paged-media/client";
 import { refusalText } from "@paged-media/panel-kit";
 import { DASH_PRESET_LENGTHS, dashArrayOp } from "@paged-media/helpers";
@@ -123,6 +124,7 @@ export function buildStrokeDashCommands(
     title: t(p.title),
     category: "Stroke",
     when: objectVerbApplies,
+    applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
     handler: async () => {
       clear();
       const refusal = await applyDashLengths(deps, p.lengths);

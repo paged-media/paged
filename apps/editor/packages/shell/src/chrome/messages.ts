@@ -118,6 +118,13 @@ export const PALETTE = defineMessages("shell.palette", {
   suggestedHere: "Suggested in this mode",
   run: "run",
   navigate: "navigate",
+  notAvailable: "Not available here",
+  goToPage: "Go to page {page}",
+  goToPageWords: "go to page, go to, goto, page, p",
+  noSuchPage: "No page {page} in this document",
+  help: "Help",
+  helpTopic: "Help: {title}",
+  helpWords: "help, how do i, how to",
 });
 
 export const HEADER = defineMessages("shell.header", {
@@ -305,6 +312,15 @@ export const CONTEXT_TOOLBAR = defineMessages("shell.contextToolbar", {
 export const APPLICABILITY = defineMessages("shell.applicability", {
   elsewhere: " — leaves this context",
   absent: " — coming soon",
+  openDocument: "Open a document first.",
+  leaveContext: "Not while editing inside an object: press Esc to leave it.",
+  leaveNamedContext: "Not while editing the {context}: press Esc to leave it.",
+  leaveText: "Not while typing: press Esc to leave the text.",
+  leavePathEdit: "Not while editing points: press Esc first.",
+  selectObject: "Select an object first.",
+  notHere: "Does not apply here.",
+  notOffered: "This editor does not offer it.",
+  unknownCommand: "No such command.",
 });
 
 export const REPLACE = defineMessages("shell.replaceDocument", {

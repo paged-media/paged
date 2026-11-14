@@ -29,7 +29,12 @@ import { covers } from "@paged-media/test-kit";
 
 import { openPanel } from "../fidelity/canvas-driver";
 import { selectElements } from "./harness/gesture-kit";
-import { expectUndoSteps, historyDepth, undoDepth } from "./harness/history";
+import {
+  expectHistoryUnchanged,
+  expectUndoSteps,
+  historyDepth,
+  undoDepth,
+} from "./harness/history";
 import { activateTool } from "./harness/interaction";
 import { openUxiFixture, UXI_A } from "./harness/uxi-fixtures";
 
@@ -203,5 +208,86 @@ test.describe("UXI FI1 — the one numeric field in the editor", () => {
     });
     await expect.poll(() => strokeWeight(page, A.back.id)).toBe(4.5);
     await expect.poll(() => strokeWeight(page, A.front.id)).toBe(9);
+  });
+});
+
+test.describe("UXI FI2/FI3 — Properties as an inspector, the control bar as an accelerator", () => {
+  test.beforeEach(async ({ page }) => {
+    await openUxiFixture(page, "A");
+    await activateTool(page, "paged.tool.select");
+    await setStrokeWeight(page, A.back.id, 1);
+    await setStrokeWeight(page, A.front.id, 4);
+    await openPanel(page, "paged.properties");
+  });
+
+  test("@uxi:UXI-PNL-001 — a search for a synonym opens the section that holds it, and the field takes a value in one step @feat:editor-shell.panels.properties @level:happy", async ({
+    page,
+  }) => {
+    covers("panel:paged.properties");
+    await selectElements(page, [A.back.id]);
+    const props = page.locator('[data-properties-panel="ready"]');
+    const search = props.locator("[data-inspector-search-input]");
+    await search.fill("border");
+    await expect(
+      props.locator('[data-inspector-section="stroke"]'),
+    ).toBeVisible();
+    await expect(
+      props.locator('[data-inspector-section="object"]'),
+    ).toBeHidden();
+    await search.press("Enter");
+    const focused = page.locator(":focus");
+    await expect(focused).toHaveAttribute("inputmode", "decimal");
+    await expectUndoSteps(page, 1, async () => {
+      await focused.fill("2.5");
+      await focused.press("Enter");
+    });
+    await expect.poll(() => strokeWeight(page, A.back.id)).toBe(2.5);
+    await search.fill("");
+    await expect(
+      props.locator('[data-inspector-section="object"]'),
+    ).toBeVisible();
+  });
+
+  test("@uxi:UXI-PNL-010 — a multi-selection states its scope, and +=1 in Properties gives each object its own value in one step @uxi:UXI-SEL-017 @feat:editor-shell.panels.properties @level:happy", async ({
+    page,
+  }) => {
+    covers("panel:paged.properties");
+    await selectElements(page, [A.back.id, A.front.id]);
+    const props = page.locator('[data-properties-panel="ready"]');
+    await expect(props.locator("[data-inspector-scope-label]")).toHaveText(
+      "2 objects · 2 rectangles",
+    );
+    const weight = props.locator(
+      '[data-properties-section="stroke"] [data-control="frameStrokeWeight"] input',
+    );
+    await expect(weight).toHaveValue("Mixed");
+    await expectUndoSteps(page, 1, async () => {
+      await weight.click();
+      await weight.fill("+=1");
+      await weight.press("Enter");
+    });
+    await expect.poll(() => strokeWeight(page, A.back.id)).toBe(2);
+    await expect.poll(() => strokeWeight(page, A.front.id)).toBe(5);
+  });
+
+  test("@uxi:UXI-PNL-001 — the control bar's More… focuses the inspector's field; Escape gives focus back @uxi:UXI-CMD-004 @feat:editor-shell.panels.control @level:happy", async ({
+    page,
+  }) => {
+    covers("panel:paged.properties");
+    await selectElements(page, [A.back.id]);
+    const more = page.locator('[data-cockpit-action="more-object"]');
+    await more.click();
+    const focused = page.locator(":focus");
+    await expect(focused).toHaveAttribute("inputmode", "decimal");
+    expect(
+      await focused.evaluate(
+        (el) =>
+          el
+            .closest("[data-properties-section]")
+            ?.getAttribute("data-properties-section") ?? null,
+      ),
+    ).toBe("object");
+    await expectHistoryUnchanged(page, () => focused.press("Escape"));
+    await expect(more).toBeFocused();
   });
 });

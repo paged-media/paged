@@ -576,6 +576,15 @@ Edit ▸ Selection to path and Path to selection (paged.image) always show, even
 
 **Screenshots:** `F-19-edit-menu-image-items.png`, `F-19-draw-menu-while-typing.png`
 
+**Fixed (2026-11-13).** One home per command: paged.draw's menu no longer repeats Close path,
+Outline stroke and Type on path (they are the host's, Object ▸ Path and Object ▸ Type on a path;
+the draw commands stay for the palette and scripts), so the two names are gone. An entry that
+does not apply where the user stands is greyed with its reason as the tooltip ("Not while
+typing: press Esc to leave the text.", "Select an object first."), and the palette lists it with
+why (editor ADR 1218). paged.image's Edit entries stay: with no image open they raise the Image
+panel, an action rather than a dead entry; a plugin's menu shows by its frame (the selection or
+the context it claims), not because a document is open.
+
 <a id="f-20"></a>
 
 #### F-20 · Right-dock tabs overflow without an affordance

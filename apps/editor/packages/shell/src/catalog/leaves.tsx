@@ -64,6 +64,11 @@ import {
 import { useStrings } from "@paged-media/strings";
 
 import { Icon } from "../icons";
+import {
+  childNodeTerms,
+  matchesQuery,
+  usePropertySearchQuery,
+} from "./property-search";
 import { usePreviewCommitter } from "./scrub-preview";
 import { useCollection } from "./use-collection";
 import { LIST } from "./messages";
@@ -390,7 +395,16 @@ export function LayoutSectionLeaf({ props }: LeafProps) {
   const title = typeof props.title === "string" ? props.title : undefined;
   const heading = props.heading !== false;
   const collapsible = props.collapsible === true;
-  const { open, toggle, region } = useDisclosure(props.defaultOpen !== false);
+  const disclosure = useDisclosure(props.defaultOpen !== false);
+  // Inspector search: a collapsed section that holds a match opens while
+  // the query lasts, and is marked (the editor ADR on inspector search).
+  const query = usePropertySearchQuery();
+  const searchHit =
+    collapsible &&
+    query !== "" &&
+    matchesQuery(query, [title ?? "", ...childNodeTerms(props.childNodes)]);
+  const open = disclosure.open || searchHit;
+  const { toggle, region } = disclosure;
   if (!heading) {
     return (
       <div className="flex flex-col gap-[9px]" data-section={title}>
@@ -400,12 +414,18 @@ export function LayoutSectionLeaf({ props }: LeafProps) {
   }
   if (collapsible) {
     return (
-      <div className="-mx-3 border-t border-input px-3" data-section={title}>
+      <div
+        className="-mx-3 border-t border-input px-3"
+        data-section={title}
+        data-search-match={searchHit ? "" : undefined}
+      >
         <button
           type="button"
           className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent py-[9px] text-left"
           data-section-toggle
           {...toggle}
+          aria-expanded={open}
+          aria-controls={open ? region.id : undefined}
         >
           <span
             className="whitespace-nowrap text-[12.5px] font-semibold"

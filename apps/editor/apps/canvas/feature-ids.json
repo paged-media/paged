@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 935,
-    "keybinding": 207,
-    "menu": 679,
+    "command": 945,
+    "keybinding": 211,
+    "menu": 682,
     "panel": 151,
     "tool": 123
   },
@@ -4026,6 +4026,26 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.help.topic.plugins",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.help.topic.scripting",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.help.topic.shortcuts",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.help.topic.templates",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.host.back",
       "kind": "command",
       "owner": "editor"
@@ -4536,7 +4556,22 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.actualSize",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.adaptiveWorkspace",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.calibrateScreen",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.calibratedSize",
       "kind": "command",
       "owner": "editor"
     },
@@ -4581,12 +4616,27 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.goToPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.guidesAndGridPreferences",
       "kind": "command",
       "owner": "editor"
     },
     {
       "id": "command:paged.view.lastPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.navigateBack",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.navigateForward",
       "kind": "command",
       "owner": "editor"
     },
@@ -5091,6 +5141,16 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:cmd+pagedown→paged.view.navigateForward",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+pageup→paged.view.navigateBack",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+r→media.paged.doc.command.word.alignRight",
       "kind": "keybinding",
       "owner": "media.paged.doc"
@@ -5379,6 +5439,16 @@
       "id": "keybinding:ctrl+m→media.paged.slide.command.newSlide",
       "kind": "keybinding",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:ctrl+pagedown→paged.view.navigateForward",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+pageup→paged.view.navigateBack",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:ctrl+r→media.paged.sheet.command.fillRight",
@@ -6031,22 +6101,12 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:Draw/Path/Close path",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "menu:Draw/Path/Join endpoints",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
     {
       "id": "menu:Draw/Path/Offset path…",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Path/Outline stroke",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -7946,6 +8006,16 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Layout/Go back",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Layout/Go forward",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Layout/Last page",
       "kind": "menu",
       "owner": "editor"
@@ -8857,6 +8927,21 @@
     },
     {
       "id": "menu:Type/Text variables",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Actual size",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Calibrate screen size…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Calibrated size",
       "kind": "menu",
       "owner": "editor"
     },
@@ -10824,6 +10909,18 @@
       "replacement": "menu:Object/Opacity mask/Release",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Path/Close path",
+      "replacement": "menu:Object/Path/Close path",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:Draw/Path/Outline stroke",
+      "replacement": "menu:Object/Path/Outline stroke…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
     },
     {
       "id": "menu:Draw/Pathfinder/Crop",

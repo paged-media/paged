@@ -102,3 +102,16 @@ Details the table cannot hold:
 - Users who come from InDesign meet four changed habits (Shift, the marquee, Tab, the image
   double-click); the release notes name them, the canvas shows modifier hints, and Tab can be
   set back.
+
+## Amendment 2026-11-13 (D-07 and D-16 implemented)
+
+- **D-07.** Every align route honours the Align scope and its key object: the Align panel, its
+  explicit key-object list beside the canvas click, and the control bar's align buttons, which
+  used to align against the selection whatever the panel said (`alignScopeArgs`,
+  `state/align-scope.ts`). Hovering or focusing an align control shows its reference on the
+  canvas: the key object filled, the selection's box, the page, its margins or the spread
+  (`data-align-reference`, `overlays/selection-chrome.tsx`). Tests: `UXI-SEL-018` in
+  `tests/e2e/uxi-commands.spec.ts`.
+- **D-16.** A property that applies to part of a selection edits the stated subset with a count
+  ("Applies to 2 of 3", [ADR 1217](1217-inspector-search-and-disclosure.md)); a command that does
+  not apply says why ([ADR 1218](1218-commands-say-why-they-do-not-apply.md)).

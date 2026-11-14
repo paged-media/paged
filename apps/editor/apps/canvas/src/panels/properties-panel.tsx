@@ -32,10 +32,26 @@
 //     picks the Page summary or a per-kind guidance hint.
 //
 // The AI Assistant lives in its own panel (ADR 221); this one links to it.
+//
+// Track FI2 (editor ADR 1217, the UX strategy's §5.3–5.5): a search field
+// finds a property by its label, a synonym or a plugin row's text and
+// opens the section that holds it; the sections are grouped Frame /
+// Content / Text, common ones open and advanced ones collapsed, as the user
+// left them per kind; a multi-selection says what it holds ("3 objects · 2
+// text frames, 1 image"), and a section that applies to part of it says so
+// ("Applies to 2 of 3") and edits that part only (D-16).
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
-import type { ElementId } from "@paged-media/client";
+import type { CompositionNode } from "@paged-media/catalog";
+import type { ElementGeometryItem, ElementId } from "@paged-media/client";
 import {
   formatLength,
   formatLengthPair,
@@ -51,7 +67,14 @@ import {
   CockpitSection,
   CockpitValue,
   CompositionRenderer,
+  compositionTerms,
+  Icon,
+  keywordTerms,
+  matchesQuery,
+  normalizeSearch,
   PanelHost,
+  PropertySearchProvider,
+  SelectionSubset,
   useCollection,
   useContentSelection,
   useDocument,
@@ -71,6 +94,12 @@ import { objectTransformComposition } from "./object-transform.composition";
 import { paragraphComposition } from "./paragraph.composition";
 import { strokeComposition } from "./stroke.composition";
 import { defineMessages, useStrings } from "@paged-media/strings";
+
+import {
+  useInspectorDisclosure,
+  type InspectorDisclosure,
+  type SectionLevel,
+} from "./inspector/inspector-disclosure";
 
 const M = defineMessages("app.propertiesPanel", {
   frame: "Frame",
@@ -101,9 +130,79 @@ const M = defineMessages("app.propertiesPanel", {
   columns: "Columns",
   bleed: "Bleed",
   columnsValue: "{count} · gutter {gutter}",
+  search: "Search properties",
+  clearSearch: "Clear the search",
+  noMatch: "No property matches “{query}”.",
+  groupFrame: "Frame",
+  groupContent: "Content",
+  groupText: "Text",
+  sectionTransform: "Transform",
+  sectionStroke: "Stroke",
+  sectionFitting: "Fitting",
+  sectionCharacter: "Character",
+  sectionParagraph: "Paragraph",
+  kwTransform:
+    "position, x, y, width, height, size, rotation, angle, scale, flip, bounds, geometry, opacity, transparency, corner",
+  kwStroke:
+    "stroke, border, outline, line, weight, thickness, dash, arrow, arrowhead, cap, join, miter, gap",
+  kwFitting:
+    "fit, fitting, crop, scale image, auto fit, frame fitting, fill frame, center content",
+  kwCharacter:
+    "font, typeface, family, size, type size, tracking, letter spacing, kerning, leading, line height, line spacing, style, case, baseline, skew, language",
+  kwParagraph:
+    "paragraph, alignment, align, justify, indent, space before, space after, drop cap, keep, keep with next, columns, span, hyphenation, rule",
+  kwContent: "content, object, settings, plugin",
+  appliesTo: "Applies to {count} of {total}",
+  selectThese: "Select these",
+  kindTextFrame: "{count, plural, one {# text frame} other {# text frames}}",
+  kindImage: "{count, plural, one {# image} other {# images}}",
+  kindRectangle: "{count, plural, one {# rectangle} other {# rectangles}}",
+  kindEllipse: "{count, plural, one {# ellipse} other {# ellipses}}",
+  kindPolygon: "{count, plural, one {# polygon} other {# polygons}}",
+  kindLine: "{count, plural, one {# line} other {# lines}}",
+  kindGroup: "{count, plural, one {# group} other {# groups}}",
+  kindOther: "{count, plural, one {# other object} other {# other objects}}",
+  nameTextFrame: "Text frame",
+  nameImage: "Image",
+  nameRectangle: "Rectangle",
+  nameEllipse: "Ellipse",
+  namePolygon: "Polygon",
+  nameLine: "Line",
+  nameGroup: "Group",
+  nameOther: "Object",
+  showObjects: "Show the objects",
+  hideObjects: "Hide the objects",
+  selectOnly: "Select only this one",
+  relativeHint:
+    "Type +=5 mm or *110% in a field to change each object by its own value.",
 });
 
 type InspectorKind = "text" | "image" | "frame" | "page" | "none";
+type Group = "frame" | "content" | "text";
+
+/** One section of the inspector. */
+interface SectionDef {
+  /** `data-properties-section`. */
+  id: string;
+  group: Group;
+  level: SectionLevel;
+  title: string;
+  /** A composition it renders (its labels are searched). */
+  composition?: CompositionNode;
+  /** Or a body of its own (a plugin's panel; its text is searched). */
+  body?: ReactNode;
+  /** Synonyms and keywords, comma-separated (a localized message). */
+  keywords: string;
+  /** For a multi-selection: the objects it applies to (D-16). */
+  applies?: (geometry: ElementGeometryItem | undefined) => boolean;
+  attrs?: Record<string, string>;
+}
+
+const GROUP_TITLE: Record<Group, string> = {
+  frame: M.groupFrame,
+  content: M.groupContent,
+  text: M.groupText,
+};
 
 export function PropertiesPanel() {
   const scope = useEditorScope();
@@ -217,16 +316,109 @@ export function PropertiesPanel() {
             .join(" · ")
         : null;
 
-  const typeSections = hasContent ? (
-    <>
-      <div data-properties-section="character">
-        <CompositionRenderer composition={characterComposition(strings)} />
-      </div>
-      <div data-properties-section="paragraph">
-        <CompositionRenderer composition={paragraphComposition(strings)} />
-      </div>
-    </>
-  ) : null;
+  // The sections, in the order they are offered (grouped when shown).
+  const sections: SectionDef[] = [];
+  const typeSections = () => {
+    sections.push(
+      {
+        id: "character",
+        group: "text",
+        level: "common",
+        title: strings.t(M.sectionCharacter),
+        composition: characterComposition(strings),
+        keywords: strings.t(M.kwCharacter),
+      },
+      {
+        id: "paragraph",
+        group: "text",
+        level: "common",
+        title: strings.t(M.sectionParagraph),
+        composition: paragraphComposition(strings),
+        keywords: strings.t(M.kwParagraph),
+      },
+    );
+  };
+  // PN-22 (UX F-37): with a caret or a text range the type settings lead,
+  // as InDesign's Properties panel puts Character and Paragraph first in
+  // text context; the frame's Object and Stroke sections follow.
+  if (kind === "text") typeSections();
+  if (kind === "frame" && owned) {
+    sections.push({
+      id: "object-type",
+      group: "content",
+      level: "common",
+      title: humanizeType(owned.objectType.type),
+      keywords: strings.t(M.kwContent),
+      attrs: { "data-object-type": owned.objectType.type },
+      body: owned.editContext?.panelIds?.length ? (
+        // The owning bundle's inspector surface, inline — the same
+        // registered panel the edit context raises.
+        <PanelHost id={owned.editContext.panelIds[0]} />
+      ) : (
+        <div
+          className="pg-ui-xs"
+          style={{ padding: "4px 2px", opacity: 0.7, lineHeight: 1.5 }}
+        >
+          {strings.t(M.editInPlace, {
+            type: humanizeType(owned.objectType.type),
+          })}
+        </div>
+      ),
+    });
+  }
+  if (kind === "frame" && !owned && metadataOwner?.panelIds?.[0]) {
+    sections.push({
+      id: "plugin-owned",
+      group: "content",
+      level: "common",
+      title: humanizeType(metadataOwner.type),
+      keywords: strings.t(M.kwContent),
+      attrs: { "data-properties-owner": metadataOwner.type },
+      body: <PanelHost id={metadataOwner.panelIds[0]} />,
+    });
+  }
+  if (hasElement) {
+    const transform = objectTransformComposition(strings);
+    sections.push({
+      id: "object",
+      group: "frame",
+      level: "common",
+      title: strings.t(M.sectionTransform),
+      // The section's header names it; the composition's kicker goes.
+      composition: {
+        ...transform,
+        props: { ...transform.props, heading: false },
+      },
+      keywords: strings.t(M.kwTransform),
+    });
+  }
+  if (kind === "image" && hasImage) {
+    sections.push({
+      id: "fitting",
+      group: "content",
+      level: "common",
+      title: strings.t(M.sectionFitting),
+      composition: frameFittingComposition(strings),
+      keywords: strings.t(M.kwFitting),
+      // Fitting is about the picture: it applies to the frames holding
+      // one, and beside others it says so and edits those (D-16).
+      applies: (g) =>
+        (g as { hasImage?: boolean } | undefined)?.hasImage === true,
+    });
+  }
+  if (hasElement) {
+    sections.push({
+      id: "stroke",
+      group: "frame",
+      // With text in hand the frame's stroke is the rare setting (the
+      // strategy's §5.4): collapsed until opened.
+      level: kind === "text" ? "advanced" : "common",
+      title: strings.t(M.sectionStroke),
+      composition: strokeComposition(strings),
+      keywords: strings.t(M.kwStroke),
+    });
+  }
+  if (hasContent && kind !== "text") typeSections();
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
@@ -251,18 +443,9 @@ export function PropertiesPanel() {
             <span className="pg-label" data-selection-label>
               {selectionLabel}
             </span>
-            {/* D1 — the seam had INVERTED. This chip read
-                `overset · —  "awaiting the engine's overset signal"`
-                while that very signal was live and already painting the
-                red "+" badge on the out-port two overlays away. So the
-                Properties panel — which IS on the panel rail, unlike
-                the ports — was telling the user a shipped feature was
-                missing, next to a canvas demonstrating it.
-
-                `StorySummary.overset` reaches the ThreadingContext via
-                `paged.stories()`, mapped frame→story by hit-testing the
-                frame's transformed centre. Reading it here costs
-                nothing; it is the same accessor the ports use. */}
+            {/* D1 — the overset chip reads `StorySummary.overset` through
+                the ThreadingContext, the same accessor the canvas ports
+                use, so the panel and the canvas cannot disagree. */}
             {kind === "text" && oversetFrameId && (
               <span
                 data-overset-state={
@@ -290,6 +473,10 @@ export function PropertiesPanel() {
           </div>
         )}
 
+        {elementSelection.length >= 2 && (
+          <SelectionScope ids={elementSelection} geometry={elementGeometry} />
+        )}
+
         {kind === "none" && (
           <div
             className="pg-ui-xs"
@@ -302,71 +489,24 @@ export function PropertiesPanel() {
 
         {kind === "page" && <PageSummary />}
 
-        <div className="p-3 pt-0 flex flex-col gap-3">
-          {/* PN-22 (UX F-37): with a caret or a text range the type
-              settings lead, as InDesign's Properties panel puts Character
-              and Paragraph first in text context; the frame's Object and
-              Stroke sections follow. */}
-          {kind === "text" ? typeSections : null}
-          {kind === "frame" && owned ? (
-            <div
-              data-properties-section="object-type"
-              data-object-type={owned.objectType.type}
-            >
-              {owned.editContext?.panelIds?.length ? (
-                // The owning bundle's inspector surface, inline — the
-                // same registered panel the edit context raises.
-                <PanelHost id={owned.editContext.panelIds[0]} />
-              ) : (
-                <div
-                  className="pg-ui-xs"
-                  style={{ padding: "4px 2px", opacity: 0.7, lineHeight: 1.5 }}
-                >
-                  {strings.t(M.editInPlace, {
-                    type: humanizeType(owned.objectType.type),
-                  })}
-                </div>
-              )}
-            </div>
-          ) : null}
-          {kind === "frame" && !owned && metadataOwner?.panelIds?.[0] ? (
-            <div
-              data-properties-section="plugin-owned"
-              data-properties-owner={metadataOwner.type}
-            >
-              <PanelHost id={metadataOwner.panelIds[0]} />
-            </div>
-          ) : null}
-          {hasElement ? (
-            <div data-properties-section="object">
-              <CompositionRenderer
-                composition={objectTransformComposition(strings)}
-              />
-            </div>
-          ) : null}
-          {kind === "image" && hasImage ? (
-            <div data-properties-section="fitting">
-              <CompositionRenderer
-                composition={frameFittingComposition(strings)}
-              />
-            </div>
-          ) : null}
-          {kind === "image" && hasElement && !hasImage ? (
-            <div
-              className="pg-ui-xs"
-              data-properties-no-image
-              style={{ padding: "4px 2px", lineHeight: 1.5 }}
-            >
-              {strings.t(M.noImage)}
-            </div>
-          ) : null}
-          {hasElement ? (
-            <div data-properties-section="stroke">
-              <CompositionRenderer composition={strokeComposition(strings)} />
-            </div>
-          ) : null}
-          {hasContent && kind !== "text" ? typeSections : null}
-        </div>
+        {kind === "image" && hasElement && !hasImage ? (
+          <div
+            className="pg-ui-xs"
+            data-properties-no-image
+            style={{ padding: "0 14px 8px", lineHeight: 1.5 }}
+          >
+            {strings.t(M.noImage)}
+          </div>
+        ) : null}
+
+        {sections.length > 0 && (
+          <InspectorSections
+            kind={kind}
+            sections={sections}
+            elementSelection={elementSelection}
+            elementGeometry={elementGeometry}
+          />
+        )}
 
         {kind !== "none" && (
           <div
@@ -390,6 +530,423 @@ export function PropertiesPanel() {
         )}
       </div>
     </CatalogRegistryProvider>
+  );
+}
+
+// ── sections: search, disclosure, groups, subsets ─────────────────
+
+const sameId = (a: ElementId, b: ElementId) =>
+  a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id);
+
+/** The form control nearest a matching label: the field a search's Enter
+ *  goes to. */
+function controlNear(el: Element): HTMLElement | null {
+  let at: Element | null = el;
+  for (let i = 0; at && i < 5; i++, at = at.parentElement) {
+    const control = at.querySelector<HTMLElement>(
+      "input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
+    );
+    if (control) return control;
+  }
+  return null;
+}
+
+/** Elements inside `root` whose own text matches (labels, not values):
+ *  leaf elements with text and no form control inside. */
+function textHits(root: HTMLElement, query: string): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (const el of root.querySelectorAll<HTMLElement>("*")) {
+    if (el.children.length > 0) continue;
+    if (/^(INPUT|SELECT|TEXTAREA|OPTION|BUTTON|svg)$/i.test(el.tagName))
+      continue;
+    const text = el.textContent ?? "";
+    if (text.trim() !== "" && matchesQuery(query, [text])) out.push(el);
+  }
+  return out;
+}
+
+function InspectorSections(props: {
+  kind: InspectorKind;
+  sections: SectionDef[];
+  elementSelection: readonly ElementId[];
+  elementGeometry: readonly ElementGeometryItem[];
+}) {
+  const strings = useStrings();
+  const { setElementSelection } = useSelection();
+  const disclosure = useInspectorDisclosure(props.kind);
+  // The query, and the sections whose RENDERED text matched it when it was
+  // typed (a plugin's rows; collapsed bodies stay rendered for this).
+  const [search, setSearch] = useState<{ query: string; dom: string[] }>({
+    query: "",
+    dom: [],
+  });
+  const bodies = useRef(new Map<string, HTMLElement>());
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const query = search.query;
+  const active = normalizeSearch(query) !== "";
+
+  const onQuery = (next: string) => {
+    const dom: string[] = [];
+    if (normalizeSearch(next) !== "")
+      for (const [id, el] of bodies.current)
+        if (matchesQuery(next, [el.textContent ?? ""])) dom.push(id);
+    setSearch({ query: next, dom });
+  };
+
+  // Mark the matching labels in the shown sections (a highlight, not a
+  // filter); cleared with the query.
+  useLayoutEffect(() => {
+    const root = listRef.current;
+    if (!root || !active) return;
+    const hits = textHits(root, query);
+    for (const el of hits) el.setAttribute("data-search-hit", "");
+    hits[0]?.scrollIntoView?.({ block: "nearest" });
+    return () => {
+      for (const el of hits) el.removeAttribute("data-search-hit");
+    };
+  }, [query, active]);
+
+  const total = props.elementSelection.length;
+  const geometryOf = (id: ElementId) =>
+    props.elementGeometry.find((g) => sameId(g.id, id));
+
+  interface Shown {
+    def: SectionDef;
+    match: boolean;
+    subset: ElementId[] | null;
+  }
+  const shown: Shown[] = [];
+  for (const def of props.sections) {
+    let subset: ElementId[] | null = null;
+    if (def.applies && total >= 2) {
+      const compatible = props.elementSelection.filter((id) =>
+        def.applies!(geometryOf(id)),
+      );
+      if (compatible.length === 0) continue;
+      if (compatible.length < total) subset = compatible;
+    }
+    const terms = [
+      def.title,
+      strings.t(GROUP_TITLE[def.group]),
+      ...keywordTerms(def.keywords),
+      ...(def.composition ? compositionTerms(def.composition) : []),
+    ];
+    const match =
+      active && (matchesQuery(query, terms) || search.dom.includes(def.id));
+    shown.push({ def, match, subset });
+  }
+  const groupsShown = [...new Set(shown.map((s) => s.def.group))];
+  const ordered = groupsShown.flatMap((g) =>
+    shown.filter((s) => s.def.group === g),
+  );
+  const anyMatch = ordered.some((s) => s.match);
+
+  const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape" && query !== "") {
+      e.preventDefault();
+      e.stopPropagation();
+      onQuery("");
+    } else if (e.key === "Enter" && active) {
+      // The first matching field takes focus: the one by a matching label,
+      // else the first of the first matching section (a synonym names the
+      // section, not a label in it).
+      e.preventDefault();
+      const root = listRef.current;
+      const hit = root?.querySelector("[data-search-hit]");
+      const section = root?.querySelector(
+        "[data-search-match] > [data-properties-section]",
+      );
+      const control = hit
+        ? controlNear(hit)
+        : (section?.querySelector<HTMLElement>(
+            "input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
+          ) ?? null);
+      control?.focus();
+    }
+  };
+
+  return (
+    <PropertySearchProvider query={active ? query : ""}>
+      <div className="px-3 pb-2" data-inspector-search>
+        <div
+          className="flex h-[28px] items-center gap-[6px] rounded-[6px] border border-input bg-background px-2"
+          style={{ color: "var(--pg-muted-fg)" }}
+        >
+          <Icon name="ui-search" size={13} />
+          <input
+            type="search"
+            value={query}
+            placeholder={strings.t(M.search)}
+            aria-label={strings.t(M.search)}
+            data-inspector-search-input
+            className="min-w-0 flex-1 bg-transparent text-[12px] outline-none"
+            style={{ color: "var(--pg-fg)" }}
+            onChange={(e) => onQuery(e.target.value)}
+            onKeyDown={onSearchKey}
+          />
+          {query !== "" && (
+            <button
+              type="button"
+              aria-label={strings.t(M.clearSearch)}
+              title={strings.t(M.clearSearch)}
+              data-inspector-search-clear
+              className="border-0 bg-transparent p-0"
+              onClick={() => onQuery("")}
+            >
+              <Icon name="ui-x" size={12} />
+            </button>
+          )}
+        </div>
+        {active && !anyMatch && (
+          <div className="pg-ui-xs pt-2" data-inspector-no-match role="status">
+            {strings.t(M.noMatch, { query })}
+          </div>
+        )}
+      </div>
+      <div
+        ref={listRef}
+        className="p-3 pt-0 flex flex-col gap-3"
+        data-inspector-sections
+      >
+        {ordered.map(({ def, match, subset }, i) => {
+          const firstOfGroup =
+            i === 0 || ordered[i - 1]!.def.group !== def.group;
+          return (
+            <div key={def.id} className="contents">
+              {groupsShown.length > 1 && firstOfGroup && (
+                <div
+                  className="pg-label"
+                  data-inspector-group={def.group}
+                  hidden={
+                    active &&
+                    !ordered.some((s) => s.match && s.def.group === def.group)
+                  }
+                >
+                  {strings.t(GROUP_TITLE[def.group])}
+                </div>
+              )}
+              <InspectorSection
+                def={def}
+                disclosure={disclosure}
+                searching={active}
+                match={match}
+                subset={subset}
+                total={total}
+                onSelect={(ids) => setElementSelection([...ids])}
+                registerBody={(el) => {
+                  if (el) bodies.current.set(def.id, el);
+                  else bodies.current.delete(def.id);
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </PropertySearchProvider>
+  );
+}
+
+function InspectorSection(props: {
+  def: SectionDef;
+  disclosure: InspectorDisclosure;
+  searching: boolean;
+  match: boolean;
+  subset: ElementId[] | null;
+  total: number;
+  onSelect: (ids: readonly ElementId[]) => void;
+  registerBody: (el: HTMLElement | null) => void;
+}) {
+  const strings = useStrings();
+  const {
+    def,
+    disclosure,
+    searching,
+    match,
+    subset,
+    total,
+    onSelect,
+    registerBody,
+  } = props;
+  const remembered = disclosure.isOpen(def.id, def.level);
+  // A search opens a matching section for as long as it lasts; the
+  // remembered state comes back with the query cleared.
+  const open = searching ? match : remembered;
+  const hidden = searching && !match;
+  const content = def.composition ? (
+    <CompositionRenderer composition={def.composition} />
+  ) : (
+    def.body
+  );
+  return (
+    <section
+      data-inspector-section={def.id}
+      data-section-level={def.level}
+      data-section-open={open ? "true" : "false"}
+      data-search-match={searching && match ? "" : undefined}
+      data-applies-count={subset ? subset.length : undefined}
+      hidden={hidden}
+      className="-mx-3 border-t border-input px-3"
+    >
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          data-section-header={def.id}
+          className="flex min-w-0 flex-1 cursor-pointer items-center justify-between border-0 bg-transparent py-[8px] text-left"
+          onClick={() => {
+            if (!searching) disclosure.setOpen(def.id, !remembered);
+          }}
+        >
+          <span
+            className="whitespace-nowrap text-[12px] font-semibold"
+            style={{
+              color: "var(--pg-fg)",
+              background:
+                searching && match
+                  ? "color-mix(in srgb, var(--pg-primary) 22%, transparent)"
+                  : undefined,
+              borderRadius: 3,
+              padding: "0 2px",
+            }}
+          >
+            {def.title}
+          </span>
+          <Icon
+            name={open ? "ui-chevron-down" : "ui-chevron-right"}
+            size={14}
+            style={{ color: "var(--pg-muted-fg)" }}
+          />
+        </button>
+        {subset && (
+          <span
+            className="pg-ui-xs whitespace-nowrap"
+            data-applies-to
+            title={strings.t(M.appliesTo, {
+              count: subset.length,
+              total,
+            })}
+          >
+            {strings.t(M.appliesTo, {
+              count: subset.length,
+              total,
+            })}
+            {" · "}
+            <button
+              type="button"
+              data-select-compatible
+              className="border-0 bg-transparent p-0 underline"
+              onClick={() => onSelect(subset)}
+            >
+              {strings.t(M.selectThese)}
+            </button>
+          </span>
+        )}
+      </div>
+      <div
+        ref={registerBody}
+        hidden={!open}
+        className="pb-3"
+        data-properties-section={def.id}
+        {...def.attrs}
+      >
+        {subset ? (
+          <SelectionSubset ids={subset}>{content}</SelectionSubset>
+        ) : (
+          content
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** One selected object's kind for the scope header: its counted message
+ *  ("2 text frames") and its name ("Text frame"). */
+function kindOf(
+  id: ElementId,
+  geometry: ElementGeometryItem | undefined,
+): { count: string; name: string } {
+  if ((geometry as { hasImage?: boolean } | undefined)?.hasImage === true)
+    return { count: M.kindImage, name: M.nameImage };
+  switch (id.kind) {
+    case "textFrame":
+      return { count: M.kindTextFrame, name: M.nameTextFrame };
+    case "rectangle":
+      return { count: M.kindRectangle, name: M.nameRectangle };
+    case "oval":
+      return { count: M.kindEllipse, name: M.nameEllipse };
+    case "polygon":
+      return { count: M.kindPolygon, name: M.namePolygon };
+    case "graphicLine":
+      return { count: M.kindLine, name: M.nameLine };
+    case "group":
+      return { count: M.kindGroup, name: M.nameGroup };
+    default:
+      return { count: M.kindOther, name: M.nameOther };
+  }
+}
+
+/** "3 objects · 2 text frames, 1 image" — the scope of a multi-selection
+ *  (UXI-PNL-010), with the objects listed on request and narrowed from
+ *  there. */
+function SelectionScope(props: {
+  ids: readonly ElementId[];
+  geometry: readonly ElementGeometryItem[];
+}) {
+  const strings = useStrings();
+  const { setElementSelection } = useSelection();
+  const [listed, setListed] = useState(false);
+  const kinds = new Map<string, number>();
+  const rows = props.ids.map((id) => {
+    const k = kindOf(
+      id,
+      props.geometry.find((g) => sameId(g.id, id)),
+    );
+    kinds.set(k.count, (kinds.get(k.count) ?? 0) + 1);
+    return { id, name: k.name };
+  });
+  const breakdown = [...kinds.entries()]
+    .map(([key, count]) => strings.t(key, { count }))
+    .join(", ");
+  return (
+    <div className="px-[14px] pb-2" data-inspector-scope>
+      <div className="pg-ui-xs flex items-center justify-between gap-2">
+        <span data-inspector-scope-label>
+          {strings.t(M.objectCount, { count: props.ids.length })} · {breakdown}
+        </span>
+        <button
+          type="button"
+          aria-expanded={listed}
+          data-inspector-scope-toggle
+          className="border-0 bg-transparent p-0 underline"
+          onClick={() => setListed(!listed)}
+        >
+          {strings.t(listed ? M.hideObjects : M.showObjects)}
+        </button>
+      </div>
+      {listed && (
+        <ul className="m-0 list-none p-0 pt-1" data-inspector-scope-list>
+          {rows.map(({ id, name }) => (
+            <li
+              key={`${id.kind}:${JSON.stringify(id.id)}`}
+              className="pg-ui-xs flex items-center justify-between gap-2"
+            >
+              <span>{strings.t(name)}</span>
+              <button
+                type="button"
+                data-select-only={typeof id.id === "string" ? id.id : ""}
+                className="border-0 bg-transparent p-0 underline"
+                onClick={() => setElementSelection([id])}
+              >
+                {strings.t(M.selectOnly)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="pg-ui-xs pt-1" style={{ opacity: 0.75 }}>
+        {strings.t(M.relativeHint)}
+      </div>
+    </div>
   );
 }
 

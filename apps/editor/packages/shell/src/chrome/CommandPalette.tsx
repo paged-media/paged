@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useStrings } from "@paged-media/strings";
+import { t, useStrings } from "@paged-media/strings";
 
 import {
   CommandDialog,
@@ -49,6 +49,9 @@ import { useEditorStorage, type StorageAdapter } from "../state/storage";
 import { useOptionalPaged } from "../state/paged-editor";
 import type { PagedEditor } from "../state/paged-editor";
 import { isEnabled } from "../registries/types";
+import { useOptionalCanvasClient } from "../state/canvas-client-context";
+import type { CommandApplicability } from "./applicability";
+import { APPLICABILITY } from "./messages";
 import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
 import { categoryLabel, PALETTE } from "./messages";
 
@@ -61,6 +64,10 @@ import { categoryLabel, PALETTE } from "./messages";
  */
 type PaletteAction = "toggle" | "open" | "close";
 const PALETTE_EVENT = scoped("palette", () => createEmitter<PaletteAction>());
+
+/** The command a "go to page" query runs (`paged.view.goToPage`, the
+ *  canvas app's: `{ page }` is a page's id, name or position). */
+export const GO_TO_PAGE_COMMAND = "paged.view.goToPage";
 
 /** Emit a palette action in `scope`'s editor. Idempotent. */
 export function notifyPalette(scope: EditorScope, action: PaletteAction): void {
@@ -135,16 +142,94 @@ function applicableCommands(
   commands: CommandRegistry,
   paged: PagedEditor | null,
   open: boolean,
-): CommandContribution[] {
-  if (!open) return [];
-  // A command the editor does not offer (a feature, docs/composable-editor.md
-  // §6) is not in the palette at all.
-  return commands
-    .list()
-    .filter(
-      (c) =>
-        commands.offered?.(c.id) !== false && isEnabled(c.when, () => paged),
-    );
+): {
+  here: CommandContribution[];
+  why: Array<{ cmd: CommandContribution; reason: string }>;
+} {
+  if (!open) return { here: [], why: [] };
+  const here: CommandContribution[] = [];
+  const why: Array<{ cmd: CommandContribution; reason: string }> = [];
+  for (const c of commands.list()) {
+    const verdict: CommandApplicability = commands.applicability
+      ? commands.applicability(c.id)
+      : commands.offered?.(c.id) === false
+        ? { state: "absent" }
+        : isEnabled(c.when, () => paged)
+          ? { state: "here" }
+          : { state: "disabled" };
+    // A command the editor does not offer (a feature,
+    // docs/composable-editor.md §6) is not in the palette at all; one that
+    // does not apply HERE is listed with its reason (ADR 1218).
+    if (verdict.state === "here") here.push(c);
+    else if (verdict.state !== "absent")
+      why.push({ cmd: c, reason: verdict.reason ?? t(APPLICABILITY.notHere) });
+  }
+  return { here, why };
+}
+
+/** One page as the palette's "Go to page" reads it. */
+interface PaletteRow {
+  selfId: string;
+  index: number;
+  name: string;
+}
+
+/** The page a "go to page …" query names: the text after one of the
+ *  localized prefixes ("go to page 14", "page B-3", "p 4"), or null. */
+export function goToPageQuery(query: string, words: string): string | null {
+  const q = query.trim();
+  const prefixes = words
+    .split(",")
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  for (const prefix of prefixes) {
+    if (q.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const rest = q.slice(prefix.length);
+      // A one-letter prefix needs the number right after it ("p4"); a
+      // word needs a space ("page 4", not "pages").
+      if (prefix.length === 1 ? !/^\s*\d/.test(rest) : !/^\s/.test(rest))
+        continue;
+      const page = rest.trim();
+      if (page !== "" && /^[+#]?[\p{L}\p{N}][\p{L}\p{N}.-]*$/u.test(page))
+        return page.replace(/^#/, "");
+    }
+  }
+  return null;
+}
+
+/** The page `token` names: a page whose name (folio) it is, else the page
+ *  at that absolute position ("14", InDesign's "+14"). */
+export function pageNamed(
+  rows: readonly PaletteRow[],
+  token: string,
+): PaletteRow | null {
+  const byName = rows.find((r) => r.name === token);
+  if (byName) return byName;
+  const n = Number(token.replace(/^\+/, ""));
+  return Number.isInteger(n) ? (rows.find((r) => r.index === n) ?? null) : null;
+}
+
+/** The document's pages while the palette is open (null until read). */
+function usePalettePages(open: boolean): PaletteRow[] | null {
+  const client = useOptionalCanvasClient();
+  const [rows, setRows] = useState<PaletteRow[] | null>(null);
+  useEffect(() => {
+    if (!open || !client) return;
+    let live = true;
+    client
+      .collection<PaletteRow>("pages")
+      .then((next) => {
+        if (live) setRows([...next]);
+      })
+      .catch(() => {
+        if (live) setRows([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, client]);
+  return rows;
 }
 
 export function CommandPalette() {
@@ -218,8 +303,20 @@ export function CommandPalette() {
   // with no positions to preserve, and a dead hit is just a wrong
   // answer to a query. `paged` supplies both the predicate's state and
   // the re-render, since the handle is memoized on the active context.
-  const all = applicableCommands(commands, paged, open);
+  const { here: all, why } = applicableCommands(commands, paged, open);
   const byId = new Map(all.map((c) => [c.id, c] as const));
+  // "Go to page 14", "page B-3" (the strategy's §5.7): navigation in the
+  // palette, through the same command a script runs.
+  const pages = usePalettePages(open);
+  const pageToken = open
+    ? goToPageQuery(query, strings.t(PALETTE.goToPageWords))
+    : null;
+  const pageTarget = pageToken && pages ? pageNamed(pages, pageToken) : null;
+  // A token that names no page is only worth a "no such page" when it is
+  // a number: "page setup" is a search, not a page.
+  const showGoTo =
+    pageToken !== null && (pageTarget !== null || /\d/.test(pageToken));
+  const goToPageCommand = byId.get(GO_TO_PAGE_COMMAND);
   const grouped = groupByCategory(all);
 
   const run = (cmd: CommandContribution) => {
@@ -327,6 +424,40 @@ export function CommandPalette() {
           </>
         )}
 
+        {showGoTo && goToPageCommand && (
+          <>
+            <CommandGroup heading={strings.t(PALETTE.navigate)} forceMount>
+              <CommandItem
+                value={`goto ${query}`}
+                forceMount
+                disabled={!pageTarget}
+                data-palette-goto={pageTarget?.selfId ?? ""}
+                onSelect={() => {
+                  if (!pageTarget) return;
+                  setOpen(false);
+                  void registries.commands.invoke(GO_TO_PAGE_COMMAND, {
+                    page: pageTarget.selfId,
+                  });
+                }}
+              >
+                <Icon
+                  name="ui-page"
+                  size={14}
+                  style={{ color: "var(--pg-muted-fg)", marginRight: 8 }}
+                />
+                <span>
+                  {pageTarget
+                    ? strings.t(PALETTE.goToPage, {
+                        page: pageTarget.name || String(pageTarget.index),
+                      })
+                    : strings.t(PALETTE.noSuchPage, { page: pageToken })}
+                </span>
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
+
         {query.length === 0 && recentItems.length > 0 && (
           <>
             <CommandGroup heading={strings.t(PALETTE.recent)}>
@@ -396,6 +527,7 @@ export function CommandPalette() {
                     cmd.title,
                     category,
                     categoryLabel(strings, category),
+                    ...(cmd.keywords ? [cmd.keywords] : []),
                   ]}
                   onSelect={() => run(cmd)}
                 >
@@ -407,6 +539,40 @@ export function CommandPalette() {
             </CommandGroup>
           </div>
         ))}
+
+        {/* ADR 1218 — a match that does not apply here is listed, greyed,
+            with why (the strategy's §5.7: "if something cannot run,
+            explain why"), never hidden behind "No results". */}
+        {query.length > 0 && why.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading={strings.t(PALETTE.notAvailable)}>
+              {why.map(({ cmd, reason }) => (
+                <CommandItem
+                  key={`why-${cmd.id}`}
+                  value={`why ${cmd.id}`}
+                  keywords={[
+                    cmd.title,
+                    cmd.category ?? "",
+                    categoryLabel(strings, cmd.category ?? "Other"),
+                    ...(cmd.keywords ? [cmd.keywords] : []),
+                  ]}
+                  disabled
+                  data-palette-unavailable={cmd.id}
+                  title={reason}
+                >
+                  <span>{cmd.title}</span>
+                  <span
+                    className="ml-auto pl-4 text-xs opacity-70"
+                    data-palette-why
+                  >
+                    {reason}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
+        )}
       </CommandList>
       {/* Kit footer: run / navigate / the AI affordance. */}
       <div

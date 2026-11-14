@@ -155,6 +155,20 @@
       ]
     },
     {
+      "id": "paged.inspector.disclosure.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.inspector.disclosure.v1",
+      "default": {},
+      "effect": "Properties' sections opened or collapsed by the user, per inspector kind (text, image, frame, page); a section not listed is open when common and collapsed when advanced (editor ADR 1217); read with a shape check (ADR 247)",
+      "source": "apps/editor/apps/canvas/src/panels/inspector/inspector-disclosure.ts",
+      "marker": "\"paged.inspector.disclosure.v1\"",
+      "sites": [
+        ["getItem", "DISCLOSURE_KEY"],
+        ["setItem", "DISCLOSURE_KEY"]
+      ]
+    },
+    {
       "id": "paged.demoGuide.v1",
       "kind": "persisted-ui-state",
       "storage": "localStorage",

@@ -39,6 +39,7 @@ import type {
   CommandContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { commandNeeds } from "@paged-media/shell";
 import type { CanvasClient, ElementId, Mutation } from "@paged-media/client";
 import { refusalText } from "@paged-media/panel-kit";
 import {
@@ -166,6 +167,7 @@ export function buildCornerCommands(
     title: t(p.title),
     category: "Corners",
     when: objectVerbApplies,
+    applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
     handler: async () => {
       clear();
       const refusal = await applyCornerPreset(deps, p.style, p.radius);
@@ -182,5 +184,6 @@ export const CORNER_MENU_ITEMS: MenuItemContribution[] = PRESETS.map(
     order: 69 + (i + 1) / 100,
     group: "corners",
     when: objectVerbApplies,
+    applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
   }),
 );

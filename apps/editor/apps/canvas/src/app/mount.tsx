@@ -1445,6 +1445,16 @@ function CanvasAppIntegration() {
         if (target === null) return;
         navigateCamera(fitCamera(vw, vh, rects[target]!, 40, rot));
       },
+      // ADR 1218 — the palette's "Go to page …": fit that page.
+      goToPageId: (pageId) => {
+        const index = handle?.pageIds.map(String).indexOf(pageId) ?? -1;
+        const rect = index >= 0 ? rects[index] : undefined;
+        if (rect) animateCamera(fitCamera(vw, vh, rect, 40, rot));
+      },
+      showPanel: (panelId) =>
+        cockpitActionsOf(instance.scope).openPanel?.(panelId, {
+          activate: true,
+        }),
     });
     // `paged.object.*` — the object verbs (Arrange ×4, Group, Ungroup,
     // Select parent group, Delete, Nudge ×8, Make / Release clipping

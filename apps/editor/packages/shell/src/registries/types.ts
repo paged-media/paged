@@ -27,6 +27,9 @@
 // never keeps a copy of a contract shape, so the two cannot drift.
 
 import type * as Api from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
+
+import { APPLICABILITY } from "../chrome/messages";
 
 /**
  * Returned by every `register` call so callers can clean up at
@@ -117,19 +120,50 @@ export function isEnabled(
 export function entryApplies(
   entryWhen: VisibilityPredicate | undefined,
   command: string,
-  commands: {
-    get(id: string): { when?: VisibilityPredicate } | undefined;
-    offered?(id: string): boolean;
-  },
+  commands: EntryCommands,
   getState: (() => unknown) | undefined,
 ): boolean {
-  if (!isEnabled(entryWhen, getState)) return false;
-  const cmd = commands.get(command);
   return (
-    cmd !== undefined &&
-    isEnabled(cmd.when, getState) &&
-    commands.offered?.(command) !== false
+    entryApplicability(entryWhen, command, commands, getState).state === "here"
   );
+}
+
+/** The command registry as an entry reads it. */
+export interface EntryCommands {
+  get(id: string): { when?: VisibilityPredicate } | undefined;
+  offered?(id: string): boolean;
+  applicability?(id: string): { state: string; reason?: string };
+}
+
+/**
+ * ADR 1218 — an entry's state and, when it is not offered, why: the
+ * entry's own `when` (false: "Does not apply here"), then the command's
+ * applicability (its needs and its `when`, `CommandRegistry.applicability`).
+ * Menus grey with the reason as the tooltip; the palette lists it.
+ */
+export function entryApplicability(
+  entryWhen: VisibilityPredicate | undefined,
+  command: string,
+  commands: EntryCommands,
+  getState: (() => unknown) | undefined,
+): { state: "here" | "elsewhere" | "absent" | "disabled"; reason?: string } {
+  if (!isEnabled(entryWhen, getState))
+    return { state: "disabled", reason: t(APPLICABILITY.notHere) };
+  if (commands.applicability) {
+    const verdict = commands.applicability(command);
+    return verdict as {
+      state: "here" | "elsewhere" | "absent" | "disabled";
+      reason?: string;
+    };
+  }
+  const cmd = commands.get(command);
+  if (cmd === undefined)
+    return { state: "absent", reason: t(APPLICABILITY.unknownCommand) };
+  if (commands.offered?.(command) === false)
+    return { state: "absent", reason: t(APPLICABILITY.notOffered) };
+  if (!isEnabled(cmd.when, getState))
+    return { state: "disabled", reason: t(APPLICABILITY.notHere) };
+  return { state: "here" };
 }
 
 /**

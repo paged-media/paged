@@ -226,13 +226,20 @@ every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, 
 gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
 resolver there.
 
-Track FI (fields, the inspector, commands) has begun. The one numeric
+Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
 the control bar and (as `host.widgets.NumericField`) the plugins' panels reads units,
 expressions and mixed units ("10 mm + 2 pt"), relative changes ("+=5 mm", "*110%") and the
 locale's decimal comma; a refused value says why; a mixed selection reads "Mixed", and a
 relative change applies to each object in one undo step; a scrub previews live and is one undo
-step. The rest of track FI (the inspector, commands, align) follows.
+step. Properties has a search over labels, synonyms and plugin rows, sections grouped Frame /
+Content / Text that open as the user left them per kind, and a multi-selection scope ("Applies
+to 2 of 3" edits that part), and the control bar's "More…" opens it at the matching field
+([ADR 1217](adr/1217-inspector-search-and-disclosure.md)). A command that does not apply says why:
+greyed in the menus with its reason, listed with it in the palette, which also goes to a page
+("go to page 14") and offers "Help: …" ([ADR 1218](adr/1218-commands-say-why-they-do-not-apply.md));
+every align route honours the key object, and an align control's hover shows its reference
+(D-07).
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

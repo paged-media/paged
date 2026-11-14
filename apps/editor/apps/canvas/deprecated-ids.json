@@ -476,6 +476,18 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "menu:Draw/Path/Close path",
+      "replacement": "menu:Object/Path/Close path",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:Draw/Path/Outline stroke",
+      "replacement": "menu:Object/Path/Outline stroke…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
       "id": "menu:Draw/Type on path/Attach",
       "replacement": "menu:Draw/Type on a path/Attach",
       "deprecatedIn": "0.78.0",

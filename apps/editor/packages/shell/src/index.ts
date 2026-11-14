@@ -192,6 +192,7 @@ export {
 
 export {
   SelectionProvider,
+  SelectionSubset,
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
@@ -224,9 +225,12 @@ export {
 export {
   ALIGN_SCOPE,
   ALIGN_TO,
+  alignScopeArgs,
+  chooseKeyObject,
   clickKeyObject,
   effectiveKeyObject,
   isSameElement,
+  previewAlignReference,
   type AlignScopeState,
   type AlignTo,
 } from "./state/align-scope";
@@ -783,7 +787,20 @@ export {
 } from "./cockpit";
 
 // ── Chrome ─────────────────────────────────────────────────────
-export { CommandPalette, notifyPalette } from "./chrome/CommandPalette";
+export {
+  CommandPalette,
+  GO_TO_PAGE_COMMAND,
+  goToPageQuery,
+  notifyPalette,
+  pageNamed,
+} from "./chrome/CommandPalette";
+export {
+  commandNeeds,
+  unmetNeed,
+  whenNeeds,
+  type CommandNeed,
+} from "./registries/command-reasons";
+export { entryApplicability } from "./registries/types";
 export {
   MenuBar,
   CONTEXT_MENU_ROOT,
@@ -919,6 +936,15 @@ export {
 
 // ── SDK Phase 3 — declarative catalog renderer + primitive leaves
 export { CompositionRenderer, CatalogRegistryProvider } from "./catalog/render";
+export {
+  PropertySearchProvider,
+  usePropertySearchQuery,
+  normalizeSearch,
+  matchesQuery,
+  keywordTerms,
+  compositionTerms,
+  pathWords,
+} from "./catalog/property-search";
 export {
   createPreviewCommitter,
   usePreviewCommitter,
@@ -1322,6 +1348,8 @@ export {
   applicabilityStyle,
   type Applicability,
   type ApplicabilityStyle,
+  type CommandApplicability,
+  type CommandState,
   type SurfaceKind,
 } from "./chrome/applicability";
 export {

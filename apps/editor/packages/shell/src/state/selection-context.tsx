@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 
 import type { ElementGeometryItem, ElementId } from "@paged-media/client";
@@ -358,6 +359,31 @@ function usePlacedGeometry(
     };
     return placeOnPages(geometry, known, sizeOf);
   }, [geometry, known, handle]);
+}
+
+const sameElement = (a: ElementId, b: ElementId) =>
+  a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id);
+
+/**
+ * The element selection the components below see, narrowed to `ids` (the
+ * interaction spec's D-16: a property that applies to part of a selection
+ * edits the stated subset, "Applies to 2 of 3"). The bindings below read
+ * and write those objects only; the setters stay the editor's own, so a
+ * click there still selects in the editor.
+ */
+export function SelectionSubset(props: {
+  ids: readonly ElementId[];
+  children: ReactNode;
+}) {
+  const ctx = useSelection();
+  const keep = (id: ElementId) => props.ids.some((k) => sameElement(k, id));
+  const value: SelectionContextValue = {
+    ...ctx,
+    elementSelection: ctx.elementSelection.filter(keep),
+    elementGeometry: ctx.elementGeometry.filter((g) => keep(g.id)),
+    placedGeometry: ctx.placedGeometry.filter((g) => keep(g.id)),
+  };
+  return <Context.Provider value={value}>{props.children}</Context.Provider>;
 }
 
 export function useSelection(): SelectionContextValue {

@@ -4016,6 +4016,22 @@
       "surfaceIds": ["panel:paged.properties"],
       "uxi": ["UXI-PNL-002", "UXI-PNL-005", "UXI-PNL-009"],
       "status": "migrated"
+    },
+    {
+      "id": "inspector.search",
+      "title": "Properties' search finds a property; Enter goes to its field, Escape clears",
+      "owner": "panel",
+      "eventClass": "key:Enter",
+      "scope": "panel/inspector-search",
+      "adapter": "none",
+      "site": "apps/editor/apps/canvas/src/panels/properties-panel.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "No document change: search opens and marks sections for as long as the query lasts (editor ADR 1217).",
+      "cancel": "Escape in the search field clears the query and restores the sections as the user left them.",
+      "surfaceIds": ["panel:paged.properties"],
+      "uxi": ["UXI-PNL-001"],
+      "status": "migrated"
     }
   ],
   "exceptions": [

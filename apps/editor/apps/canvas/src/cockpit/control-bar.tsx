@@ -33,6 +33,10 @@
 // document controls (editor ADR 298): the Word user's Home group, on every
 // page and with the caret anywhere.
 //
+// The bar is an ACCELERATOR, not a second inspector (the UX strategy's
+// §5.6; editor ADR 1217): the common fields per selection type, and
+// "More…", which opens Properties at the matching field.
+//
 // The row used to repeat five of the rail's tools, the one place above
 // the canvas where the selection's numbers belong. Every field reads and
 // writes through the same doors the panels use — `host.objects`
@@ -57,6 +61,13 @@ import {
   useCamera,
   useCanvasClient,
   useCollection,
+  ALIGN_SCOPE,
+  alignScopeArgs,
+  previewAlignReference,
+  useScoped,
+  editorRootOf,
+  queryEditor,
+  useEditorScope,
   useContentSelection,
   useDocument,
   useObjectModel,
@@ -84,6 +95,7 @@ import {
 } from "@paged-media/ui";
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
+import { focusInspectorField, INSPECTOR_TARGET } from "./inspector-focus";
 import { usePagePosition } from "../panels/page-position";
 import { layoutPages } from "../ui/layout";
 import { Chip, Sep, ToolPill } from "./toolbars";
@@ -163,6 +175,9 @@ const M = defineMessages("app.cockpitControlBar", {
   modePerspective: "Perspective",
   shearLabel: "Shear",
   shear: "Shear angle (degrees), about the reference point",
+  more: "More…",
+  moreObject: "Every property of the selection, in Properties",
+  moreText: "Every type setting, in Properties",
 });
 
 const REF_LABEL: Record<ReferenceKey, string> = {
@@ -361,10 +376,19 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
     (ids[0] as unknown as { kind?: string }).kind === "group";
   const run = (id: string, args?: unknown) =>
     void commands.invoke(id, args as never).catch(() => {});
+  // D-07 — the bar aligns against what the Align panel names (the key
+  // object, the page, …), as every align route does; hovering a button
+  // shows that reference on the canvas (UXI-SEL-018).
+  const alignStore = useScoped(ALIGN_SCOPE);
   const align = (kind: AlignKind) => {
     if (!model) return;
-    run(ALIGN_COMMAND, { kind, targets: ids.map((id) => model.addressOf(id)) });
+    run(ALIGN_COMMAND, {
+      kind,
+      targets: ids.map((id) => model.addressOf(id)),
+      ...alignScopeArgs(alignStore.get(), ids, (id) => model.addressOf(id)),
+    });
   };
+  const preview = (on: boolean) => previewAlignReference(alignStore, on);
   const resizeHint = strings.t(M.resizeHint);
   return (
     <>
@@ -471,13 +495,21 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
               ["bottom", "ui-obj-align-bottom", M.alignBottom],
             ] as const
           ).map(([kind, icon, title]) => (
-            <ToolPill
+            <span
               key={kind}
-              icon={icon}
-              title={strings.t(title)}
-              onClick={() => align(kind)}
-              testId={`align-${kind}`}
-            />
+              className="contents"
+              onPointerEnter={() => preview(true)}
+              onPointerLeave={() => preview(false)}
+              onFocus={() => preview(true)}
+              onBlur={() => preview(false)}
+            >
+              <ToolPill
+                icon={icon}
+                title={strings.t(title)}
+                onClick={() => align(kind)}
+                testId={`align-${kind}`}
+              />
+            </span>
           ))}
           <Sep />
         </>
@@ -512,7 +544,32 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
           {strings.t(M.ungroup)}
         </Chip>
       )}
+      <Sep />
+      <MoreChip target="object" />
     </>
+  );
+}
+
+/** "More…": the bar is an accelerator (the UX strategy's §5.6); the rest
+ *  is in Properties, opened at the matching field (ADR 1217). */
+function MoreChip({ target }: { target: keyof typeof INSPECTOR_TARGET }) {
+  const strings = useStrings();
+  const scope = useEditorScope();
+  const testId = `more-${target}`;
+  return (
+    <Chip
+      testId={testId}
+      title={strings.t(target === "text" ? M.moreText : M.moreObject)}
+      onClick={() => {
+        const opener = queryEditor(
+          editorRootOf(scope),
+          `[data-cockpit-action="${testId}"]`,
+        );
+        void focusInspectorField(scope, INSPECTOR_TARGET[target], opener);
+      }}
+    >
+      {strings.t(M.more)}
+    </Chip>
   );
 }
 
@@ -717,6 +774,8 @@ function TextControls() {
           testId={`justify-${value}`}
         />
       ))}
+      <Sep />
+      <MoreChip target="text" />
     </>
   );
 }

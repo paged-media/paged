@@ -210,18 +210,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     await new Designer(live).selectElements(pair);
   });
 
-  test("Draw/Path/Outline stroke — runs outlineStroke", async () => {
-    covers("menu:Draw/Path/Outline stroke");
-    // What it does to two plain rectangles is the draw suite's concern; here: it is reached and runs.
-    await expectGreyedAndInert(bare, "Draw/Path/Outline stroke");
-    const out = await clickEntry(
-      live,
-      "Draw/Path/Outline stroke",
-      "media.paged.draw.command.outlineStroke",
-    );
-    expect(out.shell).toEqual([]);
-  });
-
   test("Draw/Path/Outline stroke options… — raises Path Options, where the outline is set up", async () => {
     covers("menu:Draw/Path/Outline stroke options…");
     await expectGreyedAndInert(bare, "Draw/Path/Outline stroke options…");
@@ -296,18 +284,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     expect(out.after, "two closed rectangles have no open endpoints").toBe(
       out.before,
     );
-  });
-
-  test("Draw/Path/Close path — runs closePath; both rectangles are already closed, so it changes nothing", async () => {
-    covers("menu:Draw/Path/Close path");
-    await expectGreyedAndInert(bare, "Draw/Path/Close path");
-    const out = await clickEntry(
-      live,
-      "Draw/Path/Close path",
-      "media.paged.draw.command.closePath",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "both rectangles are already closed").toBe(out.before);
   });
 
   test("Draw/Path/Reverse path direction — runs reversePathDirection", async () => {

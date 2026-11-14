@@ -408,6 +408,11 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   and `SH/chrome/applicability.ts` everywhere; the palette says why a command is disabled; "Go to
   page N"; Help entries; `SCRIPTS/applicability-guard.mjs` extended. Closes F-19.
 - **FI5 Align's key object (D-07)** through `SH/state/align-scope.ts` on every align route.
+- **Status (2026-11-13): built.** FI1 in [ADR 1216](adr/1216-one-numeric-field.md) (the rule
+  `raw-number-input` keeps the modules' copies for CM5 and the standalone devtools inspector),
+  FI2 and FI3 in [ADR 1217](adr/1217-inspector-search-and-disclosure.md), FI4 in
+  [ADR 1218](adr/1218-commands-say-why-they-do-not-apply.md) (F-19 closed), FI5 in ADR 1201's
+  D-07 amendment. A scrub's one undo step is EN8's coalesce key (engine ADR 1304).
 
 ## 10. Track CM — Contexts and modules (spec wave 4; the strategy's §7)
 
