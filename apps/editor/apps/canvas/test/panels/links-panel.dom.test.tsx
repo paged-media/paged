@@ -211,7 +211,8 @@ describe("Links panel: relink", () => {
         key: STRUCTURE.imageFrame.id,
         primary: "photo-v2.png",
         secondary: "Rectangle",
-        badge: null,
+        // The picked file's bytes live in the document now (engine ADR 1312).
+        badge: "embedded",
         selected: true,
       },
     ]);

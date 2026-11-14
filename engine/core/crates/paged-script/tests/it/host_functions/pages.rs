@@ -85,6 +85,25 @@ fn delete_page() {
     assert_eq!(page_ids(&mut m), vec![first]);
 }
 
+/// Engine ADR 1311 — facing pages on an existing document: three single
+/// pages become page 1 alone and a pair, one undo step.
+#[test]
+fn set_facing_pages() {
+    covers!("script:paged.setFacingPages");
+    let (mut m, _, _) = two_pages();
+    ok(&mut m, "paged.insertPage()");
+    let spreads = |m: &CanvasModel| m.scene().spreads.len();
+    assert_eq!(spreads(&m), 3);
+    writes(&mut m, "paged.setFacingPages(true)", "true");
+    assert_eq!(spreads(&m), 2, "page 1 alone, then a pair");
+    assert_eq!(
+        m.scene().designmap.document_preference.facing_pages,
+        Some(true)
+    );
+    writes(&mut m, "paged.setFacingPages(false)", "true");
+    assert_eq!(spreads(&m), 3);
+}
+
 #[test]
 fn duplicate_page() {
     covers!("script:paged.duplicatePage");

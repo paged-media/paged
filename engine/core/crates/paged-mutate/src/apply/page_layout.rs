@@ -159,7 +159,7 @@ pub(super) fn repair_start(doc: &Document, spread_index: usize) -> usize {
             .iter()
             .map(|p| p.spread.pages.len())
             .sum();
-        if first == 0 || before % 2 == 1 {
+        if first == 0 || !before.is_multiple_of(2) {
             return first;
         }
         first -= 1;
@@ -244,7 +244,7 @@ pub(super) fn relayout(
     let mut groups: Vec<Vec<Unit>> = Vec::new();
     for (k, unit) in units.into_iter().enumerate() {
         let index = pages_before + k;
-        let opens = !facing || index == 0 || index % 2 == 1;
+        let opens = !facing || index == 0 || !index.is_multiple_of(2);
         if opens || groups.is_empty() {
             groups.push(vec![unit]);
         } else {
@@ -278,7 +278,7 @@ pub(super) fn relayout(
                 // left-hand page ends at it. Page 1 is a recto, then each
                 // spread a verso and a recto; a right-to-left binding
                 // mirrors both.
-                let recto = index % 2 == 0;
+                let recto = index.is_multiple_of(2);
                 if recto != rtl {
                     0.0
                 } else {

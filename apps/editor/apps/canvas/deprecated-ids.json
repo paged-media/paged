@@ -1,35 +1,4 @@
 {
   "$comment": "Feature ids that left feature-ids.json, each with its replacement (null: none) and its window: the release that deprecated it and the first release without the alias (docs/adr/PM-0013-editor-package.md, amendment 2). An editor reads an old id in a host's profile or feature set as its replacement and reports it once. Edited by hand; apps/editor/scripts/feature-ids.mjs checks it and mirrors it into feature-ids.json.",
-  "deprecated": [
-    {
-      "id": "menu:Draw/Path/Close path",
-      "replacement": "menu:Object/Path/Close path",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:Draw/Path/Outline stroke",
-      "replacement": "menu:Object/Path/Outline stroke…",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:View/Show text threads",
-      "replacement": "menu:View/Editing aids/Text threads",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:View/Show data markers",
-      "replacement": "menu:View/Editing aids/Data bindings",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:File/Open recent",
-      "replacement": "menu:File/Open recent…",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    }
-  ]
+  "deprecated": []
 }

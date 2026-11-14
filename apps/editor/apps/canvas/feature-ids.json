@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 982,
+    "command": 983,
     "keybinding": 216,
     "menu": 709,
     "panel": 156,
@@ -4127,6 +4127,11 @@
     },
     {
       "id": "command:paged.insert.endnote",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.facingPages",
       "kind": "command",
       "owner": "editor"
     },
@@ -10961,36 +10966,5 @@
       "owner": "editor"
     }
   ],
-  "deprecated": [
-    {
-      "id": "menu:Draw/Path/Close path",
-      "replacement": "menu:Object/Path/Close path",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:Draw/Path/Outline stroke",
-      "replacement": "menu:Object/Path/Outline stroke…",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:File/Open recent",
-      "replacement": "menu:File/Open recent…",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:View/Show data markers",
-      "replacement": "menu:View/Editing aids/Data bindings",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:View/Show text threads",
-      "replacement": "menu:View/Editing aids/Text threads",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    }
-  ]
+  "deprecated": []
 }

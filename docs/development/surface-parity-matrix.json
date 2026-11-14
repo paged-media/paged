@@ -1,7 +1,7 @@
 {
   "catalog": {
-    "hostFunctions": 233,
-    "operations": 198
+    "hostFunctions": 234,
+    "operations": 199
   },
   "environment": {
     "cli": true
@@ -2755,6 +2755,48 @@
       },
       "changes": true,
       "op": "deletePage"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setFacingPages"
     },
     {
       "cases": [
@@ -11622,17 +11664,17 @@
       "generic": 7,
       "named": 9,
       "none": 1,
-      "not-run": 55,
+      "not-run": 56,
       "parity": 140,
-      "typed": 181
+      "typed": 182
     },
     "boa": {
       "differs": 0,
       "gap": 1,
       "generic": 1,
-      "named": 195,
+      "named": 196,
       "none": 1,
-      "not-run": 55,
+      "not-run": 56,
       "parity": 142,
       "typed": 1
     },
@@ -11640,9 +11682,9 @@
       "differs": 0,
       "gap": 1,
       "generic": 0,
-      "named": 195,
+      "named": 196,
       "none": 1,
-      "not-run": 55,
+      "not-run": 56,
       "parity": 142,
       "typed": 2
     },
@@ -11652,17 +11694,17 @@
       "generic": 0,
       "named": 9,
       "none": 8,
-      "not-run": 55,
+      "not-run": 56,
       "parity": 133,
-      "typed": 181
+      "typed": 182
     },
     "mcp": {
       "differs": 0,
       "gap": 1,
       "generic": 2,
-      "named": 195,
+      "named": 196,
       "none": 1,
-      "not-run": 57,
+      "not-run": 58,
       "parity": 140,
       "typed": 0
     },
@@ -11672,16 +11714,16 @@
       "generic": 7,
       "named": 0,
       "none": 1,
-      "not-run": 55,
+      "not-run": 56,
       "parity": 142,
-      "typed": 190
+      "typed": 191
     },
     "viewer-sdk": {
       "differs": 0,
-      "gap": 198,
+      "gap": 199,
       "generic": 0,
       "named": 0,
-      "none": 198,
+      "none": 199,
       "not-run": 0,
       "parity": 0,
       "typed": 0
