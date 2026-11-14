@@ -24,8 +24,17 @@
 import { test, expect } from "@playwright/test";
 import { covers } from "@paged-media/test-kit";
 
-const ready = (page: import("@playwright/test").Page) =>
-  expect(page.getByRole("status")).toContainText("ready", { timeout: 60_000 });
+type Page = import("@playwright/test").Page;
+
+// The demo's own status line, in the host page's header. Not every status
+// on the page: while a document loads, each editor's canvas shows its
+// stages in a polite live region of its own (editor ADR 1208, progressive
+// loading), so the page holds one status per editor besides the host's.
+const status = (page: Page) =>
+  page.locator("header.demo-header").getByRole("status");
+
+const ready = (page: Page) =>
+  expect(status(page)).toContainText("ready", { timeout: 60_000 });
 
 test.describe("journey · embedding demos", () => {
   test("the gallery links every demo @feat:editor-shell.solo-mode @level:happy", async ({
@@ -69,13 +78,11 @@ test.describe("journey · embedding demos", () => {
     const run = (id: string) =>
       page.locator(`[data-region-command="${id}"]`).click();
     await run("paged.host.back");
-    await expect(page.getByRole("status")).toHaveText("back to the shop");
+    await expect(status(page)).toHaveText("back to the shop");
     await run("paged.host.close");
-    await expect(page.getByRole("status")).toHaveText(
-      "closed without ordering",
-    );
+    await expect(status(page)).toHaveText("closed without ordering");
     await run("paged.host.submit");
-    await expect(page.getByRole("status")).toHaveText("ordered: 250 cards");
+    await expect(status(page)).toHaveText("ordered: 250 cards");
   });
 
   test("postcard form: the host's form fills the template @feat:editor-shell.solo-mode @level:happy", async ({
@@ -95,7 +102,7 @@ test.describe("journey · embedding demos", () => {
     await page.goto("/demos/theme-language.html");
     await ready(page);
     await page.locator("[data-demo-language]").selectOption("de");
-    await expect(page.getByRole("status")).toHaveText("ready (de)", {
+    await expect(status(page)).toHaveText("ready (de)", {
       timeout: 60_000,
     });
     await page.locator("[data-demo-accent]").selectOption("160 84% 30%");
@@ -128,7 +135,7 @@ test.describe("journey · embedding demos", () => {
       { timeout: 15_000 },
     );
     await frame.locator('[data-region-command="paged.host.submit"]').click();
-    await expect(page.getByRole("status")).toHaveText("submitted");
+    await expect(status(page)).toHaveText("submitted");
     await expect(messages).toContainText('"Mary Example"');
     // Scripts reach the frame too (dev and demo builds).
     await page.locator("[data-demo-run-script]").click();
@@ -194,10 +201,9 @@ test.describe("journey · embedding demos", () => {
     await right.locator('[data-field-input="name"]').press("Enter");
 
     await page.locator("[data-demo-remount]").click();
-    await expect(page.getByRole("status")).toHaveText(
-      "ready: the left editor again",
-      { timeout: 60_000 },
-    );
+    await expect(status(page)).toHaveText("ready: the left editor again", {
+      timeout: 60_000,
+    });
     // One root per editor: the disposed one is gone, not stacked.
     await expect(left.locator("[data-paged-editor]")).toHaveCount(1);
     await expect(page.locator("[data-paged-editor]")).toHaveCount(2);
