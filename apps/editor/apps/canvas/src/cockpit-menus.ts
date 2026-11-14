@@ -25,7 +25,10 @@
 // item lights up when its backing lands. Sentence case per the
 // content rules.
 
-import { PAGED_FILE_NEW, PAGED_FILE_NEW_FROM_BRIEF } from "@paged-media/shell";
+import {
+  PAGED_FILE_NEW_DIALOG,
+  PAGED_FILE_NEW_FROM_BRIEF,
+} from "@paged-media/shell";
 import type { MenuItemContribution } from "@paged-media/shell";
 import { defineMessages } from "@paged-media/strings";
 
@@ -34,7 +37,7 @@ import { defineMessages } from "@paged-media/strings";
 defineMessages("menu", {
   "New document…": "New document…",
   "New from a brief…": "New from a brief…",
-  "Open recent": "Open recent",
+  "Open recent…": "Open recent…",
   Close: "Close",
   "Package…": "Package…",
   "Print…": "Print…",
@@ -89,9 +92,11 @@ const panel = (
 
 export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
   // ── File (kit FILE_MENU; New document… + Open IDML… + Export PDF… are real) ──
+  // Editor ADR 1220 — the dialog (presets, size, pages, bleed, margins
+  // and columns); `paged.file.new` stays the quick blank path.
   {
     path: "File/New document…",
-    command: PAGED_FILE_NEW,
+    command: PAGED_FILE_NEW_DIALOG,
     order: 5,
     group: "open",
   },
@@ -101,8 +106,6 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
     order: 6,
     group: "open",
   },
-  soon("File/Open recent", 12, "open"),
-  soon("File/Close", 30, "save"),
   // `File/Save (.paged)` was a seam here until `client.exportPaged()`
   // got a caller; it is now a REAL entry registering from
   // app-commands.ts at the same slot (order 31, group "save"). The
@@ -116,12 +119,26 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
   // on the collision, so the stub is gone rather than duplicated.
   soon("File/Package…", 60, "produce"),
   soon("File/Print…", 61, "produce"),
-  // ── Layout ── (pages are real, from insert-commands; these three
-  //    groups stay honest seams until their dialogs land)
-  soon("Layout/Margins and columns…", 20, "page-setup"),
-  soon("Layout/Ruler guides…", 30, "guides"),
+  // ── Layout ── (pages are real, from insert-commands). UX audit F-15
+  //    (editor ADR 1221): three of these were "soon" seams while Window ▸
+  //    Structure had working panels for them; they raise those panels
+  //    now, as the Type menu's rows do. Create guides… (rows and columns
+  //    of guides in one step) has no capability behind it yet and stays
+  //    an honest seam.
+  panel(
+    "Layout/Margins and columns…",
+    "paged.margins-columns",
+    20,
+    "page-setup",
+  ),
+  panel("Layout/Ruler guides…", "paged.guides", 30, "guides"),
   soon("Layout/Create guides…", 31, "guides"),
-  soon("Layout/Numbering and section options…", 40, "numbering"),
+  panel(
+    "Layout/Numbering and section options…",
+    "paged.section-options",
+    40,
+    "numbering",
+  ),
   // ── Type ── all four were `soon` seams while the panels they name
   //    were registered and working; a whole top-level menu of dead
   //    items. They raise those panels now.

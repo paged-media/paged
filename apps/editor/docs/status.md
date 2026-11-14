@@ -156,7 +156,26 @@ decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work
 
 Implemented so far: the save status (DF1, [ADR 1203](adr/1203-save-status-says-what-is-saved-where.md),
 `UXI-T67`), the recovery journal (DF2, [ADR 1204](adr/1204-recovery-journal.md)) and drop
-intent (DF3, [ADR 1205](adr/1205-drop-says-what-it-will-do.md), `UXI-T62` to `UXI-T64`). Track KF (keyboard and focus) is built: Escape is resolved
+intent (DF3, [ADR 1205](adr/1205-drop-says-what-it-will-do.md), `UXI-T62` to `UXI-T64`). Track DF's
+second part has landed: one operation feedback service per editor says how an operation ended —
+the specification's eight outcomes, an error as action, reason, whether the document changed and
+remedy, on one toast channel with no storm or in Problems while it stays, the engine's words behind
+Details, and `host.notify` for extensions (DF8, [ADR 1219](adr/1219-operation-feedback.md),
+extensions ADR 1107; F-02); the compatibility report lists every import's and export's losses
+(the engine's loss report, now also on the IDML load and export) explained, located and with each
+format's round-trip risk, and says an import's summary once (DF4,
+[ADR 1222](adr/1222-compatibility-report.md), `UXI-T66`); File ▸ New document… opens a dialog of
+purpose presets and a custom setup with a live preview (DF5, [ADR 1220](adr/1220-new-document.md);
+F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
+stages and Cancel, a verified result — in kit controls with a page scope and presets, and the
+Layout rows open their panels (DF6, [ADR 1221](adr/1221-guided-export.md), `UXI-T68`; F-12,
+F-15); the publication's issues are on the page as markers, in a page overview and in the Issues
+lens, one click to the item with targeted fixes (DF7,
+[ADR 1223](adr/1223-publication-health-on-the-page.md), `UXI-T55`; F-09); the clipboard's verbs run
+in the order they were given and paste keeps relative geometry, Paste in place its positions
+(DF9, [ADR 231](adr/231-page-item-clipboard.md) amended, `UXI-T65`); and the document open last
+reopens at the next start, with File ▸ Open recent… and File ▸ Close
+([ADR 1224](adr/1224-session-continuity.md); F-06). Track KF (keyboard and focus) is built: Escape is resolved
 once per press by a per-editor arbiter in the specification's order, and at the top level it
 clears the selection ([ADR 1207](adr/1207-one-escape.md)); every key listener hears only its own
 editor's keys; Tab moves focus everywhere, the chrome toggle is `paged.view.toggleChrome`

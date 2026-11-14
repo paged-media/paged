@@ -48,6 +48,7 @@ import type { FontSummary, LinkSummary } from "@paged-media/client";
 import { exportReadiness, exportTargetById } from "./export-targets";
 
 import { severityCounts, usePreflightFindings } from "./preflight-findings";
+import { IssuesSection } from "./issues-section";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.cockpitPublicationHealthPanel", {
@@ -74,6 +75,7 @@ const M = defineMessages("app.cockpitPublicationHealthPanel", {
     "Preflight findings populate after Prepress ▸ Validate output; the " +
     "other counts read live from the document.",
   notWired: "This risk's data source isn't wired yet",
+  issues: "Issues",
 });
 
 /** Low-res convention — screen/preflight floor below which a placed
@@ -214,6 +216,12 @@ export function PublicationHealthPanel() {
           />
         </div>
       </CockpitSection>
+      {/* Editor ADR 1223 — the issues where they are, with their fixes. */}
+      {loaded && (
+        <CockpitSection title={strings.t(M.issues)}>
+          <IssuesSection />
+        </CockpitSection>
+      )}
       <CockpitSection title={strings.t(M.risks)}>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {riskRows.map((r) => (

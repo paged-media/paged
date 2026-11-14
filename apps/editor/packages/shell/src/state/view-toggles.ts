@@ -45,6 +45,8 @@ export type ViewToggle =
   | "snapToPoints"
   | "headingAnchors"
   | "dataMarkers"
+  // Editor ADR 1223 — the publication's issues on the page.
+  | "issueMarkers"
   // Editor ADR 287 — the screen modes and the grids / snapping of the
   // View menu. `outline` / `overprintPreview` / `pixelPreview` resolve to
   // ONE engine view mode (`viewModeOf`); Overprint Preview and Pixel
@@ -109,6 +111,10 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   // frames a binding places content in and its sync state: InDesign data
   // tools keep such markers behind a View option too, and they never print.
   dataMarkers: false,
+  // Off by default: a marker on every missing link of a large document is
+  // a diagnostic view, opened from Publication health or the View menu
+  // (editor ADR 1223), and it never prints.
+  issueMarkers: false,
   // Preview is the default screen: overprints knock out, as Illustrator's
   // and InDesign's screens draw them until Overprint Preview is on.
   outline: false,

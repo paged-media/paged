@@ -32,18 +32,6 @@
     "task": "IC7",
     "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T56 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T65": {
-    "task": "DF9",
-    "reason": "No test claims it yet: clipboard conformance across selection types and contexts is not asserted end to end yet (DF9). Claim it in a test title (UXI-T65 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T66": {
-    "task": "DF4",
-    "reason": "No test claims it yet: the engine reports an IDML import's losses on the load (DocumentHandle.losses) and the client's exportIdml answers the export's (protocol 80, engine ADR 1305), but no report shows them; DF4 adds the report over EN6. Claim it in a test title (UXI-T66 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T68": {
-    "task": "DF6",
-    "reason": "No test claims it yet: export does not prevalidate the requested standard yet (DF6). Claim it in a test title (UXI-T68 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T69": {
     "task": "AP1",
     "reason": "No test claims it yet: there is no accessible object tree synchronized with the selection yet (AP1). Claim it in a test title (UXI-T69 — …) when that lands, or sooner where today's code already passes (W0.7)."

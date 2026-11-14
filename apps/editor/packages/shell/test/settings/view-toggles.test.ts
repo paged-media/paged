@@ -51,6 +51,8 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   snapToPoints: true,
   headingAnchors: false,
   dataMarkers: false,
+  // Editor ADR 1223.
+  issueMarkers: false,
   // Editor ADR 287.
   outline: false,
   overprintPreview: false,

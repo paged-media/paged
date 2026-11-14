@@ -30,6 +30,10 @@ import { importReplaceAllowed, setPendingImportSource } from "../import-source";
 import { notifyImported } from "../import-hooks";
 import { pageForPicture, pictureSize } from "../picture-size";
 import { confirmDiscard, isReplaceDeclined } from "../replace-guard";
+import { setCurrentLibraryDocument } from "../library-document";
+import { setOpenFileHandle } from "../open-file-handle";
+import { setupFromPayload } from "../new-document-presets";
+import { applyDocumentSetup } from "./new-document";
 
 export { confirmDiscard };
 import type { DocumentHandle } from "@paged-media/client";
@@ -61,14 +65,27 @@ export function buildNewDocumentCommand(options: {
     id: PAGED_FILE_NEW,
     title: t(COMMANDS.newDocument),
     category: "File",
-    handler: async (paged) => {
+    handler: async (paged, payload) => {
       const editor = paged as PagedEditor;
+      // Editor ADR 1220 — a payload that is a setup (the New document
+      // dialog's Create, a script's `{ widthPt, heightPt, pages, … }`)
+      // makes that document; none makes the quick blank page.
+      const setup = setupFromPayload(payload);
       if (!(await confirmDiscard(editor, t(REPLACE.creatingNew)))) return;
-      await mintBlankDocument(
+      if (!setup) {
+        await mintBlankDocument(
+          editor,
+          options.defaultSizePt ?? LETTER_PT,
+          options,
+        );
+        return;
+      }
+      const handle = await mintBlankDocument(
         editor,
-        options.defaultSizePt ?? LETTER_PT,
+        [setup.widthPt, setup.heightPt],
         options,
       );
+      if (handle) await applyDocumentSetup(editor, handle, setup, options);
     },
   };
 }
@@ -181,7 +198,17 @@ export async function openFile(
   }
   const importer = editor.registries.importers.resolve(file.name, file.type);
   if (importer) {
-    const outcome = await runImporter(editor.scope, importer, file, sinks);
+    const before = openDocumentOf(editor);
+    const ran = await runImporter(editor.scope, importer, file, sinks);
+    // An importer that "opened" without a new document failed to open it
+    // (it said why, UXI-FIL-001): the open document is not marked saved
+    // and nothing was imported.
+    const outcome =
+      ran === "opened" &&
+      before !== undefined &&
+      openDocumentOf(editor) === before
+        ? "failed"
+        : ran;
     // UX audit F-08: an importer that opened a document builds it with
     // mutations after the open (paged.doc applies its styles, grow rules
     // and the pour), so the engine's flag, which counts every mutation
@@ -400,6 +427,13 @@ export async function dropFileAs(
 }
 
 /** Is a document with pages open? */
+/** The engine's open document as the client tracks it; undefined for a
+ *  client that does not track it (a host's stand-in). */
+function openDocumentOf(editor: PagedEditor): string | null | undefined {
+  const client = editor.client as { openDocument?: string | null } | undefined;
+  return client && "openDocument" in client ? client.openDocument : undefined;
+}
+
 function hasDocument(editor: PagedEditor): boolean {
   return (editor.document.handle?.pageCount ?? 0) > 0;
 }
@@ -531,4 +565,27 @@ export function buildNewFromBriefCommand(
       open();
     },
   };
+}
+
+/**
+ * File ▸ Close (UX audit F-06): the open document goes, after the replace
+ * question when it has unsaved edits (ADR 230: Save, Don't save, Cancel),
+ * and the editor shows the empty canvas. Nothing is written: a closed
+ * document's recovery copy goes with it, as a save's does (editor ADR
+ * 1204), and the next start does not reopen it. Resolves true when it
+ * closed.
+ */
+export async function closeDocument(editor: PagedEditor): Promise<boolean> {
+  if (!hasDocument(editor)) return false;
+  const name = editor.document.sourceName ?? t(REPLACE.aDocument);
+  if (!(await confirmDiscard(editor, t(REPLACE.closing, { name }))))
+    return false;
+  editor.document.resetForNewDocument();
+  editor.document.setHandle(null);
+  setCurrentLibraryDocument(editor.scope, null);
+  setOpenFileHandle(editor.scope, null);
+  editor.selection.setElementSelection([]);
+  editor.selection.setElementGeometry([]);
+  editor.contentSelection.setContentSelection(null);
+  return true;
 }

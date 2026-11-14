@@ -40,6 +40,7 @@ import type {
   CreateBundleHostOptions,
   DataProviderBackend,
   DiagnosticsSink,
+  NotifySink,
   DocumentsBackend,
   ModulesBackend,
   NativeDocumentBackend,
@@ -152,6 +153,8 @@ export interface EditorHostOptionDeps {
   willSave: WillSaveBackend;
   objects: NonNullable<CreateBundleHostOptions["objects"]>;
   diagnosticsSink: DiagnosticsSink;
+  /** The editor's operation feedback (extensions ADR 1107, `host.notify`). */
+  notifySink: NotifySink;
   /** The editor's page and text doors (`./plugin-pages.ts`). */
   pages: PageDoors;
 }
@@ -354,6 +357,9 @@ export function createEditorHostOptions(
     // (`viewport.revealText@1`).
     text: deps.pages.text,
     diagnosticsSink: deps.diagnosticsSink,
+    // Extensions ADR 1107 — `host.notify` reaches the editor's one
+    // feedback service (a toast, Problems); flips supports("notify@1").
+    notifySink: deps.notifySink,
     // ADR 025 / HOST-4 — `host.journal` records into the editor's ONE
     // journal (the Journal panel, the bug-report export). The SDK has
     // checked the code is namespaced under the bundle's id; flips

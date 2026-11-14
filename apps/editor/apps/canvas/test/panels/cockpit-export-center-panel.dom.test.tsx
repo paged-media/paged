@@ -117,8 +117,24 @@ describe("Export Center: states", () => {
       expect(row(h, id).textContent).toContain("soon");
       expect(row(h, id).querySelector("button")).toBeNull();
     }
+    // Nothing to fix in a blank document; presets live in the PDF dialog
+    // (editor ADR 1221), so the centre has no disabled preset button.
     expect(action(h.root, "export-fix-issues").disabled).toBe(true);
-    expect(action(h.root, "export-save-preset").disabled).toBe(true);
+    expect(
+      h.root.querySelector('[data-cockpit-action="export-save-preset"]'),
+    ).toBeNull();
+  });
+
+  test("ADR 1221: the export's own check lights Fix issues first when the document has issues", async () => {
+    covers("panel:paged.export-center");
+    const h = await mount(linksDocument());
+    // The low-resolution picture of the links document is a warning.
+    await h.settle();
+    const issues = h.root.querySelector("[data-export-issues]");
+    expect(Number(issues?.getAttribute("data-export-issues"))).toBeGreaterThan(
+      0,
+    );
+    expect(action(h.root, "export-fix-issues").disabled).toBe(false);
   });
 });
 

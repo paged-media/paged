@@ -86,6 +86,16 @@ export interface SvgCommandDeps {
   pickFile?: () => Promise<File | null>;
   /** Deliver an export; the browser download when absent. */
   save?: (bytes: Uint8Array, name: string, mimeType: string) => void;
+  /** The import's losses for the compatibility report (editor ADR 1222),
+   *  with what it made. */
+  compat?: (report: SvgCompatReport) => void;
+}
+
+/** What an SVG import tells the compatibility report. */
+export interface SvgCompatReport {
+  name: string;
+  losses: SvgReport["losses"];
+  made: string[];
 }
 
 export interface SvgProblem {
@@ -164,7 +174,7 @@ export async function importSvgFile(
   const say = (severity: SvgProblem["severity"], message: string) =>
     rows.push({ severity, message });
   try {
-    return await importInto(paged, file, say);
+    return await importInto(paged, file, say, deps.compat);
   } finally {
     deps.report(rows);
   }
@@ -174,6 +184,7 @@ async function importInto(
   paged: PagedEditor,
   file: { name: string; bytes: Uint8Array },
   say: (severity: SvgProblem["severity"], message: string) => void,
+  compat?: (report: SvgCompatReport) => void,
 ): Promise<WorkerToMain | null> {
   const page = targetPage(paged);
   if (!page) {
@@ -206,6 +217,13 @@ async function importInto(
     say("warning", line);
   }
   say("info", t(M.imported, { name: file.name, count: plan.report.items }));
+  compat?.({
+    name: file.name,
+    losses: plan.report.losses,
+    made: (reply.payload.minted ?? []).map((m) =>
+      typeof m.element.id === "string" ? m.element.id : "",
+    ),
+  });
   await selectMinted(paged, reply);
   return reply;
 }

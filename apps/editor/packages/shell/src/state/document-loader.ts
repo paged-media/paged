@@ -26,14 +26,15 @@
 // NOT depend on React; pass it the setters and it dispatches.
 
 import { t } from "@paged-media/strings";
-import { LOAD } from "./messages";
+import { FEEDBACK_ACTIONS, LOAD } from "./messages";
+import { operationFeedbackOf } from "./operation-feedback";
 import type { CanvasClient } from "@paged-media/client";
-import type { DocumentHandle, PageId } from "@paged-media/client";
+import type { DocumentHandle, LossEntry, PageId } from "@paged-media/client";
 
 import type { DocumentEntry } from "@paged-media/repository";
 
 import type { LoadingState } from "./document-context";
-import { scoped, type EditorScope } from "./editor-scope";
+import { createEmitter, scoped, type EditorScope } from "./editor-scope";
 import { declareDocumentSource, sourceOfFile } from "./document-source";
 import {
   rememberOpenedFile,
@@ -41,6 +42,30 @@ import {
 } from "./library-document";
 
 const SNAPSHOT_WIDTH_PX = 256;
+
+/** What a document load could not carry: the file's name and the
+ *  engine's loss entries (protocol 80). */
+export interface DocumentLoadLosses {
+  name: string;
+  losses: readonly LossEntry[];
+}
+
+const LOAD_LOSSES = scoped("documentLoadLosses", () =>
+  createEmitter<DocumentLoadLosses>(),
+);
+
+/** Hear every landed load's losses in `scope`; returns the unsubscribe. */
+export function onDocumentLoadLosses(
+  scope: EditorScope,
+  listener: (loaded: DocumentLoadLosses) => void,
+): () => void {
+  return scope.get(LOAD_LOSSES).subscribe(listener);
+}
+
+/** The Problems entry of a failed open of `name`. */
+export function openFailureKey(name: string): string {
+  return `paged.open|${name}`;
+}
 
 export interface DocumentLoaderCallbacks {
   setHandle: (h: DocumentHandle | null) => void;
@@ -118,10 +143,29 @@ export async function loadDocumentFile(
     // it; nothing here was reset), and the failure is said where it is
     // seen, not only in the status line's tooltip (UX audit F-02).
     cb.pushWarning(t(LOAD.openFailed, { name: file.name }));
+    // ...and listed in Problems until that file opens or the entry is
+    // dismissed (editor ADR "Operation feedback"; F-02).
+    operationFeedbackOf(cb.scope).report({
+      action: t(FEEDBACK_ACTIONS.open, { name: file.name }),
+      outcome: "recoverable-failure",
+      reason: t(FEEDBACK_ACTIONS.openReason),
+      document: "unchanged",
+      detail: String(err),
+      key: openFailureKey(file.name),
+      source: "paged.open",
+      channel: "problem",
+    });
     cb.setStatus(`load failed: ${String(err)}`);
     return;
   }
   if (load !== loads.newest) return;
+  operationFeedbackOf(cb.scope).resolve(openFailureKey(file.name));
+  // Protocol 80 (engine ADR 1305): what the opened file does not carry, for
+  // the compatibility report (editor ADR 1222); an empty list says the
+  // document opened whole.
+  cb.scope
+    .get(LOAD_LOSSES)
+    .emit({ name: file.name, losses: handle.losses ?? [] });
   // Only a load that landed replaces what the editor shows: its pages'
   // pictures and its name.
   cb.resetForNewDocument();
