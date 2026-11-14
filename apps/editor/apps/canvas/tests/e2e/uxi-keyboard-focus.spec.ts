@@ -405,6 +405,17 @@ test.describe("UXI keyboard and focus (track KF)", () => {
     for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "Space"])
       await page.keyboard.press(key);
     await page.keyboard.press("Escape");
+    // The guided export's first control is the preset list (editor ADR
+    // 1221), a native select. Where Space opens a select's list (Chromium
+    // on Linux), that Escape closed the list, as one Escape does one thing
+    // (ADR 1207), and the next one closes the dialog.
+    const closed = await dialog
+      .waitFor({ state: "detached", timeout: 2_000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!closed) await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     expect(await dumpElement(page, SHELL.text)).toBe(frame);
     expect(await storyText(page)).toBe(story);
