@@ -339,11 +339,11 @@ describe("generation in draw on the real engine (WP8.3)", () => {
       answer = () => "I would make it warmer.";
       const bad = await applyGenerativeRecolor(h.host, { prompt: "warmer" });
       expect(bad.applied).toBe(false);
-      expect(bad.reason).toContain("no usable colour map");
+      expect(bad.reason).toContain("no usable color map");
       expect(await refOf(h, A)).toBe("Color/ured");
       await h.host.selection.set([]);
       const none = await applyGenerativeRecolor(h.host, { prompt: "x" });
-      expect(none.reason).toContain("no colour");
+      expect(none.reason).toContain("no color");
       expect(prompts).toHaveLength(1);
     });
   });

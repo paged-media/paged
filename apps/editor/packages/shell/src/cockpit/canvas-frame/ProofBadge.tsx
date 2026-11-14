@@ -39,7 +39,7 @@ const M = defineMessages("shell.proofBadge", {
   noBleed: "No bleed",
   showsTrim: "shows the trim",
   showsBleed: "shows the bleed",
-  colours: "Screen colours: not a colour-managed proof",
+  colours: "Screen colors: not a color-managed proof",
   leave: "Leave Proof view",
 });
 

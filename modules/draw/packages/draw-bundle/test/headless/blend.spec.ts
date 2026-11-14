@@ -340,7 +340,7 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       });
       expect(c.steps).toBe(BLEND_STEPS);
       expect(c.degraded).toBe(true);
-      expect(c.why).toContain("no colour distance");
+      expect(c.why).toContain("no color distance");
     });
   });
 
@@ -1091,7 +1091,7 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         "the artwork is only rebuilt when you build or update",
       );
       expect(t(BLEND_PANEL_NOTE)).toContain(
-        "keeps its own colour and stays outside the blend's group",
+        "keeps its own color and stays outside the blend's group",
       );
       // What "live" means: a preview of the PLAN, not of the artwork.
       expect(BLEND_LIVE_NOTE).toContain("preview of the");
@@ -1136,7 +1136,7 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
           1,
         ),
       ).toBe(
-        "smooth colour · replaced spine · aligned · reversed spine (1 intermediate placed)",
+        "smooth color · replaced spine · aligned · reversed spine (1 intermediate placed)",
       );
     });
   });

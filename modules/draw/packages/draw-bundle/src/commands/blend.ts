@@ -218,7 +218,7 @@ import { defineMessages } from "@paged-media/strings";
 
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.blend", {
-  make: "Blend: Make from the two selected objects (smooth colour / steps / distance — rebuilt when a key changes, or by Update)",
+  make: "Blend: Make from the two selected objects (smooth color / steps / distance — rebuilt when a key changes, or by Update)",
   update:
     "Blend: Update (new options + the keys' CURRENT geometry; the intermediates get new ids)",
   replaceSpine:
@@ -636,16 +636,16 @@ export function blendStepCountFor(args: {
   if (derived === null) {
     return clampDerived(
       BLEND_STEPS,
-      "smooth colour: neither key fill resolves to an RGB colour, so " +
-        "there is no colour distance to divide — falling back to " +
-        `${BLEND_STEPS}. (Only swatches whose NAME parses as a CSS colour ` +
+      "smooth color: neither key fill resolves to an RGB color, so " +
+        "there is no color distance to divide — falling back to " +
+        `${BLEND_STEPS}. (Only swatches whose NAME parses as a CSS color ` +
         "are readable here — the io/svg convention.)",
       true,
     );
   }
   return clampDerived(
     derived,
-    `smooth colour: ${derived} (the largest per-channel difference between ` +
+    `smooth color: ${derived} (the largest per-channel difference between ` +
       "the two key fills)",
   );
 }
@@ -901,7 +901,7 @@ export function blendRampsOf(
       ok: false,
       reason:
         "one key is gradient-filled and the other's fill does not resolve " +
-        "to a colour, so there is nothing to blend the stops toward",
+        "to a color, so there is nothing to blend the stops toward",
     };
   }
   const m = matchRamps(ra, rb);

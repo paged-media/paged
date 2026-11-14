@@ -109,7 +109,7 @@ describe("paged.draw commands, no engine — Recolor Artwork", () => {
     const r = rig([]);
     await r.run(`${C}.recolorArtwork`, {});
     expect(r.sent()).toEqual([]);
-    expect(r.logs.join("\n")).toContain("no colour to recolour");
+    expect(r.logs.join("\n")).toContain("no color to recolor");
   });
 
   it("the “…” row raises the Recolor Artwork panel and writes nothing", async () => {

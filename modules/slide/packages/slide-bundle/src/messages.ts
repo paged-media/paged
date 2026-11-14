@@ -461,7 +461,7 @@ export const DESIGN = defineMessages("slide.design", {
   remapTo: "Replace {id} with",
   none: "(none)",
   refused: "The theme could not be applied.",
-  note: "A theme recolours every theme colour of the deck and sets its heading and body fonts, in one undo step.",
+  note: "A theme recolors every theme color of the deck and sets its heading and body fonts, in one undo step.",
 });
 
 defineTranslations("de", de);
