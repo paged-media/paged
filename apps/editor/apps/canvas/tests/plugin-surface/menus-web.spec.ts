@@ -19,8 +19,8 @@
 
 // PLUGIN MENUS — paged.web (modules/web/packages/web-bundle/src/menu.ts).
 //
-// Seven entries: Object ▸ Insert web frame… (filed under Insert ▸ Web
-// frame…) and six under the Web menu, which the bar folds into Plugins ▸
+// Seven entries: Object ▸ Insert web frame (filed under Insert ▸ Web
+// frame) and six under the Web menu, which the bar folds into Plugins ▸
 // Web and also shows as a CONTEXT menu while a web frame is selected.
 //
 // The Insert test places a real web frame (and proves one Undo removes it);

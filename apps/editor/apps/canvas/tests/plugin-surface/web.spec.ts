@@ -763,15 +763,16 @@ test.describe("plugin surface · paged.web", () => {
     // now files its render / thread / bake verbs under a `Web` top level
     // and keeps `Object ▸ Insert web frame` where users already found
     // it. (The host's courtesy entry at that path is gone since B3b.) The
-    // insert verb appears once, not twice.
+    // insert verb appears once, not twice, and without the ellipsis of a
+    // dialog it never opened (editor ADR 1208).
     expect(
       reach.menuItems.length,
       "paged.web contributes its own menu entries now",
     ).toBeGreaterThanOrEqual(6);
     expect(
-      reach.menuItems.filter((p) => p === "Object/Insert web frame…"),
+      reach.menuItems.filter((p) => p.startsWith("Object/Insert web frame")),
       "the insert verb appears exactly once",
-    ).toEqual(["Object/Insert web frame…"]);
+    ).toEqual(["Object/Insert web frame"]);
     expect(
       reach.menuItems.some((p) => p.startsWith("Web/")),
       "and the flow verbs get a top level of their own",

@@ -89,7 +89,7 @@ async function bind(page: Page, field: string): Promise<void> {
   await page.locator("[data-data-bind-field]").fill(field);
   await page.locator("[data-data-bind-add]").click();
   await expect(page.locator("[data-data-bind-msg]")).toContainText(
-    "variable binding",
+    "Variable binding",
   );
 }
 

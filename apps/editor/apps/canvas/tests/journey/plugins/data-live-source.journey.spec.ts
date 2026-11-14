@@ -150,7 +150,7 @@ test.describe("journey · paged.data live remote source", () => {
     await page.locator("[data-data-bind-field]").fill("name");
     await page.locator("[data-data-bind-add]").click();
     await expect(page.locator("[data-data-bind-msg]")).toContainText(
-      "variable binding",
+      "Variable binding",
     );
     await page.getByRole("button", { name: /^place on page$/i }).click();
     await expect

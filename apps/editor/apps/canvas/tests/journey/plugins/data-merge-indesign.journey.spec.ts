@@ -188,12 +188,12 @@ async function merge(page: Page): Promise<void> {
   // imported source's rows, the default).
   await expect(page.locator("[data-data-bind-query-pick]")).toHaveValue(/^s:/);
   await row.locator("[data-data-merge-arrange]").selectOption("columns");
-  await row.getByLabel(/row spacing/).fill("6");
-  await row.getByLabel(/column spacing/).fill("12");
-  await row.getByLabel(/keep template/).uncheck();
+  await row.getByLabel("Row spacing", { exact: true }).fill("6");
+  await row.getByLabel("Column spacing", { exact: true }).fill("12");
+  await row.getByLabel("Keep template", { exact: true }).uncheck();
   await row.locator("[data-data-merge-run]").click();
   await expect(page.locator("[data-data-merge-msg]")).toContainText(
-    "merged 57 record(s) onto 3 page(s)",
+    "Merged 57 record(s) onto 3 page(s)",
     { timeout: 60_000 },
   );
 }

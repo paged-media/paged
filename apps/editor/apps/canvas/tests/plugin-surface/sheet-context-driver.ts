@@ -281,16 +281,21 @@ export async function openContextMenu(
   return menu;
 }
 
-/** A row of the open context menu, by its label. A row's accessible name
- *  carries its shortcut after the label (`Copy ⌘C`), so the label is matched
- *  whole, optionally followed by a shortcut, and never as a prefix of a
- *  longer label (`Paste` is not `Paste special…`). */
+/** One of the sheet's own rows of the open context menu, by its label. A
+ *  row's accessible name carries its shortcut after the label (`Copy ⌘C`),
+ *  so the label is matched whole, optionally followed by a shortcut, and
+ *  never as a prefix of a longer label (`Paste` is not `Paste special…`).
+ *  The host's object verbs follow the sheet's rows in the same menu (editor
+ *  ADR 1242), and one of them is also "Copy": only the sheet's command is
+ *  this row. */
 export const contextRow = (menu: Locator, label: string) =>
-  menu.getByRole("menuitem", {
-    name: new RegExp(
-      `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( (⌘|⌥|⇧|⌃|Ctrl|Alt|Shift|Meta).*)?$`,
-    ),
-  });
+  menu
+    .getByRole("menuitem", {
+      name: new RegExp(
+        `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( (⌘|⌥|⇧|⌃|Ctrl|Alt|Shift|Meta).*)?$`,
+      ),
+    })
+    .and(menu.locator('[data-command^="media.paged.sheet."]'));
 
 /** Right-click cell (row, col), click the row `label`, and assert it ran
  *  exactly `command`, once, with no payload, settling without an error. */
