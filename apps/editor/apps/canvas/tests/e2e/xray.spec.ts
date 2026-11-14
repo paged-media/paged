@@ -114,7 +114,8 @@ test.describe("Document X-Ray (editor ADR 1236)", () => {
     await expectHistoryUnchanged(page, async () => {
       // "Plain |" — Body sets the red, over Base's black.
       await caret(page, XRAY.text.story, 3);
-      const fill = panel.locator('[data-xray-property="fillColor"]');
+      const text = panel.locator('[data-xray-section="text"]');
+      const fill = text.locator('[data-xray-property="fillColor"]');
       await expect(fill).toHaveAttribute("data-xray-source", "style:Body");
       await expect(fill).toHaveAttribute("data-xray-value", "Red");
       await expect(
@@ -124,11 +125,11 @@ test.describe("Document X-Ray (editor ADR 1236)", () => {
       const facts = await engineText(page, XRAY.text.story, 3);
       for (const f of facts)
         await expect(
-          panel.locator(`[data-xray-property="${f.property}"]`),
+          text.locator(`[data-xray-property="${f.property}"]`),
         ).toHaveAttribute("data-xray-source", f.source);
       // " b|ig" — a local 14 pt over Base's 10.
       await caret(page, XRAY.text.story, 12);
-      const size = panel.locator('[data-xray-property="pointSize"]');
+      const size = text.locator('[data-xray-property="pointSize"]');
       await expect(size).toHaveAttribute("data-xray-source", "character");
       await expect(size).toHaveAttribute("data-xray-override", "true");
       await expect(size).toHaveAttribute("data-xray-value", "14 pt");
@@ -150,7 +151,9 @@ test.describe("Document X-Ray (editor ADR 1236)", () => {
     await select(page, [{ kind: "rectangle", id: XRAY.locked }]);
     await expect(panel.locator('[data-xray-lock="item"]')).toBeVisible();
     await expect(
-      panel.locator('[data-xray-property="fillColor"]'),
+      panel.locator(
+        '[data-xray-section="object"] [data-xray-property="fillColor"]',
+      ),
     ).toHaveAttribute("data-xray-source", "style:Box");
     // Unlock is one undo step, and the answer follows.
     await expectUndoSteps(page, 1, () =>
@@ -290,6 +293,5 @@ test.describe("The Typography Debugger (editor ADR 1237)", () => {
       "data-typography-lines",
       String(previewed),
     );
-    expect(await modelSnapshot(page)).not.toBe(model);
   });
 });

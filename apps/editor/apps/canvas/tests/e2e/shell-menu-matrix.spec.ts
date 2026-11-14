@@ -131,6 +131,8 @@ const HOST_MENU = [
   "Edit/Settings/Contrast/As the system",
   "Edit/Settings/Contrast/Standard",
   "Edit/Settings/Contrast/High",
+  // Track IC's modifier hints (IC10): the setting that keeps the strip.
+  "Edit/Settings/Keep modifier hints visible",
   // Editor ADR 1230 — the object tree, from the canvas.
   "View/Go to object tree",
   "View/Focus workspace",

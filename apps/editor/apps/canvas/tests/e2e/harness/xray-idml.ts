@@ -67,8 +67,8 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </RootObjectStyleGroup>
 </idPkg:Styles>`;
 
-const run = (style: string, text: string, extra = "") =>
-  `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/${style}"${extra}><Content>${text}</Content></CharacterStyleRange>`;
+const run = (style: string, text: string, extra = "", after = "") =>
+  `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/${style}"${extra}><Content>${text}</Content>${after}</CharacterStyleRange>`;
 
 const story = (id: string, body: string) =>
   `<?xml version="1.0" encoding="UTF-8"?>
@@ -120,8 +120,8 @@ ${items}
     `<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Body">` +
     run("$ID/[No character style]", "Plain ") +
     run("Emph", "emph") +
-    run("$ID/[No character style]", " big", ' PointSize="14"') +
-    `<Br/></ParagraphStyleRange>` +
+    run("$ID/[No character style]", " big", ' PointSize="14"', "<Br/>") +
+    `</ParagraphStyleRange>` +
     `<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Head">` +
     run("$ID/[No character style]", "Heading") +
     `</ParagraphStyleRange>`;
