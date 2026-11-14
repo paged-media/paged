@@ -514,7 +514,7 @@ film("data", async (k) => {
     await expect(row.locator("[data-data-merge-arrange]")).toHaveValue("rows");
     // The template page makes way for the records (merging into a new
     // document would first ask to discard the unsaved template).
-    const keep = row.getByLabel(/keep template/);
+    const keep = row.getByLabel("Keep template", { exact: true });
     if (await keep.isChecked()) await press(k, keep);
     await expect(keep).not.toBeChecked();
     await expect(row.locator("[data-data-merge-new-doc]")).not.toBeChecked();
