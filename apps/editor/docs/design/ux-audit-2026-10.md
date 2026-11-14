@@ -1130,6 +1130,13 @@ Insert ▸ Spreadsheet… imports the file but places nothing: "Place on page" i
 
 **Screenshots:** `F-42-sheet-session.png`, `F-42-sheet-typed-nowhere.png`
 
+**Fixed (2026-11-14, sheet ADR 532, extensions ADR 1108).** The entered frame is the grid (the
+frame surface of sheet ADR 510): a cell cursor on the canvas, typing edits the active cell, Tab and
+Enter commit and move, the arrows never nudge the frame. A selected sheet frame offers **Frame ·
+Edit cells**; inside, the bar reads **Editing cells** and has **Done**; it says whether the
+selected cells print in the frame and warns when rows or columns overflow it, with a print preview
+of the selection (`UXI-T38`).
+
 <a id="f-43"></a>
 
 #### F-43 · Image: two tool sets at once, and placed images are uncounted
@@ -1233,6 +1240,13 @@ Bindings shows "bindings: [sync states] none", "preview record: ‹ prev –/–
 **Recommendation:** Apply the October panel-audit wording rules to Bindings. Rename "Lower to document".
 
 **Screenshots:** `F-46-data-bindings-wording.png`
+
+**Fixed (2026-11-14, data ADR 566).** The Bindings panel speaks product language in sentence
+case: "Place on page" (was "Lower to document"), "Column", "Bindings", "Sync states", "None";
+the stepper ("preview record: ‹ prev –/– next ›", "jump to:") is a record scrubber ("Record 3 of
+120", Previous, Next, a slider, the host's numeric field); the checkboxes take the editor's
+accent. Plugins ▸ Data shows one Data query entry (the F-18 rule). The panel also gained the six
+workflow steps and an outlier finder.
 
 <a id="f-47"></a>
 

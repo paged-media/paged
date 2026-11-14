@@ -285,7 +285,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       await doc.designer.placeCaret(cardStory, 0);
       await page.getByRole("button", { name: /^refresh data$/i }).click();
       await page.waitForTimeout(600);
-      await page.getByRole("button", { name: /^lower to document$/i }).click();
+      await page.getByRole("button", { name: /^place on page$/i }).click();
       await settle(
         page,
         async () => (await doc.storyChars(cardStory)) > 0,
@@ -327,12 +327,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       await page.locator("[data-data-bind-field]").fill(TABLE_COLUMNS);
       await page.locator("[data-data-bind-add]").click();
       await expect(page.locator("[data-data-bind-msg]")).toContainText(
-        /^table binding /,
+        /^table binding /i,
         {
           timeout: 10_000,
         },
       );
-      await page.getByRole("button", { name: /^lower to document$/i }).click();
+      await page.getByRole("button", { name: /^place on page$/i }).click();
       await settle(
         page,
         async () =>

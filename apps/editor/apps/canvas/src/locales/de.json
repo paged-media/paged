@@ -3301,6 +3301,7 @@
   "app.pageLenses.preflightNotRun": "Preflight wurde nicht ausgeführt: „Ausgabe prüfen“ fügt seine Befunde hinzu.",
   "app.pageLenses.record": "Datensatz {n}",
   "app.pageLenses.noPlacements": "Die Bindung platziert noch nichts.",
+  "menu.Data bindings": "Datenbindungen",
   "app.propertiesPanel.points": "Punkte",
   "app.anchorPoints.count": "{count, plural, one {# Ankerpunkt ausgewählt} other {# Ankerpunkte ausgewählt}}",
   "app.anchorPoints.x": "X",

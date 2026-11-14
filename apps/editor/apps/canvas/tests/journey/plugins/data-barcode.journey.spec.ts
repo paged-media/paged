@@ -170,7 +170,7 @@ test.describe("journey · paged.data barcode symbology", () => {
     );
     // The binding registered (the panel's bindings list now carries it).
     await expect(
-      page.getByText(new RegExp(`bindings:.*${id}`)).first(),
+      page.getByText(new RegExp(`Bindings.*${id}`)).first(),
     ).toBeVisible({ timeout: 6_000 });
 
     // ── 4. LOWER — "Lower to document" resolves the value, the engine encodes
@@ -178,7 +178,7 @@ test.describe("journey · paged.data barcode symbology", () => {
     //    insertPath ops. The session status reports the barcode resolved +
     //    lowered (the engine encoding ran). ──
     const before = await designer.renderBytes();
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    await page.getByRole("button", { name: /^place on page$/i }).click();
     await page.waitForTimeout(1200);
 
     const status = page.locator("[data-status]").last();

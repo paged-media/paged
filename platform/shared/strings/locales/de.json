@@ -61,5 +61,22 @@
   "writeCode.unknownAddress": "Das Objekt ist nicht mehr im Dokument.",
   "writeCode.unknownCommand": "Diese Aktion ist nicht verfügbar.",
   "writeCode.unknownPath": "Diese Einstellung gilt hier nicht.",
-  "writeCode.unmapped": "Diese Einstellung kann hier noch nicht geändert werden."
+  "writeCode.unmapped": "Diese Einstellung kann hier noch nicht geändert werden.",
+  "templateForm.required": "Pflichtfeld",
+  "templateForm.optional": "Optional",
+  "templateForm.missing": "Pflichtfeld: Bitte ausfüllen.",
+  "templateForm.progress": "{filled} von {total} Feldern ausgefüllt",
+  "templateForm.progressLabel": "Ausgefüllte Felder",
+  "templateForm.requiredLeft": "{count, plural, one {# Pflichtfeld ist leer} other {# Pflichtfelder sind leer}}",
+  "templateForm.nextField": "Nächstes Feld",
+  "templateForm.nextFieldTitle": "Zum nächsten Feld, das noch einen Wert braucht",
+  "templateForm.allFilled": "Alle Felder sind ausgefüllt.",
+  "templateForm.finish": "Abschließen …",
+  "templateForm.finishTitle": "Die Felder prüfen, dann exportieren oder sichern",
+  "templateForm.finishBlocked": "{count, plural, one {Füllen Sie zuerst # Pflichtfeld aus.} other {Füllen Sie zuerst # Pflichtfelder aus.}}",
+  "templateForm.finishOverset": "{count, plural, one {Der Text von # Feld passt nicht in seinen Rahmen.} other {Der Text von # Feldern passt nicht in ihre Rahmen.}}",
+  "templateForm.ready": "Alle Pflichtfelder sind ausgefüllt. Die Seite zeigt, was veröffentlicht wird.",
+  "templateForm.exportPdf": "PDF exportieren",
+  "templateForm.save": "Sichern",
+  "templateForm.backToForm": "Zurück zum Formular"
 }

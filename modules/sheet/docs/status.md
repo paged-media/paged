@@ -314,6 +314,12 @@ each published canary added is under [Releases](#releases).
   month series; Fill Down / Fill Right; find and replace in the sheet (Find all, Replace all,
   Match case, Entire cell; the "Find & replace…" command opens the grid). The grid's viewport
   follows the panel's width, and copy, paste, fill and edit refusals show in the panel.
+- **Editing cells is a level of its own (ADR 532).** A selected sheet frame offers **Frame · Edit
+  cells**; inside, the bar reads **Editing cells** and ends with **Done** (a cell being typed is
+  committed, the frame stays selected, the camera stays). The bar answers whether the selected
+  cells print in the frame and warns with the count of rows and columns that overflow it or sit
+  outside its window; **Print preview** draws the selection over the frame's printed cells. The
+  workbook panel's numbers and the Top 10 count are the host's numeric field.
 - **Undo.** In the edit context, every committed cell edit is one step, and so is each bulk
   operation (sort, replace-all, paste, fill, clear) and each format change (style, borders,
   merge, sizes, freeze, names, and the formats a fill carries). Outside it, the host's undo takes

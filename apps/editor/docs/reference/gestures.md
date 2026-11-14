@@ -274,6 +274,8 @@ Model each gesture as an explicit typed state machine. Test the machine exhausti
 Since IC6 (ADR 235, amendment 2026-11-14) SEL-01 and SEL-03 are decided: a marquee drawn left to
 right contains, right to left intersects (the overlay draws them solid and dashed), and
 Shift-click toggles; `tests/e2e/uxi-selection.spec.ts` holds them (`UXI-T03`, `UXI-T04`).
+Since IC7 a turned item's body is its oriented box, a handle's cursor follows the item's and the
+view's rotation, and a rotation shows its angle (`tests/e2e/uxi-geometry.spec.ts`, `UXI-T14`).
 
 | ID     | Test                                                               | Assertion                                                                                                                                                        |
 | ------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |

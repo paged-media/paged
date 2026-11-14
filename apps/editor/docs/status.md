@@ -244,6 +244,24 @@ and `paged.edit.selectBelow` cycles down through them; the context menu selects 
 click does (`UXI-T29`); a locked item is dashed, carries a padlock and hollow handles, stays
 selectable and does not move (`UXI-T13`).
 
+What the user sees is what a press takes (IC7; [ADR 310](adr/310-live-shape-widgets.md), amendment
+2026-11-14): a turned item's body is its oriented box, so a press in the empty corner of its
+bounding box selects nothing; a resize handle's cursor points the way it pulls through the item's
+transform and the view's rotation; the rotate zone shows the angle beside the pointer while it
+turns (`UXI-T14`); guides and handles follow the full camera transform with the view turned
+(`UXI-T56`); and a live shape's corner widget takes only its own 12 px target, 20 px inside the
+corner, so a press beside it moves and one on the corner's square resizes, at 100 % and 800 %.
+
+Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
+Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
+print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
+Story view — the same story as continuous text, written into the engine's story — and the Story
+Map of every thread with overset and unplaced stories (doc ADR 630). paged.data shows its
+workflow as six steps, a record scrubber and an outlier finder; its binding badges are the
+editing aid Data bindings (data ADR 566; F-46). Template fill says Required or Optional, the
+progress and the next field, blocks Finish on missing content and then offers export and save,
+on phones too (ADR 1225, `UXI-T73`).
+
 Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
 [ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit
 context — Escape, the breadcrumb, another tool, another selection, a document switch — goes

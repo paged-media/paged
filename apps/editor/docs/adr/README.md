@@ -148,6 +148,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1222](1222-compatibility-report.md) | Compatibility report: every import's and export's losses (engine ADR 1097) as one report per operation, explained by area and severity with the code on demand, pages and items one click away, the summary said once after an import, the round-trip risk per format | Accepted 2026-11-13 |
 | [1223](1223-publication-health-on-the-page.md) | Publication health on the page: one gathering of the publication's issues, markers on the items and pages, a page overview, a click goes there (Back and Return), selects and offers targeted fixes that say what they will do; the Issues lens reads the same issues | Accepted 2026-11-13 |
 | [1224](1224-session-continuity.md) | Session continuity: the library document open last reopens at the next start when the journal offers nothing; File ▸ Close; File ▸ Open recent… (the library and the files opened lately); a library push is the save status's remote step | Accepted 2026-11-13; amends 1203 |
+| [1225](1225-template-fill-says-what-is-left.md) | Template fill says what is left: Required / Optional, progress, Next field, missing content, Finish with export and save | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

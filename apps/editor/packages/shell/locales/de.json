@@ -617,6 +617,7 @@
   "shell.proofBadge.colours": "Bildschirmfarben: kein farbverbindlicher Proof",
   "shell.proofBadge.leave": "Proof-Ansicht verlassen",
   "shell.pageDecorations.caption": "Seite {n}",
+  "shell.editingAids.dataMarkers": "Datenbindungen",
   "shell.exportReadiness.noDocument": "Es ist kein Dokument geöffnet.",
   "shell.exportReadiness.x4NeedsProfile": "PDF/X-4 braucht ein Profil für die Ausgabebedingung, und dieses Dokument hat keines: Laden Sie eines in den Farbeinstellungen oder exportieren Sie PDF 1.7.",
   "shell.exportReadiness.x4Ready": "PDF/X-4 bettet {profile} als Ausgabebedingung ein.",

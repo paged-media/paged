@@ -234,9 +234,8 @@ export function makePaginationPanel(
       };
     }
 
-    async function onLineHeight(): Promise<void> {
+    async function onLineHeight(pt: number): Promise<void> {
       if (!template) return;
-      const pt = Number(lineHeight);
       if (pt === template.template.lineHeightPt) return;
       setError(await session.setTemplateLineHeight(template.template.id, pt));
     }
@@ -261,19 +260,22 @@ export function makePaginationPanel(
           </label>
           <label style={row}>
             {t(M.lineHeight)}
-            <input
-              type="number"
-              min={1}
-              step={0.5}
-              style={{ width: 64 }}
-              data-data-flow-line-height
-              value={lineHeight}
-              onChange={(e) => setLineHeight(e.target.value)}
-              onBlur={() => void onLineHeight()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void onLineHeight();
-              }}
-            />
+            {/* A length ("12 pt", "4.5 mm"), set when it is committed. */}
+            <span data-data-flow-line-height style={{ display: "inline-flex" }}>
+              <host.widgets.NumericField
+                value={lineHeight === "" ? null : Number(lineHeight)}
+                length
+                unit="pt"
+                min={1}
+                step={0.5}
+                precision={2}
+                ariaLabel={t(M.lineHeight)}
+                onCommit={(v) => {
+                  setLineHeight(String(v));
+                  void onLineHeight(v);
+                }}
+              />
+            </span>
           </label>
           {template && template.usedBy.length > 1 ? (
             <p style={note}>

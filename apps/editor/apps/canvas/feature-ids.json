@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 952,
+    "command": 960,
     "keybinding": 211,
-    "menu": 690,
-    "panel": 151,
+    "menu": 694,
+    "panel": 153,
     "tool": 123
   },
   "features": [
@@ -201,6 +201,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.nextOverset",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.pasteRtf",
       "kind": "command",
       "owner": "media.paged.doc"
@@ -302,6 +307,16 @@
     },
     {
       "id": "command:media.paged.doc.command.saveAsDocx",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.storyMap",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.storyView",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -3921,6 +3936,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.edit.selectBelow",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.editor.redo",
       "kind": "command",
       "owner": "editor"
@@ -3942,6 +3962,11 @@
     },
     {
       "id": "command:paged.file.assetExport",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.close",
       "kind": "command",
       "owner": "editor"
     },
@@ -3971,6 +3996,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.file.newDialog",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.file.newFromBrief",
       "kind": "command",
       "owner": "editor"
@@ -3982,6 +4012,11 @@
     },
     {
       "id": "command:paged.file.openPdf",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.openRecent",
       "kind": "command",
       "owner": "editor"
     },
@@ -4737,6 +4772,11 @@
     },
     {
       "id": "command:paged.view.toggleHiddenCharacters",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleIssueMarkers",
       "kind": "command",
       "owner": "editor"
     },
@@ -6591,7 +6631,7 @@
       "owner": "editor"
     },
     {
-      "id": "menu:File/Open recent",
+      "id": "menu:File/Open recent…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -9011,6 +9051,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Editing aids/Data bindings",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Editing aids/Frame edges",
       "kind": "menu",
       "owner": "editor"
@@ -9069,6 +9114,11 @@
       "id": "menu:View/Focus workspace",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Go to next overset story",
+      "kind": "menu",
+      "owner": "media.paged.doc"
     },
     {
       "id": "menu:View/Guides & grid preferences…",
@@ -9181,11 +9231,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:View/Show data markers",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:View/Show grid",
       "kind": "menu",
       "owner": "editor"
@@ -9197,6 +9242,11 @@
     },
     {
       "id": "menu:View/Show heading anchors",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show issue markers",
       "kind": "menu",
       "owner": "editor"
     },
@@ -9244,6 +9294,16 @@
       "id": "menu:View/Snap to points",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Story map",
+      "kind": "menu",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "menu:View/Story view",
+      "kind": "menu",
+      "owner": "media.paged.doc"
     },
     {
       "id": "menu:View/Zoom in",
@@ -9352,6 +9412,11 @@
     },
     {
       "id": "panel:media.paged.doc.panel.review",
+      "kind": "panel",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "panel:media.paged.doc.panel.storyMap",
       "kind": "panel",
       "owner": "media.paged.doc"
     },
@@ -9757,6 +9822,11 @@
     },
     {
       "id": "panel:paged.hyperlinks",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.import-report",
       "kind": "panel",
       "owner": "editor"
     },
@@ -10676,6 +10746,18 @@
     {
       "id": "menu:Draw/Path/Outline stroke",
       "replacement": "menu:Object/Path/Outline stroke…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:File/Open recent",
+      "replacement": "menu:File/Open recent…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:View/Show data markers",
+      "replacement": "menu:View/Editing aids/Data bindings",
       "deprecatedIn": "0.80.0",
       "removeIn": "0.82.0"
     },
