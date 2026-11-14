@@ -45,6 +45,7 @@
 
 import type {
   BundleHost,
+  LossEntry,
   ObjectModelHandle,
   TypedCommandContribution,
   ValueType,
@@ -373,6 +374,15 @@ export async function exportIdmlResult(
   host: BundleHost,
   linkBase?: string,
 ): Promise<ExportResult> {
+  return (await exportIdmlWithLosses(host, linkBase)).result;
+}
+
+/** `exportIdmlResult` and the engine's loss entries themselves, for the
+ *  host's compatibility report (editor ADR 1222). */
+export async function exportIdmlWithLosses(
+  host: BundleHost,
+  linkBase?: string,
+): Promise<{ result: ExportResult; lost: LossEntry[] }> {
   const reply = await host.editor.client.send({
     kind: "exportIdml",
     payload: {
@@ -384,12 +394,13 @@ export async function exportIdmlResult(
   if (reply.kind !== "idmlExported")
     throw new Error(`failed: unexpected reply ${reply.kind}`);
   const pages = await host.document.collection("pages");
-  return {
+  const lost = reply.payload.lost ?? [];
+  const result: ExportResult = {
     bytes: Uint8Array.from(reply.payload.idmlBytes),
     fileName: `${await baseName(host)}.idml`,
     mimeType: "application/vnd.adobe.indesign-idml-package",
     pageCount: pages.length,
-    diagnostics: (reply.payload.lost ?? []).map((loss) => {
+    diagnostics: lost.map((loss) => {
       const [row] = lossDiagnostics([loss]);
       const first = loss.pages?.[0];
       return {
@@ -401,6 +412,7 @@ export async function exportIdmlResult(
       };
     }),
   };
+  return { result, lost };
 }
 
 /** Export the active document as a `.paged` container. */

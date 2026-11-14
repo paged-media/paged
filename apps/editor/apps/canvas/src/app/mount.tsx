@@ -67,6 +67,7 @@ import {
   threadingPortsContribution,
   threadLinesContribution,
   dataMarkersContribution,
+  issueMarkersContribution,
   commentPinsContribution,
   setCommentAnchorLookup,
   loadDocumentFile,
@@ -99,6 +100,9 @@ import {
   type EditorProfile,
   useEditorRoot,
   useOptionalTheme,
+  notifySinkOf,
+  onDocumentLoadLosses,
+  operationFeedbackOf,
 } from "@paged-media/shell";
 import {
   StringsProvider,
@@ -378,6 +382,18 @@ import { buildEffectMenuCommands, buildEffectMenuItems } from "../effect-menu";
 import { appCatalogRegistry } from "../panels/catalog-registry";
 import { CanvasPanel } from "../panels/canvas-panel";
 import { problemsOf, type ProblemsStore } from "../panels/problems-store";
+import {
+  recordCompatReport,
+  recordDocumentImport,
+  watchCompatibility,
+} from "../panels/compatibility-report-store";
+import { usePublicationIssuesSource } from "../publication-issues";
+import {
+  markStartDecided,
+  useRememberLastDocument,
+  useReopenLastDocument,
+} from "../session-continuity";
+import { OpenRecentDialog } from "../panels/open-recent-dialog";
 import { BUILT_IN_PANELS } from "../panels/built-in-panels";
 import { withWindowCategories } from "../panels/window-categories";
 import { applyHistoryDepthPreference } from "../panels/history-panel";
@@ -466,6 +482,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   dataMarkersContribution,
   // Engine ADR 1055 — a pin for every comment thread that is not on text.
   commentPinsContribution,
+  // Editor ADR 1223 — View ▸ Show issue markers: the publication's issues
+  // where they stand. Draws nothing until toggled on.
+  issueMarkersContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,
@@ -581,6 +600,7 @@ function PluginBundles() {
       // SharedArrayBuffer-backed, which isn't a valid BlobPart.
       const ab = new ArrayBuffer(bytes.byteLength);
       new Uint8Array(ab).set(bytes);
+      const before = client.openDocument;
       await loadDocumentFile(client, new File([ab], sourceFileName), {
         setHandle: d.setHandle,
         setSourceName: d.setSourceName,
@@ -597,6 +617,12 @@ function PluginBundles() {
         pushWarning: () => {},
         scope,
       });
+      // UXI-FIL-001 — a load that did not land is a failure the importer
+      // must hear (it says so through `host.notify`), not an open: the
+      // loader kept the open document and listed the failure in Problems
+      // (editor ADR 1219).
+      if (client.openDocument === before)
+        throw new Error(`${sourceFileName} could not be opened`);
     };
     const nativeDocument = createEditorNativeDocumentBackend(
       scope,
@@ -689,6 +715,7 @@ function PluginBundles() {
       willSave,
       objects: objects.registry,
       diagnosticsSink: problemsSink,
+      notifySink: notifySinkOf(scope),
       pages,
     });
     // Editor ADRs 291, 292: the Data panel and the bind popover read the
@@ -891,6 +918,25 @@ function CanvasAppIntegration() {
   const registries = useRegistries();
   const { pages } = instance.services;
   const problemsSink = problemsOf(instance.scope);
+
+  // Editor ADR 1222 — the compatibility report follows the bundles' loss
+  // rows and says each new report's summary once.
+  useEffect(() => watchCompatibility(instance.scope), [instance.scope]);
+  // Protocol 80 — what an opened file does not carry (engine ADR 1305).
+  useEffect(
+    () =>
+      onDocumentLoadLosses(instance.scope, ({ name, losses }) =>
+        recordDocumentImport(instance.scope, name, losses),
+      ),
+    [instance.scope],
+  );
+  // Editor ADR 1223 — the publication's issues, gathered for the markers,
+  // the page overview and Publication health.
+  usePublicationIssuesSource();
+  // UX audit F-06 — the document open last comes back at the next start
+  // (unless the recovery journal offers unsaved work first).
+  useRememberLastDocument();
+  useReopenLastDocument();
 
   // Host actions as commands (docs/composable-editor.md §8.3): registered
   // only when the host supplies them, so a profile can place them in a
@@ -1274,12 +1320,22 @@ function CanvasAppIntegration() {
         // (ADR 229).
         const fallbackName = sourceName || "document";
         try {
-          const { bytes } = await client.exportIdml();
+          const { bytes, lost } = await client.exportIdml();
           const baseName = await client.documentMeta().then(
             (meta) => meta.documentName || fallbackName,
             // meta unavailable — keep the fallback name
             () => fallbackName,
           );
+          // Editor ADR 1222 — what InDesign will not get is said, never
+          // dropped (protocol 80, engine ADR 1305).
+          recordCompatReport(instance.scope, {
+            id: "paged.document|export.idml",
+            direction: "export",
+            format: "idml",
+            name: `${baseName.replace(/\.idml$/i, "")}.idml`,
+            losses: lost,
+            source: "paged.document",
+          });
           const blob = new Blob([bytes.slice()], {
             type: "application/vnd.adobe.indesign-idml-package",
           });
@@ -1717,12 +1773,32 @@ function CanvasAppIntegration() {
     // ADR 231 — the page-item clipboard: Cut, Copy, Paste, Paste in
     // place, Duplicate. Cut's delete is Object ▸ Delete's own.
     const clipboardCommands = buildClipboardCommands({
-      report: (severity, message) =>
-        problemsSink.publish(CLIPBOARD_DIAGNOSTIC_SOURCE, "clipboard", [
-          { severity, message, source: "clipboard" },
-        ]),
+      // Editor ADR 1219 — a clipboard verb's end is a brief result on the
+      // one toast channel (a refusal says nothing changed), not a lasting
+      // Problems row; repeats of one message update one toast.
+      // A pasted SVG's losses (the warnings) go to the compatibility
+      // report below, which says their summary once.
+      report: (severity, message) => {
+        if (severity === "warning") return;
+        operationFeedbackOf(instance.scope).report({
+          action: message,
+          title: message,
+          outcome: severity === "error" ? "recoverable-failure" : "blocked",
+          document: "unchanged",
+          key: `${CLIPBOARD_DIAGNOSTIC_SOURCE}|${message}`,
+          source: CLIPBOARD_DIAGNOSTIC_SOURCE,
+        });
+      },
       system: browserClipboard(),
       deleteSelection: () => deleteSelection(objectDeps),
+      compat: (losses) =>
+        recordCompatReport(instance.scope, {
+          id: "paged.clipboard|paste",
+          direction: "import",
+          format: "svg",
+          losses,
+          source: "paged.clipboard",
+        }),
     });
     // Engine ADR 1031 — File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG.
     const svgCommands = buildSvgCommands({
@@ -1732,6 +1808,17 @@ function CanvasAppIntegration() {
           "svg",
           rows.map((r) => ({ ...r, source: "svg" })),
         ),
+      // Editor ADR 1222 — the import's losses, with what it made.
+      compat: ({ name, losses, made }) =>
+        recordCompatReport(instance.scope, {
+          id: "paged.svg|import",
+          direction: "import",
+          format: "svg",
+          name,
+          losses,
+          made: made.filter(Boolean),
+          source: "paged.svg",
+        }),
     });
     // Editor ADR 287 — View ▸ Outline / Overprint / Pixel Preview, the
     // grids, snapping and Rotate View.
@@ -2032,6 +2119,8 @@ function CanvasAppRoot() {
       <CoreCommandDialog />
       <GlobalLightDialog />
       <ViewPreferencesDialog />
+      {/* UX audit F-06 — File ▸ Open recent… */}
+      <OpenRecentDialog />
       <ScreenCalibrationDialog />
       <TransformEachDialog />
       <ReflectDialog />
@@ -2227,6 +2316,9 @@ export function mountEditor(
           instance.services.documentIdentity.current(),
         )
       : Promise.resolve(null);
+  // The start is decided once the journal has said what it offers: then
+  // the document open last may come back (UX audit F-06).
+  void recovery.then(() => markStartDecided(instance.scope));
   const root = createRoot(element);
   root.render(
     <StrictMode>

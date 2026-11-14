@@ -45,6 +45,7 @@ export const COMMANDS = defineMessages("shell.commands", {
 export const REPLACE = defineMessages("shell.replace", {
   creatingNew: "Creating a new document",
   opening: "Opening {name}",
+  closing: "Closing {name}",
   aDocument: "a document",
   requester: "{requester} wants to open {document} in place of this document. ",
   unsaved: "This document has unsaved edits. {who}{action} will discard them.",
@@ -96,6 +97,16 @@ export const RECOVERY = defineMessages("shell.recovery", {
   unreadable: "The recovery copy of {name} could not be read.",
   notRestored:
     "The recovery copy of {name} did not open. It is kept for the next start.",
+});
+
+/** The actions the shell's own feedback names (editor ADR "Operation
+ *  feedback"). */
+export const FEEDBACK_ACTIONS = defineMessages("shell.feedbackActions", {
+  shell: "complete the operation",
+  engine: "complete the last step",
+  engineReason: "the engine reported an error",
+  open: "open {name}",
+  openReason: "the file is damaged or uses something Paged cannot read",
 });
 
 export const LOAD = defineMessages("shell.load", {

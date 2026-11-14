@@ -56,6 +56,8 @@ The browser backend waits for the editor to go quiet (no request in flight for t
 
 Checked by shared helpers at every layer: INV-1 one gesture is exactly one commit and one undo step (a failed commit commits nothing); INV-2 Escape mid-gesture commits nothing and a begun worker gesture is cancelled; INV-4 one undo restores the model dump exactly and one redo re-applies it; INV-5 the constraint is a function of the current modifiers. The fuzzer adds: no panic, no error notification, finite bounds, and the IDML save → load round trip.
 
+Since the interaction coordinator ([ADR 1210](../adr/1210-the-interaction-coordinator.md)) INV-8 holds by construction on the canvas: every press is one coordinator session, and `pointercancel`, a lost pointer capture, a window blur, a hidden page, a tool switch, a document switch, a failed worker and unmount end it once, rolled back (GSM-07, E2E-11, GC-06); an orphaned engine gesture no longer turns the next drag into a pan. GC-05's order is the Escape arbiter's (ADR 1207): a gesture is cancelled before anything below it in §12.1, and by one press only.
+
 ### Findings as expected failures
 
 A finding becomes a test that fails today, titled with its id as a prefix (`GF-2: …`; square brackets in a test title are a feature tag, so not `[GF-2]`), as an expected failure (`test.failing` in bun, `test.fail` in Playwright, a `known` marker on a matrix cell). The fix flips it, and the marker comes off in the same change.

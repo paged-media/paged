@@ -26,7 +26,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { DocumentEntry } from "@paged-media/repository";
 import {
-  PAGED_FILE_NEW,
+  PAGED_FILE_NEW_DIALOG,
   PAGED_FILE_OPEN_IDML,
   getLibrary,
   libraryVersion,
@@ -104,7 +104,9 @@ export function EmptyCanvas() {
             type="button"
             data-empty-new
             style={primaryStyle}
-            onClick={() => void registries.commands.invoke(PAGED_FILE_NEW)}
+            onClick={() =>
+              void registries.commands.invoke(PAGED_FILE_NEW_DIALOG)
+            }
           >
             {strings.t(M.newDocument)}
           </button>

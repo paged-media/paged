@@ -42,9 +42,12 @@ import type {
   ExportResult,
 } from "@paged-media/plugin-api";
 
-import { exportIdmlResult } from "../commands";
+import { exportIdmlWithLosses } from "../commands";
+import { lossDiagnostics } from "@paged-media/plugin-sdk";
 
 export const IDML_IMPORTER_ID = "media.paged.publish.importer.idml";
+/** The diagnostics key an IDML export's losses go under. */
+export const IDML_EXPORT_DIAGNOSTICS = "media.paged.publish/export.idml";
 export const IDML_EXPORTER_ID = "media.paged.publish.exporter.idml";
 export const IDML_MIME = "application/vnd.adobe.indesign-idml-package";
 
@@ -86,6 +89,16 @@ async function importIdml(
     host.log.error(
       `${IDML_IMPORTER_ID}: failed to open ${file.name} — ${String(err)}`,
     );
+    // UX audit F-02, UXI-FIL-001: the failure is said where the user sees
+    // it (extensions ADR 1107); the editor's loader lists it in Problems.
+    host.notify({
+      action: t(M.openAction, { name: file.name }),
+      outcome: "recoverable-failure",
+      reason: t(M.openFailed),
+      documentChanged: false,
+      detail: String(err),
+      key: `open|${file.name}`,
+    });
   }
 }
 
@@ -105,12 +118,18 @@ async function exportIdml(host: BundleHost): Promise<ExportResult | null> {
     // The typed command's path: the engine's losses become diagnostics there
     // (each with its code and the items it stood on) and the file is named
     // after the document.
-    const r = await exportIdmlResult(host);
+    const { result: r, lost } = await exportIdmlWithLosses(host);
     for (const d of r.diagnostics)
       host.log.warn(
         `${IDML_EXPORTER_ID}: [${d.code}] ${d.message}` +
           (d.items?.length ? ` (${d.items.join(", ")})` : ""),
       );
+    // What InDesign will not get, on the diagnostics channel as loss rows:
+    // the host's compatibility report lists them (editor ADR 1222).
+    host.diagnostics.set(
+      IDML_EXPORT_DIAGNOSTICS,
+      lossDiagnostics(lost, { source: "idml" }),
+    );
     return { bytes: r.bytes, fileName: r.fileName };
   } catch (err) {
     host.log.error(`${IDML_EXPORTER_ID}: export failed — ${String(err)}`);
@@ -120,7 +139,12 @@ async function exportIdml(host: BundleHost): Promise<ExportResult | null> {
 
 // ------------------------------------------------------- registration
 
-const M = defineMessages("publish.io", { idmlPackage: "IDML package" });
+const M = defineMessages("publish.io", {
+  idmlPackage: "IDML package",
+  openAction: "open {name}",
+  openFailed:
+    "the file is damaged or uses something Paged cannot read; the open document is unchanged",
+});
 
 /** Register both the IDML importer and exporter through the K-2 doors,
  *  through the door every host has.

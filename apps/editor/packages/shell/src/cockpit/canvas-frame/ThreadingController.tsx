@@ -69,6 +69,7 @@ import { useThreading, type LoadedCursor } from "../../state/threading-context";
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
 import { queryEditor, useEditorRoot } from "../../state/editor-root";
 import { useEscapeHandler } from "../../interaction/escape-arbiter";
+import { useInteractionCoordinator } from "../../interaction/coordinator";
 
 /** Default size (pt) of a frame drawn by a plain CLICK on empty canvas
  *  (no drag): its top-left corner sits at the click and it is kept on
@@ -542,6 +543,23 @@ export function ThreadingController() {
       window.removeEventListener("pointerdown", onDown, true);
     };
   }, [cursorLoaded, clearCursor]);
+
+  // The loaded cursor is a mode of the interaction coordinator (editor ADR
+  // 1210, IC4): a document switch, a tool switch or unmount unloads it, with
+  // nothing written; a blur leaves it loaded.
+  const interactions = useInteractionCoordinator();
+  useEffect(() => {
+    if (!cursorLoaded) return;
+    const session = interactions.begin({
+      owner: "canvas-text",
+      kind: "thread",
+      transient: true,
+      onAbort: () => clearCursor(),
+    });
+    return () => {
+      if (session && !session.ended) interactions.end(session, "commit");
+    };
+  }, [cursorLoaded, clearCursor, interactions]);
 
   // TH-03 — Esc clears the loaded cursor, no mutation: a transient mode
   // of the Escape arbiter (ADR 1207), so the same press does nothing else.

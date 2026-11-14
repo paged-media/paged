@@ -346,15 +346,16 @@ export const EXPORT_PDF = defineMessages("shell.exportPdf", {
   workingSpace: "Document working space",
   // Split before ")": the strings guard reads "})" as the end of the call.
   workingSpaceNamed: "Document working space ({profile}" + ")",
-  x4NeedsProfile:
-    "PDF/X-4 requires an output-intent profile — register one in the Color settings panel or switch to PDF 1.7.",
   color: "Color",
   preserveNumbers: "Preserve numbers",
   convertToDestination: "Convert to destination",
   pages: "Pages",
   // Split before ")": the strings guard reads "})" as the end of the call.
   allPages: "All ({count}" + ")",
-  rangeInvalid: "Range must be within 1–{count}.",
+  currentPage: "Current page",
+  range: "Range",
+  fromPage: "From page",
+  toPage: "To page",
   bleed: "Bleed",
   documentBleed: "Use document bleed",
   ptAllSides: "pt (all sides)",
@@ -370,13 +371,37 @@ export const EXPORT_PDF = defineMessages("shell.exportPdf", {
   downsample: "Downsample images",
   downsampleOff: "Off (preserve)",
   downsampleTo: "to {ppi} ppi",
-  progress: "Exporting page {done} / {total}…",
-  failed: "Export failed: {message}",
+  progress: "Writing page {done} of {total}…",
+  stagePreparing: "Preparing the document…",
+  stageFinishing: "Finishing the file…",
   cancel: "Cancel",
   export: "Export",
-  exported: "Exported {file} · {count, plural, one {# page} other {# pages}}",
-  dismiss: "Dismiss",
-  findings: "{count, plural, one {# finding} other {# findings}}: {list}",
+  action: "export {file}",
+  notAPdf: "the engine answered with something that is not a PDF",
+  exportedTo:
+    "Exported {file} · {count, plural, one {# page} other {# pages}} · in your downloads",
+  exportedFindings:
+    "Exported {file} · {count, plural, one {# page} other {# pages}} · in your downloads · {findings, plural, one {# finding} other {# findings}}",
+  showFindings: "Show findings",
+  stepOutput: "1 · Output",
+  stepReadiness: "2 · Readiness",
+  stepPreview: "3 · What the file will be",
+  preset: "Preset",
+  presetCustom: "Custom",
+  presetPress: "Press quality (PDF/X-4, marks)",
+  presetPrint: "High-quality print (PDF 1.7, 300 ppi)",
+  presetScreen: "Smallest file (PDF 1.7, 150 ppi, tagged)",
+  savePreset: "Save preset…",
+  presetName: "Preset name",
+  save: "Save",
+  levelBlocker: "Blocks the export",
+  levelWarning: "Warning",
+  levelOk: "Ready",
+  summaryBlocked:
+    "{count, plural, one {# problem blocks} other {# problems block}} the export",
+  summaryWarnings:
+    "Ready · {count, plural, one {# warning} other {# warnings}}",
+  summaryReady: "Ready to export",
 });
 
 export const FILL_STROKE = defineMessages("shell.fillStroke", {

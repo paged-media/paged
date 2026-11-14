@@ -205,6 +205,7 @@ export {
 export {
   SelectionProvider,
   SelectionSubset,
+  useOptionalSelection,
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
@@ -612,9 +613,33 @@ export {
   type PlaceDropPayload,
   PAGED_FILE_NEW_FROM_BRIEF,
   buildOpenIdmlCommand,
+  closeDocument,
   PAGED_FILE_NEW,
   PAGED_FILE_OPEN_IDML,
 } from "./state/commands/file-commands";
+// Editor ADR 1220 — File ▸ New document…: the dialog, its presets and the
+// setup a document is created from.
+export {
+  applyDocumentSetup,
+  buildNewDocumentDialogCommand,
+  PAGED_FILE_NEW_DIALOG,
+  setupMutations,
+} from "./state/commands/new-document";
+export {
+  NewDocumentDialog,
+  notifyNewDocumentDialog,
+} from "./chrome/NewDocumentDialog";
+export {
+  defaultSetup,
+  paperFamilyOf,
+  PRESETS,
+  setupFromPayload,
+  setupOfPreset,
+  validateSetup,
+  type NewDocumentSetup,
+  type PresetCategory,
+  type PresetId,
+} from "./state/new-document-presets";
 export {
   attachReplacePromptSurface,
   confirmDiscard,
@@ -643,6 +668,60 @@ export {
 export { SaveStateController } from "./state/save-state-controller";
 export { SaveStatus, saveStatusLabel } from "./chrome/SaveStatus";
 export { openLibraryDocument } from "./state/open-library-document";
+// Editor ADR "Operation feedback" — how an operation ended, said once:
+// inline, the one toast channel, or Problems (UXI-FBK-001/002,
+// UXI-ASY-009/010/011).
+export {
+  createOperationFeedback,
+  isFailure,
+  notifySinkOf,
+  operationFeedbackOf,
+  OPERATION_OUTCOMES,
+  reportFromNotification,
+  reportOperation,
+  routeOf,
+  severityOf,
+  useFeedbackSnapshot,
+  useOperationFeedback,
+  wordFeedback,
+  type DocumentChange,
+  type FeedbackAction,
+  type FeedbackChannel,
+  type FeedbackProblem,
+  type FeedbackSeverity,
+  type FeedbackSnapshot,
+  type FeedbackToast,
+  type OperationFeedback,
+  type OperationOutcome,
+  type OperationReport,
+  type WordedFeedback,
+} from "./state/operation-feedback";
+export { FeedbackToasts } from "./chrome/FeedbackToasts";
+// Editor ADR 1223 — the publication's issues on the page.
+export {
+  activateIssue,
+  issuesByPage,
+  publicationIssuesOf,
+  rememberReturnView,
+  setIssueActivator,
+  setPublicationIssues,
+  takeReturnView,
+  usePublicationIssues,
+  type IssueKind,
+  type IssueSeverity,
+  type IssuesSnapshot,
+  type PublicationIssue,
+} from "./state/publication-issues";
+export {
+  issueMarkersContribution,
+  issueMarkersOf,
+  type IssueMarker,
+} from "./overlays/issue-markers";
+export {
+  onDocumentLoadLosses,
+  openFailureKey,
+  type DocumentLoadLosses,
+} from "./state/document-loader";
 // Editor ADR 1205 — what a dropped file will do, said before the drop.
 export {
   carriesFiles,
@@ -731,7 +810,23 @@ export {
   buildExportPdfCommand,
   PAGED_FILE_EXPORT_PDF,
 } from "./state/commands/export-commands";
-export { notifyExportPdfDialog } from "./chrome/ExportPdfDialog";
+export {
+  notifyExportPdfDialog,
+  onPdfExported,
+  PDF_EXPORT_FEEDBACK_KEY,
+  type PdfExportFindings,
+} from "./chrome/ExportPdfDialog";
+// Editor ADR 1221 — the guided export's readiness check and preview facts.
+export {
+  exportAllowed,
+  pdfPreviewFacts,
+  pdfReadiness,
+  type PdfDocumentFacts,
+  type PdfExportPlan,
+  type PreviewFact,
+  type ReadinessCheck,
+  type ReadinessLevel,
+} from "./lib/export-readiness";
 
 // ── Loaders ────────────────────────────────────────────────────
 export {
@@ -840,6 +935,7 @@ export * from "./focus";
 export {
   ESCAPE_TIERS,
   escapeArbiterOf,
+  escapeKeyEvent,
   isEscapeKey,
   useEscapeArbiter,
   useEscapeHandler,
@@ -879,6 +975,16 @@ export {
 } from "@paged-media/client";
 
 // ── Overlay layer ──────────────────────────────────────────────
+// paged.draw ADR 370 — the precision magnifier's rules.
+export {
+  MAGNIFIER_FACTOR,
+  MAGNIFIER_KEY,
+  MAGNIFIER_SIZE_PX,
+  PRECISION_TOOL_IDS,
+  magnifierPlacement,
+  magnifierRegion,
+  pointInLoupe,
+} from "./overlays/precision-magnifier-geometry";
 export {
   OverlayHost,
   caretContribution,

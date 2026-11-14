@@ -31,7 +31,7 @@
 // canvas internals.
 
 import { t, useStrings } from "@paged-media/strings";
-import { COMMANDS, LOAD } from "./state/messages";
+import { COMMANDS, FEEDBACK_ACTIONS, LOAD } from "./state/messages";
 import {
   debugHandlesEnabled,
   debugHandlesOf,
@@ -137,6 +137,11 @@ import { RecoveryController } from "./state/recovery-controller";
 import { RecoveryPrompt } from "./chrome/RecoveryPrompt";
 import { useSaveState } from "./state/save-status";
 import { ExportPdfDialog } from "./chrome/ExportPdfDialog";
+import {
+  NewDocumentDialog,
+  notifyNewDocumentDialog,
+} from "./chrome/NewDocumentDialog";
+import { buildNewDocumentDialogCommand } from "./state/commands/new-document";
 import { ToolRail } from "./chrome/ToolRail";
 import { ScreenModeSelector } from "./chrome/ScreenModeSelector";
 import { FillStrokeCluster } from "./chrome/FillStrokeCluster";
@@ -194,6 +199,11 @@ import {
 } from "./focus/tab-hides-panels";
 import { installRegistryDerivedContributions } from "./state/commands/registry-derived";
 import { useSpringLoadedTools } from "./tools/use-spring-loaded-tools";
+import {
+  useOperationFeedback,
+  type OperationReport,
+} from "./state/operation-feedback";
+import { FeedbackToasts } from "./chrome/FeedbackToasts";
 import type { PagedEditor } from "./state/paged-editor";
 import type { OverlayContribution } from "./registries/overlay";
 import {
@@ -652,7 +662,19 @@ function ShellChrome({
   useSpringLoadedTools();
 
   const [status, setStatus] = useState<string>("initialising worker…");
-  const [warnings, setWarnings] = useState<string[]>([]);
+  // Editor ADR "Operation feedback" — what was a list of warnings under
+  // the header, append-only for the session, goes to the one toast
+  // channel (and, for an unresolved document issue, to Problems).
+  const feedback = useOperationFeedback();
+  const pushWarning = (w: string) => {
+    feedback.report(shellWarning(w));
+  };
+  // A remedy is a command of this editor.
+  useEffect(() => {
+    feedback.setCommandRunner((id, args) => {
+      void registries.commands.invoke(id, args);
+    });
+  }, [feedback, registries]);
 
   // Solo mode — the boot artboard.
   //
@@ -668,18 +690,19 @@ function ShellChrome({
     bootDocRef.current = true;
     void mintBlankDocument(paged, initialDocumentSizePt, {
       setStatus,
-      pushWarning: (w) => setWarnings((prev) => [...prev, w]),
+      pushWarning: (w) => feedback.report(shellWarning(w)),
     }).catch((err) => {
       // A boot document that fails must SAY so. Silently continuing
       // leaves an app whose every plugin menu entry is greyed for a
       // reason the user cannot see.
       bootDocRef.current = false;
-      setWarnings((prev) => [
-        ...prev,
-        t(LOAD.initialFailed, { error: String(err) }),
-      ]);
+      feedback.report({
+        ...shellWarning(t(LOAD.initialFailed, { error: String(err) })),
+        outcome: "fatal-failure",
+        persistent: true,
+      });
     });
-  }, [initialDocumentSizePt, paged, handle, setStatus]);
+  }, [initialDocumentSizePt, paged, handle, setStatus, feedback]);
   const sabSupported = supportsSharedArrayBuffer();
   const strings = useStrings();
 
@@ -1126,7 +1149,7 @@ function ShellChrome({
             })();
           }),
         setStatus,
-        pushWarning: (w) => setWarnings((prev) => [...prev, w]),
+        pushWarning: (w) => feedback.report(shellWarning(w)),
       }),
     );
     // File ▸ New — mint a blank document through the engine. Shares
@@ -1135,8 +1158,15 @@ function ShellChrome({
     const newDoc = registries.commands.register(
       buildNewDocumentCommand({
         setStatus,
-        pushWarning: (w) => setWarnings((prev) => [...prev, w]),
+        pushWarning: (w) => feedback.report(shellWarning(w)),
       }),
+    );
+    // Editor ADR 1220 — File ▸ New document… opens the dialog; its Create
+    // runs `paged.file.new` with the setup.
+    const newDocDialog = registries.commands.register(
+      buildNewDocumentDialogCommand((paged) =>
+        notifyNewDocumentDialog(scopeOf(paged)),
+      ),
     );
     // ADR 221 — File ▸ New from a brief… (Claude builds the document).
     const newFromBrief = registries.commands.register(
@@ -1163,12 +1193,13 @@ function ShellChrome({
     return () => {
       handle.dispose();
       newDoc.dispose();
+      newDocDialog.dispose();
       newFromBrief.dispose();
       importAse.dispose();
       exportAse.dispose();
       exportPdf.dispose();
     };
-  }, [registries, scope]);
+  }, [registries, scope, feedback]);
 
   // Register the palette-toggle command + Cmd+K keybinding. The
   // command body (notifyPalette) is shell-internal; binding via
@@ -1384,13 +1415,16 @@ function ShellChrome({
           severity: "error",
           data: { kind: identOf(msg.payload.kind) ?? "unknown" },
         });
-        setWarnings((prev) =>
-          // Bounded: this list was previously append-only for the life of the
-          // session, so a chatty worker grew it without limit.
-          [...prev, `${msg.payload.kind}: ${msg.payload.details}`].slice(
-            -MAX_VISIBLE_WARNINGS,
-          ),
-        );
+        // One toast per kind (a chatty worker updates its count), the
+        // engine's own words behind Details (UXI-ASY-010, UXI-ASY-011).
+        feedback.report({
+          action: t(FEEDBACK_ACTIONS.engine),
+          outcome: "recoverable-failure",
+          reason: t(FEEDBACK_ACTIONS.engineReason),
+          detail: `${msg.payload.kind}: ${msg.payload.details}`,
+          key: `paged.worker|${msg.payload.kind}`,
+          source: "paged.worker",
+        });
       } else if (msg.kind === "attachReady") {
         setGpuActive(msg.payload.gpuActive);
       } else if (msg.kind === "resolutionDone") {
@@ -1463,6 +1497,7 @@ function ShellChrome({
   }, [
     client,
     contentSelectionRef,
+    feedback,
     setCaret,
     setGpuActive,
     setHandle,
@@ -1482,7 +1517,9 @@ function ShellChrome({
     if (!paged) return;
     const sinks = {
       setStatus,
-      pushWarning: (w: string) => setWarnings((prev) => [...prev, w]),
+      pushWarning: (w: string) => {
+        feedback.report(shellWarning(w));
+      },
     };
     // Editor ADR 1205 — a drop the zone resolved does what its label said
     // (UXI-DND-001 to UXI-DND-004).
@@ -1520,14 +1557,6 @@ function ShellChrome({
 
       {!sabSupported && (
         <div style={warningStyle}>{strings.t(LOAD.reducedMode)}</div>
-      )}
-
-      {warnings.length > 0 && (
-        <ul style={{ ...warningStyle, listStyle: "disc", paddingLeft: 24 }}>
-          {warnings.map((w, i) => (
-            <li key={i}>{w}</li>
-          ))}
-        </ul>
       )}
 
       {/* W3.2 — the edit-context breadcrumb (B-02/W-03). Renders only
@@ -1601,6 +1630,8 @@ function ShellChrome({
       <DemoSpotlight />
       <DemoOverlay />
       <ExportPdfDialog />
+      {/* Editor ADR 1220 — File ▸ New document…. */}
+      <NewDocumentDialog />
       <ReplaceDocumentPrompt />
       {/* Editor ADR 1205 — what a dragged file will do, at the pointer. */}
       <DropIntentOverlay />
@@ -1612,9 +1643,11 @@ function ShellChrome({
       <RecoveryPrompt
         sinks={{
           setStatus,
-          pushWarning: (w) => setWarnings((prev) => [...prev, w]),
+          pushWarning,
         }}
       />
+      {/* Editor ADR "Operation feedback" — the one toast channel. */}
+      <FeedbackToasts />
 
       {/* Canvas-app-specific integration: legacy hooks (keyboard
        *   shortcuts, camera tweens, text editing) that read from
@@ -1772,8 +1805,19 @@ const WORKER_WARNING_CODES: Readonly<Record<string, string>> = {
   protocol: "worker.dispatch.error",
 };
 
-/** Cap on the visible warning list. The journal keeps the real record. */
-const MAX_VISIBLE_WARNINGS = 50;
+/** A warning the shell's flows word as one sentence (a load that failed, a
+ *  page picture that did not render) as an operation's end: a toast, the
+ *  same sentence again updating its count. A failed open of a document is
+ *  also a Problems entry until a later open succeeds (UX audit F-02). */
+function shellWarning(w: string): OperationReport {
+  return {
+    action: t(FEEDBACK_ACTIONS.shell),
+    outcome: "recoverable-failure",
+    title: w,
+    key: `paged.shell|${w}`,
+    source: "paged.shell",
+  };
+}
 
 /**
  * Minimal error boundary so a panel / dockview crash leaves a

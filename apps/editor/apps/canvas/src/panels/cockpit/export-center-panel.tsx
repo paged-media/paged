@@ -30,6 +30,13 @@
 //     seams until the multi-format publishing pipeline lands.
 // Row selection syncs the Outputs nav (left) and the Export inspector
 // (right) through the shared selected-target store.
+//
+// Editor ADR 1221 (guided export): the readiness the table shows is the
+// export's own check (`pdfReadiness`, the one the PDF dialog runs before
+// it starts), so "Fix issues first" lights when the document has issues
+// and opens Publication health, which leads to each; every run says how
+// it ended through the editor's one feedback service (the file and where
+// it went, or why there is none). Presets live in the PDF dialog.
 
 import { useState } from "react";
 
@@ -40,22 +47,27 @@ import {
   Icon,
   StatusPill,
   notifyExportPdfDialog,
+  pdfReadiness,
   useEditorScope,
   printOutputFacts,
   useCanvasClient,
+  useCollection,
   useDocument,
   useDocumentMeta,
+  useDocumentStats,
   useRegistries,
   useRegistryView,
   type PrintOutputFacts,
 } from "@paged-media/shell";
+import type { FontSummary, LinkSummary } from "@paged-media/client";
 
 import {
   EXPORT_TARGETS,
   exportTargetById,
   exportReadiness,
+  reportImageExport,
   runImageExport,
-  runPluginExporter,
+  runPluginExport,
   setSelectedExportTarget,
   useImageSettings,
   useSelectedExportTarget,
@@ -79,7 +91,9 @@ const M = defineMessages("app.cockpitExportCenterPanel", {
   fromPlugin: "{extension} · from a plugin",
   ready: "ready",
   fixIssues: "Fix issues first",
-  savePreset: "Save preset",
+  issues:
+    "{count, plural, one {# issue to review} other {# issues to review}} before export",
+  noIssues: "No issues found before export",
   exportSelected: "Export selected",
 });
 
@@ -108,16 +122,44 @@ export function ExportCenterPanel() {
   // The plugins' exporters (paged.publish's IDML, a sheet's .xlsx), as
   // rows of the same table: "every format from one place" (PN-309). A
   // view of the registry, so one a bundle registers later is listed too.
-  const pluginExporters = useRegistryView(useRegistries().exporters).list();
+  const registries = useRegistries();
+  const pluginExporters = useRegistryView(registries.exporters).list();
   const [pluginBusy, setPluginBusy] = useState<string | null>(null);
   const runPlugin = async (id: string) => {
     const exporter = pluginExporters.find((e) => e.id === id);
     if (!exporter || !loaded) return;
     setPluginBusy(id);
-    await runPluginExporter(exporter)
-      .catch(() => false)
-      .finally(() => setPluginBusy(null));
+    await runPluginExport(scope, exporter).finally(() => setPluginBusy(null));
   };
+  // The export's own check (ADR 1221), on the standard the document can
+  // meet: what it warns about is what "Fix issues first" leads to.
+  const fonts = useCollection<FontSummary>("fonts");
+  const links = useCollection<LinkSummary>("links");
+  const stats = useDocumentStats();
+  const issues = pdfReadiness(
+    {
+      standard: facts.standard,
+      outputIntentProfile: "",
+      colorPolicy: "preserveNumbers",
+      pageScope: "all",
+      pageFrom: "1",
+      pageTo: "1",
+      useDocumentBleed: true,
+      bleedPt: "0",
+      downsample: "off",
+    },
+    {
+      loaded,
+      pageCount: meta?.pageCount ?? 0,
+      currentPage: 0,
+      print: facts,
+      pages: null,
+      fonts,
+      links,
+      oversetStories: stats?.overset_stories ?? null,
+      documentName: meta?.documentName ?? "",
+    },
+  ).filter((c) => c.level !== "ok");
 
   const liveCount =
     EXPORT_TARGETS.filter((t) => t.live).length + pluginExporters.length;
@@ -141,13 +183,19 @@ export function ExportCenterPanel() {
             pageSizesPt: handle.pageSizesPt,
             settings: image,
             baseName: meta?.documentName,
-          })
+          }).then(
+            (result) =>
+              reportImageExport(scope, image, result, handle.pageIds.length),
+            (err: unknown) =>
+              reportImageExport(
+                scope,
+                image,
+                { error: err instanceof Error ? err.message : String(err) },
+                handle.pageIds.length,
+              ),
+          )
         : Promise.resolve();
-    await run
-      .catch(() => {
-        /* surfaced in the inspector; the center row just clears busy */
-      })
-      .finally(() => setBusy(null));
+    await run.finally(() => setBusy(null));
   };
 
   return (
@@ -340,11 +388,27 @@ export function ExportCenterPanel() {
             justifyContent: "flex-end",
           }}
         >
-          <CockpitBtn disabled testId="export-fix-issues">
+          <span
+            className="pg-ui-xs"
+            data-export-issues={loaded ? issues.length : undefined}
+            style={{ alignSelf: "center", marginRight: "auto" }}
+          >
+            {loaded
+              ? issues.length > 0
+                ? strings.t(M.issues, { count: issues.length })
+                : strings.t(M.noIssues)
+              : null}
+          </span>
+          <CockpitBtn
+            disabled={!loaded || issues.length === 0}
+            testId="export-fix-issues"
+            onClick={() =>
+              void registries.commands.invoke(
+                "paged.panel.show.paged.publication-health",
+              )
+            }
+          >
             {strings.t(M.fixIssues)}
-          </CockpitBtn>
-          <CockpitBtn tone="soft" disabled testId="export-save-preset">
-            {strings.t(M.savePreset)}
           </CockpitBtn>
           <CockpitBtn
             primary

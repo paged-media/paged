@@ -70,6 +70,7 @@ import {
   attachReplacePromptSurface,
   createEditorScope,
   replacePrompts,
+  notifySinkOf,
   type RunResult,
   type ShellRegistries,
 } from "@paged-media/shell";
@@ -1295,6 +1296,7 @@ export async function createHeadlessEditor(
     willSave,
     objects: objectRegistry,
     diagnosticsSink: problemsSink,
+    notifySink: notifySinkOf(scope),
     pages: pageDoorsOf(scope),
   });
   const hostApp: HeadlessHostApp = {

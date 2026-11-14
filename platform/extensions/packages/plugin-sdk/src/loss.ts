@@ -70,6 +70,9 @@ export function lossDiagnostics(
       severity: lossDiagnosticSeverity(e.severity),
       message: `${opts.prefix ?? ""}${text}${times}`,
       ...(opts.source != null ? { source: opts.source } : {}),
+      // The entry itself rides along (extensions ADR 1107), so the host's
+      // compatibility report explains the code and points at its items.
+      loss: e,
     });
   }
   return out;

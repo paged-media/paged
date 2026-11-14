@@ -45,6 +45,7 @@ import type { CanvasClient } from "@paged-media/client";
 import {
   createValueStore,
   editorStorage,
+  operationFeedbackOf,
   oneOf,
   parseStored,
   printReadinessLabel,
@@ -78,6 +79,15 @@ const M = defineMessages("app.cockpitExportTargets", {
   socialNote: "Per-network image crops",
   package: "Print package",
   packageNote: "Document + links + fonts, zipped",
+  exportAction: "export {name}",
+  exportImagesAction: "export the page images",
+  nothingToExport: "the module had nothing to export for this document",
+  exportedFile: "Exported {file} · in your downloads",
+  exportedPng:
+    "Exported {count, plural, one {# PNG} other {# PNGs}} · in your downloads",
+  exportedJpeg:
+    "Exported {count, plural, one {# JPEG} other {# JPEGs}} · in your downloads",
+  rangeNamesNoPage: `"{range}" names no page in this {count}-page document`,
 });
 
 export type ExportTargetId = "pdf-x4" | "image" | "web" | "social" | "package";
@@ -518,8 +528,10 @@ export async function encodePageImage(
 
 /** K-2 / S-06 — run a plugin-registered exporter: pull its bytes and
  *  download them under its suggested name (the host owns blob→download,
- *  which is the whole point of the exporter contribution). Returns false
- *  when the exporter declined (a null result — nothing to export). */
+ *  which is the whole point of the exporter contribution). Resolves the
+ *  file it delivered; null when the exporter declined (a null result —
+ *  nothing to export) or answered no bytes, which is no file
+ *  (UXI-FIL-005: an empty artefact is never delivered as one). */
 export async function runPluginExporter(
   exporter: ExporterContribution,
   triggerDownload: (
@@ -527,11 +539,108 @@ export async function runPluginExporter(
     filename: string,
     mimeType?: string,
   ) => void = pluginDownload,
-): Promise<boolean> {
+): Promise<{ fileName: string; size: number } | null> {
   const result = await exporter.export();
-  if (!result) return false;
+  if (!result || result.bytes.length === 0) return null;
   triggerDownload(result.bytes, result.fileName, exporter.mimeType);
-  return true;
+  return { fileName: result.fileName, size: result.bytes.length };
+}
+
+/** How an export the Export Center ran ended. */
+export type ExportRunOutcome = "done" | "declined" | "error";
+
+/** Run a plugin exporter and say how it ended through the editor's one
+ *  feedback service (editor ADRs 1219, 1221): the file and where it went,
+ *  or why there is none. An export never changes the document. */
+export async function runPluginExport(
+  scope: EditorScope,
+  exporter: ExporterContribution,
+  run: typeof runPluginExporter = runPluginExporter,
+): Promise<ExportRunOutcome> {
+  const feedback = operationFeedbackOf(scope);
+  const action = t(M.exportAction, { name: exporter.title });
+  const key = `paged.export|${exporter.id}`;
+  let delivered: { fileName: string; size: number } | null;
+  try {
+    delivered = await run(exporter);
+  } catch (err) {
+    feedback.report({
+      action,
+      outcome: "recoverable-failure",
+      reason: err instanceof Error ? err.message : String(err),
+      document: "unchanged",
+      key,
+      source: "paged.export",
+    });
+    return "error";
+  }
+  if (!delivered) {
+    feedback.report({
+      action,
+      outcome: "unsupported",
+      reason: t(M.nothingToExport),
+      document: "unchanged",
+      key,
+      source: "paged.export",
+    });
+    return "declined";
+  }
+  feedback.report({
+    action,
+    outcome: "success",
+    prominent: true,
+    title: t(M.exportedFile, { file: delivered.fileName }),
+    key,
+    source: "paged.export",
+  });
+  return "done";
+}
+
+/** Say how a page-image export ended (editor ADR 1221). */
+export function reportImageExport(
+  scope: EditorScope,
+  settings: Pick<ImageSettings, "format" | "range">,
+  result: ImageExportResult | { error: string },
+  pageCount: number,
+): void {
+  const feedback = operationFeedbackOf(scope);
+  const action = t(M.exportImagesAction);
+  const key = "paged.export|images";
+  if ("error" in result) {
+    feedback.report({
+      action,
+      outcome: "recoverable-failure",
+      reason: result.error,
+      document: "unchanged",
+      key,
+      source: "paged.export",
+    });
+    return;
+  }
+  if (result.refused === "range") {
+    feedback.report({
+      action,
+      outcome: "invalid-input",
+      reason: t(M.rangeNamesNoPage, {
+        range: settings.range,
+        count: pageCount,
+      }),
+      document: "unchanged",
+      key,
+      source: "paged.export",
+    });
+    return;
+  }
+  feedback.report({
+    action,
+    outcome: "success",
+    prominent: true,
+    title: t(settings.format === "jpeg" ? M.exportedJpeg : M.exportedPng, {
+      count: result.files,
+    }),
+    key,
+    source: "paged.export",
+  });
 }
 
 // K-10 — plugin bytes leave the app through ONE mechanism: the exporter

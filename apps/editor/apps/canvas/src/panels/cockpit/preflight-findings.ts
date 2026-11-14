@@ -42,6 +42,7 @@ import { useSyncExternalStore } from "react";
 import type { CanvasClient, PreflightFinding } from "@paged-media/client";
 import {
   createValueStore,
+  onPdfExported,
   scoped,
   useScoped,
   type EditorScope,
@@ -64,10 +65,20 @@ const EMPTY: PreflightFindingsState = {
   runCount: 0,
 };
 
-const FINDINGS = scoped("preflightFindings", () => ({
-  store: createValueStore<PreflightFindingsState>(EMPTY),
-  wired: new WeakSet<CanvasClient>(),
-}));
+const FINDINGS = scoped("preflightFindings", (scope) => {
+  const store = createValueStore<PreflightFindingsState>(EMPTY);
+  // Editor ADR 1221 — an export from File ▸ Export PDF… is a run too: its
+  // findings are the last run's (the export dialog keeps the last one, so
+  // a panel opened after it still shows them).
+  onPdfExported(scope, (result) => {
+    store.set({
+      findings: result.findings ?? [],
+      diagnostics: result.diagnostics ?? [],
+      runCount: store.get().runCount + 1,
+    });
+  });
+  return { store, wired: new WeakSet<CanvasClient>() };
+});
 
 /** Record the findings from an export's TYPED return. The Preflight
  *  panel calls this with the resolved value of `client.exportPdf(...)`

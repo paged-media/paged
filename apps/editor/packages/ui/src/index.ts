@@ -45,6 +45,7 @@ export { ScrubField, type ScrubFieldProps } from "./inputs/ScrubField";
 export { BoundsInput, type BoundsInputProps } from "./inputs/BoundsInput";
 export { ColorPicker, type ColorPickerProps } from "./inputs/ColorPicker";
 export { KitSelect, type KitSelectProps } from "./inputs/KitSelect";
+export { KitCheckbox, type KitCheckboxProps } from "./inputs/KitCheckbox";
 export {
   SmartDialMicro,
   type SmartDialMicroProps,

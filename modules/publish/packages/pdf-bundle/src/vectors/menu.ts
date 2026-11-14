@@ -62,6 +62,9 @@ export function contributeConvertMenu(host: BundleHost): Disposable {
                 severity: "info" as const,
                 message: l.message ?? l.code,
                 source: CONVERT_COMMAND,
+                // The entry itself, for the host's compatibility report
+                // (extensions ADR 1107).
+                loss: l,
               })),
           );
           return r;
