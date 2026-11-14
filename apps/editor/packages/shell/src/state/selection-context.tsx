@@ -360,6 +360,12 @@ function usePlacedGeometry(
   }, [geometry, known, handle]);
 }
 
+/** The selection, or null outside a SelectionProvider (a chrome piece
+ *  that also renders standalone). */
+export function useOptionalSelection(): SelectionContextValue | null {
+  return useContext(Context);
+}
+
 export function useSelection(): SelectionContextValue {
   const ctx = useContext(Context);
   if (!ctx) {

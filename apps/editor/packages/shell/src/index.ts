@@ -192,6 +192,7 @@ export {
 
 export {
   SelectionProvider,
+  useOptionalSelection,
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
@@ -849,6 +850,16 @@ export {
 } from "@paged-media/client";
 
 // ── Overlay layer ──────────────────────────────────────────────
+// paged.draw ADR 370 — the precision magnifier's rules.
+export {
+  MAGNIFIER_FACTOR,
+  MAGNIFIER_KEY,
+  MAGNIFIER_SIZE_PX,
+  PRECISION_TOOL_IDS,
+  magnifierPlacement,
+  magnifierRegion,
+  pointInLoupe,
+} from "./overlays/precision-magnifier-geometry";
 export {
   OverlayHost,
   caretContribution,

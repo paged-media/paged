@@ -40,7 +40,11 @@
 //   · RESOLVES THE HIT — which anchor or segment of which path is under
 //     the pointer. The machine never queries anything; see `resolveHit`.
 //   · DRAWS the machine's snapshot (`penPreview`, true cubics) and turns
-//     its `intent` into a cursor.
+//     it into one of the Pen's named STATES (`pen-states.ts`: start,
+//     draw, continue, close, join, dragHandle, finish, add, delete), each
+//     with its own cursor and a short hint beside the pointer
+//     (UXI-DRW-003, paged.draw ADR 370). A click on the run's last
+//     anchor finishes the open path, as Enter does.
 //   · SENDS the plan: `penPlanMutation` lowers it to ONE mutation — an
 //     `insertPath`, or one `batch` — so every gesture is one undo step
 //     (invariant 9 / INV-1). Nothing is mutated before that.
@@ -54,7 +58,6 @@
 
 import type {
   CanvasPointerEvent,
-  CursorSpec,
   GestureHandler,
   PagedEditor,
 } from "@paged-media/shell";
@@ -67,12 +70,20 @@ import {
   penPreview,
   type PenEvent,
   type PenHit,
-  type PenIntent,
   type PenPath,
   type PenPlan,
   type PenSnapshot,
 } from "@paged-media/vector-tools";
+import { t } from "@paged-media/strings";
+
 import { createHostSnapper } from "./snapper";
+import {
+  overLastAnchor,
+  penCursor,
+  penHint,
+  penStateOf,
+  type PenState,
+} from "./pen-states";
 
 import {
   hitPathTable,
@@ -133,35 +144,11 @@ function isOpenEndpoint(table: AnchorTable, index: number): boolean {
   return false;
 }
 
-/** A cursor that says what the press will do. Crosshair plus a badge,
- *  white-haloed so it reads on any artwork. */
-function badgeCursor(badge: string): CursorSpec {
-  const stroke = (d: string, color: string, width: number) =>
-    `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round"/>`;
-  const cross = "M8 1.5v13M1.5 8h13";
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">` +
-    stroke(cross, "#fff", 3) +
-    stroke(badge, "#fff", 3.5) +
-    stroke(cross, "#111", 1.25) +
-    stroke(badge, "#111", 1.5) +
-    `</svg>`;
-  return {
-    kind: "svg",
-    src: `data:image/svg+xml,${encodeURIComponent(svg)}`,
-    hotspot: { x: 8, y: 8 },
-  };
-}
-
-/** `draw` has no entry: it is the tool's base crosshair. */
-const INTENT_CURSOR: Partial<Record<PenIntent, CursorSpec>> = {
-  // Landing on an endpoint — the v1 close cursor, kept.
-  close: { kind: "css", token: "pointer" },
-  join: { kind: "css", token: "pointer" },
-  continue: badgeCursor("M14 20l6-6"),
-  add: badgeCursor("M14 17h6M17 14v6"),
-  delete: badgeCursor("M14 17h6"),
-};
+/** The overlay layer the Pen's hint is drawn on (beside the pointer). */
+const HINT_LAYER = "paged.tool.pen.hint";
+/** The hint's offset from the pointer, screen px (right and below the
+ *  cursor's badge). */
+const HINT_OFFSET_PX: Vec2 = [18, 30];
 
 export function createPenHandler(): GestureHandler {
   let paged: PagedEditor | null = null;
@@ -175,6 +162,13 @@ export function createPenHandler(): GestureHandler {
   // A button is down. An EVENT-TIME fact (the queue lags it): it sorts
   // a move into "drag sample" or "hover".
   let pressed = false;
+  // The press that finished the run: its release belongs to nothing.
+  let finishing = false;
+  // The button is down and has moved past the drag threshold (screen
+  // px, the event's own `maxDelta`): a handle is being pulled.
+  let dragging = false;
+  // Where the pointer last was, on the page the hint is drawn on.
+  let pointerAt: { pageId: string; point: Vec2 } | null = null;
   let queue: Promise<void> = Promise.resolve();
   let hoverPending: CanvasPointerEvent | null = null;
   let hoverQueued = false;
@@ -249,6 +243,44 @@ export function createPenHandler(): GestureHandler {
     paged.overlaySignals.setToolPreview(
       page && snapshot ? penPreview(snapshot, page.pageId) : null,
     );
+    paintHint();
+  };
+
+  /** The state a press here would be in: the machine's intent, with the
+   *  start, the handle being pulled and the finish the host sees. */
+  const stateAt = (point: Vec2 | null, held = pressed): PenState =>
+    penStateOf(snapshot, {
+      pressed: held,
+      dragging,
+      overLastAnchor:
+        snapshot !== null &&
+        !snapshot.closePreview &&
+        overLastAnchor(snapshot, point, CLOSE_TOLERANCE_PX * ptPerPx()),
+    });
+
+  /** The hint beside the pointer, in the editor's language, on an overlay
+   *  layer of its own (the tool-preview slot keeps the path). */
+  const paintHint = () => {
+    const signals = paged?.overlaySignals;
+    if (!signals) return;
+    const at = pointerAt;
+    const key = at ? penHint(stateAt(at.point)) : null;
+    if (!at || !key) {
+      signals.removeOverlayLayer?.(HINT_LAYER);
+      return;
+    }
+    const k = ptPerPx();
+    signals.setOverlayLayer?.(HINT_LAYER, [
+      {
+        kind: "text",
+        pageId: at.pageId,
+        x: at.point[0] + HINT_OFFSET_PX[0] * k,
+        y: at.point[1] + HINT_OFFSET_PX[1] * k,
+        text: t(key),
+        size: 11,
+        background: true,
+      },
+    ]);
   };
 
   const reset = () => {
@@ -257,6 +289,7 @@ export function createPenHandler(): GestureHandler {
     page = null;
     machine = null;
     snapshot = null;
+    dragging = false;
   };
 
   // ---- the hit --------------------------------------------------------------
@@ -399,7 +432,10 @@ export function createPenHandler(): GestureHandler {
     const pageId = page?.pageId ?? "";
     if (!snap.active) reset();
     if (snap.plan) await send(snap.plan, pageId);
-    if (!snap.active) return;
+    if (!snap.active) {
+      paintHint();
+      return;
+    }
     // An add / delete click plans without ending the machine, and leaves
     // nothing in progress: the next press anchors its own page.
     if (snap.anchors.length === 0) page = null;
@@ -422,7 +458,16 @@ export function createPenHandler(): GestureHandler {
       page = start;
     }
     const raw = endLocalFor(page, e);
+    pointerAt = { pageId: page.pageId, point: raw };
     const hit = await resolveHit(page.pageId, raw);
+    // A click on the run's last anchor finishes the open path, as Enter
+    // does (the machine would place a second anchor on top of it).
+    // (Asked as of before this press: the button is already down.)
+    if (hit.kind === "empty" && machine && stateAt(raw, false) === "finish") {
+      finishing = true;
+      await settle(feed({ type: "key", key: "Enter" }));
+      return;
+    }
     const point = await snapIfEmpty(page.pageId, raw, hit, e);
     feed({
       type: "down",
@@ -436,9 +481,11 @@ export function createPenHandler(): GestureHandler {
 
   const drag = (e: CanvasPointerEvent) => {
     if (!page || !machine) return;
+    const point = endLocalFor(page, e);
+    pointerAt = { pageId: page.pageId, point };
     feed({
       type: "move",
-      point: endLocalFor(page, e),
+      point,
       modifiers: modifiers(e),
     });
     repaint();
@@ -459,8 +506,11 @@ export function createPenHandler(): GestureHandler {
     if (!at) {
       // Off every page with nothing in progress: the plain pen.
       snapshot = null;
+      pointerAt = null;
+      paintHint();
       return;
     }
+    pointerAt = { pageId: at.pageId, point: [at.point[0], at.point[1]] };
     const hit = await resolveHit(at.pageId, at.point);
     const point = await snapIfEmpty(at.pageId, at.point, hit, e);
     feed({ type: "move", point, modifiers: modifiers(e), hit });
@@ -468,6 +518,10 @@ export function createPenHandler(): GestureHandler {
   };
 
   const up = async (e: CanvasPointerEvent) => {
+    if (finishing) {
+      finishing = false;
+      return;
+    }
     if (!page || !machine) return;
     await settle(
       feed({ type: "up", point: lastPoint, modifiers: modifiers(e) }),
@@ -510,6 +564,8 @@ export function createPenHandler(): GestureHandler {
           if (snap.plan) await send(snap.plan, page.pageId);
         }
         reset();
+        pointerAt = null;
+        paged?.overlaySignals.removeOverlayLayer?.(HINT_LAYER);
         unsubscribe?.();
         unsubscribe = null;
       });
@@ -517,11 +573,13 @@ export function createPenHandler(): GestureHandler {
     onPointerDown(e: CanvasPointerEvent) {
       if (!paged || e.button !== 0) return;
       pressed = true;
+      dragging = false;
       enqueue(() => down(e));
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!paged) return;
       if (pressed) {
+        if (!dragging && e.maxDelta > DRAG_THRESHOLD_PX) dragging = true;
         enqueue(() => drag(e));
         return;
       }
@@ -533,6 +591,7 @@ export function createPenHandler(): GestureHandler {
     onPointerUp(e: CanvasPointerEvent) {
       if (!paged) return;
       pressed = false;
+      dragging = false;
       enqueue(() => up(e));
     },
     onKey(e: KeyboardEvent) {
@@ -540,10 +599,15 @@ export function createPenHandler(): GestureHandler {
       const k = e.key;
       enqueue(() => key(k));
     },
-    cursorAt() {
-      // What a press here would do, as the machine last resolved it;
-      // undefined falls back to the tool's base crosshair.
-      return snapshot?.active ? INTENT_CURSOR[snapshot.intent] : undefined;
+    cursorAt(e: CanvasPointerEvent) {
+      // What a press here would do, as the machine last resolved it,
+      // named as a state (UXI-DRW-003): each state has its own cursor.
+      const point = page
+        ? endLocalFor(page, e)
+        : e.pagePoint
+          ? ([e.pagePoint[0], e.pagePoint[1]] as Vec2)
+          : null;
+      return penCursor(stateAt(point));
     },
   };
 }

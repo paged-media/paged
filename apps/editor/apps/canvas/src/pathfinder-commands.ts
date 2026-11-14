@@ -123,7 +123,7 @@ const keyOf = (id: ElementId): string => {
 
 /** Flatten the scene tree to its selectable leaves in PAINT order (back to
  *  front, the order `frames_in_order` records). */
-function paintOrder(roots: readonly SceneTreeNode[]): string[] {
+export function paintOrder(roots: readonly SceneTreeNode[]): string[] {
   const out: string[] = [];
   const walk = (nodes: readonly SceneTreeNode[]) => {
     for (const node of nodes) {

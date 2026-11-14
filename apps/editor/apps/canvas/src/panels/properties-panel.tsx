@@ -30,6 +30,10 @@
 //     "Group" for groups, "Objects" for groups and frames together.
 //   - Nothing selected ⇒ the panel-rail steer (`inspectorContext`)
 //     picks the Page summary or a per-kind guidance hint.
+//   - Anchors selected by Direct Selection ⇒ Points: the selected
+//     anchors' position, type, alignment and deletion, not the frame
+//     (paged.draw ADR 370). One selected path ⇒ Shape suggestions under
+//     the frame's sections.
 //
 // The AI Assistant lives in its own panel (ADR 221); this one links to it.
 
@@ -70,6 +74,8 @@ import { frameFittingComposition } from "./frame-fitting.composition";
 import { objectTransformComposition } from "./object-transform.composition";
 import { paragraphComposition } from "./paragraph.composition";
 import { strokeComposition } from "./stroke.composition";
+import { AnchorPointsSection } from "./anchor-points-section";
+import { ShapeSuggestionsSection } from "./shape-suggestions-section";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.propertiesPanel", {
@@ -79,6 +85,7 @@ const M = defineMessages("app.propertiesPanel", {
   text: "Text",
   image: "Image",
   page: "Page",
+  points: "Points",
   properties: "Properties",
   objectCount: "{count, plural, one {# object} other {# objects}}",
   groupCount: "{count, plural, one {# group} other {# groups}}",
@@ -103,12 +110,21 @@ const M = defineMessages("app.propertiesPanel", {
   columnsValue: "{count} · gutter {gutter}",
 });
 
-type InspectorKind = "text" | "image" | "frame" | "page" | "none";
+type InspectorKind = "text" | "image" | "frame" | "page" | "points" | "none";
+
+/** The path kinds the Shape suggestions apply to. */
+const SHAPE_KINDS = new Set(["polygon", "rectangle", "graphicLine"]);
 
 export function PropertiesPanel() {
   const scope = useEditorScope();
   const strings = useStrings();
-  const { elementSelection, elementGeometry } = useSelection();
+  const {
+    elementSelection,
+    elementGeometry,
+    pathEditMode,
+    pathEditSession,
+    selectedAnchors,
+  } = useSelection();
   const { contentSelection } = useContentSelection();
   const cockpit = useOptionalCockpitState();
   // Plugin-owned content: SELECTING a classified object (webFrame,
@@ -158,15 +174,21 @@ export function PropertiesPanel() {
   if (steerAt.steer !== steer) setSteerAt({ steer, key: selectionKey });
   const pinnedKey = steerAt.steer === steer ? steerAt.key : selectionKey;
   const imageSteer = steer === "image" && pinnedKey === selectionKey;
-  const kind: InspectorKind = hasContent
-    ? "text"
-    : hasImage
-      ? "image"
-      : hasElement
-        ? imageSteer
-          ? "image"
-          : "frame"
-        : (steer ?? "none");
+  // Anchors selected inside the path being edited: the points, not the
+  // frame (the UX strategy's §7.1).
+  const pointsSelected =
+    pathEditMode && pathEditSession !== null && selectedAnchors.length > 0;
+  const kind: InspectorKind = pointsSelected
+    ? "points"
+    : hasContent
+      ? "text"
+      : hasImage
+        ? "image"
+        : hasElement
+          ? imageSteer
+            ? "image"
+            : "frame"
+          : (steer ?? "none");
 
   // A group is not a frame: InDesign names it "Group". A selection of
   // groups and frames together is named for both.
@@ -194,7 +216,9 @@ export function PropertiesPanel() {
           ? noun
           : kind === "page"
             ? strings.t(M.page)
-            : strings.t(M.properties));
+            : kind === "points"
+              ? strings.t(M.points)
+              : strings.t(M.properties));
 
   // The gallery's selection sub-header — "Text · 1 frame", "Group · 2
   // objects" (a lone group counts what is in it).
@@ -209,13 +233,15 @@ export function PropertiesPanel() {
         .filter(Boolean)
         .join(", ");
   const selectionLabel =
-    kind === "text"
-      ? strings.t(M.textSelection)
-      : hasElement
-        ? [kind === "image" ? strings.t(M.image) : noun, counted]
-            .filter(Boolean)
-            .join(" · ")
-        : null;
+    kind === "points"
+      ? null
+      : kind === "text"
+        ? strings.t(M.textSelection)
+        : hasElement
+          ? [kind === "image" ? strings.t(M.image) : noun, counted]
+              .filter(Boolean)
+              .join(" · ")
+          : null;
 
   const typeSections = hasContent ? (
     <>
@@ -302,6 +328,12 @@ export function PropertiesPanel() {
 
         {kind === "page" && <PageSummary />}
 
+        {kind === "points" && (
+          <div className="p-3 pt-0">
+            <AnchorPointsSection session={pathEditSession} />
+          </div>
+        )}
+
         <div className="p-3 pt-0 flex flex-col gap-3">
           {/* PN-22 (UX F-37): with a caret or a text range the type
               settings lead, as InDesign's Properties panel puts Character
@@ -337,7 +369,7 @@ export function PropertiesPanel() {
               <PanelHost id={metadataOwner.panelIds[0]} />
             </div>
           ) : null}
-          {hasElement ? (
+          {hasElement && kind !== "points" ? (
             <div data-properties-section="object">
               <CompositionRenderer
                 composition={objectTransformComposition(strings)}
@@ -360,10 +392,15 @@ export function PropertiesPanel() {
               {strings.t(M.noImage)}
             </div>
           ) : null}
-          {hasElement ? (
+          {hasElement && kind !== "points" ? (
             <div data-properties-section="stroke">
               <CompositionRenderer composition={strokeComposition(strings)} />
             </div>
+          ) : null}
+          {kind === "frame" &&
+          elementSelection.length === 1 &&
+          SHAPE_KINDS.has(elementSelection[0].kind) ? (
+            <ShapeSuggestionsSection id={elementSelection[0]} />
           ) : null}
           {hasContent && kind !== "text" ? typeSections : null}
         </div>

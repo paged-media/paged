@@ -3212,7 +3212,7 @@
     },
     {
       "id": "tool.pen",
-      "title": "Pen: clicks set corner anchors, drags set curves, Enter or the first anchor finishes",
+      "title": "Pen: clicks set corner anchors, drags set curves, Enter, the first anchor or the last anchor finishes",
       "owner": "canvas-draw",
       "eventClass": "pointer:primary-click",
       "scope": "canvas/tool:pen",
@@ -3228,11 +3228,11 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape cancels the path in progress through the spine's key path; Enter commits one insertPath.",
+      "cancel": "Escape cancels the path in progress through the spine's key path; Enter or a click on the run's last anchor commits one insertPath; Control shows the precision magnifier, which only reads.",
       "surfaceIds": ["tool:paged.tool.pen"],
-      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004", "UXI-DRW-006"],
       "status": "legacy",
-      "notes": "The Pen returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
+      "notes": "The Pen names its state (start, draw, continue, close, join, dragHandle, finish, add, delete) with a cursor and a hint beside the pointer (paged.draw ADR 370). It returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
     },
     {
       "id": "tool.pencil",
