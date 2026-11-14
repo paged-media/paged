@@ -104,6 +104,24 @@ export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
 export { snapBypassHeld } from "./tools/snap-bypass";
 export { hoverPreselectContribution } from "./overlays/hover-preselect";
+// Editor ADRs 1240, 1241 — what a previewed change will touch, outlined.
+export { previewTargetsContribution } from "./overlays/preview-targets";
+export {
+  clearPreviewTargets,
+  previewTargetsStore,
+  showPreviewTargets,
+  type PreviewTargets,
+} from "./state/preview-targets";
+export {
+  MODIFIER_HINTS_ALWAYS_KEY,
+  MODIFIER_HINTS_COMMAND,
+  MODIFIER_HINTS_USES_KEY,
+  MODIFIER_HINT_USES,
+  ModifierHints,
+  builtInHints,
+  modifierHintsAlways,
+  setModifierHintsAlways,
+} from "./overlays/modifier-hints";
 export {
   nextAbove,
   nextBelow,
@@ -271,6 +289,7 @@ export {
   heldTypingStyle,
   pinToPage,
   useContentSelection,
+  useOptionalContentSelection,
   type PagePin,
   type TypingStyle,
 } from "./state/content-selection-context";
@@ -596,12 +615,20 @@ export {
   type FrameLevelId,
 } from "./state/frame-content";
 export { FrameLevelControl } from "./chrome/FrameLevelControl";
+// Extensions ADR 1111 — what the document's pages are called.
+export {
+  capitalise,
+  declaredPageNoun,
+  useDeclaredPageNoun,
+  type PageNoun,
+} from "./state/page-noun";
 export { pageToContentPoint } from "./state/content-point";
 export {
   ContextTrail,
   EditContextBreadcrumb,
 } from "./chrome/EditContextBreadcrumb";
 export {
+  readEnvelope,
   useEditContextEntry,
   type DoubleClickHit,
 } from "./state/use-edit-context-entry";
@@ -687,6 +714,21 @@ export {
 export { SaveStateController } from "./state/save-state-controller";
 export { SaveStatus, saveStatusLabel } from "./chrome/SaveStatus";
 export { openLibraryDocument } from "./state/open-library-document";
+// Editor ADR 1235 — the layout variant the open document is.
+export {
+  currentLibraryRef,
+  setCurrentLibraryRef,
+} from "./state/library-document";
+// Editor ADR 1236 — the publication's readiness against its contract.
+export {
+  publicationReadinessOf,
+  setPublicationReadiness,
+  setReadinessOpener,
+  usePublicationReadiness,
+  type PublicationReadiness,
+  type ReadinessLevel as PublicationReadinessLevel,
+} from "./state/publication-readiness";
+export { ReadinessBadge } from "./chrome/ReadinessBadge";
 // Editor ADR "Operation feedback" — how an operation ended, said once:
 // inline, the one toast channel, or Problems (UXI-FBK-001/002,
 // UXI-ASY-009/010/011).

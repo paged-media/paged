@@ -70,6 +70,8 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   oversetMarkers: true,
   hiddenCharacters: false,
   nonprinting: true,
+  // Editor ADR 1233.
+  constraints: true,
 };
 
 describe("view toggles", () => {
@@ -160,6 +162,8 @@ describe("view toggles", () => {
       "setting:view.nonprinting",
       // Data ADR 566 — the binding badges are an editing aid.
       "setting:view.dataMarkers",
+      // Editor ADR 1233 — the design constraints' glyphs.
+      "setting:view.constraints",
     );
     const storage = memoryStorage();
     const before = createEditorScope();
@@ -178,6 +182,7 @@ describe("view toggles", () => {
       hiddenCharacters: false,
       nonprinting: true,
       dataMarkers: true,
+      constraints: true,
     });
     const after = createEditorScope();
     setEditorStorage(after, storage);

@@ -178,6 +178,8 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       "command:paged.view.toggleOversetMarkers",
       "command:paged.view.toggleHiddenCharacters",
       "command:paged.view.toggleNonprinting",
+      // Editor ADR 1233.
+      "command:paged.view.toggleConstraints",
     );
     const { registry, scope } = harness();
     for (const [id, toggle] of [
@@ -190,6 +192,7 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       // hides nonprinting items on screen.
       ["paged.view.toggleHiddenCharacters", "hiddenCharacters"],
       ["paged.view.toggleNonprinting", "nonprinting"],
+      ["paged.view.toggleConstraints", "constraints"],
     ] as const) {
       expect(isEnabled(registry.get(id)?.when, () => null)).toBe(true);
       const before = getViewToggle(scope, toggle);
@@ -215,6 +218,7 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       "Hidden characters",
       "Nonprinting items",
       "Data bindings",
+      "Design constraints",
     ]);
     for (const r of rows)
       expect({

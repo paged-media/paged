@@ -26,9 +26,13 @@ import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useDocument } from "../state/document-context";
 import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
 import { useEditorScope } from "../state/editor-scope";
+import { capitalise, useDeclaredPageNoun } from "../state/page-noun";
 
 const M = defineMessages("shell.pageDecorations", {
   caption: "Page {n}",
+  /** Under the noun the document declares for its pages (extensions ADR
+   *  1111): "Slide 3". */
+  captionNamed: "{noun} {n}",
 });
 
 /** The pasteboard a caption needs under its page, CSS px. */
@@ -77,6 +81,7 @@ export function captionPlace(
 function PageDecorationsRender(props: OverlayProps) {
   const { resolution } = useDocument();
   const scope = useEditorScope();
+  const noun = useDeclaredPageNoun();
   const showAnchors = useSyncExternalStore(
     (l) => subscribeViewToggles(scope, l),
     () => getViewToggle(scope, "headingAnchors"),
@@ -106,7 +111,9 @@ function PageDecorationsRender(props: OverlayProps) {
           fontFamily="var(--font-sans)"
           fill="var(--pg-muted-fg)"
         >
-          {t(M.caption, { n: i + 1 })}
+          {noun
+            ? t(M.captionNamed, { noun: capitalise(noun.one), n: i + 1 })
+            : t(M.caption, { n: i + 1 })}
         </text>
       </g>,
     );

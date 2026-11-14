@@ -271,7 +271,20 @@ holds the canvas's cursor in layers — the session's (a handle's for the whole 
 closed hand while panning), a modifier's (the copy cursor while an Alt move duplicates), the
 hover's and the tool's — and is the only writer of it; the scrub fields, the loaded thread and an
 armed placement write theirs through the same two functions, and the single-owner rule
-`cursor-write` keeps it so.
+`cursor-write` keeps it so. The Pen's nine states are on it: eight through the hover, and the
+handle being pulled through the session layer for the whole of the press (ADR 1227, amendment;
+paged.draw ADR 370, amendment).
+
+Modifier hints (IC10; extensions ADR 1109): a strip over the canvas names what the modifiers do
+with the tool in hand — the host's words for the Selection tools and the shape tools, a handler's
+own through the contract's new `GestureHandler.modifierHints` (the Pen names its own) — and
+lights the key held. It shows for a tool's first five uses and then recedes; Edit ▸ Settings ▸
+Keep modifier hints visible keeps it (`paged.modifierHints.always`; the uses are
+`paged.modifierHints.uses`).
+
+The Pen stays the Pen after it closes a path and the next clicks start another one, each path one
+undo step; deleting two selected points of a path removes only them, in one undo step (IC11,
+`UXI-T17`, `UXI-T18`; UX audit F-35). Track IC is complete: every UXI acceptance test is claimed.
 
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
@@ -313,6 +326,11 @@ changes — pixels, a non-destructive adjustment, smart, fill or type layer, the
 picture frame's Content level) the placement; the filter dialog shows a before/after split and
 says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
 panel shows the picture's own pixels at 100–800 %.
+paged.slide (ADR 725 in its range; extensions ADR 1111; UX audit F-47): a deck's pages are
+slides — the module declares the noun on its document context, and the document map, the page
+lenses, the captions beside the pages and the palette's Go to say "Slide 3" (no "Cover"); in the
+Slides panel a slide's actions show on the slide in view or under the pointer, not under every
+thumbnail.
 paged.web (ADR 416): the Web source panel inspects the element in focus — picked on the canvas
 or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
 rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts
@@ -340,7 +358,9 @@ and their page items, each row named with its type, name, page and whether it is
 hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
 the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
 and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping objects. Every text
-token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
+token meets 4.5:1 in both themes, the outline that identifies a field, a checkbox or an
+outlined button meets 3:1 on every surface (ADR 1231, amendment 2026-11-14), menu hints are no
+longer faded (F-51), and a high-contrast
 variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
 7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
 ([ADR 1231](adr/1231-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
@@ -353,6 +373,63 @@ nightly ([ADR 1232](adr/1232-performance-budgets.md),
 viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
 engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
 yet (inventory exception `EXC-003`).
+
+Track PX (the strategy's Phase 3 concepts), design constraints
+([ADR 1233](adr/1233-constraints-are-validated-intent.md), PX3): Object ▸ Add constraint… (and the
+canvas context menu) keeps an intent of the selection in the document — aligned edges, centres or
+first baselines to a key object, even spacing, a minimum gap, at most so many lines, text that
+must fit, an edge on a page margin — as the document label `x-paged:constraints`, which a `.paged`
+save and an IDML export keep. Each constraint is evaluated after every change, the pages in view
+first, deterministically from the engine's own geometry, lines and overset; one that does not hold
+is an issue in Publication health whose fix says what it will do, draws where it will put things
+while it has the pointer or the focus, and applies as one undo step. Nothing moves by itself. The
+constraints draw as faint glyphs (View ▸ Editing aids ▸ Design constraints) and are listed in
+Window ▸ Output ▸ Design constraints.
+Publication time travel ([ADR 1234](adr/1234-named-checkpoints.md), PX7): the Library panel shows
+the document's timeline — the import, the checkpoints the user names with Save checkpoint…, one
+after every export and one before an operation that replaces the open document — as commits on
+the person's own checkpoints ref, so keeping one never moves the saved version. A checkpoint
+previews read-only, compares with the open document side by side (the regions that differ boxed,
+the frames, pictures, text, formatting and styles that changed listed) in a second engine, and
+restores as a new version with the open state kept first. Bounded as the recovery journal is.
+The publication contract ([ADR 1236](adr/1236-the-publication-contract.md), PX8): Window ▸ Output ▸
+Publication contract keeps the publication's requirements with the document — PDF standard, trim
+size, bleed, output intent and profile, no RGB pictures, fonts, resolution, complete data — and
+its approval. The document is assessed against it continuously, with the export's own readiness
+check and the contract's additions; the header shows Blocked, Needs attention, Ready or Approved
+beside the save status, and an unmet requirement is an issue where it stands. Approving is an
+explicit step that keeps the approved state on the timeline; an edit after it reads "Approved,
+then edited".
+Layout variants ([ADR 1235](adr/1235-layout-variants.md), PX5): Window ▸ Object & Layout ▸ Layout
+variants branches the open layout into named alternatives on the document's own repository (no
+file duplicated); an open variant takes the saves while main stays as it was; any two layouts
+compare side by side; Make main makes a variant the main layout as a new version; and Apply shared
+changes to variants… previews, per variant, the styles and pictures main changed that the variant
+did not, then applies them — the variant's own changes are kept.
+Visual action automation ([ADR 1240](adr/1240-actions-record-what-you-meant.md), PX4): a
+recorded step keeps the selection it acted on as an intent and the edit context it ran in, and a
+panel field's commit (a font size, a style, a color) records as a step on the selection, so an
+action recorded in one document runs on another document's selection. An action has parameters,
+is kept for the user or in the document (the label `x-paged:actions`), and is previewed before it
+runs: the steps with the objects each acts on, outlined on the canvas, and how it undoes (one
+step, or how many and why). A command, an object, a context, a selection or a value that does not
+hold refuses the run by step and reason, and nothing runs; a step that no longer applies when it
+is reached stops the run and takes it back. Every saved action is a palette entry ("Run action:
+…"), an `actions@1` action and a `paged.*` script.
+The assistant proposes, the user approves ([ADR 1241](adr/1241-the-assistant-proposes-you-approve.md),
+PX6): a request to Claude first shows what will leave the device and is sent only on Send, every
+time; Claude then only reads (a read-only `propose` mode) and answers a change set of ordinary
+property writes, which the panel previews — each object, its value now and proposed, and why,
+outlined on the canvas — with nothing changed; Apply writes the ticked ones as one undo step, and
+the panel's Undo takes exactly that step back. The checks on this device (small text, contrast,
+alternative text, sizes that override their style) propose the same way and are what the panel
+offers without an AI service. The Script panel's own Ask bar is unchanged.
+Every object answers the same verbs ([ADR 1242](adr/1242-every-object-answers-the-same-verbs.md),
+PX9): Inspect, Transform…, Copy, Bind to data…, Style…, Save a version, Validate and Export… are
+the canvas context menu's first group (also inside a module's frame) and palette entries, on a
+selection or inside any context; each runs the module's own where its context names one (sheet:
+Copy, Export; image: Transform, Save a version, Export; data: Bind to data) and the editor's
+otherwise.
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

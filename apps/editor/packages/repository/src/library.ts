@@ -28,6 +28,11 @@
 //   repos/<id>/packs/<n>.pack   objects, append-only
 //   repos/<id>/packs/<n>.idx    written AFTER its pack: a pack with no index
 //                               is a write that did not finish, and is ignored
+//   repos/<id>/checkpoints.json the named points of its timeline (editor ADR
+//                               1234): commits on the `checkpoints` ref, or
+//                               an import's first version
+//   repos/<id>/variants.json    its layout variants (editor ADR 1235): each
+//                               a draft ref branched from main
 
 import type { RepoFs } from "./fs.ts";
 
@@ -202,6 +207,125 @@ export interface CommitInfo {
   imported_from?: string;
 }
 
+/** The line of history checkpoints are committed on: a draft ref of the
+ *  library's person (`drafts/<owner>/checkpoints`; the repository's ref
+ *  families are main, drafts, agents' runs and releases), never main, so
+ *  keeping a checkpoint never moves the saved version (a checkpoint is no
+ *  save; editor ADRs 1204 and 1234). */
+export function checkpointRef(owner: string): string {
+  return `drafts/${owner}/checkpoints`;
+}
+/** Automatic checkpoints kept per document; older ones leave the timeline. */
+export const MAX_AUTO_CHECKPOINTS = 20;
+/** Named checkpoints a document keeps; one more is refused. */
+export const MAX_NAMED_CHECKPOINTS = 100;
+/** A checkpoint larger than this is not kept (the recovery journal's rule). */
+export const MAX_CHECKPOINT_BYTES = 256 * 1024 * 1024;
+
+/** Why a checkpoint was kept: named by the person; kept automatically at an
+ *  import, an export or before an operation that replaces the document; or
+ *  the state a publication was approved in. */
+export type CheckpointKind =
+  "named" | "import" | "export" | "before" | "approved";
+
+/** One point of a document's timeline. */
+export interface CheckpointEntry {
+  id: string;
+  name: string;
+  kind: CheckpointKind;
+  /** Kept automatically (and pruned beyond `MAX_AUTO_CHECKPOINTS`). */
+  auto: boolean;
+  /** The version it names (a commit address). */
+  commit: string;
+  ts: number;
+  /** The document's page count then, when the caller knew it. */
+  pages?: number;
+}
+
+const CHECKPOINT_KINDS: readonly CheckpointKind[] = [
+  "named",
+  "import",
+  "export",
+  "before",
+  "approved",
+];
+
+/** One entry of `checkpoints.json`, shape-checked (ADR 247): an entry that
+ *  cannot be read is left out. */
+function readCheckpoint(v: unknown): CheckpointEntry | null {
+  if (!v || typeof v !== "object") return null;
+  const e = v as Record<string, unknown>;
+  if (typeof e.id !== "string" || typeof e.name !== "string") return null;
+  if (!CHECKPOINT_KINDS.includes(e.kind as CheckpointKind)) return null;
+  if (typeof e.commit !== "string" || !/^[0-9a-f]{64}$/.test(e.commit))
+    return null;
+  if (typeof e.ts !== "number" || !Number.isFinite(e.ts)) return null;
+  const out: CheckpointEntry = {
+    id: e.id,
+    name: e.name,
+    kind: e.kind as CheckpointKind,
+    auto: e.auto === true,
+    commit: e.commit,
+    ts: e.ts,
+  };
+  if (typeof e.pages === "number" && Number.isInteger(e.pages) && e.pages >= 0)
+    out.pages = e.pages;
+  return out;
+}
+
+/** Why a checkpoint was not kept. */
+export class CheckpointRefused extends Error {
+  readonly reason: "too-large" | "too-many";
+  constructor(reason: "too-large" | "too-many") {
+    super(`checkpoint refused: ${reason}`);
+    this.reason = reason;
+  }
+}
+
+/** A layout variant's ref: a draft of the library's person,
+ *  `drafts/<owner>/variants/<slug>`, branched from main (editor ADR 1235). */
+export function variantRef(owner: string, slug: string): string {
+  return `drafts/${owner}/variants/${slug}`;
+}
+
+/** One layout variant of a document. */
+export interface VariantEntry {
+  slug: string;
+  name: string;
+  /** Its ref, and the version it holds now (null: none yet). */
+  ref: string;
+  head: string | null;
+  createdAt: number;
+  /** Main's version when it was branched: what "shared changes since"
+   *  are measured from. */
+  base: string;
+}
+
+function readVariant(v: unknown): Omit<VariantEntry, "ref" | "head"> | null {
+  if (!v || typeof v !== "object") return null;
+  const e = v as Record<string, unknown>;
+  if (typeof e.slug !== "string" || !/^[a-z0-9-]{1,48}$/.test(e.slug))
+    return null;
+  if (typeof e.name !== "string" || !e.name.trim()) return null;
+  if (typeof e.base !== "string" || !/^[0-9a-f]{64}$/.test(e.base)) return null;
+  if (typeof e.createdAt !== "number") return null;
+  return { slug: e.slug, name: e.name, base: e.base, createdAt: e.createdAt };
+}
+
+/** A variant's slug from its name, unique among `taken`. */
+export function variantSlug(name: string, taken: ReadonlySet<string>): string {
+  const base =
+    name
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "variant";
+  let slug = base;
+  for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+  return slug;
+}
+
 export interface EvidenceInfo {
   seq: number;
   ts: number;
@@ -350,8 +474,15 @@ export class Library {
     await this.fs.write(`${dir}/meta.json`, enc.encode(JSON.stringify(o.meta)));
   }
 
-  /** Opens a file as a new document. A file that carries its history brings it. */
-  importFile(bytes: Uint8Array, name: string): Promise<DocumentEntry> {
+  /** Opens a file as a new document. A file that carries its history brings
+   *  it. The import is the first point of its timeline ("Imported <file>",
+   *  editor ADR 1234) unless `checkpoint` is false (a blank document's first
+   *  save is no import). */
+  importFile(
+    bytes: Uint8Array,
+    name: string,
+    options: { checkpoint?: boolean } = {},
+  ): Promise<DocumentEntry> {
     return this.serial(async () => {
       const id = this.newId();
       const now = this.now();
@@ -366,24 +497,249 @@ export class Library {
       o.repo.importFile(bytes, name, MAIN, this.owner, now);
       await this.persist(o);
       this.open.set(id, o);
+      if (options.checkpoint !== false && o.meta.head)
+        await this.writeCheckpoints(id, [
+          ...(await this.readCheckpoints(id)),
+          {
+            id: this.newId(),
+            name,
+            kind: "import",
+            auto: true,
+            commit: o.meta.head,
+            ts: now,
+          },
+        ]);
       return o.meta;
     });
   }
 
-  /** Commits a save. Returns the head and whether this save made a commit. */
+  private async readCheckpoints(id: string): Promise<CheckpointEntry[]> {
+    const bytes = await this.fs.read(`repos/${id}/checkpoints.json`);
+    if (!bytes) return [];
+    try {
+      const parsed = JSON.parse(dec.decode(bytes)) as { checkpoints?: unknown };
+      return Array.isArray(parsed.checkpoints)
+        ? parsed.checkpoints
+            .map(readCheckpoint)
+            .filter((c): c is CheckpointEntry => c !== null)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Writes the timeline, keeping the newest `MAX_AUTO_CHECKPOINTS`
+   *  automatic checkpoints (named ones stay until removed). */
+  private async writeCheckpoints(
+    id: string,
+    list: CheckpointEntry[],
+  ): Promise<CheckpointEntry[]> {
+    let autos = list.filter((c) => c.auto).length;
+    const kept = list.filter((c) => {
+      if (!c.auto || autos <= MAX_AUTO_CHECKPOINTS) return true;
+      autos--;
+      return false;
+    });
+    await this.fs.write(
+      `repos/${id}/checkpoints.json`,
+      enc.encode(JSON.stringify({ v: 1, checkpoints: kept })),
+    );
+    return kept;
+  }
+
+  /** The document's timeline, oldest first. */
+  checkpoints(id: string): Promise<CheckpointEntry[]> {
+    return this.serial(() => this.readCheckpoints(id));
+  }
+
+  /** Keeps `bytes` (the open document's state, saved or not) as a point of
+   *  the timeline: a commit on `checkpointRef`, never on main. Bounded: a
+   *  checkpoint over `MAX_CHECKPOINT_BYTES` is refused, a named one beyond
+   *  `MAX_NAMED_CHECKPOINTS` too, and automatic ones beyond
+   *  `MAX_AUTO_CHECKPOINTS` leave the timeline oldest first. A state equal to
+   *  the newest checkpoint's makes no new commit. */
+  checkpoint(
+    id: string,
+    bytes: Uint8Array,
+    entry: { name: string; kind: CheckpointKind; pages?: number },
+  ): Promise<CheckpointEntry> {
+    return this.serial(async () => {
+      if (bytes.length > MAX_CHECKPOINT_BYTES)
+        throw new CheckpointRefused("too-large");
+      const auto = entry.kind !== "named" && entry.kind !== "approved";
+      const list = await this.readCheckpoints(id);
+      if (!auto && list.filter((c) => !c.auto).length >= MAX_NAMED_CHECKPOINTS)
+        throw new CheckpointRefused("too-many");
+      const o = await this.load(id);
+      const now = this.now();
+      const commit = await this.faulting(o, () =>
+        o.repo.save(
+          bytes,
+          checkpointRef(this.owner),
+          this.owner,
+          `Checkpoint: ${entry.name}`,
+          now,
+        ),
+      );
+      o.repo.record(this.owner, "checkpoint", entry.name, "ok", now);
+      await this.persist(o);
+      const made: CheckpointEntry = {
+        id: this.newId(),
+        name: entry.name,
+        kind: entry.kind,
+        auto,
+        commit,
+        ts: now,
+        ...(entry.pages !== undefined ? { pages: entry.pages } : {}),
+      };
+      await this.writeCheckpoints(id, [...list, made]);
+      return made;
+    });
+  }
+
+  /** Takes a checkpoint off the timeline. Its version stays in the
+   *  repository's history (nothing rewinds). */
+  removeCheckpoint(id: string, checkpointId: string): Promise<void> {
+    return this.serial(async () => {
+      const list = await this.readCheckpoints(id);
+      await this.writeCheckpoints(
+        id,
+        list.filter((c) => c.id !== checkpointId),
+      );
+    });
+  }
+
+  /** Makes a checkpoint's state current again as a NEW version of main
+   *  ("Restore …"): the versions after it stay in the history. */
+  restoreCheckpoint(id: string, checkpointId: string): Promise<string> {
+    return this.serial(async () => {
+      const c = (await this.readCheckpoints(id)).find(
+        (x) => x.id === checkpointId,
+      );
+      if (!c) throw new Error(`no checkpoint ${checkpointId}`);
+      const o = await this.load(id);
+      const head = await this.faulting(o, () =>
+        o.repo.restore(c.commit, MAIN, this.owner, this.now()),
+      );
+      await this.persist(o);
+      return head;
+    });
+  }
+
+  /** Commits a save on `ref` (main, or the layout variant that is open,
+   *  editor ADR 1235). Returns the ref's head and whether this save made a
+   *  commit. */
   save(
     id: string,
     bytes: Uint8Array,
     message = "Save",
+    ref = MAIN,
   ): Promise<{ head: string; changed: boolean }> {
     return this.serial(async () => {
       const o = await this.load(id);
-      const before = o.meta.head;
+      const before =
+        (JSON.parse(o.repo.refs()) as Record<string, string>)[ref] ?? null;
       const head = await this.faulting(o, () =>
-        o.repo.save(bytes, MAIN, this.owner, message, this.now()),
+        o.repo.save(bytes, ref, this.owner, message, this.now()),
       );
       await this.persist(o);
       return { head, changed: head !== before };
+    });
+  }
+
+  private async readVariants(
+    id: string,
+  ): Promise<Array<Omit<VariantEntry, "ref" | "head">>> {
+    const bytes = await this.fs.read(`repos/${id}/variants.json`);
+    if (!bytes) return [];
+    try {
+      const parsed = JSON.parse(dec.decode(bytes)) as { variants?: unknown };
+      return Array.isArray(parsed.variants)
+        ? parsed.variants
+            .map(readVariant)
+            .filter((v): v is Omit<VariantEntry, "ref" | "head"> => v !== null)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async writeVariants(
+    id: string,
+    list: Array<Omit<VariantEntry, "ref" | "head">>,
+  ): Promise<void> {
+    await this.fs.write(
+      `repos/${id}/variants.json`,
+      enc.encode(JSON.stringify({ v: 1, variants: list })),
+    );
+  }
+
+  /** The document's layout variants, oldest first. */
+  variants(id: string): Promise<VariantEntry[]> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
+      return (await this.readVariants(id)).map((v) => {
+        const ref = variantRef(this.owner, v.slug);
+        return { ...v, ref, head: refs[ref] ?? null };
+      });
+    });
+  }
+
+  /** Branches a layout variant named `name` from main, holding `bytes`
+   *  (the open layout, saved or not). Shares main's history; no file is
+   *  duplicated (the repository stores each part once). */
+  createVariant(
+    id: string,
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<VariantEntry> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
+      const base = refs[MAIN];
+      if (!base) throw new Error("the document has no saved version yet");
+      const list = await this.readVariants(id);
+      const slug = variantSlug(name, new Set(list.map((v) => v.slug)));
+      const ref = variantRef(this.owner, slug);
+      const now = this.now();
+      if (!refs[ref])
+        await this.faulting(o, () => o.repo.branch(MAIN, ref, this.owner, now));
+      const head = await this.faulting(o, () =>
+        o.repo.save(bytes, ref, this.owner, `Variant: ${name}`, now),
+      );
+      await this.persist(o);
+      const entry = { slug, name: name.trim(), base, createdAt: now };
+      await this.writeVariants(id, [...list, entry]);
+      return { ...entry, ref, head };
+    });
+  }
+
+  /** Makes a variant the main layout as a NEW version of main: main's
+   *  versions stay in its history, the variant stays a variant. */
+  promoteVariant(id: string, slug: string): Promise<string> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const ref = variantRef(this.owner, slug);
+      const head = (JSON.parse(o.repo.refs()) as Record<string, string>)[ref];
+      if (!head) throw new Error(`no variant ${slug}`);
+      const now = this.now();
+      const main = await this.faulting(o, () =>
+        o.repo.restore(head, MAIN, this.owner, now),
+      );
+      o.repo.record(this.owner, "promote-variant", ref, "ok", now);
+      await this.persist(o);
+      return main;
+    });
+  }
+
+  /** Takes a variant off the list. Its versions stay in the history. */
+  removeVariant(id: string, slug: string): Promise<void> {
+    return this.serial(async () => {
+      await this.writeVariants(
+        id,
+        (await this.readVariants(id)).filter((v) => v.slug !== slug),
+      );
     });
   }
 

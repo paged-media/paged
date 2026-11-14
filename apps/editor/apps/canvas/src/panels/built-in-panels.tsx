@@ -115,6 +115,9 @@ import { HistoryPanel } from "./history-panel";
 import { GenerateImagePanel } from "./generate-image-panel";
 import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
+import { ConstraintsPanel } from "./constraints-panel";
+import { ContractPanel } from "./contract-panel";
+import { VariantsPanel } from "./variants-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
 import { PreflightPanel } from "./cockpit/preflight-panel";
@@ -231,6 +234,9 @@ const M = defineMessages("app.builtInPanels", {
   data: "Data",
   history: "History",
   library: "Library",
+  constraints: "Design constraints",
+  contract: "Publication contract",
+  variants: "Layout variants",
   table: "Table",
   tabs: "Tabs",
   glyphs: "Glyphs",
@@ -330,6 +336,28 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "left",
     defaultGroup: "cockpit",
     icon: "ui-warn",
+  },
+  {
+    // Editor ADR 1236 — the publication contract and its readiness.
+    id: "paged.publication-contract",
+    get title() {
+      return t(M.contract);
+    },
+    component: ContractPanel,
+    defaultDock: "left",
+    defaultGroup: "cockpit",
+    icon: "ui-target",
+  },
+  {
+    // Editor ADR 1233 — the document's design constraints.
+    id: "paged.constraints",
+    get title() {
+      return t(M.constraints);
+    },
+    component: ConstraintsPanel,
+    defaultDock: "left",
+    defaultGroup: "cockpit",
+    icon: "ui-target",
   },
   {
     id: "paged.stories",
@@ -1299,6 +1327,15 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: DataPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
+  },
+  {
+    // Editor ADR 1235 — the layout's variants, on the library's refs.
+    id: "paged.variants",
+    get title() {
+      return t(M.variants);
+    },
+    component: VariantsPanel,
+    defaultDock: "right",
   },
   {
     // ADR 180 — the local library: this document's versions (save = a

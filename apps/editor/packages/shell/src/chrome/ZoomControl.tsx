@@ -187,7 +187,7 @@ const groupStyle = {
   alignItems: "center",
   height: 26,
   borderRadius: "var(--radius-md)",
-  border: "1px solid var(--pg-border)",
+  border: "1px solid var(--pg-control-border)",
   overflow: "hidden",
 } as const;
 

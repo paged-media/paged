@@ -420,7 +420,7 @@ const hexInput: CSSProperties = {
   flex: 1,
   fontSize: 11,
   padding: "2px 6px",
-  border: "1px solid var(--chrome-divider)",
+  border: "1px solid var(--pg-control-border)",
   borderRadius: 3,
   fontFamily: "var(--font-mono)",
   background: "var(--elevated)",
@@ -431,7 +431,7 @@ const footBtn: CSSProperties = {
   fontSize: 11,
   padding: "3px 8px",
   borderRadius: 4,
-  border: "1px solid var(--chrome-divider)",
+  border: "1px solid var(--pg-control-border)",
   background: "var(--elevated)",
   cursor: "pointer",
 };

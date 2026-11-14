@@ -76,3 +76,26 @@ was not read.
   the muted tokens; their local baselines are regenerated when next run.
 - A Windows "forced colors" mode is not specifically styled: the browser's forced palette
   applies, and the overlays keep their strokes; a manual check belongs to gate G4.
+
+## Amendment (2026-11-14): a control's boundary meets 3:1 in the standard themes
+
+Owner decision. The second consequence above is narrowed: the boundary that identifies a
+component — a field's outline, a select, a checkbox, an outlined button, the zoom field, the
+search field — meets 3:1 against every surface it sits on in the dark and light themes (WCAG 2.2
+SC 1.4.11), not only in high contrast. Purely decorative hairlines that separate surfaces
+(`--border`, `--chrome-border`, `--chrome-divider`) stay quiet; high contrast still brings them to
+4.5:1.
+
+- `--paged-input` (shadcn's `--input`, behind every `border-input`) is 240 4 % 54 % in light
+  (3.3:1 on the tool rail, the lightest surface a field sits on; was 89 %, 1.3:1) and 240 5 % 49 %
+  in dark (3.2:1 on `--secondary`; was 22 %, 1.2:1).
+- A new resolved token, `--pg-control-border` (#85858e light, #777783 dark; the high-contrast
+  border in both high-contrast variants), is the boundary of the kit's own controls that draw
+  with inline styles: the numeric field's bar variant, the kit checkbox, the kit button's outlined
+  tone, the zoom field, the header's search field, the editing-aids control, the tool-options
+  fields and the colour mixer's fields. Two panels that wrote `var(--input)` as a colour (an
+  invalid value, since `--input` holds HSL channels) use it too.
+- `theme-contrast.test.ts` holds the control pairs (`--input` on the background, popover, muted
+  and secondary surfaces; `--pg-control-border` on the page, muted, elevated, panel and rail
+  surfaces) at 3:1 in both standard themes and 4.5:1 in high contrast;
+  `docs/theme-tokens.json` lists the new token.

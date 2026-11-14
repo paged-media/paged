@@ -34,7 +34,12 @@ export {
   EMPTY_LIBRARY,
   EMPTY_TALLY,
   NON_RECORDABLE_COMMANDS,
+  RUN_ACTION_PREFIX,
+  SET_PROPERTY_COMMAND,
   STOP_STEP_COMMAND,
+  stepsFromObjectWrite,
+  type ActionScope,
+  type ObservedSet,
   importRuleMatches,
   isStopStep,
   parseExtensions,
@@ -61,6 +66,57 @@ export {
   type StepVerdict,
   type UncapturedTally,
 } from "./model";
+
+export {
+  NO_SELECTION,
+  applyParams,
+  isObjectAddress,
+  isSelectionToken,
+  leafAt,
+  objectReferencesIn,
+  paramLabelOf,
+  parameterLeaves,
+  resolveSelection,
+  selectionTokensIn,
+  tokenizeSelection,
+  type ActionParam,
+  type PayloadKey,
+  type PayloadLeaf,
+  type SelectionAddresses,
+  type SelectionToken,
+  type SelectionTokenKind,
+} from "./intent";
+
+export {
+  planRun,
+  referencesOf,
+  stepName,
+  undoStatementText,
+  type CommandFacts,
+  type RunEnvironment,
+  type RunPlan,
+  type RunRefusal,
+  type RunStepPlan,
+  type UndoStatement,
+} from "./run-plan";
+
+export {
+  DOCUMENT_ACTIONS_LABEL,
+  documentActionsValue,
+  parseDocumentActions,
+} from "./document-store";
+
+export {
+  ACTIONS_DOOR_OWNER,
+  actionRevision,
+  definitionOf,
+  doorIdOf,
+  projectAction,
+  setActionsDoor,
+  toPagedScript,
+  type ActionProjection,
+  type ActionsDoorBackend,
+} from "./actions-door";
 
 export {
   ACTIONS_STORAGE_KEY,

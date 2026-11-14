@@ -175,6 +175,15 @@ describe("the Slides panel", () => {
     const second = view.container.querySelector<HTMLElement>(
       `[data-slide="${before[1]}"]`,
     )!;
+    // A slide that is not in view shows its actions while the pointer is
+    // on it, not under every thumbnail (slide ADR 725; F-47).
+    expect(
+      second.querySelector<HTMLElement>("[data-slide-actions]")!.hidden,
+    ).toBe(true);
+    await drive(() => fireEvent.pointerEnter(second));
+    expect(
+      second.querySelector<HTMLElement>("[data-slide-actions]")!.hidden,
+    ).toBe(false);
     await drive(() => fireEvent.click(button(second, "Delete slide")));
     expect(await d.pageIds()).toEqual(before.filter((p) => p !== before[1]));
     await drive(() => d.host.document.undo());

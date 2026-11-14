@@ -24,7 +24,12 @@ import { test } from "node:test";
 import { initSync, Repository } from "@paged-media/canvas-wasm/repo";
 
 import { memoryFs } from "../src/fs.ts";
-import { Library } from "../src/library.ts";
+import {
+  CheckpointRefused,
+  Library,
+  MAX_AUTO_CHECKPOINTS,
+  MAX_CHECKPOINT_BYTES,
+} from "../src/library.ts";
 import { crc32 } from "@paged-media/helpers";
 
 initSync({
@@ -229,4 +234,157 @@ test("a dataset is a repository of data parts, named by paged:// references", as
     /not in this library/,
   );
   await assert.rejects(lib.resolve("http://x/y"), /not a paged/);
+});
+
+// Editor ADR 1234 — named checkpoints: a timeline of named versions on the
+// document's repository, kept on their own ref so a checkpoint never moves
+// the saved version; bounded; a restore is a new version, never a rewind.
+test("PX7 — an import is the first checkpoint; checkpoints never move main", async () => {
+  const { fs, lib } = library();
+  const { id } = await lib.importFile(doc(noise(200_000, 30)), "annual.idml");
+  const main = (await lib.refs(id)).main;
+  let timeline = await lib.checkpoints(id);
+  assert.deepEqual(
+    timeline.map((c) => [c.name, c.kind, c.auto, c.commit]),
+    [["annual.idml", "import", true, main]],
+  );
+  // An unsaved state, kept by name: a commit on the checkpoints ref only.
+  const pass = await lib.checkpoint(id, doc(noise(200_000, 31)), {
+    name: "Typography pass",
+    kind: "named",
+    pages: 4,
+  });
+  assert.equal((await lib.refs(id)).main, main, "main does not move");
+  assert.equal(
+    (await lib.refs(id))["drafts/user:local/checkpoints"],
+    pass.commit,
+  );
+  assert.equal((await lib.log(id)).length, 1);
+  // The same state again makes no new version, only a new name.
+  const again = await lib.checkpoint(id, doc(noise(200_000, 31)), {
+    name: "Again",
+    kind: "named",
+  });
+  assert.equal(again.commit, pass.commit);
+  // From cold, the timeline and its states are there.
+  const fresh = library(fs).lib;
+  timeline = await fresh.checkpoints(id);
+  assert.deepEqual(
+    timeline.map((c) => c.name),
+    ["annual.idml", "Typography pass", "Again"],
+  );
+  assert.equal(timeline[1].pages, 4);
+  assert.deepEqual(
+    await fresh.exportPaged(id, pass.commit),
+    await lib.exportPaged(id, pass.commit),
+  );
+  // A blank document's first save is no import.
+  const blank = await lib.importFile(doc(noise(10, 32)), "Untitled.paged", {
+    checkpoint: false,
+  });
+  assert.deepEqual(await lib.checkpoints(blank.id), []);
+});
+
+test("PX7 — restoring a checkpoint is a new version; the versions after it stay", async () => {
+  const { lib } = library();
+  const { id } = await lib.importFile(doc(noise(100_000, 40)), "d.paged");
+  const first = await lib.exportPaged(id);
+  const [imported] = await lib.checkpoints(id);
+  await lib.save(id, doc(noise(100_000, 41)));
+  const head = await lib.restoreCheckpoint(id, imported.id);
+  const log = await lib.log(id);
+  assert.equal(log.length, 3, "import, save, restore: nothing rewound");
+  assert.equal(log[0].hash, head);
+  assert.match(log[0].message, /^Restore /);
+  assert.deepEqual(await lib.exportPaged(id), first);
+  await assert.rejects(lib.restoreCheckpoint(id, "nope"), /no checkpoint/);
+});
+
+test("PX7 — checkpoints are bounded: automatic ones pruned oldest first, a state too large refused", async () => {
+  const { lib } = library();
+  const { id } = await lib.importFile(doc(noise(1000, 50)), "d.paged");
+  await lib.checkpoint(id, doc(noise(1000, 51)), {
+    name: "Mine",
+    kind: "named",
+  });
+  for (let i = 0; i < MAX_AUTO_CHECKPOINTS + 3; i++)
+    await lib.checkpoint(id, doc(noise(1000, 60 + i)), {
+      name: `Exported ${i}`,
+      kind: "export",
+    });
+  const timeline = await lib.checkpoints(id);
+  assert.equal(timeline.filter((c) => c.auto).length, MAX_AUTO_CHECKPOINTS);
+  assert.ok(
+    timeline.some((c) => c.name === "Mine"),
+    "named ones stay",
+  );
+  assert.ok(!timeline.some((c) => c.kind === "import"), "the oldest went");
+  assert.equal(timeline.at(-1)?.name, `Exported ${MAX_AUTO_CHECKPOINTS + 2}`);
+  const huge = { length: MAX_CHECKPOINT_BYTES + 1 } as Uint8Array;
+  await assert.rejects(
+    lib.checkpoint(id, huge, { name: "Huge", kind: "named" }),
+    (e: unknown) => e instanceof CheckpointRefused && e.reason === "too-large",
+  );
+  // Removing one takes it off the timeline only.
+  const mine = timeline.find((c) => c.name === "Mine")!;
+  await lib.removeCheckpoint(id, mine.id);
+  assert.ok(!(await lib.checkpoints(id)).some((c) => c.id === mine.id));
+  assert.ok((await lib.exportPaged(id, mine.commit)).length > 0);
+});
+
+// Editor ADR 1235 — layout variants: branches of main on the person's draft
+// refs, sharing its history; saving a variant never moves main; promoting
+// one is a new version of main.
+test("PX5 — a variant branches from main, saves on its own ref, and promotes as a new version", async () => {
+  const { fs, lib } = library();
+  const { id } = await lib.importFile(doc(noise(300_000, 70)), "brochure.idml");
+  const main = (await lib.refs(id)).main;
+  const compact = await lib.createVariant(
+    id,
+    "Compact",
+    doc(noise(300_000, 71)),
+  );
+  assert.equal(compact.slug, "compact");
+  assert.equal(compact.ref, "drafts/user:local/variants/compact");
+  assert.equal(compact.base, main);
+  assert.equal((await lib.refs(id)).main, main, "main does not move");
+  // Its history starts with main's: shared, not duplicated.
+  const history = await lib.log(id, compact.ref);
+  assert.equal(history.length, 2);
+  assert.equal(history[1].hash, main);
+  // A save on the variant moves the variant only.
+  const saved = await lib.save(
+    id,
+    doc(noise(300_000, 72)),
+    "Save",
+    compact.ref,
+  );
+  assert.equal(saved.changed, true);
+  assert.equal((await lib.refs(id)).main, main);
+  // A second variant of the same name gets its own slug.
+  const again = await lib.createVariant(id, "Compact", doc(noise(300_000, 73)));
+  assert.equal(again.slug, "compact-2");
+  // From cold: both listed, with their heads.
+  const fresh = library(fs).lib;
+  assert.deepEqual(
+    (await fresh.variants(id)).map((v) => [v.name, v.slug, v.head]),
+    [
+      ["Compact", "compact", saved.head],
+      ["Compact", "compact-2", again.head],
+    ],
+  );
+  // Promote: the variant's state becomes main's newest version.
+  const variantBytes = await lib.exportPaged(id, compact.ref);
+  const head = await lib.promoteVariant(id, "compact");
+  const log = await lib.log(id);
+  assert.equal(log[0].hash, head);
+  assert.equal(log.length, 2, "import, then the promotion");
+  assert.deepEqual(await lib.exportPaged(id), variantBytes);
+  // Removing a variant takes it off the list; its versions stay.
+  await lib.removeVariant(id, "compact-2");
+  assert.deepEqual(
+    (await lib.variants(id)).map((v) => v.slug),
+    ["compact"],
+  );
+  assert.ok((await lib.exportPaged(id, again.head!)).length > 0);
 });

@@ -38,13 +38,16 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import {
+  capitalise,
   elementOfPlacement,
   useCanvasClient,
   useCollection,
   useDataRevision,
   useDataService,
+  useDeclaredPageNoun,
   useDocument,
   usePublicationIssues,
+  type PageNoun,
   type PublicationIssue,
 } from "@paged-media/shell";
 import type {
@@ -82,6 +85,8 @@ export const M = defineMessages("app.pageLenses", {
   storyMeta:
     "{chars, plural, one {# character} other {# characters}}{overset, select, true { · overset} other {}}",
   page: "Page {n}",
+  /** A page under the noun its document declares (extensions ADR 1111). */
+  pageNamed: "{noun} {n}",
   noLayer: "Layer",
   untitledLayer: "Layer {n}",
   hidden: "hidden",
@@ -146,6 +151,7 @@ export function LensTabs({
   onLens: (lens: LensId) => void;
 }) {
   const strings = useStrings();
+  const noun = useDeclaredPageNoun();
   return (
     <div
       role="tablist"
@@ -196,7 +202,7 @@ export function LensTabs({
             textOverflow: "ellipsis",
           }}
         >
-          {strings.t(M[id])}
+          {id === "pages" && noun ? capitalise(noun.other) : strings.t(M[id])}
         </button>
       ))}
     </div>
@@ -290,6 +296,18 @@ const ellipsis: CSSProperties = {
   textOverflow: "ellipsis",
 };
 
+/** "Page 3" — or "Slide 3" under the noun the document declares for its
+ *  pages (extensions ADR 1111). */
+export function pageWord(
+  strings: Strings,
+  noun: PageNoun | null,
+  n: string | number,
+): string {
+  return noun
+    ? strings.t(M.pageNamed, { noun: capitalise(noun.one), n })
+    : strings.t(M.page, { n });
+}
+
 /** The page number a reader sees for page `index`: its folio (the name
  *  InDesign shows, "iv", "A-2") when it has one, else its position. */
 export function pageLabel(
@@ -337,6 +355,7 @@ export function headingsOf(
 
 export function StructureLens({ query, actions }: LensProps) {
   const strings = useStrings();
+  const noun = useDeclaredPageNoun();
   const client = useCanvasClient();
   const { handle, resolution } = useDocument();
   const sections = useCollection<SectionSummary>("sections") ?? [];
@@ -389,7 +408,7 @@ export function StructureLens({ query, actions }: LensProps) {
           label={s.prefix || "§"}
           meta={
             s.startPageIndex != null
-              ? strings.t(M.page, { n: s.startPageIndex + 1 })
+              ? pageWord(strings, noun, s.startPageIndex + 1)
               : null
           }
           onClick={
@@ -406,7 +425,7 @@ export function StructureLens({ query, actions }: LensProps) {
           testId={`heading:${h.id}`}
           label={h.text}
           indent={h.level - 1}
-          meta={strings.t(M.page, { n: h.pageIndex + 1 })}
+          meta={pageWord(strings, noun, h.pageIndex + 1)}
           onClick={() => actions.goToPage(h.pageIndex)}
         />
       ))}
@@ -420,7 +439,7 @@ export function StructureLens({ query, actions }: LensProps) {
             key={b.selfId}
             testId={`bookmark:${b.selfId}`}
             label={b.name}
-            meta={index >= 0 ? strings.t(M.page, { n: index + 1 }) : null}
+            meta={index >= 0 ? pageWord(strings, noun, index + 1) : null}
             onClick={index >= 0 ? () => actions.goToPage(index) : undefined}
           />
         );
@@ -649,6 +668,7 @@ export function locatedFromIssues(
 
 export function IssuesLens({ query, actions }: LensProps) {
   const strings = useStrings();
+  const noun = useDeclaredPageNoun();
   const client = useCanvasClient();
   const { handle } = useDocument();
   const pages = useCollection<PageSummary>("pages") ?? [];
@@ -701,9 +721,11 @@ export function IssuesLens({ query, actions }: LensProps) {
           <Row
             key={p.pageIndex}
             testId={`page:${p.pageIndex}`}
-            label={strings.t(M.page, {
-              n: pageLabel(p.pageIndex, pages[p.pageIndex]),
-            })}
+            label={pageWord(
+              strings,
+              noun,
+              pageLabel(p.pageIndex, pages[p.pageIndex]),
+            )}
             meta={summary(p)}
             tone={errorTone(p)}
             onClick={() =>

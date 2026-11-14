@@ -181,7 +181,7 @@ const labelStyle: CSSProperties = { flex: 1 };
 const inputStyle: CSSProperties = {
   width: 72,
   padding: "2px 4px",
-  border: "1px solid var(--chrome-divider)",
+  border: "1px solid var(--pg-control-border)",
   borderRadius: 4,
   fontSize: 12,
 };

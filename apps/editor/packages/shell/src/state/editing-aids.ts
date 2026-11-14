@@ -59,6 +59,7 @@ export const EDITING_AID_LABELS = defineMessages("shell.editingAids", {
   hiddenCharacters: "Hidden characters",
   nonprinting: "Nonprinting items",
   dataMarkers: "Data bindings",
+  constraints: "Design constraints",
   control: "Editing aids",
   proofView: "Proof view",
 });
@@ -92,6 +93,8 @@ export const AID_OVERLAYS: Readonly<Record<string, EditingAidToggle>> = {
   "paged.overlay.oversetMarkers": "oversetMarkers",
   "paged.overlay.hiddenCharacters": "hiddenCharacters",
   "paged.overlay.dataMarkers": "dataMarkers",
+  // Editor ADR 1233 — the design constraints' glyphs.
+  "paged.overlay.constraints": "constraints",
 };
 
 /** The editing chrome Proof view hides as well as the aids: the

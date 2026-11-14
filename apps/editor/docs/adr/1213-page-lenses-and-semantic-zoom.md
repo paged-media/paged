@@ -82,6 +82,14 @@ which.
   names (a story has none; rows read "Story n"), unplaced data records (nowhere to go), and a
   zoom-dependent hit test.
 
+## Amendment (2026-11-14): a document names its pages
+
+The lenses, the document map's rows and search, and the captions beside the pages say the noun the
+open document declares for its pages (extensions ADR 1111): in a deck "Slides" (the Pages lens),
+"Slide 1" (no "Cover"), "Slides 2–3", "Search slides", "Slide 4" in the Structure and Issues
+lenses, "Slide 3" beside a slide on the canvas. A document without a declared noun reads as
+before.
+
 ## Related
 
 - [ADR 263](263-ruler-labels-thin-as-you-zoom-out.md) — amended: minor ticks in detail.

@@ -19,7 +19,9 @@
 // The Slides panel: the deck's slides in order as thumbnails. Click goes to
 // a slide, dragging reorders (movePage), and each slide can be duplicated,
 // deleted (its buttons, or Delete on the focused thumbnail) or hidden from
-// the slideshow. Every action is one engine
+// the slideshow — its buttons show on the slide in view and on the slide the
+// pointer or the keyboard is on, not under every thumbnail (slide ADR 725;
+// UX audit F-47). Every action is one engine
 // mutation, so one undo step. Display glue only: what a slide is comes
 // from SlidesStore.
 
@@ -193,6 +195,10 @@ export function makeSlidesPanel(
     const { observe: observeNear, has: isNear } = useNearViewport();
     const [dragging, setDragging] = React.useState<string | null>(null);
     const [over, setOver] = React.useState<number | null>(null);
+    // The slide the pointer is over, and the one holding keyboard focus:
+    // they show their actions (with the slide in view).
+    const [hovered, setHovered] = React.useState<string | null>(null);
+    const [focused, setFocused] = React.useState<string | null>(null);
     const slides = live.list();
     const active = live.activePage();
     const order = slides.map((s) => s.pageId);
@@ -218,6 +224,16 @@ export function makeSlidesPanel(
               data-near={slide.pageId}
               data-slide={slide.pageId}
               data-active={slide.pageId === active || undefined}
+              onPointerEnter={() => setHovered(slide.pageId)}
+              onPointerLeave={() =>
+                setHovered((h) => (h === slide.pageId ? null : h))
+              }
+              onFocus={() => setFocused(slide.pageId)}
+              onBlur={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node | null))
+                  return;
+                setFocused((f) => (f === slide.pageId ? null : f));
+              }}
               draggable
               onDragStart={(e) => {
                 setDragging(slide.pageId);
@@ -296,7 +312,21 @@ export function makeSlidesPanel(
                 >
                   <Thumb slide={slide} near={isNear(slide.pageId, i)} />
                 </button>
-                <div style={tools}>
+                <div
+                  data-slide-actions={slide.pageId}
+                  hidden={
+                    slide.pageId !== active &&
+                    slide.pageId !== hovered &&
+                    slide.pageId !== focused
+                  }
+                  style={
+                    slide.pageId !== active &&
+                    slide.pageId !== hovered &&
+                    slide.pageId !== focused
+                      ? { ...tools, display: "none" }
+                      : tools
+                  }
+                >
                   <button
                     type="button"
                     style={small}
