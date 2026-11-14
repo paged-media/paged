@@ -978,7 +978,7 @@ With text selected, ⌘⇧> (size up) left the size at 12 pt. No keybinding exis
 
 #### F-35 · The Pen tool drops back to Selection after each path
 
-> **Withdrawn (2026-10-19): does not reproduce.** The audit read `__canvas.activeTool`, a legacy test-handle field that reports `select` for every tool except Type. The editor's own tool state shows the Pen stays active after Enter. `tests/e2e/ux-audit-gestures.spec.ts` keeps this as a passing guard test. The original text follows for the record.
+> **Withdrawn (2026-10-19): does not reproduce.** The audit read `__canvas.activeTool`, a legacy test-handle field that reports `select` for every tool except Type. The editor's own tool state shows the Pen stays active after Enter. `tests/e2e/ux-audit-gestures.spec.ts` keeps this as a passing guard test. The original text follows for the record. Since IC11 (2026-11-14) `UXI-T17` (`tests/e2e/uxi-path.spec.ts`) holds it too, for a path closed on its first anchor as well as one ended with Enter, each path one undo step.
 
 **Severity:** polish · **Effort:** S · **Affects:** Illustrators.
 

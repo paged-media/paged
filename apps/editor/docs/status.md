@@ -277,6 +277,10 @@ lights the key held. It shows for a tool's first five uses and then recedes; Edi
 Keep modifier hints visible keeps it (`paged.modifierHints.always`; the uses are
 `paged.modifierHints.uses`).
 
+The Pen stays the Pen after it closes a path and the next clicks start another one, each path one
+undo step; deleting two selected points of a path removes only them, in one undo step (IC11,
+`UXI-T17`, `UXI-T18`; UX audit F-35). Track IC is complete: every UXI acceptance test is claimed.
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
