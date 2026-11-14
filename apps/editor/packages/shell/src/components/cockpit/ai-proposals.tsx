@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — the AI Assistant's checks, consent card and proposal
+// Editor ADR 1241 — the AI Assistant's checks, consent card and proposal
 // preview. The panel never changes the document on its own: the checks and
 // Claude PROPOSE (a change set of ordinary property writes), this view shows
 // each change with its object, the value now and the value proposed, and

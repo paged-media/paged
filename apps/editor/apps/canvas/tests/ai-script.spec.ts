@@ -154,7 +154,7 @@ test.describe("Script panel — Ask Claude", () => {
       return route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        // Editor ADR 1234: the assistant proposes; the palette's request
+        // Editor ADR 1241: the assistant proposes; the palette's request
         // runs in the read-only propose mode.
         body: toolCallTurn("propose_changes", {
           summary: "Set the frame's opacity to 40%.",
@@ -186,7 +186,7 @@ test.describe("Script panel — Ask Claude", () => {
       ),
     );
     const panel = page.locator("[data-ai-assistant]");
-    // Consent first (editor ADR 1234), then the proposal, then Apply.
+    // Consent first (editor ADR 1241), then the proposal, then Apply.
     await page.locator("[data-cockpit-action=ai-consent-send]").click();
     await expect(panel.locator("[data-ai-proposal-summary]")).toHaveText(
       "Set the frame's opacity to 40%.",

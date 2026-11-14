@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1235 — every object answers the same verbs (the strategy's
+// Editor ADR 1242 — every object answers the same verbs (the strategy's
 // Concept J): Inspect, Transform, Copy, Bind to data, Style, Version
 // (a checkpoint), Validate and Export, as host commands `paged.verb.<verb>`
 // that work on what is selected in every context — a page item, or a frame
@@ -32,7 +32,7 @@
 //   copy       Edit ▸ Copy (the clipboard already follows the context)
 //   bindData   the Data panel
 //   style      Paragraph Styles for text, Object Styles for an object
-//   version    a named checkpoint in the History panel
+//   version    a named checkpoint on the document's timeline (ADR 1234)
 //   validate   the publication's health
 //   export     Asset Export, with the selection collected
 //
@@ -52,7 +52,7 @@ import type { ElementId } from "@paged-media/client";
 import { defineMessages, t } from "@paged-media/strings";
 
 import { PAGED_EDIT_COPY } from "./clipboard-commands";
-import { historyStoreOf } from "./panels/history-store";
+import { keepCheckpointReported } from "./checkpoints/checkpoints";
 import {
   ASSET_EXPORT_PANEL,
   PAGED_ASSET_EXPORT_COLLECT_SINGLE,
@@ -211,23 +211,19 @@ async function hostVerb(paged: PagedEditor, verb: ObjectVerb): Promise<void> {
           ? "paged.paragraph-styles"
           : "paged.object-styles",
       );
-    case "version": {
-      // A checkpoint the History panel lists and restores (editor ADR 285).
-      const client = s.client as Parameters<typeof historyStoreOf>[0] | null;
-      if (client) {
-        const store = historyStoreOf(client);
-        await store.refresh();
-        store.takeSnapshot(
-          t(M.checkpoint, {
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
+    case "version":
+      // A named checkpoint on the document's timeline (editor ADR 1234),
+      // or the reason it cannot be kept, said through the feedback service.
+      await keepCheckpointReported(
+        paged,
+        t(M.checkpoint, {
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
           }),
-        );
-      }
-      return openPanel(paged, "paged.history");
-    }
+        }),
+      );
+      return;
     case "validate":
       return openPanel(paged, "paged.publication-health");
     case "export":

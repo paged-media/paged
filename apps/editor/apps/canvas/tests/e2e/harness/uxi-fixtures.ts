@@ -404,15 +404,30 @@ export async function loadUxiFixture(
   page: Page,
   name: UxiFixtureName,
 ): Promise<void> {
+  await loadIdmlFixture(
+    page,
+    `uxi-${name.toLowerCase()}.idml`,
+    BUILDERS[name](),
+  );
+}
+
+/** Open IDML `bytes` as `fileName` through the editor's file input, wait
+ *  for the canvas, fit its first page and leave the focus on the page —
+ *  what {@link loadUxiFixture} does for A–F, for a spec's own fixture. */
+export async function loadIdmlFixture(
+  page: Page,
+  fileName: string,
+  bytes: Uint8Array,
+): Promise<void> {
   await page.evaluate(() => {
     const c = (globalThis as unknown as { __canvas?: { ready?: boolean } })
       .__canvas;
     if (c) c.ready = false;
   });
   await page.setInputFiles('input[type="file"]', {
-    name: `uxi-${name.toLowerCase()}.idml`,
+    name: fileName,
     mimeType: IDML_MIME,
-    buffer: Buffer.from(BUILDERS[name]()),
+    buffer: Buffer.from(bytes),
   });
   await expect
     .poll(

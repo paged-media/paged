@@ -314,9 +314,15 @@ function CommandTrigger() {
         type="button"
         data-command-trigger
         data-compact={compact ? "true" : undefined}
-        aria-label={strings.t(HEADER.searchOrAskKey, {
-          key: prettyKey("cmd+k"),
-        })}
+        // Compact, the glyph alone shows: the label names it. Wide, the
+        // visible words are its name (WCAG 2.5.3, label in name) and the
+        // chord is announced as its shortcut.
+        aria-label={
+          compact
+            ? strings.t(HEADER.searchOrAskKey, { key: prettyKey("cmd+k") })
+            : undefined
+        }
+        aria-keyshortcuts="Meta+K Control+K"
         title={
           compact
             ? strings.t(HEADER.searchOrAskKey, { key: prettyKey("cmd+k") })

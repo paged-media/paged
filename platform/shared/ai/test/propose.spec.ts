@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — the proposal loop: reads go through the host's reader,
+// Editor ADR 1241 — the proposal loop: reads go through the host's reader,
 // the loop ends on the first `propose_changes`, a script tool is refused
 // rather than run, and the proxy's request for the mode offers only the
 // read-only tools.

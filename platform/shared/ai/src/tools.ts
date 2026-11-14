@@ -76,7 +76,7 @@ export const SCRIPT_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-// ─────────────────────────────── editor ADR 1234: the proposal tools
+// ─────────────────────────────── editor ADR 1241: the proposal tools
 //
 // Read-only: the model reads properties through the host's object model
 // and answers ONE change set. No tool writes; the user previews the change

@@ -1,4 +1,4 @@
-# ADR 1235 — Every object answers the same verbs
+# ADR 1242 — Every object answers the same verbs
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `apps/canvas/src/verb-commands.ts` (new: the verbs, their host implementations, the
@@ -33,8 +33,8 @@ own language.
    for the verb (extensions ADR 1110). Without one the host's runs:
    Inspect opens Properties; Transform the Transform panel; Copy is Edit ▸ Copy (which follows
    the context already, ADR 231); Bind to data opens the Data panel; Style opens Paragraph Styles
-   for text, Object Styles for an object; Save a version takes a named checkpoint in the History
-   panel (ADR 285); Validate opens the publication's health (ADR 1223); Export collects the
+   for text, Object Styles for an object; Save a version keeps a named checkpoint on the document's
+   timeline ([ADR 1234](1234-named-checkpoints.md)), or says why it cannot; Validate opens the publication's health (ADR 1223); Export collects the
    selection into Asset Export (ADR 288), or opens it.
 3. **Shown the same everywhere.** The eight are the canvas context menu's first group, in this
    order and these words, on the page and inside a module's frame surface (after the bundle's own

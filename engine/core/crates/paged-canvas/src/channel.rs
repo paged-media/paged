@@ -894,7 +894,33 @@ export type WorkerToMain = WorkerToMainKind & {
 //   - Import losses (engine ADR 1305): `DocumentHandle.losses` (additive,
 //     `LossEntry[]`) on every `DocumentLoaded` (`UXI-FIL-002`).
 //   New message kinds an older worker cannot answer, hence the bump.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(80);
+// v81 — the engine's side of the editing aids and Proof view (editor ADR
+//   1212, engine ADR 1306):
+//   - Hidden characters: `RequestHiddenCharacters { pageIds }` answers
+//     `HiddenCharacters { pages, revision }` — per page, per composed line,
+//     where its spaces, tabs, returns, forced line breaks, break
+//     characters and story end stand (`HiddenCharacterKind`), with the
+//     line's baseline, text size and turn. The editor draws them as an
+//     overlay.
+//   - `ViewSettings` gains `hideNonprinting` (the live build leaves the
+//     nonprinting items out, as the export does, and the hit test lands on
+//     none) and `proof` (no page edge on either lane, no degraded-asset
+//     markers): build options, so `ViewSettingsApplied` gains `rebuilt`.
+//   - One screen rule for both lanes: a page draws out to its screen
+//     extent (the trim grown to its bleed and pasteboard artwork, within a
+//     page's size past each edge); the wasm `renderTilePng` draws that
+//     extent on a transparent ground and the new `screenExtent(pageId)`
+//     says where it goes.
+//   - Per-frame baseline grids: `RequestFrameBaselineGrids { pageIds }`
+//     answers `FrameBaselineGrids { grids, revision }`.
+//   - Facing pages (engine ADR 1307): `NewBlankDocument` gains `pages` and
+//     `facingPages` — page 1 a right-hand page, then left/right spreads,
+//     `FacingPages="true"`.
+//   - Relink (engine ADR 1308): the mutation `relinkImage { elementId, uri,
+//     bytes? }` points a picture at a new source in one undo step, keeping
+//     its frame, its fitting and its size.
+//   New message kinds an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(81);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -1321,6 +1347,16 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         #[tsify(type = "number[] | null")]
         font: Option<ByteBuf>,
+        /// v81 (engine ADR 1307) — how many pages (1 to 999; absent: one).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        pages: Option<u32>,
+        /// v81 (engine ADR 1307) — lay the pages out as facing spreads
+        /// (`FacingPages`): page 1 alone as a right-hand page, then
+        /// left/right pairs. Absent: one page per spread.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        facing_pages: bool,
     },
     /// Register a named font with the worker's family resolver. Persists
     /// across loads so a fidelity test can preload Poppins/Roboto/etc
@@ -1665,9 +1701,13 @@ pub enum MainToWorkerKind {
         settings: crate::snap_point::SnapSettings,
     },
     /// v77 (editor ADR 287) — how the screen draws the document: Preview,
-    /// Outline, Overprint Preview or Pixel Preview. Survives document
-    /// loads; not saved, not undoable, no rebuild; exports, snapshots and
-    /// separations never see it. Reply: `ViewSettingsApplied`.
+    /// Outline, Overprint Preview or Pixel Preview; v81 (engine ADR 1306)
+    /// also whether nonprinting items show and whether the screen is a
+    /// proof. Survives document loads; not saved, not undoable; exports
+    /// and separations never see it. The mode is drawn at raster time;
+    /// the v81 flags are options of the live build, so changing one
+    /// rebuilds every page (`ViewSettingsApplied.rebuilt`). Reply:
+    /// `ViewSettingsApplied`.
     SetViewSettings { settings: crate::view::ViewSettings },
     /// v75 — the session's role and the host's overrides, against which
     /// the document's template policy is applied (editor
@@ -2233,6 +2273,20 @@ pub enum MainToWorkerKind {
         #[tsify(optional)]
         coalesce: Option<String>,
     },
+    /// v81 (engine ADR 1306) — where the composed lines on `page_ids` (the
+    /// pages in view) hold their hidden characters: spaces, tabs,
+    /// paragraph returns, forced line breaks, the end of a story and the
+    /// other invisibles, line by line. A read of the current build. Reply:
+    /// `HiddenCharacters`.
+    RequestHiddenCharacters { page_ids: Vec<PageId> },
+    /// v81 (engine ADR 1306) — the text frames on `page_ids` (every page
+    /// when empty) that use a baseline grid of their own, each with the
+    /// grid its aligned lines stand on. A read. Reply:
+    /// `FrameBaselineGrids`.
+    RequestFrameBaselineGrids {
+        #[serde(default)]
+        page_ids: Vec<PageId>,
+    },
 }
 
 /// Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -2705,7 +2759,15 @@ pub enum WorkerToMainKind {
         settings: crate::snap_point::SnapSettings,
     },
     /// v77 — `SetViewSettings` reply: the settings now in force.
-    ViewSettingsApplied { settings: crate::view::ViewSettings },
+    ViewSettingsApplied {
+        settings: crate::view::ViewSettings,
+        /// v81 (engine ADR 1306) — the change rebuilt the document's pages
+        /// (a build option changed): every page draws anew, and what was
+        /// read of the layout may have moved.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        rebuilt: bool,
+    },
     /// v75 — `SetSessionPolicy` reply: the policy now in force.
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,
@@ -3174,6 +3236,19 @@ pub enum WorkerToMainKind {
     /// v80 (engine ADR 1304) — `EndCoalesce` reply: the step the run ended
     /// in, null when no run was open.
     CoalesceEnded { applied_seq: Option<u64> },
+    /// v81 (engine ADR 1306) — `RequestHiddenCharacters` reply: one entry
+    /// per known page asked for, in order.
+    HiddenCharacters {
+        pages: Vec<crate::invisibles::PageHiddenCharacters>,
+        /// The document revision the answer holds for.
+        revision: u64,
+    },
+    /// v81 (engine ADR 1306) — `RequestFrameBaselineGrids` reply.
+    FrameBaselineGrids {
+        grids: Vec<crate::frame_grids::FrameBaselineGrid>,
+        /// The document revision the answer holds for.
+        revision: u64,
+    },
 }
 
 impl From<crate::hit::HitTestResult> for HitResult {

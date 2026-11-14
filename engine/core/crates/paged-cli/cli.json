@@ -4659,6 +4659,7 @@
             "setFieldValue",
             "placeImage",
             "replaceImageBytes",
+            "relinkImage",
             "moveFrame",
             "resizeFrame",
             "linkFrames",
@@ -7063,5 +7064,5 @@
       ]
     }
   ],
-  "protocol": 80
+  "protocol": 81
 }

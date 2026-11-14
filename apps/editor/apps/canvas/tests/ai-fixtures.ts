@@ -91,7 +91,7 @@ const end = (stop: string) =>
     ["message_stop", { type: "message_stop" }],
   ] as Array<[string, unknown]>;
 
-/** A model turn that calls the tool `name` with `input` (editor ADR 1234's
+/** A model turn that calls the tool `name` with `input` (editor ADR 1241's
  *  read_objects and propose_changes). */
 export function toolCallTurn(
   name: string,

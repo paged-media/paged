@@ -362,7 +362,7 @@ describe("Actions panel", () => {
     expect(stored.importRules?.[0]?.extensions).toEqual(["png", "tif"]);
   });
 
-  // ── editor ADR 1233: preview, parameters, refusals, the palette ───
+  // ── editor ADR 1240: preview, parameters, refusals, the palette ───
   test("Preview says what a run will do and how it undoes, and runs nothing until Run [editor-shell.panels.actions]", async () => {
     covers("panel:paged.actions");
     const { h, calls } = await mount();

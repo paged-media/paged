@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1233 — what a recorded step MEANT (the interaction
+// Editor ADR 1240 — what a recorded step MEANT (the interaction
 // specification's `UXI-MUT-013`): the selection it acted on, as an intent
 // rather than the ids of the recorded document, and the values the user may
 // change before a run (its parameters). THIS FILE IS PURE: no React, no DOM.

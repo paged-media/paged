@@ -32,7 +32,7 @@
 // permanently AND reports, per recording, how many uncapturable edits
 // actually happened while it was running.
 //
-// Editor ADR 1233: a panel field's commit IS recorded now (a property step
+// Editor ADR 1240: a panel field's commit IS recorded now (a property step
 // on the selection), and the panel previews a run before it happens — what
 // it acts on, outlined on the canvas, what refuses it and how it undoes —
 // keeps parameters, an action's place (this editor or the document) and its
@@ -162,7 +162,7 @@ const M = defineMessages("app.actionsPanel", {
   delete: "Delete",
   copyNoteBefore: "“Copy as script” emits the same steps as",
   copyNoteAfter: "calls for the demo/automation runner.",
-  // Editor ADR 1233.
+  // Editor ADR 1240.
   preview: "Preview",
   previewTitle: "Show what this action will do here, before it runs",
   fieldsRecorded:
@@ -377,7 +377,7 @@ export function ActionsPanel(_: PanelProps) {
         ))}
       </div>
 
-      {/* ── editor ADR 1233: what a run will do here ──────────── */}
+      {/* ── editor ADR 1240: what a run will do here ──────────── */}
       {actions.previewPlan && (
         <ActionPreview
           plan={actions.previewPlan}
@@ -879,7 +879,7 @@ function ActionDetail({
 
       <ActionParams action={action} />
 
-      {/* Editor ADR 1233 — where the action is kept. */}
+      {/* Editor ADR 1240 — where the action is kept. */}
       <label
         style={{
           display: "flex",

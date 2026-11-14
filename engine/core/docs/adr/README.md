@@ -210,6 +210,9 @@ is not written yet.
 | [1303](1303-a-press-is-one-call.md) | A press is one call: `BeginGestureAt` hit-tests, changes the selection and begins the gesture against one document state, answering the hit, the selection and the handle, or a marquee | Accepted 2026-11-13 |
 | [1304](1304-writes-with-one-coalesce-key-are-one-undo-step.md) | Writes with one coalesce key are one undo step, until another key, no key, a gesture, an undo or `EndCoalesce` | Accepted 2026-11-13 |
 | [1305](1305-an-opened-document-reports-its-losses.md) | An opened document reports its losses: `DocumentHandle.losses` (`idml.import.<what>`), and the client's `exportIdml` answers the export's | Accepted 2026-11-13 |
+| [1306](1306-the-screen-reports-its-invisibles-and-draws-a-proof.md) | The screen reports its invisibles (`RequestHiddenCharacters`) and the frames' own baseline grids, hides nonprinting items and draws a proof as build options of the live pages, and both lanes draw a page to one screen extent | Accepted 2026-11-14 |
+| [1307](1307-a-new-document-can-be-laid-out-in-facing-spreads.md) | A new document can be laid out in facing spreads: `NewBlankDocument` takes `pages` and `facingPages` (page 1 a right-hand page, then pairs; `FacingPages="true"`) | Accepted 2026-11-14 |
+| [1308](1308-relinking-a-picture-keeps-its-frame-and-its-size.md) | Relinking a picture keeps its frame and its size: `relinkImage { elementId, uri, bytes? }`, one undo step | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

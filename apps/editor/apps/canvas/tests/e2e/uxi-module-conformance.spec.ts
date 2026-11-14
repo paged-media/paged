@@ -253,7 +253,7 @@ test.describe("UXI module conformance (G2)", () => {
     });
   }
 
-  // Editor ADR 1235 (PX9) — every object answers the same verbs, in every
+  // Editor ADR 1242 (PX9) — every object answers the same verbs, in every
   // module's context: the eight host commands are offered there, each runs
   // the module's own implementation where its context names one
   // (extensions ADR 1109), and running one changes neither the document

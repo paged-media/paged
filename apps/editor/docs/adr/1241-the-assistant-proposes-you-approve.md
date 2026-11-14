@@ -1,4 +1,4 @@
-# ADR 1234 — The assistant proposes, you approve
+# ADR 1241 — The assistant proposes, you approve
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `platform/shared/ai` — `model.ts` (the `propose` mode), `tools.ts` (the read-only
@@ -6,7 +6,7 @@
   `change-set.ts` (new: the change set and its one-step apply), `checks.ts` (new: the
   deterministic checks), `proposal-session.ts` (new: consent, inspect, propose, preview, approve,
   per editor), `messages.ts`; `components/cockpit/ai-proposals.tsx` (new: checks, consent card,
-  preview) and `ai-assistant.tsx`; the preview outlines of [ADR 1233](1233-actions-record-what-you-meant.md).
+  preview) and `ai-assistant.tsx`; the preview outlines of [ADR 1240](1240-actions-record-what-you-meant.md).
   Implements the interaction specification's §25.1 ("AI-assisted edits: proposed change set →
   user preview → user approval → normal operation / mutation / undo pipeline") and `UXI-MUT-001`
   for AI-assisted workflows ([ADR 1200](1200-the-interaction-contract-is-adopted.md)); task PX6
@@ -62,7 +62,7 @@ no assistant at all.
    the checks work as above.
 7. **The preview.** Each item shows its object, the path, the value now and proposed, and why,
    with a tick; an item that needs a value takes it in place. Every object it touches is outlined
-   on the canvas (the shared preview outlines of ADR 1233), the item pointed at stronger. "Nothing
+   on the canvas (the shared preview outlines of ADR 1240), the item pointed at stronger. "Nothing
    has changed yet" is stated, and is true: the model and the undo log are as they were.
 8. **Not the centre.** The assistant stays a panel; no navigation, command or default flow
    depends on it (the strategy's §15).

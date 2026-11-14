@@ -631,6 +631,13 @@
       "summary": "Commit inline image bytes (number[] of u8) on a graphic frame; null clears."
     },
     {
+      "name": "paged.relinkImage",
+      "params": "(frameId, uri, bytes?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Relink a graphic frame's picture to uri (with its bytes, number[] of u8, when the engine cannot read the source); the frame, its fitting and the picture's size stay. One undo step."
+    },
+    {
       "name": "paged.insertTable",
       "params": "(storyId, spec)",
       "returns": "string | null",
@@ -2118,6 +2125,7 @@
     "setFieldValue",
     "placeImage",
     "replaceImageBytes",
+    "relinkImage",
     "moveFrame",
     "resizeFrame",
     "linkFrames",

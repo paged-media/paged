@@ -208,7 +208,9 @@ const triggerStyle = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 22,
+  // WCAG 2.5.8: a pointer target of 24 px at least.
+  width: 24,
+  minHeight: 24,
   height: "100%",
   border: "none",
   borderLeft: "1px solid var(--pg-border)",

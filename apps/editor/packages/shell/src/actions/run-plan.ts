@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1233 — the RUN PLAN: what an action will do here, worked out
+// Editor ADR 1240 — the RUN PLAN: what an action will do here, worked out
 // before anything runs (the interaction specification's `UXI-MUT-014`).
 // THIS FILE IS PURE: the provider gathers the facts (the commands on offer,
 // the selection, the edit context, which recorded objects exist) and this

@@ -18,7 +18,7 @@
  */
 
 // The objects a change WILL touch, outlined on the canvas before it is made
-// (editor ADRs 1233 and 1234): an action's preview and an assistant's
+// (editor ADRs 1240 and 1241): an action's preview and an assistant's
 // proposal publish their targets here, and one overlay draws them. One
 // owner at a time per editor: the newest preview replaces the last, and an
 // owner clears only its own. Nothing here changes the document or the

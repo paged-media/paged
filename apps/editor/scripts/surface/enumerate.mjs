@@ -121,7 +121,7 @@ function effectKinds(root) {
 export const DYNAMIC_SITES = new Map([
   [
     "command apps/editor/packages/shell/src/actions/actions-context.tsx",
-    "editor ADR 1233's palette entry per saved action (`paged.actions.run:<id>`): its ids are " +
+    "editor ADR 1240's palette entry per saved action (`paged.actions.run:<id>`): its ids are " +
       "the user's recorded actions, made at run time; record, stop and play are listed inline.",
   ],
   [

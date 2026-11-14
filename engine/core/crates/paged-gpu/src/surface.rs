@@ -554,38 +554,28 @@ impl SurfacePresenter {
     /// per-frame display-list traversal.
     ///
     /// `width_pt` / `height_pt` are the page's dimensions in points;
-    /// the scene is prefixed with a white background rect + 1pt
-    /// grey border so the page chrome stays consistent across the
-    /// CPU and GPU paths.
+    /// the scene is the white paper over the trim, the editor's 1 pt grey
+    /// page edge and the page's artwork, drawn out to its screen extent
+    /// (engine ADR 1306: [`crate::vello_rs::screen_page_scene`], the rule
+    /// the CPU lane's tile follows too).
     pub fn build_page_scene(list: &DisplayList, width_pt: f32, height_pt: f32) -> Scene {
-        use vello::peniko;
-        paged_compose::perf::count(|c| c.page_scenes_built += 1);
-
-        let mut scene = Scene::new();
-        // White page body.
-        scene.fill(
-            peniko::Fill::NonZero,
-            kurbo::Affine::IDENTITY,
-            peniko::Color::from_rgba8(255, 255, 255, 255),
-            None,
-            &kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64),
-        );
-        // 1pt grey border around the page edge.
-        scene.stroke(
-            &kurbo::Stroke::new(1.0),
-            kurbo::Affine::IDENTITY,
-            peniko::Color::from_rgba8(180, 180, 180, 255),
-            None,
-            &kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64),
-        );
-        // Append the page's content on top.
-        let content = build_scene_with_transform(list, kurbo::Affine::IDENTITY);
-        scene.append(&content, None);
-        scene
+        Self::build_page_scene_framed(list, width_pt, height_pt, true)
     }
 
-    /// [`Self::build_page_scene`] of `list` rewritten for `view` (editor
-    /// ADR 287). `px_per_pt` is the device scale the scene will be
+    /// [`Self::build_page_scene`], with the page edge only when `border`:
+    /// a proof (editor ADR 1212) draws the page without it.
+    pub fn build_page_scene_framed(
+        list: &DisplayList,
+        width_pt: f32,
+        height_pt: f32,
+        border: bool,
+    ) -> Scene {
+        paged_compose::perf::count(|c| c.page_scenes_built += 1);
+        crate::vello_rs::screen_page_scene(list, width_pt, height_pt, border)
+    }
+
+    /// [`Self::build_page_scene_framed`] of `list` rewritten for `view`
+    /// (editor ADR 287). `px_per_pt` is the device scale the scene will be
     /// presented at — Outline's hairline is one device pixel there — so a
     /// cache of these scenes is keyed by the view and, for Outline, by
     /// [`crate::view::outline_scale_bucket`].
@@ -595,23 +585,29 @@ impl SurfacePresenter {
         height_pt: f32,
         view: crate::RasterView,
         px_per_pt: f32,
+        border: bool,
     ) -> Scene {
         let viewed = crate::view::apply_view(list, view, px_per_pt);
-        Self::build_page_scene(&viewed, width_pt, height_pt)
+        Self::build_page_scene_framed(&viewed, width_pt, height_pt, border)
     }
 
     /// A page drawn from a finished raster — Overprint Preview's screen
     /// (editor ADR 287): the Vello lane draws overprints as knockouts, so
     /// a page that overprints is rasterised on the CPU, which simulates
     /// them, and shown as this image. `rgba` is `width_px × height_px`
-    /// RGBA8 covering the whole page; the 1 pt border matches
-    /// [`Self::build_page_scene`].
+    /// premultiplied RGBA8 covering the page's screen extent `extent`
+    /// (engine ADR 1306), transparent where nothing is painted; it is
+    /// drawn over the white paper of the trim, under the 1 pt page edge
+    /// of [`Self::build_page_scene`] when `border`.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_raster_page_scene(
         rgba: Vec<u8>,
         width_px: u32,
         height_px: u32,
+        extent: paged_compose::Rect,
         width_pt: f32,
         height_pt: f32,
+        border: bool,
     ) -> Scene {
         use std::sync::Arc;
         use vello::peniko;
@@ -634,19 +630,22 @@ impl SurfacePresenter {
             });
             scene.draw_image(
                 &brush,
-                kurbo::Affine::scale_non_uniform(
-                    width_pt as f64 / width_px as f64,
-                    height_pt as f64 / height_px as f64,
-                ),
+                kurbo::Affine::translate((extent.x as f64, extent.y as f64))
+                    * kurbo::Affine::scale_non_uniform(
+                        extent.w as f64 / width_px as f64,
+                        extent.h as f64 / height_px as f64,
+                    ),
             );
         }
-        scene.stroke(
-            &kurbo::Stroke::new(1.0),
-            kurbo::Affine::IDENTITY,
-            peniko::Color::from_rgba8(180, 180, 180, 255),
-            None,
-            &page,
-        );
+        if border {
+            scene.stroke(
+                &kurbo::Stroke::new(1.0),
+                kurbo::Affine::IDENTITY,
+                peniko::Color::from_rgba8(180, 180, 180, 255),
+                None,
+                &page,
+            );
+        }
         scene
     }
 

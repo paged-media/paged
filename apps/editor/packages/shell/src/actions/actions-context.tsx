@@ -37,7 +37,7 @@
 //     screen. See `UncapturedTally` in `model.ts` for why the direct-
 //     edit count is a floor rather than an exact ledger.
 //
-// Editor ADR 1233 adds what a step MEANT and what a run will do:
+// Editor ADR 1240 adds what a step MEANT and what a run will do:
 //
 //   · a third tap, on `host.objects` writes from the panels' fields (the
 //     provider re-provides the object model to its subtree, wrapped): a
@@ -165,7 +165,7 @@ export interface ReplayReport {
   /** Ended by Cancel rather than by running out of steps. */
   cancelled: boolean;
   finishedAt: number;
-  /** Editor ADR 1233 — refused before anything ran (the plan's refusals:
+  /** Editor ADR 1240 — refused before anything ran (the plan's refusals:
    *  nothing ran), or the step a run stopped at. */
   refusals: RunRefusal[];
   /** A run refused at a step had its writes undone. */
@@ -189,7 +189,7 @@ export interface PlaybackState {
 export interface PlayOptions {
   /** Pause after every step. */
   stepByStep?: boolean;
-  /** Editor ADR 1233 — the user saw the preview's undo statement: a run
+  /** Editor ADR 1240 — the user saw the preview's undo statement: a run
    *  that is not one undo step runs only with it (the palette's entry
    *  opens the preview instead). */
   confirmed?: boolean;
@@ -240,7 +240,7 @@ export interface ActionsApi {
   importActions(text: string): number;
   dismissReport(): void;
 
-  // ── editor ADR 1233 ──
+  // ── editor ADR 1240 ──
   /** Work out what a run of `actionId` would do here, outline its targets
    *  on the canvas and keep the plan as `previewPlan`. Changes nothing. */
   preview(actionId: string): Promise<RunPlan | null>;
@@ -302,7 +302,7 @@ export function playerDeps(
     typeof c?.endUndoGroup === "function";
   const objects = live?.objects ?? null;
   return {
-    // Editor ADR 1233 — a recorded property write is not a registered
+    // Editor ADR 1240 — a recorded property write is not a registered
     // command: the player writes it through `host.objects`, one batch.
     invoke: async (id, payload) => {
       if (id !== SET_PROPERTY_COMMAND) return commands.invoke(id, payload);
@@ -462,7 +462,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const replayingRef = useRef(false);
   const replayMutations = useRef(0);
 
-  // ── editor ADR 1233: what the editor holds right now ─────────────
+  // ── editor ADR 1240: what the editor holds right now ─────────────
   const model = useObjectModel();
   const selectionCtx = useOptionalSelection();
   const contentCtx = useOptionalContentSelection();
@@ -553,7 +553,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
         inFlight.current += 1;
         if (!recordingRef.current) return;
         if (!isRecordable(invocation.id)) return;
-        // Editor ADR 1233: the selection it names becomes an intent, and
+        // Editor ADR 1240: the selection it names becomes an intent, and
         // the step keeps the context it ran in.
         const step = stepFromInvocation(invocation, liveRef.current);
         setRecording((prev) =>
@@ -627,7 +627,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     return () => off();
   }, [client]);
 
-  // ── the object-write tap (editor ADR 1233) ─────────────────────
+  // ── the object-write tap (editor ADR 1240) ─────────────────────
   // The panels below write through this wrapped model: a field's commit
   // records as a property step. A scrub (one coalesce key) records once,
   // its last value. The write counts as in flight, so its mutation is not
@@ -803,7 +803,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     [],
   );
 
-  // ── editor ADR 1233: the plan, the preview, the refusals ─────────
+  // ── editor ADR 1240: the plan, the preview, the refusals ─────────
   const contextLabel = (type: string | null): string =>
     type === null
       ? t(ACTIONS.thePage)
@@ -1280,7 +1280,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     };
   }, [registries]);
 
-  // Editor ADR 1233 — one palette entry per saved action, "Run action:
+  // Editor ADR 1240 — one palette entry per saved action, "Run action:
   // <name>", and each action on the `actions@1` door. Re-registered when
   // the list (ids, names, contents) changes.
   const door = useSyncExternalStore(

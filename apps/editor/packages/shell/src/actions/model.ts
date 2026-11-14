@@ -94,12 +94,12 @@ import {
   type SelectionAddresses,
 } from "./intent";
 
-/** Bump when the persisted shape changes incompatibly. Editor ADR 1233's
+/** Bump when the persisted shape changes incompatibly. Editor ADR 1240's
  *  fields (a step's `context`, an action's `params` and `scope`) are
  *  additive and optional, so the number stays. */
 export const ACTIONS_SCHEMA_VERSION = 1;
 
-/** Editor ADR 1233 — the host command a recorded property write replays
+/** Editor ADR 1240 — the host command a recorded property write replays
  *  through: `{ targets, path, value }`, one `host.objects` batch. */
 export const SET_PROPERTY_COMMAND = "paged.object.setProperty";
 
@@ -147,7 +147,7 @@ export interface ActionStep {
    *  A stop invokes nothing — it is not a command, and a batch run, which
    *  has nobody to read the message, passes it by and logs it. */
   stop?: { message: string };
-  /** Editor ADR 1233 — the edit context the step ran in (its type, e.g.
+  /** Editor ADR 1240 — the edit context the step ran in (its type, e.g.
    *  `sheet`), or null on the page. A replay outside it is refused, by
    *  name, rather than run against whatever the page offers. Absent on a
    *  step an older build recorded: no check. */
@@ -222,7 +222,7 @@ export interface UncapturedTally {
   directEdits: number;
 }
 
-/** Editor ADR 1233 — where an action is kept: in the editor for this user
+/** Editor ADR 1240 — where an action is kept: in the editor for this user
  *  (the browser's settings store, every document), or in the document it
  *  was saved to (a label on `doc`, which travels with the file). */
 export type ActionScope = "user" | "document";
@@ -237,9 +237,9 @@ export interface PagedAction {
   /** Opt in to replaying `documentBound` steps. Off by default: those
    *  ids only exist in the document the action was recorded in. */
   includeDocumentBound: boolean;
-  /** Editor ADR 1233 — the values a user may change before a run. */
+  /** Editor ADR 1240 — the values a user may change before a run. */
   params?: ActionParam[];
-  /** Editor ADR 1233 — absent reads `user`. */
+  /** Editor ADR 1240 — absent reads `user`. */
   scope?: ActionScope;
 }
 
@@ -271,7 +271,7 @@ export const NON_RECORDABLE_COMMANDS: readonly string[] = [
   "paged.actions.batch",
 ];
 
-/** Editor ADR 1233 — the palette's entry of one saved action is
+/** Editor ADR 1240 — the palette's entry of one saved action is
  *  `paged.actions.run:<action id>`. */
 export const RUN_ACTION_PREFIX = "paged.actions.run:";
 
@@ -363,7 +363,7 @@ export function classifyPayload(payload: unknown): ClassifiedPayload {
   };
 }
 
-/** Build a step from one observed invocation. Editor ADR 1233: where the
+/** Build a step from one observed invocation. Editor ADR 1240: where the
  *  payload names exactly what was selected, it records the selection as an
  *  intent (a token the replay resolves to its own selection), and the step
  *  keeps the edit context it ran in. */
@@ -401,7 +401,7 @@ export interface ObservedSet {
 }
 
 /**
- * Editor ADR 1233 — the steps one observed object write records: one
+ * Editor ADR 1240 — the steps one observed object write records: one
  * {@link SET_PROPERTY_COMMAND} step per (path, value), its targets the
  * selection token when they are exactly what was selected. A field's commit
  * over a multi-selection is one batch of equal sets, so it records as one
@@ -566,7 +566,7 @@ export function toDemoScript(action: PagedAction): string {
     const payload = value === undefined ? "" : `, ${JSON.stringify(value)}`;
     if (selectionTokensIn(value).size > 0) {
       lines.push(
-        `// ${index + 1}. {"$selection": …} is the selection when the step runs (editor ADR 1233).`,
+        `// ${index + 1}. {"$selection": …} is the selection when the step runs (editor ADR 1240).`,
       );
     }
     lines.push(
@@ -613,7 +613,7 @@ function isStep(value: unknown): value is ActionStep {
   );
 }
 
-/** Editor ADR 1233's optional fields, kept when well formed and dropped
+/** Editor ADR 1240's optional fields, kept when well formed and dropped
  *  (the field, not the action) when not: an older build's action has none. */
 function withOptionalFields(a: PagedAction): PagedAction {
   const { params, scope, ...rest } = a;

@@ -44,7 +44,7 @@
 //     document — Cmd-Z there is the context's, one entry per command.
 
 //
-// WHAT IT WILL NOT DO (editor ADR 1233, `UXI-MUT-014`). Right before each
+// WHAT IT WILL NOT DO (editor ADR 1240, `UXI-MUT-014`). Right before each
 // step it asks again whether the step applies here — its command's
 // applicability, the edit context it was recorded in, the selection its
 // payload names as an intent. A step that does not is REFUSED by name and
@@ -87,7 +87,7 @@ export type PlayerStatus =
   | "stopped"
   | "done"
   | "cancelled"
-  /** Editor ADR 1233 — a step did not apply when it was reached; `refusal`
+  /** Editor ADR 1240 — a step did not apply when it was reached; `refusal`
    *  says which and why. Nothing after it ran. */
   | "refused";
 
@@ -124,7 +124,7 @@ export interface PlayerDeps {
     writes: number;
     lastSeq: number | null;
   } | null>;
-  /** Editor ADR 1233 — does the command apply right now, and if not why
+  /** Editor ADR 1240 — does the command apply right now, and if not why
    *  (the registry's applicability, editor ADR 1218). Absent: not asked. */
   applicability?(command: string): { state: string; reason?: string };
   /** The selection a selection token resolves to, at the step. Absent:
@@ -230,7 +230,7 @@ export class ActionPlayer {
     );
   }
 
-  /** Editor ADR 1233 — why `step` cannot run now, in words, or null. */
+  /** Editor ADR 1240 — why `step` cannot run now, in words, or null. */
   private refusalOf(
     index: number,
     command: string,

@@ -255,7 +255,7 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
         </>
       ) : null}
       {model.noTools && (
-        <span style={{ opacity: 0.7, whiteSpace: "nowrap" }}>
+        <span style={{ color: "var(--pg-muted-fg)", whiteSpace: "nowrap" }}>
           {strings.t(CONTEXT_TOOLBAR.noTools)}
         </span>
       )}

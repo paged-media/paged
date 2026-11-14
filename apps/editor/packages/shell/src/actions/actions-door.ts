@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1233 — a recorded action on the platform's ACTIONS door
+// Editor ADR 1240 — a recorded action on the platform's ACTIONS door
 // (`actions@1`, extensions ADR 344, PM-0015) and as a `paged.*` script.
 //
 // On the door, an action is a pure step: it computes and never edits. So a
@@ -225,7 +225,7 @@ export function toPagedScript(
 ): string {
   const plan = planReplay(action);
   const lines: string[] = [
-    `// ${action.name} — paged.* script (editor ADR 1233)`,
+    `// ${action.name} — paged.* script (editor ADR 1240)`,
   ];
   const uses = new Set<string>();
   for (const { index, step } of plan.run) {

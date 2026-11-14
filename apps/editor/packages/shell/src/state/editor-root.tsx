@@ -57,6 +57,7 @@ import {
 } from "./editor-scope";
 import { useOptionalTheme } from "./theme-context";
 import { useDensity } from "./density";
+import { useContrast } from "./contrast";
 
 const ROOT = scoped("editorRoot", () => ({
   element: null as HTMLElement | null,
@@ -240,6 +241,9 @@ export function EditorRoot({
   // The interface density (state/density.ts): the attribute re-points the
   // density tokens of styles/theme.css for everything inside the root.
   const density = useDensity();
+  // High contrast (state/contrast.ts): the attribute re-points the theme's
+  // tokens to their high-contrast variant, dark or light.
+  const contrast = useContrast();
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [portals, setPortals] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -251,6 +255,7 @@ export function EditorRoot({
       ref={setRoot}
       data-paged-editor=""
       data-density={density}
+      data-contrast={contrast}
       className={dark ? "dark" : undefined}
       tabIndex={-1}
       style={rootStyle}

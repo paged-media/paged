@@ -23,7 +23,9 @@
 // written with the engine's own operations, the ones Document Setup and
 // Margins and Columns write (ADRs 267, 323): `insertPage` for the further
 // pages, `set` on `doc` for the bleed and on each `page:#n` for its margins,
-// columns and gutter. The writes are ONE undo group, and the document is
+// columns and gutter. A facing-pages setup has the engine make all its
+// pages as spreads (engine ADR 1307), and a left-hand page takes its inside
+// margin on its right. The writes are ONE undo group, and the document is
 // then marked as it was made (`markSaved`, as an importer's build is, UX
 // audit F-08): it opens clean, "Not saved yet", not "Unsaved changes".
 
@@ -61,11 +63,13 @@ export function setupMutations(
   firstPageId: string,
 ): { pages: Mutation | null; layout: Mutation } {
   const pages: Mutation[] = [];
-  for (let i = 1; i < setup.pages; i++)
-    pages.push({
-      op: "insertPage",
-      args: { afterPageId: firstPageId, masterId: null },
-    });
+  // Facing pages come from the engine as spreads, all of them at once.
+  if (setup.facingPages !== true)
+    for (let i = 1; i < setup.pages; i++)
+      pages.push({
+        op: "insertPage",
+        args: { afterPageId: firstPageId, masterId: null },
+      });
   const layout: Mutation[] = [];
   if (setup.bleedPt > 0)
     for (const path of BLEED_PATHS)
@@ -78,10 +82,13 @@ export function setupMutations(
     const address = `page:#${n}`;
     const set = (path: string, value: Value) =>
       layout.push({ op: "set", args: { address, path, value } });
+    // A left-hand page (an even page of a facing document) binds on its
+    // right: its inside margin is its right one.
+    const verso = setup.facingPages === true && n % 2 === 0;
     set("pageMarginTop", length(m.top));
     set("pageMarginBottom", length(m.bottom));
-    set("pageMarginLeft", length(m.inside));
-    set("pageMarginRight", length(m.outside));
+    set("pageMarginLeft", length(verso ? m.outside : m.inside));
+    set("pageMarginRight", length(verso ? m.inside : m.outside));
     set("pageColumnCount", { type: "number", value: setup.columns });
     set("pageColumnGutter", length(setup.gutterPt));
   }

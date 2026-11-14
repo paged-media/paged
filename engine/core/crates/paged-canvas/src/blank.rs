@@ -99,7 +99,11 @@ fn backing() -> String {
     ))
 }
 
-fn designmap(name: &str) -> String {
+fn designmap(name: &str, spread_ids: &[String]) -> String {
+    let spreads: String = spread_ids
+        .iter()
+        .map(|id| format!("<idPkg:Spread src=\"Spreads/Spread_{id}.xml\"/>\n"))
+        .collect();
     xml(&format!(
         "<?aid style=\"50\" type=\"document\" readerVersion=\"6.0\" featureSet=\"257\" product=\"20.0(32)\"?>\n\
 <Document xmlns:idPkg=\"{NS}\" DOMVersion=\"20.0\" Self=\"d\" StoryList=\"\" Name=\"{name}\">\n\
@@ -109,8 +113,7 @@ fn designmap(name: &str) -> String {
 <idPkg:Preferences src=\"Resources/Preferences.xml\"/>\n\
 <idPkg:Tags src=\"XML/Tags.xml\"/>\n\
 <idPkg:MasterSpread src=\"MasterSpreads/MasterSpread_um.xml\"/>\n\
-<idPkg:Spread src=\"Spreads/Spread_us.xml\"/>\n\
-<idPkg:BackingStory src=\"XML/BackingStory.xml\"/>\n\
+{spreads}<idPkg:BackingStory src=\"XML/BackingStory.xml\"/>\n\
 </Document>"
     ))
 }
@@ -124,14 +127,80 @@ fn master_spread(bounds: &str) -> String {
     ))
 }
 
-/// An empty one-page spread — the blank canvas. No page items.
-fn spread(bounds: &str) -> String {
+/// One page of a blank spread: its id, its name (the folio) and its x in
+/// the spread (`-width` for a left-hand page, IDML's spine at x = 0).
+struct BlankPage {
+    id: String,
+    name: u32,
+    x: f32,
+}
+
+/// An empty spread of `pages` — the blank canvas. No page items. `y` is
+/// where it sits on the pasteboard.
+fn spread(id: &str, pages: &[BlankPage], bounds: &str, y: f32) -> String {
+    let body: String = pages
+        .iter()
+        .map(|p| {
+            format!(
+                "<Page Self=\"{}\" Name=\"{}\" GeometricBounds=\"{bounds}\" \
+ItemTransform=\"1 0 0 1 {} 0\" AppliedMaster=\"um\"/>\n",
+                p.id, p.name, p.x
+            )
+        })
+        .collect();
     xml(&format!(
         "<idPkg:Spread xmlns:idPkg=\"{NS}\" DOMVersion=\"20.0\">\n\
-<Spread Self=\"us\" PageCount=\"1\" ItemTransform=\"1 0 0 1 0 0\">\n\
-<Page Self=\"usp\" Name=\"1\" GeometricBounds=\"{bounds}\" ItemTransform=\"1 0 0 1 0 0\" AppliedMaster=\"um\"/>\n\
-</Spread></idPkg:Spread>"
+<Spread Self=\"{id}\" PageCount=\"{}\" ItemTransform=\"1 0 0 1 0 {y}\">\n\
+{body}</Spread></idPkg:Spread>",
+        pages.len()
     ))
+}
+
+/// The gap between two blank spreads on the pasteboard, pt (the one
+/// `InsertPage` stacks a new spread with).
+const SPREAD_GAP_PT: f32 = 72.0;
+
+/// The spreads of a blank document of `pages` pages (engine ADR 1307): one
+/// page per spread, or, with `facing`, page 1 alone as a right-hand page
+/// and then left/right pairs, as InDesign lays out a facing-pages
+/// document. Ids: `us`/`usp` for the first spread and page (as before),
+/// `us<n>`/`usp<n>` for the others.
+fn blank_spreads(width_pt: f32, pages: u32, facing: bool) -> Vec<(String, Vec<BlankPage>)> {
+    let page = |n: u32, x: f32| BlankPage {
+        id: if n == 1 {
+            "usp".to_string()
+        } else {
+            format!("usp{n}")
+        },
+        name: n,
+        x,
+    };
+    let spread_id = |k: usize| {
+        if k == 0 {
+            "us".to_string()
+        } else {
+            format!("us{}", k + 1)
+        }
+    };
+    let mut out: Vec<(String, Vec<BlankPage>)> = Vec::new();
+    let pages = pages.max(1);
+    if !facing {
+        for n in 1..=pages {
+            out.push((spread_id(out.len()), vec![page(n, 0.0)]));
+        }
+        return out;
+    }
+    out.push((spread_id(0), vec![page(1, 0.0)]));
+    let mut n = 2;
+    while n <= pages {
+        let mut pair = vec![page(n, -width_pt)];
+        if n < pages {
+            pair.push(page(n + 1, 0.0));
+        }
+        out.push((spread_id(out.len()), pair));
+        n += 2;
+    }
+    out
 }
 
 /// Build the bytes of a blank single-page IDML package sized
@@ -141,10 +210,20 @@ fn spread(bounds: &str) -> String {
 /// `[width, height]` page is `0 0 height width`. The returned bytes
 /// parse through [`paged_scene::Document::open`] like any opened file.
 pub fn blank_idml(width_pt: f32, height_pt: f32) -> Vec<u8> {
+    blank_idml_layout(width_pt, height_pt, 1, false)
+}
+
+/// [`blank_idml`] with `pages` pages (at least one), laid out as facing
+/// spreads when `facing` (engine ADR 1307): `FacingPages="true"` in the
+/// document's preferences, page 1 alone as a right-hand page, then
+/// left/right pairs — each page binding on the spine between them.
+pub fn blank_idml_layout(width_pt: f32, height_pt: f32, pages: u32, facing: bool) -> Vec<u8> {
     let bounds = format!("0 0 {height_pt} {width_pt}");
-    let designmap = designmap("Untitled.indd");
+    let spreads = blank_spreads(width_pt, pages, facing);
+    let ids: Vec<String> = spreads.iter().map(|(id, _)| id.clone()).collect();
+    let designmap = designmap("Untitled.indd", &ids);
     let master = master_spread(&bounds);
-    let spread = spread(&bounds);
+    let page_count = spreads.iter().map(|(_, p)| p.len()).sum::<usize>();
 
     // mimetype first + STORED (OCF convention). In-memory writes are
     // infallible; `expect` documents that invariant rather than threading
@@ -163,7 +242,8 @@ pub fn blank_idml(width_pt: f32, height_pt: f32) -> Vec<u8> {
     // `<DocumentPreference>` InDesign opens the blank with ITS default
     // document size (Letter, measured on 20.0.1) beside the page's own
     // 400 x 300 pt, so every page added there came out Letter. Single
-    // pages (the master is one page), no bleed. Then the one text
+    // pages or facing spreads as asked (engine ADR 1307; the master is one
+    // page either way), no bleed. Then the one text
     // preference the engine composes under: no optical sizing
     // (InDesign's application default re-instances variable fonts by
     // point size — see `paged_gen::builders::resources::preferences_xml`).
@@ -171,8 +251,8 @@ pub fn blank_idml(width_pt: f32, height_pt: f32) -> Vec<u8> {
         "Resources/Preferences.xml",
         &xml(&format!(
             "<idPkg:Preferences xmlns:idPkg=\"{NS}\" DOMVersion=\"20.0\">\
-<DocumentPreference PageHeight=\"{height_pt}\" PageWidth=\"{width_pt}\" PagesPerDocument=\"1\" \
-FacingPages=\"false\" DocumentBleedTopOffset=\"0\" DocumentBleedBottomOffset=\"0\" \
+<DocumentPreference PageHeight=\"{height_pt}\" PageWidth=\"{width_pt}\" PagesPerDocument=\"{page_count}\" \
+FacingPages=\"{facing}\" DocumentBleedTopOffset=\"0\" DocumentBleedBottomOffset=\"0\" \
 DocumentBleedInsideOrLeftOffset=\"0\" DocumentBleedOutsideOrRightOffset=\"0\" \
 DocumentBleedUniformSize=\"true\" SlugTopOffset=\"0\" SlugBottomOffset=\"0\" \
 SlugInsideOrLeftOffset=\"0\" SlugRightOrOutsideOffset=\"0\" DocumentSlugUniformSize=\"false\" \
@@ -182,7 +262,14 @@ PageBinding=\"LeftToRight\" ColumnDirection=\"Horizontal\" Intent=\"PrintIntent\
         false,
     );
     put("MasterSpreads/MasterSpread_um.xml", &master, false);
-    put("Spreads/Spread_us.xml", &spread, false);
+    for (k, (id, pages)) in spreads.iter().enumerate() {
+        let y = k as f32 * (height_pt + SPREAD_GAP_PT);
+        put(
+            &format!("Spreads/Spread_{id}.xml"),
+            &spread(id, pages, &bounds, y),
+            false,
+        );
+    }
     put("XML/Tags.xml", &tags(), false);
     put("XML/BackingStory.xml", &backing(), false);
 
@@ -230,5 +317,47 @@ mod tests {
         assert_eq!(dp.page_width, Some(400.0));
         assert_eq!(dp.page_height, Some(300.0));
         assert_eq!(dp.facing_pages, Some(false));
+    }
+
+    /// Engine ADR 1307 — a facing-pages blank: page 1 alone on the right
+    /// of the spine, then left/right pairs, each spread below the last on
+    /// the pasteboard, and `FacingPages="true"`.
+    #[test]
+    fn a_facing_blank_lays_its_pages_out_in_spreads() {
+        let doc = idml_import::import_idml(&blank_idml_layout(400.0, 300.0, 4, true))
+            .expect("blank IDML must parse")
+            .0;
+        assert_eq!(doc.designmap.document_preference.facing_pages, Some(true));
+        let spreads: Vec<Vec<(String, f32)>> = doc
+            .spreads
+            .iter()
+            .map(|s| {
+                s.spread
+                    .pages
+                    .iter()
+                    .map(|p| {
+                        let x = p.item_transform.map_or(0.0, |m| m[4]) + p.bounds.left;
+                        (p.self_id.clone().unwrap_or_default(), x)
+                    })
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            spreads,
+            vec![
+                vec![("usp".to_string(), 0.0)],
+                vec![("usp2".to_string(), -400.0), ("usp3".to_string(), 0.0)],
+                vec![("usp4".to_string(), -400.0)],
+            ]
+        );
+        // Single pages: one spread each, as InsertPage makes them.
+        let single = idml_import::import_idml(&blank_idml_layout(400.0, 300.0, 3, false))
+            .unwrap()
+            .0;
+        assert_eq!(single.spreads.len(), 3);
+        assert_eq!(
+            single.designmap.document_preference.facing_pages,
+            Some(false)
+        );
     }
 }

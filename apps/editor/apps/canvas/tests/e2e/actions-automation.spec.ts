@@ -18,7 +18,7 @@
  */
 
 // Visual action automation (task PX4 of the interaction plan; editor ADR
-// 1233; the strategy's Concept F). In the running editor, on the contract's
+// 1240; the strategy's Concept F). In the running editor, on the contract's
 // fixture A: an alignment from the Align command and a stroke weight from
 // the Properties panel's field are recorded as what they meant (the
 // selection), previewed on ANOTHER selection without changing anything,
@@ -98,7 +98,7 @@ async function record(
   return (await row.getAttribute("data-actions-row"))!;
 }
 
-test.describe("Actions record what you meant (PX4, ADR 1233)", () => {
+test.describe("Actions record what you meant (PX4, ADR 1240)", () => {
   test.describe.configure({ timeout: 120_000 });
 
   test("an alignment and a field edit, recorded on one selection, preview and run on another as ONE undo step @feat:editor-shell.panels.actions @level:happy @uxi:UXI-MUT-013 @uxi:UXI-MUT-004", async ({

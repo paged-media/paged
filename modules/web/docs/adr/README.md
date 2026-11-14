@@ -30,6 +30,7 @@ the code as it stood, for decisions made earlier; their status says so.
 | [413](413-object-model-and-document-values-in-the-document-label.md) | Web frames, bound values and CSS variables are objects; document values live in the document label | Accepted 2026-10-06 |
 | [414](414-baked-faces-are-kept-with-the-document.md) | The faces a bake gives the document are kept with it and given back on open | Accepted 2026-10-15 |
 | [415](415-css-effects-map-onto-native-items.md) | An element's CSS effects travel beside the layer as groups and map onto native items | Accepted 2026-10-28 |
+| [416](416-source-and-render-inspected-together.md) | Source and render inspected together: an element's place, rules, size and notes; the browser preview named as such; sample data beside the source | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1233 — what a recorded step meant (the selection as an intent,
+// Editor ADR 1240 — what a recorded step meant (the selection as an intent,
 // UXI-MUT-013), its parameters, the run plan's refusals and undo statement
 // (UXI-MUT-014, UXI-MUT-004), the `actions@1` projection and the `paged.*`
 // script. Pure: no editor, no engine.

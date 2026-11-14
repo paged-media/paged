@@ -603,6 +603,18 @@ interface Sweep {
   commit: (pageId: string, commit: BrushCommit) => Promise<void>;
 }
 
+/** The pressure a sweep records: a pen's own; a mouse or a finger is the
+ *  neutral 0.5 (editor ADR "An accessible object tree", UXI-A11Y-010).
+ *  Pointer Events report a mouse's pressure as 0 on its release, so
+ *  passing it through would taper the last anchor of every mouse stroke;
+ *  the brushes are the tools that declare pen support, and only for a
+ *  pen. */
+export function sweepPressure(
+  e: Pick<CanvasPointerEvent, "pointerType" | "pressure">,
+): number | undefined {
+  return e.pointerType === "pen" ? e.pressure : undefined;
+}
+
 function createSweepHandler(
   host: BundleHost,
   label: string,
@@ -656,7 +668,7 @@ function createSweepHandler(
         sweep.machine.handle({
           type: "down",
           point: e.pagePoint,
-          pressure: e.pressure,
+          pressure: sweepPressure(e),
         }),
       );
     },
@@ -666,7 +678,7 @@ function createSweepHandler(
         sweep.machine.handle({
           type: "move",
           point: e.pagePoint,
-          pressure: e.pressure,
+          pressure: sweepPressure(e),
         }),
       );
     },
@@ -676,7 +688,11 @@ function createSweepHandler(
       const point =
         e.pageId === pageId && e.pagePoint ? e.pagePoint : undefined;
       const snap = point
-        ? sweep.machine.handle({ type: "up", point, pressure: e.pressure })
+        ? sweep.machine.handle({
+            type: "up",
+            point,
+            pressure: sweepPressure(e),
+          })
         : sweep.machine.handle({ type: "key", key: "Escape" });
       sync(snap);
     },

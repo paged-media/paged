@@ -16,15 +16,19 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! View settings (v77, editor ADR 287) — how the canvas draws the
-//! document on screen.
+//! View settings (v77, editor ADR 287; v81, engine ADR 1306) — how the
+//! canvas draws the document on screen.
 //!
 //! Session state like the snap settings: set by `SetViewSettings`, kept
 //! across document loads, never saved, never undoable, and never seen by
 //! an export, a snapshot or a separation, which draw the document as
 //! built. The mode reaches the rasterizers as
 //! [`paged_gpu::RasterView`] plus Pixel Preview's flag; the model's build
-//! (and so its display-list digest, ADR 101) does not depend on it.
+//! (and so its display-list digest, ADR 101) does not depend on it. Two
+//! flags are build options (v81, engine ADR 1306): hiding nonprinting
+//! items and a proof's missing markers change the LIVE build, which the
+//! model rebuilds when they change ([`ViewSettings::build_differs`]); an
+//! export still builds the document as printed.
 
 use paged_gpu::RasterView;
 use serde::{Deserialize, Serialize};
@@ -73,9 +77,33 @@ impl ViewMode {
 #[serde(rename_all = "camelCase", default)]
 pub struct ViewSettings {
     pub mode: ViewMode,
+    /// v81 (engine ADR 1306) — leave the page items marked nonprinting
+    /// off the screen, as the export leaves them out of print (engine ADR
+    /// 1095): the editor's "Nonprinting items" aid off, and every proof.
+    /// The live build omits them, and the hit test lands on none of them.
+    /// Absent: shown, as InDesign's Normal view shows them.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[tsify(optional)]
+    pub hide_nonprinting: bool,
+    /// v81 (engine ADR 1306) — draw the screen as a proof (editor ADR
+    /// 1212): no page edge on either lane and none of the live build's
+    /// degraded-asset markers (the pink of a substituted font, the cross
+    /// over a placed EPS or PDF whose link is missing), so the page is the
+    /// export's. A missing image keeps InDesign's grey placeholder, which
+    /// the export prints too. Absent: the editing screen.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[tsify(optional)]
+    pub proof: bool,
 }
 
 impl ViewSettings {
+    /// Whether the live build differs between `self` and `other`: the
+    /// view mode is a raster-time rewrite, nonprinting items and the
+    /// proof's markers are build options (engine ADR 1306).
+    pub fn build_differs(&self, other: &ViewSettings) -> bool {
+        self.hide_nonprinting != other.hide_nonprinting || self.proof != other.proof
+    }
+
     /// Raster options for drawing a `width_pt × height_pt` page on screen
     /// at `dpi` under these settings.
     pub fn raster_options(
@@ -94,6 +122,14 @@ impl ViewSettings {
     }
 }
 
+/// Engine ADR 1306 — where `page` draws on the screen, `[x, y, w, h]`
+/// page-local pt: [`paged_gpu::screen::screen_extent`], the rect the CPU
+/// lane's tile covers and the GPU lane clips to.
+pub fn screen_extent(page: &paged_renderer::BuiltPage) -> [f32; 4] {
+    let r = paged_gpu::screen::screen_extent(&page.list, page.width_pt, page.height_pt).rect;
+    [r.x, r.y, r.w, r.h]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,6 +138,7 @@ mod tests {
     fn the_wire_spells_the_modes_in_camel_case() {
         let json = serde_json::to_string(&ViewSettings {
             mode: ViewMode::OverprintPreview,
+            ..ViewSettings::default()
         })
         .unwrap();
         assert_eq!(json, r#"{"mode":"overprintPreview"}"#);
@@ -110,6 +147,38 @@ mod tests {
         // Every field defaults: an empty object is Preview.
         let empty: ViewSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(empty.mode, ViewMode::Preview);
+        assert!(!empty.hide_nonprinting && !empty.proof);
+        // v81 — the proof flags, spelled in camel case and left out when off.
+        let proof: ViewSettings =
+            serde_json::from_str(r#"{"mode":"preview","hideNonprinting":true,"proof":true}"#)
+                .unwrap();
+        assert!(proof.hide_nonprinting && proof.proof);
+        assert_eq!(
+            serde_json::to_string(&proof).unwrap(),
+            r#"{"mode":"preview","hideNonprinting":true,"proof":true}"#
+        );
+    }
+
+    #[test]
+    fn only_the_build_flags_make_the_build_differ() {
+        let base = ViewSettings::default();
+        let outline = ViewSettings {
+            mode: ViewMode::Outline,
+            ..base
+        };
+        assert!(!base.build_differs(&outline));
+        for other in [
+            ViewSettings {
+                hide_nonprinting: true,
+                ..base
+            },
+            ViewSettings {
+                proof: true,
+                ..base
+            },
+        ] {
+            assert!(base.build_differs(&other));
+        }
     }
 
     #[test]

@@ -18,7 +18,7 @@
  */
 
 // A trustworthy AI assistant (task PX6 of the interaction plan; editor ADR
-// 1234; the strategy's Concept G; the specification's §25.1). In the
+// 1241; the strategy's Concept G; the specification's §25.1). In the
 // running editor, with Claude replaced by a stub of the AI service: a
 // request is sent only after the consent card's Send (Cancel sends
 // nothing); Claude reads and answers a change set, which the panel previews
@@ -98,7 +98,7 @@ async function stubClaude(page: Page, turns: string[]): Promise<unknown[]> {
 
 const card = (page: Page) => page.locator("[data-ai-assistant]");
 
-test.describe("The assistant proposes, you approve (PX6, ADR 1234)", () => {
+test.describe("The assistant proposes, you approve (PX6, ADR 1241)", () => {
   test.describe.configure({ timeout: 120_000 });
 
   test("Claude's change set is previewed without changing anything, and Approve applies it as ONE undo step @feat:editor-shell.ai-assistant @level:happy @uxi:UXI-MUT-001", async ({

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — a PROPOSAL is a change set of ordinary writes: each item
+// Editor ADR 1241 — a PROPOSAL is a change set of ordinary writes: each item
 // one property of one object (an object-model `set`, the write every panel
 // field makes) or one object label (the engine's `setPluginMetadata`), with
 // the value before and after and why. A rule or Claude proposes; nothing

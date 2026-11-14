@@ -307,7 +307,7 @@ export interface EditContextContribution {
   editLabel?: string;
   /**
    * Extensions ADR 1110 — the module's own implementation of the host's
-   * universal object verbs (editor ADR 1235): for each verb it implements,
+   * universal object verbs (editor ADR 1242): for each verb it implements,
    * the id of a command this bundle registered, run with no payload on what
    * the context edits. While the context is active the host's verb command
    * (`paged.verb.<verb>`, in the context menu and the palette) runs it; a
@@ -369,7 +369,7 @@ export interface EditContextContribution {
 }
 
 /** Extensions ADR 1110 — the verbs every object answers in every context
- *  (editor ADR 1235): inspect it, transform it, copy it, bind it to data,
+ *  (editor ADR 1242): inspect it, transform it, copy it, bind it to data,
  *  style it, version it (a checkpoint), validate it, export it. */
 export type ObjectVerb =
   | "inspect"

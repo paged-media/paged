@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — the assistant's DETERMINISTIC checks: Inspect and
+// Editor ADR 1241 — the assistant's DETERMINISTIC checks: Inspect and
 // Propose without a model, on this device. Each reads the document through
 // the object model (read-only) and proposes ordinary property writes with
 // the value before and after; the same document gives the same proposal.

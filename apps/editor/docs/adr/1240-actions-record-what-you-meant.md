@@ -1,4 +1,4 @@
-# ADR 1233 — Actions record what you meant
+# ADR 1240 — Actions record what you meant
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `packages/shell/src/actions/` — `intent.ts` (new: selection tokens, object
@@ -6,7 +6,7 @@
   `document-store.ts` (new: the document's actions), `actions-door.ts` (new: `actions@1` and the
   `paged.*` script), `model.ts`, `player.ts`, `actions-context.tsx`; `registries/command.ts`
   (`history`); `state/preview-targets.ts` and `overlays/preview-targets.tsx` (new, shared with
-  [ADR 1234](1234-the-assistant-proposes-you-approve.md)); `apps/canvas/src/panels/actions-panel.tsx`,
+  [ADR 1241](1241-the-assistant-proposes-you-approve.md)); `apps/canvas/src/panels/actions-panel.tsx`,
   `actions-preview.tsx` (new); `app/mount.tsx` (the overlay, the door). Implements
   `UXI-MUT-004`, `UXI-MUT-013` and `UXI-MUT-014` of the interaction specification
   ([ADR 1200](1200-the-interaction-contract-is-adopted.md)) and the history table's "reusable
@@ -73,7 +73,7 @@ from being automation a designer could trust:
 6. **The preview.** Preview shows the plan in the panel and outlines every target on the canvas
    (`overlays/preview-targets.tsx`, the review colour; pointing at a target in the list draws it
    stronger); Run is offered only when nothing refuses. It changes neither the document nor the
-   selection. The overlay and its store are shared with the assistant's proposals (ADR 1234).
+   selection. The overlay and its store are shared with the assistant's proposals (ADR 1241).
 7. **Kept for the user or in the document.** An action's `scope` is `user` (the browser's
    settings store, as before) or `document`: the label `x-paged:actions` on `doc`, the envelope
    `{"v": 1, "data": <library>}`. It travels with the file through `.paged` and IDML; moving an

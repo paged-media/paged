@@ -228,6 +228,7 @@ impl CanvasModel {
         let layer_z = paged_scene::layer_z_index(designmap);
         // Engine ADR 1000 — a marquee takes only what the session may select.
         let selectability = self.selectability();
+        let hide_nonprinting = self.view_settings().hide_nonprinting;
 
         struct Leaf {
             order: (usize, usize),
@@ -264,6 +265,9 @@ impl CanvasModel {
                     continue;
                 }
                 if !selectability.allows(c.element_id.raw_id()) {
+                    continue;
+                }
+                if hide_nonprinting && c.nonprinting {
                     continue;
                 }
                 let bbox = transform_bbox(c.bounds, c.item_transform);
@@ -371,6 +375,7 @@ impl CanvasModel {
         // Engine ADR 1000 — a session that may not select an item does not
         // hit it; the point falls through to what lies beneath.
         let selectability = self.selectability();
+        let hide_nonprinting = self.view_settings().hide_nonprinting;
         for parsed in &scene.spreads {
             let on_this_spread = parsed
                 .spread
@@ -405,6 +410,11 @@ impl CanvasModel {
                     continue;
                 }
                 if !selectability.allows(c.element_id.raw_id()) {
+                    continue;
+                }
+                // Engine ADR 1306 — an item the screen leaves off is not
+                // hit, as a hidden one is not (F-41).
+                if hide_nonprinting && c.nonprinting {
                     continue;
                 }
                 if !point_in_oriented_frame(spread_point, c.hit_bounds, c.item_transform) {
@@ -538,6 +548,9 @@ pub(crate) struct Candidate {
     pub group_chain: Vec<String>,
     pub layer_z: usize,
     pub doc_order: usize,
+    /// The item is marked nonprinting: off the screen, and so not hit,
+    /// while the view hides nonprinting items (engine ADR 1306).
+    pub nonprinting: bool,
 }
 
 pub(crate) fn collect_candidates(
@@ -629,6 +642,7 @@ fn push_frame_ref(
                     group_chain: group_chain.to_vec(),
                     layer_z: z,
                     doc_order: *doc_order,
+                    nonprinting: f.nonprinting,
                 });
                 *doc_order += 1;
             }
@@ -658,6 +672,7 @@ fn push_frame_ref(
                     group_chain: group_chain.to_vec(),
                     layer_z: z,
                     doc_order: *doc_order,
+                    nonprinting: f.nonprinting,
                 });
                 *doc_order += 1;
             }
@@ -684,6 +699,7 @@ fn push_frame_ref(
                     group_chain: group_chain.to_vec(),
                     layer_z: z,
                     doc_order: *doc_order,
+                    nonprinting: f.nonprinting,
                 });
                 *doc_order += 1;
             }
@@ -710,6 +726,7 @@ fn push_frame_ref(
                     group_chain: group_chain.to_vec(),
                     layer_z: z,
                     doc_order: *doc_order,
+                    nonprinting: f.nonprinting,
                 });
                 *doc_order += 1;
             }
@@ -739,6 +756,7 @@ fn push_frame_ref(
                     group_chain: group_chain.to_vec(),
                     layer_z: z,
                     doc_order: *doc_order,
+                    nonprinting: f.nonprinting,
                 });
                 *doc_order += 1;
             }
@@ -770,6 +788,7 @@ fn push_frame_ref(
                     group_chain: group_chain.to_vec(),
                     layer_z: z,
                     doc_order: *doc_order,
+                    nonprinting: false,
                 });
                 *doc_order += 1;
             }

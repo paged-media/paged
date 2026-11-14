@@ -2224,7 +2224,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   host.contribute.editContext({
     // Extensions ADR 1110 — the image's own Transform, Version and Export
-    // (editor ADR 1235's verbs): Free Transform, a snapshot, Export As.
+    // (editor ADR 1242's verbs): Free Transform, a snapshot, Export As.
     verbs: {
       transform: "media.paged.image.command.freeTransform",
       version: "media.paged.image.command.newSnapshot",

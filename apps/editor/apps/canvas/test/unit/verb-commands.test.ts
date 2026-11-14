@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1235 — the verbs every object answers: eight host commands in
+// Editor ADR 1242 — the verbs every object answers: eight host commands in
 // one order, applying on a selection or inside a context, each resolving to
 // the module's command where the context names one that applies, else to
 // the host's.

@@ -25,7 +25,10 @@
 // `requestSnapPoint` with the snap settings (`setSnapSettings`). Both are
 // session state the worker keeps across document loads, so this sends them
 // whenever they change and once on mount — nothing else needs to.
-// Renders nothing.
+// Since protocol 81 (engine ADR 1306, editor ADR 1212) the view settings
+// also carry the screen mode's proof (no page edge, no degraded-asset
+// markers) and whether nonprinting items show: the Nonprinting items aid,
+// and never in a proof, which shows what prints. Renders nothing.
 
 import { useEffect, useSyncExternalStore } from "react";
 
@@ -34,7 +37,9 @@ import type { SnapSettings } from "@paged-media/client";
 import { useBindingProviderHost } from "../catalog/binding-providers";
 import type { ShellWorkspaceView } from "../catalog/binding-providers";
 import { useCanvasClient } from "./canvas-client-context";
+import { isProofMode } from "./editing-aids";
 import { useEditorScope, type EditorScope } from "./editor-scope";
+import { useOptionalScreenMode } from "./screen-mode-context";
 import {
   gridStep,
   useViewPreferences,
@@ -109,6 +114,13 @@ export function ViewSettingsSync() {
     () => viewModeOf(scope),
     () => "preview" as const,
   );
+  const proof = isProofMode(useOptionalScreenMode()?.screenMode);
+  const showNonprinting = useSyncExternalStore(
+    (l) => subscribeViewToggles(scope, l),
+    () => getViewToggle(scope, "nonprinting"),
+    () => true,
+  );
+  const hideNonprinting = proof || !showNonprinting;
   // One string per distinct settings value: the effect runs when the
   // settings change, not on every render.
   const snapKey = useSyncExternalStore(
@@ -127,8 +139,10 @@ export function ViewSettingsSync() {
     bindings.setWorkspaceView(JSON.parse(workspaceKey) as ShellWorkspaceView);
   }, [bindings, workspaceKey]);
   useEffect(() => {
-    void client.setViewSettings({ mode }).catch(() => {});
-  }, [client, mode]);
+    void client
+      .setViewSettings({ mode, hideNonprinting, proof })
+      .catch(() => {});
+  }, [client, mode, hideNonprinting, proof]);
   useEffect(() => {
     if (!snapKey) return;
     void client

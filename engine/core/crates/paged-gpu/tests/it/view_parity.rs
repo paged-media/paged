@@ -57,7 +57,7 @@ fn scene() -> DisplayList {
         width: 2,
         height: 2,
         encoded: Default::default(),
-        rgba: vec![0u8, 120, 255, 255].repeat(4).into(),
+        rgba: [0u8, 120, 255, 255].repeat(4).into(),
         icc: None,
         rendering: None,
     });

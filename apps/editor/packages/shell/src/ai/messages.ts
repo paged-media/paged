@@ -40,7 +40,7 @@ export const AI = defineMessages("shell.ai", {
     "The document changed after Claude's edit, so it was not undone. Use Edit ▸ Undo instead.",
 });
 
-// Editor ADR 1234 — Inspect → Propose → Preview → Approve → Apply.
+// Editor ADR 1241 — Inspect → Propose → Preview → Approve → Apply.
 export const PROPOSAL = defineMessages("shell.aiProposal", {
   checks: "Checks",
   checksIntro:

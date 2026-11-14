@@ -267,6 +267,45 @@ describe("paged.draw tools through the gesture DSL — drawing", () => {
     await cancelCommitsNothing(`${T}.paintbrush`, [], [100, 700], [300, 700]);
   });
 
+  // Editor ADR "An accessible object tree" (UXI-A11Y-010): pressure is
+  // the pen's. A mouse reports 0 on its release; the brush reads it as
+  // the neutral 0.5, so a mouse stroke keeps one width to its end.
+  it("Paintbrush: a mouse stroke keeps its width to the end; a pen's pressure shapes it", async () => {
+    covers("tool:media.paged.draw.tool.paintbrush");
+    const widthsOf = (r: UnitRig): number[] => {
+      const op = r
+        .leaves()
+        .find(
+          (m) =>
+            m.op === "setElementProperty" &&
+            (m as { args: { path: string } }).args.path ===
+              "outlineStrokeVariable",
+        ) as { args: { value: { value: { widths: number[] } } } } | undefined;
+      return op?.args.value.value.widths ?? [];
+    };
+    const mouse = rig([]);
+    await arm(mouse.r, mouse.g, `${T}.paintbrush`);
+    await mouse.g.drag({ from: [100, 700], to: [300, 700], steps: 6 }).settle();
+    const flat = widthsOf(mouse.r);
+    expect(flat.length).toBeGreaterThan(1);
+    expect(Math.min(...flat)).toBeCloseTo(Math.max(...flat), 6);
+    const pen = rig([]);
+    await arm(pen.r, pen.g, `${T}.paintbrush`);
+    await pen.g
+      .drag({
+        from: [100, 700],
+        via: [[200, 640]],
+        to: [300, 700],
+        steps: 6,
+        device: "pen",
+        pressureAt: (i, n) => 0.3 + (0.6 * i) / n,
+      })
+      .settle();
+    const shaped = widthsOf(pen.r);
+    expect(shaped.length).toBeGreaterThan(2);
+    expect(Math.max(...shaped)).toBeGreaterThan(Math.min(...shaped) * 1.5);
+  });
+
   it("Blob Brush: a stroke over the selected path is united with it, as one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.blobBrush");
     const { r, g } = rig([A]);

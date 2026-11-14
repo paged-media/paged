@@ -61,6 +61,7 @@ import type {
   GestureHandler,
   PagedEditor,
 } from "@paged-media/shell";
+import { PEN_TOOL } from "../messages";
 import type { ElementId, PathAnchorsResult } from "@paged-media/client";
 
 import type { AnchorTable, Vec2 } from "@paged-media/vector-geometry";
@@ -599,6 +600,11 @@ export function createPenHandler(): GestureHandler {
       const k = e.key;
       enqueue(() => key(k));
     },
+    // IC10 — what the modifiers do with the Pen, for the host's hint strip.
+    modifierHints: [
+      { keys: ["shift"], label: t(PEN_TOOL.constrain) },
+      { keys: ["primary"], label: t(PEN_TOOL.noSnap) },
+    ],
     busy() {
       // A path under construction: Escape cancels its open run.
       return page !== null && machine !== null;

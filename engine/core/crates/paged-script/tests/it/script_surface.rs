@@ -159,7 +159,7 @@ fn every_reason_is_a_reason() {
 /// The bridge's own count, so the headline number in the module doc
 /// cannot drift from the code without a failure.
 #[test]
-fn the_script_surface_reaches_196_of_197() {
+fn the_script_surface_reaches_197_of_198() {
     // 144 of 145: v0.71.13 added insertFootnote and deleteFootnote (ADR
     // 163), deleteHyperlink and editHyperlink (ADR 164) and
     // updateTableOfContents (ADR 165); v72 generateIndex (ADR 168),
@@ -184,9 +184,10 @@ fn the_script_surface_reaches_196_of_197() {
     // chooseContentControlItem (engine ADR 1052); insertCommentThread,
     // setCommentAnchor and setPerson (engine ADR 1055); setTheme,
     // setThemeColor and setThemeFonts (engine ADR 1056);
-    // createThemeFromSwatches and setStyleThemeFont (engine ADR 1057).
-    assert_eq!(ops_the_bridge_names().len(), 196);
-    assert_eq!(paged_wire::MUTATION_NAMES.len(), 197);
+    // createThemeFromSwatches and setStyleThemeFont (engine ADR 1057);
+    // v81 relinkImage (engine ADR 1308).
+    assert_eq!(ops_the_bridge_names().len(), 197);
+    assert_eq!(paged_wire::MUTATION_NAMES.len(), 198);
 }
 
 /// The names the bridge actually installs, read out of `install_bridge`

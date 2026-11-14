@@ -34,7 +34,7 @@
 // Properties shortcut — feeds the same session store (ai/assistant-session),
 // so a run started anywhere is shown here.
 //
-// Editor ADR 1234: the assistant PROPOSES and the user approves. "Ask" no
+// Editor ADR 1241: the assistant PROPOSES and the user approves. "Ask" no
 // longer lets Claude edit: a request first shows what will leave the device
 // and waits for Send (every request); Claude then only reads, through the
 // object model, and answers a change set the panel previews (each object,
@@ -272,7 +272,7 @@ export function AIAssistant() {
     (request: string) => {
       const text = request.trim();
       if (!text || running || !hasDocument || offline) return;
-      // Editor ADR 1234: nothing is sent yet — the consent card says what
+      // Editor ADR 1241: nothing is sent yet — the consent card says what
       // would leave the device, and Send sends it.
       const selection = doors
         ? elementSelection.map((id) => doors.addressOf(id))
@@ -297,7 +297,7 @@ export function AIAssistant() {
     ],
   );
 
-  // A brief waits for consent like a request (editor ADR 1234).
+  // A brief waits for consent like a request (editor ADR 1241).
   const [pendingSize, setPendingSize] = useState("a4");
   const build = (brief: string, sizeId: string) => {
     const text = brief.trim();

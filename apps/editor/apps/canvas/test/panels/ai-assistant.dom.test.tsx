@@ -107,7 +107,7 @@ describe("AI Assistant panel", () => {
     const from = h.mark();
     await h.click(h.view.getByRole("button", { name: "Ask Claude" }));
     await h.settle();
-    // Editor ADR 1234: the request waits for consent, then is sent.
+    // Editor ADR 1241: the request waits for consent, then is sent.
     await h.click(h.view.getByRole("button", { name: "Send to Claude" }));
     await h.settle();
     const error = h.root.querySelector("[data-ai-proposal-error]")!;

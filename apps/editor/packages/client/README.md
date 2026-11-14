@@ -144,6 +144,38 @@ outOfScope, refused }`: `marquee` when nothing was hit, `outOfScope` when
   `svgImportPlan` (`report.losses`), DOCX, PPTX and PDF through their
   modules' import results.
 
+## Editing aids and proofs (protocol 81)
+
+- **Hidden characters** (engine ADR 1306). `hiddenCharacters(pageIds)`
+  answers, per page asked for (the pages in view), per composed line, where
+  its invisibles stand: each mark's `kind` (`space`, `nonBreakingSpace`,
+  `fixedSpace`, `tab`, `forcedLineBreak`, `discretionaryLineBreak`,
+  `anchoredObject`, `paragraphEnd`, the break characters `columnBreak` …
+  `evenPageBreak`, `storyEnd`) and its `x` and `width` on the line, with
+  the line's `baseline`, text `size` and `turn` (the affine a turned frame
+  or a vertical story applies; absent when upright). Draw them over the
+  page; they are never in the page's raster.
+- **A frame's own baseline grid**. `frameBaselineGrids(pageIds?)` answers
+  every text frame that uses a grid of its own, with its box and transform
+  (as `elementGeometry`), the first line below the frame's top edge
+  (`start`), the `increment` and what it is measured from (`relativeTo`).
+- **Proofs and nonprinting items**. `setViewSettings` takes
+  `hideNonprinting` (the screen leaves nonprinting items out, as print
+  does, and nothing hits them) and `proof` (no page edge, no degraded-asset
+  markers). Both rebuild the pages: the `viewSettingsApplied` reply says
+  `rebuilt`. Neither changes the document.
+- **Facing pages** (engine ADR 1307). `newBlankDocument(width, height,
+font?, { pages, facingPages })` makes that many pages, as facing spreads
+  when asked: page 1 alone as a right-hand page, then left/right pairs.
+- **Relink** (engine ADR 1308). `mutate({ op: "relinkImage", args: {
+elementId, uri, bytes? } })` — or `mutateWithBytes` with `bytes: []` and
+  the file's bytes — points a picture at a new source in one undo step,
+  keeping the frame, its fitting and the picture's size on the page.
+- **One screen extent**. The wasm `renderTilePng` draws a page's screen
+  extent (its trim grown to its bleed and pasteboard artwork) on a
+  transparent ground; `screenExtent(pageId)` says where the tile goes, the
+  rect the GPU lane clips to.
+
 ## The catalog
 
 `api-catalog.json`, shipped in this package, is the machine-readable

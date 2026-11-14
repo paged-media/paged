@@ -113,6 +113,7 @@ export const WINDOW_CATEGORY: Readonly<Record<string, WindowCategory>> = {
   "paged.preflight": "Output",
   "paged.output-readiness": "Output",
   "paged.publication-health": "Output",
+  "paged.constraints": "Output",
   "paged.separations": "Output",
   "paged.object-export": "Output",
   "paged.export-tagging": "Output",

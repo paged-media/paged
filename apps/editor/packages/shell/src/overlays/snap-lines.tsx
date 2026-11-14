@@ -27,6 +27,8 @@ import type {
 } from "../registries/overlay";
 import { useOptionalOverlaySignals } from "../state/overlay-signals-context";
 import { useViewPreferences } from "../state/view-preferences";
+import { useStrings } from "@paged-media/strings";
+import { SNAP } from "../chrome/messages";
 
 const STROKE = "var(--overlay-snap)";
 /** Label text size and end-tick length, screen px. */
@@ -81,14 +83,51 @@ function endTicks(a: [number, number], b: [number, number], inv: number) {
   ));
 }
 
+/** What a snap line snaps to, in words (`UXI-SNP-002`, IC8). */
+function targetWords(
+  strings: ReturnType<typeof useStrings>,
+  kind: SnapLine["targetKind"],
+): string | null {
+  switch (kind) {
+    case "guide":
+      return strings.t(SNAP.guide);
+    case "margin":
+      return strings.t(SNAP.margin);
+    case "column":
+      return strings.t(SNAP.column);
+    case "pageEdge":
+      return strings.t(SNAP.pageEdge);
+    case "pageCenter":
+      return strings.t(SNAP.pageCenter);
+    case "grid":
+      return strings.t(SNAP.grid);
+    case "baseline":
+      return strings.t(SNAP.baseline);
+    case "objectEdge":
+      return strings.t(SNAP.objectEdge);
+    case "objectCenter":
+      return strings.t(SNAP.objectCenter);
+    case "objectPoint":
+    case "point":
+      return strings.t(SNAP.point);
+    case "equalSpacing":
+      return strings.t(SNAP.equalSpacing);
+    case "pixel":
+      return strings.t(SNAP.pixel);
+    default:
+      return null;
+  }
+}
+
 /** One line of the engine's snap reply (v77 shape, editor ADR 287). */
 function SnapLineShape(props: {
   line: SnapLine;
   pr: OverlayPageRect;
   inv: number;
   labels: boolean;
+  target: string | null;
 }) {
-  const { line: l, pr, inv, labels } = props;
+  const { line: l, pr, inv, labels, target } = props;
   const common = {
     stroke: STROKE,
     strokeWidth: 1,
@@ -108,8 +147,10 @@ function SnapLineShape(props: {
     } else if (labels && l.distance != null && l.distance > 0.01) {
       text = formatLength(l.distance);
     }
+    // What it snaps to, always; the measure beside it when labels are on.
+    if (target) text = text ? `${target} · ${text}` : target;
     return (
-      <g data-snap-kind={kind}>
+      <g data-snap-kind={kind} data-snap-target={l.targetKind ?? undefined}>
         <line
           x1={a[0]}
           y1={a[1]}
@@ -127,25 +168,41 @@ function SnapLineShape(props: {
   }
   if (l.axis === "x") {
     return (
-      <line
-        data-snap-kind={kind}
-        x1={pr.x + l.position}
-        y1={pr.y}
-        x2={pr.x + l.position}
-        y2={pr.y + pr.h}
-        {...common}
-      />
+      <g data-snap-kind={kind} data-snap-target={l.targetKind ?? undefined}>
+        <line
+          x1={pr.x + l.position}
+          y1={pr.y}
+          x2={pr.x + l.position}
+          y2={pr.y + pr.h}
+          {...common}
+        />
+        {target && (
+          <Label
+            at={[pr.x + l.position, pr.y + 14 * inv]}
+            text={target}
+            inv={inv}
+          />
+        )}
+      </g>
     );
   }
   return (
-    <line
-      data-snap-kind={kind}
-      x1={pr.x}
-      y1={pr.y + l.position}
-      x2={pr.x + pr.w}
-      y2={pr.y + l.position}
-      {...common}
-    />
+    <g data-snap-kind={kind} data-snap-target={l.targetKind ?? undefined}>
+      <line
+        x1={pr.x}
+        y1={pr.y + l.position}
+        x2={pr.x + pr.w}
+        y2={pr.y + l.position}
+        {...common}
+      />
+      {target && (
+        <Label
+          at={[pr.x + 30 * inv, pr.y + l.position]}
+          text={target}
+          inv={inv}
+        />
+      )}
+    </g>
   );
 }
 
@@ -160,6 +217,7 @@ function SnapLineShape(props: {
  * drag.
  */
 function SnapLinesRender(props: OverlayProps) {
+  const strings = useStrings();
   const signals = useOptionalOverlaySignals();
   const prefs = useViewPreferences();
   const lines = signals?.snapLines ?? [];
@@ -177,6 +235,7 @@ function SnapLinesRender(props: OverlayProps) {
             pr={pr}
             inv={inv}
             labels={prefs.measurementLabels}
+            target={targetWords(strings, l.targetKind)}
           />
         );
       })}

@@ -47,6 +47,7 @@ mod anchored;
 mod appearance;
 mod auto_size;
 mod baseline_grid;
+pub use baseline_grid::frame_custom_grid;
 mod blend_shadow;
 mod build_engine;
 mod color_paint;
@@ -1001,6 +1002,13 @@ pub struct LineLayout {
     /// (`byte` counts within the marker's own text). Empty on a line
     /// without one.
     pub marker: Vec<ClusterPos>,
+    /// Engine ADR 1306 — how the page turns this line, page-local: the
+    /// affine its glyph commands were post-multiplied by (a turned
+    /// frame's linear part pivoted about its top-left, then a vertical
+    /// story's quarter turn), `None` for an upright line. The baseline and
+    /// the clusters above are upright, before it; whoever draws at them
+    /// (the hidden characters) maps through it.
+    pub turn: Option<[f32; 6]>,
 }
 
 /// One glyph cluster's page-local position. Cluster bytes are

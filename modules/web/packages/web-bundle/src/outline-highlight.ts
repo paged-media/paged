@@ -90,24 +90,22 @@ function setOverlay(
 }
 
 /**
- * Draw the painted boxes of outline entry `index` of `source` (the frame
- * `id`). Answers how many boxes were drawn (0: the engine is not loaded, or
- * the element painted no box).
+ * The painted boxes of outline entry `index` of `source` (the frame `id`),
+ * in the inspected render's px, without drawing them (web ADR 416: the
+ * inspector's size). Empty when the engine is not loaded or the element
+ * painted no box.
  */
-export async function highlightOutlineEntry(
+export async function outlineEntryBoxes(
   host: BundleHost,
   id: ElementId,
   source: WebFrameSource,
   index: number,
   engineOf: () => Promise<WebEngine | null> = () => loadWebEngine(host),
-): Promise<number> {
+): Promise<{ boxes: InspectBox[]; geometry: ElementGeometryItem | null }> {
   const engine = await engineOf();
-  if (!engine?.renderInspected) {
-    setOverlay(host, null);
-    return 0;
-  }
+  if (!engine?.renderInspected) return { boxes: [], geometry: null };
   const [g] = await host.document.elementGeometry([id]);
-  if (!g?.bounds) return 0;
+  if (!g?.bounds) return { boxes: [], geometry: null };
   const widthPx = Math.round(
     Math.max(0, g.bounds[3] - g.bounds[1]) * PX_PER_PT,
   );
@@ -120,9 +118,37 @@ export async function highlightOutlineEntry(
     widthPx,
     heightPx,
   );
-  if (!out) return 0;
-  const boxes = boxesForOutline(out.boxes, tagOutline(source.html), index);
-  setOverlay(host, boxOutlines(g, boxes));
+  if (!out) return { boxes: [], geometry: g };
+  return {
+    boxes: boxesForOutline(out.boxes, tagOutline(source.html), index),
+    geometry: g,
+  };
+}
+
+/**
+ * Draw the painted boxes of outline entry `index` of `source` (the frame
+ * `id`). Answers how many boxes were drawn (0: the engine is not loaded, or
+ * the element painted no box).
+ */
+export async function highlightOutlineEntry(
+  host: BundleHost,
+  id: ElementId,
+  source: WebFrameSource,
+  index: number,
+  engineOf: () => Promise<WebEngine | null> = () => loadWebEngine(host),
+): Promise<number> {
+  const { boxes, geometry } = await outlineEntryBoxes(
+    host,
+    id,
+    source,
+    index,
+    engineOf,
+  );
+  if (!geometry) {
+    setOverlay(host, null);
+    return 0;
+  }
+  setOverlay(host, boxOutlines(geometry, boxes));
   return boxes.length;
 }
 

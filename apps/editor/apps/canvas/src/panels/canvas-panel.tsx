@@ -51,6 +51,7 @@ import {
   useChromeRegions,
   useEscapeHandler,
   useSessionRole,
+  ModifierHints,
 } from "@paged-media/shell";
 
 import type {
@@ -89,7 +90,12 @@ export function CanvasPanel(_props: PanelProps) {
   // keep `null` and run ViewportCanvas's proven legacy pointer path.
   // Hand/Zoom (incl. Space / Cmd+Space spring-loads) reuse the legacy
   // pan machinery + a click-zoom rather than gesture handlers.
-  const { toolGesture, cursor: toolCursor, effectiveTool } = useGestureSpine();
+  const {
+    toolGesture,
+    cursor: toolCursor,
+    effectiveTool,
+    modifierHints,
+  } = useGestureSpine();
   // A tool whose click and drag are different halves of one tool (Type:
   // caret on click, new text frame on drag) declares BOTH a legacyKey
   // and a gesture. ViewportCanvas needs to know, because otherwise the
@@ -669,6 +675,7 @@ export function CanvasPanel(_props: PanelProps) {
         resolution={resolution}
         layoutCacheStats={layoutCacheStats}
       />
+      <ModifierHints toolId={effectiveTool} hints={modifierHints} />
     </div>
   );
 }

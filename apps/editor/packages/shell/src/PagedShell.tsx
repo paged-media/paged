@@ -31,6 +31,12 @@
 // canvas internals.
 
 import { t, useStrings } from "@paged-media/strings";
+import {
+  MODIFIER_HINTS_COMMAND,
+  modifierHintsAlways,
+  setModifierHintsAlways,
+} from "./overlays/modifier-hints";
+import { MODIFIER_HINTS } from "./chrome/messages";
 import { COMMANDS, FEEDBACK_ACTIONS, LOAD } from "./state/messages";
 import {
   debugHandlesEnabled,
@@ -148,6 +154,7 @@ import { FillStrokeCluster } from "./chrome/FillStrokeCluster";
 import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
 import { useDensityCommands } from "./state/density";
+import { useContrastCommands } from "./state/contrast";
 import {
   useFocusWorkspace,
   useFocusWorkspaceCommand,
@@ -602,6 +609,8 @@ function ShellChrome({
   // Edit ▸ Settings ▸ Interface density (state/density.ts) and the
   // adaptive workspace's switch (cockpit/workspace-class.ts).
   useDensityCommands();
+  // Edit ▸ Settings ▸ Contrast (state/contrast.ts).
+  useContrastCommands();
   useAdaptiveWorkspaceCommand();
   const focus = useFocusWorkspace();
   // A narrow workspace (cockpit/workspace-class.ts) shows the right dock as
@@ -923,6 +932,23 @@ function ShellChrome({
         group: "settings",
         order: 80,
         checked: (paged) => tabHidesPanels(scopeOf(paged)),
+      }),
+      // IC10 — the modifier hints stay past a tool's first uses.
+      registries.commands.register({
+        id: MODIFIER_HINTS_COMMAND,
+        title: t(MODIFIER_HINTS.keepVisible),
+        category: "View",
+        handler: (paged) => {
+          const at = scopeOf(paged);
+          setModifierHintsAlways(at, !modifierHintsAlways(at));
+        },
+      }),
+      registries.menus.register({
+        path: "Edit/Settings/Keep modifier hints visible",
+        command: MODIFIER_HINTS_COMMAND,
+        group: "settings",
+        order: 81,
+        checked: (paged) => modifierHintsAlways(scopeOf(paged)),
       }),
       registries.keybindings.register({
         key: "tab",

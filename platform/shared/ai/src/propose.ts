@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — the PROPOSAL loop: Inspect → Propose. The model reads
+// Editor ADR 1241 — the PROPOSAL loop: Inspect → Propose. The model reads
 // the document through the host's object model (`read_objects`, answered
 // locally by a reader the host restricts to what the user allowed) and
 // answers one change set (`propose_changes`). It has no tool that writes:

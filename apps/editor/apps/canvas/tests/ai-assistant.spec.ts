@@ -19,7 +19,7 @@
 
 // The AI Assistant panel (ADR 221), with the proxy stubbed: a suggestion
 // asks for consent, then sends the selection and the diagnosis to Claude,
-// which proposes a change set (editor ADR 1234); Apply makes it one undo
+// which proposes a change set (editor ADR 1241); Apply makes it one undo
 // step, and the panel's Undo reverts exactly that step — but not after the
 // user edited since.
 
@@ -103,7 +103,7 @@ test.describe("AI Assistant panel", () => {
     const before = await opacity(page);
 
     await card.locator("[data-ai-suggestion]").first().click();
-    // Editor ADR 1234: nothing is sent before the consent card's Send.
+    // Editor ADR 1241: nothing is sent before the consent card's Send.
     await expect(page.locator("[data-ai-consent=ask]")).toBeVisible();
     expect(sent).toHaveLength(0);
     await page.locator("[data-cockpit-action=ai-consent-send]").click();

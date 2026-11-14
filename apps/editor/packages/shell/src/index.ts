@@ -102,8 +102,9 @@ export {
 export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
+export { snapBypassHeld } from "./tools/snap-bypass";
 export { hoverPreselectContribution } from "./overlays/hover-preselect";
-// Editor ADRs 1233, 1234 — what a previewed change will touch, outlined.
+// Editor ADRs 1240, 1241 — what a previewed change will touch, outlined.
 export { previewTargetsContribution } from "./overlays/preview-targets";
 export {
   clearPreviewTargets,
@@ -111,7 +112,22 @@ export {
   showPreviewTargets,
   type PreviewTargets,
 } from "./state/preview-targets";
-export { nextBelow, objectsUnder } from "./state/objects-under";
+export {
+  MODIFIER_HINTS_ALWAYS_KEY,
+  MODIFIER_HINTS_COMMAND,
+  MODIFIER_HINTS_USES_KEY,
+  MODIFIER_HINT_USES,
+  ModifierHints,
+  builtInHints,
+  modifierHintsAlways,
+  setModifierHintsAlways,
+} from "./overlays/modifier-hints";
+export {
+  nextAbove,
+  nextBelow,
+  objectsOver,
+  objectsUnder,
+} from "./state/objects-under";
 export { isLockedEntries, useLockedKeys } from "./state/locked";
 
 export {
@@ -129,6 +145,18 @@ export {
   useDensity,
   type Density,
 } from "./state/density";
+export {
+  CONTRAST_COMMANDS,
+  CONTRAST_PREFERENCES,
+  DEFAULT_CONTRAST,
+  effectiveContrast,
+  getContrastPreference,
+  setContrastPreference,
+  useContrast,
+  useContrastPreference,
+  type Contrast,
+  type ContrastPreference,
+} from "./state/contrast";
 export {
   CameraProvider,
   cameraKeepingCentre,
@@ -292,7 +320,17 @@ export {
   type ScreenMode,
 } from "./state/screen-mode-context";
 
-export { resolveCursorCss } from "./tools/cursor";
+export {
+  CURSOR_CONTROLLER,
+  CURSOR_LAYERS,
+  createCursorController,
+  holdCursor,
+  resolveCursorCss,
+  useCursorController,
+  writeCursor,
+  type CursorController,
+  type CursorLayer,
+} from "./tools/cursor";
 export type { CursorSpec, CssCursorToken } from "./tools/cursor";
 export type {
   GestureHandler,
@@ -1020,8 +1058,14 @@ export {
   frameEdgePoints,
   baselineGridContribution,
   baselineGridLines,
+  frameGridLines,
   BASELINE_GRID_MIN_SPACING_PX,
   oversetMarkersContribution,
+  hiddenCharactersContribution,
+  hiddenCharacterRuns,
+  pagesInView,
+  HIDDEN_CHARACTER_GLYPHS,
+  HIDDEN_CHARACTERS_MIN_PX,
   proofSurfaceContribution,
   proofBox,
   dataMarkersContribution,
@@ -1420,8 +1464,7 @@ export {
   overlayShown,
   PROOF_HIDDEN_OVERLAYS,
   PROOF_SURFACE_OVERLAY,
-  UNSUPPORTED_AIDS,
-  unsupportedAidReason,
+  RENDER_AIDS,
 } from "./state/editing-aids";
 export { EditingAidsControl } from "./chrome/EditingAidsControl";
 export {

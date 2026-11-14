@@ -38,7 +38,6 @@ import {
   isProofMode,
   scopeOf,
   toggleViewToggle,
-  UNSUPPORTED_AIDS,
   type EditingAidToggle,
   type PagedEditor,
   type ViewToggle,
@@ -70,7 +69,7 @@ const M = defineMessages("app.viewCommands", {
   oversetMarkers: "Show overset markers",
   hiddenCharacters: "Show hidden characters",
   nonprinting: "Show nonprinting items",
-  notSupported: "{aid} (not supported yet)",
+  constraints: "Show design constraints",
 });
 
 defineMessages("menu", {
@@ -98,6 +97,7 @@ defineMessages("menu", {
   "Hidden characters": "Hidden characters",
   "Nonprinting items": "Nonprinting items",
   "Data bindings": "Data bindings",
+  "Design constraints": "Design constraints",
   "Proof view": "Proof view",
 });
 
@@ -127,6 +127,8 @@ export const PAGED_VIEW_TOGGLE_OVERSET_MARKERS =
 export const PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS =
   "paged.view.toggleHiddenCharacters";
 export const PAGED_VIEW_TOGGLE_NONPRINTING = "paged.view.toggleNonprinting";
+// Editor ADR 1233 — the design constraints' glyphs.
+export const PAGED_VIEW_TOGGLE_CONSTRAINTS = "paged.view.toggleConstraints";
 
 export const EDITING_AID_COMMANDS: Readonly<Record<EditingAidToggle, string>> =
   {
@@ -140,6 +142,7 @@ export const EDITING_AID_COMMANDS: Readonly<Record<EditingAidToggle, string>> =
     nonprinting: PAGED_VIEW_TOGGLE_NONPRINTING,
     // Data ADR 566 — the binding badges keep their older id (app-commands).
     dataMarkers: "paged.view.toggleDataMarkers",
+    constraints: PAGED_VIEW_TOGGLE_CONSTRAINTS,
   };
 
 /** The aids' rows of View ▸ Editing aids, in the control's order. */
@@ -153,6 +156,7 @@ const AID_ROWS: ReadonlyArray<[EditingAidToggle, string]> = [
   ["hiddenCharacters", "Hidden characters"],
   ["nonprinting", "Nonprinting items"],
   ["dataMarkers", "Data bindings"],
+  ["constraints", "Design constraints"],
 ];
 
 /** Proof view is the Preview screen mode (InDesign's W, the shell's
@@ -285,19 +289,25 @@ export function buildViewCommands(
       category: "View",
       handler: flip("oversetMarkers"),
     },
+    // Engine ADR 1306 — the engine reports the hidden characters, and it
+    // leaves nonprinting items off the screen while their aid is off.
     {
       id: PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS,
       title: t(M.hiddenCharacters),
       category: "View",
-      when: () => false,
-      handler: () => {},
+      handler: flip("hiddenCharacters"),
     },
     {
       id: PAGED_VIEW_TOGGLE_NONPRINTING,
       title: t(M.nonprinting),
       category: "View",
-      when: () => false,
-      handler: () => {},
+      handler: flip("nonprinting"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_CONSTRAINTS,
+      title: t(M.constraints),
+      category: "View",
+      handler: flip("constraints"),
     },
   ];
 }
@@ -328,12 +338,7 @@ export const VIEW_MENU_ITEMS: MenuItemContribution[] = [
     // before Show heading anchors (65).
     order: 58 + i / 10,
     group: "extras",
-    ...(UNSUPPORTED_AIDS[aid]
-      ? {
-          disabled: true,
-          labelFor: () => t(M.notSupported, { aid: t(`menu.${row}`) }),
-        }
-      : { checked: checked(aid) }),
+    checked: checked(aid),
   })),
   // Illustrator's View menu opens with the screen modes; they sit above
   // the zoom group (orders 20–50).

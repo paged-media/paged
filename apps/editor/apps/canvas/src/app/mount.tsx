@@ -51,6 +51,7 @@ import {
   frameEdgesContribution,
   baselineGridContribution,
   oversetMarkersContribution,
+  hiddenCharactersContribution,
   proofSurfaceContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -305,6 +306,7 @@ import {
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   CANVAS_CONTEXT_MENU_KEYBINDINGS,
+  SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
   CanvasContextMenuHost,
 } from "../canvas-context-menu";
@@ -326,6 +328,11 @@ import {
   buildAppearanceCommands,
 } from "../appearance-commands";
 import { buildReflectCommands, REFLECT_MENU_ITEMS } from "../reflect-commands";
+import {
+  A11Y_KEYBINDINGS,
+  A11Y_MENU_ITEMS,
+  buildA11yCommands,
+} from "../a11y-commands";
 import { buildStarCommands, STAR_MENU_ITEMS } from "../star-commands";
 import { StarDialog } from "../panels/star-dialog";
 import { buildBarcodeCommands, BARCODE_MENU_ITEMS } from "../barcode-commands";
@@ -388,6 +395,19 @@ import {
   watchCompatibility,
 } from "../panels/compatibility-report-store";
 import { usePublicationIssuesSource } from "../publication-issues";
+import {
+  ADD_CONSTRAINT_COMMAND,
+  AddConstraintDialog,
+  CONSTRAINT_MENU_ITEMS,
+} from "../constraints/add-constraint";
+import {
+  constraintGlyphsContribution,
+  fixPreviewContribution,
+} from "../constraints/overlay";
+import { useDesignConstraintsSource } from "../constraints/source";
+import { useAutomaticCheckpoints } from "../checkpoints/checkpoints";
+import { CompareDialog } from "../compare/compare-dialog";
+import { setSideEngineFactory } from "../compare/side-engine";
 import {
   markStartDecided,
   useRememberLastDocument,
@@ -457,6 +477,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   marginGuidesContribution,
   frameEdgesContribution,
   oversetMarkersContribution,
+  // Engine ADR 1306 — the hidden characters, where the engine says they
+  // stand.
+  hiddenCharactersContribution,
   // Editor ADR 287 — View ▸ Show grid / Show pixel grid.
   gridOverlayContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only
@@ -485,9 +508,13 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 1223 — View ▸ Show issue markers: the publication's issues
   // where they stand. Draws nothing until toggled on.
   issueMarkersContribution,
-  // Editor ADRs 1233, 1234 — what a previewed action or a proposed change
+  // Editor ADRs 1240, 1241 — what a previewed action or a proposed change
   // will touch. Draws nothing without a preview.
   previewTargetsContribution,
+  // Editor ADR 1233 — the design constraints' glyphs (an editing aid) and
+  // where a previewed fix would move things.
+  constraintGlyphsContribution,
+  fixPreviewContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,
@@ -723,7 +750,7 @@ function PluginBundles() {
       notifySink: notifySinkOf(scope),
       pages,
     });
-    // Editor ADR 1233 — the user's recorded actions on the `actions@1`
+    // Editor ADR 1240 — the user's recorded actions on the `actions@1`
     // door every bundle host shares.
     if (hostOptions.shared.actions)
       setActionsDoor(scope, hostOptions.shared.actions);
@@ -942,6 +969,11 @@ function CanvasAppIntegration() {
   // Editor ADR 1223 — the publication's issues, gathered for the markers,
   // the page overview and Publication health.
   usePublicationIssuesSource();
+  // Editor ADR 1233 — the design constraints, evaluated as the document
+  // changes; what does not hold joins those issues.
+  useDesignConstraintsSource();
+  // Editor ADR 1234 — a checkpoint after every export.
+  useAutomaticCheckpoints();
   // UX audit F-06 — the document open last comes back at the next start
   // (unless the recovery journal offers unsaved work first).
   useRememberLastDocument();
@@ -1849,10 +1881,13 @@ function CanvasAppIntegration() {
       ...svgCommands,
       // Editor ADR 288 — Asset Export.
       ...buildAssetExportCommands(),
-      // Editor ADR 1235 — the verbs every object answers.
+      // Editor ADR 1242 — the verbs every object answers.
       ...buildVerbCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       SELECT_BELOW_COMMAND,
+      SELECT_ABOVE_COMMAND,
+      // Editor ADR 1233 — Object ▸ Add constraint….
+      ADD_CONSTRAINT_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
@@ -1873,6 +1908,11 @@ function CanvasAppIntegration() {
       ...viewCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
+      // The object tree and the selection cycle (editor ADR "An accessible
+      // object tree").
+      ...buildA11yCommands({
+        showPanel: (id) => registries.commands.invoke(`paged.panel.show.${id}`),
+      }),
       // ADR 303 — Find & Replace, Go to page.
       ...FIND_COMMANDS,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1886,6 +1926,7 @@ function CanvasAppIntegration() {
       ...SVG_MENU_ITEMS,
       ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
+      ...CONSTRAINT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
       ...TEXT_FORMAT_MENU_ITEMS,
@@ -1903,6 +1944,7 @@ function CanvasAppIntegration() {
       ...BATCH_MENU_ITEMS,
       ...VIEW_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
+      ...A11Y_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
       // The profile keeps only the host menus its menu bar names. Whole-
@@ -1922,6 +1964,7 @@ function CanvasAppIntegration() {
       ...INSERT_KEYBINDINGS,
       ...VIEW_KEYBINDINGS,
       ...TEXT_FORMAT_KEYBINDINGS,
+      ...A11Y_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));
     return () => {
       for (const d of cmdDisposables) d.dispose();
@@ -2066,7 +2109,25 @@ function CanvasAppRoot() {
     });
     setClient(c);
     instance.onClient?.(c);
+    // Editor ADRs 1234 and 1235 — a second engine on the same worker build
+    // and default fonts, for reading a checkpoint's or a variant's state
+    // without touching the open document. Made per use, disposed after.
+    setSideEngineFactory(
+      instance.scope,
+      () =>
+        new CanvasClient({
+          workerFactory: () => {
+            const w = new CanvasRenderWorker();
+            if (instance.engineWasm)
+              w.postMessage({ kind: "engineWasm", url: instance.engineWasm });
+            return w;
+          },
+          defaultFontProvider: fetchDefaultFont,
+          defaultFontFaces: fetchDefaultFontFaces,
+        }),
+    );
     return () => {
+      setSideEngineFactory(instance.scope, null);
       c.dispose();
       setClient(null);
     };
@@ -2126,6 +2187,10 @@ function CanvasAppRoot() {
       <ViewPreferencesDialog />
       {/* UX audit F-06 — File ▸ Open recent… */}
       <OpenRecentDialog />
+      {/* Editor ADR 1233 — Object ▸ Add constraint… */}
+      <AddConstraintDialog />
+      {/* Editor ADRs 1234 and 1235 — a checkpoint's preview, a comparison. */}
+      <CompareDialog />
       <ScreenCalibrationDialog />
       <TransformEachDialog />
       <ReflectDialog />

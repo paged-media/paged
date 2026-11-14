@@ -97,6 +97,7 @@ import {
   type FlowThreadOption,
   type WebDiagnostic,
   type WebFrameSource,
+  type InspectBox,
 } from "../../../web-model/src";
 
 import {
@@ -113,6 +114,7 @@ import {
   clearOutlineHighlight,
   highlightOutlineEntry,
   onCanvasPick,
+  outlineEntryBoxes,
 } from "../outline-highlight";
 import {
   loadWebSource,
@@ -133,6 +135,11 @@ import {
 } from "./editor-lane";
 import { resolvePreviewFontFaces } from "./font-resolution";
 import { watchDocumentFonts } from "./font-watch";
+import {
+  ElementInspector,
+  PublicationNotes,
+  SampleData,
+} from "./element-inspector";
 import {
   clipboardAvailable,
   describeRemoval,
@@ -217,6 +224,10 @@ export const SOURCE_TEXT = defineMessages("web.source", {
   filterAbout:
     "A variable can pass through a filter, as in {example}. Filters: {filters}. Variables are plain text substitution; they run no scripts.",
   preview: "Preview",
+  browserPreview: "Browser preview (sandboxed)",
+  browserPreviewNote:
+    "Your browser’s rendering of this source, with scripts blocked. The page on the canvas is the publication rendering, drawn natively by Paged’s engine; the two can differ (fonts, unsupported CSS).",
+  publicationRendering: "Publication rendering",
   fontsShown: "The preview uses the document’s fonts.",
   fontsShownList: "The preview uses the document’s fonts: {families}.",
   fromDocument: "From the document: {families}",
@@ -1280,6 +1291,32 @@ function SourceEditor({
     [frameIdStr],
   );
   useEffect(() => () => clearOutlineHighlight(host), []);
+  // Web ADR 416 — the size of the element in focus: its painted boxes in
+  // the inspected render of the settled source (no overlay drawn here).
+  const [focusBoxes, setFocusBoxes] = useState<{
+    tag: number;
+    source: WebFrameSource;
+    boxes: InspectBox[];
+  } | null>(null);
+  useEffect(() => {
+    if (activeTag === null) return;
+    let alive = true;
+    const source = preview;
+    void outlineEntryBoxes(host, id, { ...source }, activeTag)
+      .then(({ boxes }) => {
+        if (alive) setFocusBoxes({ tag: activeTag, source, boxes });
+      })
+      .catch(() => {
+        if (alive) setFocusBoxes({ tag: activeTag, source, boxes: [] });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [host, id, preview, activeTag]);
+  const activeBoxes =
+    focusBoxes && focusBoxes.tag === activeTag && focusBoxes.source === preview
+      ? focusBoxes.boxes
+      : null;
   const findInSource = (entry: TagOutlineEntry, index: number) => {
     setActiveTag(index);
     void highlightOutlineEntry(host, id, { ...draft }, index).then((n) =>
@@ -1420,6 +1457,15 @@ function SourceEditor({
           />
         )}
       </div>
+      {/* Web ADR 416 — the sample data beside the source. */}
+      <SampleData
+        html={draft.html}
+        css={draft.css}
+        vars={draft.vars}
+        onAdd={(name) =>
+          setVarEntries([...varEntries, [name, ""]] as Array<[string, string]>)
+        }
+      />
       {/* Find in source — the markup's opening tags (the pure `tagOutline`
           scan); clicking one selects its source range in the editor and
           outlines the element's painted box on the canvas; a press on the
@@ -1499,6 +1545,18 @@ function SourceEditor({
           )}
         </Disclosure>
       )}
+      <ElementInspector
+        html={draft.html}
+        css={draft.css}
+        outline={outline}
+        index={activeTag}
+        boxes={activeBoxes}
+        diagnostics={diagnostics}
+        onShowInSource={(i) => {
+          const entry = outline[i];
+          if (entry) findInSource(entry, i);
+        }}
+      />
       <div style={kicker}>CSS</div>
       <div data-web-css>
         <CodeEditor
@@ -1665,7 +1723,12 @@ function SourceEditor({
         </About>
       </div>
       <BoundData host={host} names={boundNamesIn(draft)} bindings={bindings} />
-      <div style={kicker}>{t(S.preview)}</div>
+      <div style={kicker} data-web-preview-kind="browser">
+        {t(S.browserPreview)}
+      </div>
+      <p style={{ margin: `0 0 ${space[1]}`, ...mutedNote }}>
+        {t(S.browserPreviewNote)}
+      </p>
       {/* Font badge: W1 honesty + the W-06 flip. When the asset store
           serves a used family's BYTES, the panel composes a real
           `@font-face` (object URL) into the srcdoc and the badge flips
@@ -1809,6 +1872,7 @@ function SourceEditor({
           </span>
         )}
       </div>
+      <PublicationNotes css={draft.css} diagnostics={diagnostics} />
       {diagnostics.length > 0 && (
         <>
           <div style={kicker}>{t(S.diagnostics)}</div>
@@ -1861,7 +1925,9 @@ function SourceEditor({
         const deferredLine = formatDeferred(report.deferred);
         return (
           <>
-            <div style={kicker}>{t(S.flowAndRender)}</div>
+            <div style={kicker} data-web-render-kind="publication">
+              {t(S.publicationRendering)} · {t(S.flowAndRender)}
+            </div>
             <div
               data-web-render-report={report.op}
               style={{

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1233 — the Actions panel's preview and parameters. The preview
+// Editor ADR 1240 — the Actions panel's preview and parameters. The preview
 // is what a run WOULD do here, worked out before anything runs: the steps
 // with the objects each acts on (outlined on the canvas; pointing at one in
 // the list draws it stronger), the refusals that stop the run before it

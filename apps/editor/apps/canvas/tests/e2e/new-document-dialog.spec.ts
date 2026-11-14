@@ -118,6 +118,66 @@ test.describe("File ▸ New document…", () => {
     expect((await meta(page)).dirty).toBe(false);
   });
 
+  test("Facing pages: page 1 on the right, then left and right pages in spreads, a left page's inside margin on its right @feat:editor-shell.file-intake @level:happy", async ({
+    page,
+  }) => {
+    covers("command:paged.file.newDialog");
+    await openShell(page, { doc: false });
+    await clickMenuRow(page, "File/New document…");
+    const dialog = page.locator("[data-new-document-dialog]");
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-new-document-category="custom"]').click();
+    await dialog.locator("select[data-new-document-units]").selectOption("pt");
+    await fill(page, "width", "400");
+    await fill(page, "height", "600");
+    await fill(page, "pages", "4");
+    await fill(page, "marginInside", "40");
+    await fill(page, "marginOutside", "20");
+    await dialog.locator("[data-new-document-facing]").check();
+    await expect(dialog.locator("[data-new-document-preview]")).toHaveAttribute(
+      "data-preview-facing",
+      "true",
+    );
+    await dialog.locator("[data-new-document-create]").click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await meta(page)).pageCount).toBe(4);
+    const pages = await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection(
+                name: string,
+              ): Promise<{ spreadId?: string; bindingEdge?: string }[]>;
+            };
+          };
+        }
+      ).__canvas.client.collection("pages"),
+    );
+    expect(pages.map((p) => p.bindingEdge)).toEqual([
+      "left",
+      "right",
+      "left",
+      "right",
+    ]);
+    expect(pages[1]!.spreadId).toBe(pages[2]!.spreadId);
+    expect(pages[0]!.spreadId).not.toBe(pages[1]!.spreadId);
+    // A left-hand page binds on its right: its inside margin is there.
+    const near = (v: unknown, want: number) =>
+      typeof v === "number" && Math.abs(v - want) < 0.01;
+    expect(near(await objGet(page, "page:#1", "pageMarginLeft"), 40)).toBe(
+      true,
+    );
+    expect(near(await objGet(page, "page:#2", "pageMarginRight"), 40)).toBe(
+      true,
+    );
+    expect(near(await objGet(page, "page:#2", "pageMarginLeft"), 20)).toBe(
+      true,
+    );
+    expect(await undoDepth(page)).toBe(1);
+    expect((await meta(page)).dirty).toBe(false);
+  });
+
   test("Cancel creates nothing @feat:editor-shell.file-intake @level:edge", async ({
     page,
   }) => {

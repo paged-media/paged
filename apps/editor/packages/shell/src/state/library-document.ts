@@ -143,7 +143,11 @@ export async function commitSave(
   if (!st.library) return null;
   if (st.opening) await st.opening;
   if (!st.current) {
-    st.current = await st.library.importFile(bytes, name);
+    // A blank document's first save is no import: its timeline starts at
+    // the first checkpoint the user keeps (editor ADR 1234).
+    st.current = await st.library.importFile(bytes, name, {
+      checkpoint: false,
+    });
     changed(st);
     return { head: st.current.head ?? "", changed: true };
   }

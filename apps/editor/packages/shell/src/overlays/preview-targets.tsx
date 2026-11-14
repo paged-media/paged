@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The preview's outlines (editor ADRs 1233, 1234): every object a previewed
+// The preview's outlines (editor ADRs 1240, 1241): every object a previewed
 // action or a proposed change will touch, dashed, in the review colour, the
 // one the list points at drawn stronger. Text targets outline the frames of
 // their story. Overlay chrome: it never prints, never takes the pointer and

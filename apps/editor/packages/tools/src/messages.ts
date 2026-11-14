@@ -65,4 +65,7 @@ export const PEN_TOOL = defineMessages("tools.pen", {
   hintFinish: "Finish the open path",
   hintAdd: "Add an anchor",
   hintDelete: "Delete this anchor",
+  // What the modifiers do with the Pen (its `modifierHints`, IC10).
+  constrain: "Constrain to 45°",
+  noSnap: "Ignore snapping",
 });

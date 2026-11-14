@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — the assistant proposes, you approve. On the real
+// Editor ADR 1241 — the assistant proposes, you approve. On the real
 // engine: the deterministic checks find text smaller than 8 pt and propose
 // raising it; the proposal changes nothing (no write, the undo log as it
 // was); Apply writes the approved items as ONE undo step, and the panel's

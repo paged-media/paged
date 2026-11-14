@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1233 — the actions a DOCUMENT keeps: the recipe that belongs to
+// Editor ADR 1240 — the actions a DOCUMENT keeps: the recipe that belongs to
 // one publication (store.ts explains why the editor's own list stays in the
 // browser). They live in one label on `doc`, `x-paged:actions`, whose value
 // is the envelope `{"v": 1, "data": <library>}`: a label travels with the

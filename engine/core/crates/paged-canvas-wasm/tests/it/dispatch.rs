@@ -1956,6 +1956,131 @@ fn view_settings_survive_a_load_and_rebuild_nothing__feat__the_renderer_view_mod
     assert_eq!(model.built().pages[0].layout_generation, generation);
 }
 
+/// v81 (engine ADR 1306) — the proof flags are build options: setting one
+/// rebuilds the pages and drops every cached scene (the page edge is in
+/// them too), setting it again does neither, and a load keeps them.
+#[test]
+fn view_settings_proof_flags_rebuild_and_clear_the_scene_cache() {
+    let mut core = loaded_core();
+    let set = |seq: u64| {
+        serde_json::json!({
+            "seq": seq,
+            "protocol": protocol(),
+            "kind": "setViewSettings",
+            "payload": { "settings": {
+                "mode": "preview", "hideNonprinting": true, "proof": true
+            } }
+        })
+    };
+    let (reply, effect) = roundtrip_with_effect(&mut core, &set(2));
+    assert_eq!(reply["kind"], "viewSettingsApplied", "{reply}");
+    assert_eq!(reply["payload"]["rebuilt"], true);
+    assert_eq!(reply["payload"]["settings"]["proof"], true);
+    assert_eq!(reply["payload"]["settings"]["hideNonprinting"], true);
+    assert!(matches!(effect, CacheEffect::ClearAll));
+    let (reply, effect) = roundtrip_with_effect(&mut core, &set(3));
+    assert!(reply["payload"].get("rebuilt").is_none(), "{reply}");
+    assert!(matches!(effect, CacheEffect::None));
+    let loaded = roundtrip(&mut core, &load_msg(4));
+    assert_eq!(loaded["kind"], "documentLoaded");
+    let model = core.model.as_ref().expect("loaded");
+    assert!(model.view_settings().proof && model.view_settings().hide_nonprinting);
+    assert!(!model.live_build_has_markers());
+}
+
+/// v81 (engine ADR 1306) — the hidden characters of the pages asked for
+/// and the frames' own baseline grids, over the wire; no document, no
+/// answer.
+#[test]
+fn hidden_characters_and_frame_grids_answer_over_the_wire() {
+    let inter = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf is committed at engine/core/corpus/fonts");
+    let mut core = WorkerCore::new();
+    let loaded = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1,
+            "protocol": protocol(),
+            "kind": "loadDocument",
+            "payload": { "bytes": small_idml_in(Some("Inter")), "font": inter }
+        }),
+    );
+    assert_eq!(loaded["kind"], "documentLoaded", "{loaded}");
+    let r = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 2,
+            "protocol": protocol(),
+            "kind": "requestHiddenCharacters",
+            "payload": { "pageIds": ["p1", "nope"] }
+        }),
+    );
+    assert_eq!(r["kind"], "hiddenCharacters", "{r}");
+    let pages = r["payload"]["pages"].as_array().expect("pages");
+    assert_eq!(pages.len(), 1, "an unknown page is left out: {r}");
+    assert_eq!(pages[0]["pageId"], "p1");
+    let kinds: Vec<String> = pages[0]["lines"]
+        .as_array()
+        .expect("lines")
+        .iter()
+        .flat_map(|l| l["marks"].as_array().cloned().unwrap_or_default())
+        .map(|m| m["kind"].as_str().unwrap_or("").to_string())
+        .collect();
+    assert_eq!(kinds, ["space", "storyEnd"], "\"Hello world\": {r}");
+    assert!(r["payload"]["revision"].is_u64());
+
+    let r = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 3,
+            "protocol": protocol(),
+            "kind": "requestFrameBaselineGrids",
+            "payload": {}
+        }),
+    );
+    assert_eq!(r["kind"], "frameBaselineGrids", "{r}");
+    assert_eq!(r["payload"]["grids"], serde_json::json!([]));
+
+    let mut empty = WorkerCore::new();
+    let r = roundtrip(
+        &mut empty,
+        &serde_json::json!({
+            "seq": 4,
+            "protocol": protocol(),
+            "kind": "requestHiddenCharacters",
+            "payload": { "pageIds": ["p1"] }
+        }),
+    );
+    assert_eq!(r["kind"], "mutationFailed", "{r}");
+}
+
+/// v81 (engine ADR 1307) — a new document of facing pages, over the wire:
+/// the pages asked for, page 1 a right-hand page, then facing pairs.
+#[test]
+fn new_blank_document_lays_out_facing_spreads() {
+    let mut core = WorkerCore::new();
+    let r = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1,
+            "protocol": protocol(),
+            "kind": "newBlankDocument",
+            "payload": { "widthPt": 400.0, "heightPt": 600.0, "pages": 4, "facingPages": true }
+        }),
+    );
+    assert_eq!(r["kind"], "documentLoaded", "{r}");
+    assert_eq!(r["payload"]["pageCount"], 4);
+    let pages = core.model.as_ref().expect("a document").pages();
+    let edges: Vec<_> = pages
+        .iter()
+        .map(|p| serde_json::to_value(p.binding_edge).unwrap())
+        .collect();
+    assert_eq!(edges, ["left", "right", "left", "right"]);
+    assert_eq!(pages[1].spread_id, pages[2].spread_id);
+}
+
 #[test]
 fn request_snap_point_without_a_document_answers_the_point() {
     let mut core = WorkerCore::new();

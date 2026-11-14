@@ -71,3 +71,18 @@ blank page and rely on it creating one at once.
   `apps/canvas/tests/e2e/new-document-dialog.spec.ts` (the model: page size, three pages, bleed,
   every page's margins, columns and gutter; one undo step; a clean document; Cancel creates
   nothing).
+
+## Amendment (2026-11-14): facing pages
+
+Engine ADR 1307 (protocol 81) lays a new document out in facing spreads, so decision 6 is
+replaced: the dialog offers a Facing pages switch (`data-new-document-facing`), and the preview
+draws the spread (a left-hand page beside a right-hand one, its margins mirrored). A facing setup
+(`NewDocumentSetup.facingPages`, stored with the rest, read field by field) mints all its pages in
+the engine (`newBlankDocument(…, { pages, facingPages })`: page 1 a right-hand page, then
+left/right pairs), so `applyDocumentSetup` inserts none, and each page's margins land on its own
+side: a left-hand page (an even page) takes its inside margin on its right. `paged.file.new`
+takes `facingPages` in its payload too. Inserting or removing pages afterwards keeps the
+single-spread rules of engine ADR 1307. Tests: `new-document-presets.test.ts` (the stored flag, the
+preview's spread, the writes per side), `new-document-dialog.dom.test.tsx` (the switch and the
+preview), `apps/canvas/tests/e2e/new-document-dialog.spec.ts` (four pages: sides, spreads,
+margins, one undo step).

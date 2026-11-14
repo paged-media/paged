@@ -4,13 +4,13 @@
 - **Scope:** `packages/plugin-api/src/host.ts` (`ObjectVerb`, `EditContextContribution.verbs`),
   `index.ts` (the export). plugin-sdk passes the field through unchanged (its `editContext`
   stamps a copy of the contribution). plugin-sdk and plugin-api move to the next canary. Decided
-  with the editor's [ADR 1235](../../../../apps/editor/docs/adr/1235-every-object-answers-the-same-verbs.md).
+  with the editor's [ADR 1242](../../../../apps/editor/docs/adr/1242-every-object-answers-the-same-verbs.md).
 
 ## Context
 
 The editor gives every object one set of verbs — inspect, transform, copy, bind to data, style,
 version, validate, export — as host commands in the context menu and the palette (editor ADR
-1235, the strategy's Concept J). Inside a module's frame most of them mean something the module
+1242, the strategy's Concept J). Inside a module's frame most of them mean something the module
 does better: a sheet's Copy copies the selected range's values, its Export writes the sheet as
 CSV; an image's Transform is its Free Transform, its Version a snapshot of its own journal. The
 host cannot know a module's commands, and a table of module command ids in the editor would be

@@ -42,7 +42,7 @@ export const ACTIONS = defineMessages("shell.actions", {
     "Payload embeds ids minted by the recorded document. Skipped unless you allow document-bound steps.",
   verdictUnserializableTitle:
     "The payload could not be saved (a function, blob or cycle). This step can never replay.",
-  // Editor ADR 1233 — the run plan, its refusals and its undo statement.
+  // Editor ADR 1240 — the run plan, its refusals and its undo statement.
   stepName: "Step {n} “{title}”",
   thePage: "the page",
   needsSelection: "a selection, and nothing is selected",

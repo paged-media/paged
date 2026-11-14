@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1234 — the assistant's Inspect → Propose → Preview → Approve
+// Editor ADR 1241 — the assistant's Inspect → Propose → Preview → Approve
 // → Apply, one store per editor (plan task E1).
 //
 //   consent      a request for Claude waits here: the panel says what will

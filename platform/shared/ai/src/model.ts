@@ -33,7 +33,7 @@ export const DEFAULT_MODEL = "claude-haiku-5-5";
  *                effort, tighter cap).
  * - `complete` — plain text for a script's `paged.ai.complete()`; no tools.
  * - `document` — build a whole document from a brief.
- * - `propose`  — editor ADR 1234: inspect the document READ-ONLY and answer
+ * - `propose`  — editor ADR 1241: inspect the document READ-ONLY and answer
  *                a change set of ordinary property writes the user previews
  *                and approves; nothing is written by the model.
  */
@@ -56,7 +56,7 @@ export interface ModeSpec {
   /** Room for adaptive thinking AND the answer — thinking counts here. */
   readonly maxTokens: number;
   /** Which tools are offered: the script tools, the read-only proposal
-   *  tools (editor ADR 1234), or none. */
+   *  tools (editor ADR 1241), or none. */
   readonly tools: "script" | "propose" | false;
   /** Model turns one agent run may take before it is stopped. */
   readonly maxTurns: number;

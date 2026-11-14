@@ -49,7 +49,7 @@
   --paged-input: 0 0% 89%;
   --paged-ring: 263 73% 43%;
   --paged-muted: 0 0% 96%;
-  --paged-muted-fg: 0 0% 45%;
+  --paged-muted-fg: 0 0% 42%; /* 4.9:1 on muted (AA; was 45 %, 4.4:1) */
   --paged-card: 0 0% 100%;
   --paged-card-fg: 0 0% 9%;
   --paged-popover: 0 0% 100%;
@@ -60,7 +60,7 @@
   --paged-secondary-fg: 0 0% 9%;
   --paged-accent: 0 0% 96%;
   --paged-accent-fg: 0 0% 9%;
-  --paged-destructive: 0 84% 60%;
+  --paged-destructive: 0 72% 45%; /* white on it and it on white: 5.3:1 */
   --paged-destructive-fg: 0 0% 98%;
   --paged-radius: 0.5rem;
 
@@ -91,14 +91,14 @@
   --pg-fg: #171717;
   --pg-border: #e3e3e3;
   --pg-muted: #f5f5f5;
-  --pg-muted-fg: #737373;
+  --pg-muted-fg: #6b6b6b; /* 4.9:1 on --pg-muted, 4.7:1 on the rail */
   --pg-primary: hsl(263 73% 43%); /* #5b1ebe */
   --pg-primary-fg: #fafafa;
   --pg-primary-hover: hsl(263 73% 38%);
   --pg-primary-soft: hsl(
     263 73% 96%
   ); /* lavender tint — AI surface, selection */
-  --pg-destructive: #ef4444;
+  --pg-destructive: #c81e1e;
   --elevated: #ffffff; /* popovers, command bar, flyouts */
   --canvas-surround: #9a9a9e; /* the gray behind the pages */
   --hover: rgba(0, 0, 0, 0.06); /* chrome hover wash */
@@ -113,13 +113,13 @@
   --chrome-icon-active: #ffffff; /* icon on an active (dark) slot       */
   --chrome-slot-active: #1f2937; /* gray-800 — active tool / menu item  */
   --chrome-menu-text: #374151; /* gray-700 — menu-bar triggers        */
-  --chrome-label: #71717a; /* zinc-500 — tear-off / hints         */
+  --chrome-label: #65656e; /* tear-off / hints: 5.2:1 on the rail     */
 
   /* ── status signals (document map / preflight) ─────────────── */
   --status-approved: #3c6e4e; /* green  — approved / no preflight errors */
   --status-review: #9a6a1c; /* amber  — in review / proof note         */
   --status-progress: hsl(263 73% 43%); /* violet — in progress         */
-  --status-draft: #a1a1aa; /* zinc   — draft / unplaced               */
+  --status-draft: #71717a; /* zinc   — draft / unplaced (4.8:1)       */
   --status-error: #c1121f; /* red    — overset / missing font / lo-res */
   --status-info: #2c507d; /* blueprint blue — technical metadata     */
   /* Aliases plugins already reference. Undefined, each fell back to a
@@ -139,6 +139,9 @@
   /* isolation mode: the veil over everything outside the entered scope,
      white at 50 % as Illustrator draws it */
   --overlay-isolation-dim: rgba(255, 255, 255, 0.5);
+  /* the two-tone halo High contrast draws around every cue (globals.css) */
+  --overlay-halo: #ffffff;
+  --overlay-halo-edge: #000000;
 
   /* ── type ──────────────────────────────────────────────────── */
   --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
@@ -237,8 +240,8 @@
   --paged-secondary-fg: 0 0% 96%;
   --paged-accent: 240 5% 16%;
   --paged-accent-fg: 0 0% 96%;
-  --paged-destructive: 0 72% 58%;
-  --paged-destructive-fg: 0 0% 98%;
+  --paged-destructive: 0 80% 66%; /* 5.2:1 on the surface */
+  --paged-destructive-fg: 0 0% 9%;
 
   /* surfaces & interaction */
   --pg-bg: #18181b;
@@ -265,13 +268,13 @@
   --chrome-icon-active: #ffffff;
   --chrome-slot-active: hsl(263 90% 72%); /* active tool fills violet on dark */
   --chrome-menu-text: #c7c7d0;
-  --chrome-label: #7e7e8a;
+  --chrome-label: #92929e; /* 5.4:1 on the rail (was 4.1:1) */
 
   /* status (lifted for legibility on dark) */
   --status-approved: #57b87a;
   --status-review: #d39a3e;
   --status-progress: hsl(263 90% 74%);
-  --status-draft: #6c6c76;
+  --status-draft: #8e8e98; /* 5.6:1 */
   --status-error: #f0616d;
   --status-info: #5b8bd0;
 
@@ -279,7 +282,117 @@
   --overlay-snap: #14b8a6;
   /* the isolation veil follows the dark chrome instead of glaring white */
   --overlay-isolation-dim: rgba(24, 24, 27, 0.55);
+  --overlay-halo: #000000;
+  --overlay-halo-edge: #ffffff;
 
   /* floating UI needs a heavier shadow on dark */
   --shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* ── HIGH CONTRAST — the theme in use, stronger (editor ADR "High contrast
+ *    and AA"; state/contrast.ts). `data-contrast="more"` on the editor's
+ *    root: the preference High, or System under `prefers-contrast: more`.
+ *    Text 7:1 or more, field and panel boundaries and the focus ring 4.5:1
+ *    or more; the overlays keep their print-cue hues, deepened (light) or
+ *    lifted (dark), and globals.css draws them with a two-tone halo. ── */
+[data-paged-editor][data-contrast="more"]:not(.dark) {
+  --paged-fg: 0 0% 0%;
+  --paged-border: 240 4% 36%;
+  --paged-input: 240 4% 36%;
+  --paged-ring: 263 90% 34%;
+  --paged-muted: 0 0% 95%;
+  --paged-muted-fg: 0 0% 22%;
+  --paged-card-fg: 0 0% 0%;
+  --paged-popover-fg: 0 0% 0%;
+  --paged-primary: 263 85% 34%;
+  --paged-secondary-fg: 0 0% 0%;
+  --paged-accent: 0 0% 90%;
+  --paged-accent-fg: 0 0% 0%;
+  --paged-destructive: 0 85% 34%;
+
+  --pg-fg: #000000;
+  --pg-border: #57575e;
+  --pg-muted-fg: #383838;
+  --pg-primary: hsl(263 85% 34%);
+  --pg-primary-hover: hsl(263 85% 28%);
+  --pg-destructive: #a10f0f;
+  --hover: rgba(0, 0, 0, 0.12);
+
+  --chrome-border: #57575e;
+  --chrome-divider: #57575e;
+  --chrome-icon: #18181b;
+  --chrome-menu-text: #111111;
+  --chrome-label: #38383f;
+
+  --status-approved: #1b4f2c;
+  --status-review: #5e3c00;
+  --status-progress: hsl(263 85% 34%);
+  --status-draft: #45454c;
+  --status-error: #9a0011;
+  --status-info: #1a365f;
+
+  --overlay-selection: #a8005a;
+  --overlay-guide: #4626cf;
+  --overlay-snap: #064a44;
+  --overlay-target: #9e0000;
+  --overlay-halo: #ffffff;
+  --overlay-halo-edge: #000000;
+}
+
+[data-paged-editor].dark[data-contrast="more"] {
+  --paged-bg: 240 6% 6%;
+  --paged-fg: 0 0% 100%;
+  --paged-border: 240 5% 62%;
+  --paged-input: 240 5% 62%;
+  --paged-ring: 263 100% 84%;
+  --paged-muted: 240 5% 12%;
+  --paged-muted-fg: 240 6% 84%;
+  --paged-card: 240 6% 6%;
+  --paged-card-fg: 0 0% 100%;
+  --paged-popover: 240 7% 10%;
+  --paged-popover-fg: 0 0% 100%;
+  --paged-primary: 263 100% 84%;
+  --paged-primary-fg: 263 50% 10%;
+  --paged-secondary: 240 5% 14%;
+  --paged-secondary-fg: 0 0% 100%;
+  --paged-accent: 240 5% 20%;
+  --paged-accent-fg: 0 0% 100%;
+  --paged-destructive: 0 100% 78%;
+  --paged-destructive-fg: 0 0% 5%;
+
+  --pg-bg: #0e0e10;
+  --pg-fg: #ffffff;
+  --pg-border: #9c9ca6;
+  --pg-muted: #1b1b1f;
+  --pg-muted-fg: #d6d6de;
+  --pg-primary: hsl(263 100% 84%);
+  --pg-primary-fg: #140c26;
+  --pg-primary-hover: hsl(263 100% 90%);
+  --pg-destructive: #ff9aa1;
+  --elevated: #18181c;
+  --hover: rgba(255, 255, 255, 0.14);
+
+  --chrome-rail-bg: #141417;
+  --chrome-panel-bg: #121215;
+  --chrome-border: #9c9ca6;
+  --chrome-divider: #9c9ca6;
+  --chrome-icon: #ececf2;
+  --chrome-menu-text: #f2f2f6;
+  --chrome-label: #cacad4;
+  --chrome-slot-active: hsl(263 100% 84%);
+  --chrome-icon-active: #140c26;
+
+  --status-approved: #84e6a6;
+  --status-review: #ffc670;
+  --status-progress: hsl(263 100% 84%);
+  --status-draft: #b8b8c2;
+  --status-error: #ff9aa1;
+  --status-info: #a4c7ff;
+
+  --overlay-selection: #ff5cb5;
+  --overlay-guide: #ae98ff;
+  --overlay-snap: #33ead8;
+  --overlay-target: #ff7070;
+  --overlay-halo: #000000;
+  --overlay-halo-edge: #ffffff;
 }

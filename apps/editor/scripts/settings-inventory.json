@@ -49,6 +49,21 @@
       ]
     },
     {
+      "id": "paged.contrast",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.contrast",
+      "default": "system",
+      "values": ["system", "standard", "more"],
+      "effect": "high contrast: `data-contrast` on the editor's root element (\"more\" for High, or for System while the operating system asks for more contrast), which re-points the theme's tokens to their high-contrast variant and draws the canvas overlays with a two-tone halo; never the document (Edit ▸ Settings ▸ Contrast; editor ADR \"High contrast and AA\")",
+      "source": "apps/editor/packages/shell/src/state/contrast.ts",
+      "marker": "\"paged.contrast\"",
+      "sites": [
+        ["getItem", "STORAGE_KEY"],
+        ["setItem", "STORAGE_KEY"]
+      ]
+    },
+    {
       "id": "paged.units",
       "kind": "preference",
       "storage": "localStorage",
@@ -312,6 +327,36 @@
       ]
     },
     {
+      "id": "paged.modifierHints.always",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.modifierHints.always",
+      "default": false,
+      "values": [false, true],
+      "effect": "Edit ▸ Settings ▸ Keep modifier hints visible (IC10): the canvas's modifier hint strip stays past a tool's first uses; stored as \"true\" while on, removed when off",
+      "source": "apps/editor/packages/shell/src/overlays/modifier-hints.tsx",
+      "marker": "\"paged.modifierHints.always\"",
+      "sites": [
+        ["getItem", "MODIFIER_HINTS_ALWAYS_KEY"],
+        ["setItem", "MODIFIER_HINTS_ALWAYS_KEY"],
+        ["removeItem", "MODIFIER_HINTS_ALWAYS_KEY"]
+      ]
+    },
+    {
+      "id": "paged.modifierHints.uses",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.modifierHints.uses",
+      "default": {},
+      "effect": "how many times each tool was taken up (IC10): the modifier hint strip shows for a tool's first five uses, then recedes; read field by field (ADR 247)",
+      "source": "apps/editor/packages/shell/src/overlays/modifier-hints.tsx",
+      "marker": "\"paged.modifierHints.uses\"",
+      "sites": [
+        ["getItem", "MODIFIER_HINTS_USES_KEY"],
+        ["setItem", "MODIFIER_HINTS_USES_KEY"]
+      ]
+    },
+    {
       "id": "paged.actions.v1",
       "kind": "user-library",
       "storage": "localStorage",
@@ -461,6 +506,16 @@
       "effect": "View > Editing aids > Data bindings: the data field markers overlay (editor ADR 291; remembered in paged.view.editingAids since data ADR 566)",
       "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
       "marker": "dataMarkers: false",
+      "sites": []
+    },
+    {
+      "id": "view.constraints",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Editing aids > Design constraints: the document's design constraints drawn as glyphs where they stand (editor ADR 1233; remembered in paged.view.editingAids)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "constraints: true",
       "sites": []
     },
     {
@@ -738,7 +793,7 @@
     {
       "key": "OPFS <library root>, OPFS paged-recovery",
       "storage": "opfs",
-      "reason": "the local document library's repositories (documents and their versions), and the recovery journal's checkpoints of unsaved work (editor ADR 1204, root paged-recovery, opened through the same opfsFs): user data, not configuration.",
+      "reason": "the local document library's repositories (documents and their versions, with each document's timeline of named checkpoints, checkpoints.json, editor ADR 1234), and the recovery journal's checkpoints of unsaved work (editor ADR 1204, root paged-recovery, opened through the same opfsFs): user data, not configuration.",
       "source": "apps/editor/packages/repository/src/fs.ts",
       "marker": "storage.getDirectory()",
       "sites": [["getDirectory", ""]]

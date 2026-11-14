@@ -76,7 +76,9 @@ export type EditingAidToggle =
   | "hiddenCharacters"
   | "nonprinting"
   // Data ADR 566 — the binding badges of paged.data (the data markers).
-  | "dataMarkers";
+  | "dataMarkers"
+  // Editor ADR 1233 — the document's design constraints, as glyphs.
+  | "constraints";
 
 /** The editing aids in the order the control lists them. */
 export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
@@ -89,6 +91,7 @@ export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
   "hiddenCharacters",
   "nonprinting",
   "dataMarkers",
+  "constraints",
 ];
 
 const isAid = (t: ViewToggle): t is EditingAidToggle =>
@@ -142,13 +145,16 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   marginsColumns: true,
   guides: true,
   oversetMarkers: true,
-  // Hidden characters need glyph positions of spaces, tabs and returns
-  // the engine does not report yet: the control shows it, disabled.
+  // Off, as in InDesign: the marks the engine reports where spaces, tabs
+  // and returns stand (engine ADR 1306).
   hiddenCharacters: false,
-  // The engine draws nonprinting items on screen and leaves them out of
-  // export; hiding them on screen needs an engine view option it lacks:
-  // shown as on and disabled.
+  // On, as InDesign's Normal view shows them: nonprinting items on screen.
+  // Off, the engine leaves them off the screen, as it does in a proof and
+  // in print (`ViewSettings.hideNonprinting`).
   nonprinting: true,
+  // Editor ADR 1233 — on: a document's design constraints are its own
+  // intent, shown where they hold (a document without any shows nothing).
+  constraints: true,
 };
 
 /** Where the editing aids are remembered (an editor preference). */

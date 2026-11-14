@@ -165,12 +165,12 @@ extensions ADR 1107; F-02); the compatibility report lists every import's and ex
 (the engine's loss report, now also on the IDML load and export) explained, located and with each
 format's round-trip risk, and says an import's summary once (DF4,
 [ADR 1222](adr/1222-compatibility-report.md), `UXI-T66`); File ▸ New document… opens a dialog of
-purpose presets and a custom setup with a live preview (DF5, [ADR 1220](adr/1220-new-document.md);
-F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
+purpose presets and a custom setup with a live preview, facing pages included since engine ADR
+1307 (DF5, [ADR 1220](adr/1220-new-document.md); F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
 stages and Cancel, a verified result — in kit controls with a page scope and presets, and the
 Layout rows open their panels (DF6, [ADR 1221](adr/1221-guided-export.md), `UXI-T68`; F-12,
 F-15); the publication's issues are on the page as markers, in a page overview and in the Issues
-lens, one click to the item with targeted fixes (DF7,
+lens, one click to the item with targeted fixes, Relink… among them since engine ADR 1308 (DF7,
 [ADR 1223](adr/1223-publication-health-on-the-page.md), `UXI-T55`; F-09); the clipboard's verbs run
 in the order they were given and paste keeps relative geometry, Paste in place its positions
 (DF9, [ADR 231](adr/231-page-item-clipboard.md) amended, `UXI-T65`); and the document open last
@@ -207,11 +207,15 @@ and Calibrated size (from a screen calibration) beside 100 % (UXI-T48), and came
 respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 has landed
 ([ADR 1212](adr/1212-editing-aids-and-proof-view.md)): eight editing aids, each remembered on its
 own, in View ▸ Editing aids and the bottom bar (frame edges, margins and columns, ruler guides, the
-baseline grid, text threads, overset markers on every overset frame; hidden characters and
-nonprinting items are listed but disabled until the engine supports them), hidden ruler guides no
-longer snap, and Proof view (the former Preview screen mode, W) hides every aid and the selection's
-handles, masks the pasteboard at the trim or the bleed with crop marks and a badge, and keeps the
-selection. WS10 has landed ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the
+baseline grid, text threads, overset markers on every overset frame, hidden characters and
+nonprinting items), hidden ruler guides no longer snap, and Proof view (the former Preview screen
+mode, W) hides every aid and the selection's handles, masks the pasteboard at the trim or the
+bleed with crop marks and a badge, and keeps the selection. Engine ADR 1306 (protocol 81) closed
+its engine gaps: the hidden characters come from the engine (InDesign's marks where the composed
+lines hold them, for the pages in view), nonprinting items leave the screen while their aid is off
+and in every proof, a proof drops the page edge and the degraded-asset markers on both lanes, both
+lanes draw a page's bleed and pasteboard artwork to one screen extent, and the Baseline grid aid
+draws each frame's own grid. WS10 has landed ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the
 document map navigates through five lenses with one search — Pages, Structure (sections,
 headings, bookmarks, stories), Layers (named objects), Issues (pages with missing or
 low-resolution images, overset stories and preflight findings) and Data (placed records, with a
@@ -252,6 +256,31 @@ turns (`UXI-T14`); guides and handles follow the full camera transform with the 
 (`UXI-T56`); and a live shape's corner widget takes only its own 12 px target, 20 px inside the
 corner, so a press beside it moves and one on the corner's square resizes, at 100 % and 800 %.
 
+Snapping says what it snaps to (IC8, [ADR 1226](adr/1226-snapping-says-what-it-snaps-to.md)):
+every snap line names its target — guide, margin, column, page edge, page centre, grid, an
+item's edge or centre, a point, equal spacing — and one key bypasses snapping for a move, a
+handle drag and the point tools alike: the platform's primary modifier (Cmd on macOS, Ctrl
+elsewhere; a move read Ctrl before). A snap holds within the release reach and commits exactly
+(`UXI-T12`).
+
+The cursor contract (IC9, [ADR 1227](adr/1227-cursor-contract.md)): one controller per editor
+holds the canvas's cursor in layers — the session's (a handle's for the whole of its drag, the
+closed hand while panning), a modifier's (the copy cursor while an Alt move duplicates), the
+hover's and the tool's — and is the only writer of it; the scrub fields, the loaded thread and an
+armed placement write theirs through the same two functions, and the single-owner rule
+`cursor-write` keeps it so.
+
+Modifier hints (IC10; extensions ADR 1109): a strip over the canvas names what the modifiers do
+with the tool in hand — the host's words for the Selection tools and the shape tools, a handler's
+own through the contract's new `GestureHandler.modifierHints` (the Pen names its own) — and
+lights the key held. It shows for a tool's first five uses and then recedes; Edit ▸ Settings ▸
+Keep modifier hints visible keeps it (`paged.modifierHints.always`; the uses are
+`paged.modifierHints.uses`).
+
+The Pen stays the Pen after it closes a path and the next clicks start another one, each path one
+undo step; deleting two selected points of a path removes only them, in one undo step (IC11,
+`UXI-T17`, `UXI-T18`; UX audit F-35). Track IC is complete: every UXI acceptance test is claimed.
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
@@ -291,6 +320,11 @@ changes — pixels, a non-destructive adjustment, smart, fill or type layer, the
 picture frame's Content level) the placement; the filter dialog shows a before/after split and
 says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
 panel shows the picture's own pixels at 100–800 %.
+paged.web (ADR 416): the Web source panel inspects the element in focus — picked on the canvas
+or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
+rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts
+never run, names the sandboxed browser preview and the native publication rendering, and offers
+the placeholders without a value as sample data beside the source.
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
@@ -306,6 +340,69 @@ greyed in the menus with its reason, listed with it in the palette, which also g
 ("go to page 14") and offers "Help: …" ([ADR 1218](adr/1218-commands-say-why-they-do-not-apply.md));
 every align route honours the key object, and an align control's hover shows its reference
 (D-07).
+
+Track AP has landed. The Tree panel is the document's object tree
+([ADR 1230](adr/1230-an-accessible-object-tree.md)): a virtualized WAI-ARIA tree of the spreads
+and their page items, each row named with its type, name, page and whether it is locked or
+hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
+the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
+and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping objects. Every text
+token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
+variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
+7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
+([ADR 1231](adr/1231-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
+palette, and the editor works at 200 % zoom (`UXI-T69`, `T70`, `T74`, `T75`). A pen's pressure
+shapes only the tools that read it, and only for a pen (a mouse stroke keeps its width to the end);
+a pinch over a press still waiting for its hit test changes the camera and nothing else
+(`UXI-T71` to `T73`). The performance budgets are measured with the audit's methods and asserted
+nightly ([ADR 1232](adr/1232-performance-budgets.md),
+[`reference/performance.md`](reference/performance.md)): the CPU render draws the page at the
+viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
+engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
+yet (inventory exception `EXC-003`).
+
+Track PX (the strategy's Phase 3 concepts), design constraints
+([ADR 1233](adr/1233-constraints-are-validated-intent.md), PX3): Object ▸ Add constraint… (and the
+canvas context menu) keeps an intent of the selection in the document — aligned edges, centres or
+first baselines to a key object, even spacing, a minimum gap, at most so many lines, text that
+must fit, an edge on a page margin — as the document label `x-paged:constraints`, which a `.paged`
+save and an IDML export keep. Each constraint is evaluated after every change, the pages in view
+first, deterministically from the engine's own geometry, lines and overset; one that does not hold
+is an issue in Publication health whose fix says what it will do, draws where it will put things
+while it has the pointer or the focus, and applies as one undo step. Nothing moves by itself. The
+constraints draw as faint glyphs (View ▸ Editing aids ▸ Design constraints) and are listed in
+Window ▸ Output ▸ Design constraints.
+Publication time travel ([ADR 1234](adr/1234-named-checkpoints.md), PX7): the Library panel shows
+the document's timeline — the import, the checkpoints the user names with Save checkpoint…, one
+after every export and one before an operation that replaces the open document — as commits on
+the person's own checkpoints ref, so keeping one never moves the saved version. A checkpoint
+previews read-only, compares with the open document side by side (the regions that differ boxed,
+the frames, pictures, text, formatting and styles that changed listed) in a second engine, and
+restores as a new version with the open state kept first. Bounded as the recovery journal is.
+Visual action automation ([ADR 1240](adr/1240-actions-record-what-you-meant.md), PX4): a
+recorded step keeps the selection it acted on as an intent and the edit context it ran in, and a
+panel field's commit (a font size, a style, a colour) records as a step on the selection, so an
+action recorded in one document runs on another document's selection. An action has parameters,
+is kept for the user or in the document (the label `x-paged:actions`), and is previewed before it
+runs: the steps with the objects each acts on, outlined on the canvas, and how it undoes (one
+step, or how many and why). A command, an object, a context, a selection or a value that does not
+hold refuses the run by step and reason, and nothing runs; a step that no longer applies when it
+is reached stops the run and takes it back. Every saved action is a palette entry ("Run action:
+…"), an `actions@1` action and a `paged.*` script.
+The assistant proposes, the user approves ([ADR 1241](adr/1241-the-assistant-proposes-you-approve.md),
+PX6): a request to Claude first shows what will leave the device and is sent only on Send, every
+time; Claude then only reads (a read-only `propose` mode) and answers a change set of ordinary
+property writes, which the panel previews — each object, its value now and proposed, and why,
+outlined on the canvas — with nothing changed; Apply writes the ticked ones as one undo step, and
+the panel's Undo takes exactly that step back. The checks on this device (small text, contrast,
+alternative text, sizes that override their style) propose the same way and are what the panel
+offers without an AI service. The Script panel's own Ask bar is unchanged.
+Every object answers the same verbs ([ADR 1242](adr/1242-every-object-answers-the-same-verbs.md),
+PX9): Inspect, Transform…, Copy, Bind to data…, Style…, Save a version, Validate and Export… are
+the canvas context menu's first group (also inside a module's frame) and palette entries, on a
+selection or inside any context; each runs the module's own where its context names one (sheet:
+Copy, Export; image: Transform, Save a version, Export; data: Bind to data) and the editor's
+otherwise.
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
