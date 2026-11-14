@@ -69,7 +69,7 @@ async function clearLibrary(page: Page): Promise<void> {
 }
 
 test.describe("PX7 — publication time travel", () => {
-  test("PX7 — checkpoints keep states without moving the saved version; preview and compare change nothing; restore is a new state @feat:editor-shell.panels.library @feat:editor-shell.panels.history @level:happy", async ({
+  test("PX7 — checkpoints keep states without moving the saved version; preview and compare change nothing; restore is a new state @feat:editor-shell.panels.library @feat:editor-shell.panels.history @level:happy @uxi:UXI-MUT-009 @uxi:UXI-MUT-010", async ({
     page,
   }) => {
     covers("panel:paged.library");

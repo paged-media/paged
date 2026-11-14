@@ -105,7 +105,7 @@ const sizeSharedStyle = (page: Page, pt: number) =>
   }, pt);
 
 test.describe("PX5 — layout variants", () => {
-  test("PX5 — a variant branches, saves on its own, compares, becomes main, and takes shared changes only when applied @feat:editor-shell.panels.library @level:happy", async ({
+  test("PX5 — a variant branches, saves on its own, compares, becomes main, and takes shared changes only when applied @feat:editor-shell.panels.library @level:happy @uxi:UXI-MUT-011", async ({
     page,
   }) => {
     covers("panel:paged.variants");

@@ -46,7 +46,7 @@ const invoke = (page: Page, id: string) =>
   );
 
 test.describe("PX8 — the living publication contract", () => {
-  test("PX8 — readiness reacts to a document change; approval is an explicit step with a checkpoint @feat:editor-shell.panels.publication-health @feat:editor-shell.panels.preflight @feat:plugin-platform.document-metadata @level:happy", async ({
+  test("PX8 — readiness reacts to a document change; approval is an explicit step with a checkpoint @feat:editor-shell.panels.publication-health @feat:editor-shell.panels.preflight @feat:plugin-platform.document-metadata @level:happy @uxi:UXI-FIL-004", async ({
     page,
   }) => {
     covers(
