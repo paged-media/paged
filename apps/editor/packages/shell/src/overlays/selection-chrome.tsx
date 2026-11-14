@@ -36,6 +36,7 @@ import {
   isSameElement,
 } from "../state/align-scope";
 import { useScoped } from "../state/editor-scope";
+import { useLockedKeys } from "../state/locked";
 
 import { applyAffine } from "./affine";
 
@@ -69,7 +70,12 @@ function SelectionChromeRender(props: OverlayProps) {
   const pages = useAlignPages(
     previewing && (alignScope.to === "margins" || alignScope.to === "spread"),
   );
+  // D-08 / `UXI-OVR-008`: a locked item stays selectable and says it is
+  // locked by its shape — a dashed outline and a padlock at its corner —
+  // never by colour alone.
+  const locked = useLockedKeys(elementSelection);
   if (elementGeometry.length === 0) return null;
+  const inv = 1 / (props.camera.scale > 0 ? props.camera.scale : 1);
 
   const out: ReactNode[] = [];
   for (const g of elementGeometry) {
@@ -88,6 +94,7 @@ function SelectionChromeRender(props: OverlayProps) {
       .join(" ");
     const key = `${g.id.kind}:${g.id.id}`;
     const isKey = keyObject !== null && isSameElement(g.id, keyObject);
+    const isLocked = locked.has(key);
     out.push(
       <polygon
         key={key}
@@ -95,6 +102,7 @@ function SelectionChromeRender(props: OverlayProps) {
         fill={isKey && previewing ? "var(--overlay-selection)" : "none"}
         stroke="var(--overlay-selection)"
         strokeWidth={isKey ? 4 : 2}
+        strokeDasharray={isLocked ? "6 3" : undefined}
         data-key-object={isKey ? "" : undefined}
         data-align-reference={
           isKey && previewing && alignScope.to === "keyObject"
@@ -103,10 +111,17 @@ function SelectionChromeRender(props: OverlayProps) {
         }
         fillOpacity={isKey && previewing ? 0.12 : undefined}
         data-selection-outline=""
+        data-selection-locked={isLocked ? key : undefined}
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
       />,
     );
+    if (isLocked) {
+      const [lx, ly] = applyAffine(g.itemTransform, left, top);
+      out.push(
+        <LockGlyph key={`${key}:lock`} x={pr.x + lx} y={pr.y + ly} inv={inv} />,
+      );
+    }
   }
 
   // Multi-select union AABB, per page.
@@ -227,6 +242,32 @@ function renderPageReference(
       pointerEvents="none"
     />
   ));
+}
+
+/** A padlock, 12 CSS px, just above an item's top-left corner. */
+function LockGlyph(props: { x: number; y: number; inv: number }) {
+  return (
+    <g
+      transform={`translate(${props.x}, ${props.y}) scale(${props.inv}) translate(0, -16)`}
+      data-lock-glyph=""
+      pointerEvents="none"
+    >
+      <rect
+        x={0}
+        y={5}
+        width={12}
+        height={9}
+        rx={1.5}
+        fill="var(--overlay-selection)"
+      />
+      <path
+        d="M3 5 V3.5 a3 3 0 0 1 6 0 V5"
+        fill="none"
+        stroke="var(--overlay-selection)"
+        strokeWidth={1.6}
+      />
+    </g>
+  );
 }
 
 function renderUnionBoxes(

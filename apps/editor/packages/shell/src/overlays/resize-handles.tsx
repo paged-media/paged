@@ -23,6 +23,7 @@ import type { ElementGeometryItem, ResizeHandle } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useSelection } from "../state/selection-context";
+import { useLockedKeys } from "../state/locked";
 
 import { applyAffine } from "./affine";
 import { groupByPage, unionAabb } from "./selection-chrome";
@@ -44,16 +45,35 @@ import { groupByPage, unionAabb } from "./selection-chrome";
  * visible square and just inside it.
  */
 function ResizeHandlesRender(props: OverlayProps) {
-  const { placedGeometry: elementGeometry, pathEditMode } = useSelection();
+  const {
+    placedGeometry: elementGeometry,
+    pathEditMode,
+    elementSelection,
+  } = useSelection();
+  // D-08 — a locked selection's handles say they will not move it: hollow,
+  // dashed, the not-allowed cursor (`UXI-TRN-006`).
+  const locked = useLockedKeys(elementSelection);
+  const allLocked =
+    elementSelection.length > 0 &&
+    elementSelection.every((id) =>
+      locked.has(`${id.kind}:${String((id as { id?: unknown }).id)}`),
+    );
   // Path-edit mode edits the element's POINTS, and every press on the
   // canvas is the path's there — a frame handle would be drawn and
   // dead. The outline stays; the handles come back with the mode off.
   if (pathEditMode) return null;
   if (elementGeometry.length === 0) return null;
-  if (elementGeometry.length === 1) {
-    return renderSingle(elementGeometry[0], props);
-  }
-  return renderUnion(elementGeometry, props);
+  const handles =
+    elementGeometry.length === 1
+      ? renderSingle(elementGeometry[0], props)
+      : renderUnion(elementGeometry, props);
+  return allLocked ? (
+    <g data-handles-locked="" opacity={0.55} style={{ cursor: "not-allowed" }}>
+      {handles}
+    </g>
+  ) : (
+    handles
+  );
 }
 
 function renderSingle(item: ElementGeometryItem, props: OverlayProps) {

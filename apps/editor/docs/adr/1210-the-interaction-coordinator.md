@@ -1,9 +1,9 @@
 # ADR 1210 — The interaction coordinator
 
 - **Status:** Accepted 2026-11-13: IC1 (the coordinator), IC2 (the terminal events), IC3 (the
-  stale guards), IC4 (the adapters; the coordinator is the default since, with
-  `?debug=legacy-pointer` keeping the old path until IC6 removes it) and IC5 (the press in one
-  call). What ships is in [`status.md`](../status.md).
+  stale guards), IC4 (the adapters; the coordinator is the default since) and IC5 (the press in
+  one call); IC6 (2026-11-14) removed the legacy pointer path. What ships is in
+  [`status.md`](../status.md).
 - **Scope:** `packages/shell/src/interaction/` (`coordinator.ts`, `owners.ts`, `epochs.ts`,
   `trace.ts`, `interaction-provider.tsx`); the document, camera and tool contexts that feed it;
   `apps/canvas/src/ui/ViewportCanvas.tsx` (the canvas's pointer sessions); the client's
@@ -161,6 +161,19 @@ takes but will not move (a lock) is inert. A stale answer (a newer press, anothe
 pinch taking over) is undone: its move cancelled, the engine's selection put back to the
 canvas's. A Shift press keeps the two-step path (hit, select, begin) until IC6's selection
 model. The canvas mirrors the selection through `pressAt.onSelected` (`canvas-panel.tsx`).
+
+## Amendment 4 (2026-11-14): one pointer path (IC6)
+
+The legacy pointer path is gone (`UXI-MIG-002`): `?debug=legacy-pointer`, the canvas's own
+coordinator beside the editor's, its document Escape listener and window blur listener, and the
+pan the old path fell back to when the engine refused a begin or a press found nothing to move.
+The `uxi-legacy-pointer` Playwright project and the debug-flag plumbing it needed in
+`openCanvas` went with it; the `UXI-MIG-001` tapes replay on the coordinator, the one path, to
+what the legacy tools recorded. A Shift press keeps the two-step path (hit, then the click's
+toggle of [ADR 235](235-the-selection-tools-pointer-model.md), amended), since the toggle is the
+canvas's to decide. The selection model this path now carries (Shift toggles, the directional
+and scoped marquee, hover preselection, the objects under the pointer, the locked indication) is
+ADR 235's amendment of 2026-11-14.
 
 ## Consequences
 

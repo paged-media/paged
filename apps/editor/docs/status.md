@@ -233,7 +233,16 @@ wheel takes the camera from an animation (`UXI-T52`); a pinch takes over a pendi
 (`UXI-T71`); an Alt-drag commits the copy it previewed (`UXI-T06`); a Type-tool drag that starts
 over text selects text. A press off the selection is answered in one call (hit, selection and
 move), and a drag that outruns the answer moves from the press point (`UXI-T58`). The guide drag, the loaded thread cursor and an armed placement are
-sessions too. `?debug=legacy-pointer` keeps the old path until IC6 removes it.
+sessions too. Since IC6 it is the one pointer path (`UXI-MIG-002`; ADR 1210, amendment 4).
+
+The selection model of ADR 1201 has landed (IC6; [ADR 235](adr/235-the-selection-tools-pointer-model.md),
+amendment 2026-11-14): Shift-click toggles; a marquee drawn left to right takes what it wholly
+contains and right to left what it touches, starts on the pasteboard and takes the group at the
+top level, the members inside an entered group (`UXI-T03`, `UXI-T04`); hovering outlines what a
+click would select and names it; the context menu's Select ▸ lists the objects under the pointer
+and `paged.edit.selectBelow` cycles down through them; the context menu selects the group as a
+click does (`UXI-T29`); a locked item is dashed, carries a padlock and hollow handles, stays
+selectable and does not move (`UXI-T13`).
 
 Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
 [ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit

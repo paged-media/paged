@@ -30,11 +30,16 @@
 
 import { Fragment, useSyncExternalStore } from "react";
 
+import type { ElementId } from "@paged-media/client";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
@@ -96,10 +101,23 @@ function holds(when: unknown, state: unknown): boolean {
   }
 }
 
+/** One object of the picker (IC6): what is under the point, topmost
+ *  first, with its type in words. */
+export interface PickableObject {
+  id: ElementId;
+  label: string;
+}
+
 export function CanvasContextMenu({
   entries,
+  objects = [],
+  onPick,
 }: {
   entries: readonly ContextMenuEntry[];
+  /** The objects under the point the menu was opened at (`UXI-HIT-006`):
+   *  Select ▸ one of them. Two or more offer the submenu. */
+  objects?: readonly PickableObject[];
+  onPick?: (id: ElementId) => void;
 }) {
   const strings = useStrings();
   const scope = useEditorScope();
@@ -166,6 +184,30 @@ export function CanvasContextMenu({
           focusReturn.close(CONTEXT_MENU_SURFACE);
         }}
       >
+        {objects.length > 1 && onPick ? (
+          <>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger data-object-picker="">
+                {strings.t(CONTEXT_MENU.selectUnder)}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {objects.map((o) => (
+                  <DropdownMenuItem
+                    key={`${o.id.kind}:${String((o.id as { id?: unknown }).id)}`}
+                    data-object-pick={`${o.id.kind}:${String((o.id as { id?: unknown }).id)}`}
+                    onSelect={() => {
+                      closeCanvasContextMenu(scope);
+                      onPick(o.id);
+                    }}
+                  >
+                    {o.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         {rows.map((r, i) => (
           <Fragment key={r.command}>
             {i > 0 && rows[i - 1].group !== r.group && (
