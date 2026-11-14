@@ -30,7 +30,9 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   panel's buttons): every parameter of its kernel as a slider, an angle dial, a choice, a
   switch or a colour, previewed on the canvas — on a resampled proxy while a value moves
   (one-layer image, no selection; px lengths scaled with it), at full resolution when it
-  rests — with Preview and a before/after toggle; OK keeps the filter as one undo step in
+  rests — with Preview, a before/after toggle and a before/after split whose line a slider
+  drags across the frame, and a line saying whether the frame shows a draft, the
+  full-resolution pass rendering or the full result ([ADR 487](adr/487-one-tool-set-and-saying-what-an-edit-changes.md)); OK keeps the filter as one undo step in
   the active layer and inside the selection, Cancel leaves the image as it was. The filters:
   box blur, surface blur, motion and radial blur, lens blur, add noise (uniform or
   gaussian, monochromatic), despeckle, dust and scratches, median (radius ≤ 10), reduce
@@ -181,6 +183,15 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
 - **Save-back and tiles.** "Apply to file" encodes the adjusted result as PSD, PNG or JPEG
   and "Save the adjusted file" hands it to the host's save door; three exporters offer the
   same formats. "Serve image tiles to the renderer" claims the frame's image resource.
+
+- **One tool set and what an edit changes ([ADR 487](adr/487-one-tool-set-and-saying-what-an-edit-changes.md)).**
+  Inside the raster context the tools are the rail's; the context toolbar names the tool in
+  hand, carries its options and says what the next edit changes ("Editing: Pixels", "Editing:
+  Mask · non-destructive", "Editing: Adjustment · non-destructive"); the picture frame's
+  Content level says "Placement · non-destructive" (UX audit F-43). Each layer row names its
+  kind (Pixels solid; Adjustment, Smart object, Fill, Type dashed). The panel's "Pixels at
+  100 %" shows the image's own pixels around the pointer, at 100–800 % with a pixel grid at
+  800 %, with the image's pixel size and the resolution the layout gives it.
 
 ## Object model, commands and template fields
 

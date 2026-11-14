@@ -437,6 +437,10 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   on the last anchor finishes the open path; a precision magnifier on Control; Points in the
   inspector for selected anchors; Shape suggestions; the Pathfinder says it applies on click and
   outlines its operands (no engine dry run exists for a result preview).
+  **Image done** (paged.image ADR 487; closes F-43's two tool sets): the rail is the one tool set
+  and the context toolbar names the tool in hand with its options (every module's context); what
+  an edit changes is said in the layer rows and the toolbar (pixels, adjustment, mask, placement);
+  the filter dialog's before/after split, its draft / rendering / full line; the pixels at 100 %.
   **Built, part b (2026-11-14):** sheet — **Frame · Edit cells** (extensions ADR 1108), the bar's
   Editing cells and Done, the publication preview of the selection with overflow warnings, T38
   extended (sheet ADR 532; F-42 closed); doc — Story view (a module view writing the engine's

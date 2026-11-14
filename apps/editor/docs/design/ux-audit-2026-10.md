@@ -1163,6 +1163,11 @@ Content · Edit image, in the context toolbar: a double-click positions the pict
 the image tools appear only once Edit image is entered. The two tool sets inside the raster
 context, the uncounted embedded image and the "Colour" spelling are not changed.
 
+**Two tool sets fixed (2026-11-14, paged.image ADR 487).** The rail is the one tool set: the
+context toolbar no longer repeats the context's tools as icon pills; it names the tool in hand,
+carries its options and says what the next edit changes ("Editing: Pixels", "Editing: Mask ·
+non-destructive"). The uncounted embedded image and the "Colour" spelling remain open.
+
 <a id="f-44"></a>
 
 #### F-44 · Doc: the imported heading overlaps the next paragraph; health counts go stale

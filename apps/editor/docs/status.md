@@ -276,6 +276,13 @@ holding Control with a tool that places or drags anchors shows a precision magni
 four times the view, read from an engine snapshot, no document change); with anchors selected the
 Properties panel edits the points, not the frame; one selected path offers Shape suggestions; the
 Pathfinder says that it applies on click and outlines what a button takes.
+paged.image (ADR 487 in its range; UX audit F-43's two tool sets): inside any module's context the
+tools are the rail's, and the context toolbar names the tool in hand and carries its options
+instead of repeating every tool as an icon; the layer rows and the toolbar say what an edit
+changes — pixels, a non-destructive adjustment, smart, fill or type layer, the mask, or (on a
+picture frame's Content level) the placement; the filter dialog shows a before/after split and
+says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
+panel shows the picture's own pixels at 100–800 %.
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,

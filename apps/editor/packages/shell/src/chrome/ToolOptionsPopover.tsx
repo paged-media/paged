@@ -51,6 +51,24 @@ export function ToolOptionsPopover({
   );
 }
 
+/** The same fields in a row, for the context toolbar: the tool in hand's
+ *  options where the work is (image ADR 487, UX audit F-43). */
+export function ToolOptionsInline({ spec }: { spec: ToolOptionsSpec }) {
+  const strings = useStrings();
+  return (
+    <span
+      role="group"
+      aria-label={strings.t(TOOL_OPTIONS.label)}
+      data-tool-options-inline={spec.toolId}
+      style={inlineStyle}
+    >
+      {spec.fields.map((field) => (
+        <Field key={field.key} toolId={spec.toolId} field={field} />
+      ))}
+    </span>
+  );
+}
+
 function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
   const settings = useToolSettings();
   // The store's accessors are stable while its values change, so the value
@@ -127,6 +145,15 @@ function stepDigits(step: number | undefined): number {
   const text = String(step);
   return Math.min(4, text.length - text.indexOf(".") - 1);
 }
+
+const inlineStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 10,
+  fontSize: 12,
+  minWidth: 0,
+  overflow: "hidden",
+};
 
 const popoverStyle: CSSProperties = {
   display: "flex",
