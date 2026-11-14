@@ -441,6 +441,10 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   and the context toolbar names the tool in hand with its options (every module's context); what
   an edit changes is said in the layer rows and the toolbar (pixels, adjustment, mask, placement);
   the filter dialog's before/after split, its draft / rendering / full line; the pixels at 100 %.
+  **Web done** (paged.web ADR 416): the element in focus inspected in the source panel (line,
+  open tag, path, rendered size, the rules that reach it, its diagnostics), publication notes for
+  what a page cannot show and why no script runs, the browser preview and the publication
+  rendering named, sample data beside the source.
 
 ## 11. Track AP — Accessibility, devices and performance (spec wave 6)
 

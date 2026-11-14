@@ -273,6 +273,11 @@ changes — pixels, a non-destructive adjustment, smart, fill or type layer, the
 picture frame's Content level) the placement; the filter dialog shows a before/after split and
 says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
 panel shows the picture's own pixels at 100–800 %.
+paged.web (ADR 416): the Web source panel inspects the element in focus — picked on the canvas
+or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
+rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts
+never run, names the sandboxed browser preview and the native publication rendering, and offers
+the placeholders without a value as sample data beside the source.
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
