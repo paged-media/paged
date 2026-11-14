@@ -972,6 +972,13 @@ const TEXT_PROBES: Probe[] = [
     }),
   },
   {
+    op: "setFacingPages",
+    // v83 (engine ADR 1312): Document Setup's Facing pages — every page
+    // laid out again as facing spreads, one undo step (the probe's undo
+    // restores the fixture's spreads).
+    build: async () => ({ op: "setFacingPages", args: { facing: true } }),
+  },
+  {
     op: "insertFrame",
     build: async ({ fx }) => ({
       op: "insertFrame",
@@ -2927,6 +2934,39 @@ const GEOMETRY_PROBES: Probe[] = [
         : null;
     },
     setupUndo: 1,
+  },
+  {
+    op: "relinkImage",
+    // v81 (engine ADR 1308): a placed picture's frame takes a new link
+    // source, with the picked file's bytes embedded. Probed as Relink is
+    // used: on a frame that already holds a placed picture.
+    build: async ({ page, fx }) => {
+      const ids = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 120, 120],
+      ]);
+      return ids
+        ? after(
+            page,
+            {
+              op: "placeImage",
+              args: {
+                elementId: ids[0].id,
+                uri: "file:///unreachable/probe.png",
+                fit: "FillProportionally",
+              },
+            },
+            {
+              op: "relinkImage",
+              args: {
+                elementId: ids[0].id,
+                uri: "file:///probe-relinked.png",
+                bytes: PNG_1X1,
+              },
+            },
+          )
+        : null;
+    },
+    setupUndo: 2, // the frame + the placed picture
   },
   {
     op: "bindCreated",
