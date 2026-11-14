@@ -38,6 +38,7 @@ import {
   caretContribution,
   contentGrabberContribution,
   hitMarkerContribution,
+  hoverPreselectContribution,
   marqueeContribution,
   toolPreviewContribution,
   pluginOverlayLayersContribution,
@@ -302,6 +303,7 @@ import {
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   CANVAS_CONTEXT_MENU_KEYBINDINGS,
+  SELECT_BELOW_COMMAND,
   CanvasContextMenuHost,
 } from "../canvas-context-menu";
 import {
@@ -490,6 +492,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   contentGrabberContribution,
   pathEditContribution,
   marqueeContribution,
+  // IC6 — hover preselection: what a click would select.
+  hoverPreselectContribution,
   // W-20 — plugins' retained overlay layers, just below the tool preview.
   pluginOverlayLayersContribution,
   toolPreviewContribution,
@@ -1841,6 +1845,7 @@ function CanvasAppIntegration() {
       // Editor ADR 288 — Asset Export.
       ...buildAssetExportCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
+      SELECT_BELOW_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,

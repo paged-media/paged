@@ -329,11 +329,10 @@ export function CanvasPanel(_props: PanelProps) {
       // text click into a cell keeps it addressed for the Table panel).
       resolveTableCell(s);
       if (activeTool === "select") {
-        const mode: SelectionMode = modifiers?.shift
-          ? "add"
-          : modifiers?.cmd
-            ? "toggle"
-            : "replace";
+        // D-01 (editor ADR 1201, amending ADR 235): Shift-click toggles
+        // membership; Cmd (Ctrl) does the same, as before.
+        const mode: SelectionMode =
+          modifiers?.shift || modifiers?.cmd ? "toggle" : "replace";
         if (s && s.hit.element) {
           // Track L — selection target depends on `activeGroup`:
           //   activeGroup === null
@@ -487,14 +486,27 @@ export function CanvasPanel(_props: PanelProps) {
       pageId: import("@paged-media/client").PageId,
       rect: [number, number, number, number],
       modifiers?: { shift?: boolean; cmd?: boolean },
+      direction?: "contain" | "intersect",
     ) => {
+      // A Shift marquee adds what it takes; Cmd toggles (ADR 235, amended).
       const mode: SelectionMode = modifiers?.shift
         ? "add"
         : modifiers?.cmd
           ? "toggle"
           : "replace";
+      // D-01 — by direction, and by the click's group rule: the top-level
+      // items (a group as one), the entered group's members, or with Direct
+      // Selection the leaves.
+      const scope = directSelect
+        ? undefined
+        : activeGroup !== null
+          ? { kind: "group" as const, id: activeGroup }
+          : { kind: "document" as const };
       void client
-        .marqueeHits(pageId, rect)
+        .marqueeHits(pageId, rect, {
+          mode: direction ?? "intersect",
+          ...(scope ? { scope } : {}),
+        })
         .then((ids) => client.setElementSelection(ids, mode))
         .then((ids) => {
           setElementSelection(ids);
@@ -503,7 +515,13 @@ export function CanvasPanel(_props: PanelProps) {
         .then(setElementGeometry)
         .catch(() => {});
     },
-    [client, setElementGeometry, setElementSelection],
+    [
+      client,
+      setElementGeometry,
+      setElementSelection,
+      directSelect,
+      activeGroup,
+    ],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)

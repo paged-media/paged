@@ -271,6 +271,10 @@ Model each gesture as an explicit typed state machine. Test the machine exhausti
 
 #### 4.1.6 Selection gestures (`crates/select`)
 
+Since IC6 (ADR 235, amendment 2026-11-14) SEL-01 and SEL-03 are decided: a marquee drawn left to
+right contains, right to left intersects (the overlay draws them solid and dashed), and
+Shift-click toggles; `tests/e2e/uxi-selection.spec.ts` holds them (`UXI-T03`, `UXI-T04`).
+
 | ID     | Test                                                               | Assertion                                                                                                                                                        |
 | ------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SEL-01 | Marquee: intersect vs. contain mode                                | Per spec (InDesign default: intersect); assert exact set                                                                                                         |

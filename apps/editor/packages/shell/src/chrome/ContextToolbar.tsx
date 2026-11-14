@@ -43,6 +43,7 @@ import {
   FOCUS_WORKSPACE_KEYS,
 } from "../cockpit/focus-workspace";
 import { ContributedControlBarGroups } from "./ContributedBarItems";
+import { ToolOptionsInline } from "./ToolOptionsPopover";
 import { ContextTrail, useHostsContextTrail } from "./EditContextBreadcrumb";
 import { FrameLevelControl } from "./FrameLevelControl";
 import { useSelection } from "../state/selection-context";
@@ -171,18 +172,20 @@ export function contextSegmentModel(
 
 /**
  * What the bar shows while a plugin content type is being edited: the
- * content you are in, and the tools that edit it — as TOOLS, pressable
- * and showing which one is in hand. It used to be one sentence, the
- * context's raw type and a comma-separated list of every tool title
- * ("Editing rasterImage — Brush (raster), Pencil (raster), …"), which
- * named the tools without offering them.
+ * content you are in, the TOOL IN HAND — named, not an unlabelled icon —
+ * with its options, and the context's own control-bar groups.
+ *
+ * The tools themselves are picked in the tool rail, which a context
+ * restricts to its own tools (image ADR 487, UX audit F-43). The bar used
+ * to repeat every one of them as an icon pill as well, so a raster image
+ * showed fifteen tools in the rail and about forty in the bar, partly the
+ * same: two tool sets. One set is the rail; the bar is where the tool in
+ * hand is adjusted.
  *
  * The empty case is a STATEMENT, not a blank. A context declaring
  * `toolIds: []` has said no canvas tool edits its content — a
  * spreadsheet, a web frame, a data binding — and saying so out loud is
- * the point of the declaration. Rendering nothing there would leave the
- * user to infer it from an absence, which is how they conclude the app
- * is broken.
+ * the point of the declaration.
  */
 function ContextSegment({ frame }: { frame: EditContextFrame }) {
   const strings = useStrings();
@@ -192,7 +195,11 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
     const t = tools.get(id as never);
     return t ? { title: t.title, icon: t.icon } : undefined;
   });
-  const inHand = tool?.toolState.base ?? null;
+  const inHandId = tool?.toolState.base ?? null;
+  const inHand = inHandId ? tools.get(inHandId as never) : undefined;
+  // The host's Content level of a picture frame (editor ADR 1215): the
+  // picture's placement, which never changes its pixels.
+  const placement = frame.type === "paged.imageContent";
 
   return (
     <span
@@ -211,28 +218,63 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
           (`data-context-label`). Its Esc button leaves one level. */}
       <ContextTrail />
       <FrameLevelControl />
-      {model.tools.length > 0 && <span style={sepStyle} aria-hidden />}
-      {model.tools.map((t) => (
-        <ViewPill
-          key={t.id}
-          name={t.icon}
-          title={t.title}
-          active={inHand === t.id}
-          toolId={t.id}
-          onClick={() => tool?.setBaseTool(t.id)}
-        />
-      ))}
+      {placement ? (
+        <span
+          data-context-edit-kind="placement"
+          title={strings.t(CONTEXT_TOOLBAR.placementHint)}
+          style={chipStyle}
+        >
+          {strings.t(CONTEXT_TOOLBAR.placement)}
+        </span>
+      ) : null}
+      {model.tools.length > 0 && inHand && inHandId ? (
+        <>
+          <span style={sepStyle} aria-hidden />
+          <span
+            data-context-tool-in-hand={inHandId}
+            title={strings.t(CONTEXT_TOOLBAR.toolsInRail)}
+            aria-label={strings.t(CONTEXT_TOOLBAR.toolInHand, {
+              tool: inHand.title,
+            })}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              whiteSpace: "nowrap",
+              color: "var(--pg-primary)",
+            }}
+          >
+            {hasIcon(inHand.icon) ? (
+              <Icon name={inHand.icon} size={16} />
+            ) : null}
+            <span style={{ fontWeight: 600 }}>{inHand.title}</span>
+          </span>
+          {inHand.options && inHand.options.fields.length > 0 ? (
+            <ToolOptionsInline spec={inHand.options} />
+          ) : null}
+        </>
+      ) : null}
       {model.noTools && (
         <span style={{ color: "var(--pg-muted-fg)", whiteSpace: "nowrap" }}>
           {strings.t(CONTEXT_TOOLBAR.noTools)}
         </span>
       )}
       {/* Editor ADR 298 — the context's own control-bar groups (Word's
-          Home group inside a Word document). */}
+          Home group inside a Word document; the image's edit kind). */}
       <ContributedControlBarGroups editContext={frame.type} />
     </span>
   );
 }
+
+const chipStyle: React.CSSProperties = {
+  font: "10px var(--font-sans, sans-serif)",
+  lineHeight: "14px",
+  padding: "0 5px",
+  borderRadius: 3,
+  border: "1px dashed var(--pg-border)",
+  color: "var(--pg-muted-fg)",
+  whiteSpace: "nowrap",
+};
 
 /** Kit chrome.jsx Pill — 30px icon toggle; active fills the soft
  *  violet, disabled seams render dimmed with an honest tooltip. */
@@ -242,15 +284,12 @@ function ViewPill({
   active,
   disabled,
   onClick,
-  toolId,
 }: {
   name: string;
   title: string;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
-  /** Set when the pill arms a tool (the context segment). */
-  toolId?: string;
 }) {
   return (
     <button
@@ -258,9 +297,7 @@ function ViewPill({
       title={title}
       aria-label={title}
       disabled={disabled}
-      data-view-pill={toolId ? undefined : name}
-      data-context-tool={toolId}
-      aria-pressed={toolId ? Boolean(active) : undefined}
+      data-view-pill={name}
       onClick={onClick}
       style={{
         width: "var(--density-control-h)",

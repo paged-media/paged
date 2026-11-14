@@ -217,6 +217,19 @@ export const ENGINE_FAILURE = defineMessages("shell.engineFailure", {
   reload: "Reload",
 });
 
+/** Hover preselection and the locked mark (editor ADR 235, amended by
+ *  IC6): the type of the item a click would select. */
+export const HOVER = defineMessages("shell.hover", {
+  rectangle: "Rectangle",
+  oval: "Ellipse",
+  polygon: "Polygon",
+  line: "Line",
+  textFrame: "Text frame",
+  group: "Group",
+  item: "Item",
+  locked: "{kind} · locked",
+});
+
 export const COLLAB = defineMessages("shell.collab", {
   share: "Share",
   soon: "Sharing and collaboration are coming soon",
@@ -296,6 +309,7 @@ export const TOOL_OPTIONS = defineMessages("shell.toolOptions", {
 
 export const CONTEXT_MENU = defineMessages("shell.contextMenu", {
   label: "Canvas",
+  selectUnder: "Select",
 });
 
 export const PANEL_RAIL = defineMessages("shell.panelRail", {
@@ -307,6 +321,13 @@ export const CONTEXT_TOOLBAR = defineMessages("shell.contextToolbar", {
   focusWorkspace: "Focus workspace ({key}" + ")",
   noTools: "no canvas tools apply here",
   escToLeave: "Esc to leave",
+  // Image ADR 487 (UX audit F-43): the rail is the one tool set; the bar
+  // names the tool in hand and carries its options.
+  toolInHand: "Tool in hand: {tool}",
+  toolsInRail: "Pick tools in the tool rail",
+  placement: "Placement · non-destructive",
+  placementHint:
+    "Moves, scales or rotates the picture inside its frame; the image's pixels are not changed.",
 });
 
 export const APPLICABILITY = defineMessages("shell.applicability", {

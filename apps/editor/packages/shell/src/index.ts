@@ -102,6 +102,9 @@ export {
 export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
+export { hoverPreselectContribution } from "./overlays/hover-preselect";
+export { nextBelow, objectsUnder } from "./state/objects-under";
+export { isLockedEntries, useLockedKeys } from "./state/locked";
 
 export {
   CanvasClientProvider,
@@ -781,6 +784,7 @@ export {
   closeCanvasContextMenu,
   openCanvasContextMenu,
   type ContextMenuEntry,
+  type PickableObject,
 } from "./chrome/CanvasContextMenu";
 export {
   buildExportAseCommand,

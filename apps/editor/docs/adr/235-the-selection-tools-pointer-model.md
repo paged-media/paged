@@ -74,3 +74,35 @@ right takes what it fully contains, right to left what it touches, scoped to the
 and it starts on the pasteboard too. D-05 changes decision 2 for image frames: a double-click
 enters content position first, and "Edit image" enters paged.image (the note on ADR 282). Until
 those tasks land the body describes the code.
+
+## Amendment 2026-11-14: the selection model shipped (IC6)
+
+What D-01, D-08 and D-15 of [ADR 1201](1201-interaction-decisions.md) decided is built (plan task
+IC6; [ADR 1210](1210-the-interaction-coordinator.md) holds the coordinator it runs on):
+
+- **Shift-click toggles** an item in or out of the selection; Cmd (Ctrl) does the same. A Shift
+  marquee adds what it takes; a Cmd marquee toggles.
+- **The marquee is directional**: drawn left to right it takes what it wholly contains, right to
+  left what it touches; the overlay draws the first solid and the second dashed
+  (`data-marquee-mode`). It starts on the pasteboard as well (measured from the nearest page), and
+  its rectangle may cross the spread's pages (protocol 79, engine ADR 1011, amendment 1).
+- **One group rule** for a click, a marquee, the context menu and the object picker: at the top
+  level the outermost group, inside an entered group its members, with Direct Selection the
+  leaves (the marquee's `scope`).
+- **Hover preselection** (`overlays/hover-preselect.tsx`): with a Selection tool in hand and no
+  press under way, the item a click would select is outlined, thinner and lighter than the
+  selection, with its type named beside it (`UXI-OVR-006`, `UXI-OVR-009`); hovering selects
+  nothing.
+- **The objects under the pointer** can be reached on purpose (`UXI-HIT-006`): the context menu's
+  Select ▸ submenu lists them, topmost first, and the command Select next object below
+  (`paged.edit.selectBelow`, in the command palette) cycles down from the selection at the pointer
+  and wraps. The default click keeps the topmost.
+- **The context menu promotes to the group** as a click does.
+- **A locked item says so by shape** (D-08, `UXI-OVR-008`): a dashed outline, a padlock at its
+  corner, hollow handles with the not-allowed cursor; the hover label adds "locked". It stays
+  selectable and does not move (ADR 251).
+- **One path**: the legacy pointer path and its `?debug=legacy-pointer` switch are gone
+  (`UXI-MIG-002`); the inventory's guard finds no event class with two owners.
+
+Tests: `tests/e2e/uxi-selection.spec.ts` (`UXI-T03` ×3, `UXI-T04`, `UXI-T13`, `UXI-T29` ×2, hover,
+the picker and the cycle command).
