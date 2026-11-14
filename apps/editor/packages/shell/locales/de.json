@@ -187,7 +187,7 @@
   "shell.aiProposal.cleared": "der Wert des Formats",
   "shell.aiProposal.needsValue": "Schreiben Sie ihn, um diesen Punkt anzuwenden",
   "shell.aiProposal.altTextLabel": "Alternativtext für {subject}",
-  "shell.aiProposal.apply": "{count, plural, =0 {Anwenden} one {# Änderung anwenden} other {# Änderungen anwenden}}",
+  "shell.aiProposal.apply": "{count, plural, one {# Änderung anwenden} other {# Änderungen anwenden}}",
   "shell.aiProposal.discard": "Verwerfen",
   "shell.aiProposal.applied": "{count, plural, one {# Änderung} other {# Änderungen}} als {steps, plural, one {ein Widerrufschritt} other {# Widerrufschritte}} angewendet.",
   "shell.aiProposal.undo": "Widerrufen",

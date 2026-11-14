@@ -88,8 +88,7 @@ export const PROPOSAL = defineMessages("shell.aiProposal", {
   cleared: "the style's value",
   needsValue: "Write it to apply this item",
   altTextLabel: "Alternative text for {subject}",
-  apply:
-    "{count, plural, =0 {Apply} one {Apply # change} other {Apply # changes}}",
+  apply: "{count, plural, one {Apply # change} other {Apply # changes}}",
   discard: "Discard",
   applied:
     "{count, plural, one {Applied # change} other {Applied # changes}} as {steps, plural, one {one undo step} other {# undo steps}}.",
