@@ -23,6 +23,8 @@
 
 import { describe, expect, test } from "bun:test";
 
+import type { ElementId } from "@paged-media/client";
+
 import {
   alignAnchorsOps,
   curveTypeOps,
@@ -41,6 +43,7 @@ import {
 import {
   operandPreview,
   specialRole,
+  type OperandBox,
 } from "../../../src/panels/pathfinder-preview";
 
 const corner = (x: number, y: number) => ({
@@ -193,19 +196,11 @@ describe("Shape suggestions (paged.draw ADR 370)", () => {
 });
 
 describe("the Pathfinder's outline before the click (paged.draw ADR 370)", () => {
-  const a = { kind: "polygon", id: "a" };
-  const b = { kind: "polygon", id: "b" };
-  const boxes = [
-    {
-      id: a,
-      pageId: "p",
-      bounds: [0, 0, 10, 10] as [number, number, number, number],
-    },
-    {
-      id: b,
-      pageId: "p",
-      bounds: [5, 5, 15, 15] as [number, number, number, number],
-    },
+  const a: ElementId = { kind: "polygon", id: "a" };
+  const b: ElementId = { kind: "polygon", id: "b" };
+  const boxes: OperandBox[] = [
+    { id: a, pageId: "p", bounds: [0, 0, 10, 10] },
+    { id: b, pageId: "p", bounds: [5, 5, 15, 15] },
   ];
 
   test("a shape mode keeps the first selected: solid and named, the other dashed", () => {
