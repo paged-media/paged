@@ -26,7 +26,6 @@ import { describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
 import {
-  OBJECT_VERBS,
   VERB_MENU_ROWS,
   buildVerbCommands,
   resolveVerb,
