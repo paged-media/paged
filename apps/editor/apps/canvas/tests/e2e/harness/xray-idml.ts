@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The X-Ray fixture (editor ADRs 1226, 1227): one page holding every fact
+// The X-Ray fixture (editor ADRs 1233, 1234): one page holding every fact
 // Document X-Ray and the Typography Debugger answer, built in code like the
 // interaction contract's fixtures (FIXTURES.md). A based-on chain of
 // paragraph styles (Base ← Body ← Head), a character style and a local

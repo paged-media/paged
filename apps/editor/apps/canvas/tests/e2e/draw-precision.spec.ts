@@ -30,8 +30,10 @@
 //                   (not the frame): Smooth and X are one undo step each;
 //   suggestions     a selected shape offers its quick actions; Smooth is
 //                   one undo step;
-//   Pathfinder      a button says it applies on click and outlines what it
-//                   takes; nothing changes before the click.
+//   Pathfinder      pointing at a button previews its result from the
+//                   engine's dry run (the consumed operands dashed);
+//                   nothing changes before the click, the click is one
+//                   undo step.
 //
 // Every test asserts the model and the history, never a screenshot.
 
@@ -327,7 +329,7 @@ test.describe("paged.draw ADR 370 — vector editing with feedback", () => {
       .toBe(true);
   });
 
-  test("Pathfinder: a button says it applies on click and outlines what it takes; nothing changes before the click @feat:frames-paths.shape-tools @level:gesture", async ({
+  test("Pathfinder: pointing at a button previews its result from the engine's dry run; nothing changes before the click, which is one undo step @feat:frames-paths.shape-tools @level:gesture", async ({
     page,
   }) => {
     const ids = await page.evaluate(async () => {
@@ -352,21 +354,58 @@ test.describe("paged.draw ADR 370 — vector editing with feedback", () => {
     expect(ids).toHaveLength(2);
     await openPanel(page, "paged.pathfinder");
     await expect(page.locator("[data-pathfinder-applies]")).toContainText(
-      "Applies on click to 2 objects",
+      "2 objects",
     );
+    // The engine's own dry run of the union the click would make.
+    const engine = await page.evaluate(async (refs) => {
+      const c = (globalThis as unknown as CanvasGlobal).__canvas;
+      const r = await (
+        c.client as unknown as {
+          preview(q: unknown): Promise<{
+            applied: boolean;
+            outlines: Array<{ subpathStarts: number[] }>;
+          }>;
+        }
+      ).preview({
+        mutation: {
+          op: "pathfinderBoolean",
+          args: { kept: refs[0], others: [refs[1]], kind: "union" },
+        },
+        items: refs,
+      });
+      return {
+        applied: r.applied,
+        contours: r.outlines.reduce(
+          (n, o) => n + Math.max(1, o.subpathStarts.length),
+          0,
+        ),
+      };
+    }, ids);
+    expect(engine.applied).toBe(true);
     const model = await modelSnapshot(page);
     const history = await historyDepth(page);
-    const outline = page.locator(
+    const layer = page.locator(
       '[data-overlay-layer="paged.pathfinder.operands"]',
     );
     await page.locator('[data-pathfinder-kind="union"]').hover();
-    await expect(outline.locator("text")).toHaveText("Keeps the result");
-    await expect(outline.locator("path[stroke-dasharray]")).toHaveCount(1);
+    await expect(layer.locator("text")).toHaveText("Result");
+    // The result, solid, contour by contour; the consumed operand dashed.
+    await expect(layer.locator("path:not([stroke-dasharray])")).toHaveCount(
+      engine.contours,
+    );
+    await expect(layer.locator("path[stroke-dasharray]")).toHaveCount(1);
+    // Divide: the regions it would mint.
     await page.locator('[data-pathfinder-verb="pathfinderDivide"]').hover();
-    await expect(outline.locator("text")).toHaveCount(0);
+    await expect
+      .poll(() => layer.locator("path:not([stroke-dasharray])").count())
+      .toBeGreaterThanOrEqual(3);
     await page.mouse.move(5, 5);
-    await expect(outline).toHaveCount(0);
+    await expect(layer).toHaveCount(0);
     expect(await modelSnapshot(page)).toBe(model);
     expect(await historyDepth(page)).toEqual(history);
+    // The click applies the previewed union: one undo step.
+    const depth = await undoDepth(page);
+    await page.locator('[data-pathfinder-kind="union"]').click();
+    await expect.poll(() => undoDepth(page)).toBe(depth + 1);
   });
 });

@@ -127,7 +127,7 @@ export const PROOF_HIDDEN_OVERLAYS: ReadonlySet<string> = new Set([
   "paged.overlay.commentPins",
   "paged.marginBand",
   "paged.hit-marker",
-  // Editor ADRs 1226 and 1227 — diagnostic views over the page.
+  // Editor ADRs 1233 and 1234 — diagnostic views over the page.
   "paged.overlay.xray",
   "paged.overlay.typography",
 ]);

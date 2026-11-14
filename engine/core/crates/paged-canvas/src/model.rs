@@ -2912,7 +2912,20 @@ impl CanvasModel {
             (doc, Some(opened.archive))
         };
         phase_log("CanvasModel::load parse", t_parse);
+        Self::from_scene(doc_id, scene, source_archive, import_notes, bytes, opts)
+    }
 
+    /// A model over a parsed `scene`: [`Self::load`] after the parse, and a
+    /// sandbox's copy of a document (engine ADR 1308). `bytes` is the
+    /// source package kept for save-back.
+    fn from_scene(
+        doc_id: String,
+        scene: Document,
+        source_archive: Option<idml_import::SourceArchive>,
+        import_notes: Vec<String>,
+        bytes: &[u8],
+        opts: CanvasOptions,
+    ) -> Result<Self, LoadError> {
         // Honour the first font and the ICC profile. Take ownership
         // up-front so the model is self-contained — no caller-managed
         // lifetimes leaking through.
@@ -15584,30 +15597,46 @@ impl CanvasModel {
     /// scene: the live rebuild's options with every cross-build cache and
     /// hint left out. The registries (fonts, profiles, scene layers) are
     /// inputs, not caches, and are shared.
+    /// A copy of the document in a model of its own (engine ADR 1308): the
+    /// scene cloned and built cold with this model's fonts, profiles,
+    /// colour settings, session policy and id floor. A write applied to it
+    /// goes through the whole write path — lowering, permissions, the
+    /// operation layer, the rebuild — and touches nothing of this model:
+    /// not the scene, the build, the undo history nor the revision.
+    pub fn sandbox(&self) -> Result<CanvasModel, LoadError> {
+        let opts = CanvasOptions {
+            fonts: self.font_bytes.clone().into_iter().collect(),
+            font_registry: self.font_registry.clone(),
+            scene_font_registry: self.scene_font_registry.clone(),
+            cmyk_icc_profile: self.icc_bytes.clone(),
+            color_profiles: self
+                .color_profiles
+                .iter()
+                .map(|(name, bytes)| ColorProfileEntry {
+                    name: name.clone(),
+                    bytes: bytes.clone(),
+                })
+                .collect(),
+        };
+        let mut copy = Self::from_scene(
+            self.doc_id.clone(),
+            self.scene.clone(),
+            None,
+            Vec::new(),
+            &self.source_idml,
+            opts,
+        )?;
+        copy.source_id_floor = self.source_id_floor;
+        copy.last_applied_seq = self.last_applied_seq;
+        copy.color_settings = self.color_settings.clone();
+        copy.document_defaults = self.document_defaults.clone();
+        copy.session_policy = self.session_policy.clone();
+        copy.snap_settings = self.snap_settings;
+        copy.view_settings = self.view_settings;
+        Ok(copy)
+    }
+
     fn cold_build(&self) -> Result<BuiltDocument, crate::channel::LoadError> {
-        self.cold_build_of(&self.scene)
-    }
-
-    /// Engine ADR 1308 — the operation a previewed write lowers to, as the
-    /// write itself would; `None` for one the operation layer does not
-    /// apply on its own (or no caller may author).
-    pub(crate) fn preview_operation(
-        &self,
-        mutation: &Mutation,
-        mint: &mut u64,
-    ) -> Option<paged_mutate::Operation> {
-        refuse_unauthorable(mutation).ok()?;
-        self.try_translate_frame_mutation_to_operation(mutation, mint)
-    }
-
-    /// A cold build of `scene` with this model's fonts, profiles and
-    /// settings: [`Self::cold_build`] for the document, and the build of a
-    /// preview's copy (engine ADR 1308). Shares no cache a build writes
-    /// back, so the live build is untouched.
-    pub(crate) fn cold_build_of(
-        &self,
-        scene: &Document,
-    ) -> Result<BuiltDocument, crate::channel::LoadError> {
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
         let resource_providers = self.resource_tiles.provider_entries();
         let fresh_hint: std::cell::RefCell<HashMap<String, u32>> = Default::default();
@@ -15632,7 +15661,7 @@ impl CanvasModel {
         options.emission_prints = None;
         let (built, _) =
             paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
-                pipeline::build_document(scene, &options)
+                pipeline::build_document(&self.scene, &options)
             });
         built.map_err(|e| crate::channel::LoadError::Build(e.to_string()))
     }

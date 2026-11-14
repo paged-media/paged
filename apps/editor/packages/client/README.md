@@ -168,9 +168,17 @@ preview? })` answers per composed line the measure, the natural width, the
   `storyEnd`, `emergency`), the hyphenation points the dictionary offered,
   its tightness against the paragraph's word spacing, outliers and the
   baseline grid's shift; each paragraph's composition settings; the overset.
-  With `preview` (a property write), the evidence of a copy of the document
-  with the write applied: the document, its history and its revision are
+  With `preview` (any write), the evidence of a copy of the document with
+  the write applied: the document, its history and its revision are
   untouched, and applying it is an ordinary `mutate`.
+- **The dry run** (engine ADR 1308). `preview({ mutation, items?, story? })`
+  applies any write — a batch, a Pathfinder Boolean or region verb, a
+  property, a text edit — to a copy of the document through the engine's
+  whole write path and answers what it would create and remove, the
+  geometry and the outlines (`PathAnchorsResult`: anchors and the transform
+  onto the page) it would leave for those and the asked `items`, and the
+  asked `story`'s line evidence; a refused write answers `applied: false`
+  and the engine's reason. Nothing in the document changes.
 
 ## The catalog
 

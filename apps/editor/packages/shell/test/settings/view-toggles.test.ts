@@ -53,7 +53,7 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   dataMarkers: false,
   // Editor ADR 1223.
   issueMarkers: false,
-  // Editor ADRs 1226, 1227.
+  // Editor ADRs 1233, 1234.
   xray: false,
   typography: false,
   // Editor ADR 287.
@@ -256,7 +256,7 @@ describe('the overlay rule (editor ADR "Editing aids and Proof view")', () => {
     expect(overlayShown("paged.selection-chrome", on, null)).toBe(true);
   });
 
-  test("X-Ray and the Typography Debugger are diagnostic views a proof hides (editor ADRs 1226, 1227)", () => {
+  test("X-Ray and the Typography Debugger are diagnostic views a proof hides (editor ADRs 1233, 1234)", () => {
     const on = (which: ViewToggle) => getViewToggle(scope, which);
     for (const id of ["paged.overlay.xray", "paged.overlay.typography"]) {
       expect(overlayShown(id, on, "normal")).toBe(true);

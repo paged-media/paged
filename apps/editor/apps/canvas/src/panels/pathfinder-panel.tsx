@@ -50,11 +50,13 @@
 // HONEST SEAMS, still: the CONVERT SHAPE row + the corner option (no
 // Operations behind them).
 //
-// BEFORE THE CLICK (paged.draw ADR 370). The engine has no dry run of
-// these operations, so the panel says plainly that a button applies on
-// click (one undo step) and, while a button is hovered or focused,
-// outlines on the canvas the objects it will take — the one that keeps
-// the result (or that Crop cuts with) solid and named, the others dashed
+// BEFORE THE CLICK (paged.draw ADR 370, amended 2026-11-14). While a
+// button is hovered or focused, the engine's dry run (`client.preview`,
+// engine ADR 1308) applies its write to a copy of the document and the
+// canvas shows the result — solid and named, the operands it consumes
+// dashed; the click applies it, one undo step. Where no preview can be
+// made (the engine refuses, the read fails) the canvas outlines the objects
+// the button takes instead and the panel says it applies on click
 // (`pathfinder-preview.ts`).
 
 import { useEffect, useRef, useState } from "react";
@@ -69,13 +71,16 @@ import {
 
 import {
   paintOrder,
+  regionVerbMutation,
   runRegionVerb,
   runShapeMode,
+  shapeModeMutation,
   topToBottom,
   type PathfinderRegionVerb,
 } from "../pathfinder-commands";
 import {
   operandPreview,
+  resultPreview,
   specialRole,
   type OperandBox,
   type PathfinderOp,
@@ -133,8 +138,10 @@ const M = defineMessages("app.pathfinderPanel", {
   convertShape: "Convert shape",
   corner: "Corner",
   cornerSample: "Rounded · 4 pt",
-  appliesOnClick:
-    "{count, plural, one {Applies on click to # object} other {Applies on click to # objects}} · one undo step. Point at a button to see what it takes.",
+  previewHint:
+    "{count, plural, one {# object} other {# objects}} · point at a button to preview its result on the canvas; a click applies it as one undo step.",
+  noPreview: "No preview: {reason}. The button applies on click.",
+  result: "Result",
   roleResult: "Keeps the result",
   roleKept: "Kept",
   roleCutter: "Cuts the others",
@@ -237,10 +244,13 @@ export function PathfinderPanel() {
   const signals = useOptionalOverlaySignals();
   // The hover the outline answers; a newer hover (or leaving) wins.
   const previewSeq = useRef(0);
+  // Why the hovered button has no result preview (it applies on click).
+  const [noPreview, setNoPreview] = useState<string | null>(null);
 
-  /** Outline what `op` will take (or clear it, `op` null). */
+  /** Preview what `op` will make (or clear it, `op` null). */
   const preview = (op: PathfinderOp | null) => {
     const seq = ++previewSeq.current;
+    setNoPreview(null);
     if (!signals) return;
     if (!op || !enabled) {
       signals.removeOverlayLayer(PREVIEW_LAYER);
@@ -251,7 +261,7 @@ export function PathfinderPanel() {
       client.elementGeometry(ids),
       client.sceneTree().catch(() => []),
     ])
-      .then(([geometry, tree]) => {
+      .then(async ([geometry, tree]) => {
         if (seq !== previewSeq.current) return;
         const same = (a: ElementId, b: ElementId) =>
           a.kind === b.kind && String(a.id) === String(b.id);
@@ -276,6 +286,27 @@ export function PathfinderPanel() {
               : role === "cutter"
                 ? strings.t(M.roleCutter)
                 : null;
+        // The result itself, from the engine's dry run of the very write
+        // the click sends.
+        const mutation =
+          op === "union" ||
+          op === "intersect" ||
+          op === "subtract" ||
+          op === "exclude"
+            ? shapeModeMutation(ids, op)
+            : regionVerbMutation(topToBottom(ids, paintOrder(tree)), op);
+        const report = mutation
+          ? await client.preview({ mutation, items: ids }).catch(() => null)
+          : null;
+        if (seq !== previewSeq.current) return;
+        if (report?.applied) {
+          signals.setOverlayLayer(
+            PREVIEW_LAYER,
+            resultPreview(report, boxes, strings.t(M.result)) as never,
+          );
+          return;
+        }
+        setNoPreview(report?.refused ?? null);
         signals.setOverlayLayer(
           PREVIEW_LAYER,
           operandPreview(op, boxes, front, label) as never,
@@ -331,7 +362,7 @@ export function PathfinderPanel() {
             type="button"
             key={btn.kind}
             data-pathfinder-kind={btn.kind}
-            data-applies-on-click=""
+            data-previews-result=""
             disabled={!enabled}
             title={strings.t(btn.hint)}
             className={TILE_CLASS}
@@ -366,7 +397,7 @@ export function PathfinderPanel() {
             type="button"
             key={btn.verb}
             data-pathfinder-verb={btn.verb}
-            data-applies-on-click=""
+            data-previews-result=""
             disabled={!enabled}
             title={strings.t(btn.hint)}
             className={TILE_CLASS}
@@ -396,13 +427,22 @@ export function PathfinderPanel() {
           data-pathfinder-applies
           style={{ lineHeight: 1.5 }}
         >
-          {strings.t(M.appliesOnClick, { count: elementSelection.length })}
+          {strings.t(M.previewHint, { count: elementSelection.length })}
         </div>
       ) : (
         <div className="text-xs text-muted-foreground" data-pathfinder-hint>
           {strings.t(M.selectTwo)}
         </div>
       )}
+      {noPreview !== null ? (
+        <div
+          className="text-xs text-muted-foreground"
+          data-pathfinder-no-preview
+          data-applies-on-click=""
+        >
+          {strings.t(M.noPreview, { reason: noPreview })}
+        </div>
+      ) : null}
       <StatusLine tone="warn" attr="data-pathfinder-error">
         {status}
       </StatusLine>

@@ -42,6 +42,7 @@ mod determinism;
 mod digest_gate;
 mod document_metadata;
 mod document_xray;
+mod dry_run;
 mod duplicate_wire;
 mod effect_stack;
 mod element_lock_wire;

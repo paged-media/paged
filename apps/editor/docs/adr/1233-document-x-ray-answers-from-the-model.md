@@ -1,4 +1,4 @@
-# ADR 1226 — Document X-Ray answers from the model
+# ADR 1233 — Document X-Ray answers from the model
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `apps/canvas/src/panels/xray-panel.tsx` (new: the "Why?" inspector),
@@ -66,4 +66,5 @@ anywhere.
 - Tests: `apps/canvas/test/panels/xray-panel.dom.test.tsx` (the panel's sections from the
   engine's answer, the sources, the empty state); `tests/e2e/xray.spec.ts` (the panel and the
   overlay show the engine's facts for a fixture document; the model and the history stay as they
-  were); the overlay rule in `packages/shell/test/settings/view-toggles.test.ts`.
+  were); the overlay rule in `packages/shell/test/settings/view-toggles.test.ts`; the client on
+  the real engine in `tests/headless/client-protocol-82.test.ts`.

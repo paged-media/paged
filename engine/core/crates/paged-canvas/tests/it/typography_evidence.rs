@@ -356,8 +356,11 @@ fn a_preview_recomposes_a_copy_and_changes_nothing() {
 }
 
 #[test]
-fn a_write_that_is_not_a_property_is_not_previewed() {
+fn any_write_previews_and_a_refused_one_says_why() {
     let m = model();
+    let before = evidence(&m, "sj");
+    let state = (m.current_state_hash(), m.applied_log_len());
+    // A text edit: the preview composes the longer story.
     let r = m.line_evidence(&LineEvidenceQuery {
         story: "sj".into(),
         frame: None,
@@ -365,11 +368,26 @@ fn a_write_that_is_not_a_property_is_not_previewed() {
         preview: Some(Mutation::InsertText {
             story_id: "sj".into(),
             offset: 0,
+            text: "Previewed words come first. ".into(),
+            cell: None,
+        }),
+    });
+    assert!(r.preview, "{:?}", r.refused);
+    assert!(r.lines.len() > before.lines.len(), "{:#?}", r.lines);
+    assert_eq!(state, (m.current_state_hash(), m.applied_log_len()));
+    // A write the engine refuses: the document's own lines, and why.
+    let refused = m.line_evidence(&LineEvidenceQuery {
+        story: "sj".into(),
+        frame: None,
+        range: None,
+        preview: Some(Mutation::InsertText {
+            story_id: "nope".into(),
+            offset: 0,
             text: "x".into(),
             cell: None,
         }),
     });
-    assert!(!r.preview);
-    assert_eq!(r.refused.as_deref(), Some("unsupported"));
-    assert!(!r.lines.is_empty(), "the document's own lines");
+    assert!(!refused.preview);
+    assert!(refused.refused.is_some());
+    assert_eq!(refused.lines, before.lines);
 }

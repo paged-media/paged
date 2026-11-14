@@ -1280,7 +1280,7 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultGroup: "console",
   },
   {
-    // Editor ADR 1226 — Document X-Ray, the "Why?" inspector: the engine's
+    // Editor ADR 1233 — Document X-Ray, the "Why?" inspector: the engine's
     // facts on why the selection looks and behaves as it does.
     id: "paged.xray",
     get title() {
@@ -1291,7 +1291,7 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultGroup: "inspector",
   },
   {
-    // Editor ADR 1227 — the Typography Debugger: the story's lines, how
+    // Editor ADR 1234 — the Typography Debugger: the story's lines, how
     // tightly each is set and why it broke there; a change previewed in a
     // copy before it is applied.
     id: "paged.typography",

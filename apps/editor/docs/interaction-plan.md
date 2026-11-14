@@ -59,7 +59,7 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 | IC1–IC7 the coordinator, the terminal events, the stale guards, the adapters, the press in one call, the selection model, the geometry pressed | Done; the coordinator is the one pointer path (the legacy path removed)                                                                                                                                                                                    | ADR 1210                                                    |
 | CM1–CM4 contexts and modules                                                                                                                   | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced | editor ADRs 1214, 1215; extensions ADR 1106                 |
 | DF1–DF9, documents, files and feedback                                                                                                         | Done: save status, recovery, drop intent, compatibility report, new document, guided export, issues on the page, operation feedback, clipboard order; F-06 continuity                                                                                      | ADRs 1203–1205, 1219–1224, 231 (amended)                    |
-| PX1–PX2 Document X-Ray and the Typography Debugger                                                                                             | Done: the engine's provenance facts in a "Why?" panel and View ▸ X-Ray; every line's composition record, its evidence in a panel and on the canvas, a change previewed in a copy of the document                                                           | protocol 82; editor ADRs 1226, 1227; engine ADRs 1307, 1308 |
+| PX1–PX2 Document X-Ray and the Typography Debugger                                                                                             | Done: the engine's provenance facts in a "Why?" panel and View ▸ X-Ray; every line's composition record, its evidence in a panel and on the canvas, a change previewed in a copy of the document                                                           | protocol 82; editor ADRs 1233, 1234; engine ADRs 1307, 1308 |
 | Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                                                                                                      | Not started                                                                                                                                                                                                                                                | §4–§12                                                      |
 
 ## 1. Facts in the code that shape the plan
@@ -472,10 +472,10 @@ In scope. They start after G2, and each lands with its own ADR.
   style chain, the binding source, the link source, the lock reason, thread and overset, the
   dependents: "pages affected by this style") (`ENG/channel.rs`); `CV/panels/xray-panel.tsx` and
   an X-Ray overlay mode on the canvas. Deterministic facts only. **Done** (protocol 82, engine ADR 1307, editor
-  ADR 1226): `RequestExplain { item, aspect?, selection? }`; the "Why?" panel and View ▸ X-Ray.
+  ADR 1233): `RequestExplain { item, aspect?, selection? }`; the "Why?" panel and View ▸ X-Ray.
 - **PX2 The Typography Debugger.** The composer's line-break evidence, `RequestLineEvidence`
   (available width, break opportunities, hyphenation, spacing ratios); an overlay and a panel; a
-  preview through a sandboxed operation. **Done** (protocol 82, engine ADR 1308, editor ADR 1227):
+  preview through a sandboxed operation. **Done** (protocol 82, engine ADR 1308, editor ADR 1234):
   `LineLayout::composition` on every build; `RequestLineEvidence { story, frame?, range?,
 preview? }`, the preview composed in a copy of the document; the panel and View ▸ Typography
   debugger.

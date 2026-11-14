@@ -232,6 +232,8 @@ export type {
   OversetEvidence,
   PageFact,
   ParagraphComposition,
+  PreviewQuery,
+  PreviewReport,
   PropertyFact,
   SourcedValue,
   StyleChain,

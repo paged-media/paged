@@ -57,6 +57,8 @@ import {
   type Explanation,
   type LineEvidenceQuery,
   type LineEvidenceReport,
+  type PreviewQuery,
+  type PreviewReport,
   type HitResult,
   type LossEntry,
   type ExportedLinkWire,
@@ -1410,6 +1412,25 @@ export class CanvasClient {
       payload: query,
     });
     if (reply.kind === "lineEvidence") return reply.payload;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 82 (engine ADR 1308) — the dry run of any write: `mutation`
+   * (a batch, a Boolean, a region verb, a property, a text edit) applied
+   * through the engine's whole write path to a copy of the document, and
+   * answered as the items it would create and remove, the geometry and
+   * outlines it would leave for those and the asked `items`, and the asked
+   * `story`'s line evidence. A refused write answers `applied: false` with
+   * the engine's reason. A read: the document, its history and its
+   * revision are untouched; making the write is an ordinary `mutate`.
+   */
+  async preview(query: PreviewQuery): Promise<PreviewReport> {
+    const reply = await this.send({
+      kind: "requestPreview",
+      payload: query,
+    });
+    if (reply.kind === "previewed") return reply.payload;
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
 

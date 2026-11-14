@@ -2845,3 +2845,36 @@ fn the_wire_answers_line_evidence_and_a_preview_changes_nothing() {
         "the document is unchanged"
     );
 }
+
+/// Engine ADR 1308 over the wire: `requestPreview` dry-runs any write and
+/// answers the geometry it would leave; the document does not move.
+#[test]
+fn the_wire_previews_a_write_without_making_it() {
+    let mut core = loaded_core();
+    let steps = undo_len(&mut core, 2);
+    let geometry = |core: &mut WorkerCore, seq| {
+        let g = send(
+            core,
+            seq,
+            "requestElementGeometry",
+            serde_json::json!({ "ids": [{ "kind": "textFrame", "id": "tf1" }] }),
+        );
+        g["payload"]["items"][0]["itemTransform"].clone()
+    };
+    let before = geometry(&mut core, 3);
+    let reply = send(
+        &mut core,
+        4,
+        "requestPreview",
+        serde_json::json!({
+            "mutation": move_tf1(40.0),
+            "items": [{ "kind": "textFrame", "id": "tf1" }]
+        }),
+    );
+    assert_eq!(reply["kind"], "previewed", "{reply}");
+    let p = &reply["payload"];
+    assert_eq!(p["applied"], true, "{p}");
+    assert_eq!(p["geometry"][0]["itemTransform"][4], 40.0, "{p}");
+    assert_eq!(undo_len(&mut core, 5), steps, "a dry run is not a step");
+    assert_eq!(geometry(&mut core, 6), before, "the document did not move");
+}

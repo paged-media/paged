@@ -17,16 +17,23 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// What a Pathfinder button will act on, shown before the click (the UX
-// strategy's §7.1; paged.draw ADR 370). The engine offers no dry run of a
-// Boolean or region operation, so the result itself cannot be previewed;
-// what can be shown honestly is WHICH objects the click takes and which
-// of them has the role the operation turns on — the object that keeps the
+// What a Pathfinder button will do, shown before the click (the UX
+// strategy's §7.1; paged.draw ADR 370, amended 2026-11-14). The engine's
+// dry run (`client.preview`, engine ADR 1308) applies the button's write to
+// a copy of the document and answers the outlines it would leave: the
+// result is drawn solid and named, the operands it consumes dashed.
+// Where no preview can be made (the engine refuses the write, the read
+// fails), what is shown is WHICH objects the click takes and which of
+// them has the role the operation turns on — the object that keeps the
 // result of a shape mode (the first selected), the frontmost that Crop
-// cuts with and Minus back keeps. The kept one is drawn solid and named,
-// the others dashed. Nothing is changed until the click.
+// cuts with and Minus back keeps — and the panel says the button applies
+// on click. Nothing is changed until the click.
 
-import type { ElementId, PathfinderKind } from "@paged-media/client";
+import type {
+  ElementId,
+  PathfinderKind,
+  PreviewReport,
+} from "@paged-media/client";
 
 import type { PathfinderRegionVerb } from "../pathfinder-commands";
 
@@ -112,6 +119,65 @@ export function operandPreview(
         background: true,
       });
     }
+  }
+  return shapes;
+}
+
+const apply = (
+  m: readonly number[] | null | undefined,
+  [x, y]: readonly number[],
+): [number, number] =>
+  m && m.length === 6
+    ? [m[0]! * x! + m[2]! * y! + m[4]!, m[1]! * x! + m[3]! * y! + m[5]!]
+    : [x!, y!];
+
+/** The overlay shapes of a dry run's result (engine ADR 1308): every
+ *  outline it answers, contour by contour, mapped onto its page and drawn
+ *  solid; the operands it consumes (`removed`, from `boxes`) dashed; the
+ *  first result named `label`. PURE. */
+export function resultPreview(
+  report: PreviewReport,
+  boxes: readonly OperandBox[],
+  label: string,
+): Array<Record<string, unknown>> {
+  const shapes: Array<Record<string, unknown>> = [];
+  const gone = new Set(report.removed.map(key));
+  for (const b of boxes) if (gone.has(key(b.id))) shapes.push(boxPath(b, true));
+  let named = false;
+  for (const o of report.outlines) {
+    if (!o.pageId) continue;
+    const starts = o.subpathStarts.length ? o.subpathStarts : [0];
+    starts.forEach((start, k) => {
+      const end = starts[k + 1] ?? o.anchors.length;
+      const anchors = o.anchors.slice(start, end).map((a) => ({
+        anchor: apply(o.itemTransform, a.anchor),
+        left: apply(o.itemTransform, a.left),
+        right: apply(o.itemTransform, a.right),
+      }));
+      if (anchors.length < 2) return;
+      shapes.push({
+        pageId: o.pageId,
+        anchors,
+        close: !(o.subpathOpen[k] ?? false),
+        dashed: false,
+      });
+      if (!named) {
+        named = true;
+        const top = anchors.reduce(
+          (p, a) => (a.anchor[1] < p[1] ? a.anchor : p),
+          anchors[0]!.anchor,
+        );
+        shapes.push({
+          kind: "text",
+          pageId: o.pageId,
+          x: Math.min(...anchors.map((a) => a.anchor[0])),
+          y: top[1] - 4,
+          text: label,
+          size: 11,
+          background: true,
+        });
+      }
+    });
   }
   return shapes;
 }

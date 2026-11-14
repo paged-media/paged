@@ -837,8 +837,8 @@ impl CanvasModel {
             return report(&self.scene, &self.built, query, revision);
         };
         match self.preview_build(preview) {
-            Ok((scene, built)) => {
-                let mut out = report(&scene, &built, query, revision);
+            Ok(copy) => {
+                let mut out = report(&copy.scene, &copy.built, query, revision);
                 out.preview = true;
                 out
             }
@@ -850,35 +850,12 @@ impl CanvasModel {
         }
     }
 
-    /// `mutation` applied to a copy of the document, and the copy built.
-    /// Only writes the operation layer applies on its own are previewed:
-    /// properties of items, text ranges, paragraphs and styles, and
-    /// batches of them.
-    fn preview_build(&self, mutation: &Mutation) -> Result<(Document, BuiltDocument), String> {
-        let mut scene = self.scene.clone();
-        let mut ops = Vec::new();
-        let mut mint = 0u64;
-        let flat: Vec<&Mutation> = match mutation {
-            Mutation::Batch { ops } => ops.iter().collect(),
-            other => vec![other],
-        };
-        for m in flat {
-            match m {
-                Mutation::SetElementProperty { .. }
-                | Mutation::SetStyleProperty { .. }
-                | Mutation::ApplyStyle { .. } => {}
-                _ => return Err("unsupported".into()),
-            }
-            let op = self
-                .preview_operation(m, &mut mint)
-                .ok_or_else(|| "unsupported".to_string())?;
-            ops.push(op);
-        }
-        for op in &ops {
-            paged_mutate::apply_checked(&mut scene, op, self.session_policy())
-                .map_err(|e| e.to_string())?;
-        }
-        let built = self.cold_build_of(&scene).map_err(|e| format!("{e:?}"))?;
-        Ok((scene, built))
+    /// `mutation` applied, through the whole write path, to a sandbox — a
+    /// copy of the document in a model of its own ([`Self::sandbox`]).
+    fn preview_build(&self, mutation: &Mutation) -> Result<CanvasModel, String> {
+        let mut copy = self.sandbox().map_err(|e| format!("{e:?}"))?;
+        copy.apply_mutation(mutation)
+            .map_err(|e| crate::preview::refusal_text(&e))?;
+        Ok(copy)
     }
 }

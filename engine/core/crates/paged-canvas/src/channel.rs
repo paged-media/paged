@@ -894,8 +894,8 @@ export type WorkerToMain = WorkerToMainKind & {
 //   - Import losses (engine ADR 1305): `DocumentHandle.losses` (additive,
 //     `LossEntry[]`) on every `DocumentLoaded` (`UXI-FIL-002`).
 //   New message kinds an older worker cannot answer, hence the bump.
-// v82 — Document X-Ray and the Typography Debugger (editor ADRs 1226 and
-//   1227, tasks PX1 and PX2 of the editor's interaction plan):
+// v82 — Document X-Ray and the Typography Debugger (editor ADRs 1233 and
+//   1234, tasks PX1 and PX2 of the editor's interaction plan):
 //   - X-Ray (engine ADR 1307): `RequestExplain { item, aspect?,
 //     selection? }` answers
 //     `Explained(Explanation)` — the provenance of an item's look and
@@ -911,6 +911,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //     grid; with `preview`, a copy's, the document untouched.
 //     `LineLayout` keeps the composer's record of each line
 //     (`LineComposition`) on every build.
+//   - The dry run (engine ADR 1308): `RequestPreview { mutation, items?,
+//     story? }` answers `Previewed(PreviewReport)` — any write applied to a
+//     sandbox (a copy of the document in a model of its own), answered as
+//     what it creates and removes, the geometry and outlines it leaves and
+//     the line evidence; the document untouched.
 //   New message kinds an older worker cannot answer, hence the bump.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(82);
 
@@ -2273,6 +2278,15 @@ pub enum MainToWorkerKind {
     /// applied — the document, its history and its revision untouched. A
     /// read. Reply: `LineEvidence`.
     RequestLineEvidence(crate::line_evidence::LineEvidenceQuery),
+    /// v82 (engine ADR 1308) — the dry run of any write: `mutation` (a
+    /// batch, a Boolean, a region verb, a property, a text edit) applied
+    /// through the whole write path to a copy of the document in a model
+    /// of its own, answered as the items it would create and remove, the
+    /// geometry and outlines it would leave for those and the asked
+    /// `items`, and the asked `story`'s line evidence. A read: the
+    /// document, its history and its revision are untouched. Reply:
+    /// `Previewed`.
+    RequestPreview(crate::preview::PreviewQuery),
 }
 
 /// Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -3215,9 +3229,11 @@ pub enum WorkerToMainKind {
     /// in, null when no run was open.
     CoalesceEnded { applied_seq: Option<u64> },
     /// v82 (engine ADR 1307) — `RequestExplain` reply.
-    Explained(crate::explain::Explanation),
+    Explained(Box<crate::explain::Explanation>),
     /// v82 (engine ADR 1308) — `RequestLineEvidence` reply.
     LineEvidence(crate::line_evidence::LineEvidenceReport),
+    /// v82 (engine ADR 1308) — `RequestPreview` reply.
+    Previewed(crate::preview::PreviewReport),
 }
 
 impl From<crate::hit::HitTestResult> for HitResult {

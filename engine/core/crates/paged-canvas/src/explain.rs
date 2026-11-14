@@ -41,6 +41,10 @@ use tsify_next::Tsify;
 use crate::element_selection::ElementId;
 use crate::model::CanvasModel;
 
+/// Where each body paragraph is set: per (story, paragraph), its pages and
+/// its frames.
+type Placed<'a> = BTreeMap<(&'a str, u32), (BTreeSet<u32>, BTreeSet<String>)>;
+
 /// The longest `BasedOn` chain walked, as the style resolvers bound it.
 const MAX_CHAIN: usize = 16;
 
@@ -796,9 +800,8 @@ impl CanvasModel {
             }
         }
         if full {
-            self.data_bindings(item, &out, &mut out.bindings.clone())
-                .into_iter()
-                .for_each(|b| out.bindings.push(b));
+            let data = self.data_bindings(item, &out);
+            out.bindings.extend(data);
             if out.bindings.iter().any(|b| b.origin == "data") {
                 out.unknown.push(UnknownFact {
                     fact: "binding.record".into(),
@@ -1237,12 +1240,7 @@ impl CanvasModel {
     /// paged.data's bindings in the item's label (and, for text, in its
     /// frame's): kind, expression, query and source, read off the label's
     /// JSON as the data module wrote it.
-    fn data_bindings(
-        &self,
-        item: &ElementId,
-        out: &Explanation,
-        _existing: &mut Vec<BindingFacts>,
-    ) -> Vec<BindingFacts> {
+    fn data_bindings(&self, item: &ElementId, out: &Explanation) -> Vec<BindingFacts> {
         let id = match item {
             ElementId::StoryRange { story_id, .. } => {
                 match out
@@ -1601,7 +1599,7 @@ impl CanvasModel {
             }
         }
         // Where each body paragraph is set: its pages and frames.
-        let mut placed: BTreeMap<(&str, u32), (BTreeSet<u32>, BTreeSet<String>)> = BTreeMap::new();
+        let mut placed: Placed<'_> = BTreeMap::new();
         for (page_index, page) in self.built.pages.iter().enumerate() {
             for line in page.story_layout.iter().filter(|l| l.cell.is_none()) {
                 let e = placed
@@ -1927,6 +1925,27 @@ fn for_each_item<'a>(
                 effects: Vec::new(),
             },
         );
+    }
+}
+
+/// Calls `visit` with the id of every page item of `spread`: frames,
+/// shapes, lines, groups and symbol instances (the dry run's census,
+/// engine ADR 1308).
+pub(crate) fn for_each_item_id(spread: &paged_model::Spread, mut visit: impl FnMut(ElementId)) {
+    for_each_item(spread, |kind, view| {
+        if let Some(id) = view.self_id {
+            visit(element_of_kind(kind, id));
+        }
+    });
+    for g in &spread.groups {
+        if let Some(id) = &g.self_id {
+            visit(ElementId::Group(id.clone()));
+        }
+    }
+    for i in &spread.instances {
+        if let Some(id) = &i.self_id {
+            visit(ElementId::Instance(id.clone()));
+        }
     }
 }
 

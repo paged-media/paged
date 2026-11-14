@@ -169,8 +169,10 @@ canary added is under [Releases](#releases).
   Properties panel shows Points (position, Corner / Smooth, align on the average, delete;
   each one batch) instead of the frame; one selected shape shows Shape suggestions (Round
   corners, Smooth, Simplify, Offset path, Repeat, Mirror, as the shape allows); the
-  Pathfinder says it applies on click and outlines what a button takes before it is pressed.
-  The engine has no dry run, so a Boolean's result is not previewed.
+  Pathfinder previews a button's result on the canvas while it is pointed at or focused (the
+  engine's dry run, engine ADR 1308; ADR 370 amendment 1), the consumed operands dashed, and the
+  click applies it as one undo step; where the engine refuses, it outlines what the button takes
+  and says the button applies on click.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per

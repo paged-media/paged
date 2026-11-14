@@ -167,6 +167,26 @@ export interface PathfinderDeps {
   setSelection: (ids: ElementId[]) => Promise<void>;
 }
 
+/** The write a shape mode makes over `selection` (first = kept), or null
+ *  with fewer than two: what the click sends and what its preview
+ *  dry-runs (engine ADR 1308), one value for both. */
+export function shapeModeMutation(
+  selection: readonly ElementId[],
+  kind: PathfinderKind,
+): Mutation | null {
+  const [kept, ...others] = selection;
+  if (!kept || others.length === 0) return null;
+  return { op: "pathfinderBoolean", args: { kept, others, kind } } as Mutation;
+}
+
+/** The write a region verb makes over `ordered` (top to bottom). */
+export function regionVerbMutation(
+  ordered: readonly ElementId[],
+  verb: PathfinderRegionVerb,
+): Mutation {
+  return { op: verb, args: { elementIds: [...ordered] } } as Mutation;
+}
+
 /** One shape mode over the selection (first = kept). Answers the engine's
  *  refusal in words, or null. Fewer than two selected: nothing sent. */
 export async function runShapeMode(
@@ -174,12 +194,11 @@ export async function runShapeMode(
   kind: PathfinderKind,
   label: string,
 ): Promise<string | null> {
-  const [kept, ...others] = deps.getSelection();
-  if (!kept || others.length === 0) return null;
-  const reply = await deps.client.mutate({
-    op: "pathfinderBoolean",
-    args: { kept, others, kind },
-  });
+  const selection = deps.getSelection();
+  const mutation = shapeModeMutation(selection, kind);
+  if (!mutation) return null;
+  const kept = selection[0]!;
+  const reply = await deps.client.mutate(mutation);
   const refusal = refusalOf(reply, label);
   // The kept object holds the result: it stays selected.
   if (refusal === null) await deps.setSelection([kept]);
@@ -200,10 +219,7 @@ export async function runRegionVerb(
   } catch {
     // An unreadable tree leaves click order in place.
   }
-  const reply = await deps.client.mutate({
-    op: verb,
-    args: { elementIds: ordered },
-  } as Mutation);
+  const reply = await deps.client.mutate(regionVerbMutation(ordered, verb));
   const refusal = refusalOf(reply, label);
   // The verbs consume, replace and mint objects; naming a survivor would be
   // a guess, so the selection is cleared rather than left on ids that may

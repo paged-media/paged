@@ -1,4 +1,4 @@
-# ADR 1227 — The Typography Debugger
+# ADR 1234 — The Typography Debugger
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `apps/canvas/src/typography-evidence.ts` (new: the target, the words for a line's
@@ -48,7 +48,9 @@ checking a loose line or a ladder of hyphens tried a change and undid it.
 ## Consequences
 
 - A preview builds a copy of the whole document (engine ADR 1308): a deliberate action, not a
-  live scrub.
+  live scrub. The copy is the engine's general dry run of a write (`client.preview`), which
+  other previews share — the Pathfinder's result preview first (paged.draw ADR 370,
+  amendment 1).
 - The preview offers the paragraph settings the operation layer can write; the word and letter
   spacing bands have no write path yet and are shown, not previewed.
 - Tests: `apps/canvas/test/panels/typography-panel.dom.test.tsx` and

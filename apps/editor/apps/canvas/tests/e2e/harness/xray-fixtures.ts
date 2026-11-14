@@ -17,8 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Opens the editor on the X-Ray fixture (`xray-idml.ts`, editor ADRs 1226
-// and 1227).
+// Opens the editor on the X-Ray fixture (`xray-idml.ts`, editor ADRs 1233
+// and 1234).
 
 import { expect, type Page } from "@playwright/test";
 

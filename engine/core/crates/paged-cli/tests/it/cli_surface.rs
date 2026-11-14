@@ -50,9 +50,9 @@
 //! `RequestSvgImport`; 44 of 87 with engine ADR 1099's
 //! `RequestPsdLayersPlace`, which `paged place --layers` sends; 44 of 91
 //! with v80's press, edit scope and coalesced writes (engine ADRs 1301,
-//! 1303, 1304), which only a live canvas has a use for; 44 of 93 with
-//! v82's X-Ray and line evidence (engine ADRs 1307, 1308), the editor's
-//! inspectors; what remains is almost entirely the first kind.
+//! 1303, 1304), which only a live canvas has a use for; 44 of 94 with
+//! v82's X-Ray, line evidence and dry run (engine ADRs 1307, 1308), the
+//! editor's inspectors and previews; what remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
 //! `Mutate` has been one of them since the colour-profile activation in
@@ -188,12 +188,14 @@ const UNREACHED: &[(&str, &str)] = &[
      "Document X-Ray (engine ADR 1307) answers the editor's \"Why?\" inspector about a selection on a live canvas; the CLI has no `paged explain` subcommand yet, so it never asks why an item looks as it does"),
     ("RequestLineEvidence",
      "the Typography Debugger's line evidence and its preview (engine ADR 1308) serve the editor's panel and canvas view; the CLI has no subcommand that reports a story's composed lines yet"),
+    ("RequestPreview",
+     "the dry run of a write (engine ADR 1308) shows a live canvas's user what a button would do before it is pressed; a subcommand makes the write or does not, and has no one to show a preview to"),
     ("SetViewSettings",
      "the screen's view mode (editor ADR 287) changes only how a live canvas draws: every render the CLI makes is an export, a snapshot or a separation, which draw the document as built and never see a view"),
 ];
 
 /// Pinned so the list cannot grow quietly.
-const UNREACHED_COUNT: usize = 49;
+const UNREACHED_COUNT: usize = 50;
 
 /// Every `kind` the wire accepts, read out of serde's own error rather
 /// than kept as a list here — the same trick `wire_vocabulary.rs` uses
@@ -327,9 +329,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_44_of_93() {
+fn the_cli_reaches_44_of_94() {
     assert_eq!(kinds_the_cli_sends().len(), 44);
-    assert_eq!(every_kind().len(), 93);
+    assert_eq!(every_kind().len(), 94);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names
