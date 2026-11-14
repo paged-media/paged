@@ -42,4 +42,39 @@ export const ACTIONS = defineMessages("shell.actions", {
     "Payload embeds ids minted by the recorded document. Skipped unless you allow document-bound steps.",
   verdictUnserializableTitle:
     "The payload could not be saved (a function, blob or cycle). This step can never replay.",
+  // Editor ADR 1233 — the run plan, its refusals and its undo statement.
+  stepName: "Step {n} “{title}”",
+  thePage: "the page",
+  needsSelection: "a selection, and nothing is selected",
+  needsOneObject: "exactly one selected object",
+  needsText: "a text selection",
+  refuseNoDocument: "No document is open.",
+  refuseRole:
+    "This session may only fill the template's fields; running an action needs editing rights.",
+  refuseContext: "{step} was recorded in {recorded}; you are in {current}.",
+  refuseMissingCommand:
+    "{step} needs the command {command}, which this editor does not have.",
+  refuseNotOffered: "{step} is turned off in this editor.",
+  refuseMissingObject:
+    "{step} acts on {address}, which is not in this document.",
+  refuseSelection: "{step} needs {needs}.",
+  refuseArgs: "{step} cannot take its values: {why}",
+  refuseAtRun: "Stopped before {step}: {why}",
+  contextDiffers: "it was recorded in {recorded}; you are in {current}",
+  refuseNoObjects: "the object model is not available here",
+  undoOne: "Runs as one undo step: one Undo takes it all back.",
+  undoSeveral:
+    "Takes up to {count, plural, one {# undo step} other {# undo steps}}: {steps} make their own.",
+  undoEach:
+    "Each write is its own undo step here: up to {count, plural, one {# step} other {# steps}}.",
+  setProperty: "Set {path} to {value}",
+  runAction: "Run action: {name}",
+  runActionDone: "run “{name}”",
+  reviewInPanel: "Review",
+  needsReview:
+    "it takes more than one undo step, so it runs only from its preview",
+  saveToDocument: "Save action to the document",
+  scriptEditorOnly:
+    "an editor command ({command}): a paged.* script cannot run it",
+  documentFull: "The document's actions are larger than a label holds.",
 });

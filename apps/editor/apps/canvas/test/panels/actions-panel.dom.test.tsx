@@ -361,4 +361,121 @@ describe("Actions panel", () => {
     );
     expect(stored.importRules?.[0]?.extensions).toEqual(["png", "tif"]);
   });
+
+  // ── editor ADR 1233: preview, parameters, refusals, the palette ───
+  test("Preview says what a run will do and how it undoes, and runs nothing until Run [editor-shell.panels.actions]", async () => {
+    covers("panel:paged.actions");
+    const { h, calls } = await mount();
+    await recordTwo(h, "Previewed");
+    calls.length = 0;
+    await h.click(action(h, `actions-preview-${idOf(h)}`));
+    await h.settle();
+    const preview = h.root.querySelector("[data-actions-preview]")!;
+    expect(preview).not.toBeNull();
+    expect(
+      preview.querySelectorAll("[data-actions-preview-step]"),
+    ).toHaveLength(2);
+    expect(
+      preview
+        .querySelector("[data-actions-undo-statement]")
+        ?.getAttribute("data-actions-undo-statement"),
+    ).toBe("one");
+    expect(calls).toEqual([]);
+    await h.click(action(h, "actions-run"));
+    await h.settle();
+    expect(calls.map((c) => c.id)).toEqual(["test.nudge", "test.tint"]);
+    expect(h.root.querySelector("[data-actions-preview]")).toBeNull();
+  });
+
+  test("a value made a parameter is what the next run sends [editor-shell.panels.actions]", async () => {
+    covers("panel:paged.actions");
+    const { h, calls } = await mount();
+    await recordTwo(h, "Spaced");
+    await h.click(h.view.getByRole("button", { name: "Values of step 1" }));
+    await h.click(h.root.querySelector('[data-actions-make-param="dx"]')!);
+    const value = h.root.querySelector<HTMLInputElement>(
+      "[data-actions-param-value]",
+    )!;
+    expect(value.value).toBe("10");
+    await h.user.clear(value);
+    await h.user.type(value, "25{Enter}");
+    await h.settle();
+    calls.length = 0;
+    await h.click(action(h, `actions-play-${idOf(h)}`));
+    await h.settle();
+    expect(calls).toEqual([
+      { id: "test.nudge", payload: { dx: 25 } },
+      { id: "test.tint", payload: { tint: 50 } },
+    ]);
+  });
+
+  test("a step whose command is gone is refused by name before anything runs [editor-shell.panels.actions]", async () => {
+    covers("panel:paged.actions");
+    const { h, calls } = await mount();
+    await recordTwo(h, "Fragile");
+    h.registries.commands.unregister("test.tint");
+    calls.length = 0;
+    await h.click(action(h, `actions-play-${idOf(h)}`));
+    await h.settle();
+    expect(calls).toEqual([]);
+    const refusal = h.root.querySelector("[data-actions-report-refusal]");
+    expect(refusal?.textContent).toContain("Step 2");
+    expect(refusal?.textContent).toContain("test.tint");
+    expect(
+      h.root.querySelector("[data-actions-preview-refused]"),
+    ).not.toBeNull();
+  });
+
+  test("a step that does not apply when it is reached stops the run there [editor-shell.panels.actions]", async () => {
+    covers("panel:paged.actions");
+    let ready = true;
+    const { h, calls } = await mount();
+    h.registries.commands.register({
+      id: "test.gated",
+      title: "Gated",
+      when: () => ready,
+      handler: () => {
+        calls.push({ id: "test.gated", payload: undefined });
+      },
+    });
+    await h.click(action(h, "actions-record"));
+    await h.act(async () => {
+      await h.registries.commands.invoke("test.nudge", { dx: 1 });
+      await h.registries.commands.invoke("test.gated");
+    });
+    await h.click(action(h, "actions-stop"));
+    ready = false;
+    calls.length = 0;
+    await h.click(action(h, `actions-play-${idOf(h)}`));
+    await h.settle();
+    expect(calls.map((c) => c.id)).toEqual(["test.nudge"]);
+    expect(
+      h.root.querySelector("[data-actions-report-refusal]")?.textContent,
+    ).toContain("Stopped before Step 2");
+  });
+
+  test("every saved action is a palette entry that runs it [editor-shell.panels.actions]", async () => {
+    covers("panel:paged.actions");
+    const { h, calls } = await mount();
+    await recordTwo(h, "From the palette");
+    const entry = h.registries.commands.get(`paged.actions.run:${idOf(h)}`);
+    expect(entry?.title).toBe("Run action: From the palette");
+    calls.length = 0;
+    await h.act(async () => {
+      await h.registries.commands.invoke(`paged.actions.run:${idOf(h)}`);
+    });
+    await h.settle();
+    expect(calls.map((c) => c.id)).toEqual(["test.nudge", "test.tint"]);
+  });
+
+  test("the paged.* script names what a script cannot run [editor-shell.panels.actions]", async () => {
+    covers("panel:paged.actions");
+    const { h } = await mount();
+    await recordTwo(h, "Scripted");
+    await h.click(action(h, "actions-paged-script"));
+    const script =
+      h.root.querySelector("[data-actions-script]")?.textContent ?? "";
+    expect(script).toContain("// Scripted — paged.* script");
+    expect(script).toContain("a paged.* script cannot run it");
+  });
 });

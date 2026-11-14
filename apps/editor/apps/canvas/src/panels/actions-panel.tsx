@@ -26,13 +26,21 @@
 // unmounted when the user switches right-dock tabs.
 //
 // The scope note at the bottom of the panel is not decoration. A
-// recorder tapped on the command registry cannot see gestures, typing
-// or panel field edits, and an action that quietly omitted them would
-// replay to a different document than the user recorded. So the panel
-// states the limit permanently AND reports, per recording, how many
-// uncapturable edits actually happened while it was running.
+// recorder tapped on the command registry cannot see gestures or typing,
+// and an action that quietly omitted them would replay to a different
+// document than the user recorded. So the panel states the limit
+// permanently AND reports, per recording, how many uncapturable edits
+// actually happened while it was running.
+//
+// Editor ADR 1233: a panel field's commit IS recorded now (a property step
+// on the selection), and the panel previews a run before it happens — what
+// it acts on, outlined on the canvas, what refuses it and how it undoes —
+// keeps parameters, an action's place (this editor or the document) and its
+// `paged.*` script.
 
-import { useRef, useState, type CSSProperties } from "react";
+import { Fragment, useRef, useState, type CSSProperties } from "react";
+
+import { ActionParams, ActionPreview, StepValues } from "./actions-preview";
 
 import {
   CockpitPanelHeader,
@@ -63,7 +71,6 @@ const MUTED = { color: "var(--pg-muted-fg)", fontFamily: "var(--font-sans)" };
 const M = defineMessages("app.actionsPanel", {
   notGestures: "canvas gestures — move, resize, rotate, pen and shape drawing",
   notTyping: "typing in a text frame",
-  notFields: "panel field edits (font size, stroke weight, swatch values…)",
   notSelection: "selection clicks, marquee and camera moves",
   notUndoKeys:
     "the Cmd-Z / Cmd-Shift-Z keystrokes (Edit ▸ Undo from the menu IS recorded)",
@@ -155,6 +162,23 @@ const M = defineMessages("app.actionsPanel", {
   delete: "Delete",
   copyNoteBefore: "“Copy as script” emits the same steps as",
   copyNoteAfter: "calls for the demo/automation runner.",
+  // Editor ADR 1233.
+  preview: "Preview",
+  previewTitle: "Show what this action will do here, before it runs",
+  fieldsRecorded:
+    " Panel fields (a font size, a style, a colour) are recorded as a step on the selection.",
+  scopeUser: "This editor",
+  scopeDocument: "This document",
+  scopeLabel: "Keep in",
+  scopeNoDocument: "Open a document to keep actions in it.",
+  values: "Values",
+  valuesOf: "Values of step {n}",
+  pagedScript: "paged.* script",
+  copyPagedScript: "Copy paged.* script",
+  hideScript: "Hide script",
+  refusedReplay: "“{name}” did not run",
+  rolledBack: "Its writes were undone: nothing changed.",
+  notRolledBack: "What ran before it stays done.",
 });
 
 /** The permanent scope statement. Worded as facts about the tap, not
@@ -163,7 +187,6 @@ const M = defineMessages("app.actionsPanel", {
 const NOT_RECORDED = [
   M.notGestures,
   M.notTyping,
-  M.notFields,
   M.notSelection,
   M.notUndoKeys,
 ];
@@ -349,9 +372,24 @@ export function ActionsPanel(_: PanelProps) {
             }
             onPlay={() => void actions.play(action.id)}
             onStep={() => void actions.play(action.id, { stepByStep: true })}
+            onPreview={() => void actions.preview(action.id)}
           />
         ))}
       </div>
+
+      {/* ── editor ADR 1233: what a run will do here ──────────── */}
+      {actions.previewPlan && (
+        <ActionPreview
+          plan={actions.previewPlan}
+          busy={actions.playingId != null || recording != null}
+          onRun={() =>
+            void actions.play(actions.previewPlan!.actionId, {
+              confirmed: true,
+            })
+          }
+          onClose={actions.clearPreview}
+        />
+      )}
 
       {/* ── a replay waiting at a breakpoint, a stop or a step ── */}
       {actions.playback && (
@@ -405,8 +443,39 @@ export function ActionsPanel(_: PanelProps) {
         <div data-actions-report style={{ padding: "0 14px 12px" }}>
           <Divider />
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-            {strings.t(M.replayed, { name: actions.lastReport.actionName })}
+            {actions.lastReport.refusals.length > 0
+              ? strings.t(M.refusedReplay, {
+                  name: actions.lastReport.actionName,
+                })
+              : strings.t(M.replayed, { name: actions.lastReport.actionName })}
           </div>
+          {actions.lastReport.refusals.map((r, i) => (
+            <div
+              key={`refusal-${i}`}
+              role="alert"
+              data-actions-report-refusal
+              style={{
+                fontSize: 11,
+                marginBottom: 3,
+                color: "var(--status-error)",
+              }}
+            >
+              {r.reason}
+            </div>
+          ))}
+          {actions.lastReport.refusals.length > 0 &&
+            actions.lastReport.ran.length > 0 && (
+              <div
+                data-actions-rolled-back={
+                  actions.lastReport.rolledBack ? "" : undefined
+                }
+                style={{ ...MUTED, fontSize: 11 }}
+              >
+                {actions.lastReport.rolledBack
+                  ? strings.t(M.rolledBack)
+                  : strings.t(M.notRolledBack)}
+              </div>
+            )}
           {actions.lastReport.ran.map((r) => (
             <div
               key={r.index}
@@ -473,6 +542,7 @@ export function ActionsPanel(_: PanelProps) {
         <div style={{ ...MUTED, fontSize: 11, lineHeight: 1.55 }}>
           {strings.t(M.recordsBefore)} <strong>{strings.t(M.commands)}</strong>
           {strings.t(M.recordsAfter)}
+          {strings.t(M.fieldsRecorded)}
           <div style={{ marginTop: 6 }}>{strings.t(M.notRecorded)}</div>
           <ul style={{ margin: "3px 0 0", paddingLeft: 16, listStyle: "disc" }}>
             {NOT_RECORDED.map((line) => (
@@ -546,6 +616,7 @@ function ActionRow({
   onToggle,
   onPlay,
   onStep,
+  onPreview,
 }: {
   action: PagedAction;
   expanded: boolean;
@@ -554,6 +625,7 @@ function ActionRow({
   onToggle: () => void;
   onPlay: () => void;
   onStep: () => void;
+  onPreview: () => void;
 }) {
   const strings = useStrings();
   const plan = planReplay(action);
@@ -588,9 +660,25 @@ function ActionRow({
         >
           {action.name}
         </button>
+        <span
+          data-actions-scope={action.scope ?? "user"}
+          style={{ ...MUTED, fontSize: 10 }}
+        >
+          {action.scope === "document"
+            ? strings.t(M.scopeDocument)
+            : strings.t(M.scopeUser)}
+        </span>
         <span className="pg-value" style={{ fontSize: 11 }}>
           {plan.run.length}/{action.steps.length}
         </span>
+        <CockpitBtn
+          sm
+          disabled={busy || plan.run.length === 0}
+          onClick={onPreview}
+          testId={`actions-preview-${action.id}`}
+        >
+          <span title={strings.t(M.previewTitle)}>{strings.t(M.preview)}</span>
+        </CockpitBtn>
         <CockpitBtn
           sm
           disabled={busy || plan.run.length === 0}
@@ -643,7 +731,11 @@ function ActionDetail({
   onExport: () => void;
 }) {
   const strings = useStrings();
+  const actions = useActions();
   const [copied, setCopied] = useState(false);
+  const [openValues, setOpenValues] = useState<number | null>(null);
+  const [script, setScript] = useState(false);
+  const [scopeProblem, setScopeProblem] = useState<string | null>(null);
   const [stopText, setStopText] = useState("");
   const [extText, setExtText] = useState(() =>
     (rule?.extensions ?? []).join(", "),
@@ -667,99 +759,163 @@ function ActionDetail({
 
       <div style={{ marginTop: 8 }}>
         {action.steps.map((step, i) => (
-          <div
-            key={i}
-            data-actions-step
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "3px 0",
-              opacity: step.disabled ? 0.45 : 1,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={!step.disabled}
-              onChange={() => onToggleStep(i)}
-              aria-label={strings.t(M.stepEnabled, { n: i + 1 })}
-            />
-            {/* The breakpoint: playback waits before this step. */}
-            <button
-              type="button"
-              data-actions-pause={i}
-              aria-pressed={step.pause === true}
-              aria-label={strings.t(M.pauseBefore, { n: i + 1 })}
-              title={strings.t(M.pauseBefore, { n: i + 1 })}
-              onClick={() => onTogglePause(i)}
+          <Fragment key={i}>
+            <div
+              data-actions-step
               style={{
-                width: 14,
-                height: 14,
-                borderRadius: 3,
-                padding: 0,
-                cursor: "pointer",
-                border: "1px solid var(--pg-border)",
-                background: step.pause ? "var(--status-review)" : "transparent",
-                fontSize: 8,
-                lineHeight: 1,
-                color: "var(--pg-fg)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "3px 0",
+                opacity: step.disabled ? 0.45 : 1,
               }}
             >
-              {step.pause ? "❚❚" : ""}
-            </button>
-            <span
-              style={{ fontSize: 11, flex: 1 }}
-              title={step.command}
-              data-actions-stop-step={isStopStep(step) || undefined}
-            >
-              {i + 1}.{" "}
-              {isStopStep(step) ? (
-                <strong>{strings.t(M.stopStep)}: </strong>
-              ) : null}
-              {step.title}
-              {step.failed && (
-                <span style={{ color: "var(--status-error)" }}>
-                  {strings.t(M.failedWhileRecording)}
-                </span>
-              )}
-            </span>
-            <span
-              title={verdictTitle(step.verdict)}
-              data-actions-verdict={step.verdict}
-              style={{
-                fontSize: 10,
-                padding: "1px 5px",
-                borderRadius: 999,
-                border: "1px solid var(--pg-border)",
-                color:
-                  step.verdict === "documentBound" ||
-                  step.verdict === "unserializable"
+              <input
+                type="checkbox"
+                checked={!step.disabled}
+                onChange={() => onToggleStep(i)}
+                aria-label={strings.t(M.stepEnabled, { n: i + 1 })}
+              />
+              {/* The breakpoint: playback waits before this step. */}
+              <button
+                type="button"
+                data-actions-pause={i}
+                aria-pressed={step.pause === true}
+                aria-label={strings.t(M.pauseBefore, { n: i + 1 })}
+                title={strings.t(M.pauseBefore, { n: i + 1 })}
+                onClick={() => onTogglePause(i)}
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: 3,
+                  padding: 0,
+                  cursor: "pointer",
+                  border: "1px solid var(--pg-border)",
+                  background: step.pause
                     ? "var(--status-review)"
-                    : "var(--pg-muted-fg)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {verdictLabel(step.verdict)}
-            </span>
-            <button
-              type="button"
-              onClick={() => onDeleteStep(i)}
-              aria-label={strings.t(M.deleteStep, { n: i + 1 })}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--pg-muted-fg)",
-                cursor: "pointer",
-                fontSize: 12,
-                lineHeight: 1,
-                padding: 2,
-              }}
-            >
-              ×
-            </button>
-          </div>
+                    : "transparent",
+                  fontSize: 8,
+                  lineHeight: 1,
+                  color: "var(--pg-fg)",
+                }}
+              >
+                {step.pause ? "❚❚" : ""}
+              </button>
+              <span
+                style={{ fontSize: 11, flex: 1 }}
+                title={step.command}
+                data-actions-stop-step={isStopStep(step) || undefined}
+              >
+                {i + 1}.{" "}
+                {isStopStep(step) ? (
+                  <strong>{strings.t(M.stopStep)}: </strong>
+                ) : null}
+                {step.title}
+                {step.failed && (
+                  <span style={{ color: "var(--status-error)" }}>
+                    {strings.t(M.failedWhileRecording)}
+                  </span>
+                )}
+              </span>
+              {step.payload !== undefined && (
+                <button
+                  type="button"
+                  data-actions-values={i}
+                  aria-expanded={openValues === i}
+                  aria-label={strings.t(M.valuesOf, { n: i + 1 })}
+                  onClick={() => setOpenValues((v) => (v === i ? null : i))}
+                  style={{
+                    background: "none",
+                    border: "1px solid var(--pg-border)",
+                    borderRadius: 999,
+                    color: "var(--pg-muted-fg)",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    padding: "0 5px",
+                  }}
+                >
+                  {strings.t(M.values)}
+                </button>
+              )}
+              <span
+                title={verdictTitle(step.verdict)}
+                data-actions-verdict={step.verdict}
+                style={{
+                  fontSize: 10,
+                  padding: "1px 5px",
+                  borderRadius: 999,
+                  border: "1px solid var(--pg-border)",
+                  color:
+                    step.verdict === "documentBound" ||
+                    step.verdict === "unserializable"
+                      ? "var(--status-review)"
+                      : "var(--pg-muted-fg)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {verdictLabel(step.verdict)}
+              </span>
+              <button
+                type="button"
+                onClick={() => onDeleteStep(i)}
+                aria-label={strings.t(M.deleteStep, { n: i + 1 })}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--pg-muted-fg)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  lineHeight: 1,
+                  padding: 2,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {openValues === i && <StepValues action={action} index={i} />}
+          </Fragment>
         ))}
       </div>
+
+      <ActionParams action={action} />
+
+      {/* Editor ADR 1233 — where the action is kept. */}
+      <label
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          fontSize: 11,
+          marginTop: 10,
+        }}
+      >
+        <span style={MUTED}>{strings.t(M.scopeLabel)}</span>
+        <select
+          data-actions-scope-select
+          value={action.scope ?? "user"}
+          disabled={!actions.documentScopeAvailable}
+          onChange={(e) => {
+            void actions
+              .setScope(action.id, e.target.value as "user" | "document")
+              .then(setScopeProblem);
+          }}
+          style={{
+            background: "var(--pg-muted)",
+            color: "var(--pg-fg)",
+            border: "1px solid var(--chrome-divider)",
+            borderRadius: "var(--radius-sm)",
+            fontSize: 11,
+          }}
+        >
+          <option value="user">{strings.t(M.scopeUser)}</option>
+          <option value="document">{strings.t(M.scopeDocument)}</option>
+        </select>
+      </label>
+      {(scopeProblem || !actions.documentScopeAvailable) && (
+        <div style={{ ...MUTED, fontSize: 11 }}>
+          {scopeProblem ?? strings.t(M.scopeNoDocument)}
+        </div>
+      )}
 
       {/* Insert a stop (Photoshop's Insert Stop): it ends up after the
           last step; the step list's order is the replay order. */}
@@ -863,6 +1019,13 @@ function ActionDetail({
         >
           {copied ? strings.t(M.copied) : strings.t(M.copyAsScript)}
         </CockpitBtn>
+        <CockpitBtn
+          sm
+          testId="actions-paged-script"
+          onClick={() => setScript((v) => !v)}
+        >
+          {script ? strings.t(M.hideScript) : strings.t(M.pagedScript)}
+        </CockpitBtn>
         <CockpitBtn sm onClick={onExport}>
           {strings.t(M.export)}
         </CockpitBtn>
@@ -886,6 +1049,36 @@ function ActionDetail({
         {strings.t(M.copyNoteBefore)} <code>editor.runCommand(…)</code>{" "}
         {strings.t(M.copyNoteAfter)}
       </div>
+      {script && (
+        <div style={{ marginTop: 6 }}>
+          <pre
+            data-actions-script
+            style={{
+              margin: 0,
+              padding: 8,
+              maxHeight: 220,
+              overflow: "auto",
+              background: "var(--pg-muted)",
+              borderRadius: "var(--radius-sm)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 10.5,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {actions.pagedScript(action.id)}
+          </pre>
+          <CockpitBtn
+            sm
+            onClick={() =>
+              void navigator.clipboard?.writeText(
+                actions.pagedScript(action.id),
+              )
+            }
+          >
+            {strings.t(M.copyPagedScript)}
+          </CockpitBtn>
+        </div>
+      )}
     </div>
   );
 }

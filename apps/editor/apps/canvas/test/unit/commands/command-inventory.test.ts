@@ -105,7 +105,9 @@ const SITES: Record<string, number> = {
   "packages/shell/src/PagedShell.tsx": 12,
   "packages/shell/src/state/commands/registry-derived.ts": 3,
   "packages/shell/src/chrome/FillStrokeCluster.tsx": 3,
-  "packages/shell/src/actions/actions-context.tsx": 3,
+  // Record, stop, play, and editor ADR 1233's "Run action: <name>" (one per
+  // saved action, ids the user's: not part of the static surface).
+  "packages/shell/src/actions/actions-context.tsx": 4,
   // Editor ADR 1208 / 1209 — the workspace's own commands.
   "packages/shell/src/cockpit/focus-workspace.ts": 1,
   "packages/shell/src/cockpit/workspace-class.ts": 1,

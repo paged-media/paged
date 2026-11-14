@@ -103,6 +103,14 @@ export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
 export { hoverPreselectContribution } from "./overlays/hover-preselect";
+// Editor ADRs 1233, 1234 — what a previewed change will touch, outlined.
+export { previewTargetsContribution } from "./overlays/preview-targets";
+export {
+  clearPreviewTargets,
+  previewTargetsStore,
+  showPreviewTargets,
+  type PreviewTargets,
+} from "./state/preview-targets";
 export { nextBelow, objectsUnder } from "./state/objects-under";
 export { isLockedEntries, useLockedKeys } from "./state/locked";
 
@@ -253,6 +261,7 @@ export {
   heldTypingStyle,
   pinToPage,
   useContentSelection,
+  useOptionalContentSelection,
   type PagePin,
   type TypingStyle,
 } from "./state/content-selection-context";

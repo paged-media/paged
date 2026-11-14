@@ -69,6 +69,8 @@ import {
   threadLinesContribution,
   dataMarkersContribution,
   issueMarkersContribution,
+  previewTargetsContribution,
+  setActionsDoor,
   commentPinsContribution,
   setCommentAnchorLookup,
   loadDocumentFile,
@@ -482,6 +484,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 1223 — View ▸ Show issue markers: the publication's issues
   // where they stand. Draws nothing until toggled on.
   issueMarkersContribution,
+  // Editor ADRs 1233, 1234 — what a previewed action or a proposed change
+  // will touch. Draws nothing without a preview.
+  previewTargetsContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,
@@ -717,6 +722,10 @@ function PluginBundles() {
       notifySink: notifySinkOf(scope),
       pages,
     });
+    // Editor ADR 1233 — the user's recorded actions on the `actions@1`
+    // door every bundle host shares.
+    if (hostOptions.shared.actions)
+      setActionsDoor(scope, hostOptions.shared.actions);
     // Editor ADRs 291, 292: the Data panel and the bind popover read the
     // document's data from the same shared backend the bundles meet at.
     const dataBackend = hostOptions.shared.data;

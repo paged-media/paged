@@ -57,6 +57,10 @@ export interface CommandContribution extends Api.CommandContribution {
   /** Words the palette also finds it by (synonyms, a help topic's
    *  terms), comma-separated, in the editor's language. */
   keywords?: string;
+  /** Editor ADR 1233 — its writes make undo steps of their own (it runs a
+   *  script or commits a gesture), so an action's undo group cannot hold
+   *  them; the action's preview says so before a run. */
+  history?: "own-step";
 }
 
 /** A contract-authored command registers here unchanged. */
