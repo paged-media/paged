@@ -103,7 +103,7 @@ interface CanvasGlobal {
     client: {
       setElementSelection(ids: unknown[], mode: string): Promise<unknown[]>;
       mutate(m: unknown): Promise<unknown>;
-      drainJournal(): Promise<{
+      drainJournal(timeoutMs?: number): Promise<{
         entries: Array<{ code: string; durMs?: number; data?: unknown }>;
       } | null>;
     };
@@ -180,6 +180,7 @@ async function selectionLatency(page: Page): Promise<number[]> {
 async function typingLatency(
   page: Page,
   delayMs: number,
+  storyId: string = UXI_A.note.storyId,
 ): Promise<{ latencies: number[]; inserts: number }> {
   const text = "the quick brown fox jumps over the lazy dog ".repeat(2);
   await page.evaluate((storyId) => {
@@ -211,7 +212,7 @@ async function typingLatency(
       }
       return reply;
     };
-  }, UXI_A.note.storyId);
+  }, storyId);
   // The caret took focus for the text input surface.
   await expect
     .poll(() =>
@@ -283,7 +284,7 @@ async function openAndTime(
   await page.evaluate(() => {
     const c = (globalThis as unknown as Partial<CanvasGlobal>).__canvas;
     if (c) c.ready = false;
-    void c?.client.drainJournal();
+    void c?.client.drainJournal(30_000);
   });
   const t0 = Date.now();
   await page.setInputFiles(
@@ -318,7 +319,9 @@ async function openAndTime(
   let workerMs: number | null = null;
   for (let i = 0; i < 40 && workerMs === null; i++) {
     const drain = await page.evaluate(() =>
-      (globalThis as unknown as CanvasGlobal).__canvas.client.drainJournal(),
+      (globalThis as unknown as CanvasGlobal).__canvas.client.drainJournal(
+        30_000,
+      ),
     );
     const hit = drain?.entries.find((e) => e.code === "worker.firstPaint");
     if (hit) workerMs = Math.round(hit.durMs ?? 0);
@@ -403,7 +406,14 @@ test.describe("performance budgets", () => {
       if (i % 5 === 4) await page.keyboard.press("ControlOrMeta+Equal");
     }
     const memory = await memoryBytes(page);
-    results.stress = { ...timing, memoryBytes: memory };
+    // A burst in a long document: every insert re-lays the document out,
+    // so this is where keys outrun the engine (F-56).
+    const burst = await typingLatency(page, 18, "st0");
+    results.stress = {
+      ...timing,
+      memoryBytes: memory,
+      typingBurst: { ...percentiles(burst.latencies), inserts: burst.inserts },
+    };
     if (ASSERT) {
       expect(timing.firstPaintWorkerMs ?? Infinity).toBeLessThan(
         BUDGETS.firstPaintGeneratedMs,

@@ -161,6 +161,10 @@ export class WorkerRenderer {
   private painted = false;
   /** The pages the last draw showed: their tiles are never evicted. */
   private visibleNow: readonly PageGeometry[] = [];
+  /** Tiles the engine could not render (no bytes, a throw, a failed
+   *  decode), until the page or the layout changes: asked again every
+   *  tick, one would hold the loop busy for good. */
+  private readonly failedTiles = new Set<string>();
 
   private dpr = 1;
   /** Page layout in document space. Recomputed when the document changes. */
@@ -241,6 +245,7 @@ export class WorkerRenderer {
     this.dirty = true;
     this.layoutAt = performance.now();
     this.painted = false;
+    this.failedTiles.clear();
   }
 
   /** The decoded bytes the tile cache holds now. */
@@ -308,12 +313,16 @@ export class WorkerRenderer {
   markDirty(pageIds: ReadonlyArray<PageId> = []): void {
     this.dirty = true;
     if (pageIds.length === 0) {
+      this.failedTiles.clear();
       for (const t of this.tiles.values()) t.bitmap.close();
       this.tiles.clear();
       return;
     }
     // Every width of the page goes (Pixel Preview's 72 ppi tile too).
     const prefixes = pageIds.map((pageId) => `${pageId}:`);
+    for (const key of [...this.failedTiles]) {
+      if (prefixes.some((p) => key.startsWith(p))) this.failedTiles.delete(key);
+    }
     for (const [key, cached] of [...this.tiles]) {
       if (!prefixes.some((p) => key.startsWith(p))) continue;
       cached.bitmap.close();
@@ -441,10 +450,10 @@ export class WorkerRenderer {
       x: docViewport.x + docViewport.w / 2,
       y: docViewport.y + docViewport.h / 2,
     };
-    const waiting = (p: PageGeometry) =>
-      this.pendingTiles.has(
-        tileKey({ pageId: p.pageId, widthPx: this.tileWidthFor(p) }),
-      );
+    const waiting = (p: PageGeometry) => {
+      const key = tileKey({ pageId: p.pageId, widthPx: this.tileWidthFor(p) });
+      return this.pendingTiles.has(key) || this.failedTiles.has(key);
+    };
     const next =
       nearest(
         missing.filter((p) => !waiting(p)),
@@ -456,7 +465,8 @@ export class WorkerRenderer {
       void this.loadTile(next.pageId, this.tileWidthFor(next));
       this.dirty = true;
     }
-    if (!this.painted && visible.length > 0 && missing.length === 0) {
+    // The first visible paint: the first page that shows its content.
+    if (!this.painted && visible.length > missing.length) {
       this.notePainted(false);
     }
     this.visibleNow = visible;
@@ -494,7 +504,11 @@ export class WorkerRenderer {
           pageId: p.pageId,
           widthPx: this.tileWidthFor(p),
         });
-        return !this.tiles.has(key) && !this.pendingTiles.has(key);
+        return (
+          !this.tiles.has(key) &&
+          !this.pendingTiles.has(key) &&
+          !this.failedTiles.has(key)
+        );
       }),
       centre,
     );
@@ -565,7 +579,8 @@ export class WorkerRenderer {
     try {
       const bytes = this.wasm.renderTilePng(pageId, widthPx);
       if (!bytes) {
-        // Unknown page or no document — drop.
+        // Unknown page or no document — drop, and do not ask again.
+        this.failedTiles.add(key);
         return;
       }
       // ImageBitmap is the fastest decode path in workers — the
@@ -581,6 +596,10 @@ export class WorkerRenderer {
       });
       this.evictOverBudget(this.visibleNow);
       this.dirty = true;
+    } catch {
+      // The engine threw or the decode failed: the page shows its outline
+      // (the chrome border) until it changes, and the loop goes on.
+      this.failedTiles.add(key);
     } finally {
       this.pendingTiles.delete(key);
     }

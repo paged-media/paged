@@ -52,13 +52,14 @@ afterAll(() => {
     realBitmap;
 });
 
-function rig(pages: number, budget?: number) {
+function rig(pages: number, budget?: number, failing: string[] = []) {
   const rendered: string[] = [];
   const wasm: RendererWasm = {
     pageCount: () => pages,
     pageInfo: (i) => (i < pages ? [`p${i}`, PAGE[0], PAGE[1]] : undefined),
     renderTilePng: (pageId, width) => {
       rendered.push(pageId);
+      if (failing.includes(pageId)) throw new Error("cannot render");
       // Not a PNG: the stub decode above reads the width back.
       return new TextEncoder().encode(`${pageId}:${width}`);
     },
@@ -141,5 +142,14 @@ describe("the worker's CPU render schedule", () => {
     lookAt(0, 1);
     await frame();
     expect(rendered.at(-1)).toBe("p0");
+  });
+
+  test("a page the engine cannot render is not asked again every draw, and the others go on", async () => {
+    const { rendered, lookAt, frame } = rig(10, undefined, ["p4"]);
+    lookAt(4, 0.3);
+    for (let i = 0; i < 8; i++) await frame();
+    expect(rendered.filter((p) => p === "p4")).toHaveLength(1);
+    expect(rendered).toContain("p3");
+    expect(rendered).toContain("p5");
   });
 });

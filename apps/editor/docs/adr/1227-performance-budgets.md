@@ -73,8 +73,11 @@ reached the screen, and kept every tile it ever decoded. Every typed character w
 
 ## Consequences
 
-- The numbers of `reference/performance.md` replace the audit's as the baseline; F-56 is
-  fixed where it was measured, F-54 is measured and its decoded-image half stays open as
-  `EXC-003`.
+- The numbers of `reference/performance.md` replace the audit's as the baseline. F-56 is
+  addressed (keys fold: 88 keys of a burst went as 58 to 72 inserts) but not yet proven faster
+  on the shared development machine, and stays open until the nightly's numbers show the burst
+  flat; F-54 is measured, and its decoded-image half stays open as `EXC-003`. The 105 MB
+  template's first page shows 4.2 s after the file is chosen (21.5 s in the audit); the 54 MB
+  one's first page costs 8.6 s of engine composition on the CPU path.
 - A cache added later states its budget and its eviction in `reference/performance.md`.
 - The nightly job needs no secret and no corpus.

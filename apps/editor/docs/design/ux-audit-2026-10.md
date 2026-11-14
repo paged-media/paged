@@ -1397,6 +1397,15 @@ plan task AP5.
 
 **Screenshots:** none (a measured finding)
 
+**Measured again (2026-11-14, editor ADR 1227; open).** Every cache now has a stated owner and
+budget (`docs/reference/performance.md`): the CPU tiles 64 MB with LRU eviction, the GPU page
+scenes 200 pages, the thumbnails one per page, the undo log its depth. The two templates opened
+as files alone (linked images unresolved) take 341 MB and 443 MB, page and workers; the
+decoded-image cache, where the audit's gigabytes were, has no budget yet: the interaction
+inventory's exception EXC-003 (engine work: images decoded at the size they are shown, the
+visible pages composed first), with an expiry. The nightly performance job measures the
+generated stress document's memory against a 3 GB budget.
+
 <a id="f-55"></a>
 
 #### F-55 · Small windows leave almost no canvas, and below 1025 px the layout breaks
@@ -1447,6 +1456,15 @@ At normal typing speeds (2.5–8 characters/s) a character is in the model and o
 **Evidence:** `client.mutate` wrapped in the page; keydown timestamps from a capture listener installed before the app's.
 
 **Screenshots:** `F-56-typing-burst.png`
+
+**Addressed (2026-11-14, editor ADR 1227; not yet proven).** Inserts no longer queue one per
+key: while one is in flight the keys behind it fold into one insert at the advancing caret, sent
+with the reply, and every other request of the text editor sends what is pending first, so the
+order is kept (`apps/canvas/src/ui/typing-coalescer.ts`). In a burst of 55 keys a second, 88
+keys went as 58 to 72 inserts in a 40-page document. On the shared development machine the
+latency (p50 186–233 ms before, 227–232 ms after; p95 433–509 ms before, 443–473 ms after) did
+not move beyond its noise, so the finding stays open until the nightly job's quiet runner shows
+the burst flat (`docs/reference/performance.md`).
 
 ### Visual consistency
 

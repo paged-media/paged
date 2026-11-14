@@ -241,7 +241,7 @@ greyed in the menus with its reason, listed with it in the palette, which also g
 every align route honours the key object, and an align control's hover shows its reference
 (D-07).
 
-Track AP's accessibility half has landed. The Tree panel is the document's object tree
+Track AP has landed. The Tree panel is the document's object tree
 ([ADR 1225](adr/1225-an-accessible-object-tree.md)): a virtualized WAI-ARIA tree of the spreads
 and their page items, each row named with its type, name, page and whether it is locked or
 hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
@@ -251,7 +251,15 @@ token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a h
 variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
 7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
 ([ADR 1226](adr/1226-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
-palette, and the editor works at 200 % zoom (`UXI-T69`, `T70`, `T74`, `T75`).
+palette, and the editor works at 200 % zoom (`UXI-T69`, `T70`, `T74`, `T75`). A pen's pressure
+shapes only the tools that read it, and only for a pen (a mouse stroke keeps its width to the end);
+a pinch over a press still waiting for its hit test changes the camera and nothing else
+(`UXI-T71` to `T73`). The performance budgets are measured with the audit's methods and asserted
+nightly ([ADR 1227](adr/1227-performance-budgets.md),
+[`reference/performance.md`](reference/performance.md)): the CPU render draws the page at the
+viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
+engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
+yet (inventory exception `EXC-003`).
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

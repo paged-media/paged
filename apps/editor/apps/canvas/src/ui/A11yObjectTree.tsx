@@ -479,14 +479,15 @@ export function A11yObjectTree() {
   }, [scrollTop]);
 
   // The window's height, from layout.
-  const hasScene = scene !== null;
+  // (The list mounts once there is a document: watched from then on.)
+  const hasList = scene !== null && handle !== null;
   useEffect(() => {
     const el = listRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => setViewportPx(el.clientHeight));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasScene]);
+  }, [hasList]);
 
   // Lock, visibility and page of the rows in view, once per revision. A
   // read in flight is not asked again; its answer lands under the revision
@@ -503,6 +504,10 @@ export function A11yObjectTree() {
           !asked.current.has(`${rev}|${k}`),
       );
     if (wanted.length === 0) return;
+    // The asks of older revisions are spent: keep the set to this one.
+    for (const old of [...asked.current]) {
+      if (!old.startsWith(`${rev}|`)) asked.current.delete(old);
+    }
     for (const k of wanted) asked.current.add(`${rev}|${k}`);
     const ids = wanted.map(idOfKey);
     const pageIds = handle?.pageIds ?? [];
