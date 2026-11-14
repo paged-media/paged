@@ -1,7 +1,8 @@
 # ADR PM-0013 — A fourth public package: `@paged-media/editor`
 
 - **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendments 4 and 5: the `dist/` budget is 73 MiB)
-  and 2026-11-08 (amendment 6: 74.25 MiB) and 2026-11-11 (amendment 7: 74.6 MiB).
+  and 2026-11-08 (amendment 6: 74.25 MiB) and 2026-11-11 (amendment 7: 74.6 MiB) and 2026-11-14
+  (amendment 8: 75.25 MiB).
 - **Amends:** [PM-0008](PM-0008-npm-packages-and-release.md) (three public packages since its
   amendment 3; four from here).
 - **Scope:** `apps/editor/packages/editor`, `tooling/release/*`, `.github/workflows/release.yml`
@@ -230,3 +231,22 @@ write-back in the doc and slide wasm, CI's check-dist measured `dist/` at 74.4 M
 main of the same day. The new budget keeps a margin of about 0.2 MiB. Taken by the consolidation track
 that made the change and recorded for the owner's confirmation; reverting it means dropping the
 evaluator from the sheet and image wasm. The entry budgets stay at 16 KiB.
+
+## Amendment 8 (2026-11-14): a 75.25 MiB budget for `dist/`
+
+The budget for `dist/` goes from 74.6 to 75.25 MiB (78,905,344 bytes, from 78,223,769). The growth is
+the editor's own code: the interaction programme (the interaction contract's coordinator, Escape
+arbiter, cursor controller and adapters; the workspace, camera and navigation history; the save
+states, recovery, drop intent, import report, new-document dialog and guided export; the numeric
+field and the inspector; the edit contexts and module UX; accessibility, touch and pen; and Phase 3:
+X-Ray, the typography debugger, design constraints, actions, layout variants, the assistant's
+proposals, checkpoints, the publication contract and the shared verbs) added about 44,500 lines to
+the editor's sources between main of 2026-11-13 morning and of 2026-11-14 afternoon, and no
+dependency. CI's check-dist measured `dist/` at 73.3 MiB on main of 2026-11-13 (ca8774c6e, the last
+green run) and at 78,393,443 bytes (74.8 MiB) on main of 2026-11-14 (bb18f87fd); the difference is
+JavaScript and CSS, by chunk: `presets` +720 KB, `embed` +585 KB, `src` +166 KB, `style.css` +10 KB,
+`library-worker` +10 KB, `worker` +6 KB. The module wasm did not change. A local build of main of
+the evening adds about 26 KB more. The new budget keeps a margin of about 0.45 MiB for the
+programme's last landings before its final CI pass. Recorded for the owner's confirmation; reverting
+it means taking that code out of the package or splitting it from the first load. The entry budgets
+stay at 16 KiB.
