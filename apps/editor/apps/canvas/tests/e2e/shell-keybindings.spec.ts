@@ -145,6 +145,20 @@ const HOST_KEYS = [
   "ctrl+l→paged.object.lock",
   "shift+f10→paged.edit.contextMenu",
   "contextmenu→paged.edit.contextMenu",
+  // The Focus workspace (editor ADR 1208).
+  "cmd+.→paged.view.focusWorkspace",
+  "ctrl+.→paged.view.focusWorkspace",
+  // Go back / Go forward through the navigation history (editor ADR 1211).
+  "cmd+pageup→paged.view.navigateBack",
+  "ctrl+pageup→paged.view.navigateBack",
+  "cmd+pagedown→paged.view.navigateForward",
+  "ctrl+pagedown→paged.view.navigateForward",
+  // The object tree and Select next object below / above (editor ADR 1230).
+  "alt+shift+o→paged.view.objectTree",
+  "cmd+alt+[→paged.edit.selectBelow",
+  "ctrl+alt+[→paged.edit.selectBelow",
+  "cmd+alt+]→paged.edit.selectAbove",
+  "ctrl+alt+]→paged.edit.selectAbove",
 ] as const;
 
 /** The text-format chords (`TEXT_FORMAT_KEYBINDINGS`): guarded on a text
@@ -369,6 +383,17 @@ test.describe("host keybindings", () => {
       "keybinding:ctrl+l→paged.object.lock",
       "keybinding:shift+f10→paged.edit.contextMenu",
       "keybinding:contextmenu→paged.edit.contextMenu",
+      "keybinding:cmd+.→paged.view.focusWorkspace",
+      "keybinding:ctrl+.→paged.view.focusWorkspace",
+      "keybinding:cmd+pageup→paged.view.navigateBack",
+      "keybinding:ctrl+pageup→paged.view.navigateBack",
+      "keybinding:cmd+pagedown→paged.view.navigateForward",
+      "keybinding:ctrl+pagedown→paged.view.navigateForward",
+      "keybinding:alt+shift+o→paged.view.objectTree",
+      "keybinding:cmd+alt+[→paged.edit.selectBelow",
+      "keybinding:ctrl+alt+[→paged.edit.selectBelow",
+      "keybinding:cmd+alt+]→paged.edit.selectAbove",
+      "keybinding:ctrl+alt+]→paged.edit.selectAbove",
     );
     await openShell(page, { doc: true });
     // One context every binding applies in: a document, a frame selected,
@@ -384,6 +409,24 @@ test.describe("host keybindings", () => {
         }
       ).__canvas.registries.commands.invoke("paged.preferences.tabHidesPanels"),
     );
+    // Go back / Go forward (editor ADR 1211) apply once the navigation
+    // history holds a place each way.
+    await page.evaluate(() => {
+      type Nav = {
+        record(from: object, to: object): void;
+        back(current: object): unknown;
+      };
+      const nav = (
+        globalThis as unknown as {
+          __paged?: { camera?: { navigation?: Nav } };
+        }
+      ).__paged?.camera?.navigation;
+      if (!nav) throw new Error("no navigation history on __paged.camera");
+      const at = (tx: number) => ({ scale: 1, tx, ty: 0, rotation: 0 });
+      nav.record(at(0), at(500));
+      nav.record(at(500), at(1000));
+      nav.back(at(1000));
+    });
     await blurAll(page);
     const recorder = await recordCommands(page, [
       ...new Set(HOST_KEYS.map((s) => split(s).command)),

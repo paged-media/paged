@@ -70,7 +70,10 @@ describe("Layout variants", () => {
     const made: Array<{ name: string; bytes: number }> = [];
     await h.act(() => {
       setLibrary(h.scope, {
-        variants: async () => list,
+        // A fresh array per call, as the library answers (its `variants`
+        // maps the stored list): the panel keeps what it was handed, and
+        // a compiled panel re-renders only for a new list.
+        variants: async () => [...list],
         createVariant: async (_id: string, name: string, bytes: Uint8Array) => {
           made.push({ name, bytes: bytes.length });
           const v = variant("image-heavy", name);

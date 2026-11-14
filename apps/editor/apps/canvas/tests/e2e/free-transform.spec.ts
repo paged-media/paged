@@ -137,6 +137,22 @@ const near = (a: number, b: number, eps = 1.5) => Math.abs(a - b) <= eps;
 async function freeTransformOn(designer: Designer, page: Page, ref: Ref) {
   await designer.selectElement(ref.kind, ref.id);
   await page.keyboard.press("Escape");
+  // At the top level Escape clears the selection (editor ADR 1207,
+  // decision 6), through the engine. The driver below writes the
+  // selection mirror directly, so it waits for that answer first: landing
+  // after it, the answer would clear the new selection.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            globalThis as unknown as {
+              __canvas: { elementSelection?: unknown[] };
+            }
+          ).__canvas.elementSelection?.length ?? -1,
+      ),
+    )
+    .toBe(0);
   await designer.selectElement(ref.kind, ref.id);
   await page.locator("body").press("e");
   await expect(

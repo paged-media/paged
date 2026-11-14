@@ -114,6 +114,18 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
     </>
   ),
 
+  // Two text frames, the first threaded into the second — a story's
+  // route through its frames (paged.doc's Story map).
+  "panel-stories": (
+    <>
+      <rect x={3} y={3} width={9} height={9} rx={1} {...LINE} />
+      <path d="M5.5 6.5 L9.5 6.5 M5.5 9 L8 9" {...LINE} />
+      <rect x={12} y={12} width={9} height={9} rx={1} {...LINE} />
+      <path d="M14.5 15.5 L18.5 15.5 M14.5 18 L17 18" {...LINE} />
+      <path d="M12 7.5 L16.5 7.5 L16.5 12" {...LINE} />
+    </>
+  ),
+
   // A chain link with a small globe (web hyperlink).
   "panel-hyperlinks": (
     <>

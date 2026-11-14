@@ -192,6 +192,11 @@ export const CAPABILITIES: Capability[] = [
   { op: "insertPage", status: "supported" },
   { op: "deletePage", status: "supported" },
   { op: "resizePage", status: "supported" },
+  {
+    op: "setFacingPages",
+    status: "supported",
+    note: "proto 83, engine ADR 1312; {facing}; every page laid out again as facing spreads or single pages, one undo step",
+  },
   { op: "duplicatePage", status: "supported" },
   { op: "insertFrame", status: "supported" },
   { op: "insertTextFrame", status: "supported" },
@@ -363,6 +368,11 @@ export const CAPABILITIES: Capability[] = [
     op: "replaceImageBytes",
     status: "supported",
     note: "bare self id + decoded-on-apply image bytes",
+  },
+  {
+    op: "relinkImage",
+    status: "supported",
+    note: "proto 81, engine ADR 1308; {elementId, uri, bytes?}; bare self id; probed on a frame with a placed picture",
   },
   // batch handle binding (v34)
   {
