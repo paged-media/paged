@@ -143,7 +143,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const polysBefore = await sceneRefs(page, "polygon");
     await withActivePage(page, pageId, async () => {
       await doc.designer.placeCaret(throwawayStory, 0);
-      await page.getByRole("button", { name: /^lower to document$/i }).click();
+      await page.getByRole("button", { name: /^place on page$/i }).click();
       await settle(
         page,
         async () => (await newRefs(page, "textFrame", framesBefore)).length > 0,

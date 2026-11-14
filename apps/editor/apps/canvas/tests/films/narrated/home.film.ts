@@ -838,7 +838,7 @@ film("home", async (k) => {
     await expect(page.locator("[data-data-bind-msg]").first()).toContainText(
       "(ean13)",
     );
-    await press(k, page.getByRole("button", { name: /lower to document/i }));
+    await press(k, page.getByRole("button", { name: /^place on page$/i }));
     await expect
       .poll(
         async () =>

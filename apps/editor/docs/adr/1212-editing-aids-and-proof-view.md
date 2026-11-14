@@ -116,3 +116,11 @@ fidelity stays Proof colors' (soft proofing); Proof view promises none.
 - [ADR 207](207-honest-seams.md) — the disabled aids.
 - [ADR 247](247-stored-settings-are-shape-checked.md) — the stored aids.
 - [ADR 1211](1211-navigation-history-and-one-current-page.md) — the bottom bar the control joins.
+
+## Amendment 2026-11-14 — Data bindings is an editing aid
+
+paged.data's binding badges (the data markers) join the aids as **Data bindings** (data ADR 566):
+in View ▸ Editing aids and the bottom bar's control, remembered in `paged.view.editingAids` with
+the others, drawn by the same rule (`paged.overlay.dataMarkers`). The command keeps its id,
+`paged.view.toggleDataMarkers`; View ▸ Show data markers left the feature ids with a deprecation
+window, 0.80 to 0.82.

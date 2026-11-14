@@ -127,28 +127,21 @@ describe("view toggles", () => {
   });
 
   test("the other view options are not persisted: a reload starts from the defaults", async () => {
-    covers(
-      "setting:view.snapToPoints",
-      "setting:view.headingAnchors",
-      "setting:view.dataMarkers",
-    );
+    covers("setting:view.snapToPoints", "setting:view.headingAnchors");
     // A reload mounts a new editor, with a new scope, on the same storage.
     const storage = memoryStorage();
     const before = createEditorScope();
     setEditorStorage(before, storage);
     setViewToggle(before, "snapToPoints", false);
     setViewToggle(before, "headingAnchors", true);
-    setViewToggle(before, "dataMarkers", true);
     const after = createEditorScope();
     setEditorStorage(after, storage);
     expect({
       snapToPoints: getViewToggle(after, "snapToPoints"),
       headingAnchors: getViewToggle(after, "headingAnchors"),
-      dataMarkers: getViewToggle(after, "dataMarkers"),
     }).toEqual({
       snapToPoints: DEFAULTS.snapToPoints,
       headingAnchors: DEFAULTS.headingAnchors,
-      dataMarkers: DEFAULTS.dataMarkers,
     });
   });
 
@@ -163,6 +156,8 @@ describe("view toggles", () => {
       "setting:view.oversetMarkers",
       "setting:view.hiddenCharacters",
       "setting:view.nonprinting",
+      // Data ADR 566 — the binding badges are an editing aid.
+      "setting:view.dataMarkers",
     );
     const storage = memoryStorage();
     const before = createEditorScope();
@@ -170,6 +165,7 @@ describe("view toggles", () => {
     setViewToggle(before, "frameEdges", true);
     setViewToggle(before, "guides", false);
     setViewToggle(before, "textThreads", true);
+    setViewToggle(before, "dataMarkers", true);
     expect(JSON.parse(storage.getItem("paged.view.editingAids")!)).toEqual({
       frameEdges: true,
       marginsColumns: true,
@@ -179,6 +175,7 @@ describe("view toggles", () => {
       oversetMarkers: true,
       hiddenCharacters: false,
       nonprinting: true,
+      dataMarkers: true,
     });
     const after = createEditorScope();
     setEditorStorage(after, storage);
@@ -186,6 +183,7 @@ describe("view toggles", () => {
     expect(getViewToggle(after, "guides")).toBe(false);
     expect(getViewToggle(after, "textThreads")).toBe(true);
     expect(getViewToggle(after, "baselineGrid")).toBe(false);
+    expect(getViewToggle(after, "dataMarkers")).toBe(true);
 
     // A stale or hand-edited value: what is not a boolean is ignored, an
     // unknown key is dropped, the rest is taken.

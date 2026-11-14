@@ -140,7 +140,7 @@ test.describe("journey · paged.data render output", () => {
     const beforeLower = await designer.renderBytes();
     await addBindingThroughPanel(page, "variable", "name");
     await addBindingThroughPanel(page, "table", "name, role");
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    await page.getByRole("button", { name: /^place on page$/i }).click();
 
     // ── 3. RENDER ASSERTION (HARD) — the bound content visibly reached the
     //    page. The lower lane refreshes data (a store query) and then

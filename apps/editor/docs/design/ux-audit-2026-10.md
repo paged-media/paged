@@ -1206,6 +1206,13 @@ Bindings shows "bindings: [sync states] none", "preview record: ‹ prev –/–
 
 **Screenshots:** `F-46-data-bindings-wording.png`
 
+**Fixed (2026-11-14, data ADR 566).** The Bindings panel speaks product language in sentence
+case: "Place on page" (was "Lower to document"), "Column", "Bindings", "Sync states", "None";
+the stepper ("preview record: ‹ prev –/– next ›", "jump to:") is a record scrubber ("Record 3 of
+120", Previous, Next, a slider, the host's numeric field); the checkboxes take the editor's
+accent. Plugins ▸ Data shows one Data query entry (the F-18 rule). The panel also gained the six
+workflow steps and an outlier finder.
+
 <a id="f-47"></a>
 
 #### F-47 · Slide: a deck behaves like a long document

@@ -18,6 +18,12 @@
       "replacement": "menu:View/Editing aids/Text threads",
       "deprecatedIn": "0.80.0",
       "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:View/Show data markers",
+      "replacement": "menu:View/Editing aids/Data bindings",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
     }
   ]
 }

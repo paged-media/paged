@@ -761,13 +761,8 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     order: 65,
     group: "extras",
   },
-  {
-    path: "View/Show data markers",
-    command: PAGED_VIEW_TOGGLE_DATA_MARKERS,
-    checked: (paged) => getViewToggle(scopeOf(paged), "dataMarkers"),
-    order: 66,
-    group: "extras",
-  },
+  // View ▸ Show data markers moved into View ▸ Editing aids ▸ Data
+  // bindings (view-commands.ts; data ADR 566), the same command and toggle.
 ];
 
 /** Keybindings that route through the command registry. Cmd-Z /

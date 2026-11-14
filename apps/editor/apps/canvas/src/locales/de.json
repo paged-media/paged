@@ -3277,5 +3277,6 @@
   "app.pageLenses.missingFonts": "{count, plural, one {# fehlende Schrift} other {# fehlende Schriften}}",
   "app.pageLenses.preflightNotRun": "Preflight wurde nicht ausgeführt: „Ausgabe prüfen“ fügt seine Befunde hinzu.",
   "app.pageLenses.record": "Datensatz {n}",
-  "app.pageLenses.noPlacements": "Die Bindung platziert noch nichts."
+  "app.pageLenses.noPlacements": "Die Bindung platziert noch nichts.",
+  "menu.Data bindings": "Datenbindungen"
 }

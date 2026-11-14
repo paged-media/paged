@@ -314,9 +314,6 @@
       "patterns": ["type=\"number\""],
       "baseline": [
         "apps/editor/apps/devtools/src/Properties.tsx",
-        "modules/data/packages/data-bundle/src/panels/bindings-panel.tsx",
-        "modules/data/packages/data-bundle/src/panels/pagination-panel.tsx",
-        "modules/data/packages/data-bundle/src/panels/sources-panel.tsx",
         "modules/draw/packages/draw-bundle/src/panels/blend-panel.tsx",
         "modules/draw/packages/draw-bundle/src/panels/brushes-panel.tsx",
         "modules/draw/packages/draw-bundle/src/panels/image-trace-panel.tsx",

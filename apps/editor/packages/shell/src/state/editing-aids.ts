@@ -58,6 +58,7 @@ export const EDITING_AID_LABELS = defineMessages("shell.editingAids", {
   oversetMarkers: "Overset markers",
   hiddenCharacters: "Hidden characters",
   nonprinting: "Nonprinting items",
+  dataMarkers: "Data bindings",
   control: "Editing aids",
   proofView: "Proof view",
   notSupported: "{aid} (not supported yet)",
@@ -101,6 +102,7 @@ export const AID_OVERLAYS: Readonly<Record<string, EditingAidToggle>> = {
   "paged.overlay.baselineGrid": "baselineGrid",
   "paged.overlay.threadLines": "textThreads",
   "paged.overlay.oversetMarkers": "oversetMarkers",
+  "paged.overlay.dataMarkers": "dataMarkers",
 };
 
 /** The editing chrome Proof view hides as well as the aids: the
