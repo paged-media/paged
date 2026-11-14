@@ -259,6 +259,13 @@ handle drag and the point tools alike: the platform's primary modifier (Cmd on m
 elsewhere; a move read Ctrl before). A snap holds within the release reach and commits exactly
 (`UXI-T12`).
 
+The cursor contract (IC9, [ADR 1227](adr/1227-cursor-contract.md)): one controller per editor
+holds the canvas's cursor in layers — the session's (a handle's for the whole of its drag, the
+closed hand while panning), a modifier's (the copy cursor while an Alt move duplicates), the
+hover's and the tool's — and is the only writer of it; the scrub fields, the loaded thread and an
+armed placement write theirs through the same two functions, and the single-owner rule
+`cursor-write` keeps it so.
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the

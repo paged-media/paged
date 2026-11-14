@@ -301,7 +301,17 @@ export {
   type ScreenMode,
 } from "./state/screen-mode-context";
 
-export { resolveCursorCss } from "./tools/cursor";
+export {
+  CURSOR_CONTROLLER,
+  CURSOR_LAYERS,
+  createCursorController,
+  holdCursor,
+  resolveCursorCss,
+  useCursorController,
+  writeCursor,
+  type CursorController,
+  type CursorLayer,
+} from "./tools/cursor";
 export type { CursorSpec, CssCursorToken } from "./tools/cursor";
 export type {
   GestureHandler,

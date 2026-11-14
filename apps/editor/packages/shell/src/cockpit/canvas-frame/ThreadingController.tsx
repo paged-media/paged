@@ -52,6 +52,7 @@
 // channel as every other edit.
 
 import { useEffect, useEffectEvent } from "react";
+import { holdCursor } from "../../tools/cursor";
 
 import type {
   ElementGeometryItem,
@@ -446,15 +447,8 @@ export function ThreadingController() {
   // copy cursor would be a worse bug than the one being fixed.
   useEffect(() => {
     if (!cursorLoaded) return;
-    const element = root ?? document.documentElement;
-    const previous = element.style.getPropertyValue("cursor");
-    const previousPriority = element.style.getPropertyPriority("cursor");
-    element.style.setProperty("cursor", "copy", "important");
-    return () => {
-      if (previous)
-        element.style.setProperty("cursor", previous, previousPriority);
-      else element.style.removeProperty("cursor");
-    };
+    // The cursor contract's mode hold (editor ADR 1227).
+    return holdCursor(root ?? document.documentElement, "copy");
   }, [cursorLoaded, root]);
 
   useEffect(() => {

@@ -53,6 +53,7 @@ import {
   currentPageIndex,
   snapBypassHeld,
   useEscapeArbiter,
+  useCursorController,
   ownerOfTool,
   useInteractionCoordinator,
   type EndResult,
@@ -277,6 +278,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // ends it on a window blur, a hidden page, a document or tool switch and
   // unmount.
   const interactions = useInteractionCoordinator();
+  // IC9 — the canvas's cursor, in layers (editor ADR 1227):
+  // the session's, a modifier's, the hover's, the tool's. The controller
+  // is the one writer of the host's cursor.
+  const cursors = useCursorController();
+  /** The session whose cursor the session layer shows. */
+  const sessionCursorRef = useRef<string | null>(null);
   // IC4 — the press that holds the pointer, and everything the canvas
   // keeps for it, in ONE record owned by ONE session. It replaces the six
   // refs the canvas kept before (the legacy drag, a tool's drag, a
@@ -663,6 +670,14 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const hideRotateReadout = () => {
     const el = readoutRef.current;
     if (el) el.hidden = true;
+  };
+
+  /** IC9 — show `css` in the cursor's session layer for as long as
+   *  `record`'s session is open (the subscription below clears it). */
+  const showSessionCursor = (record: PointerRecord, css: string | null) => {
+    if (!css || !record.session) return;
+    sessionCursorRef.current = record.session.id;
+    cursors.set("session", css);
   };
 
   /** A press's session was ended from outside while it held the pointer:
@@ -1300,6 +1315,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       press,
     };
     record.drag = drag;
+    // IC9 — the session's cursor: a handle's for the whole of its drag
+    // (the pointer may outrun the handle), the closed hand for a pan.
+    showSessionCursor(
+      record,
+      mode === "gesture"
+        ? cursorOfElement(e.target)
+        : route.kind === "camera"
+          ? "grabbing"
+          : null,
+    );
     if (press?.atomic) beginPressAt(drag);
     else if (press) resolvePress(drag);
   };
@@ -1540,7 +1565,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       docPoint: [docX, docY],
     });
   };
-  const onPointerLeave = () => pointerStore.set(null);
+  const onPointerLeave = () => {
+    pointerStore.set(null);
+    cursors.set("hover", null);
+  };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     publishPointer(e);
@@ -1590,31 +1618,28 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // handler refine the cursor per pointer position (Pen near an
       // anchor ≠ Pen over empty canvas). Imperative style write so a
       // hover doesn't re-render the canvas.
+      // The hover layer of the cursor contract (IC9).
       const hover = props.toolGesture?.hoverCursor;
       if (hover) {
-        const refined = hover(buildToolPointer(e, 0));
-        const el = wrapperRef.current;
-        if (el) el.style.cursor = refined ?? props.cursor ?? "grab";
+        cursors.set("hover", hover(buildToolPointer(e, 0)) ?? null);
       } else if ((props.activeTool ?? "select") === "select") {
         // ADR 1103 — over a bundle's handle the Selection tool shows the
         // handle's cursor (the pointer is the default).
         const routers = overlaySignals.handleRouters();
-        const el = wrapperRef.current;
-        if (el && (routers.length > 0 || el.dataset.handleCursor)) {
-          const p = buildToolPointer(e, 0);
-          const over = routers
-            .map((r) => r.hit(p.pageId, p.pagePoint))
-            .find((h) => h !== null);
-          if (over) {
-            el.style.cursor = over.cursor
+        const p = routers.length > 0 ? buildToolPointer(e, 0) : null;
+        const over = p
+          ? routers
+              .map((r) => r.hit(p.pageId, p.pagePoint))
+              .find((h) => h !== null)
+          : undefined;
+        cursors.set(
+          "hover",
+          over
+            ? over.cursor
               ? resolveCursorCss(over.cursor)
-              : "pointer";
-            el.dataset.handleCursor = "1";
-          } else if (el.dataset.handleCursor) {
-            el.style.cursor = props.cursor ?? "grab";
-            delete el.dataset.handleCursor;
-          }
-        }
+              : "pointer"
+            : null,
+        );
       }
       return;
     }
@@ -1705,6 +1730,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       }
       // IC8 — the one snapping bypass: the platform's primary modifier
       // (Cmd on macOS, Ctrl elsewhere), as for the point-placing tools.
+      // IC9 — an Alt move duplicates: the copy cursor while Alt is held.
+      cursors.set(
+        "modifier",
+        gs.spec?.kind === "translate" && e.altKey ? "copy" : null,
+      );
       gs.modifiers = {
         shift: e.shiftKey,
         alt: e.altKey,
@@ -2253,6 +2283,31 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     });
   }, [arbiter]);
 
+  // IC9 — the cursor contract: the controller writes the host's cursor;
+  // the tool's cursor is its bottom layer (a new tool drops the old one's
+  // hover), and the session and modifier layers end with their session.
+  useEffect(() => {
+    cursors.attach(wrapperRef.current);
+    return () => cursors.attach(null);
+  }, [cursors]);
+  useEffect(() => {
+    cursors.set("hover", null);
+    cursors.set("tool", props.cursor ?? null);
+  }, [cursors, props.cursor]);
+  useEffect(
+    () =>
+      interactions.subscribe(() => {
+        const open = interactions.snapshot().openIds;
+        const id = sessionCursorRef.current;
+        if (id !== null && !open.includes(id)) {
+          sessionCursorRef.current = null;
+          cursors.set("session", null);
+        }
+        if (open.length === 0) cursors.set("modifier", null);
+      }),
+    [interactions, cursors],
+  );
+
   return (
     <div
       ref={wrapperRef}
@@ -2262,9 +2317,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       data-testid="viewport-canvas-host"
       // Phase 3 — the active tool's base cursor overrides the default
       // pan affordance; the gesture handler may refine it per position.
-      style={
-        props.cursor ? { ...wrapperStyle, cursor: props.cursor } : wrapperStyle
-      }
+      style={wrapperStyle}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
@@ -2783,7 +2836,6 @@ const wrapperStyle: React.CSSProperties = {
   height: "100%",
   overflow: "hidden",
   background: "var(--canvas-surround)",
-  cursor: "grab",
   touchAction: "none",
   userSelect: "none",
 };
@@ -2854,6 +2906,14 @@ function growDelta(
 ): void {
   const d = Math.hypot(x - t.startPointer[0], y - t.startPointer[1]);
   if (d > t.maxDelta) t.maxDelta = d;
+}
+
+/** The cursor an element under the pointer shows (a handle's), or null
+ *  when it sets none of its own. */
+function cursorOfElement(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) return null;
+  const css = getComputedStyle(target).cursor;
+  return css && css !== "auto" && css !== "default" ? css : null;
 }
 
 /** D-01 (editor ADR 1201): a marquee drawn left to right takes what it
