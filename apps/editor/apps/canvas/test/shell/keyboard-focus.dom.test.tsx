@@ -390,6 +390,29 @@ describe("keyboard focus across the main chrome", () => {
     }
   });
 
+  test('Edit ▸ Settings ▸ "Keep modifier hints visible" keeps the modifier hint strip past a tool\'s first uses, remembered (IC10)', async () => {
+    covers(
+      "command:paged.preferences.modifierHints",
+      "menu:Edit/Settings/Keep modifier hints visible",
+    );
+    const s = await mountShell();
+    expect(
+      s.registries.menus
+        .list()
+        .some((m) => m.path === "Edit/Settings/Keep modifier hints visible"),
+    ).toBe(true);
+    await act(async () => {
+      await s.registries.commands.invoke("paged.preferences.modifierHints");
+    });
+    await s.settle();
+    expect(localStorage.getItem("paged.modifierHints.always")).toBe("true");
+    await act(async () => {
+      await s.registries.commands.invoke("paged.preferences.modifierHints");
+    });
+    await s.settle();
+    expect(localStorage.getItem("paged.modifierHints.always")).toBe(null);
+  });
+
   test('with the preference "Tab hides panels (InDesign)" on, Tab on the canvas the user clicked into hides the chrome; reached by keyboard it still passes on', async () => {
     covers(
       "keybinding:tab→paged.view.toggleChrome",

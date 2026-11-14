@@ -48,6 +48,7 @@ export type {
   CssCursorToken,
   // Gesture handler contract.
   GestureHandler,
+  ModifierHint,
   CanvasPointerEvent,
   OverlayContext,
   OverlayPrimitive,

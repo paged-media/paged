@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type { ModifierHint } from "@paged-media/plugin-api";
 import type { PagedEditor } from "../state/paged-editor";
 import type { ToolId } from "../registries/tool";
 import type {
@@ -71,6 +72,20 @@ export class GestureSpine {
     return this.current?.id ?? null;
   }
 
+  private readonly listeners = new Set<() => void>();
+  /** Calls `listener` when the handler in hand changes. */
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+  private changed(): void {
+    for (const l of [...this.listeners]) l();
+  }
+  /** What the modifiers do with the handler in hand (its contract's
+   *  `modifierHints`; IC10), or null when it names none. */
+  readonly modifierHints = (): readonly ModifierHint[] | null =>
+    this.current?.handler.modifierHints ?? null;
+
   hasActive(): boolean {
     return this.current !== null;
   }
@@ -91,6 +106,14 @@ export class GestureSpine {
     // A permanent switch ends what every suspended handler was building.
     if (reason === "switch") this.dropSuspended();
     if (this.current?.id === id) return;
+    try {
+      this.swap(id, paged, reason);
+    } finally {
+      this.changed();
+    }
+  }
+
+  private swap(id: ToolId, paged: PagedEditor, reason: DeactivateReason): void {
     if (this.current) {
       this.current.handler.onDeactivate(reason);
       if (reason === "suspend") this.suspended.push(this.current);
@@ -137,6 +160,7 @@ export class GestureSpine {
       this.current = null;
     }
     this.dropSuspended();
+    this.changed();
   }
 
   pointerDown(e: CanvasPointerEvent): void {

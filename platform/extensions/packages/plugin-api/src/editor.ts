@@ -181,6 +181,15 @@ export interface OverlayContext {
   setPreview(primitives: readonly OverlayPrimitive[]): void;
 }
 
+/** A modifier a gesture handler gives a meaning to, for the host's hint
+ *  strip (extensions ADR 1109): the keys held together and what they do,
+ *  in the user's language. `primary` is the platform's primary modifier —
+ *  Cmd on macOS, Ctrl elsewhere — and `ctrl` the Control key itself. */
+export interface ModifierHint {
+  keys: ReadonlyArray<"shift" | "alt" | "primary" | "ctrl" | "space">;
+  label: string;
+}
+
 /** The contract every tool's `gesture()` factory returns. Mutate only
  *  through `paged.client` / the document surface — never by reaching
  *  into model state. */
@@ -193,6 +202,11 @@ export interface GestureHandler {
   onKey?(e: KeyboardEvent): void;
   cursorAt?(e: CanvasPointerEvent): CursorSpec | undefined;
   renderOverlay?(ctx: OverlayContext): void;
+  /** What the modifiers do while this handler's tool is in hand: the
+   *  host names them in its hint strip for the tool's first uses (and
+   *  always, when the user asks), and lights the ones held (extensions
+   *  ADR 1109). Static; absent, the host says nothing for the tool. */
+  modifierHints?: readonly ModifierHint[];
 }
 
 // ---------------------------------------------------------------- tools

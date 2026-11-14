@@ -327,6 +327,36 @@
       ]
     },
     {
+      "id": "paged.modifierHints.always",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.modifierHints.always",
+      "default": false,
+      "values": [false, true],
+      "effect": "Edit ▸ Settings ▸ Keep modifier hints visible (IC10): the canvas's modifier hint strip stays past a tool's first uses; stored as \"true\" while on, removed when off",
+      "source": "apps/editor/packages/shell/src/overlays/modifier-hints.tsx",
+      "marker": "\"paged.modifierHints.always\"",
+      "sites": [
+        ["getItem", "MODIFIER_HINTS_ALWAYS_KEY"],
+        ["setItem", "MODIFIER_HINTS_ALWAYS_KEY"],
+        ["removeItem", "MODIFIER_HINTS_ALWAYS_KEY"]
+      ]
+    },
+    {
+      "id": "paged.modifierHints.uses",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.modifierHints.uses",
+      "default": {},
+      "effect": "how many times each tool was taken up (IC10): the modifier hint strip shows for a tool's first five uses, then recedes; read field by field (ADR 247)",
+      "source": "apps/editor/packages/shell/src/overlays/modifier-hints.tsx",
+      "marker": "\"paged.modifierHints.uses\"",
+      "sites": [
+        ["getItem", "MODIFIER_HINTS_USES_KEY"],
+        ["setItem", "MODIFIER_HINTS_USES_KEY"]
+      ]
+    },
+    {
       "id": "paged.actions.v1",
       "kind": "user-library",
       "storage": "localStorage",

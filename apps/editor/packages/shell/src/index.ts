@@ -105,6 +105,16 @@ export { InteractionProvider } from "./interaction/interaction-provider";
 export { snapBypassHeld } from "./tools/snap-bypass";
 export { hoverPreselectContribution } from "./overlays/hover-preselect";
 export {
+  MODIFIER_HINTS_ALWAYS_KEY,
+  MODIFIER_HINTS_COMMAND,
+  MODIFIER_HINTS_USES_KEY,
+  MODIFIER_HINT_USES,
+  ModifierHints,
+  builtInHints,
+  modifierHintsAlways,
+  setModifierHintsAlways,
+} from "./overlays/modifier-hints";
+export {
   nextAbove,
   nextBelow,
   objectsOver,

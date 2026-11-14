@@ -17,12 +17,14 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type { ModifierHint } from "@paged-media/plugin-api";
 import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import {
@@ -77,6 +79,9 @@ export function useGestureSpine(): {
    *  behaviour that ISN'T a gesture handler (Hand → pan, Zoom →
    *  click-zoom) through its proven legacy machinery. */
   effectiveTool: string;
+  /** What the modifiers do with the handler in hand (its contract's
+   *  `modifierHints`; IC10), or null. */
+  modifierHints: readonly ModifierHint[] | null;
 } {
   const keys = useEditorKeys();
   const paged = usePaged();
@@ -124,6 +129,13 @@ export function useGestureSpine(): {
     resolve: (e) => spine.key(e),
   });
 
+  // The handler in hand's modifier hints, as they change with it.
+  const modifierHints = useSyncExternalStore(
+    spine.subscribe,
+    spine.modifierHints,
+    spine.modifierHints,
+  );
+
   // Tear the handler down on unmount.
   useEffect(() => () => spine.clear(), [spine]);
 
@@ -159,7 +171,8 @@ export function useGestureSpine(): {
         : null,
       cursor,
       effectiveTool,
+      modifierHints,
     }),
-    [hasHandler, hasCursorAt, cursor, effectiveTool, spine],
+    [hasHandler, hasCursorAt, cursor, effectiveTool, spine, modifierHints],
   );
 }

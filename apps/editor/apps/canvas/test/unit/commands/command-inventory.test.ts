@@ -104,7 +104,7 @@ const noop = new Proxy({}, { get: () => () => {} }) as never;
 /** Every `.commands.register(` call site, per file. A new site fails
  *  here: list it, and the ids it registers below. */
 const SITES: Record<string, number> = {
-  "packages/shell/src/PagedShell.tsx": 12,
+  "packages/shell/src/PagedShell.tsx": 13,
   "packages/shell/src/state/commands/registry-derived.ts": 3,
   "packages/shell/src/chrome/FillStrokeCluster.tsx": 3,
   "packages/shell/src/actions/actions-context.tsx": 3,
@@ -130,6 +130,7 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.view.toggleChrome",
     "paged.chrome.togglePanels",
     "paged.preferences.tabHidesPanels",
+    "paged.preferences.modifierHints",
     // The rest of PagedShell's sites register the shell builders:
     "paged.view.toggleScreenPreview",
     "paged.file.openIdml",

@@ -22,6 +22,8 @@
   "tools.pen.hintDraw": "Klicken: Ecke · Ziehen: glatt · Eingabe: beenden · Esc: abbrechen",
   "tools.pen.hintFinish": "Offenen Pfad beenden",
   "tools.pen.hintJoin": "Die beiden Pfade verbinden",
+  "tools.pen.constrain": "Auf 45° beschränken",
+  "tools.pen.noSnap": "Ausrichten ignorieren",
   "tools.polygon.sides": "Anzahl der Seiten",
   "tools.polygon.star": "Stern",
   "tools.polygon.starInset": "Sterneinzug"

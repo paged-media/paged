@@ -270,6 +270,13 @@ hover's and the tool's — and is the only writer of it; the scrub fields, the l
 armed placement write theirs through the same two functions, and the single-owner rule
 `cursor-write` keeps it so.
 
+Modifier hints (IC10; extensions ADR 1109): a strip over the canvas names what the modifiers do
+with the tool in hand — the host's words for the Selection tools and the shape tools, a handler's
+own through the contract's new `GestureHandler.modifierHints` (the Pen names its own) — and
+lights the key held. It shows for a tool's first five uses and then recedes; Edit ▸ Settings ▸
+Keep modifier hints visible keeps it (`paged.modifierHints.always`; the uses are
+`paged.modifierHints.uses`).
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
