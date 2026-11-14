@@ -87,17 +87,19 @@ describe("the commands", () => {
       ["ctrl+alt+]", SELECT_NEXT_ABOVE_COMMAND],
     ]);
     // The cycle needs a document; at the document root only.
-    const cycle = buildA11yCommands({ showPanel: () => {} })[1]!;
-    expect(cycle.when?.({ document: { handle: null } })).toBe(false);
+    const cycle = buildA11yCommands({ showPanel: () => {} })[1]!.when as (
+      state: unknown,
+    ) => boolean;
+    expect(cycle({ document: { handle: null } })).toBe(false);
     expect(
-      cycle.when?.({
+      cycle({
         document: { handle: {} },
         editContext: null,
         selection: {},
       }),
     ).toBe(true);
     expect(
-      cycle.when?.({ document: { handle: {} }, editContext: { type: "x" } }),
+      cycle({ document: { handle: {} }, editContext: { type: "x" } }),
     ).toBe(false);
   });
 });

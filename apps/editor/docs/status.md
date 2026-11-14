@@ -241,6 +241,18 @@ greyed in the menus with its reason, listed with it in the palette, which also g
 every align route honours the key object, and an align control's hover shows its reference
 (D-07).
 
+Track AP's accessibility half has landed. The Tree panel is the document's object tree
+([ADR 1225](adr/1225-an-accessible-object-tree.md)): a virtualized WAI-ARIA tree of the spreads
+and their page items, each row named with its type, name, page and whether it is locked or
+hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
+the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
+and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping objects. Every text
+token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
+variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
+7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
+([ADR 1226](adr/1226-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
+palette, and the editor works at 200 % zoom (`UXI-T69`, `T70`, `T74`, `T75`).
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
 and the marquee takes what it intersects.

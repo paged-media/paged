@@ -4068,6 +4068,19 @@
   ],
   "exceptions": [
     {
+      "id": "EXC-003",
+      "contract": ["UXI-PRF-004"],
+      "scope": "The engine's decoded-image cache (`image_decode_cache` in engine/core/crates/paged-canvas/src/model.rs) holds every image of the open document at full resolution for as long as it is open; the editor's own caches (the worker's CPU tiles, the GPU scene cache, the page thumbnails) have budgets and eviction rules (editor ADR 1227)",
+      "interactions": [],
+      "tests": [],
+      "why": "Every rebuild composes every page, so a decoded image the budget evicted would be decoded again on the next edit; a budget that holds needs images decoded at the resolution they are shown (proxies), and the visible pages composed first — engine work with its own record and protocol.",
+      "issue": "AP5",
+      "owner": "engine",
+      "severity": "major",
+      "expiry": "2027-03-31",
+      "repro": "Open a large real-world IDML template with many placed images and measure page + worker memory (measureUserAgentSpecificMemory): it stays in proportion to the document's images, not to what is on screen (UX audit F-54; docs/reference/performance.md)."
+    },
+    {
       "id": "EXC-001",
       "contract": ["UXI-ESC-001", "UXI-MIG-002", "UXI-KEY-004"],
       "scope": "Escape on the canvas while the viewport's drag cancel, the gesture handlers and path editing still listen on their own (they defer to the Escape arbiter, ADR 1207, until track IC registers them)",

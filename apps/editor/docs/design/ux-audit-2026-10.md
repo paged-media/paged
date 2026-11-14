@@ -1308,6 +1308,14 @@ The 11 px shortcut hints in menus measure 2.94:1 in the dark theme and 2.30:1 in
 
 **Screenshots:** `F-51-menu-hint-contrast.png`
 
+**Fixed (2026-11-14, editor ADR 1226).** The hints are drawn in the muted token, never faded
+again with opacity; the muted tokens moved so every text token meets 4.5:1 on every surface it
+is drawn on in both themes (light hints now 5.3:1 on a menu, dark 6.1:1; the search placeholder
+4.9:1); "soon" rows are disabled controls, outside the contrast rule. A token test
+(`packages/shell/test/styles/theme-contrast.test.ts`) holds the pairs, and axe runs over the
+chrome, the Object, Edit and View menus and the palette in both themes and in High contrast
+(`tests/e2e/uxi-accessibility.spec.ts`, `UXI-T74`).
+
 <a id="f-52"></a>
 
 #### F-52 · Camera animations ignore "reduce motion"

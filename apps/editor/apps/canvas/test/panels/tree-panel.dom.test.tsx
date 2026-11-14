@@ -399,7 +399,9 @@ describe("Tree panel: the keyboard", () => {
     await h.settle();
     expect(h.paged.selection.elementSelection.map(key)).toEqual([key(s.rect)]);
     expect(
-      h.sent("setElementSelection", from).map((m) => m.payload.mode),
+      h
+        .sent("setElementSelection", from)
+        .map((m) => (m.payload as { mode: string }).mode),
     ).toEqual(["toggle", "toggle"]);
     expect(h.mutations(from)).toEqual([]);
   });

@@ -89,6 +89,8 @@ interface CachedTile {
   bitmap: ImageBitmap;
   widthPx: number;
   heightPx: number;
+  /** The tick it was last drawn in: the LRU order of eviction. */
+  usedAt: number;
 }
 
 interface RendererOptions {
@@ -109,7 +111,23 @@ interface RendererOptions {
    * (`gpuLostReason`) and recovers; the renderer only reports.
    */
   onPresentFailed?: () => void;
+  /** The CPU tiles' memory budget, bytes (`TILE_BUDGET_BYTES`). */
+  tileBudgetBytes?: number;
 }
+
+/**
+ * Editor ADR "Performance budgets" (UXI-PRF-004) — the CPU path's tile
+ * cache holds at most this many bytes of decoded tiles (4 bytes a pixel).
+ * Past it the tiles drawn longest ago go first; a tile on screen this
+ * tick never does. 64 MB is ~190 snapshot tiles of a Letter page at
+ * 256 px, or ~33 Pixel Preview tiles at 72 ppi: every page of a long
+ * document at thumbnail size, a screenful at full size.
+ */
+export const TILE_BUDGET_BYTES = 64 * 1024 * 1024;
+
+/** Pages next to the visible ones that are rendered ahead, while nothing
+ *  on screen is missing (UXI-PRF-005: the viewport first, neighbours next). */
+export const PREFETCH_NEIGHBOURS = 2;
 
 const DEFAULT_SNAPSHOT_WIDTH_PX = 256;
 const DEFAULT_BACKGROUND = "#e5e7eb";
@@ -134,6 +152,15 @@ export class WorkerRenderer {
   private readonly tiles = new Map<string, CachedTile>();
   /** Set of `${pageId}:${widthPx}` requests currently being awaited. */
   private readonly pendingTiles = new Set<string>();
+  private readonly tileBudgetBytes: number;
+  /** The draw count, the clock of the tiles' LRU. */
+  private tickNo = 0;
+  /** Since the layout was (re)built: when, and whether a page has shown
+   *  yet (the first visible paint, journaled once per layout). */
+  private layoutAt = 0;
+  private painted = false;
+  /** The pages the last draw showed: their tiles are never evicted. */
+  private visibleNow: readonly PageGeometry[] = [];
 
   private dpr = 1;
   /** Page layout in document space. Recomputed when the document changes. */
@@ -180,6 +207,7 @@ export class WorkerRenderer {
     this.wasm = wasm;
     this.cameraBuffer = cameraBuffer;
     this.snapshotWidthPx = opts.snapshotWidthPx ?? DEFAULT_SNAPSHOT_WIDTH_PX;
+    this.tileBudgetBytes = opts.tileBudgetBytes ?? TILE_BUDGET_BYTES;
     this.background = opts.background ?? DEFAULT_BACKGROUND;
     this.applySize(dpr, cssWidth, cssHeight);
   }
@@ -211,6 +239,26 @@ export class WorkerRenderer {
     this.tiles.clear();
     this.pendingTiles.clear();
     this.dirty = true;
+    this.layoutAt = performance.now();
+    this.painted = false;
+  }
+
+  /** The decoded bytes the tile cache holds now. */
+  tileBytes(): number {
+    let n = 0;
+    for (const t of this.tiles.values()) n += t.widthPx * t.heightPx * 4;
+    return n;
+  }
+
+  /** One CPU draw with the camera as it is now, outside the loop (the
+   *  unit tests drive the schedule with it). */
+  drawNow(): void {
+    this.draw(this.cameraBuffer.read());
+  }
+
+  /** How many tiles the cache holds (tests, the perf probe). */
+  tileCount(): number {
+    return this.tiles.size;
   }
 
   applySize(dpr: number, cssWidth: number, cssHeight: number): void {
@@ -325,6 +373,10 @@ export class WorkerRenderer {
         // worker find out why (a lost device stays lost until recovered).
         this.dirty = true;
         this.onPresentFailed?.();
+      } else if (!this.painted && this.pages.length > 0) {
+        // The GPU path builds every visible page's scene before its first
+        // present: that present is the first visible paint.
+        this.notePainted(true);
       }
       workerJournal.record({
         code: "worker.frame",
@@ -369,16 +421,106 @@ export class WorkerRenderer {
     // matters for the 500-page target. The doc-space viewport is
     // the inverse camera mapping of the device viewport.
     const docViewport = this.docSpaceViewport(camera);
+    this.tickNo += 1;
 
+    // PROGRESSIVE (editor ADR "Performance budgets", UXI-PRF-001/005):
+    // the visible pages draw what they have; of those still missing a
+    // tile, ONE is rendered per tick — the nearest to the viewport's
+    // centre — and the next tick asks again from the camera it then
+    // has. A page that scrolled out before its turn is never rendered:
+    // nothing is queued that the camera could make stale. With every
+    // visible page drawn, one neighbour per tick is rendered ahead.
+    const visible: PageGeometry[] = [];
+    const missing: PageGeometry[] = [];
     for (const page of this.pages) {
       if (!intersects(page.rect, docViewport)) continue;
-      this.drawPage(page);
+      visible.push(page);
+      if (!this.drawPage(page)) missing.push(page);
+    }
+    const centre = {
+      x: docViewport.x + docViewport.w / 2,
+      y: docViewport.y + docViewport.h / 2,
+    };
+    const waiting = (p: PageGeometry) =>
+      this.pendingTiles.has(
+        tileKey({ pageId: p.pageId, widthPx: this.tileWidthFor(p) }),
+      );
+    const next =
+      nearest(
+        missing.filter((p) => !waiting(p)),
+        centre,
+      ) ??
+      (missing.length === 0 ? this.neighbourToPrefetch(visible, centre) : null);
+    if (next) {
+      // Rendered now, shown next tick (the decode is asynchronous).
+      void this.loadTile(next.pageId, this.tileWidthFor(next));
+      this.dirty = true;
+    }
+    if (!this.painted && visible.length > 0 && missing.length === 0) {
+      this.notePainted(false);
+    }
+    this.visibleNow = visible;
+    this.evictOverBudget(visible);
+  }
+
+  /** The first page that shows after a layout: journaled once (the
+   *  perf probe's first visible paint, from the worker's own clock). */
+  private notePainted(gpu: boolean): void {
+    this.painted = true;
+    workerJournal.record({
+      code: "worker.firstPaint",
+      durMs: performance.now() - this.layoutAt,
+      data: { pages: this.pages.length, gpu },
+    });
+  }
+
+  /** The nearest page within `PREFETCH_NEIGHBOURS` of the visible ones
+   *  that has no tile yet, or null. */
+  private neighbourToPrefetch(
+    visible: readonly PageGeometry[],
+    centre: { x: number; y: number },
+  ): PageGeometry | null {
+    if (visible.length === 0) return null;
+    const lo = Math.min(...visible.map((p) => p.index));
+    const hi = Math.max(...visible.map((p) => p.index));
+    const around = this.pages.filter(
+      (p) =>
+        (p.index < lo && p.index >= lo - PREFETCH_NEIGHBOURS) ||
+        (p.index > hi && p.index <= hi + PREFETCH_NEIGHBOURS),
+    );
+    return nearest(
+      around.filter((p) => {
+        const key = tileKey({
+          pageId: p.pageId,
+          widthPx: this.tileWidthFor(p),
+        });
+        return !this.tiles.has(key) && !this.pendingTiles.has(key);
+      }),
+      centre,
+    );
+  }
+
+  /** Drop the tiles drawn longest ago until the cache is in budget; the
+   *  tiles of `visible` pages stay whatever it costs. */
+  private evictOverBudget(visible: readonly PageGeometry[]): void {
+    let bytes = this.tileBytes();
+    if (bytes <= this.tileBudgetBytes) return;
+    const keep = new Set(visible.map((p) => `${p.pageId}:`));
+    const oldest = [...this.tiles.entries()]
+      .filter(([key]) => ![...keep].some((k) => key.startsWith(k)))
+      .sort((a, b) => a[1].usedAt - b[1].usedAt);
+    for (const [key, tile] of oldest) {
+      if (bytes <= this.tileBudgetBytes) break;
+      tile.bitmap.close();
+      this.tiles.delete(key);
+      bytes -= tile.widthPx * tile.heightPx * 4;
     }
   }
 
-  private drawPage(page: PageGeometry): void {
+  /** Draw `page`; false when its tile is not there yet. */
+  private drawPage(page: PageGeometry): boolean {
     const ctx = this.ctx;
-    if (!ctx) return;
+    if (!ctx) return true;
     const r = page.rect;
 
     // Page chrome: white background + thin border. The browser
@@ -399,17 +541,16 @@ export class WorkerRenderer {
     ctx.lineWidth = 1 / (this.dpr || 1);
     ctx.strokeStyle = "#cccccc";
     ctx.strokeRect(r.x, r.y, r.w, r.h);
+    return tile !== undefined;
   }
 
+  /** The page's tile, or undefined: the draw plans the render (`draw`),
+   *  so a miss here asks for nothing. */
   private bestTileFor(page: PageGeometry): CachedTile | undefined {
     const widthPx = this.tileWidthFor(page);
-    const key = tileKey({ pageId: page.pageId, widthPx });
-    const cached = this.tiles.get(key);
-    if (cached) return cached;
-    // Miss → request asynchronously; current frame draws nothing
-    // for the page body (the chrome border still shows location).
-    void this.loadTile(page.pageId, widthPx);
-    return undefined;
+    const cached = this.tiles.get(tileKey({ pageId: page.pageId, widthPx }));
+    if (cached) cached.usedAt = this.tickNo;
+    return cached;
   }
 
   /**
@@ -436,7 +577,9 @@ export class WorkerRenderer {
         bitmap,
         widthPx: bitmap.width,
         heightPx: bitmap.height,
+        usedAt: this.tickNo,
       });
+      this.evictOverBudget(this.visibleNow);
       this.dirty = true;
     } finally {
       this.pendingTiles.delete(key);
@@ -470,6 +613,25 @@ export class WorkerRenderer {
     const y = Math.min(...ys);
     return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   }
+}
+
+/** The page whose centre is nearest `at`, or null. */
+function nearest(
+  pages: readonly PageGeometry[],
+  at: { x: number; y: number },
+): PageGeometry | null {
+  let best: PageGeometry | null = null;
+  let bestD = Infinity;
+  for (const p of pages) {
+    const dx = p.rect.x + p.rect.w / 2 - at.x;
+    const dy = p.rect.y + p.rect.h / 2 - at.y;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      best = p;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 function tileKey(k: TileKey): string {

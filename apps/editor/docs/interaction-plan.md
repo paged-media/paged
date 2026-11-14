@@ -58,6 +58,7 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 | EN5–EN8, the engine and protocol 80                            | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)                                                                                                 | §6; engine ADRs 1301–1305, amendment 2 to 193          |
 | IC1–IC3 the coordinator, the terminal events, the stale guards | Done, behind `?debug=coordinator` until IC4: sessions, epochs, the trace, `abortAll` on every terminal event, no pan fallback, late hit tests dropped                                                                                                      | ADR 1210                                               |
 | CM1–CM4 contexts and modules                                   | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced | editor ADRs 1214, 1215; extensions ADR 1106            |
+| AP1–AP3 accessibility                                          | Done: the object tree, keyboard-only inserts and transforms, the selection cycle, AA tokens, high contrast, axe, 200 % zoom                                                                                                                                | ADR 1225, ADR 1226                                     |
 | Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                      | Not started                                                                                                                                                                                                                                                | §4–§12                                                 |
 
 ## 1. Facts in the code that shape the plan
@@ -436,9 +437,15 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
 ## 11. Track AP — Accessibility, devices and performance (spec wave 6)
 
 - **AP1 The object tree (D-13).** `CV/ui/A11yObjectTree.tsx`, virtualized and synchronised with
-  the selection; `@axe-core/playwright` in the journeys. Tests: T69.
-- **AP2 Keyboard-only creation and transforms** as commands. Tests: T70.
+  the selection; `@axe-core/playwright` in the journeys. Tests: T69. **Done**
+  ([ADR 1225](adr/1225-an-accessible-object-tree.md)): the Tree panel (`paged.tree`) is the tree;
+  `paged.view.objectTree` (Alt+Shift+O) reaches it; axe runs in `TESTS/e2e/uxi-accessibility.spec.ts`.
+- **AP2 Keyboard-only creation and transforms** as commands. Tests: T70. **Done** (ADR 1225):
+  inserts land in view, Object ▸ Transform's rotate and scale steps, and
+  `paged.object.selectNextBelow` / `.selectNextAbove` (⌥⌘[ / ⌥⌘]) for overlapping objects — the
+  cycle IC6's object picker reuses.
 - **AP3 High contrast**, the contrast fixes, 200 % UI zoom (tokens). Tests: T74, T75. Closes F-51.
+  **Done** ([ADR 1226](adr/1226-high-contrast-and-aa.md)).
 - **AP4 Touch and pen.** Pressure and tilt reach the draw tools; a pinch over a pending selection
   candidate changes the camera only. Tests: T71, T72.
 - **AP5 Performance.** Progressive first paint, cache and memory budgets, typing coalescing, p95
