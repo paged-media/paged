@@ -21,19 +21,28 @@
 // plugin-web W-03). The STACK (edit-context-stack.tsx) is pure state;
 // THIS side-effect component wires the stack to the shell chrome:
 //
-//   · Esc POPS one level (a handler of the Escape arbiter, ADR 1207);
+//   · Esc leaves one level (a handler of the Escape arbiter, ADR 1207),
+//     through the one exit resolver (ADR 1214);
 //   · on the ACTIVE frame change → EMPHASIZE the context's panels
 //     (cockpit `openPanel` raises each — UNLESS the panel on screen is
 //     one this context SERVES, see below) and FOCUS the first restricted
 //     tool ("anchor tools focused" — the tool-set swap, v1 depth);
-//   · selection cleared / shrunk away from the scope root → EXIT ALL
-//     (a marquee elsewhere or an empty-pasteboard click leaves no
-//     context stuck — mirrors the path-edit auto-exit).
+//   · selection moved outside the context's scope → LEAVE ALL (a marquee
+//     elsewhere leaves no context stuck — mirrors the path-edit
+//     auto-exit); another document → the stack is cleared.
 //
-// Renders nothing — mounted once inside the shell where the cockpit +
-// tool + selection contexts are available.
+// Every way out asks `resolveContextExit` (state/context-exit.ts, editor
+// ADR 1214): Escape, picking another tool, another selection, the
+// breadcrumb and a press outside the frame mean one thing per module, and
+// a dirty context whose module says so asks first — the resolve prompt
+// this component renders.
+//
+// Mounted once inside the shell where the cockpit + tool + selection
+// contexts are available.
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
+
+import type { ElementId } from "@paged-media/client";
 
 import { useBindingProviderHost } from "../catalog/binding-providers";
 import { panelServedBy } from "../catalog/panel-binding-surface";
@@ -51,6 +60,10 @@ import { canvasKeyYields } from "../focus/key-ownership";
 import { isEscapeKey, useEscapeHandler } from "../interaction/escape-arbiter";
 import { useEditorKeys } from "./editor-root";
 import { useOptionalRegistries } from "./registries-context";
+import { useOptionalCanvasClient } from "./canvas-client-context";
+import { useOptionalDocument } from "./document-context";
+import { ContextExitPrompt } from "../chrome/ContextExitPrompt";
+import { descendOf } from "./frame-content";
 
 const MODIFIER_KEYS = new Set([
   "Shift",
@@ -66,9 +79,19 @@ export function EditContextController() {
   const keys = useEditorKeys();
   const scope = useEditorScope();
   const cockpitActions = useCockpitActions();
-  const { active, activeContribution, commit, cancel, isActiveDirty, exitAll } =
-    useEditContextStack();
-  const { elementSelection } = useSelection();
+  const {
+    active,
+    activeContribution,
+    commit,
+    leave,
+    leaveAll,
+    checkScope,
+    isActiveDirty,
+    exitAll,
+  } = useEditContextStack();
+  const { elementSelection, setElementSelection, setElementGeometry } =
+    useSelection();
+  const client = useOptionalCanvasClient();
   const tool = useOptionalTool();
   // Editor ADR 301 — a header or footer edited in place inside this
   // context: Escape leaves the header (the caret leaves its story), not
@@ -124,6 +147,26 @@ export function EditContextController() {
       if (canvasKeyYields(e)) return;
       const contribution = contributionRef.current;
       const onContentKey = contribution?.onContentKey;
+
+      // Editor ADR 1215 (D-05) — Enter on a picture's content level goes
+      // one level in: Edit image. Without this the key reached path
+      // editing on the frame below.
+      const descend = descendOf(scope, contribution ?? null);
+      const frame = activeRef.current;
+      if (
+        descend &&
+        frame &&
+        e.key === "Enter" &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        descend(frame.scopeRoot);
+        return;
+      }
 
       // ADR-012 Tier 1 — a context that DECLARES undo ownership gets the
       // un/redo chords routed to ITS op-log; the document stack stays
@@ -189,7 +232,7 @@ export function EditContextController() {
     // Capture so we win these keys while a context is active (this
     // editor's keys only).
     return keys.listen("keydown", onKey, true);
-  }, [commit, keys]);
+  }, [commit, keys, scope]);
 
   // Escape (ADR 1207, §12.1 cases 5 and 6). Mid sub-edit (a cell being
   // typed) the context resolves the sub-edit through its `onContentKey`
@@ -213,7 +256,7 @@ export function EditContextController() {
     tier: "context",
     isActive: () => !!active && !subContexts?.current(),
     resolve: () => {
-      cancel();
+      leave("escape");
     },
   });
 
@@ -370,11 +413,15 @@ export function EditContextController() {
     // of the raster frame for zooming into its pixels). Free Transform
     // works on the frame being edited (ADR 311).
     if (toolStaysInContext(activeTool, active.toolIds)) return;
-    // COMMIT, not cancel: the user reached for another tool, they did
-    // not press Esc. Discarding their in-flight edit because they
-    // clicked the wrong thing would be its own defect.
-    commit();
-  }, [active, activeTool, commit, enteredKey]);
+    // The exit resolver (ADR 1214): the user reached for another tool,
+    // they did not press Esc, so the work is kept — or, for a dirty
+    // context whose module asks to be asked, the user decides. Kept
+    // (Cancel in the prompt): the context's tool comes back.
+    const back = toolAtEntryRef.current;
+    void leave("tool-pick").done.then((left) => {
+      if (!left && back && tool) tool.setBaseTool(back as ToolId);
+    });
+  }, [active, activeTool, leave, enteredKey, tool]);
 
   // PUT THE CONTEXT'S TOOL DOWN on the way out. Entry swaps in the
   // context's primary tool (a raster brush, an anchor tool); leaving by
@@ -411,21 +458,50 @@ export function EditContextController() {
     lastToolIdsRef.current = null;
   }, [active, tool]);
 
-  // Auto-exit when the selection no longer includes the scope root (the
-  // user selected something outside the context — a marquee elsewhere,
-  // an empty click). Mirrors usePathEditMode's auto-exit.
+  // Auto-exit when the selection moves outside the context's scope (the
+  // user selected something else — a marquee elsewhere, a click on
+  // another frame). Mirrors usePathEditMode's auto-exit. In scope is the
+  // entered root and, where the engine answers the scope query (EN5),
+  // everything inside it (UXI-CTX-010): selecting a member of the entered
+  // frame or group keeps the context. Leaving goes through the exit
+  // resolver; a user who keeps the context (Cancel in the prompt) gets
+  // its root selected again.
+  const scopeCheckRef = useRef(0);
+  const reselect = useEffectEvent((root: ElementId) => {
+    if (!client) return;
+    void client
+      .setElementSelection([root], "replace")
+      .then(async (ids) => {
+        setElementSelection(ids);
+        setElementGeometry(await client.elementGeometry(ids));
+      })
+      .catch(() => {});
+  });
   useEffect(() => {
-    if (!active) return;
+    if (!active || elementSelection.length === 0) return;
     const rootKey = JSON.stringify(active.scopeRoot);
-    const stillSelected = elementSelection.some(
-      (id) => JSON.stringify(id) === rootKey,
-    );
-    if (!stillSelected && elementSelection.length > 0) {
-      // Selection moved to a DIFFERENT element — leave the context,
-      // keeping the work the way a click outside does.
-      exitAll({ commit: true });
-    }
-  }, [active, elementSelection, exitAll]);
+    if (elementSelection.some((id) => JSON.stringify(id) === rootKey)) return;
+    const check = ++scopeCheckRef.current;
+    const root = active.scopeRoot;
+    void checkScope(elementSelection).then((inside) => {
+      if (check !== scopeCheckRef.current) return;
+      if (inside.some(Boolean)) return;
+      void leaveAll("selection-change").then((left) => {
+        if (!left) reselect(root);
+      });
+    });
+  }, [active, elementSelection, checkScope, leaveAll]);
 
-  return null;
+  // Another document: the contexts were resolved before the replace
+  // question (ADR 1214); what is left belongs to a document that is gone,
+  // and leaves with nothing to keep or revert.
+  const docId = useOptionalDocument()?.handle?.docId ?? null;
+  const contextDocRef = useRef(docId);
+  useEffect(() => {
+    if (contextDocRef.current === docId) return;
+    contextDocRef.current = docId;
+    exitAll();
+  }, [docId, exitAll]);
+
+  return <ContextExitPrompt />;
 }

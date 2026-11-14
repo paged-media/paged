@@ -43,6 +43,7 @@ import type {
   CommandContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { commandNeeds } from "@paged-media/shell";
 import type { CanvasClient, ElementId, Mutation } from "@paged-media/client";
 import { refusalText } from "@paged-media/panel-kit";
 import { defineMessages, t } from "@paged-media/strings";
@@ -213,6 +214,7 @@ export function buildAppearanceCommands(
     title: t(v.title),
     category: "Appearance",
     when: objectVerbApplies,
+    applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
     handler: async (_paged: unknown, payload: unknown) => {
       clearReport();
       const refusal = await editAppearance(deps, v.edit(payload as Payload));
@@ -230,4 +232,5 @@ export const APPEARANCE_MENU_ITEMS: MenuItemContribution[] = VERBS.filter(
   order: 71.5 + i / 100,
   group: "appearance",
   when: objectVerbApplies,
+  applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
 }));

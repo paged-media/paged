@@ -95,6 +95,7 @@ export type {
   ObjectKindInfo,
   ObjectCommandInfo,
   ObjectsSurface,
+  ObjectWriteOptions,
   TemplateFieldControl,
   TemplateFieldRef,
   TemplateFieldWrite,
@@ -272,6 +273,7 @@ export type {
   EditContextCandidate,
   EnteredEditContext,
   EditContextHistory,
+  EditContextExitPolicy,
   ContentPointerEvent,
   ContentWheelEvent,
   EditContextDescriptor,
@@ -317,6 +319,9 @@ export type {
   PropertyFieldProps,
   PropertyFrameProps,
   PropertyFieldTarget,
+  NumericFieldProps,
+  NumericFieldCommit,
+  NumericRelativeEdit,
 } from "./widgets.js";
 
 // ADR-023 phase A — BINDING PROVIDERS: one host-owned panel, and while

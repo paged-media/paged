@@ -156,13 +156,15 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    the panel — they are just no longer what a "…" row runs.
   //    "Outline stroke" carries no ellipsis and asks nothing: it
   //    outlines the element's own stroke. Its overrides are one row down.
-  ["Draw/Path/Outline stroke", "outlineStroke", "path"],
+  // UX audit F-19 (editor ADR 1218): one home per command. Outline stroke
+  // and Close path are the host's (Object ▸ Path), as Type on a path is
+  // (Object ▸ Type on a path); the draw commands stay for the palette and
+  // scripts, without a second menu row under another name.
   ["Draw/Path/Outline stroke options…", "outlineStrokeOptions", "path"],
   ["Draw/Path/Offset path…", "offsetPathOptions", "path"],
   ["Draw/Path/Simplify…", "simplifyPathOptions", "path"],
   ["Draw/Path/Join endpoints", "joinEndpoints", "path-ends"],
   ["Draw/Path/Average endpoints", "averageEndpoints", "path-ends"],
-  ["Draw/Path/Close path", "closePath", "path-ends"],
   [
     "Draw/Path/Reverse path direction",
     "reversePathDirection",

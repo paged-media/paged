@@ -44,8 +44,13 @@ export const ALIGN_TO: readonly AlignTo[] = [
 
 export interface AlignScopeState {
   to: AlignTo;
-  /** The key the user clicked; null = the selection's first object. */
+  /** The key the user clicked or chose; null = the selection's first
+   *  object. */
   key: ElementId | null;
+  /** An align control is hovered or focused: the canvas shows what it
+   *  aligns against (the interaction spec's UXI-SEL-018, D-07: the
+   *  preview reflects the reference). */
+  previewing?: boolean;
 }
 
 /** This editor's Align scope and key object. */
@@ -88,4 +93,41 @@ export function clickKeyObject(
 
 export function isSameElement(a: ElementId, b: ElementId): boolean {
   return sameId(a, b);
+}
+
+/** Choose the key object explicitly (the Align panel's key list, D-07):
+ *  `id` must be one of the selected objects; it also switches Align to
+ *  "Key object". False when `id` is not selected. */
+export function chooseKeyObject(
+  store: ValueStore<AlignScopeState>,
+  selection: readonly ElementId[],
+  id: ElementId,
+): boolean {
+  const picked = selection.find((s) => sameId(s, id));
+  if (!picked) return false;
+  store.set({ ...store.get(), to: "keyObject", key: picked });
+  return true;
+}
+
+/** An align control is (no longer) hovered or focused. */
+export function previewAlignReference(
+  store: ValueStore<AlignScopeState>,
+  on: boolean,
+): void {
+  const state = store.get();
+  if ((state.previewing ?? false) !== on)
+    store.set({ ...state, previewing: on });
+}
+
+/** The arguments every align route sends with an alignment: what it aligns
+ *  against and the key object, from this editor's Align scope (D-07: the
+ *  control bar, the panel and a script agree). Addresses come from
+ *  `addressOf`. */
+export function alignScopeArgs(
+  state: AlignScopeState,
+  selection: readonly ElementId[],
+  addressOf: (id: ElementId) => string,
+): { to: AlignTo; key?: string } {
+  const key = effectiveKeyObject(state, selection);
+  return key ? { to: state.to, key: addressOf(key) } : { to: state.to };
 }

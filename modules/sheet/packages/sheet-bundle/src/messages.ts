@@ -29,6 +29,7 @@ import de from "../locales/de.json" with { type: "json" };
 
 /** Panel titles and the palette category. */
 export const PANELS = defineMessages("sheet.panel", {
+  contextLabel: "Spreadsheet",
   workbook: "Workbook",
   grid: "Grid",
   datasets: "Datasets",

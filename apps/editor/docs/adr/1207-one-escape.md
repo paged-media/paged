@@ -98,3 +98,9 @@ the opposite: the first applicable case wins, and no press does two things.
 - A second Escape after leaving a context, the text or a group now clears the selection;
   InDesign users who pressed Escape at the top level for nothing will see it.
 - New code answers Escape with a handler, never a listener; the ratchets say so in CI.
+
+## Amendment 2026-11-13
+
+[ADR 1214](1214-one-way-out-of-a-context.md): the `context` tier leaves through the one exit
+resolver (`leave("escape")`): a clean context cancels, or commits when its module declares
+`commit-if-safe`. The `context-dirty` tier is unchanged: a sub-edit resolves first.

@@ -407,9 +407,20 @@ export function ToolRail({
     // affordance, never by a tool switch that then does nothing.
     if (isPlanned(tool)) return;
     // Hand and Zoom look at the context's content; they never leave it.
+    // Another tool leaves through the exit resolver (ADR 1214): the work
+    // is kept, or — a dirty context whose module asks to be asked — the
+    // user decides first, and the tool is picked only once it has left.
     const contextTools = editContexts.active?.toolIds;
     if (contextTools && !toolStaysInContext(tool.id, contextTools)) {
-      editContexts.commit();
+      const leaving = editContexts.leave("tool-pick");
+      if (leaving.outcome === "asking") {
+        void leaving.done.then((left) => {
+          if (!left) return;
+          setLastUsed((prev) => ({ ...prev, [tool.group]: tool.id }));
+          setBaseTool(tool.id);
+        });
+        return;
+      }
     }
     setLastUsed((prev) => ({ ...prev, [tool.group]: tool.id }));
     setBaseTool(tool.id);

@@ -39,7 +39,7 @@ import {
 } from "@paged-media/shell";
 import { ColorInput, color, radius } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
-import { formatLength, parseLengthText } from "@paged-media/ui";
+import { formatLength, NumberInput, parseLengthText } from "@paged-media/ui";
 
 const M = defineMessages("app.viewPreferencesDialog", {
   title: "Guides & grid",
@@ -154,19 +154,18 @@ function ViewPreferencesForm() {
             />
           </Row>
           <Row label={strings.t(M.subdivisions)}>
-            <input
-              type="number"
+            <NumberInput
+              value={prefs.gridSubdivisions}
               min={1}
               max={100}
-              step={1}
-              data-view-pref="gridSubdivisions"
-              value={prefs.gridSubdivisions}
-              onChange={(e) => {
-                const n = Math.round(Number(e.target.value));
-                if (n >= 1 && n <= 100)
-                  setViewPreferences({ gridSubdivisions: n });
+              precision={0}
+              inputAttributes={{ "data-view-pref": "gridSubdivisions" }}
+              className="w-[96px]"
+              onChange={(n) => {
+                const v = Math.round(n);
+                if (v >= 1 && v <= 100)
+                  setViewPreferences({ gridSubdivisions: v });
               }}
-              style={inputStyle}
             />
           </Row>
           <Row label={strings.t(M.gridColor)}>
@@ -183,19 +182,16 @@ function ViewPreferencesForm() {
           <h3 style={sectionStyle}>{strings.t(M.smartGuides)}</h3>
           {check("angleGuides", strings.t(M.angleGuides))}
           <Row label={strings.t(M.customAngle)}>
-            <input
-              type="number"
-              step={1}
-              data-view-pref="customAngle"
-              value={prefs.customAngle ?? ""}
+            <NumberInput
+              value={prefs.customAngle ?? null}
+              unsetText=""
               placeholder="–"
-              onChange={(e) => {
-                const raw = e.target.value.trim();
-                if (raw === "") setViewPreferences({ customAngle: null });
-                else if (Number.isFinite(Number(raw)))
-                  setViewPreferences({ customAngle: Number(raw) });
-              }}
-              style={inputStyle}
+              suffix="°"
+              precision={2}
+              inputAttributes={{ "data-view-pref": "customAngle" }}
+              className="w-[96px]"
+              onChange={(n) => setViewPreferences({ customAngle: n })}
+              onClear={() => setViewPreferences({ customAngle: null })}
             />
           </Row>
           {check("spacing", strings.t(M.spacing))}
@@ -203,18 +199,17 @@ function ViewPreferencesForm() {
           {check("intersections", strings.t(M.intersections))}
           {check("measurementLabels", strings.t(M.measurementLabels))}
           <Row label={strings.t(M.tolerance)}>
-            <input
-              type="number"
+            <NumberInput
+              value={prefs.tolerancePx}
               min={1}
               max={20}
-              step={1}
-              data-view-pref="tolerancePx"
-              value={prefs.tolerancePx}
-              onChange={(e) => {
-                const n = Number(e.target.value);
+              precision={1}
+              suffix="px"
+              inputAttributes={{ "data-view-pref": "tolerancePx" }}
+              className="w-[96px]"
+              onChange={(n) => {
                 if (n > 0 && n <= 20) setViewPreferences({ tolerancePx: n });
               }}
-              style={inputStyle}
             />
           </Row>
           <div style={footerStyle}>

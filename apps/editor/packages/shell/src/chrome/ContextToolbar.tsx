@@ -43,6 +43,9 @@ import {
   FOCUS_WORKSPACE_KEYS,
 } from "../cockpit/focus-workspace";
 import { ContributedControlBarGroups } from "./ContributedBarItems";
+import { ContextTrail, useHostsContextTrail } from "./EditContextBreadcrumb";
+import { FrameLevelControl } from "./FrameLevelControl";
+import { useSelection } from "../state/selection-context";
 
 export interface ContextToolbarProps {
   /** Editor handle threaded into the mode's toolbar segment. */
@@ -76,6 +79,10 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
   // changes.
   const editContexts = useOptionalEditContextStack();
   const active = editContexts?.active ?? null;
+  // F-48 (UXI-CTX-008) — the breadcrumb lives in this bar, whose height is
+  // fixed, so entering a context or a group moves nothing below it.
+  useHostsContextTrail();
+  const groupsEntered = useSelection().activeGroupPath.length > 0;
 
   return (
     <div
@@ -87,12 +94,25 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
       <div style={leftStyle}>
         {active ? (
           <ContextSegment frame={active} />
-        ) : Left ? (
-          <Left paged={paged} />
         ) : (
-          <span className="pg-ui-xs" style={{ paddingLeft: 2 }}>
-            {contribution?.blurb ?? ""}
-          </span>
+          <>
+            {groupsEntered && (
+              <>
+                <ContextTrail />
+                <span style={sepStyle} aria-hidden />
+              </>
+            )}
+            {/* Editor ADR 1215 — Frame · Content · Edit for a selected
+                frame that has more than one level. */}
+            <FrameLevelControl />
+            {Left ? (
+              <Left paged={paged} />
+            ) : (
+              <span className="pg-ui-xs" style={{ paddingLeft: 2 }}>
+                {contribution?.blurb ?? ""}
+              </span>
+            )}
+          </>
         )}
       </div>
       <div style={rightStyle}>
@@ -138,7 +158,12 @@ export function contextSegmentModel(
     return t ? [{ id, title: t.title, icon: t.icon }] : [];
   });
   return {
-    label: titleCase(frame.label || frame.type),
+    // The module's own name (F-45); a label that is only the type reads
+    // as words.
+    label:
+      !frame.label || frame.label === frame.type
+        ? titleCase(frame.type)
+        : frame.label,
     tools,
     noTools: frame.toolIds !== null && tools.length === 0,
   };
@@ -181,12 +206,11 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
       }}
       data-context-segment
     >
-      <span
-        data-context-label
-        style={{ fontWeight: 600, whiteSpace: "nowrap" }}
-      >
-        {model.label}
-      </span>
+      {/* Where you are: the entered groups and contexts, by the names
+          their modules give them; the last one is this context's label
+          (`data-context-label`). Its Esc button leaves one level. */}
+      <ContextTrail />
+      <FrameLevelControl />
       {model.tools.length > 0 && <span style={sepStyle} aria-hidden />}
       {model.tools.map((t) => (
         <ViewPill
@@ -206,9 +230,6 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
       {/* Editor ADR 298 — the context's own control-bar groups (Word's
           Home group inside a Word document). */}
       <ContributedControlBarGroups editContext={frame.type} />
-      <span style={{ color: "var(--pg-muted-fg)", whiteSpace: "nowrap" }}>
-        {strings.t(CONTEXT_TOOLBAR.escToLeave)}
-      </span>
     </span>
   );
 }

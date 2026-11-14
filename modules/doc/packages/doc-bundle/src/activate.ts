@@ -644,6 +644,11 @@ function activateDoc(
     host.contribute.editContext({
       type: "wordDocument",
       entry: "doubleClick",
+      // Extensions ADR 1106 — the breadcrumb's name (F-45); every edit in
+      // a placed Word document is native text, a document edit the moment
+      // it lands, so leaving never has anything to ask about.
+      label: t(DOC.kindDocument),
+      exitPolicy: "commit-if-safe",
       // ADR 024 — and paged.doc is the case that proves the rule is
       // not "plugins get an empty rail".
       //

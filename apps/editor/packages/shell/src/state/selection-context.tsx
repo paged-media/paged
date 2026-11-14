@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 
 import type { ElementGeometryItem, ElementId } from "@paged-media/client";
@@ -130,8 +131,31 @@ interface SelectionContextValue {
    * handler — keeping it as a plain string sidesteps cross-package
    * ElementId imports for state-only consumers. */
   activeGroup: string | null;
-  setActiveGroup: (groupId: string | null) => void;
+  /** Enter `groupId` (null leaves every group). `chain` is the hit's
+   *  group chain, outermost first, when the caller has it: the entered
+   *  path is its prefix up to `groupId`. */
+  setActiveGroup: (groupId: string | null, chain?: readonly string[]) => void;
+  /** The entered groups, outermost first, ending at `activeGroup` (empty
+   *  when none is): the breadcrumb's group levels (editor ADR 1214). */
+  activeGroupPath: readonly string[];
 }
+
+/** The entered path after entering `groupId`: the prefix of `chain` (else
+ *  of the previous path) up to it, else the group alone. */
+export function groupPathFor(
+  groupId: string | null,
+  chain: readonly string[] | undefined,
+  previous: readonly string[],
+): readonly string[] {
+  if (groupId === null) return NO_GROUPS;
+  const inChain = chain ? chain.indexOf(groupId) : -1;
+  if (chain && inChain >= 0) return chain.slice(0, inChain + 1);
+  const inPrevious = previous.indexOf(groupId);
+  if (inPrevious >= 0) return previous.slice(0, inPrevious + 1);
+  return [groupId];
+}
+
+const NO_GROUPS: readonly string[] = [];
 
 const Context = createContext<SelectionContextValue | null>(null);
 
@@ -203,7 +227,17 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   );
   const [pathEditSession, setPathEditSession] =
     useState<PathEditSession | null>(null);
-  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [activeGroup, setActiveGroupState] = useState<string | null>(null);
+  const [activeGroupPath, setActiveGroupPath] =
+    useState<readonly string[]>(NO_GROUPS);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setActiveGroup = useCallback(
+    (groupId: string | null, chain?: readonly string[]) => {
+      setActiveGroupState(groupId);
+      setActiveGroupPath((prev) => groupPathFor(groupId, chain, prev));
+    },
+    [],
+  );
 
   // A selection belongs to its document. When another document replaces
   // it, the engine starts with nothing selected; the mirror must too, or
@@ -243,6 +277,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
       setPathEditSession,
       activeGroup,
       setActiveGroup,
+      activeGroupPath,
     }),
     [
       elementSelection,
@@ -258,6 +293,8 @@ export function SelectionProvider({ children }: PropsWithChildren) {
       setSelectedAnchorIndex,
       pathEditSession,
       activeGroup,
+      setActiveGroup,
+      activeGroupPath,
     ],
   );
 
@@ -322,6 +359,31 @@ function usePlacedGeometry(
     };
     return placeOnPages(geometry, known, sizeOf);
   }, [geometry, known, handle]);
+}
+
+const sameElement = (a: ElementId, b: ElementId) =>
+  a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id);
+
+/**
+ * The element selection the components below see, narrowed to `ids` (the
+ * interaction spec's D-16: a property that applies to part of a selection
+ * edits the stated subset, "Applies to 2 of 3"). The bindings below read
+ * and write those objects only; the setters stay the editor's own, so a
+ * click there still selects in the editor.
+ */
+export function SelectionSubset(props: {
+  ids: readonly ElementId[];
+  children: ReactNode;
+}) {
+  const ctx = useSelection();
+  const keep = (id: ElementId) => props.ids.some((k) => sameElement(k, id));
+  const value: SelectionContextValue = {
+    ...ctx,
+    elementSelection: ctx.elementSelection.filter(keep),
+    elementGeometry: ctx.elementGeometry.filter((g) => keep(g.id)),
+    placedGeometry: ctx.placedGeometry.filter((g) => keep(g.id)),
+  };
+  return <Context.Provider value={value}>{props.children}</Context.Provider>;
 }
 
 export function useSelection(): SelectionContextValue {

@@ -44,7 +44,12 @@ import { useOptionalPaged } from "../state/paged-editor";
 import { useOptionalEditContextStack } from "../state/edit-context-stack";
 import { useSelectionEditContext } from "../state/use-selection-object-type";
 import { useWorkflowMode } from "../state/workflow-mode-context";
-import { entryApplies, type VisibilityPredicate } from "../registries/types";
+import {
+  entryApplicability,
+  entryApplies,
+  type VisibilityPredicate,
+} from "../registries/types";
+import type { CommandApplicability } from "./applicability";
 import { Icon, hasIcon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 import { useFocusReturn } from "../focus/focus-return";
@@ -252,6 +257,8 @@ export function MenuBar() {
     invoke: (id) => void commands.invoke(id),
     applies: (item) =>
       entryApplies(item.when, item.command, commands, () => paged),
+    applicability: (item) =>
+      entryApplicability(item.when, item.command, commands, () => paged),
     state: paged,
     keyFor,
     iconFor,
@@ -745,6 +752,8 @@ interface RenderCtx {
   /** The entry's own `when`, its command registered, and the command's
    *  `when` (ADR 249). */
   applies: (item: MenuLeaf) => boolean;
+  /** ADR 1218 — the entry's state and, when not `here`, why. */
+  applicability: (item: MenuLeaf) => CommandApplicability;
   state: unknown;
   keyFor: (commandId: string) => string | null;
   iconFor: (leaf: MenuLeaf) => string | null;
@@ -856,17 +865,41 @@ function renderLeaf(
   }
   // TWO REASONS TO GREY, which the user needs told apart: `disabled` is
   // a seam (the feature does not exist yet — "soon"); a false `when` is
-  // "does not apply where you are standing", which promises nothing.
-  const inapplicable = !ctx.applies(item);
+  // "does not apply where you are standing". ADR 1218: the second says
+  // why. Such an item stays focusable and hoverable (`aria-disabled`, not
+  // the menu's `disabled`), so its reason can be read with the keyboard
+  // or the pointer (UXI-PNL-004); choosing it runs nothing and keeps the
+  // menu open.
+  const verdict = item.disabled
+    ? ({ state: "absent" } as CommandApplicability)
+    : ctx.applicability(item);
+  const inapplicable = verdict.state !== "here";
   const greyed = Boolean(item.disabled) || inapplicable;
+  const why =
+    inapplicable && !item.disabled && verdict.reason
+      ? {
+          title: verdict.reason,
+          "aria-disabled": true as const,
+          // Greyed like a disabled item (specs and the menu's style read
+          // `data-disabled`), yet still under the pointer for its tooltip.
+          "data-disabled": "",
+          "data-applies": verdict.state,
+          "data-why": verdict.reason,
+          className: "data-[disabled]:pointer-events-auto",
+        }
+      : {};
   const accel =
     ctx.keyFor(item.command) ??
     (item.accelerator ? prettyKey(item.accelerator) : null);
   // Re-checked at invoke: a menu can stay open across a context change,
   // and the click must not run against the old surface.
-  const onSelect = () => {
+  const onSelect = (e: Event) => {
     if (!greyed) ctx.invoke(item.command);
+    else e.preventDefault();
   };
+  // A seam is the menu's `disabled`; an entry that does not apply here
+  // is not, so it keeps its tooltip and its focus.
+  const radixDisabled = Boolean(item.disabled) || (inapplicable && !why.title);
   const trailing = item.disabled ? (
     <span
       className="pg-mono-meta"
@@ -900,9 +933,10 @@ function renderLeaf(
     return (
       <DropdownMenuCheckboxItem
         key={item.command}
-        disabled={greyed}
+        disabled={radixDisabled}
         checked={on}
         onSelect={onSelect}
+        {...why}
       >
         {displayLabel(item, ctx)}
         {trailing}
@@ -910,7 +944,12 @@ function renderLeaf(
     );
   }
   return (
-    <DropdownMenuItem key={item.command} disabled={greyed} onSelect={onSelect}>
+    <DropdownMenuItem
+      key={item.command}
+      disabled={radixDisabled}
+      onSelect={onSelect}
+      {...why}
+    >
       {iconSlot}
       {displayLabel(item, ctx)}
       {/* E2 — the accelerator column; a seam shows `soon` instead, since

@@ -83,6 +83,7 @@ import type {
   MenuItemContribution,
   PagedEditor,
 } from "@paged-media/shell";
+import { commandNeeds } from "@paged-media/shell";
 import {
   awaitPlacementPoint,
   currentPageIndex,
@@ -1131,6 +1132,7 @@ export function buildInsertCommands(
     title,
     category: "Insert",
     when: insertApplies,
+    applicability: commandNeeds("document", "outsideContext"),
     handler: (paged) => run(paged as PagedEditor),
   });
   return [

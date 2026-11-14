@@ -474,6 +474,7 @@
   "image.command.contentAwareFill": "Inhaltsbasierte Füllung",
   "image.command.contentAwareFillWorkspace": "Inhaltsbasierte Füllung … (Arbeitsbereich)",
   "image.command.contentAwareScale": "Inhaltsbasiert skalieren …",
+  "image.command.contextLabel": "Bild",
   "image.command.convertActiveLayerToSmartObject": "Aktive Ebene in Smartobjekt konvertieren",
   "image.command.convertForSmartFilters": "Für Smartfilter konvertieren",
   "image.command.copyLayerStyle": "Ebenenstil kopieren",

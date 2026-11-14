@@ -62,6 +62,7 @@ import {
 import { useReportBindingSurface } from "./panel-binding-surface";
 import type {
   ShellObjectModelHost,
+  ShellObjectOp,
   ShellObjectWriteResult,
   ShellPropertySchema,
   ShellValueEdit,
@@ -123,13 +124,30 @@ export interface ObjectProperty {
   addresses: readonly string[];
   /** Address → the selection element it came from (for label reads). */
   elementOf(address: string): ElementId | null;
-  /** `null` = nothing to write to (no target, read-only, refused). */
-  commit: ((value: unknown) => Promise<ShellObjectWriteResult>) | null;
+  /** `null` = nothing to write to (no target, read-only, refused).
+   *  `options.coalesce` joins the write to the run of that key: a scrub's
+   *  previews and release are one undo step (engine ADR 1304). */
+  commit:
+    | ((
+        value: unknown,
+        options?: { coalesce?: string },
+      ) => Promise<ShellObjectWriteResult>)
+    | null;
   /** §12.8 — one list / struct edit (add, remove, move, item / field set)
    *  over every target as ONE batch = one undo step: through the host's
    *  `editValue` (plugin-sdk) when it has one, else applied here to the
    *  shown value and written whole. `null` exactly when `commit` is. */
   edit: ((e: ShellValueEdit) => Promise<ShellObjectWriteResult>) | null;
+  /** UXI-PNL-010 (editor ADR 1216) — a write that differs per target
+   *  ("each width +5 mm"): `next` gets each target's own value and answers
+   *  its new one (`undefined` leaves that target alone); all go as ONE
+   *  batch, one undo step. `null` exactly when `commit` is, and for a path
+   *  an edit context answers. */
+  commitEach:
+    | ((
+        next: (current: unknown) => unknown | undefined,
+      ) => Promise<ShellObjectWriteResult>)
+    | null;
   /** The last refused commit, cleared by the next successful one. */
   error: string | null;
   /** A paged.data binding targets this path on (one of) the targets —
@@ -341,14 +359,21 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     }
     if (!model || addresses.length === 0 || readOnly || notApplicable)
       return null;
-    return async (value: unknown): Promise<ShellObjectWriteResult> => {
+    return async (
+      value: unknown,
+      options?: { coalesce?: string },
+    ): Promise<ShellObjectWriteResult> => {
       const ops = setOps(addresses, req.path, value);
+      const write = {
+        label: req.path,
+        ...(options?.coalesce !== undefined
+          ? { coalesce: options.coalesce }
+          : {}),
+      };
       const r =
         ops.length === 1
-          ? await model.objects.set(addresses[0], req.path, value, {
-              label: req.path,
-            })
-          : await model.objects.batch(ops, { label: req.path });
+          ? await model.objects.set(addresses[0], req.path, value, write)
+          : await model.objects.batch(ops, write);
       setError(
         r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
       );
@@ -365,6 +390,32 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     req.path,
     scope,
   ]);
+
+  const commitEach =
+    commit && !claimed && model
+      ? async (
+          next: (current: unknown) => unknown | undefined,
+        ): Promise<ShellObjectWriteResult> => {
+          const values = await Promise.all(
+            addresses.map((a) => model.objects.get(a, req.path)),
+          );
+          const ops: ShellObjectOp[] = [];
+          addresses.forEach((address, i) => {
+            const v = values[i];
+            const out = next(v?.kind === "value" ? v.value : null);
+            if (out !== undefined)
+              ops.push(...setOps([address], req.path, out));
+          });
+          if (ops.length === 0) return { applied: true, undoSteps: 0 };
+          const r = await model.objects.batch(ops, { label: req.path });
+          setError(
+            r.applied
+              ? null
+              : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
+          );
+          return r;
+        }
+      : null;
 
   // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const edit = useMemo(() => {
@@ -430,6 +481,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     addresses,
     elementOf,
     commit,
+    commitEach,
     edit,
     error,
     bound,

@@ -559,7 +559,9 @@ export function CanvasPanel(_props: PanelProps) {
       // Subsequent single-clicks stay scoped to that group's
       // members via `onHit`'s activeGroup branch; Escape (and
       // empty-pasteboard clicks) exit.
-      setActiveGroup(groupId);
+      // The chain names the entered path, so the breadcrumb shows each
+      // group level (editor ADR 1214).
+      setActiveGroup(groupId, chain);
       groupChainRef.current = chain;
       const target = hitElement;
       if (!target) return;

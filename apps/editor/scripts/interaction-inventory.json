@@ -2936,12 +2936,19 @@
       "site": "apps/editor/packages/shell/src/state/use-edit-context-entry.tsx",
       "listener": "element",
       "states": ["idle", "pressed", "pending-hit", "settled"],
-      "permission": "Entering a context changes no document state; the context's scope is root equality only (UXI-CTX-011).",
+      "permission": "Entering a context changes no document state; the context's write scope is its root plus the engine's edit scope of it (client.editScope, EN5, engine ADR 1301; editor ADR 1214)",
       "cancel": "Nothing to cancel on entry; the hit test that picks the target carries no epoch (IC3).",
       "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
-      "uxi": ["UXI-CTX-002", "UXI-CTX-013", "UXI-SEL-012", "UXI-TXT-002"],
+      "uxi": [
+        "UXI-CTX-002",
+        "UXI-CTX-005",
+        "UXI-CTX-008",
+        "UXI-CTX-013",
+        "UXI-SEL-012",
+        "UXI-TXT-002"
+      ],
       "status": "legacy",
-      "notes": "An image enters its edit context today; ADR 1201 makes it content position first (D-05)."
+      "notes": "A picture frame enters its content level first and Edit image on a second double-click, Enter or the level control (D-05, editor ADR 1215); tryEnterEditContext decides every double-click, picture frames included. Stays legacy until track IC's ContentContextAdapter routes the canvas's double-click through it."
     },
     {
       "id": "edit-context.content-pointer",
@@ -2968,7 +2975,7 @@
     },
     {
       "id": "edit-context.click-out",
-      "title": "A press outside an edit context's frame commits the context and then selects",
+      "title": "A press outside an edit context's frame leaves the context through the exit resolver, then selects",
       "owner": "frame-content",
       "eventClass": "pointer:primary-click",
       "scope": "canvas/edit-context/outside",
@@ -2976,11 +2983,12 @@
       "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
       "listener": "element",
       "states": ["idle", "pressed", "settled"],
-      "permission": "Commits the context's pending edit whether clean or dirty.",
-      "cancel": "None: the press commits, then falls through to select what is under it (D-04 makes a clean context exit and a dirty one follow its exitPolicy).",
+      "permission": "Leaves through resolveContextExit (editor ADR 1214): a clean context commits at once; a dirty one commits when its module declares commit-if-safe, asks (Keep / Discard / Cancel) when it declares ask.",
+      "cancel": "An open resolve prompt holds the press (Cancel keeps the context); otherwise the press falls through to select what is under it (D-04).",
       "surfaceIds": [],
       "uxi": ["UXI-HIT-005", "UXI-CTX-006", "UXI-CTX-007"],
-      "status": "legacy"
+      "status": "legacy",
+      "notes": "The resolver and useContextExit are in the shell; the canvas switches its commit() to leave(\"click-outside\") with track IC (ViewportCanvas.tsx is IC's)."
     },
     {
       "id": "hand.pan",
@@ -3892,7 +3900,7 @@
     },
     {
       "id": "escape.edit-context",
-      "title": "Escape cancels the active edit context",
+      "title": "Escape leaves the active edit context through the exit resolver",
       "owner": "frame-content",
       "eventClass": "key:Escape",
       "scope": "editor/edit-context",
@@ -3901,9 +3909,9 @@
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "The context tiers of the Escape arbiter (editor ADR 1207): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand), a clean context pops one level; a header edited in place leaves its Escape to the text.",
+      "cancel": "The context tiers of the Escape arbiter (editor ADR 1207): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand); a clean context leaves one level through resolveContextExit (editor ADR 1214: cancel, or commit for a commit-if-safe module); a header edited in place leaves its Escape to the text.",
       "surfaceIds": [],
-      "uxi": ["UXI-ESC-001", "UXI-CTX-003", "UXI-CTX-007"],
+      "uxi": ["UXI-CTX-003", "UXI-CTX-006", "UXI-CTX-007", "UXI-ESC-001"],
       "status": "migrated"
     },
     {
@@ -4001,6 +4009,61 @@
       "surfaceIds": ["panel:paged.tree"],
       "uxi": ["UXI-ESC-001", "UXI-A11Y-002", "UXI-KEY-009"],
       "status": "migrated"
+    },
+    {
+      "id": "field.scrub",
+      "title": "A numeric field's label scrubs its value (Shift fine, Alt coarse)",
+      "owner": "panel",
+      "eventClass": "pointer:primary-drag",
+      "scope": "panel/numeric-field",
+      "adapter": "none",
+      "site": "apps/editor/packages/ui/src/inputs/NumericField.tsx",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One undo step per scrub (editor ADR 1216): every preview and the release carry one coalesce key to the engine (engine ADR 1304), which keeps them one step; a write from an edit context commits on release only.",
+      "cancel": "Escape (the gesture tier of the Escape arbiter, ADR 1207) and pointercancel revert the scrub and undo its step; a release where it began commits nothing.",
+      "surfaceIds": ["panel:paged.stroke", "panel:paged.properties"],
+      "uxi": ["UXI-PNL-002", "UXI-PNL-005"],
+      "status": "migrated"
+    },
+    {
+      "id": "field.type",
+      "title": "A numeric field takes an expression: Enter or blur commits, Escape restores",
+      "owner": "panel",
+      "eventClass": "key:Enter",
+      "scope": "panel/numeric-field",
+      "adapter": "none",
+      "site": "apps/editor/packages/ui/src/inputs/NumericField.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "A typed value is one commit (one undo step); a refused value (syntax, range, unit) is said in words and writes nothing (editor ADR 1216).",
+      "cancel": "Escape in the focused field restores what was there and commits nothing; the field owns the key while it has focus (ADR 234).",
+      "surfaceIds": ["panel:paged.properties"],
+      "uxi": ["UXI-PNL-002", "UXI-PNL-005", "UXI-PNL-009"],
+      "status": "migrated"
+    },
+    {
+      "id": "inspector.search",
+      "title": "Properties' search finds a property; Enter goes to its field, Escape clears",
+      "owner": "panel",
+      "eventClass": "key:Enter",
+      "scope": "panel/inspector-search",
+      "adapter": "none",
+      "site": "apps/editor/apps/canvas/src/panels/properties-panel.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "No document change: search opens and marks sections for as long as the query lasts (editor ADR 1217).",
+      "cancel": "Escape in the search field clears the query and restores the sections as the user left them.",
+      "surfaceIds": ["panel:paged.properties"],
+      "uxi": ["UXI-PNL-001"],
+      "status": "migrated"
     }
   ],
   "exceptions": [
@@ -4022,5 +4085,5 @@
       "repro": "Begin a move with a drawing tool's handler in hand inside an entered group and press Escape: the handler and the viewport both see the key (the arbiter defers to the pointer held on the canvas)."
     }
   ],
-  "enforcedGates": []
+  "enforcedGates": ["G2"]
 }

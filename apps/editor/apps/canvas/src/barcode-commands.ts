@@ -40,6 +40,7 @@
 //     carries under its bars is not drawn.
 
 import {
+  commandNeeds,
   scopeOf,
   type CommandContribution,
   type MenuItemContribution,
@@ -307,6 +308,7 @@ export function buildBarcodeCommands(
       },
       category: "Insert",
       when: insertApplies,
+      applicability: commandNeeds("document", "outsideContext"),
       handler: (paged, payload) => {
         if (!hasBarcodeParams(payload)) {
           openBarcodeDialog(scopeOf(paged));

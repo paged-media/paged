@@ -91,6 +91,9 @@ interface GuardState {
    *  journal keeps a checkpoint (editor ADR 1204), since a load can fail
    *  or take the tab down. */
   beforeReplace: (() => Promise<unknown>) | null;
+  /** Resolves the open edit contexts before the question (editor ADR
+   *  1214, D-04): false keeps the document and the contexts. */
+  contexts: (() => Promise<boolean>) | null;
   readonly queue: PendingReplace[];
   readonly listeners: Set<() => void>;
   readonly prompts: ReplacePrompts;
@@ -110,6 +113,7 @@ const GUARD = scoped("replaceGuard", (): GuardState => {
     surfaces: 0,
     saver: null,
     beforeReplace: null,
+    contexts: null,
     queue,
     listeners,
     prompts: {
@@ -177,6 +181,22 @@ export function setBeforeReplace(
   g.beforeReplace = run;
   return () => {
     if (g.beforeReplace === run) g.beforeReplace = null;
+  };
+}
+
+/** Register how `scope`'s open edit contexts are resolved before a
+ *  document replaces this one (the edit-context stack does): a dirty
+ *  context is committed, discarded or kept as its module's `exitPolicy`
+ *  and the user say (editor ADR 1214). `false` keeps the document.
+ *  Returns the unregister. */
+export function setContextResolver(
+  scope: EditorScope,
+  run: () => Promise<boolean>,
+): () => void {
+  const g = scope.get(GUARD);
+  g.contexts = run;
+  return () => {
+    if (g.contexts === run) g.contexts = null;
   };
 }
 
@@ -260,6 +280,11 @@ export async function confirmReplace(
   // still armed, and the next canvas click would drop that image into a
   // document the user never chose it for.
   cancelPendingPlacement(scope);
+  // An edit context holding unfinished work is resolved first, whether or
+  // not the document itself is dirty: typed source not yet committed is
+  // no document edit, and would be lost with the document (UXI-T43).
+  // Cancel there keeps the document and the context as they were.
+  if (g.contexts && !(await g.contexts().catch(() => false))) return false;
   let dirty = false;
   try {
     dirty = (await client.documentMeta()).dirty;

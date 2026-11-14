@@ -1774,6 +1774,11 @@ export interface CreateBundleHostOptions {
    *  `supports("editContext.historySteps@1")` true; the SDK passes the
    *  contribution through either way. */
   editContextHistorySteps?: boolean;
+  /** Extensions ADR 1106 — the host resolves every way out of an edit
+   *  context by its `exitPolicy` (and shows its `label`). Only makes
+   *  `supports("editContext.exitPolicy@1")` true; the SDK passes the
+   *  contribution through either way. */
+  editContextExitPolicy?: boolean;
   /** The host's tool-options store. When absent, `host.tools.settings`
    *  answers `{}` and `supports("tools.settings@1")` is false. */
   toolSettings?: ToolSettingsBackend;
@@ -6505,6 +6510,11 @@ export function createBundleHost(
     // `historySteps` (see the option).
     featureSet.add("editContext.historySteps@1");
   }
+  if (options?.editContextExitPolicy === true) {
+    // Extensions ADR 1106 — the host's one exit resolver reads a context's
+    // `exitPolicy` (see the option).
+    featureSet.add("editContext.exitPolicy@1");
+  }
   if (hostDrawsHandles(getEditor())) {
     // ADR 339 — the host draws the handle primitive on the same layer
     // sink, so handle sets and transform boxes are visible. Without it
@@ -6550,6 +6560,12 @@ export function createBundleHost(
     // The host's own mixer is wired; without it the bundle gets the
     // native `<input type="color">`.
     featureSet.add("widgets.colorPicker@1");
+  }
+  if (options?.widgets?.NumericField) {
+    // The host's one numeric field is wired (units, expressions, Mixed,
+    // one undo step per scrub); without it the bundle gets a plain
+    // decimal text field.
+    featureSet.add("widgets.numericField@1");
   }
   // ADR 323 — the host's schema-driven property field (and its frame)
   // for React panels; optional members, so the probe is their presence.

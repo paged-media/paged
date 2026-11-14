@@ -328,6 +328,14 @@
   }
 }
 
+/* Inspector search (editor ADR 1217): the labels a query matched are
+   marked while it lasts. */
+[data-search-hit] {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--pg-primary) 22%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pg-primary) 22%, transparent);
+}
+
 /* Progressive loading on the canvas (cockpit/canvas-frame/LoadingStatus.tsx,
    UXI-PRF-003): the stage pill and the pages' outlines. They come in after
    a short delay, so a document that opens at once shows nothing; the dot

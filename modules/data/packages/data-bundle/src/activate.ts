@@ -31,7 +31,7 @@
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
 import { contributeMenu } from "./menu";
-import { COMMANDS as M } from "./messages";
+import { BINDINGS, COMMANDS as M } from "./messages";
 import {
   contributePanel,
   contributeSchemaPanel,
@@ -314,6 +314,11 @@ export function activate(host: BundleHost): BundleHandle {
   host.contribute.editContext({
     type: "dataBinding",
     entry: "doubleClick",
+    // Extensions ADR 1106 — the breadcrumb's name (F-45). A binding is
+    // edited through its panel, each change a document edit: leaving has
+    // nothing in flight to ask about.
+    label: t(BINDINGS.contextLabel),
+    exitPolicy: "commit-if-safe",
     // Claimed by OUR OWN metadata envelope — the host pre-resolves
     // this plugin's namespace and never a foreign one, so this cannot
     // claim another plugin's frame. Matching by KIND would claim every

@@ -17,7 +17,15 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { getViewToggle, scopeOf, toggleViewToggle } from "@paged-media/shell";
+import {
+  commandNeeds,
+  getViewToggle,
+  GO_TO_PAGE_COMMAND,
+  pageNamed,
+  scopeOf,
+  toggleViewToggle,
+  whenNeeds,
+} from "@paged-media/shell";
 
 // SDK Phase 4 — canvas-app-specific commands.
 //
@@ -73,6 +81,19 @@ const M = defineMessages("app.appCommands", {
   docs: "Documentation",
   idmlReference: "IDML format reference",
   reportIssue: "Report an issue…",
+  goToPage: "Go to page…",
+  noPage: "There is no page {page} in this document.",
+  helpScripting: "Help: Scripting the editor",
+  helpScriptingWords:
+    "script, scripting, automate, automation, paged.set, javascript, macro",
+  helpTemplates: "Help: Templates and fields",
+  helpTemplatesWords:
+    "template, fields, fill, form, data merge, variable data, roles",
+  helpPlugins: "Help: Built-in modules",
+  helpPluginsWords:
+    "plugin, module, draw, image, sheet, spreadsheet, slide, word, data, web, pdf",
+  helpShortcuts: "Help: Keyboard shortcuts",
+  helpShortcutsWords: "keyboard, shortcut, keys, hotkey, chord, accelerator",
   undoNamed: "Undo {name}",
   redoNamed: "Redo {name}",
   about: "paged editor · engine {version}",
@@ -147,6 +168,9 @@ export const PAGED_VIEW_FIRST_PAGE = "paged.view.firstPage";
 export const PAGED_VIEW_PREVIOUS_PAGE = "paged.view.previousPage";
 export const PAGED_VIEW_NEXT_PAGE = "paged.view.nextPage";
 export const PAGED_VIEW_LAST_PAGE = "paged.view.lastPage";
+/** ADR 1218 — "Go to page 14" / "Go to page B-3": the palette's page
+ *  navigation, `{ page }` a page's id, its name (folio) or its position. */
+export const PAGED_VIEW_GO_TO_PAGE = GO_TO_PAGE_COMMAND;
 /** B4 — View ▸ Show text threads. Flips a module-scope view toggle the
  *  thread-line overlay subscribes to. The menu item carries a tick while
  *  it is on (`checked`, SH-4), as InDesign's View ▸ Extras items do. */
@@ -185,6 +209,30 @@ const HELP_LINKS = [
     url: "https://github.com/paged-media/paged/issues/new",
     icon: "ui-warn",
     order: 30,
+  },
+] as const;
+
+/** ADR 1218 — "Help: …" entries the palette finds by their words (the
+ *  strategy's §5.7: "How do I …" → the relevant help). Each opens its
+ *  page of the documentation, or a panel of the editor's own. */
+const HELP_TOPICS = [
+  {
+    id: "paged.help.topic.scripting",
+    label: M.helpScripting,
+    words: M.helpScriptingWords,
+    url: "https://docs.paged.media/scripting/",
+  },
+  {
+    id: "paged.help.topic.templates",
+    label: M.helpTemplates,
+    words: M.helpTemplatesWords,
+    url: "https://docs.paged.media/templates/",
+  },
+  {
+    id: "paged.help.topic.plugins",
+    label: M.helpPlugins,
+    words: M.helpPluginsWords,
+    url: "https://docs.paged.media/plugins/",
   },
 ] as const;
 
@@ -228,6 +276,10 @@ export interface AppCommandHandlers {
   fitSpread: () => void | Promise<void>;
   fitSelection: () => void | Promise<void>;
   goToPage: (which: "first" | "previous" | "next" | "last") => void;
+  /** Fit the page with this id in the window (ADR 1218's "Go to page"). */
+  goToPageId?: (pageId: string) => void;
+  /** Show a registered panel (Help: Keyboard shortcuts). */
+  showPanel?: (panelId: string) => void;
 }
 
 /** How many places Back (or Forward) holds in the editor `state` is, 0
@@ -395,6 +447,40 @@ export function buildAppCommands(
       handler: () => handlers.fitSelection(),
     },
     {
+      id: PAGED_VIEW_GO_TO_PAGE,
+      title: t(M.goToPage),
+      category: "Layout",
+      args: {
+        kind: "struct",
+        fields: { page: { kind: "text" } },
+      },
+      when: whenNeeds("document"),
+      applicability: commandNeeds("document"),
+      handler: async (paged, payload) => {
+        const page = String(
+          (payload as { page?: unknown } | undefined)?.page ?? "",
+        );
+        const client = (
+          paged as {
+            client?: {
+              collection<T>(name: "pages"): Promise<readonly T[]>;
+            };
+          } | null
+        )?.client;
+        const rows = client
+          ? await client.collection<{
+              selfId: string;
+              index: number;
+              name: string;
+            }>("pages")
+          : [];
+        const row =
+          rows.find((r) => r.selfId === page) ?? pageNamed(rows, page);
+        if (!row) throw new Error(`notFound: ${t(M.noPage, { page })}`);
+        handlers.goToPageId?.(row.selfId);
+      },
+    },
+    {
       id: PAGED_VIEW_FIRST_PAGE,
       title: t(M.firstPage),
       category: "Layout",
@@ -456,6 +542,20 @@ export function buildAppCommands(
       category: "Help",
       handler: () => openExternal(l.url),
     })),
+    ...HELP_TOPICS.map((h) => ({
+      id: h.id,
+      title: t(h.label),
+      category: "Help",
+      keywords: t(h.words),
+      handler: () => openExternal(h.url),
+    })),
+    {
+      id: "paged.help.topic.shortcuts",
+      title: t(M.helpShortcuts),
+      category: "Help",
+      keywords: t(M.helpShortcutsWords),
+      handler: () => handlers.showPanel?.("paged.keyboard-shortcuts"),
+    },
   ];
 }
 

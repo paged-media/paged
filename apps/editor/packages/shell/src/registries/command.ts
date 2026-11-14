@@ -20,6 +20,10 @@
 import type { FeatureStore } from "../state/features";
 import type * as Api from "@paged-media/plugin-api";
 
+import { t } from "@paged-media/strings";
+
+import type { CommandApplicability } from "../chrome/applicability";
+import { APPLICABILITY } from "../chrome/messages";
 import { isEnabled } from "./types";
 import type { Disposable, Registrable } from "./types";
 import type { ShellValueType } from "../catalog/object-model-types";
@@ -43,6 +47,16 @@ export interface CommandContribution extends Api.CommandContribution {
    *  registry's declared table), `invoke` checks the payload against it
    *  and throws `invalidValue: …` instead of running the handler. */
   args?: ShellValueType;
+  /** ADR 1218 — whether the command applies to `state` (the editor
+   *  handle, as `when` gets it) and, when not, why, in words: a state of
+   *  the shared vocabulary (`here`, `elsewhere`, `absent`, `disabled`) and
+   *  a reason. `commandNeeds(...)` builds the common ones. `when` stays as
+   *  the yes/no adapter: a false `when` without an applicability reads
+   *  `disabled`, "Does not apply here". */
+  applicability?: (state: unknown) => CommandApplicability;
+  /** Words the palette also finds it by (synonyms, a help topic's
+   *  terms), comma-separated, in the editor's language. */
+  keywords?: string;
 }
 
 /** A contract-authored command registers here unchanged. */
@@ -98,6 +112,12 @@ export interface CommandRegistry extends Api.CommandRegistry {
    *  (docs/composable-editor.md §6). A command it does not offer is
    *  refused by `invoke` like one whose `when` is false. */
   offered?(id: string): boolean;
+  /** ADR 1218 — whether `id` applies now and, when not, why: unknown and
+   *  not offered read `absent`; then the command's `applicability`; then
+   *  its `when` (false: `disabled`, "Does not apply here"). `invoke` runs
+   *  only what reads `here`; menus grey the rest with the reason, the
+   *  palette lists them with it. */
+  applicability?(id: string): CommandApplicability;
   /** The editor a command invoked NOW would run against: the live one,
    *  not a value captured at some earlier render. A flow that changes the
    *  document and then goes on (File ▸ Open of a picture with nothing
@@ -127,6 +147,29 @@ export function createCommandRegistry(
   features?.onChange(() => changed());
   const offered = (id: string) => features?.allows("command", id) ?? true;
   let nextSeq = 1;
+
+  // ADR 1218 — one answer to "does it apply, and if not, why", for invoke,
+  // the menus and the palette alike.
+  const applicabilityOf = (
+    cmd: CommandContribution | undefined,
+  ): CommandApplicability => {
+    if (!cmd)
+      return { state: "absent", reason: t(APPLICABILITY.unknownCommand) };
+    if (!offered(cmd.id))
+      return { state: "absent", reason: t(APPLICABILITY.notOffered) };
+    if (cmd.applicability) {
+      let verdict: CommandApplicability;
+      try {
+        verdict = cmd.applicability(getEditor());
+      } catch {
+        verdict = { state: "disabled", reason: t(APPLICABILITY.notHere) };
+      }
+      if (verdict.state !== "here") return verdict;
+    }
+    if (!isEnabled(cmd.when, getEditor))
+      return { state: "disabled", reason: t(APPLICABILITY.notHere) };
+    return { state: "here" };
+  };
 
   const emit = (event: CommandInvocationEvent) => {
     for (const observer of observers) {
@@ -159,6 +202,9 @@ export function createCommandRegistry(
       if (byId.delete(id)) changed();
     },
     offered,
+    applicability(id) {
+      return applicabilityOf(byId.get(id));
+    },
     async invoke(id, payload) {
       const cmd = byId.get(id);
       if (!cmd) {
@@ -181,7 +227,7 @@ export function createCommandRegistry(
       // an ordinary answer to an ordinary question; throwing would turn
       // every stale menu click into an error dialog. Observers still see
       // nothing, because nothing ran.
-      if (!isEnabled(cmd.when, getEditor) || !offered(id)) return undefined;
+      if (applicabilityOf(cmd).state !== "here") return undefined;
       // ADR 323 — a typed command refuses a payload that does not conform,
       // before anything runs (and before any observer records it).
       const args = cmd.args;

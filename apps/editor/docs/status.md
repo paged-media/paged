@@ -211,9 +211,39 @@ a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a doubl
 context menu's hit test that answers after a newer press, document or context is dropped
 (`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
 
+Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
+[ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit
+context — Escape, the breadcrumb, another tool, another selection, a document switch — goes
+through one exit resolver that weighs the reason, whether the context holds unfinished work and
+the module's declared `exitPolicy`; a dirty context whose module asks puts up a small Keep /
+Discard / Cancel question, and a document switch asks it before the replace question
+(`UXI-T40` to `UXI-T44`). The stack runs each context hook once, after it changed; the breadcrumb
+shows entered groups and lives in the context toolbar's fixed bar, so entering a context moves
+nothing (F-48); contexts and module-owned frames are named as their modules name them (F-45). A
+double-click on a picture frame positions the picture inside it first; Edit image (the level
+control, Enter, or a second double-click) enters paged.image (D-05). A conformance suite holds
+every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, `UXI-T51`), and
+gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
+resolver there.
+
+Track FI (fields, the inspector, commands) has landed. The one numeric
+field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
+the control bar and (as `host.widgets.NumericField`) the plugins' panels reads units,
+expressions and mixed units ("10 mm + 2 pt"), relative changes ("+=5 mm", "*110%") and the
+locale's decimal comma; a refused value says why; a mixed selection reads "Mixed", and a
+relative change applies to each object in one undo step; a scrub previews live and is one undo
+step. Properties has a search over labels, synonyms and plugin rows, sections grouped Frame /
+Content / Text that open as the user left them per kind, and a multi-selection scope ("Applies
+to 2 of 3" edits that part), and the control bar's "More…" opens it at the matching field
+([ADR 1217](adr/1217-inspector-search-and-disclosure.md)). A command that does not apply says why:
+greyed in the menus with its reason, listed with it in the palette, which also goes to a page
+("go to page 14") and offers "Help: …" ([ADR 1218](adr/1218-commands-say-why-they-do-not-apply.md));
+every align route honours the key object, and an align control's hover shows its reference
+(D-07).
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
-the marquee takes what it intersects, and a double-click on an image frame enters paged.image.
+and the marquee takes what it intersects.
 Wave 0's interaction inventory
 (`scripts/interaction-inventory.json`, with the one exception ledger), the coverage report for
 the `UXI-T` tests and the test harness are being built.

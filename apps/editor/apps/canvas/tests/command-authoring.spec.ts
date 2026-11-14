@@ -629,20 +629,25 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("when-gate: with NO document the verbs hide from the palette and invoke refuses @feat:editor-shell.command-authoring @level:edge", async ({
+  test("when-gate: with NO document the palette says why the verbs do not apply, and invoke refuses @feat:editor-shell.command-authoring @level:edge", async ({
     page,
   }) => {
     await openCanvas(page);
 
-    // Palette: HIDDEN, not greyed (a dead hit is a wrong answer to a
-    // search).
+    // Palette (editor ADR 1218): listed, greyed, with the reason — not a
+    // runnable row and not hidden behind "No results".
     await invoke(page, "paged.palette.toggle");
     const input = page.getByPlaceholder("Ask or search anything…");
     await expect(input).toBeVisible();
     await input.fill("Insert text frame");
-    await expect(
-      page.getByRole("option", { name: /Insert text frame/ }),
-    ).toHaveCount(0);
+    const row = page.locator(
+      '[data-palette-unavailable="paged.insert.textFrame"]',
+    );
+    await expect(row).toBeVisible();
+    await expect(row).toHaveAttribute("aria-disabled", "true");
+    await expect(row.locator("[data-palette-why]")).toHaveText(
+      "Open a document first.",
+    );
     await page.keyboard.press("Escape");
 
     // Invoke: a clean refusal — resolves undefined, the handler never
@@ -651,7 +656,7 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     expect(result).toBeUndefined();
   });
 
-  test("when-gate: inside an edit context the verbs hide and invoke refuses @feat:editor-shell.command-authoring @level:edge", async ({
+  test("when-gate: inside an edit context the verbs say why and invoke refuses @feat:editor-shell.command-authoring @level:edge", async ({
     page,
   }) => {
     await openCanvas(page);
@@ -746,14 +751,20 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     expect(result).toBeUndefined();
     expect(await sceneNodeCount(page)).toBe(before);
 
-    // Palette: hidden while the context is active.
+    // Palette: not runnable while the context is active, and it says why
+    // (editor ADR 1218: the verb applies elsewhere — leave the context).
     await invoke(page, "paged.palette.toggle");
     const input = page.getByPlaceholder("Ask or search anything…");
     await expect(input).toBeVisible();
     await input.fill("Insert rectangle");
     await expect(
-      page.getByRole("option", { name: /Insert rectangle/ }),
+      page.locator('[cmdk-item][data-value="paged.insert.rectangle"]'),
     ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-palette-unavailable="paged.insert.rectangle"] [data-palette-why]',
+      ),
+    ).toContainText("press Esc to leave it");
     await page.keyboard.press("Escape");
 
     // Leave the context — picking a dimmed rail tool is an EXIT (the

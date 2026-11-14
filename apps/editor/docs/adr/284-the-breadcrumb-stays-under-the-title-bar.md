@@ -33,3 +33,10 @@ made it visible there.
 - A second bundle that goes full screen writes its own header; if more than one appears, a shared
   header component in panel-kit is the next step.
 - In full screen the shell's breadcrumb and the bundle's header never show at the same time.
+
+## Amendment 2026-11-13
+
+[ADR 1215](1215-frame-content-edit.md) moves the trail into the context toolbar, whose height is
+fixed, so entering a context no longer inserts a row (F-48); where a profile shows no context
+toolbar the trail floats over the work area and takes no row. Full screen is unchanged: the
+surface's own header still carries it there.

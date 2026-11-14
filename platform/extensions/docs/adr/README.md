@@ -77,6 +77,7 @@ and each one names the plugins that follow it and those that do not.
 | [1103](1103-host-tools-drag-a-bundles-handles.md) | The host's Selection tools drag a bundle's handles: `onHostDrag`, `overlay.handles.hostDrag@1` | Accepted 2026-11-09 |
 | [1104](1104-the-eyedropper-lane.md) | The host Eyedropper's target: the binding provider's eyedropper lane, `bindings.eyedropper@1` | Accepted 2026-11-11 |
 | [1105](1105-the-decoded-pixels-door.md) | The decoded-pixels door: `host.assets.decodeImage`, `assets.decodeImage@1` | Accepted 2026-11-11 |
+| [1106](1106-an-edit-context-says-how-it-is-left.md) | An edit context says how it is left (`exitPolicy`), what it is called (`label`) and whether it edits placed pictures (`editsPlacedImages`); `editContext.exitPolicy@1` | Accepted 2026-11-13 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

@@ -31,8 +31,18 @@
 // host-stamped `metadataKey` (`x-paged:<plugin id>`); the resolver reads
 // the element's properties ONCE and hands each contribution ONLY its own
 // envelope (a plugin never sees a foreign namespace).
+//
+// PICTURE FRAMES (editor ADR 1215, D-05). A frame holding a placed image
+// offers Frame · Content · Edit image (state/frame-content.ts). A pointer
+// entry (the double-click) enters CONTENT first — the picture moves inside
+// the frame; the frame stays. A second double-click on it, Enter, or the
+// level control enter EDIT: the context that declares `editsPlacedImages`
+// (paged.image). Content another plugin owns by its metadata (an object
+// type) still goes to that plugin. `tryEnterEditContext` answers every
+// double-click, picture frames included: the canvas needs no check of its
+// own.
 
-import { useCallback } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
 import type {
   ElementGeometryItem,
@@ -45,8 +55,15 @@ import { useCanvasClient } from "./canvas-client-context";
 import { useSelection } from "./selection-context";
 import { pageToContentPoint } from "./content-point";
 import { useEditContextStack, type EnterPoint } from "./edit-context-stack";
+import { useEditorScope } from "./editor-scope";
 import { useRegistries } from "./registries-context";
 import { TEXT_TOOL_ID } from "./tool-context";
+import {
+  IMAGE_CONTENT_CONTEXT,
+  imageContentLevelOf,
+  imageEditorOf,
+  type FrameLevelId,
+} from "./frame-content";
 import {
   resolveDoubleClick,
   type EditContextCandidate,
@@ -138,16 +155,146 @@ async function selectForEntry(
     return at;
   }
 }
+/** Does `element` hold a placed image? One geometry read. */
+async function holdsImage(
+  client: ReturnType<typeof useCanvasClient>,
+  element: ElementId,
+): Promise<boolean> {
+  return client
+    .elementGeometry([element])
+    .then((items) => items[0]?.hasImage === true)
+    .catch(() => false);
+}
+
+function sameElement(a: ElementId, b: ElementId): boolean {
+  return idKey(a) === idKey(b);
+}
+
+/** A plugin matcher that throws claims nothing. Outside the hook: the
+ *  React Compiler does not compile a `try` with a conditional (ADR 229). */
+function matchesSafely(
+  matches: (c: EditContextCandidate) => boolean,
+  candidate: EditContextCandidate,
+): boolean {
+  try {
+    return matches(candidate);
+  } catch {
+    return false;
+  }
+}
+
 export function useEditContextEntry() {
   const client = useCanvasClient();
+  const scope = useEditorScope();
   const { setElementSelection, setElementGeometry } = useSelection();
-  const { enter } = useEditContextStack();
+  const { enter, active, stack } = useEditContextStack();
   const { editContexts, objectTypes } = useRegistries();
+
+  // The picture frame's content level (D-05): one per editor, wired to
+  // the live client and selection.
+  const imageContent = imageContentLevelOf(scope).contribution;
+  // ── picture frames (D-05) ──────────────────────────────────────────
+  const activeRef = useRef(active);
+  const stackRef = useRef(stack);
+  useLayoutEffect(() => {
+    activeRef.current = active;
+    stackRef.current = stack;
+  });
+
+  /** The object type that claims `element` by its metadata, if any: the
+   *  plugin that owns what the frame holds. */
+  const ownerTypeOf = async (element: ElementId): Promise<string | null> => {
+    if (objectTypes.list().length === 0) return null;
+    let entries: ReadonlyArray<{ value?: unknown }> = [];
+    try {
+      const props = await client.elementProperties(element);
+      if (props) entries = props.entries as ReadonlyArray<{ value?: unknown }>;
+    } catch {
+      return null;
+    }
+    const kind = (element as unknown as { kind?: string }).kind;
+    for (const ot of objectTypes.list()) {
+      if (!ot.editContextType) continue;
+      const candidate: EditContextCandidate = {
+        id: element,
+        kind,
+        groupChain: [],
+        metadata: ot.metadataKey ? readEnvelope(entries, ot.metadataKey) : null,
+      };
+      if (matchesSafely(ot.matches, candidate)) return ot.editContextType;
+    }
+    return null;
+  };
+
+  /** Push picture frame `element`'s `level`, selecting it first. */
+  const enterPicture = async (
+    element: ElementId,
+    level: "content" | "edit",
+    point?: EnterPoint,
+  ): Promise<boolean> => {
+    const editor = imageEditorOf(editContexts.list());
+    if (level === "edit" && !editor) return false;
+    const at = await selectForEntry(
+      client,
+      element,
+      point,
+      setElementSelection,
+      setElementGeometry,
+    );
+    if (level === "content") {
+      enter(imageContent, element, at);
+      return true;
+    }
+    const real = editContexts.get(editor!.type);
+    if (!real) return false;
+    enter(real, element, at);
+    return true;
+  };
+
+  /** The picture-frame lane of an entry: null when `hit` is no picture
+   *  frame of the host's (no image, or another plugin owns it). */
+  const pictureLevel = async (
+    hit: DoubleClickHit,
+    dryRun: boolean,
+  ): Promise<boolean | null> => {
+    const element = hit.element!;
+    if (!(await holdsImage(client, element))) return null;
+    const editor = imageEditorOf(editContexts.list());
+    const owner = await ownerTypeOf(element);
+    if (owner !== null && owner !== editor?.type) return null;
+    // Enter on a selected picture frame enters Edit image (ADR 282).
+    if (dryRun) return editor !== null;
+    const top = activeRef.current;
+    const onThis = top !== null && sameElement(top.scopeRoot, element);
+    if (onThis && editor && top.type === editor.type) return true;
+    const point =
+      hit.pageId && hit.pagePoint
+        ? { pageId: hit.pageId, pagePoint: hit.pagePoint }
+        : undefined;
+    // A keyboard entry (no point) is the explicit Edit; a double-click is
+    // Content, and a second one on Content is Edit.
+    if (!point) return enterPicture(element, editor ? "edit" : "content");
+    if (onThis && top.type === IMAGE_CONTENT_CONTEXT)
+      return editor ? enterPicture(element, "edit", point) : true;
+    return enterPicture(element, "content", point);
+  };
+  const pictureLevelRef = useRef(pictureLevel);
+  useLayoutEffect(() => {
+    pictureLevelRef.current = pictureLevel;
+    imageContentLevelOf(scope).wire({
+      client,
+      onCommitted: (geometry) => {
+        if (geometry.length > 0) setElementGeometry(geometry);
+      },
+      descend: (frame) => void enterPicture(frame, "edit"),
+    });
+  });
 
   /**
    * Try to enter an edit context for a double-clicked element. Resolves
    * to `true` when a context was entered (caller skips group descent),
-   * `false` otherwise.
+   * `false` otherwise. A picture frame enters its Content level first,
+   * its Edit level on a second double-click (D-05).
    */
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const tryEnterEditContext = useCallback(
@@ -158,6 +305,9 @@ export function useEditContextEntry() {
     ): Promise<boolean> => {
       const element = hit.element;
       if (!element) return false;
+      // D-05 — a picture frame enters its content first (see the header).
+      const picture = await pictureLevelRef.current(hit, dryRun);
+      if (picture !== null) return picture;
       // Nothing registered → no work (the common case stays cheap).
       if (editContexts.list().length === 0 && objectTypes.list().length === 0) {
         return false;
@@ -307,10 +457,39 @@ export function useEditContextEntry() {
     [tryEnterEditContext],
   );
 
+  /** Editor ADR 1215 — go to `level` of frame `element` (the context
+   *  toolbar's level control): Frame leaves the frame's own contexts,
+   *  Content and Edit enter them. `editType` names the Edit level's
+   *  context for a frame a plugin owns. */
+  const enterFrameLevel = async (
+    element: ElementId,
+    level: FrameLevelId,
+    editType?: string | null,
+  ): Promise<boolean> => {
+    const current = stackRef.current;
+    const ownStart = current.findIndex((f) =>
+      sameElement(f.scopeRoot, element),
+    );
+    const own = ownStart < 0 ? [] : current.slice(ownStart);
+    if (level === "frame") return own.length === 0;
+    const atIndex = own.findIndex((f) =>
+      level === "content"
+        ? f.type === IMAGE_CONTENT_CONTEXT
+        : f.type !== IMAGE_CONTENT_CONTEXT,
+    );
+    // Already entered: the levels above it are left by the caller.
+    if (atIndex >= 0) return true;
+    if (editType && level === "edit") {
+      return enterContextByType(editType, element);
+    }
+    return enterPicture(element, level === "content" ? "content" : "edit");
+  };
+
   return {
     tryEnterEditContext,
     tryEnterOwnedContent,
     enterContextByType,
     isOwnedContent,
+    enterFrameLevel,
   };
 }

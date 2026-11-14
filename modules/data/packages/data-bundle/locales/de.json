@@ -21,6 +21,7 @@
   "data.bindings.conditionDoesNotParse": "Die Bedingung ist syntaktisch ungültig",
   "data.bindings.conditionNoParse": "sie ist syntaktisch ungültig",
   "data.bindings.conditionUnusable": "Die Bedingung ist nicht verwendbar: {error}",
+  "data.bindings.contextLabel": "Datenbindung",
   "data.bindings.createBindings": "{count, plural, one {# Verknüpfung} other {# Verknüpfungen}} erstellen",
   "data.bindings.dataMerge": "Datenzusammenführung",
   "data.bindings.datePlaceholder": "DD.MM.YYYY (des Gebietsschemas)",

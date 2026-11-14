@@ -1235,7 +1235,12 @@ export function createCoreObjectsV70(
           : ({ op: "batch", args: { ops: mutations } } as MutationInput);
       const label = opts?.label?.trim() ? opts.label : undefined;
       try {
-        const reply = await client().mutate(m as never);
+        // Engine ADR 1304 — a coalesce key joins the run of that key (a
+        // field's scrub: one undo step); without one, a step of its own.
+        const reply =
+          opts?.coalesce !== undefined
+            ? await client().mutate(m as never, { coalesce: opts.coalesce })
+            : await client().mutate(m as never);
         // Engine ADR 1030 — the commit's one step takes the caller's name
         // (best effort: `labelStep` names it only while it is the top).
         if (label !== undefined && reply.kind === "mutationApplied")

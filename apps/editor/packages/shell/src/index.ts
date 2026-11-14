@@ -204,6 +204,7 @@ export {
 
 export {
   SelectionProvider,
+  SelectionSubset,
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
@@ -236,9 +237,12 @@ export {
 export {
   ALIGN_SCOPE,
   ALIGN_TO,
+  alignScopeArgs,
+  chooseKeyObject,
   clickKeyObject,
   effectiveKeyObject,
   isSameElement,
+  previewAlignReference,
   type AlignScopeState,
   type AlignTo,
 } from "./state/align-scope";
@@ -521,14 +525,62 @@ export {
 } from "./registries/document-io";
 export {
   EditContextStackProvider,
+  useContextExit,
   useEditContextStack,
   useOptionalEditContextStack,
+  type ContextExit,
+  type ContextLeave,
   type EditContextFrame,
   type EditContextStackValue,
   type EnterPoint,
 } from "./state/edit-context-stack";
+// Editor ADR 1214 — one way out of an edit context.
+export {
+  DEFAULT_EXIT_POLICY,
+  askContextExit,
+  attachContextExitPromptSurface,
+  contextExitPrompts,
+  resolveContextExit,
+  resolutionOfAnswer,
+  type ContextExitAnswer,
+  type ContextExitPolicy,
+  type ContextExitReason,
+  type ContextExitResolution,
+  type ContextExitState,
+  type PendingContextExit,
+} from "./state/context-exit";
+export {
+  createEditContextStore,
+  editScopeOf,
+  reduceEditContexts,
+  scopeQueryOf,
+  type EditContextAction,
+  type EditContextEffect,
+  type EditContextState,
+  type EditContextStore,
+  type EditScopeLike,
+  type ScopeQuery,
+} from "./state/edit-context-store";
+export { ContextExitPrompt } from "./chrome/ContextExitPrompt";
+// Editor ADR 1215 — Frame, Content, Edit.
+export {
+  IMAGE_CONTENT_CONTEXT,
+  contentToPage,
+  createImageContentContext,
+  currentFrameLevel,
+  frameLevelDepth,
+  frameLevels,
+  imageEditorOf,
+  type FrameContentFacts,
+  type FrameLevel,
+  type FrameLevelId,
+} from "./state/frame-content";
+export { FrameLevelControl } from "./chrome/FrameLevelControl";
 export { pageToContentPoint } from "./state/content-point";
-export { EditContextBreadcrumb } from "./chrome/EditContextBreadcrumb";
+export {
+  ContextTrail,
+  EditContextBreadcrumb,
+} from "./chrome/EditContextBreadcrumb";
 export {
   useEditContextEntry,
   type DoubleClickHit,
@@ -747,7 +799,20 @@ export {
 } from "./cockpit";
 
 // ── Chrome ─────────────────────────────────────────────────────
-export { CommandPalette, notifyPalette } from "./chrome/CommandPalette";
+export {
+  CommandPalette,
+  GO_TO_PAGE_COMMAND,
+  goToPageQuery,
+  notifyPalette,
+  pageNamed,
+} from "./chrome/CommandPalette";
+export {
+  commandNeeds,
+  unmetNeed,
+  whenNeeds,
+  type CommandNeed,
+} from "./registries/command-reasons";
+export { entryApplicability } from "./registries/types";
 export {
   MenuBar,
   CONTEXT_MENU_ROOT,
@@ -797,6 +862,7 @@ export {
   useScrubGesture,
   type ScrubGesture,
   type ScrubGestureOptions,
+  type ScrubPhase,
 } from "./gestures/use-scrub-gesture";
 
 // SDK Phase 1 — gesture SAB primitives moved to `@paged-media/client`
@@ -882,6 +948,20 @@ export {
 
 // ── SDK Phase 3 — declarative catalog renderer + primitive leaves
 export { CompositionRenderer, CatalogRegistryProvider } from "./catalog/render";
+export {
+  PropertySearchProvider,
+  usePropertySearchQuery,
+  normalizeSearch,
+  matchesQuery,
+  keywordTerms,
+  compositionTerms,
+  pathWords,
+} from "./catalog/property-search";
+export {
+  createPreviewCommitter,
+  usePreviewCommitter,
+  type PreviewCommitter,
+} from "./catalog/scrub-preview";
 // ── W3.1 — the plugin SCHEMA-PANEL renderer (closes plugin-draw B-01):
 //    renders a bundle's declarative `PanelSchema` from the catalog and
 //    gates rows/sections on the bundle's published bindings.
@@ -1280,6 +1360,8 @@ export {
   applicabilityStyle,
   type Applicability,
   type ApplicabilityStyle,
+  type CommandApplicability,
+  type CommandState,
   type SurfaceKind,
 } from "./chrome/applicability";
 export {

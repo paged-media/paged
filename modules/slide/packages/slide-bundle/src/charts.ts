@@ -20,8 +20,11 @@
 // (double-click, the `slideChart` edit context), its workbook opens in the
 // chart data sheet (the context's frame surface, which can go full screen),
 // and when the user leaves, the workbook is kept in the document and every
-// frame of the chart is redrawn from it in one undo step. Esc throws the
-// session's edits away. Export writes the chart part and its workbook.
+// frame of the chart is redrawn from it in one undo step. Leaving keeps the
+// session's edits whichever way the user leaves — Esc in the data sheet, Esc
+// on the page, a press outside (editor ADR 1214: the context declares
+// `commit-if-safe`); the one undo step takes them back. Export writes the
+// chart part and its workbook.
 //
 // The data sheet is paged.sheet's grid and engine, reached through the
 // workbook door (extensions ADR 1102, slide ADR 724 amendment 1): the
@@ -36,7 +39,10 @@ import type {
   WorkbookRange,
 } from "@paged-media/plugin-api";
 
+import { t } from "@paged-media/strings";
+
 import { makeChartDataSurface } from "./chart-data-surface.js";
+import { PANELS } from "./messages.js";
 import {
   chartFrames,
   readIndex,
@@ -270,6 +276,10 @@ export function contributeCharts(
     host.contribute.editContext({
       type: CHART_CONTEXT,
       entry: "doubleClick",
+      // Extensions ADR 1106 — the breadcrumb's name (F-45) and how the host
+      // leaves: the edits are kept as one undo step (see the header).
+      label: t(PANELS.chart),
+      exitPolicy: "commit-if-safe",
       matches: (c) =>
         editing.frameOf(
           (c.id as unknown as { id: string }).id,

@@ -369,6 +369,9 @@ export function createEditorHostOptions(
     editContextEnterPoint: true,
     // Editor ADR 285 — the History panel lists an active context's steps.
     editContextHistorySteps: true,
+    // Extensions ADR 1106 — the shell leaves a context through one exit
+    // resolver that reads its `exitPolicy` (state/context-exit.ts).
+    editContextExitPolicy: true,
   };
   return {
     shared,

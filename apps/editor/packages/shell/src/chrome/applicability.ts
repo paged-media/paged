@@ -62,6 +62,19 @@ import { APPLICABILITY } from "./messages";
 
 export type Applicability = "here" | "elsewhere" | "absent";
 
+/** A COMMAND's state (editor ADR 1218): the three above, and `disabled`,
+ *  for a command that is offered here but lacks what it needs (a
+ *  selection, an open document). Every state but `here` carries a reason
+ *  in words, which menus show as a tooltip and the palette beside the
+ *  greyed command (UXI-PNL-004). */
+export type CommandState = Applicability | "disabled";
+
+export interface CommandApplicability {
+  state: CommandState;
+  /** Why it does not apply, in words; absent for `here`. */
+  reason?: string;
+}
+
 /** What KIND of surface is rendering the state, because the right
  *  treatment for `elsewhere` differs between them and a single rule is
  *  wrong for one of them.

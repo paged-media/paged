@@ -35,3 +35,10 @@ enters the image module; it enters content position (the picture moves, the fram
 explicit "Edit image" action enters paged.image's context: its button on the context toolbar,
 Enter on the selected frame as this record decides, or a second double-click. Other owned content
 is unchanged. Until that task lands the body describes the code.
+
+## Amendment 2026-11-13 (implemented)
+
+[ADR 1215](1215-frame-content-edit.md) builds D-05: a double-click on a picture frame enters its
+content level; Enter on a selected picture frame (and on its content level) enters Edit image,
+the context that declares `editsPlacedImages`. `isOwnedContent` answers true for a picture
+frame when such a context is registered.

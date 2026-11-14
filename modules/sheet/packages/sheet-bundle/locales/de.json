@@ -180,6 +180,7 @@
   "sheet.notice.cantPaste": "Einfügen nicht möglich: {reason}.",
   "sheet.notice.copied": "{rows} × {cols} kopiert: {cells, plural, one {# Zelle} other {# Zellen}}.",
   "sheet.notice.pasted": "{rows} × {cols} eingefügt: {cells, plural, one {# Zelle} other {# Zellen}}.",
+  "sheet.panel.contextLabel": "Tabellenblatt",
   "sheet.panel.datasets": "Datensets",
   "sheet.panel.grid": "Raster",
   "sheet.panel.properties": "Tabelleneigenschaften",

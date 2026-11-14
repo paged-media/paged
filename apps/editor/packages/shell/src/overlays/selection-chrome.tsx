@@ -17,9 +17,16 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import type { ElementGeometryItem } from "@paged-media/client";
+
+import { useOptionalCanvasClient } from "../state/canvas-client-context";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useSelection } from "../state/selection-context";
@@ -55,6 +62,13 @@ function SelectionChromeRender(props: OverlayProps) {
     alignStore.get,
   );
   const keyObject = effectiveKeyObject(alignScope, elementSelection);
+  // D-07 / UXI-SEL-018 — while an align control is hovered or focused the
+  // canvas shows what it aligns against: the key object, the selection's
+  // box, the page, its margins or the spread.
+  const previewing = alignScope.previewing === true;
+  const pages = useAlignPages(
+    previewing && (alignScope.to === "margins" || alignScope.to === "spread"),
+  );
   if (elementGeometry.length === 0) return null;
 
   const out: ReactNode[] = [];
@@ -78,10 +92,16 @@ function SelectionChromeRender(props: OverlayProps) {
       <polygon
         key={key}
         points={points}
-        fill="none"
+        fill={isKey && previewing ? "var(--overlay-selection)" : "none"}
         stroke="var(--overlay-selection)"
         strokeWidth={isKey ? 4 : 2}
         data-key-object={isKey ? "" : undefined}
+        data-align-reference={
+          isKey && previewing && alignScope.to === "keyObject"
+            ? "keyObject"
+            : undefined
+        }
+        fillOpacity={isKey && previewing ? 0.12 : undefined}
         data-selection-outline=""
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
@@ -91,15 +111,128 @@ function SelectionChromeRender(props: OverlayProps) {
 
   // Multi-select union AABB, per page.
   if (elementGeometry.length > 1) {
-    out.push(...renderUnionBoxes(elementGeometry, props));
+    out.push(
+      ...renderUnionBoxes(
+        elementGeometry,
+        props,
+        previewing && alignScope.to === "selection",
+      ),
+    );
   }
+  if (previewing)
+    out.push(
+      ...renderPageReference(alignScope.to, elementGeometry, props, pages),
+    );
 
   return <>{out}</>;
+}
+
+/** A page's margins and spread, as the pages collection reports them. */
+interface AlignPageRow {
+  selfId: string;
+  spreadId?: string | null;
+  marginTopPt?: number;
+  marginLeftPt?: number;
+  marginBottomPt?: number;
+  marginRightPt?: number;
+}
+
+/** The pages' margins and spreads, read while a margins or spread
+ *  reference is previewed. */
+function useAlignPages(enabled: boolean): readonly AlignPageRow[] {
+  const client = useOptionalCanvasClient();
+  const [rows, setRows] = useState<readonly AlignPageRow[]>([]);
+  useEffect(() => {
+    if (!enabled || !client) return;
+    let live = true;
+    client
+      .collection<AlignPageRow>("pages")
+      .then((next) => {
+        if (live) setRows(next);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [enabled, client]);
+  return rows;
+}
+
+/** The page, margins or spread an alignment would use, outlined. */
+function renderPageReference(
+  to: string,
+  geometry: ReadonlyArray<ElementGeometryItem>,
+  props: OverlayProps,
+  pages: readonly AlignPageRow[],
+): ReactNode[] {
+  if (to !== "page" && to !== "margins" && to !== "spread") return [];
+  const pageIds = [...groupByPage(geometry).keys()];
+  const rects: Array<{
+    key: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }> = [];
+  const seen = new Set<string>();
+  for (const pageId of pageIds) {
+    const pr = props.pageRects.get(pageId);
+    if (!pr) continue;
+    const row = pages.find((p) => p.selfId === pageId);
+    if (to === "page") {
+      rects.push({ key: pageId, ...pr });
+    } else if (to === "margins") {
+      const t = row?.marginTopPt ?? 0;
+      const l = row?.marginLeftPt ?? 0;
+      const b = row?.marginBottomPt ?? 0;
+      const r = row?.marginRightPt ?? 0;
+      rects.push({
+        key: pageId,
+        x: pr.x + l,
+        y: pr.y + t,
+        w: Math.max(0, pr.w - l - r),
+        h: Math.max(0, pr.h - t - b),
+      });
+    } else {
+      const spread = row?.spreadId ?? pageId;
+      if (seen.has(spread)) continue;
+      seen.add(spread);
+      const members = pages.filter((p) => (p.spreadId ?? p.selfId) === spread);
+      const boxes = (
+        members.length > 0 ? members.map((m) => m.selfId) : [pageId]
+      )
+        .map((id) => props.pageRects.get(id))
+        .filter((b): b is NonNullable<typeof b> => b !== undefined);
+      if (boxes.length === 0) continue;
+      const x = Math.min(...boxes.map((b) => b.x));
+      const y = Math.min(...boxes.map((b) => b.y));
+      const x2 = Math.max(...boxes.map((b) => b.x + b.w));
+      const y2 = Math.max(...boxes.map((b) => b.y + b.h));
+      rects.push({ key: spread, x, y, w: x2 - x, h: y2 - y });
+    }
+  }
+  return rects.map((r) => (
+    <rect
+      key={`align-ref:${r.key}`}
+      x={r.x}
+      y={r.y}
+      width={r.w}
+      height={r.h}
+      fill="none"
+      stroke="var(--overlay-selection)"
+      strokeWidth={2}
+      strokeDasharray="6 4"
+      data-align-reference={to}
+      vectorEffect="non-scaling-stroke"
+      pointerEvents="none"
+    />
+  ));
 }
 
 function renderUnionBoxes(
   geometry: ReadonlyArray<ElementGeometryItem>,
   props: OverlayProps,
+  reference = false,
 ): ReactNode[] {
   const byPage = groupByPage(geometry);
   const out: ReactNode[] = [];
@@ -117,8 +250,9 @@ function renderUnionBoxes(
         height={bb.maxY - bb.minY}
         fill="none"
         stroke="var(--overlay-selection)"
-        strokeWidth={1}
+        strokeWidth={reference ? 2 : 1}
         strokeDasharray="4 3"
+        data-align-reference={reference ? "selection" : undefined}
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
       />,

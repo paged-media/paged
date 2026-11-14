@@ -45,6 +45,7 @@
 //     selection. Session state, never the document's.
 
 import {
+  commandNeeds,
   scopeOf,
   TRANSFORM_MEMORY,
   type CommandContribution,
@@ -299,6 +300,7 @@ export function buildReflectCommands(
       },
       category: "Transform",
       when: objectVerbApplies,
+      applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
       handler: reflect(REFLECT_HORIZONTAL_DEG),
     },
     {
@@ -308,6 +310,7 @@ export function buildReflectCommands(
       },
       category: "Transform",
       when: objectVerbApplies,
+      applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
       handler: reflect(REFLECT_VERTICAL_DEG),
     },
     {
@@ -317,6 +320,7 @@ export function buildReflectCommands(
       },
       category: "Transform",
       when: objectVerbApplies,
+      applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
       handler: (paged: unknown) => {
         const addresses = deps.selectionOf(paged);
         if (addresses.length > 0) deps.openOptions(paged, addresses);
@@ -329,6 +333,7 @@ export function buildReflectCommands(
       },
       category: "Transform",
       when: objectVerbApplies,
+      applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
       handler: (paged: unknown) =>
         runTransformAgain(depsFor(paged), deps.selectionOf(paged)),
     },
@@ -410,4 +415,5 @@ export const REFLECT_MENU_ITEMS: MenuItemContribution[] = [
   order: order as number,
   group: "transform",
   when: objectVerbApplies,
+  applicability: commandNeeds("outsideContext", "noText", "noPathEdit"),
 }));

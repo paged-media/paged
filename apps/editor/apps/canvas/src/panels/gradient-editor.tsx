@@ -57,7 +57,7 @@ import {
 } from "@paged-media/shell";
 import { ColorInput, IconButton, Segment } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
-import { KitSelect } from "@paged-media/ui";
+import { KitSelect, NumberInput } from "@paged-media/ui";
 import type {
   GradientDetail,
   GradientSummary,
@@ -476,31 +476,16 @@ export function GradientEditor() {
                     onChange={(hex) => setStopInlineAt(i, hex)}
                   />
                 ) : null}
-                <input
-                  type="number"
+                <NumberInput
+                  value={Math.round(s.locationPct)}
                   min={0}
                   max={100}
-                  defaultValue={Math.round(s.locationPct)}
-                  key={`loc-${i}-${Math.round(s.locationPct)}`}
+                  precision={0}
                   aria-label={strings.t(M.stopLocation, { n: i + 1 })}
-                  data-stop-location
-                  className="w-[52px] text-xs h-[26px] px-1 text-center rounded-[6px] border border-input bg-background pg-value"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setStopLocationAt(
-                        i,
-                        Number.parseFloat(
-                          (e.target as HTMLInputElement).value,
-                        ) || 0,
-                      );
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const v = Number.parseFloat(e.target.value);
-                    if (Number.isFinite(v) && Math.round(s.locationPct) !== v) {
-                      setStopLocationAt(i, v);
-                    }
-                  }}
+                  inputAttributes={{ "data-stop-location": "" }}
+                  className="w-[52px]"
+                  onChange={() => {}}
+                  onCommit={(v) => setStopLocationAt(i, v)}
                 />
                 <IconButton
                   label={strings.t(M.removeStopN, { n: i + 1 })}
@@ -542,29 +527,16 @@ export function GradientEditor() {
                     )
                   }
                 />
-                <input
-                  type="number"
+                <NumberInput
+                  value={opacity}
                   min={0}
                   max={100}
-                  defaultValue={opacity}
-                  key={`op-${i}-${opacity}`}
+                  precision={0}
                   aria-label={strings.t(M.stopOpacity, { n: i + 1 })}
-                  data-stop-opacity
-                  className="w-[52px] text-xs h-[26px] px-1 text-center rounded-[6px] border border-input bg-background pg-value"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const v = Number.parseFloat(
-                        (e.target as HTMLInputElement).value,
-                      );
-                      if (Number.isFinite(v)) setStopOpacityAt(i, v);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const v = Number.parseFloat(e.target.value);
-                    if (Number.isFinite(v) && Math.round(opacity) !== v) {
-                      setStopOpacityAt(i, v);
-                    }
-                  }}
+                  inputAttributes={{ "data-stop-opacity": "" }}
+                  className="w-[52px]"
+                  onChange={() => {}}
+                  onCommit={(v) => setStopOpacityAt(i, v)}
                 />
               </div>
             </div>

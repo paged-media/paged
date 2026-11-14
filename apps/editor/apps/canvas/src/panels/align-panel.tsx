@@ -42,8 +42,11 @@ import { useState, useSyncExternalStore } from "react";
 
 import {
   ALIGN_SCOPE,
+  chooseKeyObject,
   effectiveKeyObject,
   Icon,
+  isSameElement,
+  previewAlignReference,
   useObjectModel,
   useRegistries,
   useScoped,
@@ -86,7 +89,26 @@ const M = defineMessages("app.alignPanel", {
   selectToAlignPage: "Select an object to align.",
   selectToDistribute: "Select 3 or more objects to distribute.",
   keyHint: "Click a selected object to make it the key object.",
+  keyObjectChoice: "Key object",
+  keyObjectOption: "{kind} {n}",
+  keyObjectFirst: "{kind} {n} (first selected)",
+  kindObject: "Object",
+  kindTextFrame: "Text frame",
+  kindRectangle: "Rectangle",
+  kindEllipse: "Ellipse",
+  kindPolygon: "Polygon",
+  kindLine: "Line",
+  kindGroup: "Group",
 });
+
+const KIND_NAME: Record<string, string> = {
+  textFrame: M.kindTextFrame,
+  rectangle: M.kindRectangle,
+  oval: M.kindEllipse,
+  polygon: M.kindPolygon,
+  graphicLine: M.kindLine,
+  group: M.kindGroup,
+};
 
 type Button = { kind: AlignKind; icon: string; hint: string };
 
@@ -173,6 +195,9 @@ export function AlignPanel() {
     }
   }
 
+  // D-07 / UXI-SEL-018: hovering or focusing an align button shows on the
+  // canvas what it aligns against.
+  const preview = (on: boolean) => previewAlignReference(store, on);
   const iconBtn = (btn: Button, on: boolean) => (
     <button
       type="button"
@@ -183,6 +208,10 @@ export function AlignPanel() {
       aria-label={strings.t(btn.hint)}
       className="flex h-[30px] w-[32px] items-center justify-center rounded-[6px] border border-input bg-background hover:bg-muted/60 disabled:opacity-50"
       style={{ color: "var(--chrome-icon)" }}
+      onPointerEnter={() => preview(true)}
+      onPointerLeave={() => preview(false)}
+      onFocus={() => preview(true)}
+      onBlur={() => preview(false)}
       onClick={() => {
         void align(btn.kind);
       }}
@@ -221,12 +250,46 @@ export function AlignPanel() {
           ))}
         </KitSelect>
         {scope.to === "keyObject" ? (
-          <div
-            className="mt-1 text-xs text-muted-foreground"
-            data-key-object-hint
-          >
-            {strings.t(M.keyHint)}
-          </div>
+          <>
+            {count >= 2 && key ? (
+              // D-07 — the key chosen explicitly, beside the canvas click.
+              <div className="mt-[6px]">
+                <KitSelect
+                  aria-label={strings.t(M.keyObjectChoice)}
+                  data-key-object-choice
+                  value={String(
+                    elementSelection.findIndex((id) => isSameElement(id, key)),
+                  )}
+                  onChange={(e) => {
+                    const picked = elementSelection[Number(e.target.value)];
+                    if (picked)
+                      chooseKeyObject(store, elementSelection, picked);
+                  }}
+                >
+                  {elementSelection.map((id, i) => {
+                    const kind = strings.t(KIND_NAME[id.kind] ?? M.kindObject);
+                    return (
+                      <option key={`${id.kind}:${String(id.id)}`} value={i}>
+                        {strings.t(
+                          i === 0 ? M.keyObjectFirst : M.keyObjectOption,
+                          {
+                            kind,
+                            n: i + 1,
+                          },
+                        )}
+                      </option>
+                    );
+                  })}
+                </KitSelect>
+              </div>
+            ) : null}
+            <div
+              className="mt-1 text-xs text-muted-foreground"
+              data-key-object-hint
+            >
+              {strings.t(M.keyHint)}
+            </div>
+          </>
         ) : null}
       </div>
       <div className="pg-label pt-1">{strings.t(M.alignObjects)}</div>
