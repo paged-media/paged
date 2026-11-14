@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Typography Debugger panel (editor ADR 1234; the UX strategy's Concept
+// The Typography Debugger panel (editor ADR 1237; the UX strategy's Concept
 // E; task PX2 of the interaction plan). For the story under the caret, or
 // of the selected text frame: every composed line with how tightly it is
 // set, its word spacing against the paragraph's bounds and why it broke

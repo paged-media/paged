@@ -67,6 +67,7 @@ import {
   SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
 } from "../../../src/canvas-context-menu";
+import { ADD_CONSTRAINT_COMMAND } from "../../../src/constraints/add-constraint";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildEffectMenuCommands } from "../../../src/effect-menu";
 import { buildViewCommands } from "../../../src/view-commands";
@@ -104,7 +105,7 @@ const noop = new Proxy({}, { get: () => () => {} }) as never;
 /** Every `.commands.register(` call site, per file. A new site fails
  *  here: list it, and the ids it registers below. */
 const SITES: Record<string, number> = {
-  "packages/shell/src/PagedShell.tsx": 12,
+  "packages/shell/src/PagedShell.tsx": 13,
   "packages/shell/src/state/commands/registry-derived.ts": 3,
   "packages/shell/src/chrome/FillStrokeCluster.tsx": 3,
   "packages/shell/src/actions/actions-context.tsx": 3,
@@ -130,6 +131,7 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.view.toggleChrome",
     "paged.chrome.togglePanels",
     "paged.preferences.tabHidesPanels",
+    "paged.preferences.modifierHints",
     // The rest of PagedShell's sites register the shell builders:
     "paged.view.toggleScreenPreview",
     "paged.file.openIdml",
@@ -204,6 +206,7 @@ function tableIds(): string[] {
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
     SELECT_ABOVE_COMMAND,
+    ADD_CONSTRAINT_COMMAND,
     ...buildObjectCommands(noop),
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
@@ -306,6 +309,7 @@ describe("the host command inventory", () => {
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
       "SELECT_ABOVE_COMMAND",
+      "ADD_CONSTRAINT_COMMAND",
       "objectCommands",
       "pathfinderCommands",
       "cornerCommands",

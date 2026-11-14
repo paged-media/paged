@@ -920,8 +920,8 @@ export type WorkerToMain = WorkerToMainKind & {
 //     bytes? }` points a picture at a new source in one undo step, keeping
 //     its frame, its fitting and its size.
 //   New message kinds an older worker cannot answer, hence the bump.
-// v82 — Document X-Ray and the Typography Debugger (editor ADRs 1233 and
-//   1234, tasks PX1 and PX2 of the editor's interaction plan):
+// v82 — Document X-Ray and the Typography Debugger (editor ADRs 1236 and
+//   1237, tasks PX1 and PX2 of the editor's interaction plan):
 //   - X-Ray (engine ADR 1309): `RequestExplain { item, aspect?,
 //     selection? }` answers
 //     `Explained(Explanation)` — the provenance of an item's look and

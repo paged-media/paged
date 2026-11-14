@@ -44,6 +44,7 @@ import {
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
+import { fixPreviewOf, setFixPreview } from "../../constraints/store";
 import { fixesOf, type IssueFix } from "../../issue-fixes";
 import { goToIssue } from "../../publication-issues";
 
@@ -293,11 +294,39 @@ function FixButton({ issue, fix }: { issue: PublicationIssue; fix: IssueFix }) {
   const scope = useEditorScope();
   const paged = usePaged();
   const actions = useCockpitActions();
+  // Editor ADR 1233 — a fix that moves or grows something shows where, on
+  // the canvas, while it has the pointer or the focus: a preview, nothing
+  // is sent to the engine.
+  const previewKey = `${issue.id}|${fix.id}`;
+  const showPreview = () => {
+    if (fix.ghosts?.length)
+      setFixPreview(scope, { id: previewKey, ghosts: fix.ghosts });
+  };
+  const hidePreview = () => {
+    if (fixPreviewOf(scope)?.id === previewKey) setFixPreview(scope, null);
+  };
+  if (fix.run.kind === "note")
+    return (
+      <div
+        data-issue-fix={fix.id}
+        data-issue-fix-note=""
+        style={{ display: "flex", flexDirection: "column", gap: 1 }}
+      >
+        <strong style={{ fontSize: 12 }}>{fix.label}</strong>
+        {fix.preview && (
+          <span data-issue-fix-preview className="pg-ui-xs">
+            {fix.preview}
+          </span>
+        )}
+      </div>
+    );
   const run = () => {
+    hidePreview();
     if (fix.run.kind === "panel") {
       actions.openPanel?.(fix.run.panel);
       return;
     }
+    if (fix.run.kind !== "mutate") return;
     void fix.run.apply(paged).then((ok) => {
       const feedback = operationFeedbackOf(scope);
       if (ok) {
@@ -333,6 +362,10 @@ function FixButton({ issue, fix }: { issue: PublicationIssue; fix: IssueFix }) {
         type="button"
         data-issue-fix={fix.id}
         onClick={run}
+        onPointerEnter={showPreview}
+        onPointerLeave={hidePreview}
+        onFocus={showPreview}
+        onBlur={hidePreview}
         style={linkStyle}
       >
         {fix.label}

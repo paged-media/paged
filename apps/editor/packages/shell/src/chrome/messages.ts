@@ -219,6 +219,18 @@ export const ENGINE_FAILURE = defineMessages("shell.engineFailure", {
 
 /** Hover preselection and the locked mark (editor ADR 235, amended by
  *  IC6): the type of the item a click would select. */
+/** The modifier hint strip (IC10). */
+export const MODIFIER_HINTS = defineMessages("shell.modifierHints", {
+  label: "Modifier keys",
+  toggle: "Add to or remove from the selection",
+  duplicate: "Duplicate while moving",
+  noSnap: "Ignore snapping",
+  pan: "Pan",
+  square: "Square or circle",
+  fromCentre: "From the centre",
+  keepVisible: "Keep modifier hints visible",
+});
+
 export const HOVER = defineMessages("shell.hover", {
   rectangle: "Rectangle",
   oval: "Ellipse",

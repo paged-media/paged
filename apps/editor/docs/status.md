@@ -270,6 +270,17 @@ hover's and the tool's — and is the only writer of it; the scrub fields, the l
 armed placement write theirs through the same two functions, and the single-owner rule
 `cursor-write` keeps it so.
 
+Modifier hints (IC10; extensions ADR 1109): a strip over the canvas names what the modifiers do
+with the tool in hand — the host's words for the Selection tools and the shape tools, a handler's
+own through the contract's new `GestureHandler.modifierHints` (the Pen names its own) — and
+lights the key held. It shows for a tool's first five uses and then recedes; Edit ▸ Settings ▸
+Keep modifier hints visible keeps it (`paged.modifierHints.always`; the uses are
+`paged.modifierHints.uses`).
+
+The Pen stays the Pen after it closes a path and the next clicks start another one, each path one
+undo step; deleting two selected points of a path removes only them, in one undo step (IC11,
+`UXI-T17`, `UXI-T18`; UX audit F-35). Track IC is complete: every UXI acceptance test is claimed.
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
@@ -350,8 +361,20 @@ viewport's centre first, one tile per tick, within a 64 MB tile budget; typing t
 engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
 yet (inventory exception `EXC-003`).
 
-Track PX has begun with the first two Phase 3 concepts. Document X-Ray is built
-([ADR 1233](adr/1233-document-x-ray-answers-from-the-model.md), engine ADR 1309): a "Why?"
+Track PX (the strategy's Phase 3 concepts), design constraints
+([ADR 1233](adr/1233-constraints-are-validated-intent.md), PX3): Object ▸ Add constraint… (and the
+canvas context menu) keeps an intent of the selection in the document — aligned edges, centres or
+first baselines to a key object, even spacing, a minimum gap, at most so many lines, text that
+must fit, an edge on a page margin — as the document label `x-paged:constraints`, which a `.paged`
+save and an IDML export keep. Each constraint is evaluated after every change, the pages in view
+first, deterministically from the engine's own geometry, lines and overset; one that does not hold
+is an issue in Publication health whose fix says what it will do, draws where it will put things
+while it has the pointer or the focus, and applies as one undo step. Nothing moves by itself. The
+constraints draw as faint glyphs (View ▸ Editing aids ▸ Design constraints) and are listed in
+Window ▸ Output ▸ Design constraints.
+
+Document X-Ray (PX1) is built
+([ADR 1236](adr/1236-document-x-ray-answers-from-the-model.md), engine ADR 1309): a "Why?"
 inspector (Window ▸ Utilities ▸ X-Ray) shows the engine's facts on the text at the caret or the
 selected item — per property the style level that wins (a style, a style through based-on, a
 local override, the default) and what it overrides, the lock and visibility reasons with Unlock,
@@ -360,7 +383,7 @@ and template fields, the thread with its overset count, the object style's fill 
 what editing each applied style changes (uses, pages, styles based on it); what the document does
 not store (a binding's record) is said so. View ▸ X-Ray outlines every item by the style that
 shapes it, with a label, a hover and a legend per page. The Typography Debugger is built
-([ADR 1234](adr/1234-typography-debugger.md), engine ADR 1310): the build keeps every line's
+([ADR 1237](adr/1237-typography-debugger.md), engine ADR 1310): the build keeps every line's
 composition record, and a panel lists the story's lines with their tightness, word spacing and
 why each broke (the dictionary's hyphenation points included); View ▸ Typography debugger tints
 the lines on the canvas and marks hyphens, forced breaks and the overset end; a change

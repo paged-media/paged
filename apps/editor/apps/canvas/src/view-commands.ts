@@ -69,6 +69,7 @@ const M = defineMessages("app.viewCommands", {
   oversetMarkers: "Show overset markers",
   hiddenCharacters: "Show hidden characters",
   nonprinting: "Show nonprinting items",
+  constraints: "Show design constraints",
 });
 
 defineMessages("menu", {
@@ -96,6 +97,7 @@ defineMessages("menu", {
   "Hidden characters": "Hidden characters",
   "Nonprinting items": "Nonprinting items",
   "Data bindings": "Data bindings",
+  "Design constraints": "Design constraints",
   "Proof view": "Proof view",
 });
 
@@ -125,6 +127,8 @@ export const PAGED_VIEW_TOGGLE_OVERSET_MARKERS =
 export const PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS =
   "paged.view.toggleHiddenCharacters";
 export const PAGED_VIEW_TOGGLE_NONPRINTING = "paged.view.toggleNonprinting";
+// Editor ADR 1233 — the design constraints' glyphs.
+export const PAGED_VIEW_TOGGLE_CONSTRAINTS = "paged.view.toggleConstraints";
 
 export const EDITING_AID_COMMANDS: Readonly<Record<EditingAidToggle, string>> =
   {
@@ -138,6 +142,7 @@ export const EDITING_AID_COMMANDS: Readonly<Record<EditingAidToggle, string>> =
     nonprinting: PAGED_VIEW_TOGGLE_NONPRINTING,
     // Data ADR 566 — the binding badges keep their older id (app-commands).
     dataMarkers: "paged.view.toggleDataMarkers",
+    constraints: PAGED_VIEW_TOGGLE_CONSTRAINTS,
   };
 
 /** The aids' rows of View ▸ Editing aids, in the control's order. */
@@ -151,6 +156,7 @@ const AID_ROWS: ReadonlyArray<[EditingAidToggle, string]> = [
   ["hiddenCharacters", "Hidden characters"],
   ["nonprinting", "Nonprinting items"],
   ["dataMarkers", "Data bindings"],
+  ["constraints", "Design constraints"],
 ];
 
 /** Proof view is the Preview screen mode (InDesign's W, the shell's
@@ -296,6 +302,12 @@ export function buildViewCommands(
       title: t(M.nonprinting),
       category: "View",
       handler: flip("nonprinting"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_CONSTRAINTS,
+      title: t(M.constraints),
+      category: "View",
+      handler: flip("constraints"),
     },
   ];
 }

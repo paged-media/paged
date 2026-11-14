@@ -80,6 +80,7 @@ import {
   PAGED_OBJECT_UNGROUP,
 } from "./object-commands";
 import { PAGED_EDIT_SELECT_ALL } from "./select-all";
+import { PAGED_OBJECT_ADD_CONSTRAINT } from "./constraints/add-constraint";
 import { layoutPages } from "./ui/layout";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -116,6 +117,8 @@ export const CANVAS_CONTEXT_MENU: readonly ContextMenuEntry[] = [
   { command: PAGED_OBJECT_UNGROUP, group: "group" },
   { command: PAGED_OBJECT_LOCK, group: "lock" },
   { command: PAGED_OBJECT_HIDE, group: "lock" },
+  // Editor ADR 1233 — a design constraint made from the selection.
+  { command: PAGED_OBJECT_ADD_CONSTRAINT, group: "constraints" },
   { command: PAGED_OBJECT_DELETE, group: "delete" },
   { command: PAGED_EDIT_SELECT_ALL, group: "select" },
 ];

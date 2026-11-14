@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Typography Debugger's shared half (editor ADR 1234): which story it
+// The Typography Debugger's shared half (editor ADR 1237): which story it
 // looks at, what a line's evidence means in words ("Why did this line break
 // here?"), the colour of a line's tightness, and the writes a preview
 // tries. The panel and the canvas overlay both read the engine's evidence

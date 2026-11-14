@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Document X-Ray and the Typography Debugger (editor ADRs 1233, 1234; the
+// Document X-Ray and the Typography Debugger (editor ADRs 1236, 1237; the
 // UX strategy's Concepts A and E; tasks PX1, PX2). The panels show the
 // engine's facts — the same answer `client.explain` and
 // `client.lineEvidence` give — for the X-Ray fixture; looking changes
@@ -101,7 +101,7 @@ const engineText = (page: Page, storyId: string, at: number) =>
     { storyId, at },
   );
 
-test.describe("Document X-Ray (editor ADR 1233)", () => {
+test.describe("Document X-Ray (editor ADR 1236)", () => {
   test("the Why? inspector shows the engine's cascade for the text at the caret; looking changes nothing @feat:editor-shell.panels.inspector @feat:styles.based-on-chain @feat:styles.cascade @level:happy", async ({
     page,
   }) => {
@@ -227,7 +227,7 @@ test.describe("Document X-Ray (editor ADR 1233)", () => {
   });
 });
 
-test.describe("The Typography Debugger (editor ADR 1234)", () => {
+test.describe("The Typography Debugger (editor ADR 1237)", () => {
   test("the panel and the canvas show the engine's lines; a preview never mutates; Apply is one undo step @feat:typography.knuth-plass @feat:typography.hyphenation @feat:typography.justification-spacing @level:happy", async ({
     page,
   }) => {

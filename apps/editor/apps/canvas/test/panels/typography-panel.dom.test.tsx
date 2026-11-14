@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Typography Debugger panel (editor ADR 1234): the story's lines as the
+// The Typography Debugger panel (editor ADR 1237): the story's lines as the
 // engine reports them, why the chosen one broke, and a preview that writes
 // nothing until Apply, which is one write.
 

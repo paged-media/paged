@@ -47,7 +47,7 @@ export type ViewToggle =
   | "dataMarkers"
   // Editor ADR 1223 — the publication's issues on the page.
   | "issueMarkers"
-  // Editor ADRs 1233 and 1234 — Document X-Ray and the Typography
+  // Editor ADRs 1236 and 1237 — Document X-Ray and the Typography
   // Debugger's lines on the canvas.
   | "xray"
   | "typography"
@@ -80,7 +80,9 @@ export type EditingAidToggle =
   | "hiddenCharacters"
   | "nonprinting"
   // Data ADR 566 — the binding badges of paged.data (the data markers).
-  | "dataMarkers";
+  | "dataMarkers"
+  // Editor ADR 1233 — the document's design constraints, as glyphs.
+  | "constraints";
 
 /** The editing aids in the order the control lists them. */
 export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
@@ -93,6 +95,7 @@ export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
   "hiddenCharacters",
   "nonprinting",
   "dataMarkers",
+  "constraints",
 ];
 
 const isAid = (t: ViewToggle): t is EditingAidToggle =>
@@ -124,7 +127,7 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   issueMarkers: false,
   // Off by default: X-Ray outlines every item by the style that shapes it
   // and the Typography Debugger colours every line of the selected story
-  // (editor ADRs 1233, 1234). Both are diagnostic views, never printed.
+  // (editor ADRs 1236, 1237). Both are diagnostic views, never printed.
   xray: false,
   typography: false,
   // Preview is the default screen: overprints knock out, as Illustrator's
@@ -158,6 +161,9 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   // Off, the engine leaves them off the screen, as it does in a proof and
   // in print (`ViewSettings.hideNonprinting`).
   nonprinting: true,
+  // Editor ADR 1233 — on: a document's design constraints are its own
+  // intent, shown where they hold (a document without any shows nothing).
+  constraints: true,
 };
 
 /** Where the editing aids are remembered (an editor preference). */
