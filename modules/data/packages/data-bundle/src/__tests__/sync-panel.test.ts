@@ -11,7 +11,10 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { BindingSync, QueryRowDiff } from "../review";
 import type { DataSourceSession, SessionState } from "../session";
 
-import { silentConsole as silent } from "@paged-media/plugin-sdk";
+import {
+  FALLBACK_WIDGETS,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
@@ -31,6 +34,12 @@ mock.module("react", () => ({
         typeof v === "function" ? (v as (p: unknown) => unknown)(slots[i]) : v;
     };
     return [slots[i], set];
+  },
+  // A ref is a slot too: the same object on every render.
+  useRef: (init: unknown) => {
+    const i = cursor++;
+    if (!(i in slots)) slots[i] = { current: init };
+    return slots[i];
   },
   // No renderer here: effects (the session subscription) do not run.
   useEffect: () => {},
@@ -110,6 +119,8 @@ const host = {
   log: silent,
   supports: () => true,
   selection: { get: () => [] },
+  // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+  widgets: FALLBACK_WIDGETS,
 } as unknown as BundleHost;
 
 beforeEach(() => {
@@ -127,6 +138,13 @@ const change = (tree: El[], attr: string, value: string) =>
   (find(tree, attr)!.props.onChange as (e: unknown) => void)({
     target: { value },
   });
+/** Commit a number into the host NumericField the element with `attr` wraps. */
+const commitNumber = (tree: El[], attr: string, value: number) =>
+  (
+    (find(tree, attr)!.props.children as El).props.onCommit as (
+      n: number,
+    ) => void
+  )(value);
 
 async function panel(
   over: Partial<DataSourceSession>,
@@ -197,8 +215,8 @@ describe("bindings panel — sync states and decisions [data.bind.sync-review]",
       { status: "error", buttons: ["Pin", "Format…"] },
       { status: "linked", buttons: ["Pin"] },
     ]);
-    expect(text(items[0])).toContain("pinned");
-    expect(text(items[3])).toContain("synced");
+    expect(text(items[0])).toContain("Pinned");
+    expect(text(items[3])).toContain("Synced");
     expect(text(items[2])).toContain("· fr");
 
     const buttons = tree.filter((e) => e.type === "button");
@@ -257,12 +275,12 @@ describe("bindings panel — sync states and decisions [data.bind.sync-review]",
     tree = render(Panel);
     change(tree, "data-data-format-kind", "currency");
     tree = render(Panel);
-    change(tree, "data-data-format-decimals", "0");
+    commitNumber(tree, "data-data-format-decimals", 0);
     tree = render(Panel);
     change(tree, "data-data-format-locale", "fr");
     tree = render(Panel);
     expect(text(find(tree, "data-data-format-locale"))).toContain(
-      "session locale (de)",
+      "Session locale (de)",
     );
     await press(tree, "data-data-format-apply");
     tree = render(Panel);
@@ -385,7 +403,7 @@ describe("bindings panel — the rule editor [data.rule.authoring]", () => {
     await press(tree, "data-data-rule-preview");
     tree = render(Panel);
     expect(text(find(tree, "data-data-rule-preview-out"))).toBe(
-      "fires on 2 of 3 records: #1, #3",
+      "Fires on 2 of 3 records: #1, #3",
     );
   });
 

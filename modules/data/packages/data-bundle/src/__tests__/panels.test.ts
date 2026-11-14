@@ -15,7 +15,10 @@ import type {
   SessionState,
 } from "../session";
 
-import { silentConsole as silent } from "@paged-media/plugin-sdk";
+import {
+  FALLBACK_WIDGETS,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
@@ -35,6 +38,12 @@ mock.module("react", () => ({
         typeof v === "function" ? (v as (p: unknown) => unknown)(slots[i]) : v;
     };
     return [slots[i], set];
+  },
+  // A ref is a slot too: the same object on every render.
+  useRef: (init: unknown) => {
+    const i = cursor++;
+    if (!(i in slots)) slots[i] = { current: init };
+    return slots[i];
   },
   // No renderer here: effects (the session subscription) do not run.
   useEffect: () => {},
@@ -114,6 +123,8 @@ const host = {
   log: silent,
   supports: () => true,
   selection: { get: () => [] },
+  // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+  widgets: FALLBACK_WIDGETS,
 } as unknown as BundleHost;
 
 beforeEach(() => {
@@ -370,7 +381,7 @@ describe("bindings panel — every binding kind is reachable [data.bind.authorin
       addVisibilityBinding: (...a: unknown[]) => void calls.push(a),
     });
     expect(calls).toHaveLength(0);
-    expect(msg).toMatch(/select the frame/);
+    expect(msg).toMatch(/Select the frame/);
   });
 
   it("a style rule over the caret's story applies the named style [data.bind.authoring]", async () => {
@@ -552,9 +563,9 @@ describe("bindings panel — the record-preview stepper [data.bind.preview-step]
     const { session } = liveSession({ records: { q_all: 24 } });
     const { makeBindingsPanel } = await import("../panels/bindings-panel");
     const tree = render(makeBindingsPanel(host, session));
-    expect(position(tree)).toBe("1 / 24");
-    expect(button(tree, /next/).props.disabled).toBe(false);
-    expect(button(tree, /prev/).props.disabled).toBe(true);
+    expect(position(tree)).toBe("Record 1 of 24");
+    expect(button(tree, /^Next$/).props.disabled).toBe(false);
+    expect(button(tree, /^Previous$/).props.disabled).toBe(true);
   });
 
   it("keeps its record when the panel is shown again (another tab, then back)", async () => {
@@ -562,15 +573,15 @@ describe("bindings panel — the record-preview stepper [data.bind.preview-step]
     const { makeBindingsPanel } = await import("../panels/bindings-panel");
     const Panel = makeBindingsPanel(host, session);
     let tree = render(Panel);
-    await (button(tree, /next/).props.onClick as () => Promise<void>)();
+    await (button(tree, /^Next$/).props.onClick as () => Promise<void>)();
     await new Promise((r) => setTimeout(r, 0));
     tree = render(Panel);
-    expect(position(tree)).toBe("2 / 24");
+    expect(position(tree)).toBe("Record 2 of 24");
     // A remount: the panel's own state is gone, the session's is not.
     slots.length = 0;
     tree = render(Panel);
-    expect(position(tree)).toBe("2 / 24");
-    expect(button(tree, /prev/).props.disabled).toBe(false);
+    expect(position(tree)).toBe("Record 2 of 24");
+    expect(button(tree, /^Previous$/).props.disabled).toBe(false);
   });
 
   it("before the data ran, next › runs it and shows the first record", async () => {
@@ -587,13 +598,13 @@ describe("bindings panel — the record-preview stepper [data.bind.preview-step]
     const { makeBindingsPanel } = await import("../panels/bindings-panel");
     const Panel = makeBindingsPanel(host, session);
     let tree = render(Panel);
-    expect(position(tree)).toBe("— / —");
-    expect(button(tree, /next/).props.disabled).toBe(false);
-    await (button(tree, /next/).props.onClick as () => Promise<void>)();
+    expect(position(tree)).toBe("No records yet");
+    expect(button(tree, /^Next$/).props.disabled).toBe(false);
+    await (button(tree, /^Next$/).props.onClick as () => Promise<void>)();
     await new Promise((r) => setTimeout(r, 0));
     tree = render(Panel);
     expect(refreshed).toBe(1);
-    expect(position(tree)).toBe("1 / 3");
+    expect(position(tree)).toBe("Record 1 of 3");
   });
 });
 
