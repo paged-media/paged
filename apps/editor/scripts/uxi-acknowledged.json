@@ -1,9 +1,5 @@
 {
   "$comment": "UXI acceptance tests no test claims yet, each with the plan task that will make one claim it (editor ADR 1202; apps/editor/docs/reference/surface-conformance.md, 'Interaction contract coverage'). scripts/uxi-coverage.mjs fails while a claimed id is still listed here (run it with --prune) and when an unlisted id has no claiming test.",
-  "UXI-T14": {
-    "task": "IC7",
-    "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T14 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T17": {
     "task": "IC11",
     "reason": "No test claims it yet: the Pen tool does not stay Pen after closing a path, and deleting points is not one undo step yet (IC11). Claim it in a test title (UXI-T17 — …) when that lands, or sooner where today's code already passes (W0.7)."
@@ -11,10 +7,6 @@
   "UXI-T18": {
     "task": "IC11",
     "reason": "No test claims it yet: the Pen tool does not stay Pen after closing a path, and deleting points is not one undo step yet (IC11). Claim it in a test title (UXI-T18 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T56": {
-    "task": "IC7",
-    "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T56 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T69": {
     "task": "AP1",

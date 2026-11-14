@@ -162,8 +162,9 @@ describe("live-shape widgets", () => {
         .querySelector("[data-live-shape-handles]")!
         .getAttribute("data-count"),
     ).toBe("4");
-    // Square corners: each widget sits the minimum 14 px in.
-    expect(at(h, "corner-0")).toEqual([114, 114]);
+    // Square corners: each widget sits the minimum 20 px in, clear of the
+    // corner's resize square (ADR 310, amendment 2026-11-14).
+    expect(at(h, "corner-0")).toEqual([120, 120]);
     const mark = h.mark();
     await drag(h, "corner-0", [
       [118, 118],
@@ -338,10 +339,10 @@ describe("live-shape widgets", () => {
         .querySelector("[data-live-shape-handles]")!
         .getAttribute("data-count"),
     ).toBe("3");
-    // A square corner: the minimum 14 px in, along the bisector.
+    // A square corner: the minimum 20 px in, along the bisector.
     const [wx, wy] = at(h, "polygon-corner-0");
-    expect(wx).toBeCloseTo(100 + 14 / Math.SQRT2, 6);
-    expect(wy).toBeCloseTo(100 + 14 / Math.SQRT2, 6);
+    expect(wx).toBeCloseTo(100 + 20 / Math.SQRT2, 6);
+    expect(wy).toBeCloseTo(100 + 20 / Math.SQRT2, 6);
     const mark = h.mark();
     // To (120, 120): 20 pt along both edges, so a 20 pt radius at 90°.
     await drag(h, "polygon-corner-0", [
