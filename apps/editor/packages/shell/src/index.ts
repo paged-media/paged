@@ -833,6 +833,7 @@ export {
   useScrubGesture,
   type ScrubGesture,
   type ScrubGestureOptions,
+  type ScrubPhase,
 } from "./gestures/use-scrub-gesture";
 
 // SDK Phase 1 — gesture SAB primitives moved to `@paged-media/client`
@@ -918,6 +919,11 @@ export {
 
 // ── SDK Phase 3 — declarative catalog renderer + primitive leaves
 export { CompositionRenderer, CatalogRegistryProvider } from "./catalog/render";
+export {
+  createPreviewCommitter,
+  usePreviewCommitter,
+  type PreviewCommitter,
+} from "./catalog/scrub-preview";
 // ── W3.1 — the plugin SCHEMA-PANEL renderer (closes plugin-draw B-01):
 //    renders a bundle's declarative `PanelSchema` from the catalog and
 //    gates rows/sections on the bundle's published bindings.

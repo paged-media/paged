@@ -43,6 +43,7 @@
 // layers needs a door the image module does not offer yet.
 
 import { ColorInput } from "@paged-media/panel-kit";
+import { NumberInput } from "@paged-media/ui";
 import { useState } from "react";
 
 import {
@@ -470,6 +471,14 @@ export function parseNumbers(
   return nums.map((n) => Math.min(max, Math.max(min, n)));
 }
 
+/** Decimal places a step shows: 0.01 → 2, 1 → 0 (at most 4). */
+function digitsOf(step: number | undefined): number {
+  if (!step || Number.isInteger(step)) return 0;
+  const text = String(step);
+  const dot = text.indexOf(".");
+  return dot < 0 ? 0 : Math.min(4, text.length - dot - 1);
+}
+
 /** A field that commits on Enter or blur; `key` reseeds it whenever the
  *  stack changes underneath (undo, another selection). */
 function CommitInput({
@@ -485,7 +494,7 @@ function CommitInput({
 }: {
   value: string;
   label: string;
-  type: "number" | "text";
+  type: "text";
   min?: number;
   max?: number;
   step?: number;
@@ -597,25 +606,30 @@ function OpRow({
         const key = `${index}:${f.key}:${JSON.stringify(op[f.key])}`;
         if (f.kind === "number") {
           return (
-            <CommitInput
+            <label
               key={key}
-              dataKey={f.key}
-              label={label}
-              type="number"
-              min={f.min}
-              max={f.max}
-              step={f.step}
-              value={String(op[f.key] ?? 0)}
-              disabled={disabled}
-              onCommit={(text) => {
-                const n = Number(text);
-                if (!Number.isFinite(n)) return;
-                onChange({
-                  ...op,
-                  [f.key]: Math.min(f.max, Math.max(f.min, n)),
-                });
-              }}
-            />
+              className="flex items-center justify-between gap-2 py-[2px]"
+            >
+              <span
+                className="text-[11px]"
+                style={{ color: "var(--pg-muted-fg)" }}
+              >
+                {label}
+              </span>
+              <NumberInput
+                value={Number(op[f.key] ?? 0)}
+                min={f.min}
+                max={f.max}
+                step={f.step}
+                precision={digitsOf(f.step)}
+                disabled={disabled}
+                aria-label={label}
+                className="w-[96px]"
+                inputAttributes={{ "data-adjust-field": f.key }}
+                onChange={() => {}}
+                onCommit={(n) => onChange({ ...op, [f.key]: n })}
+              />
+            </label>
           );
         }
         if (f.kind === "color") {

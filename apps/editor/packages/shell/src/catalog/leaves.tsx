@@ -50,17 +50,21 @@ import {
   useRowLabelId,
 } from "@paged-media/panel-kit";
 import {
+  applyRelative,
   BoundsInput,
   isLengthUnit,
   KitSelect,
   LengthInput,
   ColorPicker,
   NumberInput,
+  type NumericCommitMeta,
+  type RelativeEdit,
 } from "@paged-media/ui";
 
 import { useStrings } from "@paged-media/strings";
 
 import { Icon } from "../icons";
+import { usePreviewCommitter } from "./scrub-preview";
 import { useCollection } from "./use-collection";
 import { LIST } from "./messages";
 
@@ -196,20 +200,83 @@ function rowProps(props: Record<string, unknown>) {
 
 // ---------------------------------------------------------------- leaves
 
+/** The one numeric field's handlers for a leaf (UXI-PNL-005, PNL-010): a
+ *  scrub previews through the binding as one undo step when the binding
+ *  writes through core (`previewable`), else commits on release; a relative
+ *  entry over a mixed selection writes each object its own value
+ *  (`commitEach`). Values are numbers in the leaf's unit (points). */
+function useNumericLeafWrites(
+  onCommit: LeafProps["onCommit"],
+  props: Record<string, unknown>,
+) {
+  const committer = usePreviewCommitter();
+  const write = (n: number) => (coalesce: string | null) =>
+    onCommit?.(
+      { type: "length", value: n } as Value,
+      coalesce !== null ? { coalesce } : undefined,
+    );
+  const previewable = props.previewable === true && committer !== null;
+  const commitEach =
+    typeof props.commitEach === "function"
+      ? (props.commitEach as (
+          next: (current: Value | null) => Value | null,
+        ) => void)
+      : null;
+  return {
+    onCommit: (n: number, meta?: NumericCommitMeta) => {
+      if (committer) committer.commit(meta?.coalesceKey ?? null, write(n));
+      else write(n)(null);
+    },
+    onPreview: previewable
+      ? (n: number, meta: NumericCommitMeta) => {
+          if (meta.coalesceKey) committer.preview(meta.coalesceKey, write(n));
+        }
+      : undefined,
+    onCancelPreview: previewable
+      ? (meta: NumericCommitMeta) => {
+          if (meta.coalesceKey) committer.cancel(meta.coalesceKey);
+        }
+      : undefined,
+    onCommitRelative: commitEach
+      ? (edit: RelativeEdit) =>
+          commitEach((current) =>
+            current?.type === "length" && typeof current.value === "number"
+              ? ({
+                  type: "length",
+                  value: applyRelative(edit, current.value),
+                } as Value)
+              : null,
+          )
+      : undefined,
+  };
+}
+
+/** The value is data-bound (`props.bound`, PropertyField's verdict). */
+function boundOf(props: Record<string, unknown>): boolean | string | undefined {
+  return props.bound === true || typeof props.bound === "string"
+    ? (props.bound as boolean | string)
+    : undefined;
+}
+
 /** Numeric metric bound to a `Value::Length` — the kit `Num`: h28,
  *  mono value with the unit INSIDE ("16 pt"), optional glyph chip
- *  (the scrub handle) and in-field `prefix`. `null` shows the
- *  em-dash inside the control; seams show `placeholder` text. */
+ *  (the scrub handle) and in-field `prefix`. A mixed selection reads
+ *  "Mixed", no selection the em-dash; seams show `placeholder` text.
+ *  The one numeric field: expressions, a live scrub preview (one undo
+ *  step), relative entries over a mixed selection. */
 export function LengthLeaf({ value, onCommit, props }: LeafProps) {
   const icon = iconFromProps(props);
   const seam = isSeam(props);
   const unsetText = unsetTextOf(value, props);
   const pointValue = unsetText ? null : unwrapLength(value, props);
+  const writes = useNumericLeafWrites(onCommit, props);
   return (
     <LeafRow {...rowProps(props)}>
       <span data-seam={seam ? "true" : undefined} className="contents">
         <LengthInput
           valuePt={seam ? null : pointValue}
+          mixed={!seam && props.mixed === true}
+          bound={seam ? undefined : boundOf(props)}
           defaultUnit={isLengthUnit(props.unit) ? props.unit : undefined}
           icon={icon}
           prefix={strFromProps(props, "prefix")}
@@ -220,11 +287,12 @@ export function LengthLeaf({ value, onCommit, props }: LeafProps) {
           unsetText={seam ? undefined : unsetText}
           disabled={seam || onCommit == null}
           onChangePt={() => {
-            /* live updates ignored; commit on blur */
+            /* live values go through onPreviewPt; commits through onCommitPt */
           }}
-          onCommitPt={(next) => {
-            onCommit?.({ type: "length", value: next } as Value);
-          }}
+          onCommitPt={writes.onCommit}
+          onPreviewPt={writes.onPreview}
+          onCancelPreview={writes.onCancelPreview}
+          onCommitRelativePt={writes.onCommitRelative}
         />
       </span>
     </LeafRow>
@@ -237,11 +305,14 @@ export function NumericScrubLeaf({ value, onCommit, props }: LeafProps) {
   const seam = isSeam(props);
   const unsetText = unsetTextOf(value, props);
   const pointValue = unsetText ? null : unwrapLength(value, props);
+  const writes = useNumericLeafWrites(onCommit, props);
   return (
     <LeafRow {...rowProps(props)}>
       <span data-seam={seam ? "true" : undefined} className="contents">
         <NumberInput
           value={seam ? null : pointValue}
+          mixed={!seam && props.mixed === true}
+          bound={seam ? undefined : boundOf(props)}
           icon={icon}
           prefix={strFromProps(props, "prefix")}
           suffix={strFromProps(props, "suffix")}
@@ -251,11 +322,12 @@ export function NumericScrubLeaf({ value, onCommit, props }: LeafProps) {
           unsetText={seam ? undefined : unsetText}
           disabled={seam || onCommit == null}
           onChange={() => {
-            /* live updates ignored; commit on blur */
+            /* live values go through onPreview; commits through onCommit */
           }}
-          onCommit={(next) => {
-            onCommit?.({ type: "length", value: next } as Value);
-          }}
+          onCommit={writes.onCommit}
+          onPreview={writes.onPreview}
+          onCancelPreview={writes.onCancelPreview}
+          onCommitRelative={writes.onCommitRelative}
         />
       </span>
     </LeafRow>

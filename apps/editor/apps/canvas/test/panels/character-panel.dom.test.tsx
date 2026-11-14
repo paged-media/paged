@@ -127,7 +127,8 @@ describe("Character panel: states", () => {
     );
     await h.selectText(h.scene.storyId, 0, 11);
     expect(state(h, "characterFontSize")).toBe("mixed");
-    expect(input(h, "characterFontSize")).toBe("—");
+    // UXI-PNL-008: a mixed field says so, never a number or a blank.
+    expect(input(h, "characterFontSize")).toBe("Mixed");
     expect(state(h, "characterTracking")).toBe("value");
   });
 

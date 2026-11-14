@@ -245,6 +245,7 @@ const _schemaRendererCompat: _AssertSchemaRenderer = true;
 void _schemaRendererCompat;
 import { CodeEditor } from "@paged-media/ui";
 import { HostColorPicker } from "../plugin-color-picker";
+import { HostNumericField } from "../plugin-numeric-field";
 import { setHostColorPicker } from "@paged-media/panel-kit";
 import {
   ObjectPropertyField,
@@ -662,6 +663,7 @@ function PluginBundles() {
       widgets: {
         CodeEditor,
         ColorPicker: HostColorPicker,
+        NumericField: HostNumericField,
         PropertyField: ObjectPropertyField,
         PropertyFrame: ObjectPropertyFrame,
       },

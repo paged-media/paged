@@ -3977,6 +3977,45 @@
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-SEL-013"],
       "status": "migrated"
+    },
+    {
+      "id": "field.scrub",
+      "title": "A numeric field's label scrubs its value (Shift fine, Alt coarse)",
+      "owner": "panel",
+      "eventClass": "pointer:primary-drag",
+      "scope": "panel/numeric-field",
+      "adapter": "none",
+      "site": "apps/editor/packages/ui/src/inputs/NumericField.tsx",
+      "listener": "element",
+      "states": [
+        "idle",
+        "pressed",
+        "previewing",
+        "committing",
+        "canceling",
+        "settled"
+      ],
+      "permission": "One undo step per scrub (editor ADR 1216): every preview and the release carry one coalesce key to the engine (engine ADR 1304), which keeps them one step; a write from an edit context commits on release only.",
+      "cancel": "Escape (the gesture tier of the Escape arbiter, ADR 1207) and pointercancel revert the scrub and undo its step; a release where it began commits nothing.",
+      "surfaceIds": ["panel:paged.stroke", "panel:paged.properties"],
+      "uxi": ["UXI-PNL-002", "UXI-PNL-005"],
+      "status": "migrated"
+    },
+    {
+      "id": "field.type",
+      "title": "A numeric field takes an expression: Enter or blur commits, Escape restores",
+      "owner": "panel",
+      "eventClass": "key:Enter",
+      "scope": "panel/numeric-field",
+      "adapter": "none",
+      "site": "apps/editor/packages/ui/src/inputs/NumericField.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "A typed value is one commit (one undo step); a refused value (syntax, range, unit) is said in words and writes nothing (editor ADR 1216).",
+      "cancel": "Escape in the focused field restores what was there and commits nothing; the field owns the key while it has focus (ADR 234).",
+      "surfaceIds": ["panel:paged.properties"],
+      "uxi": ["UXI-PNL-002", "UXI-PNL-005", "UXI-PNL-009"],
+      "status": "migrated"
     }
   ],
   "exceptions": [

@@ -116,10 +116,11 @@ export interface CoreObjects {
   /** Evaluate core selector steps (no plugin steps). */
   query(steps: readonly SelectorStep[]): Promise<string[]>;
   /** Commit mutations as ONE engine mutation (a `batch` when > 1). */
-  /** `opts.label` names the undo step (engine ADR 1030). */
+  /** `opts.label` names the undo step (engine ADR 1030); `opts.coalesce`
+   *  joins it to the run of writes with that key (engine ADR 1304). */
   commit(
     mutations: readonly MutationInput[],
-    opts?: { label?: string },
+    opts?: { label?: string; coalesce?: string },
   ): Promise<MutationOutcome>;
   /** Pre-71 only: remember a table's story (a `cell:` address carries
    *  none; the old wire's `TableCell` id needs it). A no-op at 71. */

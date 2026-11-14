@@ -124,20 +124,27 @@ describe("Picture adjustments [images-graphics.image-filter-stack]", () => {
     expect(await h.get(addr(h.scene.rect), PATH)).toEqual(stack([]));
   });
 
-  test("a preset appends its ops; an out-of-range value is clamped", async () => {
+  test("a preset appends its ops; an out-of-range value is refused in words", async () => {
     covers("panel:paged.picture-adjustments");
     const h = await mount();
     await h.select([h.scene.rect]);
     await h.choose(q(h, "[data-adjust-preset]"), "noir");
     expect(rows(h)).toEqual(["blackWhite", "curves"]);
     await h.choose(q(h, "[data-adjust-add]"), "blur");
-    await h.typeInto(
+    const radius = () =>
       q<HTMLInputElement>(
         h,
         '[data-adjust-row="blur"] [data-adjust-field="radius"]',
-      ),
-      "500",
-    );
+      );
+    const before = (await h.get(addr(h.scene.rect), PATH)) as {
+      value: Array<Record<string, unknown>>;
+    };
+    // The one numeric field (UXI-PNL-009): out of range is said, not
+    // silently clamped, and nothing is written.
+    await h.typeInto(radius(), "500");
+    expect(radius().getAttribute("aria-invalid")).toBe("true");
+    expect(await h.get(addr(h.scene.rect), PATH)).toEqual(before);
+    await h.typeInto(radius(), "64");
     const v = (await h.get(addr(h.scene.rect), PATH)) as {
       value: Array<Record<string, unknown>>;
     };

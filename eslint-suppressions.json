@@ -7,11 +7,6 @@
       "count": 1
     }
   },
-  "apps/editor/apps/canvas/src/cockpit/control-bar.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "apps/editor/apps/canvas/src/core-command-dialog.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
@@ -100,7 +95,7 @@
       "count": 1
     },
     "react-hooks/set-state-in-effect": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/editor/apps/canvas/src/panels/table-styles-panel.tsx": {

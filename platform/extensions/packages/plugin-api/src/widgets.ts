@@ -107,6 +107,19 @@ export interface WidgetSurface {
    *  `host.supports("widgets.propertyField@1")`) and keep your own control
    *  as the fallback. */
   readonly PropertyField?: ComponentType<PropertyFieldProps>;
+  /** The host's ONE NUMERIC FIELD (editor ADR on the one numeric field;
+   *  the interaction spec's UXI-PNL-002): the field every host panel types
+   *  numbers into, so a plugin's numbers behave as the host's do. Units
+   *  and expressions ("10 mm + 2 pt", "+=5", "*110%"), the UI locale's
+   *  decimal comma, "Mixed" for a mixed selection (never 0), an inline
+   *  message for a refused value (invalid, out of range, a unit the field
+   *  cannot take), Enter / blur commits and Escape restores, a scrub of the
+   *  label previews live and commits ONCE on release (one undo step), and
+   *  the bound badge. It edits a value the BUNDLE owns: the bundle writes
+   *  the committed value through its own door. Always present: a plain
+   *  decimal text field stands in when the host injects none (probe
+   *  `host.supports("widgets.numericField@1")`). */
+  readonly NumericField: ComponentType<NumericFieldProps>;
   /** ADR 323 — the field CHROME without a widget, around a control the
    *  bundle keeps on purpose (a curve editor, a gradient strip): the
    *  host's verdict hooks, "Bind to data…" on right-click and the badges.
@@ -153,6 +166,71 @@ export interface PropertyFrameProps {
   kind?: string;
   bindable?: boolean;
   children: ReactNode;
+}
+
+/** A relative entry typed over a value ("+=5 mm", "*110%"): apply it to
+ *  each target's own value. `operand` is in the field's value unit (points
+ *  for an added length); `percent` marks "+=10%" (a tenth of the value). */
+export interface NumericRelativeEdit {
+  op: "+" | "-" | "*" | "/";
+  operand: number;
+  percent: boolean;
+}
+
+/** What produced a value {@link WidgetSurface.NumericField} hands over. */
+export interface NumericFieldCommit {
+  /** `type`: Enter or blur; `scrub`: a scrub's preview or release; `step`:
+   *  an arrow key. */
+  source: "type" | "scrub" | "step";
+  /** Shared by every preview and the commit of ONE scrub: write them as
+   *  one undo step (the bundle's own grouping; null outside a scrub). */
+  coalesceKey: string | null;
+  /** The relative entry typed, when there was one. */
+  relative: NumericRelativeEdit | null;
+}
+
+/** Props of {@link WidgetSurface.NumericField}. */
+export interface NumericFieldProps {
+  /** The value: in points for a `length` field, else in the field's own
+   *  unit. Null: no value (unset, mixed, nothing to read). */
+  value: number | null;
+  /** The targets disagree: the field reads "Mixed". */
+  mixed?: boolean;
+  /** A length: shown in the document's unit (or `unit`), committed in
+   *  points. */
+  length?: boolean;
+  /** A length field's display unit. */
+  unit?: "pt" | "pc" | "px" | "mm" | "cm" | "in";
+  /** A non-length field's suffix ("%", "°"), shown and accepted. */
+  suffix?: string;
+  /** Bounds, in the value's unit. A typed value outside them is refused
+   *  with a message; a scrub clamps. */
+  min?: number;
+  max?: number;
+  /** Shown units per scrubbed pixel and per arrow key. Default 1. */
+  step?: number;
+  /** Decimal places shown. */
+  precision?: number;
+  /** Text on the scrub handle ("W", "Radius"); without it the field does
+   *  not scrub. */
+  label?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  /** The value comes from data: `true`, or the source's name. */
+  bound?: boolean | string;
+  /** A committed value: Enter, blur, a scrub's release, an arrow step. */
+  onCommit?(value: number, commit: NumericFieldCommit): void;
+  /** A live value while scrubbing (the commit that follows closes it). */
+  onPreview?(value: number, commit: NumericFieldCommit): void;
+  /** A scrub that previewed ended without a new value: put back what was
+   *  there. */
+  onCancelPreview?(commit: NumericFieldCommit): void;
+  /** A relative entry over a mixed value: apply it per target. */
+  onCommitRelative?(
+    edit: NumericRelativeEdit,
+    commit: NumericFieldCommit,
+  ): void;
+  ariaLabel?: string;
 }
 
 /** Props of {@link WidgetSurface.ColorPicker}. Colours are sRGB hex. */

@@ -123,6 +123,15 @@ function Node({ node }: { node: CompositionNode }): ReactElement {
       props: {
         ...node.props,
         ...(absent ? { seam: true } : {}),
+        // The one numeric field's three binding facts (UXI-PNL-005/008/010):
+        // the targets disagree; the write goes through core, so a scrub
+        // can preview it as one undo step; and a per-object write for a
+        // relative entry over a mixed selection.
+        ...(resolved.value?.state === "mixed" ? { mixed: true } : {}),
+        ...(resolved.value?.plan ? { previewable: true } : {}),
+        ...(resolved.value?.commitEach
+          ? { commitEach: resolved.value.commitEach }
+          : {}),
         ...(childElements ? { children: <>{childElements}</> } : {}),
         // Layout leaves that wrap EACH child (the cluster's
         // sub-labelled cells) need the array, not the opaque

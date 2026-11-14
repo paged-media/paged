@@ -1273,6 +1273,7 @@ export async function createHeadlessEditor(
     widgets: {
       CodeEditor: renderNothing,
       ColorPicker: renderNothing,
+      NumericField: renderNothing,
       PropertyField: renderNothing,
       PropertyFrame: renderNothing,
     } as never,

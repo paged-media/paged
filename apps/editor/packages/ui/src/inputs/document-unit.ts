@@ -27,6 +27,7 @@
 
 import { useSyncExternalStore } from "react";
 
+import { lengthTextToPoints } from "./expression";
 import { POINTS_PER_UNIT, type LengthUnit } from "./units";
 
 /** The units the preference offers, in menu order, with their names. */
@@ -117,29 +118,15 @@ export function formatLength(
   return `${lengthIn(pt, unit)} ${unit}`;
 }
 
-/** Points per unit for every suffix a typed length may carry ("p" is the
- *  pica, as InDesign spells it). */
-const SUFFIX: Readonly<Record<string, number>> = {
-  ...POINTS_PER_UNIT,
-  p: POINTS_PER_UNIT.pc,
-  "″": POINTS_PER_UNIT.in,
-  '"': POINTS_PER_UNIT.in,
-};
-
-/** Read a typed length into points: "10mm", "0.5 in", "6p", "12,5 pt"; a
- *  bare number is in `unit`. Null when the text is not a length. */
+/** Read a typed length into points: "10mm", "0.5 in", "6p", "12,5 pt",
+ *  "10 mm + 2 pt"; a bare number is in `unit`. Null when the text is not a
+ *  length. The one expression parser reads it (`./expression`, the numeric
+ *  field's ADR); this is its length-only door. */
 export function parseLengthText(
   text: string,
   unit: LengthUnit = documentUnit(),
 ): number | null {
-  const m = /^\s*([-+]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*([a-z"″]*)\s*$/i.exec(
-    text,
-  );
-  if (!m) return null;
-  const n = Number(m[1].replace(",", "."));
-  if (!Number.isFinite(n)) return null;
-  const factor = m[2] ? SUFFIX[m[2].toLowerCase()] : POINTS_PER_UNIT[unit];
-  return factor === undefined ? null : n * factor;
+  return lengthTextToPoints(text, unit);
 }
 
 /** A width and height as one readout: "612 × 792 pt", "210 × 297 mm". */

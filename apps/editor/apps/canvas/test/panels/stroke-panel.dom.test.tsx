@@ -108,7 +108,8 @@ describe("Stroke panel: states", () => {
     expect(
       h.field("frameStrokeWeight").getAttribute("data-binding-state"),
     ).toBe("mixed");
-    expect(shown(h, "frameStrokeWeight")).toBe("—");
+    // UXI-PNL-008: mixed reads "Mixed", never a number.
+    expect(shown(h, "frameStrokeWeight")).toBe("Mixed");
     expect(
       h.field("frameStrokeEndCap").getAttribute("data-binding-state"),
     ).toBe("value");

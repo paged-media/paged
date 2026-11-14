@@ -53,14 +53,14 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [230](230-one-replace-question.md) | One question before any document replaces the open one | Accepted 2026-10-19 |
 | [231](231-page-item-clipboard.md) | The page-item clipboard: Cut, Copy, Paste, Paste in place, Duplicate | Accepted 2026-10-19 |
 | [232](232-canvas-context-menu.md) | The canvas context menu is made of commands | Accepted 2026-10-19 |
-| [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 |
+| [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 (amended 2026-11-13 by 1216) |
 | [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 (amended 2026-11-13 by 1201; D-03 implemented 2026-11-13) |
 | [235](235-the-selection-tools-pointer-model.md) | The Selection tools follow InDesign's pointer model | Accepted 2026-10-19 (amended 2026-11-13 by 1201) |
 | [236](236-a-caret-holds-its-character-style.md) | A caret holds the character style chosen at it | Accepted 2026-10-19 |
 | [237](237-a-document-opens-on-its-first-page.md) | A document opens on its first page | Accepted 2026-10-19 (amended 2026-11-13 by 1208) |
 | [238](238-the-default-pdf-is-one-the-document-can-meet.md) | The default PDF is one the document can meet | Accepted 2026-10-19 |
 | [240](240-react-19-features.md) | The editor uses React 19's effect events, Activity, view transitions, Fragment refs and Trusted Types | Accepted 2026-10-19 |
-| [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 |
+| [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 (amended 2026-11-13 by 1216) |
 | [246](246-one-zoom-range.md) | One zoom range, and the view chords in the keybinding registry | Accepted 2026-10-19 (amended 2026-11-13 by 1201, 1211) |
 | [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
 | [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
@@ -139,6 +139,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1213](1213-page-lenses-and-semantic-zoom.md) | Page lenses and semantic zoom: the document map as Pages, Structure, Layers, Issues and Data lenses with one search, every jump recorded for Back; overview, page and detail tiers decide which handles and ruler ticks draw, never the selection or the tool; page names off the pages | Accepted 2026-11-13; amends 263 |
 | [1214](1214-one-way-out-of-a-context.md) | One way out of a context: one exit resolver (reason × dirty × the module's `exitPolicy`) for every exit, a resolve prompt, the document switch resolved before the replace question; the stack as a reducer with a post-commit effect queue, hooks by frame id, the scope query, groups in the breadcrumb | Accepted 2026-11-13; amends 250 and 281 |
 | [1215](1215-frame-content-edit.md) | Frame, content, edit: a picture frame enters its content first (the picture moves, the frame stays), Edit image explicitly (D-05); labels name the content; the trail lives in the context toolbar's fixed bar | Accepted 2026-11-13; amends 282 and 284 |
+| [1216](1216-one-numeric-field.md) | One numeric field: one parser (units, + − × ÷, brackets, relative `+=` / `*110%`, mixed units resolved to the field's unit, the locale's decimal comma, typed errors) and one field (Enter or blur commits, Escape restores, "Mixed", messages in words, the bound badge, a scrub as one undo step with a live preview, relative entries per object); the wrappers, the control bar and the host panels use it; `host.widgets.NumericField`; rule `raw-number-input` | Accepted 2026-11-13; amends 233, 245 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

@@ -153,11 +153,11 @@ export interface ShellObjectsSurface {
     address: string,
     path: string,
     value: unknown,
-    opts?: { label?: string },
+    opts?: { label?: string; coalesce?: string },
   ): Promise<ShellObjectWriteResult>;
   batch(
     ops: readonly ShellObjectOp[],
-    opts?: { label?: string },
+    opts?: { label?: string; coalesce?: string },
   ): Promise<ShellObjectWriteResult>;
   schema(addressOrKind: string): Promise<readonly ShellPropertySchema[]>;
   commands(): Promise<readonly ShellObjectCommandInfo[]>;

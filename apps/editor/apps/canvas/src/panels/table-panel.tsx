@@ -76,7 +76,8 @@
 // ContentSelection.cell → useTextEditing). This panel edits cell
 // STRUCTURE; the in-canvas caret edits cell TEXT.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { NumberInput } from "@paged-media/ui";
 
 import {
   CockpitBtn,
@@ -944,41 +945,17 @@ function NumberCommit({
   onCommit: (v: number) => void;
   testId: string;
 }) {
-  const [draft, setDraft] = useState<string>("");
-  // The last text committed: Enter commits AND blurs, and the blur must
-  // not write the same value a second time (that was a second undo step).
-  const committed = useRef<string | null>(null);
-  // Sync the draft to the read-back value when it changes (and the
-  // field isn't mid-edit — a blank draft means "show the model").
-  useEffect(() => {
-    if (value != null) setDraft(String(value));
-  }, [value]);
-  const commit = () => {
-    const n = Number(draft);
-    if (draft.trim() === "" || !Number.isFinite(n)) return;
-    if (committed.current === draft) return;
-    committed.current = draft;
-    onCommit(n);
-  };
+  // The one numeric field: Enter / blur commits once, Escape restores; an
+  // unread value (no read surface) stays blank behind its placeholder.
   return (
-    <input
-      type="number"
-      data-num-input={testId}
-      value={draft}
+    <NumberInput
+      value={value ?? null}
+      unsetText={value == null ? "" : undefined}
       placeholder={placeholder}
-      onChange={(e) => {
-        committed.current = null;
-        setDraft(e.target.value);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          commit();
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-      onBlur={commit}
-      className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px] tabular-nums"
-      style={{ color: "var(--pg-fg)" }}
+      className="w-full"
+      inputAttributes={{ "data-num-input": testId }}
+      onChange={() => {}}
+      onCommit={onCommit}
     />
   );
 }

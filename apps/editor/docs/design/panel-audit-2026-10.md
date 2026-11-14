@@ -136,7 +136,9 @@ The editor backs it in `apps/canvas/src/plugin-pages.ts`.
 - **User messages.** A way for plugins to show the user a message (`host.notify` or an
   inline status primitive). The plugins now show refusals in their own panels, each in
   its own way.
-- **Shared primitives.** The kit's input primitives exposed through `plugin-api`.
+- **Shared primitives: resolved (2026-11-13).** The editor's one numeric field reaches plugins
+  as `host.widgets.NumericField` (`widgets.numericField@1`), beside the colour picker and the
+  property field ([ADR 1216](../adr/1216-one-numeric-field.md)).
 - **Doc plugin size: resolved.** paged.doc's wasm was 8.64 MB when this audit was written,
   over its manifest's 8 MiB budget. The `wasm-release` profile (2026-10-14) brought it
   down, and the build now enforces `maxBytes`. It measured 6.56 MiB raw (1.79 MiB gzip)

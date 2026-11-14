@@ -45,7 +45,6 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { type ElementId, type FontSummary } from "@paged-media/client";
@@ -80,9 +79,7 @@ import {
 } from "@paged-media/tools";
 import {
   formatLengthPair,
-  parseLengthText,
-  POINTS_PER_UNIT,
-  unitDigits,
+  NumericField,
   useDocumentUnit,
 } from "@paged-media/ui";
 
@@ -828,9 +825,11 @@ function PropertyNum(p: {
   );
 }
 
-/** A compact numeric field: label · value · unit on one line. Enter or
- *  blur commits, Escape reverts, ↑/↓ steps (⇧ ×10). Read-only (no
- *  commit) renders muted; a mixed selection shows an em-dash. */
+/** A compact numeric field: label · value · unit on one line — the one
+ *  numeric field's `bar` variant: expressions and units ("10mm + 2pt",
+ *  "+=5"), Enter or blur commits, Escape reverts, ↑/↓ steps (⇧ ×10), the
+ *  label scrubs (one commit on release), a mixed selection reads "Mixed".
+ *  Read-only (no commit) renders muted. */
 function NumField(p: {
   label: string;
   title: string;
@@ -853,122 +852,31 @@ function NumField(p: {
   length?: boolean;
 }) {
   const docUnit = useDocumentUnit();
-  const lengthUnit = p.length ? docUnit : null;
-  // Points per shown unit: 1 for every field that is not a geometry length.
-  const per = lengthUnit ? POINTS_PER_UNIT[lengthUnit] : 1;
-  const digits = lengthUnit ? unitDigits(lengthUnit) : (p.digits ?? 1);
-  const unitLabel = lengthUnit ?? p.unit;
-  const title = lengthUnit
-    ? p.title.replace("(pt)", `(${lengthUnit})`)
-    : p.title;
-  const shown =
-    p.value === "mixed"
-      ? "—"
-      : p.value === null
-        ? ""
-        : fmt(p.value / per, digits);
-  const [text, setText] = useState(shown);
-  const [editing, setEditing] = useState(false);
-  // Only TYPED text commits on blur — a step already wrote itself, and
-  // re-committing it against a not-yet-re-read position would move twice.
-  const [typed, setTyped] = useState(false);
-  useEffect(() => {
-    if (!editing) setText(shown);
-  }, [shown, editing]);
-  const clamp = (n: number) =>
-    Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, n));
-  // A length (and a point-valued field: a stroke, a type size) reads a
-  // typed unit, "10mm" or "1p"; anything else keeps its plain number.
-  const read = (raw: string): number =>
-    lengthUnit || p.unit === "pt"
-      ? (parseLengthText(raw, lengthUnit ?? "pt") ?? Number.NaN)
-      : Number(raw.replace(",", ".").replace(/[^\d.+-]/g, ""));
-  const commit = (raw: string) => {
-    const n = read(raw);
-    if (!p.onCommit || raw.trim() === "" || !Number.isFinite(n)) {
-      setText(shown);
-      return;
-    }
-    const next = clamp(n);
-    if (typeof p.value === "number" && Math.abs(next - p.value) < 1e-6) return;
-    p.onCommit(next);
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      commit(text);
-      setTyped(false);
-      (e.target as HTMLInputElement).blur();
-    } else if (e.key === "Escape") {
-      setTyped(false);
-      setText(shown);
-      (e.target as HTMLInputElement).blur();
-    } else if (
-      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
-      typeof p.value === "number" &&
-      p.onCommit
-    ) {
-      e.preventDefault();
-      // One step is one shown unit (a millimetre in a mm document).
-      const step =
-        (p.step ?? 1) *
-        per *
-        (e.shiftKey ? 10 : 1) *
-        (e.key === "ArrowUp" ? 1 : -1);
-      // Step from what the field SHOWS: a second press can land before
-      // the first one's re-read, and `p.value` would still be the old one.
-      const shownNow = Number(text);
-      const base =
-        Number.isFinite(shownNow) && text.trim() !== ""
-          ? shownNow * per
-          : p.value;
-      const next = clamp(base + step);
-      // The field is focused, so it is not following `shown`; show the
-      // stepped value now rather than when focus leaves.
-      setText(fmt(next / per, digits));
-      if (p.onStep) p.onStep(next - base);
-      else p.onCommit(next);
-    }
-    e.stopPropagation(); // tool shortcuts must not fire while typing
-  };
-  const readOnly = !p.onCommit || p.value === null;
+  const title = p.length ? p.title.replace("(pt)", `(${docUnit})`) : p.title;
+  const commit = p.onCommit;
   return (
-    <label
+    <NumericField
+      variant="bar"
+      label={p.label}
       title={title}
-      data-control-field={p.testId}
-      data-field-state={p.fieldState}
-      style={{
-        ...fieldBox,
-        opacity: p.value === null && !p.placeholder ? 0.45 : 1,
+      aria-label={title}
+      value={p.value === "mixed" ? null : p.value}
+      mixed={p.value === "mixed"}
+      length={p.length}
+      suffix={p.length ? undefined : p.unit}
+      precision={p.length ? undefined : (p.digits ?? 1)}
+      min={p.min}
+      max={p.max}
+      step={p.step ?? 1}
+      placeholder={p.placeholder}
+      readOnly={!commit || (p.value === null && !p.placeholder)}
+      onCommit={commit ? (n) => commit(n) : undefined}
+      onStep={p.onStep}
+      dataAttributes={{
+        "data-control-field": p.testId,
+        ...(p.fieldState ? { "data-field-state": p.fieldState } : {}),
       }}
-    >
-      <span style={fieldLabel}>{p.label}</span>
-      <input
-        value={text}
-        placeholder={p.placeholder}
-        readOnly={readOnly && !p.placeholder}
-        aria-label={title}
-        onFocus={(e) => {
-          setEditing(true);
-          setTyped(false);
-          e.currentTarget.select();
-        }}
-        onBlur={() => {
-          setEditing(false);
-          if (typed) commit(text);
-          setTyped(false);
-        }}
-        onChange={(e) => {
-          setTyped(true);
-          setText(e.target.value);
-        }}
-        onKeyDown={onKeyDown}
-        style={{
-          ...fieldInput,
-          color: readOnly ? "var(--pg-muted-fg)" : "var(--pg-fg)",
-        }}
-      />
-      <span style={fieldUnit}>{unitLabel}</span>
-    </label>
+    />
   );
 }
 
@@ -1025,53 +933,12 @@ function Label({ children }: { children: ReactNode }) {
   );
 }
 
-function fmt(n: number, digits: number): string {
-  const f = Number(n.toFixed(digits));
-  return String(Object.is(f, -0) ? 0 : f);
-}
-
 const valueText: CSSProperties = {
   fontFamily: "var(--font-mono)",
   fontVariantNumeric: "tabular-nums",
   fontSize: 12,
   color: "var(--pg-fg)",
   whiteSpace: "nowrap",
-};
-
-const fieldBox: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 4,
-  height: 28,
-  padding: "0 7px",
-  borderRadius: "var(--radius-md)",
-  border: "1px solid var(--chrome-divider)",
-  background: "var(--pg-muted)",
-  flexShrink: 0,
-  cursor: "text",
-};
-
-const fieldLabel: CSSProperties = {
-  fontSize: 11,
-  color: "var(--pg-muted-fg)",
-  whiteSpace: "nowrap",
-};
-
-const fieldInput: CSSProperties = {
-  width: 46,
-  border: "none",
-  outline: "none",
-  background: "transparent",
-  fontFamily: "var(--font-mono)",
-  fontVariantNumeric: "tabular-nums",
-  fontSize: 12,
-  textAlign: "right",
-  padding: 0,
-};
-
-const fieldUnit: CSSProperties = {
-  fontSize: 10.5,
-  color: "var(--pg-muted-fg)",
 };
 
 const selectBox: CSSProperties = {

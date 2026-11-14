@@ -39,6 +39,7 @@ export {
   type CompositionNode,
   type DocumentMetaKey,
   type LeafProps,
+  type LeafWriteOptions,
   type PropSchema,
   type ReadSpec,
   type SelectionPropertyBinding,

@@ -6561,6 +6561,12 @@ export function createBundleHost(
     // native `<input type="color">`.
     featureSet.add("widgets.colorPicker@1");
   }
+  if (options?.widgets?.NumericField) {
+    // The host's one numeric field is wired (units, expressions, Mixed,
+    // one undo step per scrub); without it the bundle gets a plain
+    // decimal text field.
+    featureSet.add("widgets.numericField@1");
+  }
   // ADR 323 — the host's schema-driven property field (and its frame)
   // for React panels; optional members, so the probe is their presence.
   if (options?.widgets?.PropertyField) {

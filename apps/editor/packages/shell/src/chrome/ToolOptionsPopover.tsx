@@ -19,6 +19,7 @@
 
 import { useSyncExternalStore, type CSSProperties } from "react";
 import { useStrings } from "@paged-media/strings";
+import { NumberInput } from "@paged-media/ui";
 
 import { useToolSettings } from "../state/tool-settings-context";
 import type { ToolOptionField, ToolOptionsSpec } from "../tools/tool-options";
@@ -66,17 +67,16 @@ function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
       <label style={rowStyle}>
         <span style={labelStyle}>{field.label}</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="number"
+          <NumberInput
             value={value}
             min={field.min}
             max={field.max}
             step={field.step ?? 1}
-            onChange={(e) =>
-              settings.set(toolId, field.key, Number(e.target.value))
-            }
-            style={inputStyle}
-            data-tool-option={field.key}
+            precision={stepDigits(field.step)}
+            aria-label={field.label}
+            className="w-[72px]"
+            inputAttributes={{ "data-tool-option": field.key }}
+            onChange={(n) => settings.set(toolId, field.key, n)}
           />
           {field.unit && <span style={unitStyle}>{field.unit}</span>}
         </span>
@@ -119,6 +119,13 @@ function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
       </select>
     </label>
   );
+}
+
+/** Decimal places a step shows: 0.5 → 1, 1 → 0 (at most 4). */
+function stepDigits(step: number | undefined): number {
+  if (!step || Number.isInteger(step)) return 0;
+  const text = String(step);
+  return Math.min(4, text.length - text.indexOf(".") - 1);
 }
 
 const popoverStyle: CSSProperties = {

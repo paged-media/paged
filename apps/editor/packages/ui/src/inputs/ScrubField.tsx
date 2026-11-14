@@ -19,14 +19,19 @@
 
 import type { ReactNode } from "react";
 
-import { useScrubGesture, type ScrubGestureOptions } from "@paged-media/shell";
+import {
+  useScrubGesture,
+  type ScrubGestureOptions,
+  type ScrubPhase,
+} from "@paged-media/shell";
 
 export interface ScrubFieldProps extends Omit<
   ScrubGestureOptions,
   "onUpdate" | "onCommit" | "onCancel"
 > {
-  /** Fires on begin + every pointer-move. */
-  onUpdate?: (value: number, phase: "begin" | "update") => void;
+  /** Fires on begin + every pointer-move, and with the initial value
+   *  (`"revert"`) when the scrub is cancelled. */
+  onUpdate?: (value: number, phase: ScrubPhase) => void;
   onCommit?: (value: number, initial: number) => void;
   onCancel?: () => void;
   /** Render-prop body. The wrapper applies the scrub bind ref +

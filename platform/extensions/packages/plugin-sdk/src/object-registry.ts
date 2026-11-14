@@ -415,8 +415,9 @@ export function createObjectRegistry(
   async function batch(
     ops: readonly ObjectOp[],
     note: Note = null,
-    label?: string,
+    write?: { label?: string; coalesce?: string },
   ): Promise<ObjectWriteResult> {
+    const label = write?.label;
     const no = (e: Refusal): ObjectWriteResult => ({
       applied: false,
       code: e.code,
@@ -829,10 +830,18 @@ export function createObjectRegistry(
         commandPlans.length > 0
           ? await coreCommands!.snapshot(commandPlans.map((c) => c.plan))
           : null;
-      // Engine ADR 1030 — the caller's name for the one undo step.
+      // Engine ADR 1030 — the caller's name for the one undo step; engine
+      // ADR 1304 — a coalesce key joins it to the run of that key.
       const outcome = await core.commit(
         mutations,
-        label !== undefined ? { label } : undefined,
+        label !== undefined || write?.coalesce !== undefined
+          ? {
+              ...(label !== undefined ? { label } : {}),
+              ...(write?.coalesce !== undefined
+                ? { coalesce: write.coalesce }
+                : {}),
+            }
+          : undefined,
       );
       if (!outcome.applied) {
         const reason = describe(outcome.error);
@@ -1217,8 +1226,8 @@ export function createObjectRegistry(
       const view: ObjectsSurface = {
         ...surface,
         set: (address, path, value, opts) =>
-          batch([{ op: "set", address, path, value }], note, opts?.label),
-        batch: (ops, opts) => batch(ops, note, opts?.label),
+          batch([{ op: "set", address, path, value }], note, opts),
+        batch: (ops, opts) => batch(ops, note, opts),
         invoke: (command, args) => invoke(command, args, note),
       };
       return view;
@@ -1236,9 +1245,9 @@ export function createObjectRegistry(
       return out;
     },
     set(address, path, value, opts) {
-      return batch([{ op: "set", address, path, value }], null, opts?.label);
+      return batch([{ op: "set", address, path, value }], null, opts);
     },
-    batch: (ops, opts) => batch(ops, null, opts?.label),
+    batch: (ops, opts) => batch(ops, null, opts),
     async schema(addressOrKind) {
       const parsed = parseAddress(addressOrKind);
       const kind =

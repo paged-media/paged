@@ -235,9 +235,17 @@ export interface CatalogEntry {
  * through the apply layer. `null` value means "indeterminate /
  * mixed" — render the em-dash placeholder, not a default.
  */
+/** How a leaf's write lands in the history: `coalesce` joins it to the run
+ *  of writes with that key, one undo step (a numeric field's scrub; engine
+ *  ADR 1304). */
+export interface LeafWriteOptions {
+  coalesce?: string;
+}
+
 export interface LeafProps {
   value: Value | null;
-  onCommit?: (next: Value) => void;
+  /** May answer the write's promise: a scrub waits for it in order. */
+  onCommit?: (next: Value, options?: LeafWriteOptions) => unknown;
   /** Free-form additional props forwarded from the composition node;
    *  leaves type-check their own shape internally. */
   props: Record<string, unknown>;

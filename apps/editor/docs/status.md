@@ -226,6 +226,14 @@ every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, 
 gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
 resolver there.
 
+Track FI (fields, the inspector, commands) has begun. The one numeric
+field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
+the control bar and (as `host.widgets.NumericField`) the plugins' panels reads units,
+expressions and mixed units ("10 mm + 2 pt"), relative changes ("+=5 mm", "*110%") and the
+locale's decimal comma; a refused value says why; a mixed selection reads "Mixed", and a
+relative change applies to each object in one undo step; a scrub previews live and is one undo
+step. The rest of track FI (the inspector, commands, align) follows.
+
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,
 and the marquee takes what it intersects.
