@@ -909,6 +909,7 @@ export {
 // ── Loaders ────────────────────────────────────────────────────
 export {
   loadDocumentFile,
+  editedWhileLoading,
   fetchDefaultFont,
   fetchDefaultFontFaces,
   setDefaultFontUrls,

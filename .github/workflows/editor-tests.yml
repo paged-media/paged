@@ -163,7 +163,11 @@ env:
   # reached Playwright's 55-minute --global-timeout and left 11 tests unrun.
   # Seven since 2026-10-29: with six, shard 2 (gesture-matrix 16.8 min and
   # object-commands 6.0 min) reached it with 322 green and 2 unrun.
-  SHARDS: 7
+  # Ten since 2026-11-15: the interaction programme's specs (the UXI
+  # journeys, the module conformance and the Phase 3 panels) took shards
+  # 2, 3 and 7 to the 55-minute --global-timeout, leaving 79 and 83 tests
+  # unrun, while shard 6 finished in 18 minutes.
+  SHARDS: 10
 
 jobs:
   # Static guards that need only the editor repo itself — no plugin
@@ -569,7 +573,7 @@ jobs:
           retention-days: 90
 
   playwright:
-    name: playwright (shard ${{ matrix.shard }}/7)
+    name: playwright (shard ${{ matrix.shard }}/10)
     runs-on: ubuntu-latest
     # 50, not 30: the COLD (uncached) paged-gen fixture-generator build
     # consumed most of a 30-min budget, leaving no room for the sharded
@@ -591,7 +595,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       # The whole repository at the workspace root: the editor is
       # apps/editor, core's paged-gen is engine/core, and the doc/slide link
