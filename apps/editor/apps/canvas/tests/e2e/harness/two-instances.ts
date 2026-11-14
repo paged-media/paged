@@ -43,7 +43,11 @@ export interface TwoEditors {
 /** Open the two-editors demo and wait until both editors are ready. */
 export async function openTwoEditors(page: Page): Promise<TwoEditors> {
   await page.goto("/demos/two-editors.html");
-  await expect(page.getByRole("status")).toContainText("ready: two editors", {
+  // The demo's own status line, in the host page's header: each editor's
+  // canvas has a status of its own while its document opens (the load
+  // stages, editor ADR 1208), so the page holds one per editor besides it.
+  const status = page.locator("header.demo-header").getByRole("status");
+  await expect(status).toContainText("ready: two editors", {
     timeout: 60_000,
   });
   await expect(page.locator("[data-paged-editor]")).toHaveCount(2);

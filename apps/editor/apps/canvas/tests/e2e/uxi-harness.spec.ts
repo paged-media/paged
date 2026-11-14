@@ -210,14 +210,18 @@ test.describe("interaction contract harness", () => {
     expect(await focusedSide(two)).toBe("right");
   });
 
-  test("AC-UXI-HARNESS-4 — fixture H holds a hit-test reply until its delay runs out @feat:editor-tools.select.click-marquee @level:edge", async ({
+  test("AC-UXI-HARNESS-4 — fixture H holds a click's replies until their delay runs out @feat:editor-tools.select.click-marquee @level:edge", async ({
     page,
   }) => {
     await openChaosCanvas(page);
     await loadUxiFixture(page, "A");
+    // A press is answered in one call, its hit, selection and begin
+    // (engine ADR 1303, IC5): fixture H holds that answer and the click's
+    // hit tests alike.
+    await delayReply(page, "beginGestureAt", 1500);
     await delayReply(page, "hitTest", 1500);
     await clickOn(page, UXI_A.free.id);
-    // The click's hit tests are held: nothing is selected yet.
+    // The click's replies are held: nothing is selected yet.
     await expect.poll(() => heldReplies(page)).toBeGreaterThan(0);
     expect((await selectionSnapshot(page)).elements).toEqual([]);
     await chaosIdle(page);
