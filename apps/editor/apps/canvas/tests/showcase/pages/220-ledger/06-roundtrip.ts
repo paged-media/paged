@@ -99,7 +99,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   if (!(await sortSection.evaluate((d) => (d as HTMLDetailsElement).open))) {
     await sortSection.locator(":scope > summary").click();
   }
-  await page.locator("[data-sheet-sort-key]").fill("1");
+  await page.locator("[data-sheet-sort-key] input").fill("1");
   await page.locator("[data-sheet-sort-dir]").selectOption("desc");
   await page.locator("[data-sheet-sort]").click();
   const sortMsg = page.locator("[data-sheet-sort-msg]");

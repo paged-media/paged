@@ -29,7 +29,14 @@
 // render here.
 
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
-import { useState, type CSSProperties, type ReactElement } from "react";
+import {
+  useState,
+  type ComponentType,
+  type CSSProperties,
+  type ReactElement,
+} from "react";
+
+import type { NumericFieldProps } from "@paged-media/plugin-api";
 
 import type { EdgeStyle } from "../engine";
 import type { BorderKind, SessionResult, WorkbookSession } from "../session";
@@ -87,8 +94,11 @@ export function FormatSection(props: {
   /** Opens the Sheet properties panel; the rows that panel carries live
    *  there only. */
   openProperties: () => void;
+  /** The host's numeric field (`host.widgets.NumericField`, editor ADR
+   *  1216): units, expressions and the shared refusal messages. */
+  NumericField: ComponentType<NumericFieldProps>;
 }): ReactElement {
-  const { session, styles: st, openProperties } = props;
+  const { session, styles: st, openProperties, NumericField } = props;
   const { t } = useStrings();
   const [msg, setMsg] = useState<string | null>(null);
   const report = (r: SessionResult, done: string) =>
@@ -103,8 +113,6 @@ export function FormatSection(props: {
 
   const [borderStyle, setBorderStyle] = useState("thin");
   const [borderColor, setBorderColor] = useState("#000000");
-  const [width, setWidth] = useState("");
-  const [height, setHeight] = useState("");
 
   const edge: EdgeStyle = { style: borderStyle, color: borderColor };
   const borders = (kind: BorderKind, done: string) =>
@@ -239,29 +247,21 @@ export function FormatSection(props: {
         </button>
       </div>
       <div style={st.row}>
-        <input
-          data-sheet-col-width
-          type="number"
-          min={0}
-          max={255}
-          value={width}
-          placeholder={t(FORMAT.widthPlaceholder)}
-          aria-label={t(FORMAT.widthAria)}
-          onChange={(e) => setWidth(e.target.value)}
-          style={{ ...st.input, width: 80 }}
-        />
-        <button
-          type="button"
-          data-sheet-col-width-set
-          style={st.button}
-          disabled={!width.trim()}
-          title={width.trim() ? undefined : t(FORMAT.widthFirst)}
-          onClick={() =>
-            report(session.setColumnWidth(Number(width)), t(FORMAT.widthSet))
-          }
-        >
-          {t(FORMAT.setWidth)}
-        </button>
+        {/* Enter or leaving the field sets the width (one undo step). */}
+        <span data-sheet-col-width style={{ display: "inline-flex" }}>
+          <NumericField
+            value={null}
+            min={0}
+            max={255}
+            precision={2}
+            suffix="ch"
+            placeholder={t(FORMAT.widthPlaceholder)}
+            ariaLabel={t(FORMAT.widthAria)}
+            onCommit={(v) =>
+              report(session.setColumnWidth(v), t(FORMAT.widthSet))
+            }
+          />
+        </span>
         <button
           type="button"
           data-sheet-col-width-reset
@@ -274,29 +274,22 @@ export function FormatSection(props: {
         </button>
       </div>
       <div style={st.row}>
-        <input
-          data-sheet-row-height
-          type="number"
-          min={0}
-          max={409}
-          value={height}
-          placeholder={t(FORMAT.heightPlaceholder)}
-          aria-label={t(FORMAT.heightAria)}
-          onChange={(e) => setHeight(e.target.value)}
-          style={{ ...st.input, width: 80 }}
-        />
-        <button
-          type="button"
-          data-sheet-row-height-set
-          style={st.button}
-          disabled={!height.trim()}
-          title={height.trim() ? undefined : t(FORMAT.heightFirst)}
-          onClick={() =>
-            report(session.setRowHeight(Number(height)), t(FORMAT.heightSet))
-          }
-        >
-          {t(FORMAT.setHeight)}
-        </button>
+        {/* A length: "12 pt", "5 mm"; set in points. */}
+        <span data-sheet-row-height style={{ display: "inline-flex" }}>
+          <NumericField
+            value={null}
+            length
+            unit="pt"
+            min={0}
+            max={409}
+            precision={2}
+            placeholder={t(FORMAT.heightPlaceholder)}
+            ariaLabel={t(FORMAT.heightAria)}
+            onCommit={(v) =>
+              report(session.setRowHeight(v), t(FORMAT.heightSet))
+            }
+          />
+        </span>
         <button
           type="button"
           data-sheet-row-height-reset

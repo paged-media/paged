@@ -113,7 +113,7 @@ test.describe("journey · paged.data refresh and undo", () => {
     });
     await bind(page, "name");
     await bind(page, "role");
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    await page.getByRole("button", { name: /^place on page$/i }).click();
     await expect
       .poll(() => values(page), { timeout: 20_000 })
       .toEqual(["Ada Lovelace", "Author"]);

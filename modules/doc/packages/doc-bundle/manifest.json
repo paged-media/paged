@@ -31,7 +31,8 @@
       "media.paged.doc.panel.properties",
       "media.paged.doc.panel.references",
       "media.paged.doc.panel.review",
-      "media.paged.doc.panel.contentControl"
+      "media.paged.doc.panel.contentControl",
+      "media.paged.doc.panel.storyMap"
     ],
     "commands": [
       "media.paged.doc.command.placeDoc",
@@ -126,7 +127,10 @@
       "media.paged.doc.command.review.replyComment",
       "media.paged.doc.command.review.resolveComment",
       "media.paged.doc.command.review.deleteComment",
-      "media.paged.doc.command.review.showReview"
+      "media.paged.doc.command.review.showReview",
+      "media.paged.doc.command.storyView",
+      "media.paged.doc.command.storyMap",
+      "media.paged.doc.command.nextOverset"
     ],
     "importers": [
       "media.paged.doc.importer.docx",
@@ -2005,6 +2009,7 @@
           "title": "Word list items"
         }
       ]
-    }
+    },
+    "views": ["media.paged.doc.view.story"]
   }
 }

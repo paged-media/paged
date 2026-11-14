@@ -93,7 +93,6 @@ const HOST_MENU = [
   "View/Editing aids/Text threads",
   "View/Snap to points",
   "View/Show heading anchors",
-  "View/Show data markers",
   // Editor ADR 1223.
   "View/Show issue markers",
   // Editor ADR 287.
@@ -148,6 +147,7 @@ const HOST_MENU = [
   "View/Editing aids/Overset markers",
   "View/Editing aids/Hidden characters",
   "View/Editing aids/Nonprinting items",
+  "View/Editing aids/Data bindings",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
@@ -1177,28 +1177,24 @@ test.describe("the host menu bar", () => {
     ).toHaveAttribute("aria-checked", "true", { timeout: 2_000 });
   });
 
-  test("View/Show data markers toggles its checked state", async ({ page }) => {
-    covers("menu:View/Show data markers");
+  test("View/Editing aids/Data bindings toggles the binding badges and is remembered", async ({
+    page,
+  }) => {
+    // Data ADR 566 — the data markers are an editing aid (they moved from
+    // View ▸ Show data markers).
+    covers("menu:View/Editing aids/Data bindings");
     await openShell(page, { doc: true });
-    const trigger = page.locator('[data-menu-trigger="View"]');
-    const row = page.getByRole("menuitemcheckbox", {
-      name: /Show data markers/,
-    });
-    // Open the View menu from closed: whether a click on a checkbox row
-    // closes the menu is the menu's business, so close it ourselves first.
-    const openView = async () => {
-      await page.keyboard.press("Escape");
-      await expect(row).toBeHidden();
-      await trigger.click();
-      await expect(row).toBeVisible();
-    };
-    await openView();
-    // Off by default; a click turns it on, and the row shows it checked.
-    await expect(row).toHaveAttribute("aria-checked", "false");
-    await row.click();
-    await openView();
-    await expect(row).toHaveAttribute("aria-checked", "true");
-    await page.keyboard.press("Escape");
+    const stored = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("paged.view.editingAids") ?? "{}")
+            .dataMarkers ?? false,
+      );
+    expect(await stored()).toBe(false);
+    await clickMenuRow(page, "View/Editing aids/Data bindings");
+    await expect.poll(stored).toBe(true);
+    await clickMenuRow(page, "View/Editing aids/Data bindings");
+    await expect.poll(stored).toBe(false);
   });
 });
 

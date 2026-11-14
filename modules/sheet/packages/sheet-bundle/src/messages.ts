@@ -30,6 +30,8 @@ import de from "../locales/de.json" with { type: "json" };
 /** Panel titles and the palette category. */
 export const PANELS = defineMessages("sheet.panel", {
   contextLabel: "Spreadsheet",
+  /** The frame's Edit level (extensions ADR 1108, sheet ADR 532). */
+  editCells: "Edit cells",
   workbook: "Workbook",
   grid: "Grid",
   datasets: "Datasets",
@@ -332,16 +334,12 @@ export const FORMAT = defineMessages("sheet.format", {
   freeze: "Freeze panes",
   widthPlaceholder: "Width (ch)",
   widthAria: "Column width in characters",
-  widthFirst: "Enter a width first",
   widthSet: "Column width set.",
-  setWidth: "Set width",
   widthReset: "Column width reset.",
   default: "Default",
   heightPlaceholder: "Height (pt)",
   heightAria: "Row height in points",
-  heightFirst: "Enter a height first",
   heightSet: "Row height set.",
-  setHeight: "Set height",
   heightReset: "Row height reset.",
 });
 
@@ -557,3 +555,41 @@ export const CHART_STYLE = defineMessages("sheet.chartStyle", {
 });
 
 defineTranslations("de", de);
+
+/** Sheet ADR 532 — the frame surface's bar while the cells are edited: the
+ *  mode, the way out, and the publication preview of the selection. */
+export const SURFACE = defineMessages("sheet.surface", {
+  mode: "Editing cells",
+  modeHint:
+    "The grid has the keys: type to edit, arrows move, Tab and Enter commit.",
+  done: "Done",
+  doneTitle: "Leave the cells; the frame stays selected (Esc)",
+  preview: "Print preview",
+  previewTitle: "How the selected cells land in the frame on the page",
+  previewHeading: "Selection {range} in this frame",
+  fits: "Prints in the frame",
+  fitsLong: "Every selected cell prints in this frame.",
+  overflowRows:
+    "{count, plural, one {# selected row is} other {# selected rows are}} below the frame's edge and will not print",
+  overflowCols:
+    "{count, plural, one {# selected column is} other {# selected columns are}} past the frame's right edge and will not print",
+  beforeRows:
+    "{count, plural, one {# selected row is} other {# selected rows are}} above the rows this frame shows",
+  beforeCols:
+    "{count, plural, one {# selected column is} other {# selected columns are}} left of the columns this frame shows",
+  overflowShort:
+    "{count, plural, one {# row or column does not print} other {# rows or columns do not print}}",
+  printed: "Prints {rows} × {cols} of the selection",
+  legendFrame: "Frame",
+  legendPrints: "Prints",
+  legendOverflow: "Does not print",
+  formula: "Formula",
+  cancelEdit: "Cancel",
+  commitEdit: "Enter",
+  whereYouAre: "Where you are",
+  trail: "Page › Sheet frame ›",
+  wholeScreen: "Whole screen",
+  wholeScreenTitle: "Use the whole screen (the browser's full screen)",
+  backToPage: "Back to page",
+  backToPageTitle: "Back to the frame on the page (Esc)",
+});

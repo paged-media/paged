@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 968,
+    "command": 971,
     "keybinding": 216,
-    "menu": 703,
-    "panel": 152,
+    "menu": 706,
+    "panel": 153,
     "tool": 123
   },
   "features": [
@@ -201,6 +201,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.nextOverset",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.pasteRtf",
       "kind": "command",
       "owner": "media.paged.doc"
@@ -302,6 +307,16 @@
     },
     {
       "id": "command:media.paged.doc.command.saveAsDocx",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.storyMap",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.storyView",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -9171,6 +9186,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Editing aids/Data bindings",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Editing aids/Frame edges",
       "kind": "menu",
       "owner": "editor"
@@ -9229,6 +9249,11 @@
       "id": "menu:View/Focus workspace",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Go to next overset story",
+      "kind": "menu",
+      "owner": "media.paged.doc"
     },
     {
       "id": "menu:View/Go to object tree",
@@ -9346,11 +9371,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:View/Show data markers",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:View/Show grid",
       "kind": "menu",
       "owner": "editor"
@@ -9414,6 +9434,16 @@
       "id": "menu:View/Snap to points",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Story map",
+      "kind": "menu",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "menu:View/Story view",
+      "kind": "menu",
+      "owner": "media.paged.doc"
     },
     {
       "id": "menu:View/Zoom in",
@@ -9522,6 +9552,11 @@
     },
     {
       "id": "panel:media.paged.doc.panel.review",
+      "kind": "panel",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "panel:media.paged.doc.panel.storyMap",
       "kind": "panel",
       "owner": "media.paged.doc"
     },
@@ -10857,6 +10892,12 @@
     {
       "id": "menu:File/Open recent",
       "replacement": "menu:File/Open recent…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:View/Show data markers",
+      "replacement": "menu:View/Editing aids/Data bindings",
       "deprecatedIn": "0.80.0",
       "removeIn": "0.82.0"
     },

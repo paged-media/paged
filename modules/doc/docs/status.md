@@ -1,5 +1,17 @@
 # paged.doc — status
 
+## Story view and Story Map (2026-11-14, ADR 630)
+
+- **Story view** (View ▸ Story view): the story of the caret as continuous text in place of the
+  canvas, written straight into the engine's story (no second text model): headings and list
+  items set as such, a Headings list to jump, Show in layout on every paragraph, a word count, the
+  overset paragraphs marked; Enter splits, Backspace joins, one undo step per run of typing;
+  Layout view gives the canvas back where it was.
+- **Story Map** (View ▸ Story map): every story's thread as frame chips by page, Overset and Not
+  placed first; a chip goes to its frame (Go back returns). **Go to next overset story** walks the
+  overset stories.
+- The References panel's page setup uses the host's numeric field.
+
 ## Wasm size (measured 2026-10-24)
 
 `docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-doc` profile,

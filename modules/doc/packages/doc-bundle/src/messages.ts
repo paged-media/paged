@@ -110,6 +110,10 @@ export const FILES = defineMessages("doc.files", {
 
 export const MENU = defineMessages("menu", {
   "Insert Word document…": "Insert Word document…",
+  // Doc ADR 630.
+  "Story view": "Story view",
+  "Story map": "Story map",
+  "Go to next overset story": "Go to next overset story",
 });
 
 export const TEMPLATE = defineMessages("doc.template", {
@@ -320,6 +324,43 @@ export const REVIEW = defineMessages("doc.review", {
   commentPlaceholder: "Comment",
   replyPlaceholder: "Reply",
   noTextForComment: "Select text, or place the caret in a word, to comment.",
+});
+
+/** Doc ADR 630 — the Story view and the Story Map. */
+export const STORY = defineMessages("doc.story", {
+  viewTitle: "Story view",
+  viewCommand: "Story view",
+  layoutView: "Layout view",
+  layoutViewTitle: "Back to the pages, where you were",
+  pickStory: "Story",
+  emptyStory: "(empty story)",
+  noStory: "No story to show. Place text in a frame first.",
+  outline: "Headings",
+  noHeadings: "No headings in this story.",
+  emptyHeading: "(empty heading)",
+  wordCount: "{count, plural, one {# word} other {# words}}",
+  headingLabel: "Heading {level}",
+  paragraphLabel: "Paragraph {n}",
+  showInLayout: "Show in layout",
+  oversetBelow: "Overset: the text below does not fit the story's frames",
+  mapTitle: "Story map",
+  mapCommand: "Story map",
+  mapLoading: "Reading the stories…",
+  mapEmpty: "No stories in this document.",
+  mapSummary: "{count, plural, one {# story} other {# stories}}",
+  mapOverset: "{count, plural, one {# overset} other {# overset}}",
+  mapLoose: "{count, plural, one {# not placed} other {# not placed}}",
+  openInStoryView: "Story view",
+  threadLabel: "Frames in thread order",
+  notPlaced: "Not placed: no frame shows this story",
+  goToFrame: "Frame {n}, on {page}",
+  pasteboard: "the pasteboard",
+  pasteboardShort: "Pasteboard",
+  pageShort: "p. {page}",
+  overset: "Overset",
+  goToOverset: "Go to the last frame, where the text runs out of room",
+  nextOverset: "Go to next overset story",
+  noOverset: "No story is overset.",
 });
 
 defineTranslations("de", de);

@@ -635,6 +635,35 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return record;
   };
 
+  // TRN-004 — the angle of a rotation, beside the pointer, while it turns:
+  // written straight onto its element (no render per move).
+  const readoutRef = useRef<HTMLDivElement | null>(null);
+  const showRotateReadout = (
+    pivot: [number, number],
+    from: [number, number],
+    to: [number, number],
+    shift: boolean,
+    x: number,
+    y: number,
+  ) => {
+    const el = readoutRef.current;
+    if (!el) return;
+    let deg =
+      ((Math.atan2(to[1] - pivot[1], to[0] - pivot[0]) -
+        Math.atan2(from[1] - pivot[1], from[0] - pivot[0])) *
+        180) /
+      Math.PI;
+    deg = ((((deg + 180) % 360) + 360) % 360) - 180;
+    if (shift) deg = Math.round(deg / 15) * 15;
+    el.textContent = `${deg.toFixed(1)}°`;
+    el.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+    el.hidden = false;
+  };
+  const hideRotateReadout = () => {
+    const el = readoutRef.current;
+    if (el) el.hidden = true;
+  };
+
   /** A press's session was ended from outside while it held the pointer:
    *  let the pointer go and roll the press back. */
   const abortHeld = (
@@ -707,6 +736,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
    *  pan has nothing to roll back; a content gesture just ends (the
    *  context keeps its state). */
   const rollBackRecord = (p: PointerRecord) => {
+    hideRotateReadout();
     if (p.tool) {
       p.tool = null;
       props.toolGesture?.onCancel();
@@ -1016,6 +1046,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // pan so the existing typing UX is undisturbed.
     let mode: DragState["mode"] = "pan";
     let press: PressState | undefined;
+    let rotatePivot: [number, number] | null = null;
     let gestureState: GestureState | undefined;
     // Path-edit mode — a primary press is the path's. The session
     // takes it whatever it landed on (an empty press starts its
@@ -1081,6 +1112,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       if (handleAttr === "rotate" && (selectedGeom || isMultiSelect)) {
         gestureSpec = { kind: "rotate" };
         targets = selectedGeom ? [selectedGeom.id] : selection.slice();
+        // The angle readout turns about the selection's centre (TRN-004).
+        const box = selectedGeom
+          ? itemHandleBox(selectedGeom)
+          : gesturePage
+            ? unionHandleBox(geometry.filter((g) => g.pageId === gesturePage))
+            : null;
+        const pr = gesturePage
+          ? rects[props.pageIds.indexOf(gesturePage)]
+          : null;
+        rotatePivot =
+          box && pr ? [pr.x + box.centre[0], pr.y + box.centre[1]] : null;
       } else if (handleAttr && handleAttr !== "rotate") {
         if (isMultiSelect) {
           // Phase G — multi-select handle drag is always matrix
@@ -1181,6 +1223,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           spec: gestureSpec,
           modifiers: { shift: e.shiftKey, alt: e.altKey },
           scale: scale ?? undefined,
+          ...(rotatePivot ? { pivot: rotatePivot } : {}),
         };
         beginWorkerGesture(gestureState, scale ? scaleAnchor(scale) : anchor);
       } else if (containing && props.onHit && !modifiers.cmd) {
@@ -1649,6 +1692,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       ];
       const gs = drag.gestureState;
       if (!gs) return;
+      if (gs.pivot) {
+        showRotateReadout(
+          gs.pivot,
+          drag.startDoc,
+          [docX, docY],
+          e.shiftKey,
+          cx,
+          cy,
+        );
+      }
       // Plan-2 §8.4 — Ctrl bypasses snap. Read `e.ctrlKey`
       // independently of `metaKey`; on macOS the Ctrl key is its own
       // thing (not Cmd), matching InDesign's "hold Ctrl to ignore
@@ -1712,6 +1765,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    hideRotateReadout();
     if (pinchUp(e)) return;
     const held = pointerRef.current;
     // K-1 — end a content gesture: deliver the up to the active context
@@ -2248,6 +2302,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       />
       {/* F-36 — where typed and composed text arrives while a caret is
           in a story (ADR 234). */}
+      <div
+        ref={readoutRef}
+        hidden
+        data-rotate-readout=""
+        aria-live="polite"
+        style={rotateReadoutStyle}
+      />
       <TextInputSurface
         camera={props.camera}
         pageIds={props.pageIds}
@@ -2375,6 +2436,8 @@ interface GestureState {
   scale?: HandleScale;
   /** The pointer went up before the begin was confirmed: commit when it is. */
   release?: "commit";
+  /** A rotation: the centre it turns about, document pt (the readout). */
+  pivot?: [number, number];
 }
 
 type Pt = [number, number];
@@ -2726,6 +2789,20 @@ const wrapperStyle: React.CSSProperties = {
   userSelect: "none",
 };
 
+const rotateReadoutStyle: React.CSSProperties = {
+  position: "absolute",
+  left: 0,
+  top: 0,
+  padding: "2px 6px",
+  borderRadius: 3,
+  background: "var(--elevated)",
+  color: "var(--fg)",
+  border: "1px solid var(--border)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  pointerEvents: "none",
+};
+
 const canvasStyle: React.CSSProperties = {
   position: "absolute",
   inset: 0,
@@ -2808,14 +2885,12 @@ function nearestPage(
   return best;
 }
 
-/** Phase B — return the first selected element whose AABB
- * (transformed corners → axis-aligned bbox) contains the pointer,
- * with the page it was hit on. `pointerOn` gives the pointer in a
- * page's local space. AABB rather than oriented-rect: fast, no
- * transform math in TS, and a false positive at the AABB corner of a
- * rotated frame is acceptable since the worker's `begin_gesture` then
- * rejects it. Matches what the renderer paints for the selection
- * chrome at the same point in time. */
+/** The first selected element whose ORIENTED box (its bounds through its
+ *  item transform) holds the pointer, with the page it was hit on
+ *  (`UXI-TRN-005`, IC7): the pointer is taken back into the item's own
+ *  space and tested against its bounds, so the empty corners of a turned
+ *  item's axis-aligned box are not its body. `pointerOn` gives the pointer
+ *  in a page's local space. */
 function findSelectedElementUnderPointer(
   selection: ReadonlyArray<ElementId>,
   geometry: ReadonlyArray<ElementGeometryItem>,
@@ -2827,28 +2902,16 @@ function findSelectedElementUnderPointer(
     if (!inSel.has(`${g.id.kind}:${g.id.id}`)) continue;
     const pageLocal = pointerOn(g.pageId);
     if (!pageLocal) continue;
+    const local = invertAffinePoint(g.itemTransform, pageLocal);
+    if (!local) continue;
     const [top, left, bottom, right] = g.bounds;
-    const corners: Array<[number, number]> = [
-      applyAffineLocal(g.itemTransform, left, top),
-      applyAffineLocal(g.itemTransform, right, top),
-      applyAffineLocal(g.itemTransform, right, bottom),
-      applyAffineLocal(g.itemTransform, left, bottom),
-    ];
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    for (const [x, y] of corners) {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
+    // Half a point of slack for the edge itself.
+    const e = 0.5;
     if (
-      pageLocal[0] >= minX &&
-      pageLocal[0] <= maxX &&
-      pageLocal[1] >= minY &&
-      pageLocal[1] <= maxY
+      local[0] >= Math.min(left, right) - e &&
+      local[0] <= Math.max(left, right) + e &&
+      local[1] >= Math.min(top, bottom) - e &&
+      local[1] <= Math.max(top, bottom) + e
     ) {
       return { id: g.id, pageId: g.pageId };
     }
@@ -2856,13 +2919,18 @@ function findSelectedElementUnderPointer(
   return null;
 }
 
-function applyAffineLocal(
+/** `p` taken back through the affine `m` (null for a singular one). */
+function invertAffinePoint(
   m: [number, number, number, number, number, number] | null | undefined,
-  x: number,
-  y: number,
-): [number, number] {
-  if (!m) return [x, y];
-  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  p: [number, number],
+): [number, number] | null {
+  if (!m) return p;
+  const [a, b, c, d, tx, ty] = m;
+  const det = a * d - b * c;
+  if (Math.abs(det) < 1e-12) return null;
+  const x = p[0] - tx;
+  const y = p[1] - ty;
+  return [(d * x - c * y) / det, (-b * x + a * y) / det];
 }
 
 /** Phase C/D — read the `data-handle` attribute from a pointer

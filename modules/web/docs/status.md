@@ -46,6 +46,16 @@ and the performance reading are in [`design/analysis-2026-10-05.md`](design/anal
   text commits and opens that node.
 - **Outline and canvas.** Clicking a tag in the panel's outline outlines the element's painted
   box on the canvas; a press inside the entered frame marks the tag of the element under it.
+- **Source and render inspected together ([ADR 416](adr/416-source-and-render-inspected-together.md)).**
+  The element in focus (picked on the canvas or clicked in the outline) is inspected in the
+  panel: its source line and open tag (Show in source selects it and outlines it), its selector
+  path, its rendered size in pt, the stylesheet rules that apply to it (type, class, id,
+  universal and compound selectors with descendant and child combinators; a rule needing more is
+  listed as not evaluated) and its line's diagnostics. Publication notes list the CSS a printed
+  page cannot show (animation, transitions, interaction states, fixed or sticky positioning,
+  pointer styling) and say why scripts never run. The iframe is named the browser preview
+  (sandboxed), the canvas and the render report the publication rendering. Sample data under the
+  source lists the placeholders without a value and adds each with a click (a draft edit).
 - **Bound data.** Templates can name `{{doc.title}}`, `{{doc.pages}}`, `{{doc.<key>}}` (a
   document value map, set in the panel), `{{frame.page}}` and `{{data.<field>}}` /
   `{{data.<provider>.<field>}}` (the first record of a `dataset` data provider, which paged.data

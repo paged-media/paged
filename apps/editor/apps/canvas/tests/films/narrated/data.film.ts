@@ -613,7 +613,7 @@ film("data", async (k) => {
     const polygonsBefore = new Set(
       (await elements(page, "polygon")).map((e) => e.id),
     );
-    await press(k, page.getByRole("button", { name: /lower to document/i }));
+    await press(k, page.getByRole("button", { name: /^place on page$/i }));
     await expect(page.locator("[data-status]").last()).toHaveText(
       /Resolved \+ lowered barcode/,
       { timeout: 10_000 },

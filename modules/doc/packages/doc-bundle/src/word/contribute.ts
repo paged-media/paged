@@ -336,7 +336,10 @@ export function contributeWord(
   disposers.push(
     host.contribute.panel({
       id: REFERENCES_PANEL,
-      ...makeReferencesPanel(referencesActions(host, deps.docStories)),
+      ...makeReferencesPanel(
+        referencesActions(host, deps.docStories),
+        host.widgets,
+      ),
     }).dispose,
   );
 

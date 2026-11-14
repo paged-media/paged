@@ -276,26 +276,18 @@ test.describe("view commands", () => {
   test("Show data markers toggles the view setting", async ({ page }) => {
     covers("command:paged.view.toggleDataMarkers");
     await openShell(page, { doc: true });
-    const trigger = page.locator('[data-menu-trigger="View"]');
-    const row = page.getByRole("menuitemcheckbox", {
-      name: /Show data markers/,
-    });
-    // The View menu's row reports the setting; open the menu only when it
-    // is closed, read the row, and close the menu again.
-    const checked = async () => {
-      if ((await trigger.getAttribute("data-state")) !== "open")
-        await trigger.click();
-      await expect(row).toBeVisible();
-      const v = await row.getAttribute("aria-checked");
-      await page.keyboard.press("Escape");
-      await expect(row).toBeHidden();
-      return v;
-    };
-    expect(await checked()).toBe("false");
+    // An editing aid since data ADR 566: remembered with the others.
+    const on = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("paged.view.editingAids") ?? "{}")
+            .dataMarkers ?? false,
+      );
+    expect(await on()).toBe(false);
     await invoke(page, "paged.view.toggleDataMarkers");
-    expect(await checked()).toBe("true");
+    await expect.poll(on).toBe(true);
     await invoke(page, "paged.view.toggleDataMarkers");
-    expect(await checked()).toBe("false");
+    await expect.poll(on).toBe(false);
   });
 
   test("the preview screen mode toggles Normal ⇄ Preview", async ({ page }) => {
