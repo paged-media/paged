@@ -66,11 +66,14 @@ const PATH_KINDS = new Set(["polygon", "rectangle", "graphicLine"]);
 export const SIMPLIFY_FROM_ANCHORS = 12;
 
 /** Is the shape complex enough to suggest anything: a path of three or
- *  more anchors, or one with a curve. */
+ *  more anchors, or one with a curve (a rectangle only once it has one). */
 export function isComplexShape(shape: ShapeFacts): boolean {
   if (!PATH_KINDS.has(shape.kind)) return false;
-  if (shape.anchors.length >= 3) return true;
-  return shape.anchors.some((a) => !isCornerAnchor(a as AnchorTriple));
+  const curved = shape.anchors.some((a) => !isCornerAnchor(a as AnchorTriple));
+  // A plain rectangle is not a complex shape; one whose points were
+  // edited into curves is.
+  if (shape.kind === "rectangle") return curved;
+  return shape.anchors.length >= 3 || curved;
 }
 
 /** The suggestions for `shape`, in the order shown; `has(command)` says

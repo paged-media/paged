@@ -250,6 +250,14 @@ every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, 
 gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
 resolver there.
 
+Track CM's module streams (CM5) have begun. paged.draw (ADR 370 in its range): the Pen names its
+state — start, draw, continue, close, join, pulling a handle, finish, add, delete — with its cursor
+and a hint beside the pointer, and a click on the run's last anchor finishes the open path;
+holding Control with a tool that places or drags anchors shows a precision magnifier (a loupe at
+four times the view, read from an engine snapshot, no document change); with anchors selected the
+Properties panel edits the points, not the frame; one selected path offers Shape suggestions; the
+Pathfinder says that it applies on click and outlines what a button takes.
+
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,
 the control bar and (as `host.widgets.NumericField`) the plugins' panels reads units,

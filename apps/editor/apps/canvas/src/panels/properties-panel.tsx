@@ -94,7 +94,11 @@ import { objectTransformComposition } from "./object-transform.composition";
 import { paragraphComposition } from "./paragraph.composition";
 import { strokeComposition } from "./stroke.composition";
 import { AnchorPointsSection } from "./anchor-points-section";
-import { ShapeSuggestionsSection } from "./shape-suggestions-section";
+import {
+  ShapeSuggestionsSection,
+  useShapeFacts,
+  useShapeSuggestions,
+} from "./shape-suggestions-section";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import {
@@ -343,6 +347,16 @@ export function PropertiesPanel() {
               .join(" · ")
           : null;
 
+  // paged.draw ADR 370 — the one selected path the Shape suggestions read.
+  const shapeTarget =
+    kind === "frame" &&
+    elementSelection.length === 1 &&
+    SHAPE_KINDS.has(elementSelection[0].kind)
+      ? elementSelection[0]
+      : null;
+  const shapeFacts = useShapeFacts(shapeTarget);
+  const shapeSuggestions = useShapeSuggestions(shapeFacts);
+
   // The sections, in the order they are offered (grouped when shown).
   const sections: SectionDef[] = [];
   const typeSections = () => {
@@ -457,19 +471,22 @@ export function PropertiesPanel() {
       keywords: strings.t(M.kwStroke),
     });
   }
-  // paged.draw ADR 370 — quick actions for one selected path.
-  if (
-    kind === "frame" &&
-    elementSelection.length === 1 &&
-    SHAPE_KINDS.has(elementSelection[0].kind)
-  ) {
+  // paged.draw ADR 370 — quick actions for one selected path, when the
+  // shape gives them something to do.
+  if (shapeTarget && shapeFacts && shapeSuggestions.length > 0) {
     sections.push({
       id: "shape-suggestions",
       group: "frame",
       level: "common",
       title: strings.t(M.shapeSuggestions),
       keywords: strings.t(M.kwShape),
-      body: <ShapeSuggestionsSection id={elementSelection[0]} />,
+      body: (
+        <ShapeSuggestionsSection
+          id={shapeTarget}
+          shape={shapeFacts}
+          suggestions={shapeSuggestions}
+        />
+      ),
     });
   }
   if (hasContent && kind !== "text") typeSections();

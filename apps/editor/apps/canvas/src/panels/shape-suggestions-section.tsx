@@ -37,6 +37,7 @@ import {
   smoothCornerOps,
   suggestShapeActions,
   type ShapeFacts,
+  type ShapeSuggestion,
   type ShapeSuggestionId,
 } from "./shape-suggestions";
 
@@ -65,15 +66,17 @@ const LABEL: Record<ShapeSuggestionId, { label: string; hint: string }> = {
   mirror: { label: M.mirror, hint: M.mirrorHint },
 };
 
-/** The selected path's facts, re-read when the document changes. */
-function useShapeFacts(id: ElementId): ShapeFacts | null {
+/** The selected path's facts, re-read when the document changes; null
+ *  for no element and while the first read is in flight. */
+export function useShapeFacts(id: ElementId | null): ShapeFacts | null {
   const client = useCanvasClient();
   const [facts, setFacts] = useState<{
     key: string;
     shape: ShapeFacts | null;
   } | null>(null);
-  const key = JSON.stringify(id);
+  const key = id ? JSON.stringify(id) : "";
   useEffect(() => {
+    if (key === "") return;
     let alive = true;
     // `key` names the element by value: a new object for the same element
     // is not a new element.
@@ -115,17 +118,31 @@ function useShapeFacts(id: ElementId): ShapeFacts | null {
   return facts?.key === key ? facts.shape : null;
 }
 
-export function ShapeSuggestionsSection({ id }: { id: ElementId }) {
+/** The suggestions for `shape` among the commands the editor offers. */
+export function useShapeSuggestions(
+  shape: ShapeFacts | null,
+): ShapeSuggestion[] {
+  const commands = useRegistryView(useRegistries().commands);
+  return shape
+    ? suggestShapeActions(
+        shape,
+        (command) => commands.get(command) !== undefined,
+      )
+    : [];
+}
+
+export function ShapeSuggestionsSection({
+  id,
+  shape,
+  suggestions,
+}: {
+  id: ElementId;
+  shape: ShapeFacts;
+  suggestions: readonly ShapeSuggestion[];
+}) {
   const strings = useStrings();
   const client = useCanvasClient();
   const commands = useRegistryView(useRegistries().commands);
-  const shape = useShapeFacts(id);
-  if (!shape) return null;
-  const suggestions = suggestShapeActions(
-    shape,
-    (command) => commands.get(command) !== undefined,
-  );
-  if (suggestions.length === 0) return null;
 
   const run = (command: string | null) => {
     if (command) {

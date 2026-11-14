@@ -433,6 +433,10 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   cells, T38; a publication preview; F-42), doc (a story view and a story map), data (a record
   scrubber, an outlier finder, wording; F-46), web (source and render in sync), slide (the sorter
   as the default navigation; F-47), template fill (role-aware UX, forms on phones; T73).
+  **Draw done** (paged.draw ADR 370): the Pen's named states with their cursors and hints, a click
+  on the last anchor finishes the open path; a precision magnifier on Control; Points in the
+  inspector for selected anchors; Shape suggestions; the Pathfinder says it applies on click and
+  outlines its operands (no engine dry run exists for a result preview).
 
 ## 11. Track AP — Accessibility, devices and performance (spec wave 6)
 

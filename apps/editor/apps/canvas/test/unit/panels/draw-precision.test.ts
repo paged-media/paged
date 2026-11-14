@@ -180,6 +180,15 @@ describe("Shape suggestions (paged.draw ADR 370)", () => {
     expect(isComplexShape({ kind: "textFrame", anchors: star.anchors })).toBe(
       false,
     );
+    // A plain rectangle is not complex; one with a curved point is.
+    const rect = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
+    expect(isComplexShape({ kind: "rectangle", anchors: rect })).toBe(false);
+    expect(
+      isComplexShape({
+        kind: "rectangle",
+        anchors: [...rect.slice(0, 3), smooth(0, 10)],
+      }),
+    ).toBe(true);
   });
 });
 
