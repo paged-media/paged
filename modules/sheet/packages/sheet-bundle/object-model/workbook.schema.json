@@ -76,6 +76,6 @@
     },
     "title": "Chart style",
     "nullable": true,
-    "summary": "The document chart style every chart follows where it does not override a role: role → {swatch, paragraphStyle, characterStyle} (document ids), and a document colour group for the series. Null clears it."
+    "summary": "The document chart style every chart follows where it does not override a role: role → {swatch, paragraphStyle, characterStyle} (document ids), and a document color group for the series. Null clears it."
   }
 ]

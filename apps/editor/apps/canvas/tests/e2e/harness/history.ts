@@ -75,7 +75,8 @@ export async function expectHistoryUnchanged<T>(
 export async function expectUndoSteps<T>(
   page: Page,
   steps: number,
-  fn: () => Promise<T>,
+  // A gesture DSL chain is thenable, not a Promise: either is awaited.
+  fn: () => PromiseLike<T>,
   label = "the operation",
 ): Promise<T> {
   const before = await historyDepth(page);

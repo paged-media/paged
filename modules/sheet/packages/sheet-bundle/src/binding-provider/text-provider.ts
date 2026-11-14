@@ -401,7 +401,7 @@ export async function patchForWrite(
         ? { hAlign: alignOfJustification(text) }
         : "a justification is text";
     case "characterFillColor": {
-      if (value.type !== "colorRef") return "a text colour is a swatch";
+      if (value.type !== "colorRef") return "a text color is a swatch";
       if (value.value === null) return { fontColor: "", fontSwatch: null };
       if (!swatchRef) return "the document's swatches cannot be read";
       const ref = await swatchRef(value.value);

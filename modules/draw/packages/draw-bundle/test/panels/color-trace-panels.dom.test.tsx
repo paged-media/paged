@@ -125,14 +125,14 @@ describe("the colour and trace panels", () => {
   it("RECOLOR ARTWORK: the colour group, the wheel's handles, a preview row per colour, and Apply in one undo step", async () => {
     covers("panel:media.paged.draw.panel.recolorArtwork");
     const panel = await mountContributed(h, RECOLOR_PANEL_ID);
-    expect(panel.text()).toContain("Select artwork to recolour.");
+    expect(panel.text()).toContain("Select artwork to recolor.");
     await h.host.selection.set([A, B]);
     await settle();
     const ready = await mountContributed(h, RECOLOR_PANEL_ID);
     expect(
       ready.attr("[data-draw-recolor-panel]", "data-draw-recolor-panel"),
     ).toBe("2");
-    expect(ready.text()).toContain("2 colours in the selection");
+    expect(ready.text()).toContain("2 colors in the selection");
     expect(ready.count("[data-draw-recolor-row]")).toBe(2);
     // Complementary of red: two handles on the wheel.
     expect(ready.count("[data-draw-recolor-handle]")).toBe(2);

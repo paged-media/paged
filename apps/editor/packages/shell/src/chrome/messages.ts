@@ -141,6 +141,15 @@ export const HEADER = defineMessages("shell.header", {
 
 /** The header's save status (editor ADR 1203): a label per state, and the
  *  details its popover gives (where, when, why, Retry). */
+/** The publication's readiness against its contract (editor ADR 1236). */
+export const READINESS = defineMessages("shell.readiness", {
+  label: "Publication contract: {state}",
+  blocked: "Blocked",
+  attention: "Needs attention",
+  ready: "Ready",
+  approved: "Approved",
+});
+
 export const SAVE_STATUS = defineMessages("shell.saveStatus", {
   noChanges: "No changes",
   notSavedYet: "Not saved yet",

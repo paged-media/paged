@@ -33,6 +33,11 @@ import { moveFixWords, CONSTRAINT_WORDS } from "./constraints/describe";
 import type { Box } from "./constraints/evaluate";
 import { applyMoveFix } from "./constraints/fixes";
 import { constraintStateOf } from "./constraints/store";
+import {
+  CONTRACT_PANEL,
+  contractCheckId,
+  contractStateOf,
+} from "./contract/source";
 
 const M = defineMessages("app.issueFixes", {
   expandFrame: "Expand frame",
@@ -48,6 +53,7 @@ const M = defineMessages("app.issueFixes", {
   openPreflight: "Open Preflight",
   openReport: "Open the compatibility report",
   openData: "Open Data",
+  openContract: "Open the publication contract",
 });
 
 /** One fix: a label, what it will do, and how. */
@@ -249,6 +255,27 @@ export async function fixesOf(
       ];
     case "constraint":
       return constraintFixes(paged, issue);
+    case "contract": {
+      // Editor ADR 1236 — the panel that meets the requirement, and the
+      // contract itself.
+      const id = contractCheckId(issue.id);
+      const check = contractStateOf(paged.scope).assessment?.checks.find(
+        (c) => c.id === id,
+      );
+      const out: IssueFix[] = [];
+      if (check?.fix && check.fix.panel !== CONTRACT_PANEL)
+        out.push({
+          id: "contract-fix",
+          label: check.fix.label,
+          run: { kind: "panel", panel: check.fix.panel },
+        });
+      out.push({
+        id: "open-contract",
+        label: t(M.openContract),
+        run: { kind: "panel", panel: CONTRACT_PANEL },
+      });
+      return out;
+    }
     case "missing-data":
       return [
         {

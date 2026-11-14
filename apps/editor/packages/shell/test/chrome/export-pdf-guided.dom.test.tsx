@@ -243,7 +243,7 @@ describe("guided export: the preview facts", () => {
     expect(fact("size")).toBe("612 × 792 pt (215.9 × 279.4 mm)");
     expect(fact("bleed")).toBe("9 pt on every side");
     expect(fact("color")).toBe(
-      "PDF 1.7 · no output intent · colour numbers kept",
+      "PDF 1.7 · no output intent · color numbers kept",
     );
     expect(fact("transparency")).toBe("Kept live, not flattened");
     expect(fact("images")).toBe("Placed images pass through unchanged");

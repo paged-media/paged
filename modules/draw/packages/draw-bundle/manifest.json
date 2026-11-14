@@ -1239,7 +1239,7 @@
                 "members": ["smoothColor", "steps", "distance"]
               },
               "default": "steps",
-              "summary": "Spacing mode: smooth colour, specified steps, specified distance."
+              "summary": "Spacing mode: smooth color, specified steps, specified distance."
             },
             {
               "path": "steps",
@@ -1303,7 +1303,7 @@
               },
               "nullable": true,
               "default": null,
-              "summary": "Independent colour easing; null = follow position."
+              "summary": "Independent color easing; null = follow position."
             },
             {
               "path": "colorEasingStrength",
@@ -1315,7 +1315,7 @@
                 "max": 1
               },
               "default": 1,
-              "summary": "Colour easing strength."
+              "summary": "Color easing strength."
             },
             {
               "path": "reverseSpine",
@@ -4244,7 +4244,7 @@
       "templateFields": [
         {
           "kind": "media.paged.draw.paint",
-          "title": "Fill or stroke colour"
+          "title": "Fill or stroke color"
         },
         {
           "kind": "media.paged.draw.graphicStyle",

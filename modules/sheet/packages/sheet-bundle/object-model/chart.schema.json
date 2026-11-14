@@ -139,9 +139,9 @@
     "type": {
       "kind": "text"
     },
-    "title": "Series colours",
+    "title": "Series colors",
     "nullable": true,
-    "summary": "A document colour group the series take their colours from, in order; null = the workbook chart style's."
+    "summary": "A document color group the series take their colors from, in order; null = the workbook chart style's."
   },
   {
     "path": "sheet",

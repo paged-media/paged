@@ -719,7 +719,7 @@ const barBox: CSSProperties = {
   height: 28,
   padding: "0 7px",
   borderRadius: "var(--radius-md)",
-  border: "1px solid var(--chrome-divider)",
+  border: "1px solid var(--pg-control-border)",
   background: "var(--pg-muted)",
   flexShrink: 0,
   cursor: "text",

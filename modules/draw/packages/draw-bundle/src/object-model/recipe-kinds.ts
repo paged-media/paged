@@ -178,8 +178,7 @@ const REPEAT_PARAMS: Record<keyof RepeatParams, ParamRow> = {
 const BLEND_PARAMS: Record<keyof BlendParams, ParamRow> = {
   spacing: {
     type: enumOf(["smoothColor", "steps", "distance"]),
-    summary:
-      "Spacing mode: smooth colour, specified steps, specified distance.",
+    summary: "Spacing mode: smooth color, specified steps, specified distance.",
   },
   steps: {
     type: INT,
@@ -204,12 +203,12 @@ const BLEND_PARAMS: Record<keyof BlendParams, ParamRow> = {
   colorEasing: {
     type: enumOf(EASE_KINDS),
     nullable: true,
-    summary: "Independent colour easing; null = follow position.",
+    summary: "Independent color easing; null = follow position.",
   },
   colorEasingStrength: {
     type: NUM,
     range: { min: 0, max: 1 },
-    summary: "Colour easing strength.",
+    summary: "Color easing strength.",
   },
   reverseSpine: { type: BOOL, summary: "Run along the spine the other way." },
   reverseFrontToBack: {

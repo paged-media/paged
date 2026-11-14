@@ -67,9 +67,9 @@ export const PROPOSAL = defineMessages("shell.aiProposal", {
   consentObjects:
     "{count, plural, =0 {the document's object addresses} one {the address of # selected object} other {the addresses of # selected objects}}",
   consentValues:
-    "the property values Claude reads (sizes, colours, styles, positions)",
+    "the property values Claude reads (sizes, colors, styles, positions)",
   consentText: "the text of the objects it reads",
-  consentNoText: "no text: Claude sees sizes, colours and styles only",
+  consentNoText: "no text: Claude sees sizes, colors and styles only",
   consentWhere:
     "It goes to Anthropic through this editor's AI service and is not kept by the editor.",
   consentNothing:

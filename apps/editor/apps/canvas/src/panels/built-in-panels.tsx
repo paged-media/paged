@@ -116,6 +116,7 @@ import { GenerateImagePanel } from "./generate-image-panel";
 import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
 import { ConstraintsPanel } from "./constraints-panel";
+import { ContractPanel } from "./contract-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
 import { PreflightPanel } from "./cockpit/preflight-panel";
@@ -233,6 +234,7 @@ const M = defineMessages("app.builtInPanels", {
   history: "History",
   library: "Library",
   constraints: "Design constraints",
+  contract: "Publication contract",
   table: "Table",
   tabs: "Tabs",
   glyphs: "Glyphs",
@@ -332,6 +334,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "left",
     defaultGroup: "cockpit",
     icon: "ui-warn",
+  },
+  {
+    // Editor ADR 1236 — the publication contract and its readiness.
+    id: "paged.publication-contract",
+    get title() {
+      return t(M.contract);
+    },
+    component: ContractPanel,
+    defaultDock: "left",
+    defaultGroup: "cockpit",
+    icon: "ui-target",
   },
   {
     // Editor ADR 1233 — the document's design constraints.

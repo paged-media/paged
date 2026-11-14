@@ -65,7 +65,9 @@ export function KitCheckbox({
           className="peer h-[14px] w-[14px] cursor-[inherit] appearance-none rounded-[3px] border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           style={{
             margin: 0,
-            borderColor: checked ? "var(--pg-primary)" : "var(--pg-border)",
+            borderColor: checked
+              ? "var(--pg-primary)"
+              : "var(--pg-control-border)",
             background: checked ? "var(--pg-primary)" : "var(--pg-bg)",
             ...style,
           }}

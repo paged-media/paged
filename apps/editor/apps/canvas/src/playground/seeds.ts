@@ -114,7 +114,7 @@ if (ps.length) {
   "swatches-and-styles": {
     title: "Swatches & styles",
     summary:
-      "A row of swatch chips drawn from the default palette — for colour/style reference reads.",
+      "A row of swatch chips drawn from the default palette — for color/style reference reads.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const colors = ["Color/Black", "Color/Red", "Color/Black", "Color/Black"];
@@ -163,7 +163,7 @@ if (typeof paged.insertTable === "function") {
   flyer: {
     title: "Event flyer",
     summary:
-      "A poster page — colour banner, headline, subhead and a picture block; the headline is selected.",
+      "A poster page — color banner, headline, subhead and a picture block; the headline is selected.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const addText = function (bounds, text) {

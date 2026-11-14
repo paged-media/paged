@@ -219,7 +219,7 @@ export function recolorPalette(
     let base: Rgb | null = null;
     if (typeof params.base === "string" && params.base !== "") {
       base = parseCssColor(params.base);
-      if (!base) throw new Error(`${id}: base ${params.base} is not a colour`);
+      if (!base) throw new Error(`${id}: base ${params.base} is not a color`);
     } else {
       // The heaviest chromatic colour, as the Recolor Artwork command picks.
       const chromatic = colors.filter((c) => !isNeutral(c.rgb));
@@ -242,7 +242,7 @@ export function recolorPalette(
       const f = parseCssColor(from);
       const t = typeof to === "string" ? parseCssColor(to) : null;
       if (!f || !t)
-        throw new Error(`${id}: map takes colour → colour (${from} → ${to})`);
+        throw new Error(`${id}: map takes color → color (${from} → ${to})`);
       table.set(rgbToHex(f), t);
     }
     return colors.map((c) => table.get(rgbToHex(c.rgb)) ?? c.rgb);
@@ -334,7 +334,7 @@ export function drawActions(host: BundleHost): ActionDefinition[] {
     },
     {
       id: DRAW_ACTION_IDS.recolor,
-      title: "Recolour an SVG (reduce, harmony or a colour map)",
+      title: "Recolor an SVG (reduce, harmony or a color map)",
       input: "asset",
       output: "asset",
       params: {

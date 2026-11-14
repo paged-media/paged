@@ -58,7 +58,7 @@ export const FG = defineMessages("image.filter", {
   smudgeStick: "Smudge stick",
   sponge: "Sponge",
   underpainting: "Underpainting",
-  watercolor: "Watercolour",
+  watercolor: "Watercolor",
   accentedEdges: "Accented edges",
   angledStrokes: "Angled strokes",
   darkStrokes: "Dark strokes",

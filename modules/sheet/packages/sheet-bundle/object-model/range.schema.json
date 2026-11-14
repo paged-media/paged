@@ -123,7 +123,7 @@
     "type": {
       "kind": "text"
     },
-    "title": "Font colour",
+    "title": "Font color",
     "summary": "`#RRGGBB`; empty = automatic."
   },
   {

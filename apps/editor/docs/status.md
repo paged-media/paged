@@ -347,7 +347,9 @@ and their page items, each row named with its type, name, page and whether it is
 hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
 the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
 and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping objects. Every text
-token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
+token meets 4.5:1 in both themes, the outline that identifies a field, a checkbox or an
+outlined button meets 3:1 on every surface (ADR 1231, amendment 2026-11-14), menu hints are no
+longer faded (F-51), and a high-contrast
 variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
 7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
 ([ADR 1231](adr/1231-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
@@ -379,9 +381,17 @@ the person's own checkpoints ref, so keeping one never moves the saved version. 
 previews read-only, compares with the open document side by side (the regions that differ boxed,
 the frames, pictures, text, formatting and styles that changed listed) in a second engine, and
 restores as a new version with the open state kept first. Bounded as the recovery journal is.
+The publication contract ([ADR 1236](adr/1236-the-publication-contract.md), PX8): Window ▸ Output ▸
+Publication contract keeps the publication's requirements with the document — PDF standard, trim
+size, bleed, output intent and profile, no RGB pictures, fonts, resolution, complete data — and
+its approval. The document is assessed against it continuously, with the export's own readiness
+check and the contract's additions; the header shows Blocked, Needs attention, Ready or Approved
+beside the save status, and an unmet requirement is an issue where it stands. Approving is an
+explicit step that keeps the approved state on the timeline; an edit after it reads "Approved,
+then edited".
 Visual action automation ([ADR 1240](adr/1240-actions-record-what-you-meant.md), PX4): a
 recorded step keeps the selection it acted on as an intent and the edit context it ran in, and a
-panel field's commit (a font size, a style, a colour) records as a step on the selection, so an
+panel field's commit (a font size, a style, a color) records as a step on the selection, so an
 action recorded in one document runs on another document's selection. An action has parameters,
 is kept for the user or in the document (the label `x-paged:actions`), and is previewed before it
 runs: the steps with the objects each acts on, outlined on the canvas, and how it undoes (one

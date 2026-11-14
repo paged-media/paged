@@ -2360,8 +2360,8 @@ function DocumentStylePickers({
       <button
         type="button"
         data-testid="sheet-bar-text-color"
-        aria-label="Text colour"
-        title="Text colour (document swatch)"
+        aria-label="Text color"
+        title="Text color (document swatch)"
         aria-expanded={open === "text"}
         style={button}
         onClick={() => setOpen(open === "text" ? null : "text")}
@@ -2372,7 +2372,7 @@ function DocumentStylePickers({
         <div
           data-testid="sheet-swatch-picker"
           role="listbox"
-          aria-label={open === "fill" ? "Cell fill" : "Text colour"}
+          aria-label={open === "fill" ? "Cell fill" : "Text color"}
           style={{
             ...card,
             position: "absolute",

@@ -20,8 +20,9 @@
 // The theme's contrast (editor ADR "High contrast and AA"; UXI-A11Y-012):
 // every text token on every surface token it is drawn on meets WCAG 2.2 AA
 // (4.5:1) in the dark and light themes, and 7:1 in their high-contrast
-// variants, where field and panel boundaries and the focus ring meet 4.5:1
-// too. Computed from theme.css itself (WCAG's relative luminance), so a
+// variants; the glyphs, the focus ring and the boundaries that identify a
+// control meet 3:1 (4.5:1 in high contrast, where the panels' hairlines do
+// too). Computed from theme.css itself (WCAG's relative luminance), so a
 // token change that breaks a pair fails here before any page renders.
 
 import { describe, expect, test } from "bun:test";
@@ -148,8 +149,24 @@ const GLYPHS: Array<[string, string]> = [
   ["--chrome-icon", "--chrome-panel-bg"],
   ["--chrome-icon-active", "--chrome-slot-active"],
 ];
-const BOUNDARIES: Array<[string, string]> = [
+/** The boundaries that identify a control — a field's outline, a select, a
+ *  checkbox, an outlined button — on every surface a control sits on: 3:1
+ *  in every theme (1.4.11; ADR 1231, amendment 2026-11-14), 4.5:1 in high
+ *  contrast. */
+const CONTROLS: Array<[string, string]> = [
   ["--input", "--background"],
+  ["--input", "--popover"],
+  ["--input", "--muted"],
+  ["--input", "--secondary"],
+  ["--pg-control-border", "--pg-bg"],
+  ["--pg-control-border", "--pg-muted"],
+  ["--pg-control-border", "--elevated"],
+  ["--pg-control-border", "--chrome-panel-bg"],
+  ["--pg-control-border", "--chrome-rail-bg"],
+];
+/** Hairlines that separate surfaces (decorative in the standard themes,
+ *  4.5:1 in high contrast). */
+const BOUNDARIES: Array<[string, string]> = [
   ["--border", "--background"],
   ["--chrome-divider", "--chrome-panel-bg"],
   ["--chrome-border", "--chrome-panel-bg"],
@@ -168,9 +185,11 @@ describe("the theme's contrast", () => {
       })).filter((r) => r.ratio < min);
       expect(below).toEqual([]);
     });
-    test(`${theme}: glyphs and the focus ring ${high ? "4.5" : "3"}:1${high ? ", boundaries 4.5:1" : ""}`, () => {
+    test(`${theme}: glyphs, the focus ring and control boundaries ${high ? "4.5" : "3"}:1${high ? ", hairlines 4.5:1" : ""}`, () => {
       const min = high ? 4.5 : 3;
-      const pairs = high ? [...GLYPHS, ...BOUNDARIES] : GLYPHS;
+      const pairs = high
+        ? [...GLYPHS, ...CONTROLS, ...BOUNDARIES]
+        : [...GLYPHS, ...CONTROLS];
       const below = pairs
         .map(([fg, bg]) => ({
           pair: `${fg} on ${bg}`,

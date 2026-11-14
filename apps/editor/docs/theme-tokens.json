@@ -432,8 +432,8 @@
     },
     "--paged-input": {
       "group": "Paged semantic channels",
-      "light": "0 0% 89%",
-      "dark": "240 5% 22%",
+      "light": "240 4% 54%",
+      "dark": "240 5% 49%",
       "highContrast": {
         "light": "240 4% 36%",
         "dark": "240 5% 62%"
@@ -538,6 +538,15 @@
       "group": "surfaces & interaction",
       "light": "#e3e3e3",
       "dark": "#2c2c31",
+      "highContrast": {
+        "light": "#57575e",
+        "dark": "#9c9ca6"
+      }
+    },
+    "--pg-control-border": {
+      "group": "surfaces & interaction",
+      "light": "#85858e",
+      "dark": "#777783",
       "highContrast": {
         "light": "#57575e",
         "dark": "#9c9ca6"

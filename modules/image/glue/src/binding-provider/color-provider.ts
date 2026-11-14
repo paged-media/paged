@@ -93,7 +93,7 @@ export function valueToRgba(
   value: Value,
 ): { ok: true; colour: Rgba01 } | { ok: false; error: string } {
   if (value.type !== "swatchColor") {
-    return { ok: false, error: `not a colour value (${value.type})` };
+    return { ok: false, error: `not a color value (${value.type})` };
   }
   const { space, value: v } = value.value;
   const to01 = (rgb: readonly number[]): Rgba01 => [
@@ -123,7 +123,7 @@ export function valueToRgba(
     default:
       return {
         ok: false,
-        error: `paged.image takes RGB, CMYK or gray colours, not ${space}`,
+        error: `paged.image takes RGB, CMYK or gray colors, not ${space}`,
       };
   }
 }
@@ -196,7 +196,7 @@ export function makeColorBindingProvider(
           return refused("an image's colors cannot be None");
         }
         colour = await swatchColour(id);
-        if (!colour) return refused(`swatch "${id}" has no colour to take`);
+        if (!colour) return refused(`swatch "${id}" has no color to take`);
       } else {
         const parsed = valueToRgba(request.value);
         if (!parsed.ok) return refused(parsed.error);

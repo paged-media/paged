@@ -166,7 +166,7 @@ const M = defineMessages("app.actionsPanel", {
   preview: "Preview",
   previewTitle: "Show what this action will do here, before it runs",
   fieldsRecorded:
-    " Panel fields (a font size, a style, a colour) are recorded as a step on the selection.",
+    " Panel fields (a font size, a style, a color) are recorded as a step on the selection.",
   scopeUser: "This editor",
   scopeDocument: "This document",
   scopeLabel: "Keep in",

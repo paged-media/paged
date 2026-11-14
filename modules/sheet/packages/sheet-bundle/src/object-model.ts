@@ -261,7 +261,7 @@ const STYLE_ROWS: PropertySchema[] = [
   rw("italic", bool, { title: "Italic" }),
   rw("underline", bool, { title: "Underline" }),
   rw("fontColor", text, {
-    title: "Font colour",
+    title: "Font color",
     summary: "`#RRGGBB`; empty = automatic.",
   }),
   rw("fill", text, { title: "Fill", summary: "`#RRGGBB`; empty = none." }),
@@ -296,7 +296,7 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
       title: "Chart style",
       nullable: true,
       summary:
-        "The document chart style every chart follows where it does not override a role: role → {swatch, paragraphStyle, characterStyle} (document ids), and a document colour group for the series. Null clears it.",
+        "The document chart style every chart follows where it does not override a role: role → {swatch, paragraphStyle, characterStyle} (document ids), and a document color group for the series. Null clears it.",
     }),
   ],
   sheet: [
@@ -408,10 +408,10 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
         "The chart's own document-style overrides: chartArea, plotArea, axisLine, gridlines (a swatch); text, title, axisTitle, tickLabels, legend, dataLabels (paragraph style, character style, swatch). A write replaces them; a role left out follows the workbook chart style.",
     }),
     rw("seriesColorGroup", text, {
-      title: "Series colours",
+      title: "Series colors",
       nullable: true,
       summary:
-        "A document colour group the series take their colours from, in order; null = the workbook chart style's.",
+        "A document color group the series take their colors from, in order; null = the workbook chart style's.",
     }),
     derived("sheet", text, { title: "Sheet" }),
   ],
