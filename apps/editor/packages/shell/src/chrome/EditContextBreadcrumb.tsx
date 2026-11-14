@@ -235,11 +235,14 @@ const floatingBarStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+// Where you are never gives way: in a narrow bar it is the context's
+// control-bar groups after it that the bar clips. A trail that could shrink
+// collapsed to no width under the level control beside it at 1280 px.
 const inlineStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: space[2],
-  minWidth: 0,
+  flexShrink: 0,
   fontSize: 12,
   whiteSpace: "nowrap",
 };
