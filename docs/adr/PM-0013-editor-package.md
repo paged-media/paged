@@ -2,7 +2,7 @@
 
 - **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendments 4 and 5: the `dist/` budget is 73 MiB)
   and 2026-11-08 (amendment 6: 74.25 MiB) and 2026-11-11 (amendment 7: 74.6 MiB) and 2026-11-14
-  (amendment 8: 75.25 MiB).
+  (amendment 8: 75.25 MiB; amendment 9: 100 MiB, the owner's decision).
 - **Amends:** [PM-0008](PM-0008-npm-packages-and-release.md) (three public packages since its
   amendment 3; four from here).
 - **Scope:** `apps/editor/packages/editor`, `tooling/release/*`, `.github/workflows/release.yml`
@@ -250,3 +250,14 @@ the evening adds about 26 KB more. The new budget keeps a margin of about 0.45 M
 programme's last landings before its final CI pass. Recorded for the owner's confirmation; reverting
 it means taking that code out of the package or splitting it from the first load. The entry budgets
 stay at 16 KiB.
+
+## Amendment 9 (2026-11-14): a 100 MiB budget for `dist/`
+
+The owner decided the budget for `dist/`: 100 MiB (104,857,600 bytes, from 78,905,344). This
+confirms amendments 7 and 8, which were recorded for the owner's confirmation, and ends the step by
+step raises: with every built-in module shipping in the package (each with its wasm) and the
+interaction programme's code in the editor, a budget a few hundred KiB above the last build failed
+CI at each feature landing without saying anything a reviewer did not already know. At 100 MiB the
+check still catches a real regression (a duplicated wasm, a source map or an unminified chunk in the
+package, a dependency pulled in whole), and growth past it is again a decision recorded here. The
+entry budgets stay at 16 KiB.
