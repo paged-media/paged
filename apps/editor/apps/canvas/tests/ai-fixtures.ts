@@ -91,6 +91,44 @@ const end = (stop: string) =>
     ["message_stop", { type: "message_stop" }],
   ] as Array<[string, unknown]>;
 
+/** A model turn that calls the tool `name` with `input` (editor ADR 1234's
+ *  read_objects and propose_changes). */
+export function toolCallTurn(
+  name: string,
+  input: unknown,
+  id = "msg_call",
+): string {
+  return sse([
+    start(id),
+    [
+      "content_block_start",
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: `toolu_${id}`,
+          name,
+          input: {},
+        },
+      },
+    ],
+    [
+      "content_block_delta",
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: {
+          type: "input_json_delta",
+          partial_json: JSON.stringify(input),
+        },
+      },
+    ],
+    ["content_block_stop", { type: "content_block_stop", index: 0 }],
+    ...end("tool_use"),
+  ]);
+}
+
 /** A model turn that calls run_script with `source`. */
 export function toolTurn(source: string, id = "msg_tool"): string {
   return sse([

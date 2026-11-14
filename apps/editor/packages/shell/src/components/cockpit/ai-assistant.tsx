@@ -33,8 +33,23 @@
 // Every entry point — the palette's "Ask Claude", the File menu, the
 // Properties shortcut — feeds the same session store (ai/assistant-session),
 // so a run started anywhere is shown here.
+//
+// Editor ADR 1234: the assistant PROPOSES and the user approves. "Ask" no
+// longer lets Claude edit: a request first shows what will leave the device
+// and waits for Send (every request); Claude then only reads, through the
+// object model, and answers a change set the panel previews (each object,
+// its value now and proposed, why; outlined on the canvas). Approve applies
+// the ticked changes as one undo step. The deterministic checks propose the
+// same way, on this device; without an AI service they are all the panel
+// offers. A brief (New document) asks the same consent before it is sent.
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { createStrings, useStrings, type Strings } from "@paged-media/strings";
 
@@ -69,6 +84,15 @@ import { useOptionalPaged } from "../../state/paged-editor";
 import { useSelection } from "../../state/selection-context";
 import { Btn, PanelHeader, Section } from "./kit";
 import { ASSISTANT as M } from "../messages";
+import {
+  ChecksSection,
+  ConsentCard,
+  ProposalView,
+  proposalWords,
+  useProposalDoors,
+} from "./ai-proposals";
+import { proposalSession } from "../../ai/proposal-session";
+import { PROPOSAL } from "../../ai/messages";
 
 /** The panels' shared low-res floor (publication-health-panel). */
 const LOW_RES_PPI = 150;
@@ -154,6 +178,7 @@ export function AIAssistant() {
   const {
     dismissAssistantRun,
     getAssistantState,
+    setAssistantDraft,
     setAssistantView,
     startAssistantRun,
     stopAssistantRun,
@@ -171,6 +196,17 @@ export function AIAssistant() {
   const links = useCollection<LinkSummary>("links");
   const fonts = useCollection<FontSummary>("fonts");
   const session = useSyncExternalStore(subscribeAssistant, getAssistantState);
+  const editorScope = useEditorScope();
+  const proposals = proposalSession(editorScope);
+  const proposal = useSyncExternalStore(
+    proposals.subscribeProposal,
+    proposals.getProposalState,
+    proposals.getProposalState,
+  );
+  const doors = useProposalDoors();
+  const offline = useAiAvailability() === "unavailable";
+  const selectedOf = (): string[] =>
+    doors ? elementSelection.map((id) => doors.addressOf(id)) : [];
   const meta = useDocumentMeta();
   // The engine's own page count, not only the shell's handle: a document
   // loaded through the client directly (an automation, a test) has no handle.
@@ -235,27 +271,47 @@ export function AIAssistant() {
   const ask = useCallback(
     (request: string) => {
       const text = request.trim();
-      if (!text || running || !hasDocument) return;
-      const scoped = elementSelection.length > 0 || contentSelection != null;
-      startAssistantRun({
-        client,
-        mode: scoped ? "assist" : "script",
-        prompt: `${scoped ? `The user has a ${kind ?? "frame"} selected.\n` : ""}${context()}\n\nRequest: ${text}`,
+      if (!text || running || !hasDocument || offline) return;
+      // Editor ADR 1234: nothing is sent yet — the consent card says what
+      // would leave the device, and Send sends it.
+      const selection = doors
+        ? elementSelection.map((id) => doors.addressOf(id))
+        : [];
+      proposals.requestConsent({
+        kind: "ask",
+        text,
+        scope: selection.length > 0 ? "selection" : "document",
+        allowText: true,
+        selection,
       });
+      setAssistantDraft("");
     },
     [
-      startAssistantRun,
-      client,
-      context,
+      proposals,
       running,
       hasDocument,
+      offline,
+      doors,
       elementSelection,
-      contentSelection,
-      kind,
+      setAssistantDraft,
     ],
   );
 
+  // A brief waits for consent like a request (editor ADR 1234).
+  const [pendingSize, setPendingSize] = useState("a4");
   const build = (brief: string, sizeId: string) => {
+    const text = brief.trim();
+    if (!text || running || !editor || offline) return;
+    setPendingSize(sizeId);
+    proposals.requestConsent({
+      kind: "brief",
+      text,
+      scope: "document",
+      allowText: true,
+      selection: [],
+    });
+  };
+  const runBuild = (brief: string, sizeId: string) => {
     const text = brief.trim();
     if (!text || running || !editor) return;
     const size = SIZES.find((s) => s.id === sizeId) ?? SIZES[0]!;
@@ -319,19 +375,57 @@ export function AIAssistant() {
         </Btn>
       </div>
 
-      {view === "ask" ? (
-        <AskView
-          kind={kind ?? "page"}
-          diagnosis={diagnosis}
-          draft={session.draft}
-          running={running}
-          onAsk={ask}
+      {proposal.phase === "consent" && (
+        <ConsentCard
+          request={proposal.request}
+          onCancel={() => proposals.declineConsent()}
+          onSend={() => {
+            if (proposal.request.kind === "brief") {
+              const brief = proposal.request.text;
+              proposals.declineConsent();
+              runBuild(brief, pendingSize);
+              return;
+            }
+            if (doors)
+              void proposals.grantConsent(
+                doors.read,
+                proposalWords(strings),
+                context(),
+              );
+          }}
         />
+      )}
+
+      {view === "ask" ? (
+        <>
+          <AskView
+            kind={kind ?? "page"}
+            diagnosis={diagnosis}
+            draft={session.draft}
+            running={running || proposal.phase === "inspecting"}
+            onAsk={ask}
+          />
+          {offline && (
+            <div
+              role="status"
+              data-ai-checks-only
+              className="pg-ui-xs"
+              style={{ padding: "0 14px 12px", color: "var(--pg-muted-fg)" }}
+            >
+              {strings.t(PROPOSAL.checksOnly)}
+            </div>
+          )}
+          <ProposalView />
+          <ChecksSection
+            selection={selectedOf()}
+            busy={running || proposal.phase === "inspecting"}
+          />
+        </>
       ) : (
         <BriefView
           draft={session.draft}
           running={running}
-          canBuild={editor != null}
+          canBuild={editor != null && !offline}
           onBuild={build}
         />
       )}

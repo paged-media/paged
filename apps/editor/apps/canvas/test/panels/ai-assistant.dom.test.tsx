@@ -107,8 +107,10 @@ describe("AI Assistant panel", () => {
     const from = h.mark();
     await h.click(h.view.getByRole("button", { name: "Ask Claude" }));
     await h.settle();
-    expect(panel(h).getAttribute("data-ai-assistant-state")).toBe("error");
-    const error = h.root.querySelector("[data-ai-error]")!;
+    // Editor ADR 1234: the request waits for consent, then is sent.
+    await h.click(h.view.getByRole("button", { name: "Send to Claude" }));
+    await h.settle();
+    const error = h.root.querySelector("[data-ai-proposal-error]")!;
     expect(error.getAttribute("role")).toBe("alert");
     expect(error.textContent!.length).toBeGreaterThan(2);
     expect(error.textContent).not.toContain("{");
@@ -116,7 +118,7 @@ describe("AI Assistant panel", () => {
     expect(h.mutations(from)).toEqual([]);
     expect(h.sent("executeScript", from)).toEqual([]);
     await h.click(h.view.getByRole("button", { name: "Done" }));
-    expect(h.root.querySelector("[data-ai-error]")).toBeNull();
+    expect(h.root.querySelector("[data-ai-proposal-error]")).toBeNull();
   });
 
   // UX audit F-25 (fixed): with no AI service the panel says so up front.
