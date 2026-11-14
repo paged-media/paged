@@ -396,11 +396,12 @@ export function NewDocumentDialog() {
               </Row>
               <Row label={strings.t(M.pages)}>
                 <span data-new-document-field="pages">
+                  {/* No min / max: the one numeric field refuses a typed value
+                      outside its bounds before the setup sees it, and the
+                      range is the dialog's to say (ADR 1220, decision 3). */}
                   <NumberInput
                     value={setup.pages}
                     precision={0}
-                    min={1}
-                    max={999}
                     onChange={(n) => edit({ pages: Math.round(n) })}
                   />
                 </span>
@@ -469,8 +470,6 @@ export function NewDocumentDialog() {
                   <NumberInput
                     value={setup.columns}
                     precision={0}
-                    min={1}
-                    max={216}
                     onChange={(n) => edit({ columns: Math.round(n) })}
                   />
                 </span>
