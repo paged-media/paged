@@ -162,19 +162,18 @@ test.describe("File ▸ New document…", () => {
     ]);
     expect(pages[1]!.spreadId).toBe(pages[2]!.spreadId);
     expect(pages[0]!.spreadId).not.toBe(pages[1]!.spreadId);
-    // A left-hand page binds on its right: its inside margin is there.
+    // A left-hand page binds on its right: its inside margin is there. The
+    // setup's writes land after the pages exist (one undo group): poll.
     const near = (v: unknown, want: number) =>
       typeof v === "number" && Math.abs(v - want) < 0.01;
-    expect(near(await objGet(page, "page:#1", "pageMarginLeft"), 40)).toBe(
-      true,
-    );
-    expect(near(await objGet(page, "page:#2", "pageMarginRight"), 40)).toBe(
-      true,
-    );
-    expect(near(await objGet(page, "page:#2", "pageMarginLeft"), 20)).toBe(
-      true,
-    );
-    expect(await undoDepth(page)).toBe(1);
+    const margin = (id: string, side: string, want: number) =>
+      expect
+        .poll(async () => near(await objGet(page, id, side), want))
+        .toBe(true);
+    await margin("page:#1", "pageMarginLeft", 40);
+    await margin("page:#2", "pageMarginRight", 40);
+    await margin("page:#2", "pageMarginLeft", 20);
+    await expect.poll(() => undoDepth(page)).toBe(1);
     expect((await meta(page)).dirty).toBe(false);
   });
 
