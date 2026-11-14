@@ -87,7 +87,27 @@ What the numbers say, plainly:
   the CPU path, and it now shows alone, before its neighbours; the composition of that one
   page is the engine's.
 - Memory with the packages alone is 0.3 to 0.5 GB; the decoded-image half of F-54 needs the
-  images resolved to measure and a budget the engine does not have yet (EXC-003).
+  images resolved to measure. Since engine ADR 1311 the decoded pictures have a budget (below).
+
+**The decoded-picture store** (engine ADR 1311; measured 2026-11-14, load average 7–17, the
+Vite development server, Chromium's full headless browser, which here took the GPU path: the
+worker's first paint is its first present). "Before" is `main` at the time, "after" the same
+tree with the store; the runs alternated. The 54 MB template embeds thirty RGB JPEGs of about
+2 MB each in its spreads.
+
+| 54 MB template, 8 pages                        | Before            | After                                        |
+| ---------------------------------------------- | ----------------- | -------------------------------------------- |
+| First paint, worker (from the layout)          | 6.3 s             | 4.4 s                                        |
+| First paint, screenshot (from the file)        | 17.0 s            | 10.7 s                                       |
+| Memory, page and workers (opened, after use)   | 347 MB, 237 MB    | 347 MB, 237 MB                               |
+| Decoded pictures held (opened, after use)      | not reported      | 36 MB (32 pictures), 62 MB (40), budget 256 MiB |
+
+The pictures of a page drawn at fit size are now decoded at the level the draw needs (a JPEG
+at its DCT scale) and kept, within the budget, for the thumbnails, the tiles and the GPU scenes
+alike; before, every draw decoded each one at the size the build recorded (up to 4 096 px) and
+the GPU kept its own full-size copy. Of the 4.4 s left, 3.7 s is the first GPU present of a page
+of nineteen photographs (the worker journal's `worker.frame`). The 105 MB template's first
+present came 10 ms after its layout in both runs; its pictures held after use are 67 MB (23).
 
 ## Budgets
 
@@ -113,13 +133,16 @@ real regression fails and a loaded runner does not:
 | Page thumbnails (compressed PNG URLs) | `packages/shell/src/state/page-thumbnails.ts`, `document-loader.ts`   | One per page                               | Dropped and revoked with their page; re-taken after an edit.                    |
 | Undo history                          | the engine's undo log (`MAX_APPLIED_LOG`), the History panel's depth  | 10,000 steps (the setting may lower it)    | The oldest step first.                                                          |
 | Fonts                                 | the engine's font registry (`client.clearFontRegistry`)               | The document's own                         | With the document.                                                              |
-| Decoded images                        | `engine/core/crates/paged-canvas/src/model.rs` (`image_decode_cache`) | **None yet** (inventory exception EXC-003) | Kept while the document is open.                                                |
+| Decoded pictures (pixels)             | the engine's decoded-picture store, `engine/core/crates/paged-gpu/src/image_store.rs` (engine ADR 1311) | 256 MiB (`DEFAULT_BUDGET_BYTES`) | The pictures drawn longest ago first; a decode larger than the budget is not kept. All with the document. |
+| Pictures' encoded bytes and sizes     | the live model's `image_decode_cache` (`engine/core/crates/paged-canvas/src/model.rs`) | The document's own pictures, and at most eight filter-stack twins a picture (engine ADR 1037) | With the document. |
 
-The decoded-image cache is the one without a budget, and the measured memory of large
-documents is mostly there (the main thread's JS heap stays a fraction of it). Every rebuild
-composes every page, so an image evicted would be decoded again on the next edit; a budget
-that holds needs images decoded at the size they are shown and the visible pages composed
-first, which is engine work with its own record.
+A placed picture's pixels live in one place: the engine's decoded-picture store, shared by the
+CPU tiles, the page thumbnails and the GPU page scenes. A draw asks for the picture at the
+level its device size needs (level `k` is `1 / 2^k` of the size the build placed it at; a JPEG
+is decoded at its DCT scale), so a thumbnail never decodes a photograph at full size, and only
+a page shown at a scale that needs every pixel holds a picture at level 0. Exports decode from
+the encoded bytes at full resolution, as before. Every journal drain records what the store,
+the CPU tiles and the GPU scenes hold (`worker.caches`); the suite reports it.
 
 ## What makes it fast
 

@@ -102,7 +102,7 @@ interface CanvasGlobal {
     elementSelection?: Array<{ kind: string; id: string }>;
     client: {
       setElementSelection(ids: unknown[], mode: string): Promise<unknown[]>;
-      mutate(m: unknown): Promise<unknown>;
+      mutate(m: unknown, ...rest: unknown[]): Promise<unknown>;
       drainJournal(timeoutMs?: number): Promise<{
         entries: Array<{ code: string; durMs?: number; data?: unknown }>;
       } | null>;
@@ -181,14 +181,29 @@ async function typingLatency(
   page: Page,
   delayMs: number,
   storyId: string = UXI_A.note.storyId,
-): Promise<{ latencies: number[]; inserts: number }> {
+): Promise<{
+  latencies: number[];
+  inserts: number;
+  engineMs: number[];
+  requests: Record<string, number>;
+}> {
   const text = "the quick brown fox jumps over the lazy dog ".repeat(2);
   await page.evaluate((storyId) => {
     const w = globalThis as unknown as CanvasGlobal & {
-      __typing?: { downs: number[]; done: number[]; inserts: number };
+      __typing?: {
+        downs: number[];
+        done: number[];
+        inserts: number;
+        engineMs: number[];
+      };
     };
     w.__canvas.setContentSelection({ storyId, start: 0, end: 0 });
-    const probe = { downs: [] as number[], done: [] as number[], inserts: 0 };
+    const probe = {
+      downs: [] as number[],
+      done: [] as number[],
+      inserts: 0,
+      engineMs: [] as number[],
+    };
     w.__typing = probe;
     window.addEventListener(
       "keydown",
@@ -196,12 +211,37 @@ async function typingLatency(
       true,
     );
     const client = w.__canvas.client;
-    const mutate = client.mutate.bind(client);
-    client.mutate = async (m: unknown) => {
-      const reply = await mutate(m);
+    // Every request the editor sends while the keys go in, by kind: what
+    // rides along with each insert.
+    const counts: Record<string, number> = {};
+    (w as unknown as { __typingRequests: Record<string, number> }).__typingRequests =
+      counts;
+    const sender = client as unknown as {
+      send: (m: { kind?: string }) => Promise<unknown>;
+    };
+    const send = sender.send.bind(client);
+    sender.send = (m) => {
+      const k = m?.kind ?? "?";
+      counts[k] = (counts[k] ?? 0) + 1;
+      return send(m);
+    };
+    const mutate = client.mutate.bind(client) as (
+      m: unknown,
+      ...rest: unknown[]
+    ) => Promise<unknown>;
+    // Every argument passes through: the text editor's typed inserts carry
+    // `{ typing: true }` (editor ADR 1232 amendment).
+    client.mutate = async (m: unknown, ...rest: unknown[]) => {
+      const reply = await mutate(m, ...rest);
       const op = m as { op?: string; args?: { text?: string } };
       if (op.op === "insertText") {
         probe.inserts += 1;
+        // The worker's own time for the insert (apply + rebuild), from
+        // the reply's cache stats: the engine's share of the latency.
+        const stats = (
+          reply as { payload?: { cacheStats?: { rebuildMs?: number } } }
+        ).payload?.cacheStats;
+        if (stats?.rebuildMs !== undefined) probe.engineMs.push(stats.rebuildMs);
         const n = [...(op.args?.text ?? "")].length;
         requestAnimationFrame(() =>
           setTimeout(() => {
@@ -236,12 +276,21 @@ async function typingLatency(
   return page.evaluate(() => {
     const p = (
       globalThis as unknown as {
-        __typing: { downs: number[]; done: number[]; inserts: number };
+        __typing: {
+          downs: number[];
+          done: number[];
+          inserts: number;
+          engineMs: number[];
+        };
       }
     ).__typing;
     return {
       latencies: p.done.map((d, i) => d - (p.downs[i] ?? d)),
       inserts: p.inserts,
+      engineMs: p.engineMs,
+      requests: (
+        globalThis as unknown as { __typingRequests: Record<string, number> }
+      ).__typingRequests,
     };
   });
 }
@@ -258,6 +307,21 @@ async function litFraction(page: Page): Promise<number> {
     if (l > 60) lit++;
   }
   return lit / (png.width * png.height);
+}
+
+/** What the worker's caches hold now (the `worker.caches` entry each
+ *  journal drain records; engine ADR 1311): the decoded pictures, the CPU
+ *  tiles, the GPU page scenes. */
+async function cachesNow(
+  page: Page,
+): Promise<Record<string, number> | null> {
+  const drain = await page.evaluate(() =>
+    (globalThis as unknown as CanvasGlobal).__canvas.client.drainJournal(
+      30_000,
+    ),
+  );
+  const hit = drain?.entries.filter((e) => e.code === "worker.caches").at(-1);
+  return (hit?.data as Record<string, number> | undefined) ?? null;
 }
 
 async function memoryBytes(page: Page): Promise<number | null> {
@@ -381,8 +445,17 @@ test.describe("performance budgets", () => {
     const burst = percentiles(typedBurst.latencies);
     results.interaction = {
       selection,
-      typingNormal: { ...normal, inserts: typedNormal.inserts },
-      typingBurst: { ...burst, inserts: typedBurst.inserts },
+      typingNormal: {
+        ...normal,
+        inserts: typedNormal.inserts,
+        engine: percentiles(typedNormal.engineMs),
+      },
+      typingBurst: {
+        ...burst,
+        inserts: typedBurst.inserts,
+        engine: percentiles(typedBurst.engineMs),
+        requests: typedBurst.requests,
+      },
       memoryIdleBytes: idle,
     };
     if (ASSERT) {
@@ -406,13 +479,20 @@ test.describe("performance budgets", () => {
       if (i % 5 === 4) await page.keyboard.press("ControlOrMeta+Equal");
     }
     const memory = await memoryBytes(page);
+    const caches = await cachesNow(page);
     // A burst in a long document: every insert re-lays the document out,
     // so this is where keys outrun the engine (F-56).
     const burst = await typingLatency(page, 18, "st0");
     results.stress = {
       ...timing,
       memoryBytes: memory,
-      typingBurst: { ...percentiles(burst.latencies), inserts: burst.inserts },
+      caches,
+      typingBurst: {
+        ...percentiles(burst.latencies),
+        inserts: burst.inserts,
+        engine: percentiles(burst.engineMs),
+        requests: burst.requests,
+      },
     };
     if (ASSERT) {
       expect(timing.firstPaintWorkerMs ?? Infinity).toBeLessThan(
@@ -436,16 +516,20 @@ test.describe("performance budgets", () => {
       const size = statSync(path).size;
       const timing = await openAndTime(page, path);
       const opened = await memoryBytes(page);
+      const cachesOpened = await cachesNow(page);
       for (let k = 0; k < 20; k++) {
         await page.keyboard.press("PageDown");
         if (k % 5 === 4) await page.keyboard.press("ControlOrMeta+Equal");
       }
       const used = await memoryBytes(page);
+      const cachesUsed = await cachesNow(page);
       results[`large${i + 1}`] = {
         megabytes: Math.round(size / 1e5) / 10,
         ...timing,
         memoryOpenedBytes: opened,
         memoryAfterUseBytes: used,
+        cachesOpened,
+        cachesAfterUse: cachesUsed,
       };
     });
   }

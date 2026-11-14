@@ -347,8 +347,9 @@ a pinch over a press still waiting for its hit test changes the camera and nothi
 nightly ([ADR 1232](adr/1232-performance-budgets.md),
 [`reference/performance.md`](reference/performance.md)): the CPU render draws the page at the
 viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
-engine folds into one insert per round trip (F-56). The engine's decoded images have no budget
-yet (inventory exception `EXC-003`).
+engine folds into one insert per round trip (F-56). Placed pictures are decoded at the size
+they are shown, from one store per worker with a 256 MiB budget (engine ADR 1311; the
+inventory's exception `EXC-003` is closed).
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

@@ -147,6 +147,8 @@ mod wasm {
         #[wasm_bindgen(js_name = perfCounters)]
         pub fn perf_counters(&self) -> js_sys::Object {
             let c = paged_compose::perf::snapshot();
+            // Engine ADR 1311 — the decoded-picture store's size and work.
+            let s = paged_canvas::decoded_image_stats();
             let obj = js_sys::Object::new();
             for (k, v) in [
                 ("fontBytesHashed", c.font_bytes_hashed),
@@ -156,6 +158,13 @@ mod wasm {
                 ("blendCpuComposites", c.blend_cpu_composites),
                 ("growPasses", c.grow_passes),
                 ("storyEmits", c.story_emits),
+                ("imageStoreBytes", s.bytes as u64),
+                ("imageStorePeakBytes", s.peak_bytes as u64),
+                ("imageStoreBudget", s.budget as u64),
+                ("imageStoreEntries", s.entries as u64),
+                ("imageStoreDecodes", s.decodes),
+                ("imageStoreHits", s.hits),
+                ("imageStoreEvictions", s.evictions),
             ] {
                 // Reflect::set on a fresh Object cannot fail.
                 let _ = js_sys::Reflect::set(&obj, &k.into(), &JsValue::from_f64(v as f64));
@@ -277,6 +286,9 @@ mod wasm {
                     }
                     let handle = model.handle();
                     self.core.model = Some(model);
+                    // Engine ADR 1311 — the replaced document's decoded
+                    // pictures go with it.
+                    paged_canvas::clear_decoded_images();
                     #[cfg(feature = "gpu")]
                     {
                         self.scene_cache.clear();
@@ -697,7 +709,8 @@ mod wasm {
                                     | paged_compose::DisplayCommand::StrokePathOverprint { .. }
                             )
                         });
-                    let view = SceneView::for_page(mode, overprints, k);
+                    let pictures = !built_page.list.images.is_empty();
+                    let view = SceneView::for_page(mode, overprints, pictures, k);
                     if self.scene_cache.get((idx, view)).is_none() {
                         let scene = build_view_scene(built_page, view, border);
                         self.scene_cache.insert((idx, view), scene);
@@ -1136,12 +1149,15 @@ mod wasm {
     ) -> paged_gpu::VelloScene {
         use crate::scene_cache::SceneView;
         match view {
-            SceneView::Knockout => paged_gpu::SurfacePresenter::build_page_scene_framed(
-                &page.list,
-                page.width_pt,
-                page.height_pt,
-                border,
-            ),
+            SceneView::Knockout | SceneView::Pictures(_) => {
+                paged_gpu::SurfacePresenter::build_page_scene_framed(
+                    &page.list,
+                    page.width_pt,
+                    page.height_pt,
+                    border,
+                    view.scale(),
+                )
+            }
             SceneView::Outline(_) => paged_gpu::SurfacePresenter::build_page_scene_view(
                 &page.list,
                 page.width_pt,

@@ -1455,6 +1455,16 @@ inventory's exception EXC-003 (engine work: images decoded at the size they are 
 visible pages composed first), with an expiry. The nightly performance job measures the
 generated stress document's memory against a 3 GB budget.
 
+**Decoded pictures budgeted (2026-11-14, engine ADR 1311; EXC-003 closed).** The engine draws
+placed pictures from one decoded-picture store per worker, shared by the CPU tiles, the page
+thumbnails and the GPU scenes: each picture decoded at the size it is shown (a JPEG at its DCT
+scale), within a 256 MiB budget, the pictures drawn longest ago evicted first. Measured on the
+54 MB template (the GPU path of the headless browser): 36 MB of decoded pictures held when
+opened, 62 MB after a minute of paging and zooming, page and workers 347 MB and 237 MB; the
+first visible page 4.4 s after the layout (6.3 s before), 10.7 s after the file was chosen
+(17.0 s). The audit's gigabytes came from linked images resolved at full size, which the file
+input does not resolve; the store holds those to the same budget.
+
 <a id="f-55"></a>
 
 #### F-55 · Small windows leave almost no canvas, and below 1025 px the layout breaks

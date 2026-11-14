@@ -118,3 +118,46 @@ fn probe_and_decode_read_the_web_formats() {
         Err(paged_raster::Error::PageOutOfRange { page: 1, count: 1 })
     ));
 }
+
+/// Engine ADR 1311 — a JPEG asked for at a half or less of its size is
+/// decoded at its DCT scale and resampled from there: the size asked, the
+/// picture's colours, and the same result as the full decode resampled
+/// within a few levels.
+#[test]
+fn a_large_jpeg_decodes_at_its_dct_scale_for_a_small_target() {
+    let rgb = image::RgbImage::from_fn(256, 128, |x, y| {
+        image::Rgb([(x / 2) as u8, (y * 2) as u8, 90])
+    });
+    let bytes = jpeg(&rgb, None);
+    let small = paged_raster::decode_rgba8_at(&bytes, 32, 16).expect("decodes");
+    assert_eq!(small.len(), 32 * 16 * 4);
+    let full = decode_rgba8(&bytes, None).unwrap();
+    let reference = paged_resample::resize_rgba8(
+        &full.data,
+        full.width,
+        full.height,
+        32,
+        16,
+        paged_resample::Filter::Bilinear,
+    )
+    .unwrap();
+    let worst = small
+        .iter()
+        .zip(&reference)
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap();
+    assert!(worst <= 8, "DCT-scaled decode drifts {worst} levels");
+    assert!(small.chunks(4).all(|p| p[3] == 255));
+    // A gray JPEG too; a target near full size takes the full decode.
+    let gray = image::GrayImage::from_fn(64, 64, |x, _| image::Luma([x as u8 * 4]));
+    let mut g = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut g, 90)
+        .write_image(&gray, 64, 64, image::ExtendedColorType::L8)
+        .unwrap();
+    let px = paged_raster::decode_rgba8_at(&g, 8, 8).expect("decodes");
+    assert_eq!(px.len(), 8 * 8 * 4);
+    assert!(px.chunks(4).all(|p| p[0] == p[1] && p[1] == p[2]));
+    let near = paged_raster::decode_rgba8_at(&g, 48, 48).expect("decodes");
+    assert_eq!(near.len(), 48 * 48 * 4);
+}

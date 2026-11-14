@@ -482,8 +482,8 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   Closes F-54, F-56; raises G3. **Done** ([ADR 1232](adr/1232-performance-budgets.md);
   [`reference/performance.md`](reference/performance.md)): the CPU render one tile per tick from
   the viewport's centre, a 64 MB tile budget, typing folded per round trip, the budgets suite
-  and its nightly workflow. The engine's decoded-image cache stays unbudgeted as the inventory's
-  `EXC-003`.
+  and its nightly workflow. Track EN part 4 closed the engine's gaps: placed pictures decoded
+  at the size they are shown, within a budget (engine ADR 1311; `EXC-003` closed).
 
 ## 12. Track PX — The strategy's Phase 3 concepts
 

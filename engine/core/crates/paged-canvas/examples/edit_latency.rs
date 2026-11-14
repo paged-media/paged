@@ -249,6 +249,34 @@ fn main() {
             let story = paged_gen::samples::docx_pagination::section_story_id(0);
             println!("story={story} offset={}", text_offset(&m, &story, 115) + 1);
         }
+        "file" => {
+            // Any IDML or .paged: the load, the first page's 256 px tile
+            // (the editor's CPU tile) twice, and with STORY=<id> typing
+            // into that story's first paragraph.
+            let path = args.get(1).expect("file needs a path");
+            let bytes = std::fs::read(path).expect("read file");
+            let t = std::time::Instant::now();
+            let mut m = CanvasModel::load("file", &bytes, options(false)).expect("load");
+            println!(
+                "file: load {:.0} ms ({:.0} ms build), {} pages",
+                t.elapsed().as_secs_f64() * 1e3,
+                m.last_rebuild_stats().build_ms,
+                m.built().pages.len()
+            );
+            let first = m.built().pages[0].id.clone();
+            for pass in ["cold", "warm"] {
+                let t = std::time::Instant::now();
+                let png = paged_canvas::render_snapshot_png(&m, &first, 256).expect("tile");
+                println!(
+                    "file: page 1 tile at 256 px ({pass}) {:.0} ms, {} bytes",
+                    t.elapsed().as_secs_f64() * 1e3,
+                    png.png_bytes.len()
+                );
+            }
+            if let Ok(story) = std::env::var("STORY") {
+                type_into("file", &mut m, &story, 0, edits);
+            }
+        }
         other => panic!("unknown document {other:?}"),
     }
 }

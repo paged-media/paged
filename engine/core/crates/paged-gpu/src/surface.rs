@@ -42,7 +42,7 @@ use paged_compose::{Color, DisplayList};
 use vello::kurbo;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
-use crate::vello_rs::{build_scene_for_surface, build_scene_with_transform, linear_to_peniko};
+use crate::vello_rs::{build_scene_for_surface, linear_to_peniko};
 
 /// Viewport transform applied on top of the page → px scale before
 /// presenting. The editor uses this for zoom/pan/dpr — the renderer
@@ -559,19 +559,23 @@ impl SurfacePresenter {
     /// (engine ADR 1306: [`crate::vello_rs::screen_page_scene`], the rule
     /// the CPU lane's tile follows too).
     pub fn build_page_scene(list: &DisplayList, width_pt: f32, height_pt: f32) -> Scene {
-        Self::build_page_scene_framed(list, width_pt, height_pt, true)
+        Self::build_page_scene_framed(list, width_pt, height_pt, true, None)
     }
 
     /// [`Self::build_page_scene`], with the page edge only when `border`:
-    /// a proof (editor ADR 1212) draws the page without it.
+    /// a proof (editor ADR 1212) draws the page without it. The placed
+    /// pictures are decoded for `image_px_per_pt` device pixels per point
+    /// (engine ADR 1311; `None`: at their recorded size), so the scene of a
+    /// page with pictures is cached per scale octave.
     pub fn build_page_scene_framed(
         list: &DisplayList,
         width_pt: f32,
         height_pt: f32,
         border: bool,
+        image_px_per_pt: Option<f32>,
     ) -> Scene {
         paged_compose::perf::count(|c| c.page_scenes_built += 1);
-        crate::vello_rs::screen_page_scene(list, width_pt, height_pt, border)
+        crate::vello_rs::screen_page_scene(list, width_pt, height_pt, border, image_px_per_pt)
     }
 
     /// [`Self::build_page_scene_framed`] of `list` rewritten for `view`
@@ -588,7 +592,7 @@ impl SurfacePresenter {
         border: bool,
     ) -> Scene {
         let viewed = crate::view::apply_view(list, view, px_per_pt);
-        Self::build_page_scene_framed(&viewed, width_pt, height_pt, border)
+        Self::build_page_scene_framed(&viewed, width_pt, height_pt, border, Some(px_per_pt))
     }
 
     /// A page drawn from a finished raster — Overprint Preview's screen
@@ -789,7 +793,8 @@ impl SurfacePresenter {
             None,
             &kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64),
         );
-        let content = build_scene_with_transform(list, kurbo::Affine::IDENTITY);
+        // Engine ADR 1311 — the pictures at the snapshot's resolution.
+        let content = crate::vello_rs::build_page_space_scene(list, Some(dpi / 72.0));
         page.append(&content, None);
         let mut scene = Scene::new();
         scene.append(&page, Some(kurbo::Affine::scale((dpi / 72.0) as f64)));
@@ -886,7 +891,9 @@ impl SurfacePresenter {
                 t[4] as f64,
                 t[5] as f64,
             ]);
-            let scene = build_scene_with_transform(list, kurbo::Affine::IDENTITY);
+            // Engine ADR 1311 — the pictures at the scale the page is shown.
+            let px_per_pt = (t[0] as f64).hypot(t[1] as f64) as f32;
+            let scene = crate::vello_rs::build_page_space_scene(list, Some(px_per_pt));
             combined.append(&scene, Some(affine));
         }
 

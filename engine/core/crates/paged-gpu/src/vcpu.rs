@@ -1231,20 +1231,25 @@ impl Raster<'_> {
                     if img.width == 0 || img.height == 0 {
                         continue;
                     }
-                    let Some(pixmap) = image_pixmap(img) else {
+                    if img.width > MAX_SIDE || img.height > MAX_SIDE {
                         continue;
-                    };
+                    }
                     let [a, b, c, d, tx, ty] = transform.0;
                     let unit_to_page =
                         Affine::new([a as f64, b as f64, c as f64, d as f64, tx as f64, ty as f64]);
-                    let pixel_to_unit =
-                        Affine::scale_non_uniform(1.0 / img.width as f64, 1.0 / img.height as f64);
+                    // Engine ADR 1311 — the picture at the level this draw
+                    // needs, from the store both lanes share.
+                    let unit_to_px = self.active().xform * unit_to_page;
+                    let level = crate::image_store::level_for_draw(img, unit_to_px.as_coeffs());
+                    let Some((pixmap, w, h)) = crate::image_store::pixmap(img, level) else {
+                        continue;
+                    };
+                    let pixel_to_unit = Affine::scale_non_uniform(1.0 / w as f64, 1.0 / h as f64);
                     let (surface, res, _) = self.split();
-                    let to_px = surface.xform * unit_to_page * pixel_to_unit;
                     surface.draw_image(
                         res,
-                        Arc::new(pixmap),
-                        to_px,
+                        pixmap,
+                        unit_to_px * pixel_to_unit,
                         image_sampler(),
                         PenikoBlendMode::default(),
                     );
@@ -2248,46 +2253,6 @@ fn mesh_pixmap(raster: &paged_compose::MeshRaster) -> Option<Arc<Pixmap>> {
 /// bilinear places them at their sub-pixel origin, as the GPU lane does.
 fn stamp_sampler() -> ImageSampler {
     ImageSampler::new().with_extend(Extend::Pad)
-}
-
-/// A placed image as a `vello_cpu` pixmap: the eagerly decoded RGBA when
-/// the build kept it (native), else decoded from the encoded bytes now
-/// (the wasm32 lazy path, which keeps one decoded image alive at a
-/// time). Straight alpha in, premultiplied out.
-fn image_pixmap(img: &paged_compose::DecodedImage) -> Option<Pixmap> {
-    if img.width > MAX_SIDE || img.height > MAX_SIDE {
-        return None;
-    }
-    let expected = img.width as usize * img.height as usize * 4;
-    let rgba = if img.rgba.len() == expected {
-        img.rgba.as_ref().to_vec()
-    } else if !img.encoded.is_empty() {
-        decode_image_for_render(&img.encoded, img.width, img.height, img.rendering)?
-    } else {
-        return None;
-    };
-    Some(Pixmap::from_parts(
-        rgba,
-        img.width as u16,
-        img.height as u16,
-        PixelMetadata::new(ImageAlphaType::Alpha, true),
-    ))
-}
-
-/// Decode encoded image bytes to RGBA8 at the dimensions the build
-/// recorded, resizing when a DCT-scaled JPEG decodes at another size.
-fn decode_image_for_render(
-    bytes: &[u8],
-    expected_w: u32,
-    expected_h: u32,
-    rendering: Option<paged_raster::Rendering>,
-) -> Option<Vec<u8>> {
-    // One function for both lanes: paged-raster decodes (a TIFF or PSD
-    // capped at the recorded size) and resamples to it, converting with
-    // the frame's rendering intent that the build recorded on the lazy
-    // image.
-    let conv = paged_raster::PagedColour::new(rendering.unwrap_or_default());
-    paged_raster::decode_rgba8_at_with(bytes, expected_w, expected_h, &conv)
 }
 
 /// A scratch rectangle for `bbox_pt` padded by `pad_pt`, in the pixels

@@ -81,3 +81,17 @@ reached the screen, and kept every tile it ever decoded. Every typed character w
   one's first page costs 8.6 s of engine composition on the CPU path.
 - A cache added later states its budget and its eviction in `reference/performance.md`.
 - The nightly job needs no secret and no corpus.
+
+## Amendment 2026-11-14: decoded pictures have a budget (engine ADR 1311)
+
+The exception `EXC-003` is closed and removed from the interaction inventory. Placed pictures
+are drawn from the engine's decoded-picture store
+([engine ADR 1311](../../../../engine/core/docs/adr/1311-a-picture-is-decoded-at-the-size-it-is-shown.md)):
+one store per worker, shared by the CPU tiles, the page thumbnails and the GPU page scenes, each
+picture decoded at the level its draw needs (a JPEG at its DCT scale) and kept within a 256 MiB
+budget, the pictures drawn longest ago evicted first; exports and fidelity renders still take
+every pixel. Every journal drain records what the worker's caches hold (`worker.caches`: the
+store, the CPU tiles, the GPU scenes), and the performance suite reports it with the memory. On
+the 54 MB template the first visible page came 4.4 s after the layout instead of 6.3 s, 10.7 s
+after the file was chosen instead of 17.0 s, with 36 MB of pictures held when opened and 62 MB
+after use (`reference/performance.md`).

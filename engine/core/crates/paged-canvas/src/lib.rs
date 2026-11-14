@@ -115,6 +115,23 @@ pub use view::{ViewMode, ViewSettings};
 /// bytes do not decode. A bundle's image trace reads its pixels here
 /// instead of the browser's decoders.
 pub fn decode_image_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Option<(u32, u32, Vec<u8>)> {
+    // A JPEG is read at full size by `decode_rgba8`: one larger than
+    // `max_dim` is decoded once, at the size asked, from its header's
+    // dimensions (at its DCT scale, engine ADR 1311).
+    if let Some(m) = max_dim.filter(|m| *m > 0) {
+        if paged_raster::sniff(bytes) == Some(paged_raster::Format::Jpeg) {
+            if let Some(h) = paged_raster::jpeg_header(bytes) {
+                if h.width.max(h.height) > m {
+                    let k = f64::from(m) / f64::from(h.width.max(h.height));
+                    let tw = ((f64::from(h.width) * k).round() as u32).max(1);
+                    let th = ((f64::from(h.height) * k).round() as u32).max(1);
+                    if let Some(d) = paged_raster::decode_rgba8_at(bytes, tw, th) {
+                        return Some((tw, th, d));
+                    }
+                }
+            }
+        }
+    }
     let img = paged_raster::decode_rgba8(bytes, max_dim).ok()?;
     let (w, h) = (img.width, img.height);
     match max_dim {
@@ -127,6 +144,27 @@ pub fn decode_image_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Option<(u32, u3
         }
         _ => Some((w, h, img.data)),
     }
+}
+
+/// Engine ADR 1311 — what the decoded-picture store holds and has done on
+/// this thread: the pixels both lanes draw placed pictures from, kept
+/// within its budget.
+#[cfg(feature = "cpu")]
+pub fn decoded_image_stats() -> paged_gpu::image_store::StoreStats {
+    paged_gpu::image_store::stats()
+}
+
+/// Engine ADR 1311 — drop every decoded picture this thread holds (the
+/// worker's document was replaced).
+#[cfg(feature = "cpu")]
+pub fn clear_decoded_images() {
+    paged_gpu::image_store::clear();
+}
+
+/// Engine ADR 1311 — the decoded-picture store's budget, in bytes.
+#[cfg(feature = "cpu")]
+pub fn set_decoded_image_budget(bytes: usize) {
+    paged_gpu::image_store::set_budget(bytes);
 }
 
 /// Phase 3 Item 4 — one rect-per-line in page-local coords for a

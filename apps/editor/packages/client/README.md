@@ -176,6 +176,14 @@ elementId, uri, bytes? } })` — or `mutateWithBytes` with `bytes: []` and
   transparent ground; `screenExtent(pageId)` says where the tile goes, the
   rect the GPU lane clips to.
 
+## Decoded pictures (engine ADR 1311)
+
+The worker's `perfCounters()` reports the engine's decoded-picture store
+(`imageStoreBytes`, `imageStorePeakBytes`, `imageStoreBudget`,
+`imageStoreEntries`, `imageStoreDecodes`, `imageStoreHits`,
+`imageStoreEvictions`), and every journal drain records it as
+`worker.caches`, with the CPU tile bytes and the GPU scene count.
+
 ## The catalog
 
 `api-catalog.json`, shipped in this package, is the machine-readable

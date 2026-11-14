@@ -142,6 +142,23 @@ export const CODES: Readonly<Record<string, CodeSpec>> = {
     policy: ALWAYS,
     data: ["pages", "gpu"],
   },
+  // Editor ADR 1232 / engine ADR 1311 — what the worker's caches hold when
+  // the journal is drained: the engine's decoded pictures, the CPU tiles,
+  // the GPU page scenes (UXI-PRF-004).
+  "worker.caches": {
+    text: "The worker's caches when the journal was drained",
+    policy: ALWAYS,
+    data: [
+      "imageBytes",
+      "imagePeakBytes",
+      "imageBudget",
+      "imageEntries",
+      "imageDecodes",
+      "imageEvictions",
+      "tileBytes",
+      "scenes",
+    ],
+  },
 
   // ── client ────────────────────────────────────────────────────────────
   "client.send": {

@@ -213,6 +213,7 @@ is not written yet.
 | [1306](1306-the-screen-reports-its-invisibles-and-draws-a-proof.md) | The screen reports its invisibles (`RequestHiddenCharacters`) and the frames' own baseline grids, hides nonprinting items and draws a proof as build options of the live pages, and both lanes draw a page to one screen extent | Accepted 2026-11-14 |
 | [1307](1307-a-new-document-can-be-laid-out-in-facing-spreads.md) | A new document can be laid out in facing spreads: `NewBlankDocument` takes `pages` and `facingPages` (page 1 a right-hand page, then pairs; `FacingPages="true"`) | Accepted 2026-11-14 |
 | [1308](1308-relinking-a-picture-keeps-its-frame-and-its-size.md) | Relinking a picture keeps its frame and its size: `relinkImage { elementId, uri, bytes? }`, one undo step | Accepted 2026-11-14 |
+| [1311](1311-a-picture-is-decoded-at-the-size-it-is-shown.md) | A picture is decoded at the size it is shown, from one store with a budget: the decoded-picture store both lanes draw from (levels by the draw's device size, a JPEG at its DCT scale, 256 MiB LRU, the GPU's page scenes per scale octave), reported in `perfCounters` | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

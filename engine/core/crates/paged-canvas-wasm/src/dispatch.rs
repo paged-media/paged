@@ -427,6 +427,9 @@ impl WorkerCore {
                         }
                         let handle = model.handle();
                         self.model = Some(model);
+                        // Engine ADR 1311 — the replaced document's
+                        // decoded pictures go with it.
+                        paged_canvas::clear_decoded_images();
                         self.script_sessions.clear();
                         // Export sessions hold a build of the PREVIOUS
                         // document — drop them.
@@ -479,6 +482,9 @@ impl WorkerCore {
                         }
                         let handle = model.handle();
                         self.model = Some(model);
+                        // Engine ADR 1311 — the replaced document's
+                        // decoded pictures go with it.
+                        paged_canvas::clear_decoded_images();
                         self.script_sessions.clear();
                         self.export_sessions.clear();
                         effect = CacheEffect::ClearAll;
