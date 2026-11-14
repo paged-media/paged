@@ -79,7 +79,10 @@ describe("protocol 82 through the client", () => {
     const write = {
       op: "setElementProperty",
       args: {
-        elementId: { kind: "storyRange", id: { story_id: story, start: 0, end: 200 } },
+        elementId: {
+          kind: "storyRange",
+          id: { story_id: story, start: 0, end: 200 },
+        },
         path: "characterTracking",
         value: { type: "length", value: -60 },
       },

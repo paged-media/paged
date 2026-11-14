@@ -30,7 +30,8 @@
 import { storedZip } from "@paged-media/test-kit";
 
 export const IDML_MIME = "application/vnd.adobe.indesign-idml-package";
-const PKG = 'xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"';
+const PKG =
+  'xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"';
 
 export const XRAY = {
   pageId: "xrP",
@@ -88,7 +89,11 @@ export function xrayFixture(): Uint8Array {
       "48 340 120 440",
       'Locked="true" AppliedObjectStyle="ObjectStyle/BoxChild"',
     ),
-    rect(X.lockedLayer, "48 460 120 560", `ItemLayer="${X.layerLock.id}" FillColor="Color/Blue"`),
+    rect(
+      X.lockedLayer,
+      "48 460 120 560",
+      `ItemLayer="${X.layerLock.id}" FillColor="Color/Blue"`,
+    ),
     rect(X.pictures[0], "180 340 260 440", "", image("xrL1")),
     rect(X.pictures[1], "180 460 260 560", "", image("xrL2")),
     `<TextFrame Self="${X.thread.first}" ParentStory="${X.thread.story}" NextTextFrame="${X.thread.last}" GeometricBounds="300 48 340 200" ItemTransform="1 0 0 1 0 0"/>`,
@@ -141,7 +146,10 @@ ${items}
     { name: "designmap.xml", data: designmap },
     { name: "Resources/Styles.xml", data: STYLES },
     { name: "Spreads/Spread_xr.xml", data: spread },
-    { name: `Stories/Story_${X.text.story}.xml`, data: story(X.text.story, s1) },
+    {
+      name: `Stories/Story_${X.text.story}.xml`,
+      data: story(X.text.story, s1),
+    },
     {
       name: `Stories/Story_${X.thread.story}.xml`,
       data: story(X.thread.story, s2),
@@ -152,4 +160,3 @@ ${items}
     },
   ]);
 }
-

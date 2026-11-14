@@ -144,19 +144,19 @@ describe("a preview's write", () => {
   });
 
   test("tracking is a story-range property write", () => {
-    expect(previewMutation("s1", 0, 10, { kind: "tracking", value: -10 })).toEqual(
-      {
-        op: "setElementProperty",
-        args: {
-          elementId: {
-            kind: "storyRange",
-            id: { story_id: "s1", start: 0, end: 10 },
-          },
-          path: "characterTracking",
-          value: { type: "length", value: -10 },
+    expect(
+      previewMutation("s1", 0, 10, { kind: "tracking", value: -10 }),
+    ).toEqual({
+      op: "setElementProperty",
+      args: {
+        elementId: {
+          kind: "storyRange",
+          id: { story_id: "s1", start: 0, end: 10 },
         },
-      } as never,
-    );
+        path: "characterTracking",
+        value: { type: "length", value: -10 },
+      },
+    } as never);
   });
 
   test("a summary counts loose lines and hyphens", () => {

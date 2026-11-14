@@ -60,8 +60,7 @@ function TypographyLines(props: OverlayProps) {
   const strings = useStrings();
   const target = useTypographyTarget();
   const report = useLineEvidence(target?.storyId ?? null);
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   if (!report || !report.found) return null;
   const inv = 1 / props.camera.scale;
   const bands = new Map(
@@ -87,7 +86,8 @@ function TypographyLines(props: OverlayProps) {
           .filter(Boolean)
           .join("\n");
         const hyphen =
-          line.breakKind === "hyphen" || line.breakKind === "discretionaryHyphen";
+          line.breakKind === "hyphen" ||
+          line.breakKind === "discretionaryHyphen";
         return (
           <g
             key={`${line.paragraph}:${line.line}:${line.pageId}`}

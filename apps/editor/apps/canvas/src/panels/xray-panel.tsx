@@ -88,7 +88,8 @@ const M = defineMessages("app.xrayPanel", {
   characterStyle: "Character style",
   noCharacterStyle: "No character style",
   chainBroken: "A based-on style is missing.",
-  overrides: "{count, plural, one {# local override} other {# local overrides}}",
+  overrides:
+    "{count, plural, one {# local override} other {# local overrides}}",
   mixed: "The selection mixes formats; these are its first character's.",
   sourceCharacter: "Local override on the text",
   sourceParagraph: "Local override on the paragraph",
@@ -105,8 +106,7 @@ const M = defineMessages("app.xrayPanel", {
   linkStatus: "Status: {status}",
   embedded: "Embedded in the document.",
   ppi: "{actual} ppi actual, {effective} ppi effective",
-  replace:
-    "Replacing it keeps the frame's size and place; fitting: {fitting}.",
+  replace: "Replacing it keeps the frame's size and place; fitting: {fitting}.",
   noFitting: "none",
   replaceDenied: "Your role may not replace it.",
   sameLink:
@@ -127,7 +127,8 @@ const M = defineMessages("app.xrayPanel", {
   changes:
     "{style} changes {uses, plural, one {# use} other {# uses}} on {pages, plural, =0 {no page} one {page {list}} other {pages {list}}}.",
   basedOnIt: "Styles based on it change too: {names}.",
-  unplaced: "{count, plural, one {# use is in overset text} other {# uses are in overset text}}.",
+  unplaced:
+    "{count, plural, one {# use is in overset text} other {# uses are in overset text}}.",
   effects: "Effects",
   opacity: "Opacity {value} %",
   unknown: "Not in the document",
@@ -211,9 +212,7 @@ export function sourceLabel(
 
 /** A stable key for a source, for tests and the legend. PURE. */
 export function sourceKey(source: ValueSource): string {
-  return source.kind === "style"
-    ? `style:${source.style.name}`
-    : source.kind;
+  return source.kind === "style" ? `style:${source.style.name}` : source.kind;
 }
 
 export function XRayPanel() {
@@ -250,8 +249,7 @@ export function XRayPanel() {
     });
   }, [client, key]);
 
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   return (
     <div data-xray-panel style={panel}>
       <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
@@ -284,8 +282,7 @@ export function XRayPanel() {
 
 function Facts({ x }: { x: Explanation }) {
   const strings = useStrings();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   return (
     <div
       data-xray-target={x.kind}
@@ -323,7 +320,11 @@ function Section(props: {
   open?: boolean;
 }) {
   return (
-    <details data-xray-section={props.id} open={props.open ?? true} style={card}>
+    <details
+      data-xray-section={props.id}
+      open={props.open ?? true}
+      style={card}
+    >
       <summary style={summary}>{props.title}</summary>
       <div
         style={{
@@ -360,8 +361,7 @@ function useReveal() {
 
 function ItemSection({ x }: { x: Explanation }) {
   const strings = useStrings();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   return (
     <Section id="item" title={t(M.item)}>
       <div data-xray-kind={x.kind}>
@@ -379,8 +379,7 @@ function ItemSection({ x }: { x: Explanation }) {
 function LockSection({ x }: { x: Explanation }) {
   const strings = useStrings();
   const client = useCanvasClient();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const itemId = x.kind === "storyRange" ? null : x.item;
   return (
     <Section id="lock" title={t(M.lock)} open={x.lock.locked}>
@@ -449,8 +448,7 @@ function LockSection({ x }: { x: Explanation }) {
 function VisibilitySection({ x }: { x: Explanation }) {
   const strings = useStrings();
   const client = useCanvasClient();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const v = x.visibility;
   const itemId = x.kind === "storyRange" ? null : x.item;
   return (
@@ -536,8 +534,7 @@ function ChainLine(props: {
 
 function PropertyRow({ p }: { p: PropertyFact }) {
   const strings = useStrings();
-  const t = (k: string, q?: Record<string, string | number>) =>
-    strings.t(k, q);
+  const t = (k: string, q?: Record<string, string | number>) => strings.t(k, q);
   const local = p.source.kind === "character" || p.source.kind === "paragraph";
   return (
     <div
@@ -574,8 +571,7 @@ function PropertyRow({ p }: { p: PropertyFact }) {
 
 function TextSection({ x }: { x: Explanation }) {
   const strings = useStrings();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const text = x.text!;
   return (
     <Section id="text" title={t(M.text)}>
@@ -617,8 +613,7 @@ function TextSection({ x }: { x: Explanation }) {
 
 function ObjectSection({ x }: { x: Explanation }) {
   const strings = useStrings();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   return (
     <Section id="object" title={t(M.objectStyle)}>
       {x.objectStyle ? (
@@ -651,8 +646,7 @@ function ObjectSection({ x }: { x: Explanation }) {
 function LinkSection({ x }: { x: Explanation }) {
   const strings = useStrings();
   const openPanel = usePanelOpener();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const l = x.link!;
   return (
     <Section id="link" title={t(M.link)}>
@@ -699,8 +693,7 @@ function LinkSection({ x }: { x: Explanation }) {
 function BindingSection({ x }: { x: Explanation }) {
   const strings = useStrings();
   const openPanel = usePanelOpener();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   return (
     <Section id="bindings" title={t(M.bindings)}>
       {x.bindings.map((b, i) => (
@@ -733,8 +726,7 @@ function BindingSection({ x }: { x: Explanation }) {
 function FlowSection({ x }: { x: Explanation }) {
   const strings = useStrings();
   const reveal = useReveal();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const f = x.flow!;
   return (
     <Section id="flow" title={t(M.flow)}>
@@ -777,8 +769,7 @@ function FlowSection({ x }: { x: Explanation }) {
 
 function DependentsSection({ x }: { x: Explanation }) {
   const strings = useStrings();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   return (
     <Section id="dependents" title={t(M.dependents)}>
       {x.dependents.map((d) => (

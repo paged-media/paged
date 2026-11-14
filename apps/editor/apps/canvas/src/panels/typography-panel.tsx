@@ -104,8 +104,7 @@ export function TypographyPanel() {
     () => getViewToggle(scope, "typography"),
     () => false,
   );
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const caretLine =
     report && target?.selection
       ? report.lines.find(
@@ -150,7 +149,9 @@ export function TypographyPanel() {
                 data-typography-row={lineKey(l)}
                 data-tightness={l.tightness}
                 data-break={l.breakKind}
-                aria-pressed={selected ? lineKey(selected) === lineKey(l) : false}
+                aria-pressed={
+                  selected ? lineKey(selected) === lineKey(l) : false
+                }
                 onClick={() => setChosen(lineKey(l))}
                 style={{
                   ...lineRow,
@@ -170,7 +171,14 @@ export function TypographyPanel() {
                     flex: "none",
                   }}
                 />
-                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {l.text}
                   {l.breakKind === "hyphen" ||
                   l.breakKind === "discretionaryHyphen"
@@ -238,8 +246,7 @@ function Summary({ report }: { report: LineEvidenceReport }) {
 
 function Settings(props: { report: LineEvidenceReport; paragraph: number }) {
   const strings = useStrings();
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const p =
     props.report.paragraphs.find((x) => x.paragraph === props.paragraph) ??
     props.report.paragraphs[0];
@@ -318,8 +325,7 @@ function Preview({ report }: { report: LineEvidenceReport }) {
   const target = useTypographyTarget();
   const [draft, setDraft] = useState<Draft>({ kind: "tracking", value: "-10" });
   const [result, setResult] = useState<LineEvidenceReport | null>(null);
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   const selection = target?.selection ?? null;
   const [start, end] = changeRange(report, selection);
   const change = changeOf(draft);

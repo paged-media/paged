@@ -55,8 +55,7 @@ export const TYPO = defineMessages("app.typography", {
   storyEnd: "The story ends here.",
   emergency:
     "Nothing allowed a break: the line was cut where it filled the measure.",
-  oversetAfter:
-    "The frames end here; the rest of the story is overset.",
+  oversetAfter: "The frames end here; the rest of the story is overset.",
   frameEnd: "The text continues in the next frame.",
   measure:
     "Set in {available} pt; its natural width is {natural} pt ({fill} % of the measure).",
@@ -131,7 +130,9 @@ export function whyThisBreak(line: LineEvidence, t: T): string[] {
         out.push(
           h.points.length === 0
             ? t(TYPO.wordSpaceNoPoint, {
-                reason: t(REASON[h.reason ?? "noPattern"] ?? TYPO.reasonNoPattern),
+                reason: t(
+                  REASON[h.reason ?? "noPattern"] ?? TYPO.reasonNoPattern,
+                ),
               })
             : t(TYPO.wordSpacePoints, { count: h.points.length }),
         );
@@ -374,8 +375,7 @@ export function evidenceSummary(r: LineEvidenceReport): {
       (l) => l.tightness === "tight" || l.tightness === "veryTight",
     ).length,
     hyphens: r.lines.filter(
-      (l) =>
-        l.breakKind === "hyphen" || l.breakKind === "discretionaryHyphen",
+      (l) => l.breakKind === "hyphen" || l.breakKind === "discretionaryHyphen",
     ).length,
     overset: r.overset?.characters ?? 0,
   };

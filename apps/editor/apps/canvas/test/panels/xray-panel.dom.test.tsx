@@ -26,11 +26,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
-import {
-  formatValue,
-  sourceKey,
-  XRayPanel,
-} from "../../src/panels/xray-panel";
+import { formatValue, sourceKey, XRayPanel } from "../../src/panels/xray-panel";
 import { mountPanel, unmountAll } from "./harness";
 import { XRAY, xrayFixture } from "../../tests/e2e/harness/xray-idml";
 
@@ -99,9 +95,9 @@ describe("Document X-Ray", () => {
     const h = await mount();
     await h.select([{ kind: "rectangle", id: XRAY.pictures[0] }]);
     await h.settle();
-    expect(attr(h.root, "[data-xray-link-status]", "data-xray-link-status")).toBe(
-      "missing",
-    );
+    expect(
+      attr(h.root, "[data-xray-link-status]", "data-xray-link-status"),
+    ).toBe("missing");
     expect(attr(h.root, "[data-xray-same-link]", "data-xray-same-link")).toBe(
       "1",
     );
@@ -110,9 +106,9 @@ describe("Document X-Ray", () => {
     expect(
       Number(attr(h.root, "[data-xray-overset]", "data-xray-overset")),
     ).toBeGreaterThan(0);
-    expect(attr(h.root, "[data-xray-frame-index]", "data-xray-frame-index")).toBe(
-      "1",
-    );
+    expect(
+      attr(h.root, "[data-xray-frame-index]", "data-xray-frame-index"),
+    ).toBe("1");
   });
 
   test("values and sources read as the user sees them", () => {

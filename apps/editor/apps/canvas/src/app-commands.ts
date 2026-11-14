@@ -203,7 +203,8 @@ export const PAGED_VIEW_TOGGLE_ISSUE_MARKERS = "paged.view.toggleIssueMarkers";
 export const PAGED_VIEW_TOGGLE_XRAY = "paged.view.toggleXray";
 /** Editor ADR 1227 — View ▸ Typography debugger: the selected story's
  *  lines coloured by how tightly they are set, with their breaks. */
-export const PAGED_VIEW_TOGGLE_TYPOGRAPHY = "paged.view.toggleTypographyDebugger";
+export const PAGED_VIEW_TOGGLE_TYPOGRAPHY =
+  "paged.view.toggleTypographyDebugger";
 
 /** Help — the places the app sends you to learn it. */
 const HELP_LINKS = [

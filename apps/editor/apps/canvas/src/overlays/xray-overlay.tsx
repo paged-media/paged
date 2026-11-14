@@ -46,7 +46,6 @@ import {
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
-
 const M = defineMessages("app.xrayOverlay", {
   noStyle: "Set on the item",
   text: "Text: paragraph style {chain}",
@@ -123,7 +122,9 @@ export function xrayPalette(keys: readonly string[]): Map<string, string> {
   [...new Set(keys)]
     .filter((k) => k !== "")
     .sort()
-    .forEach((k, i) => out.set(k, `hsl(${Math.round((i * 137.5) % 360)} 70% 45%)`));
+    .forEach((k, i) =>
+      out.set(k, `hsl(${Math.round((i * 137.5) % 360)} 70% 45%)`),
+    );
   out.set("", "var(--overlay-guide)");
   return out;
 }
@@ -188,8 +189,7 @@ function XrayItems(props: OverlayProps) {
       if (changesTheDocument(msg)) refresh();
     });
   }, [client]);
-  const t = (k: string, p?: Record<string, string | number>) =>
-    strings.t(k, p);
+  const t = (k: string, p?: Record<string, string | number>) => strings.t(k, p);
   if (!items) return null;
   const palette = xrayPalette(items.map((i) => i.key));
   const inv = 1 / props.camera.scale;
