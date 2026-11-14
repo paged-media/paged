@@ -46,7 +46,10 @@
   --paged-bg: 0 0% 100%;
   --paged-fg: 0 0% 9%;
   --paged-border: 0 0% 89%;
-  --paged-input: 0 0% 89%;
+  /* A field's outline identifies the field: 3:1 or more on every surface a
+     field sits on (WCAG 1.4.11; editor ADR "High contrast and AA",
+     amendment 2026-11-14). The hairlines (--paged-border) stay quiet. */
+  --paged-input: 240 4% 54%;
   --paged-ring: 263 73% 43%;
   --paged-muted: 0 0% 96%;
   --paged-muted-fg: 0 0% 42%; /* 4.9:1 on muted (AA; was 45 %, 4.4:1) */
@@ -89,7 +92,11 @@
   /* ── surfaces & interaction (resolved) ─────────────────────── */
   --pg-bg: #ffffff;
   --pg-fg: #171717;
-  --pg-border: #e3e3e3;
+  --pg-border: #e3e3e3; /* hairline between surfaces (decorative) */
+  /* the boundary that identifies a control — a field, a checkbox, an
+     outlined button: 3:1 or more on every chrome surface (3.3:1 on the
+     rail). Equal to --input. */
+  --pg-control-border: #85858e;
   --pg-muted: #f5f5f5;
   --pg-muted-fg: #6b6b6b; /* 4.9:1 on --pg-muted, 4.7:1 on the rail */
   --pg-primary: hsl(263 73% 43%); /* #5b1ebe */
@@ -226,7 +233,7 @@
   --paged-bg: 240 6% 10%;
   --paged-fg: 0 0% 96%;
   --paged-border: 240 5% 20%;
-  --paged-input: 240 5% 22%;
+  --paged-input: 240 5% 49%; /* 3:1 or more on every surface (was 22 %) */
   --paged-ring: 263 90% 72%;
   --paged-muted: 240 5% 16%;
   --paged-muted-fg: 240 5% 64%;
@@ -247,6 +254,7 @@
   --pg-bg: #18181b;
   --pg-fg: #ededf0;
   --pg-border: #2c2c31;
+  --pg-control-border: #777783; /* 3.2:1 on --secondary, 3.5:1 on --elevated */
   --pg-muted: #232327;
   --pg-muted-fg: #9b9ba4;
   --pg-primary: hsl(263 90% 72%); /* lifted violet — #a984f5 */
@@ -312,6 +320,7 @@
 
   --pg-fg: #000000;
   --pg-border: #57575e;
+  --pg-control-border: #57575e;
   --pg-muted-fg: #383838;
   --pg-primary: hsl(263 85% 34%);
   --pg-primary-hover: hsl(263 85% 28%);
@@ -363,6 +372,7 @@
   --pg-bg: #0e0e10;
   --pg-fg: #ffffff;
   --pg-border: #9c9ca6;
+  --pg-control-border: #9c9ca6;
   --pg-muted: #1b1b1f;
   --pg-muted-fg: #d6d6de;
   --pg-primary: hsl(263 100% 84%);

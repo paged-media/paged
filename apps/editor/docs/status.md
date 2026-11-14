@@ -347,7 +347,9 @@ and their page items, each row named with its type, name, page and whether it is
 hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
 the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
 and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping objects. Every text
-token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
+token meets 4.5:1 in both themes, the outline that identifies a field, a checkbox or an
+outlined button meets 3:1 on every surface (ADR 1231, amendment 2026-11-14), menu hints are no
+longer faded (F-51), and a high-contrast
 variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
 7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
 ([ADR 1231](adr/1231-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the

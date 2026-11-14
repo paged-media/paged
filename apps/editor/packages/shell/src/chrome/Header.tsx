@@ -341,7 +341,7 @@ function CommandTrigger() {
           padding: compact ? 0 : "0 12px",
           borderRadius: "var(--radius-full)",
           background: "var(--pg-muted)",
-          border: "1px solid var(--pg-border)",
+          border: "1px solid var(--pg-control-border)",
           color: "var(--pg-muted-fg)",
           cursor: compact ? "pointer" : "text",
           flexShrink: 0,
