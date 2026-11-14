@@ -164,12 +164,10 @@ fn looks(frames: &[AnchoredFrame]) -> Vec<String> {
     out
 }
 
-/// A picture's bytes as a short value: their length and an FNV-1a hash.
+/// A picture's bytes as a short value: their length and an FNV-1a hash
+/// (paged-pixel's, the engine's one 64-bit FNV).
 fn fingerprint(bytes: &[u8]) -> (usize, u64) {
-    let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-        (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
-    });
-    (bytes.len(), hash)
+    (bytes.len(), paged_pixel::fnv1a_64(bytes))
 }
 
 /// What stands at a character of the paragraph.
