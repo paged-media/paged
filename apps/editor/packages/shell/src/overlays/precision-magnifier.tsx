@@ -126,7 +126,12 @@ function Loupe({ camera, width, height }: PrecisionMagnifierProps) {
   // twice for the same place.
   const latest = useRef<CanvasPointer | null>(null);
   const nudge = useRef<(() => void) | null>(null);
-  const shown = useRef<ImageBitmap | null>(null);
+  // Every image made and not yet closed, oldest first. An image is closed
+  // only once a NEWER one has been committed and drawn (the effect on
+  // `shot` below), never when the newer one is made: until then the draws
+  // of earlier commits still use it — a pointer move's, or a commit whose
+  // effects run late under load — and drawing a closed ImageBitmap throws.
+  const made = useRef<ImageBitmap[]>([]);
 
   const scale = camera.scale;
   const pageId = pointer?.pageId ?? null;
@@ -175,8 +180,7 @@ function Loupe({ camera, width, height }: PrecisionMagnifierProps) {
             bitmap.close();
             return;
           }
-          shown.current?.close();
-          shown.current = bitmap;
+          made.current.push(bitmap);
           setShot({ pageId: pid, region: snap.region ?? region, bitmap });
         })
         .catch(() => {
@@ -209,11 +213,10 @@ function Loupe({ camera, width, height }: PrecisionMagnifierProps) {
     };
   }, [client, scale]);
 
-  // Release the last image with the loupe.
+  // Release every image with the loupe.
   useEffect(
     () => () => {
-      shown.current?.close();
-      shown.current = null;
+      for (const b of made.current.splice(0)) b.close();
     },
     [],
   );
@@ -246,6 +249,17 @@ function Loupe({ camera, width, height }: PrecisionMagnifierProps) {
     ctx.strokeStyle = "#d6007f";
     crosshair(ctx, c[0], c[1]);
   }, [shot, pageId, at, preview]);
+
+  // After the committed shot was drawn (the effect above runs first), the
+  // images made before it are closed: every later render draws this one or
+  // a newer one. The images made after it wait for their own commit (or a
+  // newer one's).
+  useEffect(() => {
+    const now = shot?.bitmap;
+    const index = now ? made.current.indexOf(now) : -1;
+    if (index <= 0) return;
+    for (const old of made.current.splice(0, index)) old.close();
+  }, [shot]);
 
   if (!pointer) return null;
   const screen = docToViewport(
