@@ -20,7 +20,8 @@
 // Design system — the zoom field and its menu, in the bottom bar beside
 // the slider (kit chrome.jsx "50% ▾").
 //
-// The field is editable (interaction contract §13.2, UXI-CAM-007; editor
+// The field is the kit's mono value (`pg-value`), as the readout was before
+// it. It is editable (interaction contract §13.2, UXI-CAM-007; editor
 // ADR "Navigation history and one current page"): type a percentage
 // ("150", "150 %") and Enter zooms about the viewport's centre, held inside
 // the one zoom range; the field then shows the result as normalised, so
@@ -105,6 +106,7 @@ export function ZoomControl({
     <div data-zoom-control style={groupStyle}>
       <input
         data-zoom-field
+        className="pg-value"
         aria-label={strings.t(ZOOM.field)}
         inputMode="decimal"
         spellCheck={false}
@@ -198,9 +200,6 @@ const fieldStyle = {
   border: "none",
   outline: "none",
   background: "transparent",
-  fontFamily: "var(--font-mono)",
-  fontVariantNumeric: "tabular-nums",
-  fontSize: 12,
   color: "var(--pg-fg)",
 } as const;
 
