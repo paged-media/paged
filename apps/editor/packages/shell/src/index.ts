@@ -102,6 +102,7 @@ export {
 export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
+export { snapBypassHeld } from "./tools/snap-bypass";
 export { hoverPreselectContribution } from "./overlays/hover-preselect";
 export {
   nextAbove,

@@ -1,5 +1,5 @@
 name: editor / performance (nightly)
-# The editor's performance budgets (apps/editor/docs/adr/1228-performance-budgets.md,
+# The editor's performance budgets (apps/editor/docs/adr/1232-performance-budgets.md,
 # apps/editor/docs/reference/performance.md): selection and typing latency at
 # p50 / p95 / p99, a generated 40-page document's first paint and memory —
 # the stress suite — measured in the running editor on a production build.

@@ -252,6 +252,13 @@ turns (`UXI-T14`); guides and handles follow the full camera transform with the 
 (`UXI-T56`); and a live shape's corner widget takes only its own 12 px target, 20 px inside the
 corner, so a press beside it moves and one on the corner's square resizes, at 100 % and 800 %.
 
+Snapping says what it snaps to (IC8, [ADR 1226](adr/1226-snapping-says-what-it-snaps-to.md)):
+every snap line names its target — guide, margin, column, page edge, page centre, grid, an
+item's edge or centre, a point, equal spacing — and one key bypasses snapping for a move, a
+handle drag and the point tools alike: the platform's primary modifier (Cmd on macOS, Ctrl
+elsewhere; a move read Ctrl before). A snap holds within the release reach and commits exactly
+(`UXI-T12`).
+
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
 print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
@@ -313,7 +320,7 @@ every align route honours the key object, and an align control's hover shows its
 (D-07).
 
 Track AP has landed. The Tree panel is the document's object tree
-([ADR 1226](adr/1226-an-accessible-object-tree.md)): a virtualized WAI-ARIA tree of the spreads
+([ADR 1230](adr/1230-an-accessible-object-tree.md)): a virtualized WAI-ARIA tree of the spreads
 and their page items, each row named with its type, name, page and whether it is locked or
 hidden, sharing one selection with the canvas and the inspector; Alt+Shift+O goes to it from
 the canvas and Escape comes back. Inserts land in view; Object ▸ Transform rotates by 90° or 15°
@@ -321,12 +328,12 @@ and scales by 10 %; ⌥⌘[ and ⌥⌘] step the selection through overlapping o
 token meets 4.5:1 in both themes, menu hints are no longer faded (F-51), and a high-contrast
 variant of each theme (Edit ▸ Settings ▸ Contrast, or the system's `prefers-contrast`) draws
 7:1 text, strong boundaries, a two-tone focus ring and haloed overlay cues
-([ADR 1227](adr/1227-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
+([ADR 1231](adr/1231-high-contrast-and-aa.md)); axe finds nothing in the chrome, its menus or the
 palette, and the editor works at 200 % zoom (`UXI-T69`, `T70`, `T74`, `T75`). A pen's pressure
 shapes only the tools that read it, and only for a pen (a mouse stroke keeps its width to the end);
 a pinch over a press still waiting for its hit test changes the camera and nothing else
 (`UXI-T71` to `T73`). The performance budgets are measured with the audit's methods and asserted
-nightly ([ADR 1228](adr/1228-performance-budgets.md),
+nightly ([ADR 1232](adr/1232-performance-budgets.md),
 [`reference/performance.md`](reference/performance.md)): the CPU render draws the page at the
 viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
 engine folds into one insert per round trip (F-56). The engine's decoded images have no budget

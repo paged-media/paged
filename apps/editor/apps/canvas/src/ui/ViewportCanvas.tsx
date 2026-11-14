@@ -51,6 +51,7 @@ import {
   type MarqueeRectPageLocal,
   type SelectionState,
   currentPageIndex,
+  snapBypassHeld,
   useEscapeArbiter,
   ownerOfTool,
   useInteractionCoordinator,
@@ -1702,14 +1703,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           cy,
         );
       }
-      // Plan-2 §8.4 — Ctrl bypasses snap. Read `e.ctrlKey`
-      // independently of `metaKey`; on macOS the Ctrl key is its own
-      // thing (not Cmd), matching InDesign's "hold Ctrl to ignore
-      // snap targets" convention.
+      // IC8 — the one snapping bypass: the platform's primary modifier
+      // (Cmd on macOS, Ctrl elsewhere), as for the point-placing tools.
       gs.modifiers = {
         shift: e.shiftKey,
         alt: e.altKey,
-        disableSnap: e.ctrlKey,
+        disableSnap: snapBypassHeld({ cmd: e.metaKey, ctrl: e.ctrlKey }),
       };
       if (gs.scale && gs.handle !== null && e.altKey !== gs.scale.alt) {
         // Alt/Option moves the pivot between the opposite handle and

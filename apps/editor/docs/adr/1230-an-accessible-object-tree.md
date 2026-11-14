@@ -1,4 +1,4 @@
-# ADR 1226 — An accessible object tree
+# ADR 1230 — An accessible object tree
 
 - **Status:** Accepted 2026-11-14. Implements decision D-13 of
   [ADR 1201](1201-interaction-decisions.md) (plan tasks AP1, AP2 and AP4 of
@@ -100,6 +100,6 @@ keyboard but the inspector's fields.
   longer buttons.
 - `@axe-core/playwright` (MPL-2.0, a development dependency of the canvas app) runs over the
   chrome, its menus and the palette in both themes; see
-  [ADR 1227](1227-high-contrast-and-aa.md).
+  [ADR 1231](1231-high-contrast-and-aa.md).
 - A screen reader, an operating-system IME and a real pen remain manual checks before a
   release (gate G4, D-14).

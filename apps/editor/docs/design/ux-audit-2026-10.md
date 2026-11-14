@@ -1357,7 +1357,7 @@ The 11 px shortcut hints in menus measure 2.94:1 in the dark theme and 2.30:1 in
 
 **Screenshots:** `F-51-menu-hint-contrast.png`
 
-**Fixed (2026-11-14, editor ADR 1227).** The hints are drawn in the muted token, never faded
+**Fixed (2026-11-14, editor ADR 1231).** The hints are drawn in the muted token, never faded
 again with opacity; the muted tokens moved so every text token meets 4.5:1 on every surface it
 is drawn on in both themes (light hints now 5.3:1 on a menu, dark 6.1:1; the search placeholder
 4.9:1); "soon" rows are disabled controls, outside the contrast rule. A token test
@@ -1446,7 +1446,7 @@ plan task AP5.
 
 **Screenshots:** none (a measured finding)
 
-**Measured again (2026-11-14, editor ADR 1228; open).** Every cache now has a stated owner and
+**Measured again (2026-11-14, editor ADR 1232; open).** Every cache now has a stated owner and
 budget (`docs/reference/performance.md`): the CPU tiles 64 MB with LRU eviction, the GPU page
 scenes 200 pages, the thumbnails one per page, the undo log its depth. The two templates opened
 as files alone (linked images unresolved) take 341 MB and 443 MB, page and workers; the
@@ -1506,7 +1506,7 @@ At normal typing speeds (2.5–8 characters/s) a character is in the model and o
 
 **Screenshots:** `F-56-typing-burst.png`
 
-**Addressed (2026-11-14, editor ADR 1228; not yet proven).** Inserts no longer queue one per
+**Addressed (2026-11-14, editor ADR 1232; not yet proven).** Inserts no longer queue one per
 key: while one is in flight the keys behind it fold into one insert at the advancing caret, sent
 with the reply, and every other request of the text editor sends what is pending first, so the
 order is kept (`apps/canvas/src/ui/typing-coalescer.ts`). In a burst of 55 keys a second, 88

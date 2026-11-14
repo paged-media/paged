@@ -1,6 +1,6 @@
 # Performance: how it is measured, the numbers, the budgets
 
-The editor's performance budgets ([ADR 1228](../adr/1228-performance-budgets.md)) and the
+The editor's performance budgets ([ADR 1232](../adr/1232-performance-budgets.md)) and the
 interaction specification's §20 (`UXI-PRF-001` to `PRF-007`). This page says how each number is
 taken, what it was in the October audit, what it is now, which budget holds it, and which cache
 owns which memory. The suite is `apps/canvas/tests/perf/budgets.perf.spec.ts` (the `perf`
@@ -42,7 +42,7 @@ change is judged by the same run's before and after, not against another day's n
 Measured 2026-11-14 on a 16-core Apple-silicon machine shared with other builds (load average
 15–31 during the runs), the Vite development server (not the production build the nightly
 uses), Chromium (`channel: "chromium"`, the full headless browser), which has no WebGPU adapter
-here: the CPU render path throughout. "Before" is the editor just before ADR 1228 (the same
+here: the CPU render path throughout. "Before" is the editor just before ADR 1232 (the same
 tree with `ui/useTextEditing.ts` and `worker/render.ts` as they were), "after" is with it; the
 runs alternated, so each pair saw the same machine. Milliseconds, p50 / p95 / p99.
 
