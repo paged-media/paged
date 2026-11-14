@@ -115,7 +115,7 @@ const modelled = (c: SlideComment) => ({
 });
 
 describe("[plugin-slide.comments] comments, headless", () => {
-  it("a deck holds the slideDeck document context; another document drops it", async () => {
+  it("a deck holds the slideDeck document context, whose pages are slides; another document drops it", async () => {
     const d = await open(fixture("placeholders"), "placeholders.pptx");
     await waitFor(() =>
       expect(d.h.documentContext()).toEqual({
@@ -123,6 +123,12 @@ describe("[plugin-slide.comments] comments, headless", () => {
         type: DECK_CONTEXT,
       }),
     );
+    // Extensions ADR 1111 (slide ADR 725): the host names a deck's pages
+    // "Slide 3" through the context's noun.
+    expect(
+      d.h.editContextsContributed().find((c) => c.type === DECK_CONTEXT)
+        ?.pageNoun,
+    ).toEqual({ one: "slide", other: "slides" });
     await d.h.newBlank(612, 792);
     await waitFor(() => expect(d.h.documentContext()).toBeNull());
   }, 120_000);

@@ -615,6 +615,13 @@ export {
   type FrameLevelId,
 } from "./state/frame-content";
 export { FrameLevelControl } from "./chrome/FrameLevelControl";
+// Extensions ADR 1111 — what the document's pages are called.
+export {
+  capitalise,
+  declaredPageNoun,
+  useDeclaredPageNoun,
+  type PageNoun,
+} from "./state/page-noun";
 export { pageToContentPoint } from "./state/content-point";
 export {
   ContextTrail,

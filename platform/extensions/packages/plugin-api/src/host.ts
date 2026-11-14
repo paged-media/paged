@@ -316,6 +316,17 @@ export interface EditContextContribution {
    */
   verbs?: Partial<Record<ObjectVerb, string>>;
   /**
+   * Extensions ADR 1111 — what the pages of a document this context covers
+   * as a whole are called, in the editor's language as the words read
+   * inside a sentence: `{ one: "slide", other: "slides" }` for a deck. While
+   * this context is the DOCUMENT context (`host.shell.setDocumentContext`,
+   * ADR 348) the host names the document's pages with it — the document
+   * map and its lenses, the captions beside the pages on the canvas, the
+   * palette's Go to — capitalising the first letter where a label starts
+   * ("Slide 3"). Read only for the document context; absent ⇒ pages.
+   */
+  pageNoun?: PageNoun;
+  /**
    * Extensions ADR 1106 (the interaction contract's D-05) — this context
    * edits the pixels of a placed image. A double-click on a frame that
    * holds an image positions the image inside its frame first (the host's
@@ -385,6 +396,16 @@ export type ObjectVerb =
  *  ({@link EditContextContribution.exitPolicy}). */
 export type EditContextExitPolicy =
   "commit-if-safe" | "ask" | "discard-allowed";
+
+/** Extensions ADR 1110 — what a document's pages are called
+ *  ({@link EditContextContribution.pageNoun}), in the editor's language as
+ *  the words read inside a sentence ("slide", "slides"). */
+export interface PageNoun {
+  /** One page: "slide" ("Go to slide 3"; "Slide 3" where a label starts). */
+  one: string;
+  /** Several pages: "slides" ("Search slides"; "Slides 2–3"). */
+  other: string;
+}
 
 /** Editor ADR 285 — an edit context's own history ({@link
  *  EditContextContribution.historySteps}). */

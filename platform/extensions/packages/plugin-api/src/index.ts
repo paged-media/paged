@@ -278,6 +278,7 @@ export type {
   EditContextHistory,
   EditContextExitPolicy,
   ObjectVerb,
+  PageNoun,
   ContentPointerEvent,
   ContentWheelEvent,
   EditContextDescriptor,

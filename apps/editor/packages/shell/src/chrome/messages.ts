@@ -122,6 +122,12 @@ export const PALETTE = defineMessages("shell.palette", {
   goToPage: "Go to page {page}",
   goToPageWords: "go to page, go to, goto, page, p",
   noSuchPage: "No page {page} in this document",
+  /** Under the noun the document declares for its pages (extensions ADR
+   *  1111): "Go to slide 3", and "go to slide, slide" as the query's
+   *  words. */
+  goToNamed: "Go to {noun} {page}",
+  goToNamedWords: "go to {noun}, {noun}",
+  noSuchNamed: "No {noun} {page} in this document",
   help: "Help",
   helpTopic: "Help: {title}",
   helpWords: "help, how do i, how to",

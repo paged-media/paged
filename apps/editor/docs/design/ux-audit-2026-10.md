@@ -1269,6 +1269,16 @@ A 10-slide deck opens as a vertical page stack at 11%. The "page N" labels sit o
 
 **Screenshots:** `F-47-slide-deck-surface.png`
 
+**Fixed (2026-11-14, slide ADR 725, extensions ADR 1111).** A module names its document's pages
+through its document context (`pageNoun`): a deck's are slides — "Slide 1" (no "Cover") and
+"Slides 2–3" in the document map and its Slides lens, "Slide 4" in the page lenses, "Slide 3"
+beside each slide on the canvas and "Go to slide 3" in the palette. In the Slides panel a slide's
+Duplicate, Delete and Hide show on the slide in view and on the one the pointer or the keyboard is
+on, not under every thumbnail. The rest had landed: the first slide is fitted when a deck opens
+(editor ADR 1208), a caption sits beside its page when the gap below is too small (editor ADR
+1213), and Slide Show ▸ From Beginning (F5, Play), Presenter View and View ▸ Slide Sorter are
+paged.slide's (slide ADR 716).
+
 ### Keyboard and accessibility
 
 <a id="f-49"></a>

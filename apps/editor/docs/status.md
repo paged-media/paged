@@ -322,6 +322,11 @@ changes — pixels, a non-destructive adjustment, smart, fill or type layer, the
 picture frame's Content level) the placement; the filter dialog shows a before/after split and
 says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
 panel shows the picture's own pixels at 100–800 %.
+paged.slide (ADR 725 in its range; extensions ADR 1111; UX audit F-47): a deck's pages are
+slides — the module declares the noun on its document context, and the document map, the page
+lenses, the captions beside the pages and the palette's Go to say "Slide 3" (no "Cover"); in the
+Slides panel a slide's actions show on the slide in view or under the pointer, not under every
+thumbnail.
 paged.web (ADR 416): the Web source panel inspects the element in focus — picked on the canvas
 or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
 rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts

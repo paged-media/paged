@@ -459,6 +459,10 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   template fill — Required / Optional, progress, Next field, missing content, Finish with export
   and save, T73 on a phone (editor ADR 1225). The modules' raw number inputs of sheet, doc and data
   left the `raw-number-input` baseline.
+  **Slide done** (slide ADR 725, extensions ADR 1111; F-47 closed): a deck's pages are slides
+  through the contract's `pageNoun` on its document context — the document map, the page lenses,
+  the captions and Go to say "Slide 3"; the Slides panel (the filmstrip on the rail) keeps a
+  slide's actions on the slide in view or under the pointer; the sorter and Play are ADR 716's.
 
 ## 11. Track AP — Accessibility, devices and performance (spec wave 6)
 

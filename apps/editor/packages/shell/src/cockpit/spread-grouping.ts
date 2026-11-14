@@ -26,6 +26,7 @@
 import { t } from "@paged-media/strings";
 import { PAGES } from "./messages";
 import type { PageId, SpreadSummary } from "@paged-media/client";
+import { capitalise, type PageNoun } from "../state/page-noun";
 
 export interface SpreadEntry {
   key: string;
@@ -57,8 +58,22 @@ export function isIdLikeLabel(label: string, selfId: string): boolean {
 export function groupSpreads(
   pageIds: ReadonlyArray<PageId>,
   spreads: ReadonlyArray<SpreadSummary> | null,
+  /** The noun the document declares for its pages (extensions ADR 1111):
+   *  "Slide 3" for every page, no cover. Null: the editor's own words. */
+  noun: PageNoun | null = null,
 ): SpreadEntry[] {
   const entries: SpreadEntry[] = [];
+  const pageName = (range: string | number, count: number, first: boolean) =>
+    noun
+      ? t(PAGES.named, {
+          noun: capitalise(count === 1 ? noun.one : noun.other),
+          range,
+        })
+      : first && count === 1
+        ? t(PAGES.cover)
+        : count === 1
+          ? t(PAGES.page, { range })
+          : t(PAGES.pages, { range });
   let cursor = 0;
   if (spreads && spreads.length > 0) {
     for (const s of spreads) {
@@ -75,13 +90,9 @@ export function groupSpreads(
       entries.push({
         key: s.selfId,
         name:
-          entries.length === 0 && pageIndices.length === 1
-            ? t(PAGES.cover)
-            : labelUsable
-              ? s.label
-              : pageIndices.length === 1
-                ? t(PAGES.page, { range })
-                : t(PAGES.pages, { range }),
+          labelUsable && !(entries.length === 0 && pageIndices.length === 1)
+            ? s.label
+            : pageName(range, pageIndices.length, entries.length === 0),
         range,
         pageIndices,
       });
@@ -91,7 +102,7 @@ export function groupSpreads(
     const n = cursor + 1;
     entries.push({
       key: `page-${pageIds[cursor]}`,
-      name: cursor === 0 ? t(PAGES.cover) : t(PAGES.page, { range: n }),
+      name: pageName(n, 1, cursor === 0),
       range: String(n),
       pageIndices: [cursor],
     });

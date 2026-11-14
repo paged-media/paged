@@ -1169,8 +1169,23 @@ test.describe("plugin surface · paged.slide", () => {
       page.evaluate(() =>
         (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
       );
+    // A deck's pages are slides (extensions ADR 1111, slide ADR 725): the
+    // caption beside each page and the document map's lens say so.
+    await expect(page.locator('[data-page-caption="1"] text')).toHaveText(
+      "Slide 1",
+    );
+    await expect(page.locator('[data-page-lens="pages"]')).toHaveText("Slides");
+    // A slide's actions show on the slide in view (and under the pointer or
+    // with the keyboard), not under every thumbnail (slide ADR 725; F-47):
+    // go to the slide first, as a user does.
+    const goTo = async (n: number) => {
+      const row = panel.locator("[data-slide]").nth(n);
+      await row.locator("[data-slide-thumb]").click();
+      await expect(row).toHaveAttribute("data-active", "true");
+    };
 
     // Duplicate slide 2: eleven slides, then undo → ten.
+    await goTo(1);
     await panel
       .locator("[data-slide]")
       .nth(1)
@@ -1199,6 +1214,7 @@ test.describe("plugin surface · paged.slide", () => {
         `${KIND("slide")}/${pageId}`,
       );
     expect(await hidden()).toBe(false);
+    await goTo(2);
     await third.getByTitle("Hide from slideshow").click();
     await expect(third.getByTitle("Show in slideshow")).toHaveAttribute(
       "aria-pressed",
@@ -1212,6 +1228,7 @@ test.describe("plugin surface · paged.slide", () => {
     await expect.poll(hidden, { timeout: 10_000 }).toBe(false);
 
     // Delete slide 10: nine slides, then undo → ten.
+    await goTo(9);
     await panel
       .locator("[data-slide]")
       .nth(9)

@@ -82,6 +82,7 @@ and each one names the plugins that follow it and those that do not.
 | [1108](1108-an-edit-context-names-its-edit-level.md) | An edit context names what entering it does (`editLabel`): the Edit level of the Frame / Content / Edit control | Accepted 2026-11-14 |
 | [1109](1109-a-gesture-handler-names-its-modifiers.md) | A gesture handler names its modifiers (`modifierHints`, `ModifierHint`): the host's hint strip says what Shift, Alt and the primary modifier do with the tool in hand | Accepted 2026-11-14 |
 | [1110](1110-an-edit-context-names-its-verbs.md) | An edit context names its verbs (`verbs`, `ObjectVerb`): the module's own command for the host's universal object verbs (editor ADR 1242) | Accepted 2026-11-14 |
+| [1111](1111-a-document-names-its-pages.md) | A document names its pages (`pageNoun`, `PageNoun`): while its context holds the document context, the document map, the page lenses, the captions and Go to say "Slide 3" | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
