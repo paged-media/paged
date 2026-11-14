@@ -54,6 +54,7 @@ import { buildAppearanceCommands } from "../../../src/appearance-commands";
 import { buildStarCommands } from "../../../src/star-commands";
 import { buildBarcodeCommands } from "../../../src/barcode-commands";
 import { buildReflectCommands } from "../../../src/reflect-commands";
+import { buildA11yCommands } from "../../../src/a11y-commands";
 import { buildCornerCommands } from "../../../src/corner-commands";
 import { buildTextFormatCommands } from "../../../src/text-format-commands";
 import { buildReferenceCommands } from "../../../src/reference-commands";
@@ -63,6 +64,7 @@ import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
+  SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
 } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
@@ -110,6 +112,7 @@ const SITES: Record<string, number> = {
   "packages/shell/src/cockpit/focus-workspace.ts": 1,
   "packages/shell/src/cockpit/workspace-class.ts": 1,
   "packages/shell/src/state/density.ts": 1,
+  "packages/shell/src/state/contrast.ts": 1,
   "packages/shell/src/bundles/loader.ts": 1,
   "packages/shell/src/bundles/sample-bundle.worker.ts": 1,
   // The app tables, and the host actions as commands (hostCommands).
@@ -164,6 +167,11 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.view.density.professional",
     "paged.view.density.compact",
   ],
+  "packages/shell/src/state/contrast.ts": [
+    "paged.view.contrast.system",
+    "paged.view.contrast.standard",
+    "paged.view.contrast.high",
+  ],
   "packages/shell/src/bundles/sample-bundle.worker.ts": ["paged.sample.hello"],
   "apps/canvas/src/app/mount.tsx": [AI_ASK_COMMAND],
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": [
@@ -195,6 +203,7 @@ function tableIds(): string[] {
     ...buildAssetExportCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
+    SELECT_ABOVE_COMMAND,
     ...buildObjectCommands(noop),
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
@@ -219,6 +228,7 @@ function tableIds(): string[] {
     ...buildViewCommands(noop),
     ...OPEN_AS_TEMPLATE_COMMANDS,
     SELECT_ALL_COMMAND,
+    ...buildA11yCommands({ showPanel: noop }),
     ...FIND_COMMANDS,
     // Registered only when an embedding host supplies the action.
     ...hostCommands({ submit: noop, close: noop, back: noop }),
@@ -295,6 +305,7 @@ describe("the host command inventory", () => {
       "buildAssetExportCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
+      "SELECT_ABOVE_COMMAND",
       "objectCommands",
       "pathfinderCommands",
       "cornerCommands",

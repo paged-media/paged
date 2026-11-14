@@ -3979,6 +3979,38 @@
       "status": "migrated"
     },
     {
+      "id": "object-tree.select",
+      "title": "The object tree selects the item of a row (Enter, Space, a click; Shift toggles)",
+      "owner": "panel",
+      "eventClass": "key:Enter",
+      "scope": "editor/object-tree",
+      "adapter": "none",
+      "site": "apps/editor/apps/canvas/src/ui/A11yObjectTree.tsx",
+      "listener": "element",
+      "states": ["idle", "settled"],
+      "permission": "A selection change through the engine, as a canvas click makes it; not a document change and not an undo step (D-15).",
+      "cancel": "Nothing to cancel: one request, its answer is the selection the canvas and the inspector show.",
+      "surfaceIds": ["panel:paged.tree"],
+      "uxi": ["UXI-A11Y-003", "UXI-A11Y-004", "UXI-A11Y-008"],
+      "status": "migrated"
+    },
+    {
+      "id": "escape.object-tree",
+      "title": "Escape in the object tree gives focus back to the canvas",
+      "owner": "panel",
+      "eventClass": "key:Escape",
+      "scope": "editor/object-tree",
+      "adapter": "EscapeArbiter",
+      "site": "apps/editor/apps/canvas/src/ui/A11yObjectTree.tsx",
+      "listener": "editor-root",
+      "states": ["idle", "settled"],
+      "permission": "Moves focus only; the selection stays.",
+      "cancel": "The focused tier of the Escape arbiter (editor ADR 1207): the tree owns the press while it has focus, so the selection tier below never clears the selection.",
+      "surfaceIds": ["panel:paged.tree"],
+      "uxi": ["UXI-ESC-001", "UXI-A11Y-002", "UXI-KEY-009"],
+      "status": "migrated"
+    },
+    {
       "id": "field.scrub",
       "title": "A numeric field's label scrubs its value (Shift fine, Alt coarse)",
       "owner": "panel",
@@ -4034,6 +4066,20 @@
       "status": "migrated"
     }
   ],
-  "exceptions": [],
+  "exceptions": [
+    {
+      "id": "EXC-003",
+      "contract": ["UXI-PRF-004"],
+      "scope": "The engine's decoded-image cache (`image_decode_cache` in engine/core/crates/paged-canvas/src/model.rs) holds every image of the open document at full resolution for as long as it is open; the editor's own caches (the worker's CPU tiles, the GPU scene cache, the page thumbnails) have budgets and eviction rules (editor ADR 1232)",
+      "interactions": [],
+      "tests": [],
+      "why": "Every rebuild composes every page, so a decoded image the budget evicted would be decoded again on the next edit; a budget that holds needs images decoded at the resolution they are shown (proxies), and the visible pages composed first — engine work with its own record and protocol.",
+      "issue": "AP5",
+      "owner": "engine",
+      "severity": "major",
+      "expiry": "2027-03-31",
+      "repro": "Open a large real-world IDML template with many placed images and measure page + worker memory (measureUserAgentSpecificMemory): it stays in proportion to the document's images, not to what is on screen (UX audit F-54; docs/reference/performance.md)."
+    }
+  ],
   "enforcedGates": ["G2"]
 }

@@ -40,6 +40,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { writeCursor } from "../tools/cursor";
 
 import { useEscapeArbiter } from "../interaction/escape-arbiter";
 
@@ -179,7 +180,7 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
         // we proceed without it (the move/up listeners on the
         // element still fire for as long as the element exists).
       }
-      element.style.cursor = "ew-resize";
+      writeCursor(element, "ew-resize");
       setIsScrubbing(true);
       const next = computeValue(0, event.shiftKey, event.altKey);
       latestValueRef.current = next;
@@ -204,7 +205,7 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
       } catch {
         // Already released.
       }
-      element.style.cursor = "";
+      writeCursor(element, null);
       dragRef.current = null;
       setIsScrubbing(false);
       const o = optionsRef.current;

@@ -119,6 +119,11 @@ import {
 } from "@paged-media/shell";
 
 import { textInputSurface } from "./TextInputSurface";
+import {
+  createTypingCoalescer,
+  rawClient,
+  type TypingCoalescer,
+} from "./typing-coalescer";
 
 export interface TextEditingContext {
   client: CanvasClient | null;
@@ -229,6 +234,17 @@ export function useTextEditing(ctx: TextEditingContext) {
       selRef.current = s;
       latest().setSelection(s);
     };
+    // F-56 — keys that outrun the engine fold into one insert per round
+    // trip (ui/typing-coalescer.ts); every request of this handler goes
+    // through it, so the worker sees them in the order they were made.
+    let typing: { raw: CanvasClient; coalescer: TypingCoalescer } | null = null;
+    const typed = (client: CanvasClient): CanvasClient => {
+      if (typing?.raw !== client) {
+        typing?.coalescer.flush();
+        typing = { raw: client, coalescer: createTypingCoalescer(client) };
+      }
+      return typing.coalescer.client;
+    };
     const after = (work: () => unknown) => {
       queueRef.current = queueRef.current.then(async () => {
         try {
@@ -243,7 +259,7 @@ export function useTextEditing(ctx: TextEditingContext) {
         const sel = selRef.current;
         const client = latest().client;
         if (!sel || !client) return;
-        await task(sel, client);
+        await task(sel, typed(client));
       });
     /** An engine answer still applies only if nothing outside this
      *  handler moved the selection while the question was in flight. */
@@ -283,7 +299,10 @@ export function useTextEditing(ctx: TextEditingContext) {
         e.preventDefault();
         // Behind any key still in flight, so it undoes what was typed.
         const redo = e.shiftKey;
-        after(() => (redo ? client.redo() : client.undo()));
+        after(() => {
+          const c = typed(client);
+          return redo ? c.redo() : c.undo();
+        });
         return;
       }
 
@@ -683,6 +702,8 @@ export function useTextEditing(ctx: TextEditingContext) {
     ];
     return () => {
       for (const off of offs) off();
+      // Nothing typed is left behind.
+      typing?.coalescer.flush();
     };
   }, [keys, root, keybindings, escapeArbiter]);
 
@@ -732,7 +753,7 @@ export function insertAt(
   };
   // Finding PN-152 (ADR 236): a character style chosen at this caret
   // goes on the text typed there, in the insert's one undo step.
-  const style = sel.cell ? null : heldTypingStyle(client, sel);
+  const style = sel.cell ? null : heldTypingStyle(rawClient(client), sel);
   if (style) {
     const end = sel.start + byteLength(text);
     void client.mutate({

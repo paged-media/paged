@@ -509,6 +509,22 @@
       ],
       "extensions": [".ts", ".tsx"],
       "baseline": []
+    },
+    {
+      "name": "cursor-write",
+      "description": "write an element's cursor through @paged-media/shell's writeCursor / holdCursor (the cursor contract, editor ADR 1227): the canvas through its cursor controller's layers, a mode that owns every press through holdCursor",
+      "allowReason": "a test sets a cursor directly to see the code under test put it back",
+      "allow": [
+        "apps/editor/packages/shell/test/stores/pending-placement.dom.test.ts"
+      ],
+      "owner": ["apps/editor/packages/shell/src/tools/cursor.ts"],
+      "patterns": [
+        "\\.style\\.cursor\\s*=",
+        "style\\.setProperty\\(\\s*[\"']cursor[\"']",
+        "style\\.removeProperty\\(\\s*[\"']cursor[\"']"
+      ],
+      "extensions": [".ts", ".tsx"],
+      "baseline": ["modules/slide/packages/slide-bundle/src/show/ink.ts"]
     }
   ]
 }

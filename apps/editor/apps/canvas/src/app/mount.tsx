@@ -303,6 +303,7 @@ import {
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   CANVAS_CONTEXT_MENU_KEYBINDINGS,
+  SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
   CanvasContextMenuHost,
 } from "../canvas-context-menu";
@@ -324,6 +325,11 @@ import {
   buildAppearanceCommands,
 } from "../appearance-commands";
 import { buildReflectCommands, REFLECT_MENU_ITEMS } from "../reflect-commands";
+import {
+  A11Y_KEYBINDINGS,
+  A11Y_MENU_ITEMS,
+  buildA11yCommands,
+} from "../a11y-commands";
 import { buildStarCommands, STAR_MENU_ITEMS } from "../star-commands";
 import { StarDialog } from "../panels/star-dialog";
 import { buildBarcodeCommands, BARCODE_MENU_ITEMS } from "../barcode-commands";
@@ -1848,6 +1854,7 @@ function CanvasAppIntegration() {
       ...buildAssetExportCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       SELECT_BELOW_COMMAND,
+      SELECT_ABOVE_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
@@ -1868,6 +1875,11 @@ function CanvasAppIntegration() {
       ...viewCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
+      // The object tree and the selection cycle (editor ADR "An accessible
+      // object tree").
+      ...buildA11yCommands({
+        showPanel: (id) => registries.commands.invoke(`paged.panel.show.${id}`),
+      }),
       // ADR 303 — Find & Replace, Go to page.
       ...FIND_COMMANDS,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1898,6 +1910,7 @@ function CanvasAppIntegration() {
       ...BATCH_MENU_ITEMS,
       ...VIEW_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
+      ...A11Y_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
       // The profile keeps only the host menus its menu bar names. Whole-
@@ -1917,6 +1930,7 @@ function CanvasAppIntegration() {
       ...INSERT_KEYBINDINGS,
       ...VIEW_KEYBINDINGS,
       ...TEXT_FORMAT_KEYBINDINGS,
+      ...A11Y_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));
     return () => {
       for (const d of cmdDisposables) d.dispose();

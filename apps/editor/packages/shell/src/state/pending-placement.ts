@@ -47,6 +47,7 @@ import { queryEditor } from "./editor-dom";
 import { editorRootOf } from "./editor-root";
 import { escapeArbiterOf } from "../interaction/escape-arbiter";
 import { interactionCoordinatorOf } from "../interaction/coordinator";
+import { holdCursor } from "../tools/cursor";
 
 /** A client-space point the user clicked, or `null` when they cancelled. */
 export interface PlacementPoint {
@@ -107,8 +108,9 @@ export function awaitPlacementPoint(
     // The editor's root element (the page's <html> for a shell without
     // one): what the editor writes, it writes on itself (plan task E1).
     const root = editorRootOf(scope) ?? document.documentElement;
-    const previous = root.style.getPropertyValue("cursor");
-    const previousPriority = root.style.getPropertyPriority("cursor");
+    // The cursor contract's mode hold (editor ADR 1227): set
+    // when armed, below; this puts back what was there.
+    let releaseCursor = () => {};
 
     /** The press inside the canvas, while its release is awaited. */
     let pressed: { clientX: number; clientY: number } | null = null;
@@ -132,9 +134,7 @@ export function awaitPlacementPoint(
         interactions.end(session, value ? "commit" : "cancel");
       armed.cancel = null;
       root.removeAttribute(ARMED_ATTR);
-      if (previous)
-        root.style.setProperty("cursor", previous, previousPriority);
-      else root.style.removeProperty("cursor");
+      releaseCursor();
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove, true);
       window.removeEventListener("pointerup", onUp, true);
@@ -218,7 +218,7 @@ export function awaitPlacementPoint(
 
     armed.cancel = () => finish(null);
     root.setAttribute(ARMED_ATTR, "armed");
-    root.style.setProperty("cursor", "copy", "important");
+    releaseCursor = holdCursor(root, "copy");
     // Capture phase, so this wins the pointer before ViewportCanvas's
     // own pointerdown handler begins a gesture.
     window.addEventListener("pointerdown", onDown, true);

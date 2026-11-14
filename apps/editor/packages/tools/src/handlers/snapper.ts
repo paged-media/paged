@@ -30,10 +30,11 @@
 // the one the draw Curvature tool uses too) with this host's transport
 // and bypass.
 //
-// Both are bypassed while Cmd is held (Illustrator's "snap off while
-// held") and while Shift constrains — a constrained angle wins over a
-// snap that would pull the point off it. View ▸ Snap to points turns it
-// off. Direct Selection keeps a LOCAL snap to the edited path's own
+// Both are bypassed while the snapping bypass is held — the platform's
+// primary modifier, Cmd on macOS and Ctrl elsewhere, the one key of every
+// drag (editor ADR 1226) — and while Shift
+// constrains: a constrained angle wins over a snap that would pull the
+// point off it. View ▸ Snap to points turns it off. Direct Selection keeps a LOCAL snap to the edited path's own
 // anchors (`SNAP_TOLERANCE_PX`), only to answer a drag sample before the
 // engine's answer for it arrives.
 
@@ -41,6 +42,7 @@ import type { SnapPointQuery, SnapPointResult } from "@paged-media/plugin-api";
 import {
   getViewToggle,
   scopeOf,
+  snapBypassHeld,
   type CanvasPointerEvent,
   type EditorScope,
   type PagedEditor,
@@ -86,11 +88,14 @@ export function snappingOn(
   scope: EditorScope,
   modifiers: {
     cmd?: boolean;
+    ctrl?: boolean;
     shift?: boolean;
   },
 ): boolean {
   return (
-    getViewToggle(scope, "snapToPoints") && !modifiers.cmd && !modifiers.shift
+    getViewToggle(scope, "snapToPoints") &&
+    !snapBypassHeld(modifiers) &&
+    !modifiers.shift
   );
 }
 

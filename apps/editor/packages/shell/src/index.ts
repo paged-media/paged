@@ -102,8 +102,14 @@ export {
 export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
+export { snapBypassHeld } from "./tools/snap-bypass";
 export { hoverPreselectContribution } from "./overlays/hover-preselect";
-export { nextBelow, objectsUnder } from "./state/objects-under";
+export {
+  nextAbove,
+  nextBelow,
+  objectsOver,
+  objectsUnder,
+} from "./state/objects-under";
 export { isLockedEntries, useLockedKeys } from "./state/locked";
 
 export {
@@ -121,6 +127,18 @@ export {
   useDensity,
   type Density,
 } from "./state/density";
+export {
+  CONTRAST_COMMANDS,
+  CONTRAST_PREFERENCES,
+  DEFAULT_CONTRAST,
+  effectiveContrast,
+  getContrastPreference,
+  setContrastPreference,
+  useContrast,
+  useContrastPreference,
+  type Contrast,
+  type ContrastPreference,
+} from "./state/contrast";
 export {
   CameraProvider,
   cameraKeepingCentre,
@@ -283,7 +301,17 @@ export {
   type ScreenMode,
 } from "./state/screen-mode-context";
 
-export { resolveCursorCss } from "./tools/cursor";
+export {
+  CURSOR_CONTROLLER,
+  CURSOR_LAYERS,
+  createCursorController,
+  holdCursor,
+  resolveCursorCss,
+  useCursorController,
+  writeCursor,
+  type CursorController,
+  type CursorLayer,
+} from "./tools/cursor";
 export type { CursorSpec, CssCursorToken } from "./tools/cursor";
 export type {
   GestureHandler,

@@ -135,6 +135,13 @@ export const CODES: Readonly<Record<string, CodeSpec>> = {
     policy: { mode: "aggregate", windowMs: 1000 },
     data: ["n", "avgMs", "maxMs", "gpu"],
   },
+  // Editor ADR "Performance budgets" — the first page on screen after a
+  // document's layout, from the worker's clock (the perf probe reads it).
+  "worker.firstPaint": {
+    text: "The first page showed after the layout",
+    policy: ALWAYS,
+    data: ["pages", "gpu"],
+  },
 
   // ── client ────────────────────────────────────────────────────────────
   "client.send": {
