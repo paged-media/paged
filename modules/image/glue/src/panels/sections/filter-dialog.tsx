@@ -2,9 +2,12 @@
 // It draws the filter's parameter schema (`filters.ts`): a slider per
 // range, an angle dial, a choice, a switch, a colour. The canvas shows
 // the result live (the session's preview: a resampled proxy while a
-// slider moves, full resolution when it rests), with Preview and a
-// before/after toggle; OK keeps the filter as ONE undo step, Cancel puts
-// the image back.
+// slider moves, full resolution when it rests), with Preview, a
+// before/after toggle and (image ADR 487) a before/after SPLIT whose line
+// the split slider drags across the frame, and a line that says whether
+// the frame shows a draft, the full-resolution pass rendering, or the
+// full result; OK keeps the filter as ONE undo step, Cancel puts the
+// image back.
 
 import { hexToRgb } from "@paged-media/helpers";
 import { ColorInput } from "./color-input";
@@ -17,6 +20,7 @@ import { color, font, space } from "@paged-media/panel-kit";
 import type { ReactNode } from "react";
 
 import { kicker, mono, note, row } from "./styles";
+import { FILTER_SPLIT } from "../../filter-split";
 
 const M = defineMessages("image.filterDialog", {
   ok: "OK",
@@ -516,6 +520,7 @@ export function FilterDialog({
   onChange,
   onPreview,
   onBefore,
+  onSplit,
   onOk,
   onCancel,
   onChooseImage = () => {},
@@ -528,6 +533,8 @@ export function FilterDialog({
   onChange: (patch: Record<string, FilterValue>) => void;
   onPreview: (on: boolean) => void;
   onBefore: (before: boolean) => void;
+  /** Image ADR 487 — the split view on at a position (0–1), or off. */
+  onSplit?: (split: number | null) => void;
   onOk: () => void;
   onCancel: () => void;
   /** An `image` parameter's source changed (0 composite, 1 a file). */
@@ -601,6 +608,21 @@ export function FilterDialog({
         >
           {dialog.before ? t(M.before) : t(M.after)}
         </button>
+        {onSplit ? (
+          <label
+            style={{ font: `12px ${font.sans}` }}
+            title={t(FILTER_SPLIT.splitTitle)}
+          >
+            <input
+              type="checkbox"
+              data-filter-split-toggle
+              checked={dialog.split !== null}
+              disabled={!dialog.preview || dialog.before}
+              onChange={(e) => onSplit(e.target.checked ? 0.5 : null)}
+            />{" "}
+            {t(FILTER_SPLIT.split)}
+          </label>
+        ) : null}
         <span style={{ flex: 1 }} />
         <button type="button" data-filter-cancel onClick={onCancel}>
           {t(M.cancel)}
@@ -614,7 +636,68 @@ export function FilterDialog({
           {t(M.ok)}
         </button>
       </div>
+      {onSplit && dialog.split !== null ? (
+        <div style={{ ...row, borderBottom: "none" }}>
+          <span style={{ font: `11px ${font.sans}` }}>
+            {t(FILTER_SPLIT.before)}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={dialog.split}
+            aria-label={t(FILTER_SPLIT.splitPosition)}
+            data-filter-split={dialog.split}
+            onChange={(e) => onSplit(Number(e.target.value))}
+            style={{ flex: 1 }}
+          />
+          <span style={{ font: `11px ${font.sans}` }}>
+            {t(FILTER_SPLIT.after)}
+          </span>
+        </div>
+      ) : null}
+      <FilterQuality dialog={dialog} />
       <div style={note}>{gpu ? t(M.note) : t(M.gpuOnly)}</div>
     </section>
+  );
+}
+
+/** What the frame shows of the filter (image ADR 487): a draft on the
+ *  reduced copy, the full-resolution pass rendering (an indeterminate bar:
+ *  the engine reports no progress, so none is invented), or the full
+ *  result. */
+function FilterQuality({ dialog }: { dialog: FilterDialogState }) {
+  const text = dialog.before
+    ? t(FILTER_SPLIT.beforeShowing)
+    : dialog.quality === "draft"
+      ? t(FILTER_SPLIT.draft)
+      : dialog.quality === "rendering"
+        ? t(FILTER_SPLIT.rendering)
+        : dialog.quality === "full"
+          ? t(FILTER_SPLIT.full)
+          : null;
+  if (!text) return null;
+  return (
+    <div
+      data-filter-quality={dialog.before ? "before" : (dialog.quality ?? "")}
+      role="status"
+      style={{ ...note, display: "flex", alignItems: "center", gap: space[1] }}
+    >
+      {dialog.quality === "rendering" && !dialog.before ? (
+        <span
+          role="progressbar"
+          aria-label={t(FILTER_SPLIT.rendering)}
+          style={{
+            width: 48,
+            height: 4,
+            borderRadius: 2,
+            background: `repeating-linear-gradient(90deg, ${color.primary} 0 8px, ${color.border} 8px 16px)`,
+            flexShrink: 0,
+          }}
+        />
+      ) : null}
+      <span>{text}</span>
+    </div>
   );
 }

@@ -27,6 +27,10 @@
 //   · picking the Zoom tool left the context, as if zooming to look at
 //     the pixels were reaching for another editing tool;
 //   · after Escape the raster tool stayed armed on the page.
+//
+// Image ADR 487 (UX audit F-43): the rail is the one tool set. The bar no
+// longer repeats every tool of the context as an icon pill; it names the
+// tool in hand, carries its options and says what the next edit changes.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -100,7 +104,7 @@ async function enterRasterContext(page: Page): Promise<void> {
 }
 
 test.describe("ED-11 — raster context chrome", () => {
-  test("AC-CTXBAR-1 — the bar names the context and offers its tools as tools, not as a raw list @feat:editor-shell.context-toolbars @level:edge", async ({
+  test("AC-CTXBAR-1 — the bar names the context and the tool in hand; the tools are the rail's, one set (F-43) @feat:editor-shell.context-toolbars @level:edge", async ({
     page,
   }) => {
     await enterRasterContext(page);
@@ -110,13 +114,34 @@ test.describe("ED-11 — raster context chrome", () => {
     await expect(segment).not.toContainText(",");
     // The module's own name for it (editor ADR 1215, F-45).
     await expect(segment.locator("[data-context-label]")).toHaveText("Image");
-    const pills = segment.locator("[data-context-tool]");
-    expect(await pills.count()).toBeGreaterThan(1);
-    // A pill IS the tool: pressing one arms it, inside the context.
-    const second = await pills.nth(1).getAttribute("data-context-tool");
-    await pills.nth(1).click();
-    await expect.poll(async () => (await debug(page)).tool).toBe(second);
-    await expect(pills.nth(1)).toHaveAttribute("aria-pressed", "true");
+    // No second tool set in the bar.
+    await expect(segment.locator("[data-context-tool]")).toHaveCount(0);
+    // The tool in hand, named.
+    const inHand = segment.locator("[data-context-tool-in-hand]");
+    await expect(inHand).toHaveAttribute(
+      "data-context-tool-in-hand",
+      (await debug(page)).tool!,
+    );
+    await expect(inHand).not.toHaveText("");
+    // What the next edit changes (image ADR 487).
+    await expect(
+      segment.locator('[data-image-edit-kind="pixels"]'),
+    ).toBeVisible();
+    // Another image tool, picked in the rail: the bar follows, the context
+    // stays.
+    const before = (await debug(page)).tool;
+    const slots = await page
+      .locator('[data-tool-slot^="media.paged.image."]')
+      .evaluateAll((els) =>
+        els
+          .filter((e) => e.getAttribute("data-active") !== "true")
+          .map((e) => e.getAttribute("data-tool-slot")),
+      );
+    expect(slots.length, "the rail holds the image's tools").toBeGreaterThan(1);
+    await page.locator(`[data-tool-slot="${slots[0]}"]`).click();
+    await expect.poll(async () => (await debug(page)).tool).not.toBe(before);
+    const now = (await debug(page)).tool!;
+    await expect(inHand).toHaveAttribute("data-context-tool-in-hand", now);
     expect((await debug(page)).context).toBe("rasterImage");
   });
 
@@ -133,7 +158,10 @@ test.describe("ED-11 — raster context chrome", () => {
       "the rail's Zoom keeps the context",
     ).toBe("rasterImage");
 
-    await page.locator("[data-context-tool]").first().click();
+    await page
+      .locator('[data-tool-slot^="media.paged.image."]')
+      .first()
+      .click();
     await page.locator("body").focus();
     await page.keyboard.press("z");
     await expect
