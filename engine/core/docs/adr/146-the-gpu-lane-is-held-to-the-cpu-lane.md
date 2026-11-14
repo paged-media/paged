@@ -79,3 +79,13 @@ page again.
 - A change to the display list or to either rasterizer that moves the lanes apart shows up as a
   fixture over budget, with a heatmap, instead of in a user's document.
 - `docs/status.md` no longer lists the shadow gap; it lists the two known gaps above.
+
+## Amendment 1 (2026-11-14): one screen extent
+
+The CPU lane's screen tile was a page-sized raster, so it cut every page at its trim, while the
+GPU presenter drew the display list unclipped: bleed artwork and items left on the pasteboard
+showed on one lane and not the other. Both lanes now draw a page to one screen extent — the trim
+grown to what it paints, within a page's size past each edge (`paged_gpu::screen::screen_extent`,
+engine ADR 1306) — the CPU tile as a raster of it, the GPU page scene clipped to it.
+`tests/it/screen_parity.rs` compares the two lanes' screens of a page that bleeds and of an item
+past the reach.

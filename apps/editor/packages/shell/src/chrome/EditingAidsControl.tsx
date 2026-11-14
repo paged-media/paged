@@ -20,8 +20,7 @@
 // The bottom bar's Editing aids control (editor ADR "Editing aids and
 // Proof view"; the redesign strategy's §4.1): one button that opens the
 // aids as independent, remembered switches, and Proof view below them.
-// The same toggles as View ▸ Editing aids; an aid the engine cannot do yet
-// is listed, disabled, with its reason.
+// The same toggles as View ▸ Editing aids.
 
 import { useSyncExternalStore } from "react";
 import { useStrings } from "@paged-media/strings";
@@ -34,12 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
-import {
-  EDITING_AID_LABELS,
-  isProofMode,
-  UNSUPPORTED_AIDS,
-  unsupportedAidReason,
-} from "../state/editing-aids";
+import { EDITING_AID_LABELS, isProofMode } from "../state/editing-aids";
 import { useEditorScope } from "../state/editor-scope";
 import { useOptionalScreenMode } from "../state/screen-mode-context";
 import {
@@ -89,25 +83,18 @@ export function EditingAidsControl({
         <Icon name={proof ? "ui-eye-off" : "ui-eye"} size={15} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side={side} sideOffset={4}>
-        {EDITING_AID_TOGGLES.map((aid, i) => {
-          const unsupported = UNSUPPORTED_AIDS[aid] === true;
-          const name = strings.t(EDITING_AID_LABELS[aid]);
-          return (
-            <DropdownMenuCheckboxItem
-              key={aid}
-              data-editing-aid={aid}
-              checked={states[i] === "1"}
-              disabled={unsupported || proof}
-              title={unsupportedAidReason(aid) ?? undefined}
-              onSelect={(e) => e.preventDefault()}
-              onCheckedChange={(on) => setViewToggle(scope, aid, on === true)}
-            >
-              {unsupported
-                ? strings.t(EDITING_AID_LABELS.notSupported, { aid: name })
-                : name}
-            </DropdownMenuCheckboxItem>
-          );
-        })}
+        {EDITING_AID_TOGGLES.map((aid, i) => (
+          <DropdownMenuCheckboxItem
+            key={aid}
+            data-editing-aid={aid}
+            checked={states[i] === "1"}
+            disabled={proof}
+            onSelect={(e) => e.preventDefault()}
+            onCheckedChange={(on) => setViewToggle(scope, aid, on === true)}
+          >
+            {strings.t(EDITING_AID_LABELS[aid])}
+          </DropdownMenuCheckboxItem>
+        ))}
         {screen && (
           <>
             <DropdownMenuSeparator />

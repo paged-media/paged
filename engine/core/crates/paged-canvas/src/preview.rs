@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! A write's dry run (v82, engine ADR 1308): any mutation — a batch, a
+//! A write's dry run (v82, engine ADR 1310): any mutation — a batch, a
 //! Boolean, a region verb, a property, a text edit — applied through the
 //! whole write path to a sandbox (a copy of the document in a model of
 //! its own, [`CanvasModel::sandbox`]) and answered as the geometry and the
@@ -96,7 +96,7 @@ fn page_items(doc: &paged_scene::Document) -> Vec<ElementId> {
 }
 
 impl CanvasModel {
-    /// The dry run of `query.mutation` (engine ADR 1308). A read.
+    /// The dry run of `query.mutation` (engine ADR 1310). A read.
     pub fn preview(&self, query: &PreviewQuery) -> PreviewReport {
         let revision = self.document_revision();
         let refused = |why: String| PreviewReport {

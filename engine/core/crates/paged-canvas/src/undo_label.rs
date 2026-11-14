@@ -137,6 +137,7 @@ fn mutation_text(name: &str) -> Option<&'static str> {
         "ReorderElement" => "Arrange",
         "PlaceImage" => "Place",
         "ReplaceImageBytes" => "Edit image",
+        "RelinkImage" => "Relink",
         "SetPluginMetadata" => "Change plugin data",
         "PathPointInsert" => "Add anchor point",
         "PathPointRemove" => "Delete anchor point",
@@ -338,6 +339,7 @@ fn operation_name(op: &Operation) -> &'static str {
         Operation::SetFieldValue { .. } => "SetFieldValue",
         Operation::PlaceImage { .. } => "PlaceImage",
         Operation::ReplaceImageBytes { .. } => "ReplaceImageBytes",
+        Operation::RelinkImage { .. } => "RelinkImage",
         Operation::InsertGuide { .. } => "InsertGuide",
         Operation::MoveGuide { .. } => "MoveGuide",
         Operation::DeleteGuide { .. } => "DeleteGuide",
@@ -418,6 +420,7 @@ fn operation_text(name: &str) -> Option<&'static str> {
         "SetGroupTransform" => "Transform",
         "PlaceImage" => "Place",
         "ReplaceImageBytes" => "Edit image",
+        "RelinkImage" => "Relink",
         _ => return None,
     })
 }

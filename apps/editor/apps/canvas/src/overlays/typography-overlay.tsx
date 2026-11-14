@@ -20,7 +20,7 @@
 // The Typography Debugger on the canvas (editor ADR 1234): with View ▸
 // Typography debugger on, every composed line of the selected story is
 // tinted by how tightly it is set (the engine's evidence, engine ADR
-// 1308), a hyphen or a forced break is marked at the line's end, and the
+// 1310), a hyphen or a forced break is marked at the line's end, and the
 // marker at the end of every line says, on hover, why the line broke
 // there. Diagnostic chrome: hidden in Proof view, never printed. With the
 // view off it reads nothing.

@@ -199,6 +199,11 @@ export async function loadDocumentFile(
 export interface BlankDocumentOptions {
   widthPt: number;
   heightPt: number;
+  /** Engine ADR 1307 — how many pages the engine makes (default one). */
+  pages?: number;
+  /** Engine ADR 1307 — facing spreads: page 1 a right-hand page, then
+   *  left/right pairs. */
+  facingPages?: boolean;
 }
 
 /**
@@ -236,6 +241,9 @@ export async function createBlankDocument(
       opts.widthPt,
       opts.heightPt,
       fontBytes,
+      opts.pages !== undefined || opts.facingPages
+        ? { pages: opts.pages, facingPages: opts.facingPages === true }
+        : undefined,
     );
   } catch (err) {
     if (load !== loads.newest) return null;

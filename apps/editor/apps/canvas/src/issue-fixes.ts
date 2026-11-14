@@ -19,20 +19,26 @@
 
 // The targeted fixes of a publication issue (editor ADR 1223): what the
 // engine offers for it, each with what it will do said before it runs
-// (its preview) and, for a document change, one undo step. Where the
-// engine has no operation (relinking a document link), the fix is the
-// panel that handles it, never a button that pretends.
+// (its preview) and, for a document change, one undo step. A picture's
+// link is relinked to a file the user picks (engine ADR 1308); where the
+// engine has no operation, the fix is the panel that handles it, never a
+// button that pretends.
 
 import type { ElementId, PageSummary } from "@paged-media/client";
 import type { PagedEditor, PublicationIssue } from "@paged-media/shell";
 import { defineMessages, t } from "@paged-media/strings";
 
+import { relinkFromPicker } from "./relink";
+
 const M = defineMessages("app.issueFixes", {
   expandFrame: "Expand frame",
   expandFramePreview: "Extends the frame {grow} pt down, to the bottom margin.",
   showStories: "Show in Stories",
+  relink: "Relink…",
+  relinkPreview:
+    "Choose the picture's file: the frame, its fitting and the picture's size stay. One undo step.",
   openLinks: "Open Links",
-  openLinksPreview: "Relink or update the picture in the Links panel.",
+  openLinksPreview: "See every link in the Links panel.",
   openFonts: "Find font",
   openFontsPreview: "Add or replace the font in the Fonts panel.",
   openPreflight: "Open Preflight",
@@ -123,15 +129,27 @@ export async function fixesOf(
     }
     case "missing-link":
     case "low-res":
-    case "color-space":
-      return [
-        {
-          id: "open-links",
-          label: t(M.openLinks),
-          preview: t(M.openLinksPreview),
-          run: { kind: "panel", panel: "paged.links" },
-        },
-      ];
+    case "color-space": {
+      const out: IssueFix[] = [];
+      const frame = issue.element;
+      // A picture is relinked in place (engine ADR 1308).
+      if (frame && typeof frame.id === "string") {
+        const id = frame.id;
+        out.push({
+          id: "relink",
+          label: t(M.relink),
+          preview: t(M.relinkPreview),
+          run: { kind: "mutate", apply: (p) => relinkFromPicker(p, id) },
+        });
+      }
+      out.push({
+        id: "open-links",
+        label: t(M.openLinks),
+        preview: t(M.openLinksPreview),
+        run: { kind: "panel", panel: "paged.links" },
+      });
+      return out;
+    }
     case "missing-font":
       return [
         {

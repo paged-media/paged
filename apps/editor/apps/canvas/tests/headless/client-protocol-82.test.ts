@@ -18,8 +18,8 @@
  */
 
 // Protocol 82 through the editor's client, on the real engine: Document
-// X-Ray (engine ADR 1307) and the line evidence with its preview (engine
-// ADR 1308). Both are reads; a preview leaves the document, its history
+// X-Ray (engine ADR 1309) and the line evidence with its preview (engine
+// ADR 1310). Both are reads; a preview leaves the document, its history
 // and its revision as they were.
 
 import { afterEach, describe, expect, test } from "bun:test";

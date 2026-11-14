@@ -1539,6 +1539,23 @@ pub enum Mutation {
         #[tsify(type = "number[] | null")]
         bytes: Option<ByteBuf>,
     },
+    /// v81 (engine ADR 1308) — relink a placed picture: the graphic frame
+    /// `element_id` (a Rectangle / Oval / Polygon) takes `uri` as its link
+    /// source (IDML `LinkResourceURI`; for a picked file, `file:///<name>`),
+    /// and `bytes`, when given, as the new source's contents (embedded,
+    /// for a source the engine cannot read itself). The frame, its
+    /// fitting and the picture's place in it stay; the picture keeps the
+    /// size it had on the page when both sources' pixel sizes are known
+    /// (InDesign's "Preserve image dimensions when relinking"). The old
+    /// source's recorded colour space and ppi are dropped. One undo step.
+    /// Routes to `Operation::RelinkImage`.
+    RelinkImage {
+        element_id: String,
+        uri: String,
+        #[serde(default)]
+        #[tsify(type = "number[] | null")]
+        bytes: Option<ByteBuf>,
+    },
     /// Set a page item's whole placement transform, in the space
     /// `elementGeometry` reads it: the page the item sits on, its origin
     /// at `(0, 0)` (spread space for an item on the pasteboard). The
@@ -3247,6 +3264,7 @@ mutation_vocabulary! {
     SetFieldValue,
     PlaceImage,
     ReplaceImageBytes,
+    RelinkImage,
     MoveFrame,
     ResizeFrame,
     LinkFrames,

@@ -25,8 +25,8 @@
 // one New path (`paged.file.new` with the setup: the replace question,
 // then the blank document and its setup as one undo step). A field that
 // cannot be created says why beside it, and Create waits (UXI-FBK-001).
-// Facing pages are said to be unavailable, not offered: the engine lays
-// out single pages only.
+// Facing pages are a switch (engine ADR 1307): the engine lays the pages
+// out as facing spreads, and the miniature shows the spread.
 
 import { useEffect, useState } from "react";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -115,8 +115,7 @@ const M = defineMessages("shell.newDocumentDialog", {
   units: "Units",
   pages: "Pages",
   facingPages: "Facing pages",
-  facingUnavailable:
-    "Not available yet: pages are laid out singly, one per spread.",
+  facingHint: "Page 1 on the right, then left and right pages in spreads.",
   bleed: "Bleed",
   margins: "Margins",
   top: "Top",
@@ -409,12 +408,15 @@ export function NewDocumentDialog() {
             </div>
             {problem(problems.pages)}
             <Row label={strings.t(M.facingPages)}>
-              <span
-                data-new-document-facing="unavailable"
-                style={unavailableStyle}
-              >
-                {strings.t(M.facingUnavailable)}
-              </span>
+              <label style={facingStyle}>
+                <input
+                  type="checkbox"
+                  data-new-document-facing=""
+                  checked={setup.facingPages === true}
+                  onChange={(e) => edit({ facingPages: e.target.checked })}
+                />
+                <span style={unavailableStyle}>{strings.t(M.facingHint)}</span>
+              </label>
             </Row>
             <Row label={strings.t(M.bleed)}>
               {length(
@@ -512,6 +514,7 @@ function Preview({ setup, label }: { setup: NewDocumentSetup; label: string }) {
       data-new-document-preview
       data-preview-columns={g.columns.length}
       data-preview-bleed={g.bleed ? "true" : "false"}
+      data-preview-facing={g.facing ? "true" : "false"}
       width="100%"
       viewBox={`0 0 ${g.width} ${g.height}`}
       style={previewStyle}
@@ -528,6 +531,30 @@ function Preview({ setup, label }: { setup: NewDocumentSetup; label: string }) {
           strokeWidth={0.75}
           strokeDasharray="3 2"
         />
+      )}
+      {g.facing && (
+        <>
+          <rect
+            data-preview-facing-page
+            x={g.facing.page.x}
+            y={g.facing.page.y}
+            width={g.facing.page.w}
+            height={g.facing.page.h}
+            fill="#ffffff"
+            stroke="var(--chrome-border)"
+            strokeWidth={0.75}
+          />
+          <rect
+            data-preview-facing-margins
+            x={g.facing.margins.x}
+            y={g.facing.margins.y}
+            width={g.facing.margins.w}
+            height={g.facing.margins.h}
+            fill="none"
+            stroke="var(--overlay-guide)"
+            strokeWidth={0.75}
+          />
+        </>
       )}
       <rect
         data-preview-page
@@ -670,6 +697,12 @@ const groupLabelStyle: React.CSSProperties = {
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
   margin: "4px 0 6px",
+};
+
+const facingStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
 };
 
 const unavailableStyle: React.CSSProperties = {

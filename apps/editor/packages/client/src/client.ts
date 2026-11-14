@@ -53,6 +53,8 @@ import {
   type FrameChainLink,
   type GestureType,
   type GesturePress,
+  type PageHiddenCharacters,
+  type FrameBaselineGrid,
   type ExplainAspect,
   type Explanation,
   type LineEvidenceQuery,
@@ -907,12 +909,16 @@ export class CanvasClient {
    * Unlike `loadDocument` this carries no large payload, so it rides the
    * regular JSON channel (`send`) rather than the binary side-channel.
    * `font` is the optional default-font fallback (the editor's Inter) so
-   * text the user then types has glyph metrics.
+   * text the user then types has glyph metrics. Protocol 81 (engine ADR
+   * 1307): `layout.pages` makes that many pages (1 to 999), and
+   * `layout.facingPages` lays them out as facing spreads — page 1 alone as
+   * a right-hand page, then left/right pairs.
    */
   async newBlankDocument(
     widthPt: number,
     heightPt: number,
     font?: Uint8Array,
+    layout?: { pages?: number; facingPages?: boolean },
   ): Promise<DocumentHandle> {
     // U5/A7 — same default-font door as `loadDocument`; this path rides
     // the JSON channel, so the bytes go as `number[]` like a
@@ -924,6 +930,8 @@ export class CanvasClient {
         widthPt,
         heightPt,
         font: fontBytes ? Array.from(fontBytes) : null,
+        ...(layout?.pages !== undefined ? { pages: layout.pages } : {}),
+        ...(layout?.facingPages ? { facingPages: true } : {}),
       },
     });
     if (reply.kind === "documentLoaded") {
@@ -1099,9 +1107,12 @@ export class CanvasClient {
 
   /**
    * v77 (editor ADR 287) — how the screen draws the document: Preview,
-   * Outline, Overprint Preview or Pixel Preview. Session state the worker
-   * keeps across document loads; no build, export or undo step sees it.
-   * Resolves to the settings now in force.
+   * Outline, Overprint Preview or Pixel Preview; protocol 81 (engine ADR
+   * 1306) also `hideNonprinting` (the screen leaves nonprinting items out,
+   * as print does) and `proof` (no page edge, no degraded-asset markers).
+   * Session state the worker keeps across document loads; no export or
+   * undo step sees it, and it never changes the document. Resolves to the
+   * settings now in force.
    */
   async setViewSettings(settings: ViewSettings): Promise<ViewSettings> {
     const reply = await this.send({
@@ -1109,6 +1120,41 @@ export class CanvasClient {
       payload: { settings },
     });
     if (reply.kind === "viewSettingsApplied") return reply.payload.settings;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 81 (engine ADR 1306) — where the composed lines on `pageIds`
+   * (the pages in view) hold their hidden characters: per page, per line,
+   * the spaces, tabs, returns, forced line breaks, break characters and
+   * the story's end, with the line's baseline, text size and turn. A read
+   * of the current layout; one round trip.
+   */
+  async hiddenCharacters(
+    pageIds: readonly PageId[],
+  ): Promise<PageHiddenCharacters[]> {
+    const reply = await this.send({
+      kind: "requestHiddenCharacters",
+      payload: { pageIds: [...pageIds] },
+    });
+    if (reply.kind === "hiddenCharacters") return reply.payload.pages;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * Protocol 81 (engine ADR 1306) — the text frames on `pageIds` (every
+   * page when empty) that use a baseline grid of their own (Text Frame
+   * Options ▸ Baseline Options), each with the grid its aligned lines
+   * stand on, in the frame's own coordinates. A read; one round trip.
+   */
+  async frameBaselineGrids(
+    pageIds?: readonly PageId[],
+  ): Promise<FrameBaselineGrid[]> {
+    const reply = await this.send({
+      kind: "requestFrameBaselineGrids",
+      payload: { pageIds: [...(pageIds ?? [])] },
+    });
+    if (reply.kind === "frameBaselineGrids") return reply.payload.grids;
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
@@ -1369,7 +1415,7 @@ export class CanvasClient {
   }
 
   /**
-   * Protocol 82 (engine ADR 1307) — Document X-Ray: why `item` (a page
+   * Protocol 82 (engine ADR 1309) — Document X-Ray: why `item` (a page
    * item, or a story range for text) looks and behaves as it does, from the
    * model alone: per text property the winning level of the style cascade
    * and the levels it shadows (a local override shows as one), the layer,
@@ -1397,7 +1443,7 @@ export class CanvasClient {
   }
 
   /**
-   * Protocol 82 (engine ADR 1308) — the Typography Debugger's evidence for
+   * Protocol 82 (engine ADR 1310) — the Typography Debugger's evidence for
    * a story's composed lines (`frame`: one frame's; `range`: those touching
    * story character offsets `[start, end)`): the measure, the natural
    * width, the adjustment ratio, the word and letter spacing as set, why
@@ -1416,7 +1462,7 @@ export class CanvasClient {
   }
 
   /**
-   * Protocol 82 (engine ADR 1308) — the dry run of any write: `mutation`
+   * Protocol 82 (engine ADR 1310) — the dry run of any write: `mutation`
    * (a batch, a Boolean, a region verb, a property, a text edit) applied
    * through the engine's whole write path to a copy of the document, and
    * answered as the items it would create and remove, the geometry and
@@ -2332,9 +2378,9 @@ export class CanvasClient {
 
   /**
    * v66 — apply `mutation` (a `batch` too) handing `bytes` to its first
-   * `replaceImageBytes` whose `bytes` is `[]` — the commit lane for
-   * processed pixels without a `number[]`. Resolves with the same reply
-   * `mutate` does.
+   * `replaceImageBytes` (or, protocol 81, `relinkImage`) whose `bytes` is
+   * `[]` — the commit lane for processed pixels or a relinked file without
+   * a `number[]`. Resolves with the same reply `mutate` does.
    */
   async mutateWithBytes(
     mutation: Mutation,

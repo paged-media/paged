@@ -132,7 +132,7 @@ pub(super) fn apply_no_break(
 /// The paragraph's own hyphenation limits, IDML's factory values (2 / 2 /
 /// 5, capitalised and last words hyphenatable, no ladder limit) where an
 /// attribute is absent. The composer's and the Typography Debugger's
-/// (engine ADR 1308) one reading.
+/// (engine ADR 1310) one reading.
 pub fn hyphenation_limits(
     resolved: &paged_scene::ResolvedParagraphAttrs,
 ) -> paged_text::HyphenationLimits {

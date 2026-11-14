@@ -773,6 +773,7 @@ fn render_snapshot_inner(
         SnapshotSize::WidthPx(_) => model.view_settings(),
         SnapshotSize::Dpi(_) => crate::view::ViewSettings {
             mode: crate::view::ViewMode::OverprintPreview,
+            ..Default::default()
         },
     };
     let opts = view.raster_options(
@@ -791,6 +792,55 @@ fn render_snapshot_inner(
         numbering_generation: page.numbering_generation,
         rgba: img.into_raw(),
     })
+}
+
+/// Engine ADR 1306 — the CPU lane's screen tile of a page, PNG-encoded:
+/// the page's [`paged_gpu::screen::screen_extent`] (the trim, grown to
+/// the bleed and the pasteboard artwork it paints) drawn in the session's
+/// view, at `target_width_px` across the page's TRIM (a page that spills
+/// keeps its trim's resolution), on a transparent ground — the worker lays
+/// the paper under the trim, as the GPU lane's scene does. `extent` is
+/// where the tile goes, page-local pt `[x, y, w, h]`.
+#[cfg(feature = "cpu")]
+pub fn render_screen_tile_png(
+    model: &CanvasModel,
+    page_id: &PageId,
+    target_width_px: u32,
+) -> Result<(Vec<u8>, [f32; 4]), SnapshotError> {
+    let page = model
+        .page(page_id)
+        .ok_or_else(|| SnapshotError::UnknownPage {
+            page_id: page_id.clone(),
+        })?;
+    if target_width_px == 0 {
+        return Err(SnapshotError::InvalidWidth(0));
+    }
+    let dpi = target_width_px as f32 / page.width_pt.max(1e-3) * 72.0;
+    let extent = paged_gpu::screen::screen_extent(&page.list, page.width_pt, page.height_pt).rect;
+    let list = page.list.translated_for_raster(-extent.x, -extent.y);
+    let transparent = paged_compose::Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
+    let opts = model
+        .view_settings()
+        .raster_options(extent.w, extent.h, dpi, transparent);
+    let (w, h) = opts.pixel_size();
+    if w > MAX_SNAPSHOT_SIDE_PX || h > MAX_SNAPSHOT_SIDE_PX {
+        return Err(SnapshotError::TooLarge {
+            width_px: w,
+            height_px: h,
+        });
+    }
+    let img = paged_gpu::rasterize(&list, &opts);
+    let (width_px, height_px) = (img.width(), img.height());
+    let mut rgba = img.into_raw();
+    unpremultiply(&mut rgba);
+    let png = paged_raster::encode_rgba8_png(&rgba, width_px, height_px)
+        .map_err(|e| SnapshotError::PngEncode(e.to_string()))?;
+    Ok((png, [extent.x, extent.y, extent.w, extent.h]))
 }
 
 /// Convenience: render + PNG-encode in one call. The worker uses

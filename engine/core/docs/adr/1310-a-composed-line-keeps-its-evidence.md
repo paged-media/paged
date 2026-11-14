@@ -1,4 +1,4 @@
-# ADR 1308 — A composed line keeps its evidence, and a write has a dry run
+# ADR 1310 — A composed line keeps its evidence, and a write has a dry run
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** protocol v82. `paged-text` (`LaidOutLine::hyphenated`, `LayoutOptions::line_measure`),

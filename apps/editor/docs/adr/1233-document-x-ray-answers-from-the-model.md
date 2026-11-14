@@ -8,7 +8,7 @@
   `packages/shell/src/state/view-toggles.ts` (the `xray` toggle) and `state/editing-aids.ts`
   (hidden in a proof); `packages/client` (`CanvasClient.explain`, protocol 82). The UX strategy's
   Concept A; the interaction specification's §25.1; task PX1 of
-  [`interaction-plan.md`](../interaction-plan.md). The engine's side is engine ADR 1307.
+  [`interaction-plan.md`](../interaction-plan.md). The engine's side is engine ADR 1309.
 
 ## Context
 
@@ -23,7 +23,7 @@ anywhere.
 
 ## Decision
 
-1. **One read, the engine's.** X-Ray asks `client.explain` (engine ADR 1307) and shows its facts
+1. **One read, the engine's.** X-Ray asks `client.explain` (engine ADR 1309) and shows its facts
    as they come. The panel computes nothing about the document: no cascade of its own, no guess.
    What the document does not store (the record a binding shows, a table cell's text) is shown
    as such, from the answer's `unknown`.

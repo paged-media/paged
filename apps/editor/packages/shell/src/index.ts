@@ -1038,8 +1038,14 @@ export {
   frameEdgePoints,
   baselineGridContribution,
   baselineGridLines,
+  frameGridLines,
   BASELINE_GRID_MIN_SPACING_PX,
   oversetMarkersContribution,
+  hiddenCharactersContribution,
+  hiddenCharacterRuns,
+  pagesInView,
+  HIDDEN_CHARACTER_GLYPHS,
+  HIDDEN_CHARACTERS_MIN_PX,
   proofSurfaceContribution,
   proofBox,
   dataMarkersContribution,
@@ -1438,8 +1444,7 @@ export {
   overlayShown,
   PROOF_HIDDEN_OVERLAYS,
   PROOF_SURFACE_OVERLAY,
-  UNSUPPORTED_AIDS,
-  unsupportedAidReason,
+  RENDER_AIDS,
 } from "./state/editing-aids";
 export { EditingAidsControl } from "./chrome/EditingAidsControl";
 export {

@@ -19,7 +19,7 @@
 
 // What a Pathfinder button will do, shown before the click (the UX
 // strategy's §7.1; paged.draw ADR 370, amended 2026-11-14). The engine's
-// dry run (`client.preview`, engine ADR 1308) applies the button's write to
+// dry run (`client.preview`, engine ADR 1310) applies the button's write to
 // a copy of the document and answers the outlines it would leave: the
 // result is drawn solid and named, the operands it consumes dashed.
 // Where no preview can be made (the engine refuses the write, the read
@@ -131,7 +131,7 @@ const apply = (
     ? [m[0]! * x! + m[2]! * y! + m[4]!, m[1]! * x! + m[3]! * y! + m[5]!]
     : [x!, y!];
 
-/** The overlay shapes of a dry run's result (engine ADR 1308): every
+/** The overlay shapes of a dry run's result (engine ADR 1310): every
  *  outline it answers, contour by contour, mapped onto its page and drawn
  *  solid; the operands it consumes (`removed`, from `boxes`) dashed; the
  *  first result named `label`. PURE. */

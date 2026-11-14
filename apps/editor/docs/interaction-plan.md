@@ -60,7 +60,7 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 | CM1–CM4 contexts and modules                                                                                                                                                     | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced                                               | editor ADRs 1214, 1215; extensions ADR 1106                 |
 | DF1–DF9, documents, files and feedback                                                                                                                                           | Done: save status, recovery, drop intent, compatibility report, new document, guided export, issues on the page, operation feedback, clipboard order; F-06 continuity                                                                                                                                    | ADRs 1203–1205, 1219–1224, 231 (amended)                    |
 | AP1–AP5 accessibility, devices, performance                                                                                                                                      | Done: the object tree, keyboard-only inserts and transforms, the selection cycle, AA tokens, high contrast, axe, 200 % zoom; pen pressure for pens only, the pinch over a pending press; the performance budgets, a progressive CPU render, typing folded, the nightly suite (decoded images: `EXC-003`) | ADR 1230, ADR 1231, ADR 1232                                |
-| PX1–PX2 Document X-Ray and the Typography Debugger                                                                                                                               | Done: the engine's provenance facts in a "Why?" panel and View ▸ X-Ray; every line's composition record, its evidence in a panel and on the canvas, a change previewed in a copy of the document                                                                                                         | protocol 82; editor ADRs 1233, 1234; engine ADRs 1307, 1308 |
+| PX1–PX2 Document X-Ray and the Typography Debugger                                                                                                                               | Done: the engine's provenance facts in a "Why?" panel and View ▸ X-Ray; every line's composition record, its evidence in a panel and on the canvas, a change previewed in a copy of the document                                                                                                         | protocol 82; editor ADRs 1233, 1234; engine ADRs 1309, 1310 |
 | Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                                                                                                                                        | Not started                                                                                                                                                                                                                                                                                              | §4–§12                                                      |
 
 ## 1. Facts in the code that shape the plan
@@ -358,8 +358,11 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   overset, hidden characters and non-printing items, and a Proof view
   (`SH/state/view-toggles.ts`). **Done** ([ADR 1212](adr/1212-editing-aids-and-proof-view.md)):
   the overlay host applies one rule (`SH/state/editing-aids.ts`); Proof view is the Preview screen
-  mode completed; hidden characters and nonprinting items wait for engine view options (recorded
-  there).
+  mode completed. Its engine gaps are closed by engine ADR 1306 (protocol 81, track EN part 3):
+  the hidden characters are reported per composed line and drawn as an overlay, nonprinting items
+  and a proof's page edge and markers are view options of the live build, both lanes draw a page
+  to one screen extent, and frames' own baseline grids are on the wire (ADR 1212, amendment
+  2026-11-14).
 - **WS10 Page lenses** (Pages, Structure, Layers, Issues, Data) and semantic zoom. Closes F-57.
   **Done** ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the lenses live in the
   document map (`CV/panels/cockpit/page-lenses.tsx`); the tiers in `SH/state/semantic-zoom.ts`
@@ -490,11 +493,11 @@ In scope. They start after G2, and each lands with its own ADR.
 - **PX1 Document X-Ray.** An engine request `RequestExplain(item)` answers provenance facts (the
   style chain, the binding source, the link source, the lock reason, thread and overset, the
   dependents: "pages affected by this style") (`ENG/channel.rs`); `CV/panels/xray-panel.tsx` and
-  an X-Ray overlay mode on the canvas. Deterministic facts only. **Done** (protocol 82, engine ADR 1307, editor
+  an X-Ray overlay mode on the canvas. Deterministic facts only. **Done** (protocol 82, engine ADR 1309, editor
   ADR 1233): `RequestExplain { item, aspect?, selection? }`; the "Why?" panel and View ▸ X-Ray.
 - **PX2 The Typography Debugger.** The composer's line-break evidence, `RequestLineEvidence`
   (available width, break opportunities, hyphenation, spacing ratios); an overlay and a panel; a
-  preview through a sandboxed operation. **Done** (protocol 82, engine ADR 1308, editor ADR 1234):
+  preview through a sandboxed operation. **Done** (protocol 82, engine ADR 1310, editor ADR 1234):
   `LineLayout::composition` on every build; `RequestLineEvidence { story, frame?, range?,
 preview? }`, the preview composed in a copy of the document; the panel and View ▸ Typography
   debugger.

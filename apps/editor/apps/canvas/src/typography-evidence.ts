@@ -21,7 +21,7 @@
 // looks at, what a line's evidence means in words ("Why did this line break
 // here?"), the colour of a line's tightness, and the writes a preview
 // tries. The panel and the canvas overlay both read the engine's evidence
-// (`client.lineEvidence`, engine ADR 1308); nothing here measures a line.
+// (`client.lineEvidence`, engine ADR 1310); nothing here measures a line.
 
 import { useEffect, useRef, useState } from "react";
 

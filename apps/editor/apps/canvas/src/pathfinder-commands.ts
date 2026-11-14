@@ -169,7 +169,7 @@ export interface PathfinderDeps {
 
 /** The write a shape mode makes over `selection` (first = kept), or null
  *  with fewer than two: what the click sends and what its preview
- *  dry-runs (engine ADR 1308), one value for both. */
+ *  dry-runs (engine ADR 1310), one value for both. */
 export function shapeModeMutation(
   selection: readonly ElementId[],
   kind: PathfinderKind,

@@ -1,7 +1,7 @@
 # ADR 370 — Vector editing with feedback: the Pen's named states, a precision magnifier, point-level controls, shape suggestions, and saying what a path operation takes
 
 - **Status:** Accepted 2026-11-14. Amended 2026-11-14: the Pathfinder previews its result through
-  the engine's dry run (engine ADR 1308); see "Amendment 1".
+  the engine's dry run (engine ADR 1310); see "Amendment 1".
 - **Scope:** the editor's half of drawing, which this module's machines drive:
   `apps/editor/packages/tools/src/handlers/pen-states.ts` and `pen-tool.ts` (the Pen's states, cursors,
   hints and the finish click), `apps/editor/packages/shell/src/overlays/precision-magnifier.tsx` and
@@ -91,12 +91,12 @@ and the engine offers no dry run of a Boolean or region operation to preview its
 - The close and join cursors are no longer the plain pointer; a test that compared them to it now
   compares to the state cursor.
 - When track IC's cursor controller lands, the Pen's `cursorAt` answers through it unchanged.
-- The engine's dry run (engine ADR 1308) lets the Pathfinder preview its result (Amendment 1); the
+- The engine's dry run (engine ADR 1310) lets the Pathfinder preview its result (Amendment 1); the
   shape suggestions still apply on click and could preview through the same door.
 
 ## Amendment 1 — the Pathfinder previews its result (2026-11-14)
 
-The engine now has the dry run point 6 waited for: `RequestPreview` (protocol 82, engine ADR 1308)
+The engine now has the dry run point 6 waited for: `RequestPreview` (protocol 82, engine ADR 1310)
 applies any write to a copy of the document in a model of its own, through the whole write path,
 and answers the items it would create and remove and the outlines it would leave, the document and
 its history untouched. The Pathfinder sends it the very write the button sends

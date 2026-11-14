@@ -23,8 +23,10 @@
 // dot (`LinkSummary.status` ok/missing), a `missing` badge when the
 // renderer fell back to the grey placeholder, the placed-image
 // colourspace, and the effective PPI with a `lo-res` badge below the
-// 150-ppi preflight convention. The toolbar (relink/update/go-to)
-// stays a seam until the relocate/update/break Operations ship.
+// 150-ppi preflight convention. A selected link is relinked to a file the
+// user picks (Relink…, engine ADR 1308: the frame, its fitting and the
+// picture's size stay; one undo step); update and go-to stay seams until
+// their operations ship.
 //
 // Image ADR 482 — a bundle whose content links or embeds files (paged.image's
 // smart objects) serves its own `links` rows while its edit context is
@@ -40,6 +42,7 @@ import {
   PanelToolbar,
   ToolbarBtn,
   useCollection,
+  useOptionalPaged,
   useProvidedCollection,
   useRegistries,
   type ListRowBadge,
@@ -48,6 +51,8 @@ import {
 import type { LinkSummary } from "@paged-media/client";
 import type { ProvidedLinkRow } from "@paged-media/plugin-api";
 import { defineMessages, useStrings } from "@paged-media/strings";
+
+import { relinkFromPicker } from "../relink";
 
 const M = defineMessages("app.linksPanel", {
   loading: "Loading links…",
@@ -61,6 +66,7 @@ const M = defineMessages("app.linksPanel", {
   lowRes: "lo-res",
   embedded: "embedded",
   relinkProvided: "Relink…",
+  relink: "Relink…",
   updateProvided: "Update from file…",
   embedProvided: "Embed",
 });
@@ -75,11 +81,20 @@ export function LinksPanel() {
   const links = useCollection<LinkSummary>("links");
   const provided = useProvidedCollection<ProvidedLinkRow>("links");
   const registries = useRegistries();
+  const paged = useOptionalPaged();
   const [selected, setSelected] = useState<string | null>(null);
   // A provider's rows (a smart object's file), after the document's own.
   const extra: ProvidedLinkRow[] =
     provided.provider !== null ? (provided.rows ?? []) : [];
   const picked = extra.find((r) => r.hostSelfId === selected) ?? null;
+  // A document link the user picked: Relink… replaces its source.
+  const own = links?.find((l) => l.hostSelfId === selected) ?? null;
+  const relink = () => {
+    if (!own || !paged) return;
+    void relinkFromPicker(paged, own.hostSelfId).catch((err: unknown) =>
+      console.warn("paged.links: relink refused", err),
+    );
+  };
   const run = (command: string | undefined) => {
     if (!command || !picked) return;
     void Promise.resolve(
@@ -101,6 +116,14 @@ export function LinksPanel() {
   return (
     <div data-links-panel="ready">
       <PanelToolbar>
+        <button
+          type="button"
+          data-link-action="relink-document"
+          disabled={!own || !paged}
+          onClick={relink}
+        >
+          {strings.t(M.relink)}
+        </button>
         <ToolbarBtn icon="ui-return" label={strings.t(M.updateLink)} />
         <ToolbarBtn icon="ui-history" label={strings.t(M.relinkHistory)} />
         <ToolbarBtn icon="ui-target" label={strings.t(M.goToLink)} />
@@ -188,6 +211,8 @@ export function LinksPanel() {
                   primary: filename,
                   secondary,
                   badge,
+                  selected: link.hostSelfId === selected,
+                  onClick: () => setSelected(link.hostSelfId),
                   searchText: `${filename} ${link.uri} ${link.colorspace ?? ""}`,
                 };
               })

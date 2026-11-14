@@ -20,7 +20,7 @@
 // Document X-Ray, the "Why?" inspector (editor ADR 1233; the UX strategy's
 // Concept A; task PX1 of the interaction plan). For the selected item, or
 // the text under the caret, it shows what the engine knows about why it
-// looks and behaves as it does (`client.explain`, engine ADR 1307): the
+// looks and behaves as it does (`client.explain`, engine ADR 1309): the
 // style chain of every text property with the level that wins and the
 // levels it shadows, the layer, why it is locked or hidden, where its
 // picture comes from, what data supplies it, where its text flows and how

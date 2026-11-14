@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Document X-Ray (v82, engine ADR 1307): why an item looks and behaves as
+//! Document X-Ray (v82, engine ADR 1309): why an item looks and behaves as
 //! it does, answered from the model and nothing else.
 //!
 //! For text, every property is walked down the cascade the renderer
@@ -701,7 +701,7 @@ impl CanvasModel {
         )
     }
 
-    /// Document X-Ray (engine ADR 1307): why `item` looks and behaves as it
+    /// Document X-Ray (engine ADR 1309): why `item` looks and behaves as it
     /// does. A read; `revision` names the document state it holds for.
     pub fn explain(&self, item: &ElementId, aspect: ExplainAspect) -> Explanation {
         let mut out = Explanation {
@@ -1930,7 +1930,7 @@ fn for_each_item<'a>(
 
 /// Calls `visit` with the id of every page item of `spread`: frames,
 /// shapes, lines, groups and symbol instances (the dry run's census,
-/// engine ADR 1308).
+/// engine ADR 1310).
 pub(crate) fn for_each_item_id(spread: &paged_model::Spread, mut visit: impl FnMut(ElementId)) {
     for_each_item(spread, |kind, view| {
         if let Some(id) = view.self_id {

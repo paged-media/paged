@@ -47,6 +47,7 @@ mod anchored;
 mod appearance;
 mod auto_size;
 mod baseline_grid;
+pub use baseline_grid::frame_custom_grid;
 mod blend_shadow;
 mod build_engine;
 mod color_paint;
@@ -1002,14 +1003,21 @@ pub struct LineLayout {
     /// (`byte` counts within the marker's own text). Empty on a line
     /// without one.
     pub marker: Vec<ClusterPos>,
-    /// How the composer set the line (engine ADR 1308): the measure, the
+    /// Engine ADR 1306 — how the page turns this line, page-local: the
+    /// affine its glyph commands were post-multiplied by (a turned
+    /// frame's linear part pivoted about its top-left, then a vertical
+    /// story's quarter turn), `None` for an upright line. The baseline and
+    /// the clusters above are upright, before it; whoever draws at them
+    /// (the hidden characters) maps through it.
+    pub turn: Option<[f32; 6]>,
+    /// How the composer set the line (engine ADR 1310): the measure, the
     /// natural width, the adjustment ratio, the hyphen. The Typography
     /// Debugger's evidence; a blank line and a table cell's line carry
     /// what they know.
     pub composition: LineComposition,
 }
 
-/// The composer's record of one line (engine ADR 1308), kept from the
+/// The composer's record of one line (engine ADR 1310), kept from the
 /// build that set it: nothing here is recomputed, so a reader sees what
 /// the composer decided, not an estimate of it.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

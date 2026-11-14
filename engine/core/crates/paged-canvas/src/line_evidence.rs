@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The Typography Debugger's evidence (v82, engine ADR 1308): for every
+//! The Typography Debugger's evidence (v82, engine ADR 1310): for every
 //! composed line of a story, what the composer had and what it decided —
 //! the measure, the natural width, the adjustment ratio, the word and
 //! letter spacing the line was set with, why it broke where it did, the
@@ -828,7 +828,7 @@ fn report(
 }
 
 impl CanvasModel {
-    /// The Typography Debugger's evidence for `query` (engine ADR 1308).
+    /// The Typography Debugger's evidence for `query` (engine ADR 1310).
     /// With `preview`, the evidence of a copy of the document with that
     /// write applied; the document is never changed.
     pub fn line_evidence(&self, query: &LineEvidenceQuery) -> LineEvidenceReport {

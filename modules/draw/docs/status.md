@@ -170,7 +170,7 @@ canary added is under [Releases](#releases).
   each one batch) instead of the frame; one selected shape shows Shape suggestions (Round
   corners, Smooth, Simplify, Offset path, Repeat, Mirror, as the shape allows); the
   Pathfinder previews a button's result on the canvas while it is pointed at or focused (the
-  engine's dry run, engine ADR 1308; ADR 370 amendment 1), the consumed operands dashed, and the
+  engine's dry run, engine ADR 1310; ADR 370 amendment 1), the consumed operands dashed, and the
   click applies it as one undo step; where the engine refuses, it outlines what the button takes
   and says the button applies on click.
 - **The link index.** The ten features that tag elements with this bundle's metadata

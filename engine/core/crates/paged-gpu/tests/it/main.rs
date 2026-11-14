@@ -5,6 +5,7 @@
 
 mod appearance_parity;
 mod scene_layer_parity;
+mod screen_parity;
 mod svg_reference;
 mod symbol_parity;
 mod vello_effects;

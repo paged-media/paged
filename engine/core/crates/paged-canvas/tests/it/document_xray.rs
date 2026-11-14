@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Document X-Ray (engine ADR 1307): an item explains itself from the
+//! Document X-Ray (engine ADR 1309): an item explains itself from the
 //! model — the style cascade per property with the winning level and the
 //! levels it shadows, the lock and visibility reasons, the link, the data
 //! binding, the thread and its overset, the object style, and what editing

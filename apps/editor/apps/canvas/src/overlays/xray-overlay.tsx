@@ -23,7 +23,7 @@
 // its object style, one with neither as set on the item — with a label,
 // and a legend beside each page. Hovering a label says the winning source
 // in full (the style and what it is based on, a lock and its reason). The
-// facts are the engine's (`explain`, overview; engine ADR 1307). Diagnostic
+// facts are the engine's (`explain`, overview; engine ADR 1309). Diagnostic
 // chrome: hidden in Proof view, never printed; with the view off it reads
 // nothing.
 

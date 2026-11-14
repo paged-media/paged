@@ -6678,6 +6678,33 @@ pub enum Operation {
         #[serde(default)]
         prior_has_image_element: Option<bool>,
     },
+    /// Engine ADR 1308 — relink a placed picture: SET the graphic frame's
+    /// link source (`image_uri`, IDML `LinkResourceURI`), its embedded
+    /// bytes (`bytes`, the inline lane the renderer prefers over the link:
+    /// the new source's contents when the host has them, absent to let the
+    /// link draw), the picture's transform inside the frame
+    /// (`image_transform`, IDML `<Image ItemTransform>`) and the link's
+    /// recorded metadata (`metadata_json`, an `ImageMetadata` as JSON;
+    /// absent drops the old source's colour space and ppi), in one step.
+    /// Every field is set as given (absent clears), so the inverse is the
+    /// same op with the values it replaced. The frame's box, path and
+    /// fitting are untouched. `frame` is a Rectangle / Oval / Polygon.
+    RelinkImage {
+        frame: NodeId,
+        #[serde(default)]
+        image_uri: Option<String>,
+        #[serde(default)]
+        #[tsify(type = "number[] | null")]
+        bytes: Option<Vec<u8>>,
+        #[serde(default)]
+        image_transform: Option<[f32; 6]>,
+        #[serde(default)]
+        metadata_json: Option<String>,
+        /// Inverse-only: the frame's `has_image_element` to restore;
+        /// absent (a forward relink) makes it an image frame.
+        #[serde(default)]
+        has_image_element: Option<bool>,
+    },
     /// W0.5 — insert a ruler guide on the spread `spread_id`.
     /// `position` is the page-local coordinate on the perpendicular
     /// axis (x for Vertical, y for Horizontal); `page_index` is the

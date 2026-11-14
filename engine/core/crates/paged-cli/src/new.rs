@@ -62,6 +62,8 @@ pub fn run(size: &str, out: &Path, format: &str) -> Result<()> {
         width_pt,
         height_pt,
         font: None,
+        pages: None,
+        facing_pages: false,
     })?;
     expect_reply!(reply, WorkerToMainKind::DocumentLoaded(h) => h, "new blank document")?;
 

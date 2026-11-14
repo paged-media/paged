@@ -894,9 +894,35 @@ export type WorkerToMain = WorkerToMainKind & {
 //   - Import losses (engine ADR 1305): `DocumentHandle.losses` (additive,
 //     `LossEntry[]`) on every `DocumentLoaded` (`UXI-FIL-002`).
 //   New message kinds an older worker cannot answer, hence the bump.
+// v81 — the engine's side of the editing aids and Proof view (editor ADR
+//   1212, engine ADR 1306):
+//   - Hidden characters: `RequestHiddenCharacters { pageIds }` answers
+//     `HiddenCharacters { pages, revision }` — per page, per composed line,
+//     where its spaces, tabs, returns, forced line breaks, break
+//     characters and story end stand (`HiddenCharacterKind`), with the
+//     line's baseline, text size and turn. The editor draws them as an
+//     overlay.
+//   - `ViewSettings` gains `hideNonprinting` (the live build leaves the
+//     nonprinting items out, as the export does, and the hit test lands on
+//     none) and `proof` (no page edge on either lane, no degraded-asset
+//     markers): build options, so `ViewSettingsApplied` gains `rebuilt`.
+//   - One screen rule for both lanes: a page draws out to its screen
+//     extent (the trim grown to its bleed and pasteboard artwork, within a
+//     page's size past each edge); the wasm `renderTilePng` draws that
+//     extent on a transparent ground and the new `screenExtent(pageId)`
+//     says where it goes.
+//   - Per-frame baseline grids: `RequestFrameBaselineGrids { pageIds }`
+//     answers `FrameBaselineGrids { grids, revision }`.
+//   - Facing pages (engine ADR 1307): `NewBlankDocument` gains `pages` and
+//     `facingPages` — page 1 a right-hand page, then left/right spreads,
+//     `FacingPages="true"`.
+//   - Relink (engine ADR 1308): the mutation `relinkImage { elementId, uri,
+//     bytes? }` points a picture at a new source in one undo step, keeping
+//     its frame, its fitting and its size.
+//   New message kinds an older worker cannot answer, hence the bump.
 // v82 — Document X-Ray and the Typography Debugger (editor ADRs 1233 and
 //   1234, tasks PX1 and PX2 of the editor's interaction plan):
-//   - X-Ray (engine ADR 1307): `RequestExplain { item, aspect?,
+//   - X-Ray (engine ADR 1309): `RequestExplain { item, aspect?,
 //     selection? }` answers
 //     `Explained(Explanation)` — the provenance of an item's look and
 //     behaviour from the model: the style cascade per property with the
@@ -904,14 +930,14 @@ export type WorkerToMain = WorkerToMainKind & {
 //     locked or hidden, its link, its bindings, its thread and overset,
 //     its object style and effects, what editing its styles changes, and
 //     what the document does not store (`unknown`).
-//   - Line evidence (engine ADR 1308): `RequestLineEvidence { story,
+//   - Line evidence (engine ADR 1310): `RequestLineEvidence { story,
 //     frame?, range?, preview? }` answers `LineEvidence(LineEvidenceReport)`
 //     — per composed line the measure, the natural width, the ratio, the
 //     word and letter spacing, why it broke, the hyphenation points, the
 //     grid; with `preview`, a copy's, the document untouched.
 //     `LineLayout` keeps the composer's record of each line
 //     (`LineComposition`) on every build.
-//   - The dry run (engine ADR 1308): `RequestPreview { mutation, items?,
+//   - The dry run (engine ADR 1310): `RequestPreview { mutation, items?,
 //     story? }` answers `Previewed(PreviewReport)` — any write applied to a
 //     sandbox (a copy of the document in a model of its own), answered as
 //     what it creates and removes, the geometry and outlines it leaves and
@@ -1344,6 +1370,16 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         #[tsify(type = "number[] | null")]
         font: Option<ByteBuf>,
+        /// v81 (engine ADR 1307) — how many pages (1 to 999; absent: one).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        pages: Option<u32>,
+        /// v81 (engine ADR 1307) — lay the pages out as facing spreads
+        /// (`FacingPages`): page 1 alone as a right-hand page, then
+        /// left/right pairs. Absent: one page per spread.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        facing_pages: bool,
     },
     /// Register a named font with the worker's family resolver. Persists
     /// across loads so a fidelity test can preload Poppins/Roboto/etc
@@ -1688,9 +1724,13 @@ pub enum MainToWorkerKind {
         settings: crate::snap_point::SnapSettings,
     },
     /// v77 (editor ADR 287) — how the screen draws the document: Preview,
-    /// Outline, Overprint Preview or Pixel Preview. Survives document
-    /// loads; not saved, not undoable, no rebuild; exports, snapshots and
-    /// separations never see it. Reply: `ViewSettingsApplied`.
+    /// Outline, Overprint Preview or Pixel Preview; v81 (engine ADR 1306)
+    /// also whether nonprinting items show and whether the screen is a
+    /// proof. Survives document loads; not saved, not undoable; exports
+    /// and separations never see it. The mode is drawn at raster time;
+    /// the v81 flags are options of the live build, so changing one
+    /// rebuilds every page (`ViewSettingsApplied.rebuilt`). Reply:
+    /// `ViewSettingsApplied`.
     SetViewSettings { settings: crate::view::ViewSettings },
     /// v75 — the session's role and the host's overrides, against which
     /// the document's template policy is applied (editor
@@ -2256,7 +2296,21 @@ pub enum MainToWorkerKind {
         #[tsify(optional)]
         coalesce: Option<String>,
     },
-    /// v82 (engine ADR 1307) — Document X-Ray: why `item` (a page item or
+    /// v81 (engine ADR 1306) — where the composed lines on `page_ids` (the
+    /// pages in view) hold their hidden characters: spaces, tabs,
+    /// paragraph returns, forced line breaks, the end of a story and the
+    /// other invisibles, line by line. A read of the current build. Reply:
+    /// `HiddenCharacters`.
+    RequestHiddenCharacters { page_ids: Vec<PageId> },
+    /// v81 (engine ADR 1306) — the text frames on `page_ids` (every page
+    /// when empty) that use a baseline grid of their own, each with the
+    /// grid its aligned lines stand on. A read. Reply:
+    /// `FrameBaselineGrids`.
+    RequestFrameBaselineGrids {
+        #[serde(default)]
+        page_ids: Vec<PageId>,
+    },
+    /// v82 (engine ADR 1309) — Document X-Ray: why `item` (a page item or
     /// a story range) looks and behaves as it does, from the model alone.
     /// `aspect` `overview` answers only what the canvas's X-Ray mode
     /// colours by. A read. Reply: `Explained`.
@@ -2272,13 +2326,13 @@ pub enum MainToWorkerKind {
         #[tsify(optional)]
         selection: Option<crate::selection::ContentSelection>,
     },
-    /// v82 (engine ADR 1308) — the Typography Debugger's evidence for a
+    /// v82 (engine ADR 1310) — the Typography Debugger's evidence for a
     /// story's composed lines (one frame's, those touching a range); with
     /// `preview`, the evidence of a copy of the document with that write
     /// applied — the document, its history and its revision untouched. A
     /// read. Reply: `LineEvidence`.
     RequestLineEvidence(crate::line_evidence::LineEvidenceQuery),
-    /// v82 (engine ADR 1308) — the dry run of any write: `mutation` (a
+    /// v82 (engine ADR 1310) — the dry run of any write: `mutation` (a
     /// batch, a Boolean, a region verb, a property, a text edit) applied
     /// through the whole write path to a copy of the document in a model
     /// of its own, answered as the items it would create and remove, the
@@ -2759,7 +2813,15 @@ pub enum WorkerToMainKind {
         settings: crate::snap_point::SnapSettings,
     },
     /// v77 — `SetViewSettings` reply: the settings now in force.
-    ViewSettingsApplied { settings: crate::view::ViewSettings },
+    ViewSettingsApplied {
+        settings: crate::view::ViewSettings,
+        /// v81 (engine ADR 1306) — the change rebuilt the document's pages
+        /// (a build option changed): every page draws anew, and what was
+        /// read of the layout may have moved.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        rebuilt: bool,
+    },
     /// v75 — `SetSessionPolicy` reply: the policy now in force.
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,
@@ -3228,11 +3290,24 @@ pub enum WorkerToMainKind {
     /// v80 (engine ADR 1304) — `EndCoalesce` reply: the step the run ended
     /// in, null when no run was open.
     CoalesceEnded { applied_seq: Option<u64> },
-    /// v82 (engine ADR 1307) — `RequestExplain` reply.
+    /// v81 (engine ADR 1306) — `RequestHiddenCharacters` reply: one entry
+    /// per known page asked for, in order.
+    HiddenCharacters {
+        pages: Vec<crate::invisibles::PageHiddenCharacters>,
+        /// The document revision the answer holds for.
+        revision: u64,
+    },
+    /// v81 (engine ADR 1306) — `RequestFrameBaselineGrids` reply.
+    FrameBaselineGrids {
+        grids: Vec<crate::frame_grids::FrameBaselineGrid>,
+        /// The document revision the answer holds for.
+        revision: u64,
+    },
+    /// v82 (engine ADR 1309) — `RequestExplain` reply.
     Explained(Box<crate::explain::Explanation>),
-    /// v82 (engine ADR 1308) — `RequestLineEvidence` reply.
+    /// v82 (engine ADR 1310) — `RequestLineEvidence` reply.
     LineEvidence(crate::line_evidence::LineEvidenceReport),
-    /// v82 (engine ADR 1308) — `RequestPreview` reply.
+    /// v82 (engine ADR 1310) — `RequestPreview` reply.
     Previewed(crate::preview::PreviewReport),
 }
 

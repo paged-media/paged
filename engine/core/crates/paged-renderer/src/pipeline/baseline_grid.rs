@@ -124,6 +124,21 @@ pub(super) fn frame_grid(document: &Document, frame: &TextFrame, page: &BuiltPag
     Grid::checked(from_page_pt - frame_top_on_page, step_pt)
 }
 
+/// Engine ADR 1306 — the grid `frame` uses of its own
+/// (`UseCustomBaselineFrameGrid`) on `page`, as the composer sets its
+/// aligned lines on it: `(origin_pt, step_pt)`, lines at `origin_pt +
+/// k × step_pt` pt below the frame's top edge in its own coordinates, `k ≥
+/// 0`. `None` for a frame that takes the document's grid, and for a grid
+/// measured from the page on a turned frame (which keeps its leading).
+pub fn frame_custom_grid(
+    document: &Document,
+    frame: &TextFrame,
+    page: &BuiltPage,
+) -> Option<(f32, f32)> {
+    frame.baseline_frame_grid.and_then(|g| g.custom())?;
+    frame_grid(document, frame, page).map(|g| (g.origin_pt, g.step_pt))
+}
+
 impl Grid {
     fn checked(origin_pt: f32, step_pt: f32) -> Option<Self> {
         (step_pt.is_finite() && origin_pt.is_finite() && step_pt >= 0.1)

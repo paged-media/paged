@@ -8,7 +8,7 @@
   (`paged.view.toggleTypographyDebugger`), `app/mount.tsx`, `locales/de.json`;
   `packages/shell/src/state/view-toggles.ts` (the `typography` toggle), `state/editing-aids.ts`;
   `packages/client` (`CanvasClient.lineEvidence`, protocol 82). The UX strategy's Concept E; task
-  PX2 of [`interaction-plan.md`](../interaction-plan.md). The engine's side is engine ADR 1308.
+  PX2 of [`interaction-plan.md`](../interaction-plan.md). The engine's side is engine ADR 1310.
 
 ## Context
 
@@ -19,7 +19,7 @@ checking a loose line or a ladder of hyphens tried a change and undid it.
 
 ## Decision
 
-1. **The evidence is the engine's** (`client.lineEvidence`, engine ADR 1308): per composed line
+1. **The evidence is the engine's** (`client.lineEvidence`, engine ADR 1310): per composed line
    the measure, the natural width, the breaker's ratio, the word spaces as set (% of the font's
    space, mean, smallest, largest), the letters' spread, the break (word space, hyphen,
    discretionary hyphen, hard hyphen, forced line break, paragraph end, story end, an emergency
@@ -47,7 +47,7 @@ checking a loose line or a ladder of hyphens tried a change and undid it.
 
 ## Consequences
 
-- A preview builds a copy of the whole document (engine ADR 1308): a deliberate action, not a
+- A preview builds a copy of the whole document (engine ADR 1310): a deliberate action, not a
   live scrub. The copy is the engine's general dry run of a write (`client.preview`), which
   other previews share — the Pathfinder's result preview first (paged.draw ADR 370,
   amendment 1).

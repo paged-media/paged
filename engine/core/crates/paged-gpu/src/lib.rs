@@ -83,6 +83,9 @@ pub mod cmyk_compute;
 pub(crate) mod ink_planes;
 #[cfg(any(feature = "cpu", feature = "vello-backend"))]
 pub(crate) mod pattern_raster;
+/// Engine ADR 1306 — the part of the canvas a page draws on screen, one
+/// rule for both lanes.
+pub mod screen;
 /// Ink separations + total-area-coverage readings off the CPU
 /// rasterizer's plane state. CPU-only: the Vello backend keeps plane
 /// state per overprint batch, not per page, so it has no separation to

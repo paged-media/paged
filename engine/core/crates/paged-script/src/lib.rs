@@ -987,6 +987,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("replaceImageBytes"),
             2,
         )
+        .function(guarded(paged_relink_image), js_string!("relinkImage"), 3)
         // tables
         .function(guarded(paged_insert_table), js_string!("insertTable"), 2)
         .function(guarded(paged_set_row_height), js_string!("setRowHeight"), 4)
@@ -3659,6 +3660,39 @@ fn paged_replace_image_bytes(
         "args": { "elementId": bare_id(&id), "bytes": bytes_json },
     });
     match serde_json::from_value::<Mutation>(m_json) {
+        Ok(mutation) => Ok(apply_bool(&mutation)),
+        Err(_) => Ok(JsValue::from(false)),
+    }
+}
+
+/// `paged.relinkImage(frameId, uri, bytes?)` — relink a graphic frame's
+/// picture to `uri`, with the new source's `bytes` (a JS `number[]` of u8)
+/// when the engine cannot read it (`Mutation::RelinkImage`, engine ADR
+/// 1308). Built as the whole mutation's JSON, as `replaceImageBytes` is.
+fn paged_relink_image(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let uri = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let bytes_arg = args.get_or_undefined(2);
+    let bytes_json = if bytes_arg.is_undefined() || bytes_arg.is_null() {
+        serde_json::Value::Null
+    } else {
+        match to_json_value(bytes_arg, ctx) {
+            Some(v) => v,
+            None => return Ok(JsValue::from(false)),
+        }
+    };
+    let m_json = serde_json::json!({
+        "op": "relinkImage",
+        "args": { "elementId": bare_id(&id), "uri": uri, "bytes": bytes_json },
+    });
+    match serde_json::from_value::<Mutation>(m_json) {
+        // The wire's `Mutation::RelinkImage`, built from its JSON.
         Ok(mutation) => Ok(apply_bool(&mutation)),
         Err(_) => Ok(JsValue::from(false)),
     }

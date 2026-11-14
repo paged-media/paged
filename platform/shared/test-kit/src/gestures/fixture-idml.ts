@@ -126,13 +126,26 @@ type Box = readonly [number, number, number, number];
 interface ItemOptions {
   fill?: string;
   locked?: boolean;
+  /** Attributes ▸ Nonprint: drawn on screen, left out of print. */
+  nonprinting?: boolean;
   transform?: readonly [number, number, number, number, number, number];
+}
+
+/** A text frame's own baseline grid (Text Frame Options ▸ Baseline
+ *  Options ▸ Use Custom Baseline Grid), in pt. */
+export interface FrameGridOptions {
+  start: number;
+  increment: number;
+  /** `TopOfInset` (InDesign's default), `TopOfFrame`, `TopOfMargin` or
+   *  `TopOfPage`. */
+  relativeTo?: string;
 }
 
 const attrs = (o: ItemOptions) =>
   `ItemTransform="${(o.transform ?? [1, 0, 0, 1, 0, 0]).join(" ")}" ` +
   `FillColor="${o.fill ?? "Color/Gray"}" StrokeWeight="1" StrokeColor="Color/Black"` +
-  (o.locked ? ' Locked="true"' : "");
+  (o.locked ? ' Locked="true"' : "") +
+  (o.nonprinting ? ' Nonprinting="true"' : "");
 
 export const rect = (
   self: string,
@@ -183,12 +196,13 @@ export const line = (self: string, a: Pt, b: Pt): string => {
   );
 };
 
-/** A text frame threading `storyId` (a story of the spec's `stories`). */
+/** A text frame threading `storyId` (a story of the spec's `stories`),
+ *  with a baseline grid of its own when `o.baselineGrid` says so. */
 export const textFrame = (
   self: string,
   [t, l, b, r]: Box,
   storyId: string,
-  o: ItemOptions = {},
+  o: ItemOptions & { baselineGrid?: FrameGridOptions } = {},
 ): string =>
   `<TextFrame Self="${self}" ParentStory="${storyId}" ContentType="TextType" ` +
   `GeometricBounds="${t} ${l} ${b} ${r}" ${attrs({ fill: "Swatch/None", ...o })}>` +
@@ -201,6 +215,12 @@ export const textFrame = (
     ],
     false,
   ) +
+  (o.baselineGrid
+    ? `<BaselineFrameGridOption UseCustomBaselineFrameGrid="true" ` +
+      `StartingOffsetForBaselineFrameGrid="${o.baselineGrid.start}" ` +
+      `BaselineFrameGridRelativeOption="${o.baselineGrid.relativeTo ?? "TopOfInset"}" ` +
+      `BaselineFrameGridIncrement="${o.baselineGrid.increment}"/>`
+    : "") +
   `</TextFrame>`;
 
 const escapeXml = escapeXmlText;

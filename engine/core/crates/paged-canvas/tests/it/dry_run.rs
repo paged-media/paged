@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The dry run of a write (engine ADR 1308): any mutation applied to a
+//! The dry run of a write (engine ADR 1310): any mutation applied to a
 //! sandbox — a copy of the document in a model of its own — and answered
 //! as what it would create and remove and the outlines it would leave. The
 //! document, its history and its revision are untouched; the write itself,

@@ -1,4 +1,4 @@
-# ADR 1307 — An item explains itself from the model
+# ADR 1309 — An item explains itself from the model
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** protocol v82. `paged-canvas` (`explain.rs`: `CanvasModel::explain`,

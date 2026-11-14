@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The Typography Debugger's evidence (engine ADR 1308): every composed
+//! The Typography Debugger's evidence (engine ADR 1310): every composed
 //! line says what the composer had (the measure, the natural width, the
 //! settings) and what it decided (the ratio, the spacing, the break, the
 //! hyphen, the grid). A preview builds a copy and leaves the document, its

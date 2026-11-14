@@ -3623,6 +3623,8 @@ pub(super) fn build_document_inner(
             // when StoryDirection="VerticalWritingDirection".
             let pre_story_cmd_counts: Vec<usize> =
                 pages.iter().map(|p| p.list.commands.len()).collect();
+            let pre_story_layout_counts: Vec<usize> =
+                pages.iter().map(|p| p.story_layout.len()).collect();
             // ADR 027 plan step 6 — a resumable story carries no
             // footnotes, so every pass is a keeps pass and may resume.
             let plan = plan_for(&forced_breaks, &pages);
@@ -3737,6 +3739,7 @@ pub(super) fn build_document_inner(
                 apply_vertical_writing_rotation(
                     &mut pages,
                     &pre_story_cmd_counts,
+                    &pre_story_layout_counts,
                     &chain_for_post,
                     &chain_pages_for_post,
                 );
@@ -7080,6 +7083,7 @@ fn emit_paragraph_lines(
                     // A blank line is composed of nothing: no measure was
                     // filled, no ratio taken.
                     composition: Default::default(),
+                    turn: super::text_frame::line_turn(frame, (ox, oy)),
                 });
             }
         }
@@ -8986,7 +8990,7 @@ fn emit_paragraph_lines(
             &resolved_paragraph,
             em.segment.opens_paragraph && current_line_idx == 0,
         );
-        // Engine ADR 1308 — how far the grid moved the line, for its record.
+        // Engine ADR 1310 — how far the grid moved the line, for its record.
         let mut grid_shift_64: Option<i32> = grid_aligned.then_some(0);
         if grid_aligned {
             let d = em.grid_snap_64(pages, line.baseline_y);
@@ -9420,6 +9424,7 @@ fn emit_paragraph_lines(
                     &line,
                     grid_shift_64.map(|d| d as f32 / paged_text::shape::ADVANCE_PRECISION),
                 ),
+                turn: super::text_frame::line_turn(frame, (ox, oy)),
             });
         }
         // The notes whose reference stands on this line go to its frame; all

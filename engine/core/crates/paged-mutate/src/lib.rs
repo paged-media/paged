@@ -1789,6 +1789,15 @@ mod tests {
                 bytes: Some(vec![1, 2, 3, 4]),
                 prior_has_image_element: Some(false),
             },
+            // Engine ADR 1308 — relink.
+            Operation::RelinkImage {
+                frame: NodeId::Rectangle("Rectangle/u1".to_string()),
+                image_uri: Some("file:cover-v2.png".to_string()),
+                bytes: Some(vec![1, 2, 3, 4]),
+                image_transform: Some([0.5, 0.0, 0.0, 0.5, 10.0, 20.0]),
+                metadata_json: None,
+                has_image_element: Some(true),
+            },
             Operation::InsertGuide {
                 spread_id: "Spread/u_main".to_string(),
                 orientation: crate::operation::GuideOrientationSpec::Vertical,

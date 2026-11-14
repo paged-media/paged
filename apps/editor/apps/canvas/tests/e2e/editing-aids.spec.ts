@@ -20,21 +20,29 @@
 // Editing aids and Proof view (editor ADR "Editing aids and Proof view";
 // the redesign strategy's §4.1 and §4.5; the interaction contract's
 // UXI-GDE-003 / -004 and UXI-OVR-002): each aid is its own remembered
-// toggle, in the bottom bar's control and View ▸ Editing aids; an aid the
-// engine cannot do yet is listed, disabled; Proof view hides every aid and
-// the selection's handles, masks the pasteboard at the trim (or the bleed)
-// and never touches the selection. Each asserts the overlays, the
-// selection and the history, not a screenshot.
+// toggle, in the bottom bar's control and View ▸ Editing aids; the hidden
+// characters, nonprinting items and a frame's own baseline grid come from
+// the engine (engine ADR 1306); Proof view hides every aid and the
+// selection's handles, masks the pasteboard at the trim (or the bleed),
+// draws the page as a proof and never touches the selection. Each asserts
+// the overlays, the engine's answers, the selection and the history, not
+// a screenshot.
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { covers } from "@paged-media/test-kit";
+import {
+  buildFixtureIdml,
+  covers,
+  rect,
+  textFrame,
+} from "@paged-media/test-kit";
 
+import { openCanvas } from "../fidelity/canvas-driver";
 import { selectElements } from "./harness/gesture-kit";
 import { expectHistoryUnchanged } from "./harness/history";
 import { modelSnapshot, selectionSnapshot } from "./harness/model-dump";
 import { clickMenuRow } from "./harness/shell-surface";
-import { openUxiFixture, UXI_A } from "./harness/uxi-fixtures";
+import { loadIdmlFixture, openUxiFixture, UXI_A } from "./harness/uxi-fixtures";
 
 const A = UXI_A;
 
@@ -53,12 +61,100 @@ async function storedAids(page: Page) {
   );
 }
 
+type G = {
+  __canvas: {
+    client: {
+      send(m: unknown): Promise<{ kind: string; payload: unknown }>;
+      subscribe(
+        f: (msg: { kind: string; payload: unknown }) => void,
+      ): () => void;
+    };
+  };
+};
+
+/** The engine-side aids' fixture: a text frame of two paragraphs, a frame
+ *  with a baseline grid of its own, and a black nonprinting square. */
+const AIDS = {
+  pageId: "aidsP",
+  text: { id: "aidsText", story: "aidsS", box: [72, 72, 200, 540] as const },
+  grid: { id: "aidsGrid", story: "aidsG", box: [240, 72, 360, 300] as const },
+  np: { id: "aidsNp", box: [420, 100, 520, 300] as const, at: [200, 470] },
+};
+
+function aidsIdml(): Uint8Array {
+  return buildFixtureIdml({
+    name: "editing-aids",
+    pages: [
+      {
+        id: AIDS.pageId,
+        items: [
+          textFrame(AIDS.text.id, AIDS.text.box, AIDS.text.story),
+          textFrame(AIDS.grid.id, AIDS.grid.box, AIDS.grid.story, {
+            baselineGrid: { start: 5, increment: 13, relativeTo: "TopOfFrame" },
+          }),
+          rect(AIDS.np.id, AIDS.np.box, {
+            fill: "Color/Black",
+            nonprinting: true,
+          }),
+        ],
+      },
+    ],
+    stories: [
+      { id: AIDS.text.story, paragraphs: ["One two three", "Four"] },
+      { id: AIDS.grid.story, paragraphs: ["On a grid"] },
+    ],
+  });
+}
+
+/** What the engine hits at a page-local point. */
+async function hitAt(page: Page, at: readonly number[]) {
+  return page.evaluate(
+    async ({ pageId, at }) => {
+      const r = await (globalThis as unknown as G).__canvas.client.send({
+        kind: "hitTest",
+        payload: { pageId, docPoint: at, filter: "any" },
+      });
+      const p = r.payload as { element?: { id: string } | null } | null;
+      return p?.element?.id ?? null;
+    },
+    { pageId: AIDS.pageId, at },
+  );
+}
+
+/** Record the view settings the engine applies from now on. */
+async function watchViewSettings(page: Page) {
+  await page.evaluate(() => {
+    const w = globalThis as unknown as G & { __viewSettings: unknown[] };
+    w.__viewSettings = [];
+    w.__canvas.client.subscribe((msg) => {
+      if (msg.kind === "viewSettingsApplied")
+        w.__viewSettings.push((msg.payload as { settings: unknown }).settings);
+    });
+  });
+}
+
+/** The last view settings the engine applied (an absent flag is off). */
+async function lastViewSettings(page: Page) {
+  return page.evaluate(() => {
+    const all = (globalThis as unknown as { __viewSettings: unknown[] })
+      .__viewSettings;
+    const last = all[all.length - 1] as
+      { hideNonprinting?: boolean; proof?: boolean } | undefined;
+    return last
+      ? {
+          hideNonprinting: last.hideNonprinting === true,
+          proof: last.proof === true,
+        }
+      : null;
+  });
+}
+
 test.describe("editing aids and Proof view", () => {
   test.beforeEach(async ({ page }) => {
     await openUxiFixture(page, "A");
   });
 
-  test("each aid is its own remembered switch; an unsupported one is listed, disabled @feat:editor-shell.view-menu @level:happy", async ({
+  test("each aid is its own remembered switch, every one enabled @feat:editor-shell.view-menu @level:happy", async ({
     page,
   }) => {
     covers(
@@ -85,9 +181,17 @@ test.describe("editing aids and Proof view", () => {
       );
       await expect(aid(page, "guides")).toHaveAttribute("aria-checked", "true");
       for (const id of ["hiddenCharacters", "nonprinting"]) {
-        await expect(aid(page, id)).toHaveAttribute("data-disabled", "");
-        await expect(aid(page, id)).toContainText("not supported yet");
+        await expect(aid(page, id)).not.toHaveAttribute("data-disabled", "");
+        await expect(aid(page, id)).not.toContainText("not supported");
       }
+      await expect(aid(page, "hiddenCharacters")).toHaveAttribute(
+        "aria-checked",
+        "false",
+      );
+      await expect(aid(page, "nonprinting")).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
       await expect(page.locator("[data-frame-edge]")).toHaveCount(0);
 
       // Frame edges on: every item's edge, the unselected ones too.
@@ -217,6 +321,85 @@ test.describe("editing aids and Proof view", () => {
       await expect(handles.first()).toBeVisible();
     });
     expect(await selectionSnapshot(page)).toEqual(selected);
+    expect(await modelSnapshot(page)).toBe(model);
+  });
+  test("hidden characters, nonprinting items and a frame's own grid come from the engine, and change no document @feat:editor-shell.view-menu @level:happy", async ({
+    page,
+  }) => {
+    covers(
+      "command:paged.view.toggleHiddenCharacters",
+      "command:paged.view.toggleNonprinting",
+      "setting:view.hiddenCharacters",
+      "setting:view.nonprinting",
+      "setting:view.baselineGrid",
+    );
+    await openCanvas(page);
+    await loadIdmlFixture(page, "editing-aids.idml", aidsIdml());
+    await watchViewSettings(page);
+    const model = await modelSnapshot(page);
+    await expectHistoryUnchanged(page, async () => {
+      // Hidden characters: the marks of the spaces, the returns and the
+      // story's end, where the engine says the lines hold them.
+      const marks = page.locator("[data-hidden-characters]");
+      await expect(marks).toHaveCount(0);
+      await clickMenuRow(page, "View/Editing aids/Hidden characters");
+      await expect(marks).toBeAttached();
+      await expect
+        .poll(async () =>
+          Number(await marks.getAttribute("data-hidden-characters")),
+        )
+        .toBeGreaterThan(3);
+      const kinds = (await marks.getAttribute("data-hidden-kinds")) ?? "";
+      for (const k of ["space", "paragraphEnd", "storyEnd"])
+        expect(kinds.split(" ")).toContain(k);
+      await expect(page.locator("[data-hidden-run]").first()).toBeAttached();
+
+      // Nonprinting items: shown, the square is on screen and hit; off,
+      // the engine leaves it off the screen and nothing lands on it.
+      expect(await hitAt(page, AIDS.np.at)).toBe(AIDS.np.id);
+      await clickMenuRow(page, "View/Editing aids/Nonprinting items");
+      await expect
+        .poll(() => lastViewSettings(page))
+        .toMatchObject({ hideNonprinting: true });
+      await expect.poll(() => hitAt(page, AIDS.np.at)).toBeNull();
+      await clickMenuRow(page, "View/Editing aids/Nonprinting items");
+      await expect.poll(() => hitAt(page, AIDS.np.at)).toBe(AIDS.np.id);
+
+      // The baseline grid draws the frame's own grid over the frame.
+      await clickMenuRow(page, "View/Editing aids/Baseline grid");
+      await expect(
+        page
+          .locator(`[data-frame-baseline-grid="${AIDS.grid.id}"] line`)
+          .first(),
+      ).toBeAttached();
+      await clickMenuRow(page, "View/Editing aids/Baseline grid");
+      await clickMenuRow(page, "View/Editing aids/Hidden characters");
+      await expect(marks).toHaveCount(0);
+    });
+    expect(await modelSnapshot(page)).toBe(model);
+  });
+
+  test("Proof view draws the page as a proof: no page edge, no markers, no nonprinting items @feat:editor-shell.view-menu @level:happy", async ({
+    page,
+  }) => {
+    covers("menu:View/Proof view");
+    await openCanvas(page);
+    await loadIdmlFixture(page, "editing-aids.idml", aidsIdml());
+    await watchViewSettings(page);
+    const model = await modelSnapshot(page);
+    await expectHistoryUnchanged(page, async () => {
+      await clickMenuRow(page, "View/Proof view");
+      await expect
+        .poll(() => lastViewSettings(page))
+        .toMatchObject({ proof: true, hideNonprinting: true });
+      // What prints: the nonprinting square is not on the proof.
+      await expect.poll(() => hitAt(page, AIDS.np.at)).toBeNull();
+      await clickMenuRow(page, "View/Proof view");
+      await expect
+        .poll(() => lastViewSettings(page))
+        .toMatchObject({ proof: false, hideNonprinting: false });
+      await expect.poll(() => hitAt(page, AIDS.np.at)).toBe(AIDS.np.id);
+    });
     expect(await modelSnapshot(page)).toBe(model);
   });
 });

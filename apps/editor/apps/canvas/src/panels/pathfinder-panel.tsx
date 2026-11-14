@@ -52,7 +52,7 @@
 //
 // BEFORE THE CLICK (paged.draw ADR 370, amended 2026-11-14). While a
 // button is hovered or focused, the engine's dry run (`client.preview`,
-// engine ADR 1308) applies its write to a copy of the document and the
+// engine ADR 1310) applies its write to a copy of the document and the
 // canvas shows the result — solid and named, the operands it consumes
 // dashed; the click applies it, one undo step. Where no preview can be
 // made (the engine refuses, the read fails) the canvas outlines the objects
