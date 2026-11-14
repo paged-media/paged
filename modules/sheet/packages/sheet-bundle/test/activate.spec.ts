@@ -35,6 +35,7 @@ import type {
   ObjectTypeContribution,
   PanelContribution,
 } from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 
 import { covers } from "@paged-media/test-kit";
 
@@ -62,6 +63,8 @@ function fakeHost() {
   const host = {
     manifest: sheetBundle.manifest,
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+    widgets: FALLBACK_WIDGETS,
     // The document doors every host has; nothing here fires them.
     document: {
       onDidChange: () => ({ dispose() {} }),

@@ -40,6 +40,7 @@ import type {
   Mutation,
   MutationOutcome,
 } from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 import { parseBinding } from "@paged-media/sheet-host-model";
 
 import { makeWorkbookPanel } from "../src/panels/workbook-panel";
@@ -73,6 +74,8 @@ function fakeDoc(
   let seq = 0;
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+    widgets: FALLBACK_WIDGETS,
     supports: () => false,
     document: {
       async meta() {

@@ -45,6 +45,7 @@ import type {
   SceneLayer,
   WorkerToMain,
 } from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 
 import { activate } from "../src/activate";
 import { bootEngine } from "../src/engine";
@@ -104,6 +105,8 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
   ]);
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+    widgets: FALLBACK_WIDGETS,
     supports: (f: string) => supported.has(f),
     parts: {
       read: async (p: string) => current.get(p) ?? null,

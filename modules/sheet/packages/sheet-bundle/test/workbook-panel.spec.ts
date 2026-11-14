@@ -32,6 +32,7 @@ import {
 import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 
 import {
   createWorkbookSession,
@@ -92,6 +93,8 @@ function fakeHost(features: string[] = []): {
   const opened: string[] = [];
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+    widgets: FALLBACK_WIDGETS,
     // The document doors every host has; nothing here fires them.
     document: {
       onDidChange: () => ({ dispose() {} }),

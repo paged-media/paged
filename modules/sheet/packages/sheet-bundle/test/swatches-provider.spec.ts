@@ -29,6 +29,7 @@ import type {
   Mutation,
   SwatchSummary,
 } from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 import { paletteEntry } from "../../sheet-host-model/src";
 
 import { sheetBundle } from "../src";
@@ -308,6 +309,8 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
     const host = {
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
+      // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+      widgets: FALLBACK_WIDGETS,
       // The document doors every host has; nothing here fires them.
       document: {
         onDidChange: () => ({ dispose() {} }),
@@ -361,6 +364,8 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
     const host = {
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
+      // The contract's widget catalog (the host's NumericField, editor ADR 1216).
+      widgets: FALLBACK_WIDGETS,
       // The document doors every host has; nothing here fires them.
       document: {
         onDidChange: () => ({ dispose() {} }),
