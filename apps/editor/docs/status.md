@@ -421,7 +421,9 @@ property writes, which the panel previews — each object, its value now and pro
 outlined on the canvas — with nothing changed; Apply writes the ticked ones as one undo step, and
 the panel's Undo takes exactly that step back. The checks on this device (small text, contrast,
 alternative text, sizes that override their style) propose the same way and are what the panel
-offers without an AI service. The Script panel's own Ask bar is unchanged.
+offers without an AI service. The Script panel's own Ask bar asks the same consent (amendment 1,
+owner decision 2026-11-14): its request, the script in the panel (sent only when ticked) and what
+Claude's scripts read from the document are listed, and nothing is sent before Send, every time.
 Every object answers the same verbs ([ADR 1242](adr/1242-every-object-answers-the-same-verbs.md),
 PX9): Inspect, Transform…, Copy, Bind to data…, Style…, Save a version, Validate and Export… are
 the canvas context menu's first group (also inside a module's frame) and palette entries, on a

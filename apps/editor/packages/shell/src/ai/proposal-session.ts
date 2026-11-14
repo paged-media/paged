@@ -59,7 +59,9 @@ import { describeAiError, editorAiTransport, loadAiCatalog } from "./editor-ai";
 
 /** What a request to Claude sends, as the consent card states it. */
 export interface ClaudeRequest {
-  kind: "ask" | "brief";
+  /** The assistant's Ask, a brief (New document), or the Script panel's
+   *  own Ask bar (`script`: Claude writes and runs scripts there). */
+  kind: "ask" | "brief" | "script";
   text: string;
   /** `selection`: Claude reads and changes only the selected objects. */
   scope: "selection" | "document";
@@ -68,7 +70,15 @@ export interface ClaudeRequest {
   allowText: boolean;
   /** The selected objects' addresses when the request was made. */
   selection: readonly string[];
+  /** A `script` request: the script in the Script panel when it was made,
+   *  sent with the request only when `send`. */
+  script?: { lines: number; send: boolean };
 }
+
+/** What the consent card may change of a waiting request. */
+export type ConsentPatch = Partial<
+  Pick<ClaudeRequest, "scope" | "allowText" | "script">
+>;
 
 export type ProposalState =
   | { phase: "idle" }
@@ -148,7 +158,7 @@ function createProposalSession(scope: EditorScope) {
       set({ phase: "consent", request });
     },
     /** Change what the waiting request may send. */
-    setConsent(patch: Partial<Pick<ClaudeRequest, "scope" | "allowText">>) {
+    setConsent(patch: ConsentPatch) {
       if (state.phase !== "consent") return;
       set({ phase: "consent", request: { ...state.request, ...patch } });
     },

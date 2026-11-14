@@ -264,6 +264,9 @@ film("developers", async (k) => {
     await press(k, input);
     await typeHuman(page, ASK, 13);
     await press(k, panel.locator("[data-action=ask]"));
+    // The consent card says what leaves the device; Send sends it
+    // (editor ADR 1241, amendment 1).
+    await press(k, panel.locator('[data-cockpit-action="ai-consent-send"]'));
     await expect(source).not.toHaveValue(BATCH, { timeout: 90_000 });
   });
 

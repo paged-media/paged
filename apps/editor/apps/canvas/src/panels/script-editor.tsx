@@ -32,17 +32,25 @@
 // corrects until it is done. Each script it runs shows in the editor and
 // the log, so nothing it does is hidden, and every write undoes like a
 // hand-run script.
+//
+// Nothing leaves the device before Send (editor ADR 1241, amended
+// 2026-11-14): Ask stops at the assistant's consent card, which lists what
+// would be sent — the request, the script in the editor (sent only when
+// ticked) and what Claude's scripts read from the document — and Send
+// sends this request only; the next one asks again.
 
 import { useRef, useState } from "react";
 
 import {
   aiUnavailableText,
+  ConsentCard,
   describeAiError,
   plainSummary,
   PoweredByClaude,
   runEditorAgent,
   useAiAvailability,
   useCanvasClient,
+  type ClaudeRequest,
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -76,6 +84,22 @@ interface LogEntry {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PanelProps = any;
 
+/** A request waiting at the consent card, with the script it would send
+ *  (the editor's source when Ask was pressed: the card lists that one). */
+interface PendingAsk {
+  request: ClaudeRequest;
+  script: string;
+}
+
+/** What Claude receives: the request, and the script when the user sent
+ *  it. Words for the model, not for the user (English, like the
+ *  assistant's context lines). */
+function scriptAskPrompt(pending: PendingAsk): string {
+  const { request, script } = pending;
+  if (!request.script?.send || script.trim() === "") return request.text;
+  return `${request.text}\n\nThe script now in the Script panel (revise it, or write a new one):\n\`\`\`js\n${script}\n\`\`\``;
+}
+
 const EXAMPLE = `// Try editing the textFrame's opacity from JS.
 // All scene-graph writes go through the Operation channel,
 // so Cmd-Z undoes them.
@@ -91,6 +115,7 @@ export function ScriptEditorPanel(_: PanelProps) {
   const [running, setRunning] = useState(false);
   const [ask, setAsk] = useState("");
   const [asking, setAsking] = useState<AbortController | null>(null);
+  const [pending, setPending] = useState<PendingAsk | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   // F-25 (PN-352): with no AI service, Ask says so before a request is typed.
   const offline = useAiAvailability() === "unavailable";
@@ -104,8 +129,31 @@ export function ScriptEditorPanel(_: PanelProps) {
     });
   };
 
-  const askClaude = async (requested?: string) => {
-    const prompt = (requested ?? ask).trim();
+  /** Ask: nothing is sent yet — the consent card says what would be. */
+  const requestConsent = () => {
+    const prompt = ask.trim();
+    if (!prompt || asking || running || offline) return;
+    const script = source;
+    const lines =
+      script.trim() === "" ? 0 : script.trimEnd().split("\n").length;
+    setPending({
+      request: {
+        kind: "script",
+        text: prompt,
+        scope: "document",
+        allowText: true,
+        selection: [],
+        // The user's own script goes along unless they untick it; the
+        // untouched example is not theirs, and stays here.
+        script: { lines, send: lines > 0 && script.trim() !== EXAMPLE.trim() },
+      },
+      script,
+    });
+  };
+
+  /** Send: this request, as the card listed it. */
+  const askClaude = async (consented: PendingAsk) => {
+    const prompt = consented.request.text;
     if (!prompt || asking || running || offline) return;
     const controller = new AbortController();
     setAsking(controller);
@@ -123,7 +171,7 @@ export function ScriptEditorPanel(_: PanelProps) {
     // not compile a component with a `finally` in it (ADR 229).
     await runEditorAgent(client, {
       mode: "script",
-      prompt,
+      prompt: scriptAskPrompt(consented),
       signal: controller.signal,
       onEvent: (event) => {
         if (event.type === "script") setSource(event.source);
@@ -206,7 +254,7 @@ export function ScriptEditorPanel(_: PanelProps) {
         data-script-ask
         onSubmit={(e) => {
           e.preventDefault();
-          void askClaude();
+          requestConsent();
         }}
       >
         <input
@@ -230,7 +278,7 @@ export function ScriptEditorPanel(_: PanelProps) {
         ) : (
           <button
             type="submit"
-            disabled={!ask.trim() || running || offline}
+            disabled={!ask.trim() || running || offline || pending !== null}
             title={offline ? aiUnavailableText() : undefined}
             className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50 text-xs"
             data-action="ask"
@@ -240,6 +288,26 @@ export function ScriptEditorPanel(_: PanelProps) {
         )}
         <PoweredByClaude size={10} />
       </form>
+      {pending ? (
+        <div className="pt-2" data-script-consent>
+          <ConsentCard
+            request={pending.request}
+            onChange={(patch) =>
+              setPending((prev) =>
+                prev
+                  ? { ...prev, request: { ...prev.request, ...patch } }
+                  : prev,
+              )
+            }
+            onCancel={() => setPending(null)}
+            onSend={() => {
+              const consented = pending;
+              setPending(null);
+              void askClaude(consented);
+            }}
+          />
+        </div>
+      ) : null}
       {offline ? (
         <div
           role="status"

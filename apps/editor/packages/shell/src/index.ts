@@ -1270,6 +1270,9 @@ export {
   AIAssistant,
   type AssistantKind,
 } from "./components/cockpit/ai-assistant";
+// Editor ADR 1241 amendment — the one consent card, also the Script panel's.
+export { ConsentCard } from "./components/cockpit/ai-proposals";
+export type { ClaudeRequest, ConsentPatch } from "./ai/proposal-session";
 export {
   assistantSession,
   openAssistant,

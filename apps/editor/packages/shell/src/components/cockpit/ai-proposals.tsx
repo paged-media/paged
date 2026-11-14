@@ -40,6 +40,7 @@ import {
   proposalSession,
   type ClaudeDoors,
   type ClaudeRequest,
+  type ConsentPatch,
   type ProposalWords,
 } from "../../ai/proposal-session";
 import { PROPOSAL as P } from "../../ai/messages";
@@ -279,19 +280,27 @@ function ScopeChoice({
   );
 }
 
-/** What a request to Claude sends, stated before anything is sent. */
+/** What a request to Claude sends, stated before anything is sent: the
+ *  assistant's (its proposal session holds the request) and the Script
+ *  panel's Ask bar (which holds its own and passes `onChange`). */
 export function ConsentCard({
   request,
   onSend,
   onCancel,
+  onChange,
 }: {
   request: ClaudeRequest;
   onSend: () => void;
   onCancel: () => void;
+  /** A change to the waiting request; the assistant's session by default. */
+  onChange?: (patch: ConsentPatch) => void;
 }) {
   const strings = useStrings();
   const scope = useEditorScope();
   const session = proposalSession(scope);
+  const change =
+    onChange ?? ((patch: ConsentPatch) => session.setConsent(patch));
+  const script = request.script ?? null;
   return (
     <div
       role="dialog"
@@ -338,6 +347,16 @@ export function ConsentCard({
             </li>
           </>
         )}
+        {request.kind === "script" && (
+          <>
+            <li data-ai-consent-script={script?.send ? "on" : "off"}>
+              {script?.send
+                ? strings.t(P.consentScript, { lines: script.lines })
+                : strings.t(P.consentNoScript)}
+            </li>
+            <li data-ai-consent-document>{strings.t(P.consentDocument)}</li>
+          </>
+        )}
       </ul>
       <div style={{ ...MUTED, marginBottom: 6 }}>
         {strings.t(P.consentWhere)}
@@ -347,7 +366,7 @@ export function ConsentCard({
           <ScopeChoice
             value={request.scope}
             canSelect={request.selection.length > 0}
-            onChange={(v) => session.setConsent({ scope: v })}
+            onChange={(v) => change({ scope: v })}
             name="consent"
           />
           <label
@@ -362,14 +381,39 @@ export function ConsentCard({
               type="checkbox"
               data-ai-allow-text
               checked={request.allowText}
-              onChange={(e) =>
-                session.setConsent({ allowText: e.target.checked })
-              }
+              onChange={(e) => change({ allowText: e.target.checked })}
             />
             {strings.t(P.allowText)}
           </label>
           <div style={{ ...MUTED, marginBottom: 6 }}>
             {strings.t(P.consentNothing)}
+          </div>
+        </>
+      )}
+      {request.kind === "script" && (
+        <>
+          <label
+            style={{
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              margin: "6px 0",
+            }}
+          >
+            <input
+              type="checkbox"
+              data-ai-send-script
+              checked={script?.send ?? false}
+              disabled={!script || script.lines === 0}
+              onChange={(e) =>
+                script &&
+                change({ script: { ...script, send: e.target.checked } })
+              }
+            />
+            {strings.t(P.sendScript)}
+          </label>
+          <div style={{ ...MUTED, marginBottom: 6 }}>
+            {strings.t(P.consentScriptRuns)}
           </div>
         </>
       )}

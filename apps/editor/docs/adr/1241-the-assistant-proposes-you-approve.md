@@ -73,7 +73,7 @@ no assistant at all.
 - The alternative text lives in a label the editor writes and IDML and `.paged` carry; the PDF
   exporter does not read it yet (the engine models no `ObjectExportOption`).
 - The Script panel's own Ask bar, which asks Claude to write a script into the Script panel, is
-  not the assistant and is unchanged by this record.
+  not the assistant; its consent is the amendment below.
 - Tests: `platform/shared/ai/test/propose.spec.ts` (the loop reads through the host, ends on the
   proposal, refuses a script tool; the mode's request offers only the read-only tools);
   `apps/canvas/test/panels/ai-proposals.dom.test.tsx` (the checks on the real engine: a proposal
@@ -83,3 +83,25 @@ no assistant at all.
   preview outlines and changes neither model nor history, Approve is one undo step, the panel's
   Undo restores the model; the checks without a service); `tests/ai-assistant.spec.ts`,
   `ai-script.spec.ts` and `ai-new-from-brief.spec.ts` follow the consent and proposal flow.
+
+## Amendment 1 (2026-11-14): the Script panel's Ask bar asks the same consent (owner decision)
+
+The Script panel's own "Ask Claude" bar sent its request the moment it was typed. It now stops at
+the assistant's consent card — the same component (`ConsentCard`, exported by the shell) and the
+same rule: nothing leaves the device before an explicit Send, the card lists what is sent, and
+Send sends this request only; the next one asks again. Cancel sends nothing and keeps the request
+in the field.
+
+For this request (`kind: "script"`) the card lists the request's words; the script in the Script
+panel, with its line count, sent only while "Send the script in the Script panel" is ticked (ticked
+for a script the user wrote, unticked for the untouched example, disabled for an empty editor);
+the document context — what the scripts Claude runs read from the document (objects, values and
+text) and pictures of its pages; and where it goes (Anthropic, through this editor's AI service,
+not kept by the editor). Unlike the assistant, Claude here writes and runs scripts on the
+document, and the card says so: each one shows in the panel and each change undoes like a script
+the user runs (ADR 221). The card lists the script as it was when Ask was pressed, and that is
+the script sent.
+
+Tests: `apps/canvas/test/panels/script-editor.dom.test.tsx` (the AI service stubbed: no request
+before Send, none after Cancel, every request asks again, the script goes only when ticked, the
+untouched example is not offered); `tests/ai-script.spec.ts` sends through the card.
