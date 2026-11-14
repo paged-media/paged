@@ -54,6 +54,11 @@ struct PageClone {
     stories: Vec<ParsedStory>,
     #[serde(default)]
     hyperlinks: Vec<paged_model::Hyperlink>,
+    /// Engine ADR 1312 (amendment 2026-11-14) — the copy of a page of a
+    /// facing document: once in place as its own spread, the pages re-pair
+    /// with it right after its page.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pair: bool,
 }
 
 fn invalid(page: &str, reason: impl Into<String>) -> OperationError {
@@ -93,6 +98,21 @@ fn restore_clone(
     let story_ids: Vec<String> = clone.stories.iter().map(|s| s.self_id.clone()).collect();
     let hyperlink_ids: Vec<String> = clone.hyperlinks.iter().map(|h| h.self_id.clone()).collect();
     let index = clone.spread.index.min(doc.spreads.len());
+    // The re-pairing starts where the source page's spread does, as on the
+    // first application.
+    let repair = clone.pair.then(|| {
+        let source = doc
+            .spreads
+            .iter()
+            .position(|p| {
+                p.spread
+                    .pages
+                    .iter()
+                    .any(|pg| pg.self_id.as_deref() == Some(page))
+            })
+            .unwrap_or(index.saturating_sub(1));
+        super::page_layout::repair_start(doc, source)
+    });
     doc.spreads.insert(
         index,
         paged_scene::ParsedSpread {
@@ -102,21 +122,60 @@ fn restore_clone(
     );
     doc.stories.extend(clone.stories);
     doc.designmap.hyperlinks.extend(clone.hyperlinks);
+    let remove = Operation::RemovePageClone {
+        page: page.to_string(),
+        cloned_page: cloned_page_id.clone(),
+        story_ids,
+        hyperlink_ids,
+    };
+    let inverse = match repair {
+        Some(start) => pair_up(doc, start, page, &cloned_page_id, remove)?,
+        None => remove,
+    };
     Ok(AppliedOperation {
         op: Operation::DuplicatePage {
             page: page.to_string(),
             clone_spread_json: Some(json.to_string()),
         },
-        inverse: Operation::RemovePageClone {
-            page: page.to_string(),
-            cloned_page: cloned_page_id,
-            story_ids,
-            hyperlink_ids,
-        },
+        inverse,
         invalidation: InvalidationHint {
             structural: true,
             ..Default::default()
         },
+    })
+}
+
+/// Engine ADR 1312 (amendment 2026-11-14) — re-pair a facing document's
+/// pages from spread `start` with the copy `cloned_page`, in place as its
+/// own spread, put right after its page `page`. The undo puts those
+/// spreads back as they were with the copy alone in its spread, then
+/// removes it the way a single-page copy is removed (`remove`).
+fn pair_up(
+    doc: &mut Document,
+    start: usize,
+    page: &str,
+    cloned_page: &str,
+    remove: Operation,
+) -> Result<Operation, OperationError> {
+    let placed = super::page_layout::capture(doc, start, false)?;
+    super::page_layout::relayout(
+        doc,
+        start,
+        true,
+        |_| true,
+        Some(super::page_layout::Place {
+            page: cloned_page,
+            after: Some(page),
+        }),
+    );
+    Ok(Operation::Batch {
+        ops: vec![
+            Operation::RestoreSpreads {
+                first: start,
+                capture_json: placed,
+            },
+            remove,
+        ],
     })
 }
 
@@ -140,17 +199,26 @@ pub(super) fn apply_duplicate_page(
                 .any(|pg| pg.self_id.as_deref() == Some(page))
         })
         .ok_or_else(|| OperationError::NodeNotFound(NodeId::Page(page.to_string())))?;
-    if doc.spreads[src_idx].spread.pages.len() != 1 {
+    // Engine ADR 1312 (amendment 2026-11-14) — in a facing document the
+    // copy is the page and what sits on it, cut out of its spread; the
+    // pages re-pair with the copy right after its page.
+    let facing = super::page_layout::is_facing(doc);
+    let source = if facing {
+        super::page_layout::page_unit(&doc.spreads[src_idx].spread, page)
+            .ok_or_else(|| OperationError::NodeNotFound(NodeId::Page(page.to_string())))?
+    } else if doc.spreads[src_idx].spread.pages.len() != 1 {
         return Err(invalid(
             page,
             "duplicating a page out of a multi-page spread is not supported in v1",
         ));
-    }
+    } else {
+        doc.spreads[src_idx].spread.clone()
+    };
 
     // The stories the copy needs, in frame order, each validated before
     // anything is written.
     let mut story_sources: Vec<String> = Vec::new();
-    for f in &doc.spreads[src_idx].spread.text_frames {
+    for f in &source.text_frames {
         let Some(sid) = f.parent_story.as_deref() else {
             continue;
         };
@@ -177,7 +245,10 @@ pub(super) fn apply_duplicate_page(
     // The floor is the document's whole shared `u<hex>` line — hyperlinks
     // and sections included — not the spreads alone, which handed out ids
     // a designmap object already held.
-    let mut clone = doc.spreads[src_idx].clone();
+    let mut clone = paged_scene::ParsedSpread {
+        src: String::new(),
+        spread: source,
+    };
     let mut next = crate::ids::highest_u_hex_id(doc) + 1;
     let renamed = fresh_ids(&mut clone.spread, &mut next);
     // A page's `Name` is its folio, which InDesign recomputes for a copy;
@@ -262,6 +333,7 @@ pub(super) fn apply_duplicate_page(
         },
         stories: stories.clone(),
         hyperlinks: added_links,
+        pair: facing,
     };
     let json = serde_json::to_string(&capture)
         .map_err(|e| invalid(page, format!("duplicate-page capture failed: {e}")))?;
@@ -269,18 +341,25 @@ pub(super) fn apply_duplicate_page(
     let story_ids: Vec<String> = stories.iter().map(|s| s.self_id.clone()).collect();
     doc.spreads.insert(insert_index, clone);
     doc.stories.extend(stories);
+    let remove = Operation::RemovePageClone {
+        page: page.to_string(),
+        cloned_page: cloned_page_id.clone(),
+        story_ids,
+        hyperlink_ids: hyperlinks,
+    };
+    let inverse = if facing {
+        let start = super::page_layout::repair_start(doc, src_idx);
+        pair_up(doc, start, page, &cloned_page_id, remove)?
+    } else {
+        remove
+    };
 
     Ok(AppliedOperation {
         op: Operation::DuplicatePage {
             page: page.to_string(),
             clone_spread_json: Some(json),
         },
-        inverse: Operation::RemovePageClone {
-            page: page.to_string(),
-            cloned_page: cloned_page_id,
-            story_ids,
-            hyperlink_ids: hyperlinks,
-        },
+        inverse,
         invalidation: InvalidationHint {
             structural: true,
             ..Default::default()
@@ -404,6 +483,9 @@ pub(super) fn apply_remove_page_clone(
         },
         stories,
         hyperlinks,
+        // Put back alone in its spread: in a facing document the spreads
+        // around it are restored by the `RestoreSpreads` beside it.
+        pair: false,
     };
     let json = serde_json::to_string(&capture)
         .map_err(|e| invalid(cloned_page, format!("page-clone capture failed: {e}")))?;

@@ -71,3 +71,10 @@ engine at protocol 68 found the gaps below.
   editing each flattened master.
 - `hideItems` hides items, not paragraphs. A build that reveals one bullet at a time is rendered
   as its whole shape.
+
+## Amendment (2026-11-14): a facing document
+
+In a document whose preferences say `FacingPages="true"`, `movePage` moves any page, a page of a
+two-page spread too, with what sits on it, and the pages pair up again, page 1 alone on the right
+([ADR 1312](1312-facing-pages-on-an-existing-document.md), amendment 2026-11-14). A single-sided
+document, such as a presentation, keeps the rule above. Page metadata still travels with its page.

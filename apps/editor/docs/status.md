@@ -167,7 +167,7 @@ format's round-trip risk, and says an import's summary once (DF4,
 [ADR 1222](adr/1222-compatibility-report.md), `UXI-T66`); File ▸ New document… opens a dialog of
 purpose presets and a custom setup with a live preview, facing pages included since engine ADR
 1307 (DF5, [ADR 1220](adr/1220-new-document.md); F-04), and Document Setup turns facing pages on or
-off in an existing document while an inserted or deleted page keeps the pairs (engine ADR 1312); the PDF export is guided — readiness before anything starts, what the file will be, named
+off in an existing document while an inserted, deleted, moved or duplicated page keeps the pairs (engine ADR 1312); the PDF export is guided — readiness before anything starts, what the file will be, named
 stages and Cancel, a verified result — in kit controls with a page scope and presets, and the
 Layout rows open their panels (DF6, [ADR 1221](adr/1221-guided-export.md), `UXI-T68`; F-12,
 F-15); the publication's issues are on the page as markers, in a page overview and in the Issues

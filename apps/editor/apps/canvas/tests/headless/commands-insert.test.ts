@@ -185,6 +185,52 @@ describe("pages", () => {
     await expectOneUndoStep(e, before);
   });
 
+  test("in a facing document a page moved or duplicated re-pairs the pages, each one undo step (engine ADR 1312, amendment 2026-11-14)", async () => {
+    covers("command:paged.core.movePage");
+    const e = await blank();
+    await run(e, "paged.insert.newPage");
+    await run(e, "paged.insert.newPage");
+    await run(e, "paged.insert.facingPages");
+    type Row = { selfId: string; spreadId: string | null };
+    const rows = (d: ModelDump) => d.collections.pages as Row[];
+    const ids = (d: ModelDump) => rows(d).map((p) => p.selfId);
+    // Page 1 alone, then a pair: the spread index of each page.
+    const pairs = (d: ModelDump) => {
+      const seen: (string | null)[] = [];
+      return rows(d).map((p) => {
+        if (!seen.includes(p.spreadId)) seen.push(p.spreadId);
+        return seen.indexOf(p.spreadId);
+      });
+    };
+    const core = async (op: string, args: Record<string, unknown>) => {
+      (
+        e.objects as { core?: { invalidate(): void } | null }
+      ).core?.invalidate();
+      await e.invokeCore(op, args);
+      await e.idle();
+    };
+
+    // Page 3, the right-hand page of the pair, to the front.
+    const before = await e.dump();
+    const [p1, p2, p3] = ids(before);
+    await core("movePage", { page: `page:${p3}`, after: null });
+    const moved = await e.dump();
+    expect(ids(moved)).toEqual([p3, p1, p2]);
+    expect(pairs(moved)).toEqual([0, 1, 1]);
+    await expectOneUndoStep(e, before);
+
+    // Page 2, the left-hand page of the pair: its copy faces it and
+    // page 3 opens the next spread.
+    await core("duplicatePage", { page: `page:${p2}` });
+    const copied = await e.dump();
+    const order = ids(copied);
+    expect(order).toHaveLength(4);
+    expect([order[0], order[1], order[3]]).toEqual([p1, p2, p3]);
+    expect([p1, p2, p3]).not.toContain(order[2]);
+    expect(pairs(copied)).toEqual([0, 1, 1, 2]);
+    await expectOneUndoStep(e, before);
+  });
+
   test("the only page is refused, in words", async () => {
     covers("command:paged.insert.deletePage");
     const e = await blank();

@@ -297,7 +297,10 @@ pub(super) fn apply_insert_page(
             start,
             true,
             |_| true,
-            after.as_deref().map(|a| (pid.as_str(), a)),
+            after.as_deref().map(|a| super::page_layout::Place {
+                page: pid.as_str(),
+                after: Some(a),
+            }),
         );
         return Ok(AppliedOperation {
             op: Operation::InsertPage {
@@ -461,6 +464,50 @@ pub(super) fn apply_move_page(
         })
     };
     let from = spread_of(doc, page_id).ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    if after_page_id == Some(page_id) {
+        return Err(OperationError::InvalidValue {
+            node,
+            path: PropertyPath::PageBounds,
+            reason: "a page cannot follow itself".to_string(),
+        });
+    }
+    // Engine ADR 1312 (amendment 2026-11-14) — in a facing document the
+    // page leaves its spread with what sits on it and the pages re-pair
+    // from the first spread the move touches, page 1 alone on the right,
+    // as InDesign's "allow document pages to shuffle" does.
+    if super::page_layout::is_facing(doc) {
+        let to = match after_page_id {
+            None => 0,
+            Some(pid) => spread_of(doc, pid)
+                .ok_or_else(|| OperationError::NodeNotFound(NodeId::Page(pid.to_string())))?,
+        };
+        let start = super::page_layout::repair_start(doc, from.min(to));
+        let prior = super::page_layout::capture(doc, start, false)?;
+        super::page_layout::relayout(
+            doc,
+            start,
+            true,
+            |_| true,
+            Some(super::page_layout::Place {
+                page: page_id,
+                after: after_page_id,
+            }),
+        );
+        return Ok(AppliedOperation {
+            op: Operation::MovePage {
+                page_id: page_id.to_string(),
+                after_page_id: after_page_id.map(str::to_string),
+            },
+            inverse: Operation::RestoreSpreads {
+                first: start,
+                capture_json: prior,
+            },
+            invalidation: InvalidationHint {
+                structural: true,
+                ..Default::default()
+            },
+        });
+    }
     if doc.spreads[from].spread.pages.len() > 1 {
         return Err(OperationError::InvalidValue {
             node,
@@ -468,13 +515,6 @@ pub(super) fn apply_move_page(
             reason: "page belongs to a multi-page spread; moving a page within or out of a \
                      spread is not supported in v1"
                 .to_string(),
-        });
-    }
-    if after_page_id == Some(page_id) {
-        return Err(OperationError::InvalidValue {
-            node,
-            path: PropertyPath::PageBounds,
-            reason: "a page cannot follow itself".to_string(),
         });
     }
     let before = placements(doc);

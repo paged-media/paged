@@ -18,12 +18,15 @@
 
 //! Engine ADR 1312 — facing pages on an existing document: Document
 //! Setup's Facing Pages lays every page out again, each page's items with
-//! it, as one undo step; a page inserted into or removed from a facing
-//! document keeps page 1 on the right and the pairs after it.
+//! it, as one undo step; a page inserted into, removed from, moved or
+//! duplicated in a facing document keeps page 1 on the right and the pairs
+//! after it; a one-page master stays one page and shows alike on both
+//! sides.
 
 use paged_canvas::channel::{BindingEdgeWire, Mutation};
 use paged_canvas::element_selection::ElementId;
-use paged_canvas::{CanvasModel, CanvasOptions};
+use paged_canvas::{render_snapshot_png, CanvasModel, CanvasOptions};
+use paged_mutate::{NodeId, NodeSpec, Operation};
 use paged_wire::PageId;
 
 use BindingEdgeWire::{Left as R, Right as V};
@@ -267,4 +270,266 @@ fn a_page_removed_from_a_facing_document_takes_its_items_and_re_pairs_the_rest()
             page_id: PageId(only)
         })
         .is_err());
+}
+
+fn ids(m: &CanvasModel) -> Vec<String> {
+    m.pages().into_iter().map(|p| p.self_id).collect()
+}
+
+/// The master a page applies, as the scene holds it.
+fn master_of(m: &CanvasModel, page: &str) -> Option<String> {
+    m.scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.pages.iter())
+        .find(|p| p.self_id.as_deref() == Some(page))
+        .and_then(|p| p.applied_master.clone())
+}
+
+/// Every rectangle on `page`, with its place there.
+fn rectangles_on(m: &CanvasModel, page: &str) -> Vec<Place> {
+    let all: Vec<ElementId> = m
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.rectangles.iter())
+        .filter_map(|r| r.self_id.clone().map(ElementId::Rectangle))
+        .collect();
+    places(m, &all)
+        .into_iter()
+        .filter(|(on, _, _)| on.as_deref() == Some(page))
+        .collect()
+}
+
+#[test]
+fn a_page_moved_in_a_facing_document_re_pairs_the_pages_with_its_items_and_master() {
+    let (mut m, frames) = single_pages(5);
+    m.apply_mutation(&Mutation::SetFacingPages { facing: true })
+        .expect("facing");
+    let p = ids(&m);
+    // Page 4 shows no master, so the move can be seen to keep its own.
+    m.apply_mutation(&Mutation::ApplyMasterToPage {
+        page: PageId(p[3].clone()),
+        master: None,
+    })
+    .expect("no master on page 4");
+    let master = master_of(&m, &p[0]);
+    assert!(master.is_some(), "a blank's pages apply its master");
+    let hash = m.scene().canonical_hash();
+    let before = places(&m, &frames);
+    let steps = m.applied_log_len();
+
+    // Page 4 (the left-hand page of the last pair) after page 1: it
+    // becomes the left-hand page of the first pair, and the pages after it
+    // shuffle (InDesign 20.0.1, tooling/oracle/indesign/facing-pages-probe).
+    m.apply_mutation(&Mutation::MovePage {
+        page: PageId(p[3].clone()),
+        after: Some(PageId(p[0].clone())),
+    })
+    .expect("a page of a facing spread moves");
+    assert_eq!(m.applied_log_len(), steps + 1, "one step");
+    assert_eq!(
+        ids(&m),
+        [&p[0], &p[3], &p[1], &p[2], &p[4]].map(String::clone)
+    );
+    assert_eq!(pairs(&m), [0, 1, 1, 2, 2]);
+    assert_eq!(sides(&m), [Some(R), Some(V), Some(R), Some(V), Some(R)]);
+    assert_eq!(
+        places(&m, &frames),
+        before,
+        "every item stays on its page, in its place"
+    );
+    assert_eq!(
+        master_of(&m, &p[3]),
+        None,
+        "the moved page keeps its master"
+    );
+    assert_eq!(master_of(&m, &p[1]), master);
+
+    m.undo().expect("undo");
+    assert_eq!(
+        m.scene().canonical_hash(),
+        hash,
+        "undo restores the spreads"
+    );
+    m.redo().expect("redo");
+    assert_eq!(
+        ids(&m),
+        [&p[0], &p[3], &p[1], &p[2], &p[4]].map(String::clone)
+    );
+
+    // To the front: the last page becomes page 1, alone on the right.
+    m.apply_mutation(&Mutation::MovePage {
+        page: PageId(p[4].clone()),
+        after: None,
+    })
+    .expect("to the front");
+    let order = [&p[4], &p[0], &p[3], &p[1], &p[2]].map(String::clone);
+    assert_eq!(ids(&m), order);
+    assert_eq!(pairs(&m), [0, 1, 1, 2, 2]);
+    assert_eq!(sides(&m), [Some(R), Some(V), Some(R), Some(V), Some(R)]);
+    assert_eq!(places(&m, &frames), before);
+
+    // The IDML it saves opens as what it shows.
+    let idml = m.export_idml().expect("export");
+    let reopened = CanvasModel::load("reopened", &idml, CanvasOptions::default()).expect("reopen");
+    assert_eq!(ids(&reopened), order);
+    assert_eq!(pairs(&reopened), [0, 1, 1, 2, 2]);
+    assert_eq!(
+        sides(&reopened),
+        [Some(R), Some(V), Some(R), Some(V), Some(R)]
+    );
+    assert_eq!(places(&reopened, &frames), before);
+    assert_eq!(master_of(&reopened, &p[3]), None);
+}
+
+#[test]
+fn a_page_duplicated_in_a_facing_document_lands_after_it_with_its_items_and_master() {
+    let (mut m, frames) = single_pages(4);
+    m.apply_mutation(&Mutation::SetFacingPages { facing: true })
+        .expect("facing");
+    let p = ids(&m);
+    assert_eq!(pairs(&m), [0, 1, 1, 2]);
+    m.apply_mutation(&Mutation::ApplyMasterToPage {
+        page: PageId(p[1].clone()),
+        master: None,
+    })
+    .expect("no master on page 2");
+    let hash = m.scene().canonical_hash();
+    let before = places(&m, &frames);
+    let steps = m.applied_log_len();
+
+    // Page 2, the left-hand page of a two-page spread: its copy faces it,
+    // and pages 3 and 4 make the next pair.
+    let out = m
+        .apply_mutation(&Mutation::DuplicatePage {
+            page: PageId(p[1].clone()),
+        })
+        .expect("a page of a facing spread duplicates");
+    assert_eq!(m.applied_log_len(), steps + 1, "one step");
+    let order = ids(&m);
+    assert_eq!(order.len(), 5);
+    let copy = order[2].clone();
+    assert!(!p.contains(&copy), "the copy is a new page");
+    assert_eq!(
+        [&order[0], &order[1], &order[3], &order[4]].map(String::clone),
+        [&p[0], &p[1], &p[2], &p[3]].map(String::clone)
+    );
+    assert_eq!(
+        out.created_pages
+            .iter()
+            .map(|p| p.0.clone())
+            .collect::<Vec<_>>(),
+        [copy.as_str()],
+        "the reply names the copy"
+    );
+    assert_eq!(pairs(&m), [0, 1, 1, 2, 2]);
+    assert_eq!(sides(&m), [Some(R), Some(V), Some(R), Some(V), Some(R)]);
+    assert_eq!(places(&m, &frames), before, "the originals stay in place");
+    assert_eq!(
+        master_of(&m, &copy),
+        None,
+        "the copy keeps its page's master"
+    );
+    // The copy holds a copy of the page's frame, at the same place.
+    let (_, bounds, transform) = before[1].clone();
+    assert_eq!(
+        rectangles_on(&m, &copy),
+        [(Some(copy.clone()), bounds, transform)]
+    );
+
+    m.undo().expect("undo");
+    assert_eq!(
+        m.scene().canonical_hash(),
+        hash,
+        "undo removes the copy and puts the spreads back"
+    );
+    m.redo().expect("redo");
+    assert_eq!(ids(&m), order, "redo makes the same copy");
+    assert_eq!(pairs(&m), [0, 1, 1, 2, 2]);
+
+    // The first page duplicates too: its copy is the left-hand page of
+    // the first pair.
+    m.apply_mutation(&Mutation::DuplicatePage {
+        page: PageId(p[0].clone()),
+    })
+    .expect("page 1 duplicates");
+    assert_eq!(ids(&m)[0], p[0]);
+    assert_eq!(pairs(&m), [0, 1, 1, 2, 2, 3]);
+
+    let idml = m.export_idml().expect("export");
+    let reopened = CanvasModel::load("reopened", &idml, CanvasOptions::default()).expect("reopen");
+    assert_eq!(ids(&reopened), ids(&m));
+    assert_eq!(pairs(&reopened), [0, 1, 1, 2, 2, 3]);
+    assert_eq!(
+        rectangles_on(&reopened, &copy),
+        [(Some(copy.clone()), bounds, transform)]
+    );
+}
+
+#[test]
+fn a_one_page_master_stays_one_page_and_shows_alike_on_both_sides() {
+    // InDesign 20.0.1 (tooling/oracle/indesign/facing-pages-probe): Facing
+    // Pages leaves a one-page master one page, and every page, left-hand
+    // or right-hand, shows it whole at the same place on the page.
+    let mut m =
+        CanvasModel::new_blank_layout("single", 400.0, 600.0, 3, false, CanvasOptions::default())
+            .expect("a blank loads");
+    let master = m
+        .scene()
+        .master_spreads
+        .keys()
+        .next()
+        .cloned()
+        .expect("a blank has a master");
+    m.apply_operation(Operation::OnMaster {
+        master_id: master.clone(),
+        op: Box::new(Operation::InsertNode {
+            parent: NodeId::Spread(master.clone()),
+            position: 0,
+            node: NodeSpec::Rectangle {
+                self_id: "uEdge".into(),
+                // Near the page's left edge, where a mirrored master would
+                // move it.
+                bounds: [30.0, 5.0, 60.0, 45.0],
+                fill_color: Some("Color/Black".into()),
+                stroke_color: None,
+                stroke_weight: None,
+                item_transform: None,
+            },
+            z_slot: None,
+        }),
+    })
+    .expect("a black rectangle on the master");
+    let p: Vec<PageId> = ids(&m).into_iter().map(PageId).collect();
+    let png = |m: &CanvasModel, page: &PageId| {
+        render_snapshot_png(m, page, 200)
+            .expect("snapshot")
+            .png_bytes
+    };
+    let single = png(&m, &p[1]);
+
+    m.apply_mutation(&Mutation::SetFacingPages { facing: true })
+        .expect("facing");
+    assert_eq!(sides(&m), [Some(R), Some(V), Some(R)]);
+    assert_eq!(
+        m.scene().master_spreads[&master].spread.pages.len(),
+        1,
+        "the master keeps its one page"
+    );
+    let left = png(&m, &p[1]);
+    assert_eq!(
+        left, single,
+        "the left-hand page shows the master as before"
+    );
+    assert_eq!(png(&m, &p[0]), left, "and the right-hand page alike");
+    assert_eq!(png(&m, &p[2]), left);
+
+    // The rectangle is drawn: a page without the master differs.
+    m.apply_mutation(&Mutation::ApplyMasterToPage {
+        page: p[2].clone(),
+        master: None,
+    })
+    .expect("no master");
+    assert_ne!(png(&m, &p[2]), left);
 }

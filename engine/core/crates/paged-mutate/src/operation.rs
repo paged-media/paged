@@ -6856,7 +6856,10 @@ pub enum Operation {
     /// `after_page_id`, or to the front when `None`: the slide sorter's
     /// reorder. The spreads restack in their new order when they were
     /// stacked; spreads that share one position keep it. Inverse:
-    /// `SetSpreadOrder` with the previous order and transforms.
+    /// `SetSpreadOrder` with the previous order and transforms. In a
+    /// facing document (engine ADR 1312, amendment 2026-11-14) any page
+    /// moves with what sits on it and the pages re-pair; inverse
+    /// `RestoreSpreads`.
     MovePage {
         page_id: String,
         #[serde(default)]
@@ -6872,7 +6875,9 @@ pub enum Operation {
     /// item) immediately after the source, minting fresh self ids for
     /// the clone. Each text frame's story is COPIED (D-23), and every
     /// side map keyed by `Self` (margins, labels, …) follows the clone.
-    /// Inverse: `RemovePageClone`.
+    /// Inverse: `RemovePageClone`. In a facing document (engine ADR 1312,
+    /// amendment 2026-11-14) any page is copied, with what sits on it, and
+    /// the pages re-pair; inverse `RestoreSpreads` then `RemovePageClone`.
     /// `clone_spread_json` is **echo/redo-only** — the apply layer
     /// fills it with the materialised clone so redo re-creates the
     /// exact ids and geometry.

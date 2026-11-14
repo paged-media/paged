@@ -30,6 +30,10 @@
 //! side of the spine and its items move with it by the same offset, so
 //! nothing changes on the page. The spreads stack down the pasteboard.
 //!
+//! A page moved or duplicated in a facing document takes the same road
+//! (the 2026-11-14 amendment): the pages re-pair from the first spread the
+//! change touches, as InDesign's "allow document pages to shuffle" does.
+//!
 //! The undo of every such change is [`apply_restore_spreads`]: the spreads
 //! from the first one touched, captured whole, put back verbatim, so undo
 //! and redo are exact.
@@ -166,6 +170,16 @@ pub(super) fn repair_start(doc: &Document, spread_index: usize) -> usize {
     }
 }
 
+/// The page `page` of `spread` cut out of it with what sits on it — the
+/// unit [`relayout`] moves: the page, its items with the group members,
+/// pasted-in children and mask items they bring, and their side-map
+/// entries. A one-page spread is its own unit.
+pub(super) fn page_unit(spread: &Spread, page: &str) -> Option<Spread> {
+    split(spread.clone())
+        .into_iter()
+        .find(|s| s.pages.first().and_then(|p| p.self_id.as_deref()) == Some(page))
+}
+
 // ---------------------------------------------------------------------------
 // The layout
 // ---------------------------------------------------------------------------
@@ -177,17 +191,26 @@ struct Unit {
     alone: bool,
 }
 
+/// Where [`relayout`] puts one page: right after the page `after` names,
+/// or first when it names none (`MovePage` to the front, which re-pairs
+/// from the first spread).
+pub(super) struct Place<'a> {
+    pub(super) page: &'a str,
+    pub(super) after: Option<&'a str>,
+}
+
 /// Lay out the pages of `doc.spreads[first..]` again — facing or single —
 /// keeping the units `keep` accepts (a page `RemovePage` drops is refused
-/// by it). The spreads keep their ids in order; a spread more than before
-/// takes a fresh id. The spreads from `first` on stack down the pasteboard
-/// below the one before.
+/// by it), with the page `place` names put in its new place. The spreads
+/// keep their ids in order; a spread more than before takes a fresh id.
+/// The spreads from `first` on stack down the pasteboard below the one
+/// before.
 pub(super) fn relayout(
     doc: &mut Document,
     first: usize,
     facing: bool,
     mut keep: impl FnMut(&str) -> bool,
-    place_after: Option<(&str, &str)>,
+    place: Option<Place<'_>>,
 ) {
     let rtl = doc.designmap.document_preference.page_binding.as_deref() == Some("RightToLeft");
     let pages_before: usize = doc.spreads[..first]
@@ -223,19 +246,23 @@ pub(super) fn relayout(
         }
     }
 
-    // A page inserted after a page goes right after it, inside its spread
-    // if need be (InsertPage put it after the whole spread).
-    if let Some((page, after)) = place_after {
+    // A page inserted, moved or duplicated after a page goes right after
+    // it, inside its spread if need be (InsertPage and DuplicatePage put it
+    // after the whole spread); moved to the front, it goes first.
+    if let Some(Place { page, after }) = place {
         let unit_page = |u: &Unit| u.spread.pages.first().and_then(|p| p.self_id.clone());
         if let Some(from) = units
             .iter()
             .position(|u| unit_page(u).as_deref() == Some(page))
         {
             let unit = units.remove(from);
-            let to = units
-                .iter()
-                .position(|u| unit_page(u).as_deref() == Some(after))
-                .map_or(units.len(), |i| i + 1);
+            let to = match after {
+                None => 0,
+                Some(after) => units
+                    .iter()
+                    .position(|u| unit_page(u).as_deref() == Some(after))
+                    .map_or(units.len(), |i| i + 1),
+            };
             units.insert(to, unit);
         }
     }
