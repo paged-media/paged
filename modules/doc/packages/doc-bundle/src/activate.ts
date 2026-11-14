@@ -42,7 +42,7 @@ import {
 } from "./files.js";
 import { DOC, FILES, OUTLINE } from "./messages.js";
 import { contributeMenu } from "./menu";
-import { contributeStory } from "./story/contribute.js";
+import { contributeStory, type StoryContribution } from "./story/contribute.js";
 import { createDocStore, paragraphRange } from "./panels/outline-model.js";
 import {
   INSERT_LABEL,
@@ -133,6 +133,9 @@ function activateDoc(
   // Doc ADR 608 — the Word chrome (control bar, shortcuts, status items),
   // contributed once the wordDocument context is registered below.
   let word: WordContribution | null = null;
+  // Doc ADR 630 — the Story view, the Story Map and overset navigation,
+  // contributed at the end; the object model's typed twins run them.
+  let story: StoryContribution | null = null;
   /** An ingest is opening its own document (which gets its fonts there). */
   let ingesting = false;
 
@@ -699,6 +702,7 @@ function activateDoc(
       word ? word.runReview(id, args) : Promise.resolve(undefined),
     saveAsDocx: () => exportDocx(),
     pasteRtf,
+    storyCommand: (id) => (story ? story.run(id) : Promise.resolve(false)),
   });
 
   // ADR 323 — the object properties as host-rendered PropertyFields (a
@@ -721,7 +725,8 @@ function activateDoc(
   // so every command in this bundle lived behind Cmd+K and nowhere else.
   const menuSub = contributeMenu(host);
   // Doc ADR 630 — the Story view, the Story Map and overset navigation.
-  disposers.push(contributeStory(host));
+  story = contributeStory(host);
+  disposers.push(() => story?.dispose());
 
   return {
     dispose() {

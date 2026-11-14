@@ -38,13 +38,22 @@ import {
 } from "./story-map-model.js";
 import { StoryMapPanel, type StoryMapDoors } from "./story-map-panel.js";
 import { StoryView, createStoryFocus, type StoryDoors } from "./story-view.js";
+import {
+  NEXT_OVERSET_COMMAND,
+  STORY_MAP_COMMAND,
+  STORY_MAP_PANEL_ID,
+  STORY_VIEW_COMMAND,
+  STORY_VIEW_ID,
+  type StoryCommandResult,
+} from "./ids.js";
 
-export const STORY_VIEW_ID = "media.paged.doc.view.story";
-export const STORY_MAP_PANEL_ID = "media.paged.doc.panel.storyMap";
-const C = "media.paged.doc.command";
-export const STORY_VIEW_COMMAND = `${C}.storyView`;
-export const STORY_MAP_COMMAND = `${C}.storyMap`;
-export const NEXT_OVERSET_COMMAND = `${C}.nextOverset`;
+export {
+  NEXT_OVERSET_COMMAND,
+  STORY_MAP_COMMAND,
+  STORY_MAP_PANEL_ID,
+  STORY_VIEW_COMMAND,
+  STORY_VIEW_ID,
+};
 
 /** Preview at most this many stories' first words (each is a content read). */
 const PREVIEW_CAP = 60;
@@ -56,7 +65,14 @@ type ReadStory = {
   }>;
 };
 
-export function contributeStory(host: BundleHost): () => void {
+export interface StoryContribution {
+  /** Run a story command by id, as its menu row does (the typed twins,
+   *  ADR 323); false when the id is not a story command. */
+  run(id: string): Promise<StoryCommandResult | false>;
+  dispose(): void;
+}
+
+export function contributeStory(host: BundleHost): StoryContribution {
   const disposers: Array<() => void> = [];
   const focus = createStoryFocus();
   const canRead = host.supports("document.readStory@1");
@@ -251,39 +267,59 @@ export function contributeStory(host: BundleHost): () => void {
 
   // Story view ⇄ Layout view: the same command toggles, on the story of
   // the text caret, else the one shown last, else the first.
+  const toggleStoryView = (): StoryCommandResult => {
+    if (!views) return { applied: false };
+    if (host.shell.activeView() === STORY_VIEW_ID) {
+      host.shell.showView(null);
+      return { applied: true };
+    }
+    const caret = host.supports("text.caret@1") ? host.text.caret() : null;
+    if (caret) focus.set(caret.storyId);
+    const shown = host.shell.showView(STORY_VIEW_ID);
+    const storyId = focus.get();
+    return shown && storyId ? { applied: true, storyId } : { applied: shown };
+  };
+  const openStoryMap = (): StoryCommandResult => {
+    host.shell.openPanel(STORY_MAP_PANEL_ID);
+    return { applied: true };
+  };
+  // Overset navigation: the next overset story's last frame, round the
+  // document; the map shows the same stories first.
+  const goToNextOverset = async (): Promise<StoryCommandResult> => {
+    const map = await readMap();
+    const next = nextOverset(map, focus.get());
+    if (!next) return { applied: false };
+    focus.set(next.storyId);
+    goToFrame(next.frames[next.frames.length - 1]!);
+    return { applied: true, storyId: next.storyId };
+  };
+  const run = async (id: string): Promise<StoryCommandResult | false> => {
+    switch (id) {
+      case STORY_VIEW_COMMAND:
+        return toggleStoryView();
+      case STORY_MAP_COMMAND:
+        return openStoryMap();
+      case NEXT_OVERSET_COMMAND:
+        return goToNextOverset();
+      default:
+        return false;
+    }
+  };
   disposers.push(
     host.contribute.command({
       id: STORY_VIEW_COMMAND,
       title: t(STORY.viewCommand),
-      handler: () => {
-        if (!views) return false;
-        if (host.shell.activeView() === STORY_VIEW_ID) {
-          host.shell.showView(null);
-          return true;
-        }
-        const caret = host.supports("text.caret@1") ? host.text.caret() : null;
-        if (caret) focus.set(caret.storyId);
-        return host.shell.showView(STORY_VIEW_ID);
-      },
+      handler: () => toggleStoryView().applied,
     }).dispose,
     host.contribute.command({
       id: STORY_MAP_COMMAND,
       title: t(STORY.mapCommand),
-      handler: () => host.shell.openPanel(STORY_MAP_PANEL_ID),
+      handler: () => openStoryMap().applied,
     }).dispose,
-    // Overset navigation: the next overset story's last frame, round the
-    // document; the map shows the same stories first.
     host.contribute.command({
       id: NEXT_OVERSET_COMMAND,
       title: t(STORY.nextOverset),
-      handler: async () => {
-        const map = await readMap();
-        const next = nextOverset(map, focus.get());
-        if (!next) return false;
-        focus.set(next.storyId);
-        goToFrame(next.frames[next.frames.length - 1]!);
-        return true;
-      },
+      handler: async () => (await goToNextOverset()).applied,
     }).dispose,
   );
   for (const [path, command, order] of [
@@ -296,7 +332,10 @@ export function contributeStory(host: BundleHost): () => void {
       host.contribute.menu({ path, command, group: "story", order }).dispose,
     );
   }
-  return () => {
-    for (const d of disposers.splice(0).reverse()) d();
+  return {
+    run,
+    dispose() {
+      for (const d of disposers.splice(0).reverse()) d();
+    },
   };
 }

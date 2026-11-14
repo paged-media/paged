@@ -137,4 +137,28 @@ describe("story commands", () => {
       ["goToPage", "p2"],
     ]);
   });
+
+  it("the typed twins run the same commands and name the story they reach (ADR 323)", async () => {
+    const { host, calls } = fakeHost();
+    const story = contributeStory(host);
+    expect(await story.run(STORY_VIEW_COMMAND)).toEqual({
+      applied: true,
+      storyId: "s2",
+    });
+    expect(await story.run(STORY_VIEW_COMMAND)).toEqual({ applied: true });
+    expect(await story.run(STORY_MAP_COMMAND)).toEqual({ applied: true });
+    expect(await story.run(NEXT_OVERSET_COMMAND)).toEqual({
+      applied: true,
+      storyId: "s2",
+    });
+    expect(await story.run("media.paged.doc.command.placeDoc")).toBe(false);
+    expect(calls).toEqual([
+      ["showView", STORY_VIEW_ID],
+      ["showView", null],
+      ["openPanel", STORY_MAP_PANEL_ID],
+      ["select", [{ kind: "textFrame", id: "f2" }]],
+      ["goToPage", "p2"],
+    ]);
+    story.dispose();
+  });
 });

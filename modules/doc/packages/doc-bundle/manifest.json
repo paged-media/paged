@@ -1993,6 +1993,64 @@
               }
             }
           }
+        },
+        {
+          "id": "media.paged.doc.command.storyView",
+          "title": "Story view",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "story": {
+                "kind": "ref",
+                "to": "story",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.storyMap",
+          "title": "Story map",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.nextOverset",
+          "title": "Go to next overset story",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "story": {
+                "kind": "ref",
+                "to": "story",
+                "optional": true
+              }
+            }
+          }
         }
       ],
       "templateFields": [

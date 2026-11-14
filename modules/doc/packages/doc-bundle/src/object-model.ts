@@ -54,6 +54,7 @@
 // where a run was poured is doc-host-model's.
 
 import { WORD_COMMAND } from "./word/commands.js";
+import { STORY_COMMANDS, type StoryCommandResult } from "./story/ids.js";
 import {
   REVIEW_COMMAND,
   type ReviewArgs,
@@ -1379,6 +1380,31 @@ function reviewTypedCommands(
   );
 }
 
+/** Doc ADR 630 — the typed twins of the story commands: no arguments;
+ *  each runs what its menu row runs and answers `{ applied, story? }`, the
+ *  story shown or gone to (Go to next overset story with none overset
+ *  answers `applied: false`). */
+function storyTypedCommands(
+  deps: DocObjectModelDeps,
+): TypedCommandContribution[] {
+  return STORY_COMMANDS.map(
+    (id) =>
+      ({
+        ...decl(id),
+        handler: async () => {
+          const out = await deps.storyCommand?.(id);
+          if (out === undefined || out === false)
+            throw new Error(
+              `unavailable: ${id} needs the story contribution (the editor's shell)`,
+            );
+          return out.storyId === undefined
+            ? { applied: out.applied }
+            : { applied: out.applied, story: `story:${out.storyId}` };
+        },
+      }) as TypedCommandContribution,
+  );
+}
+
 // ------------------------------------------------------------ entry
 
 export interface DocObjectModelDeps {
@@ -1403,6 +1429,9 @@ export interface DocObjectModelDeps {
   saveAsDocx?(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
   /** Doc ADR 616 — pour RTF at the caret; the paragraphs inserted. */
   pasteRtf?(rtf: string): Promise<number>;
+  /** Doc ADR 630 — run a story command by id; false when the id is not
+   *  one or the story contribution is not there yet. */
+  storyCommand?(id: string): Promise<StoryCommandResult | false>;
 }
 
 /** The bundle's object model over `host` (headless). */
@@ -1421,6 +1450,7 @@ export function createDocObjectModel(
       ...typedCommands(host, deps.place, deps.exportBytes, deps),
       ...wordTypedCommands(deps),
       ...reviewTypedCommands(deps),
+      ...storyTypedCommands(deps),
     ],
     // Editor plan G3a: a paragraph's text, a merge field, a list's items.
     templateFields: docTemplateFields(host),

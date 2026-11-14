@@ -75,6 +75,10 @@ describe.skipIf(!docxPresent)(
           "media.paged.doc.command.placeDoc",
           "media.paged.doc.command.exportDocx",
           "media.paged.doc.command.fillMergeFields",
+          // Doc ADR 630 — the story commands' typed twins.
+          "media.paged.doc.command.storyView",
+          "media.paged.doc.command.storyMap",
+          "media.paged.doc.command.nextOverset",
         ]),
       );
       expect(await storyTexts(host, story)).toEqual([FIRST, "Order «OrderNo»"]);

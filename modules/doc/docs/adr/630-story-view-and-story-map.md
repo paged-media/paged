@@ -2,7 +2,8 @@
 
 - **Status:** Accepted, 2026-11-14.
 - **Scope:** `doc-bundle/src/story/` (new: `story-model.ts`, `story-view.tsx`,
-  `story-map-model.ts`, `story-map-panel.tsx`, `contribute.tsx`), `src/activate.ts`,
+  `story-map-model.ts`, `story-map-panel.tsx`, `contribute.tsx`, `ids.ts`), `src/activate.ts`,
+  `src/object-model.ts` (the commands' typed twins),
   `src/messages.ts`, `manifest.json` (the view `media.paged.doc.view.story`, the panel
   `media.paged.doc.panel.storyMap`, the commands `storyView`, `storyMap`, `nextOverset`, the
   View menu's three rows), `src/panels/references-panel.tsx` (the host's numeric field). Task
@@ -56,6 +57,10 @@ frames.
 6. **One numeric field.** The References panel's page setup (margins as lengths in the
    document's unit, columns) is the host's `NumericField`; the file leaves the
    `raw-number-input` baseline.
+7. **Typed twins.** The three commands are also typed commands of the object model (ADR 323;
+   `contributes.objectModel.commands`): no arguments; each runs what its menu row runs and
+   answers `{ applied, story? }`, the story the view shows or the overset walk reached.
+   Go to next overset story with nothing overset answers `applied: false`.
 
 ## Conformance (interaction specification §21.3)
 
