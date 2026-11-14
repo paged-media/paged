@@ -35,12 +35,29 @@ export async function objectsUnder(
 ): Promise<ElementId[]> {
   const r = 0.5;
   const [x, y] = point;
-  return client.marqueeHits(pageId, [y - r, x - r, y + r, x + r], {
-    mode: "intersect",
-    scope: activeGroup
-      ? { kind: "group", id: activeGroup }
-      : { kind: "document" },
-  });
+  return objectsOver(client, pageId, [y - r, x - r, y + r, x + r], activeGroup);
+}
+
+/** The items that overlap `box` (page-local `[top, left, bottom, right]`),
+ *  topmost first, by the same rule: the stack the keyboard cycles through
+ *  when no pointer says where (editor ADR "An accessible object tree",
+ *  `UXI-A11Y-008`). */
+export async function objectsOver(
+  client: Pick<CanvasClient, "marqueeHits">,
+  pageId: PageId,
+  box: readonly [number, number, number, number],
+  activeGroup: string | null,
+): Promise<ElementId[]> {
+  return client.marqueeHits(
+    pageId,
+    [...box] as [number, number, number, number],
+    {
+      mode: "intersect",
+      scope: activeGroup
+        ? { kind: "group", id: activeGroup }
+        : { kind: "document" },
+    },
+  );
 }
 
 /** The item below `current` in `stack`, wrapping to the top; the topmost
@@ -58,4 +75,19 @@ export function nextBelow(
     if (selected.has(key(id))) at = i;
   });
   return stack[(at + 1) % stack.length] ?? null;
+}
+
+/** The item above `current` in `stack`, wrapping to the bottom; the
+ *  bottommost when `current` is not in it (`nextBelow`'s mirror). */
+export function nextAbove(
+  stack: readonly ElementId[],
+  current: readonly ElementId[],
+): ElementId | null {
+  if (stack.length === 0) return null;
+  const key = (id: ElementId) =>
+    `${id.kind}:${String((id as { id?: unknown }).id)}`;
+  const selected = new Set(current.map(key));
+  const at = stack.findIndex((id) => selected.has(key(id)));
+  if (at < 0) return stack[stack.length - 1] ?? null;
+  return stack[(at - 1 + stack.length) % stack.length] ?? null;
 }

@@ -3916,7 +3916,17 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.edit.selectAbove",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.edit.selectAll",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.selectBelow",
       "kind": "command",
       "owner": "editor"
     },
@@ -4287,16 +4297,6 @@
     },
     {
       "id": "command:paged.object.releaseClippingMask",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.object.selectNextAbove",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.object.selectNextBelow",
       "kind": "command",
       "owner": "editor"
     },
@@ -5096,12 +5096,12 @@
       "owner": "media.paged.doc"
     },
     {
-      "id": "keybinding:cmd+alt+[→paged.object.selectNextBelow",
+      "id": "keybinding:cmd+alt+[→paged.edit.selectBelow",
       "kind": "keybinding",
       "owner": "editor"
     },
     {
-      "id": "keybinding:cmd+alt+]→paged.object.selectNextAbove",
+      "id": "keybinding:cmd+alt+]→paged.edit.selectAbove",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5476,12 +5476,12 @@
       "owner": "editor"
     },
     {
-      "id": "keybinding:ctrl+alt+[→paged.object.selectNextBelow",
+      "id": "keybinding:ctrl+alt+[→paged.edit.selectBelow",
       "kind": "keybinding",
       "owner": "editor"
     },
     {
-      "id": "keybinding:ctrl+alt+]→paged.object.selectNextAbove",
+      "id": "keybinding:ctrl+alt+]→paged.edit.selectAbove",
       "kind": "keybinding",
       "owner": "editor"
     },

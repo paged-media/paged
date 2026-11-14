@@ -6,7 +6,8 @@
 - **Scope:** `apps/canvas/src/ui/A11yObjectTree.tsx` (the tree), `panels/tree-panel.tsx` (the
   Tree panel, `paged.tree`, retitled "Object tree"), `a11y-commands.ts` (the reach command
   and the selection cycle), `reflect-commands.ts` (the rotate and scale steps),
-  `insert-commands.ts` (`boundsInView`), `packages/shell/src/registries/keybinding.ts` (the
+  `insert-commands.ts` (`boundsInView`), `canvas-context-menu.tsx` (the cycle's keyboard half),
+  `packages/shell/src/state/objects-under.ts` (`objectsOver`, `nextAbove`), `packages/shell/src/registries/keybinding.ts` (the
   brackets matched by their physical key), `modules/draw/packages/draw-bundle/src/handlers/brush.ts`
   (pen pressure only).
 - **Requirements:** `UXI-A11Y-002`, `A11Y-003`, `A11Y-004`, `A11Y-006`, `A11Y-007`,
@@ -61,14 +62,15 @@ keyboard but the inspector's fields.
    the selection's centre, one batch and one undo step each, remembered by Transform
    again. The arrow keys nudge (ADR 251's `paged.object.nudge*`, unchanged); X, Y, W, H and
    the angle stay the inspector's fields.
-7. **Objects under objects (A11Y-008).** `paged.object.selectNextBelow` and
-   `.selectNextAbove` (Object menu; ⌥⌘[ and ⌥⌘], Ctrl+Alt elsewhere, InDesign's keys) step
-   the selection through the objects that overlap its box, top first, in the entered
-   group's scope or among the top-level items, wrapping; with nothing selected, through the
-   page in view. A step is a selection change only. The registry matches `[` and `]` with
-   Alt by their physical key, as it already did for letters, digits, `=`, `-` and `'`.
-   Track IC's object picker (IC6) reuses these commands.
-
+7. **Objects under objects (A11Y-008).** The selection cycle is IC6's one pair of commands
+   (`paged.edit.selectBelow`, and its mirror `paged.edit.selectAbove`, ADR 235 as amended by
+   IC6), now on the keyboard and the Object menu: ⌥⌘[ and ⌥⌘] (Ctrl+Alt elsewhere, InDesign's
+   keys) and Object ▸ Select next object below / above. With the pointer over a page they step
+   through the objects under it; from the keyboard, with no pointer on the canvas, through the
+   objects that overlap the selection's box (`objectsOver`, beside IC6's `objectsUnder`), top
+   first, in the entered group's scope or among the top-level items, wrapping. A step is a
+   selection change only. The registry matches `[` and `]` with Alt by their physical key, as
+   it already did for letters, digits, `=`, `-` and `'`.
 8. **Touch and pen (AP4).** A pointer event carries the pen's pressure, tilt and pointer
    type to every tool's handler (B-08, unchanged); a tool declares pen support by reading
    them, and only for `pointerType === "pen"`: the Pencil tapers a pen stroke by its

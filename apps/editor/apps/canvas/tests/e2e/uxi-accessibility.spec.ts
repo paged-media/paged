@@ -192,11 +192,11 @@ test.describe("keyboard-only editing", () => {
     covers("command:paged.object.nudgeRight");
     covers("command:paged.transform.rotate90Clockwise");
     covers("command:paged.transform.scaleUp");
-    covers("command:paged.object.selectNextBelow");
-    covers("keybinding:cmd+alt+[→paged.object.selectNextBelow");
-    covers("keybinding:ctrl+alt+[→paged.object.selectNextBelow");
-    covers("keybinding:cmd+alt+]→paged.object.selectNextAbove");
-    covers("keybinding:ctrl+alt+]→paged.object.selectNextAbove");
+    covers("command:paged.edit.selectBelow");
+    covers("keybinding:cmd+alt+[→paged.edit.selectBelow");
+    covers("keybinding:ctrl+alt+[→paged.edit.selectBelow");
+    covers("keybinding:cmd+alt+]→paged.edit.selectAbove");
+    covers("keybinding:ctrl+alt+]→paged.edit.selectAbove");
     await openUxiFixture(page, "A");
     await focusCanvas(page);
 
@@ -287,7 +287,7 @@ test.describe("the menus", () => {
     covers("command:paged.transform.scaleDown");
     covers("menu:Object/Select next object below");
     covers("menu:Object/Select next object above");
-    covers("command:paged.object.selectNextAbove");
+    covers("command:paged.edit.selectAbove");
     covers("menu:View/Go to object tree");
     await openUxiFixture(page, "A");
     await page.evaluate(async (ref) => {
@@ -418,6 +418,24 @@ async function axe(page: Page, scope = "[data-paged-editor]") {
   }));
 }
 
+/** Wait until the layer's open animation (a fade and a zoom) has run:
+ *  mid-fade, its text is partly transparent and axe measures that. */
+async function animationsDone(page: Page, selector: string): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (sel) =>
+          [...document.querySelectorAll(sel)].every((el) =>
+            el
+              .getAnimations({ subtree: true })
+              .every((a) => a.playState === "finished"),
+          ),
+        selector,
+      ),
+    )
+    .toBe(true);
+}
+
 /** The chrome, three menus and the palette, each through axe. */
 async function axeTheChrome(page: Page): Promise<void> {
   await page.evaluate(() =>
@@ -430,6 +448,7 @@ async function axeTheChrome(page: Page): Promise<void> {
   for (const name of ["Object", "Edit", "View"]) {
     await page.getByRole("menuitem", { name, exact: true }).first().click();
     await expect(page.locator('[role="menu"]').first()).toBeVisible();
+    await animationsDone(page, '[role="menu"]');
     expect(await axe(page, '[role="menu"]'), `the ${name} menu`).toEqual([]);
     await page.keyboard.press("Escape");
     await expect(page.locator('[role="menu"]')).toHaveCount(0);
@@ -437,6 +456,7 @@ async function axeTheChrome(page: Page): Promise<void> {
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.locator("[data-palette-footer]")).toBeVisible();
   await page.keyboard.type("rect");
+  await animationsDone(page, '[role="dialog"]');
   expect(await axe(page, '[role="dialog"]'), "the palette").toEqual([]);
   await page.keyboard.press("Escape");
 }

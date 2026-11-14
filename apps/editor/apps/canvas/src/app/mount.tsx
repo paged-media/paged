@@ -303,6 +303,7 @@ import {
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   CANVAS_CONTEXT_MENU_KEYBINDINGS,
+  SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
   CanvasContextMenuHost,
 } from "../canvas-context-menu";
@@ -1846,6 +1847,7 @@ function CanvasAppIntegration() {
       ...buildAssetExportCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       SELECT_BELOW_COMMAND,
+      SELECT_ABOVE_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,

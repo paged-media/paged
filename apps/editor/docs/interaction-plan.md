@@ -451,7 +451,7 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   `paged.view.objectTree` (Alt+Shift+O) reaches it; axe runs in `TESTS/e2e/uxi-accessibility.spec.ts`.
 - **AP2 Keyboard-only creation and transforms** as commands. Tests: T70. **Done** (ADR 1226):
   inserts land in view, Object ▸ Transform's rotate and scale steps, and
-  `paged.object.selectNextBelow` / `.selectNextAbove` (⌥⌘[ / ⌥⌘]) for overlapping objects — the
+  `paged.edit.selectBelow` / `.selectAbove` (⌥⌘[ / ⌥⌘], IC6’s cycle with a keyboard half) for overlapping objects — the
   cycle IC6's object picker reuses.
 - **AP3 High contrast**, the contrast fixes, 200 % UI zoom (tokens). Tests: T74, T75. Closes F-51.
   **Done** ([ADR 1227](adr/1227-high-contrast-and-aa.md)).

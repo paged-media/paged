@@ -23,16 +23,13 @@
 //   paged.view.objectTree        Alt+Shift+O — from the canvas to the object
 //                                tree (the Tree panel, shown if it was not)
 //                                and back. Escape in the tree also returns.
-//   paged.object.selectNextBelow Cmd/Ctrl+Alt+[ — the next object below the
-//   paged.object.selectNextAbove Cmd/Ctrl+Alt+] — selection, and above it.
-//
-// THE CYCLE. With a selection, the candidates are the objects that overlap
-// the selection's box, top first, as a click would take them (the entered
-// group's members inside a group, else the top-level items): the stack a
-// pointer cannot reach under the top object. Below steps one down the
-// stack and wraps to the top, above one up. With nothing selected, the
-// candidates are every object of the page in view, and below starts at the
-// top, above at the bottom (InDesign's Select ▸ Next Object Below / Above).
+//   paged.edit.selectBelow       Cmd/Ctrl+Alt+[ — the next object below the
+//   paged.edit.selectAbove       Cmd/Ctrl+Alt+] — selection, and above it
+//                                (IC6's cycle, canvas-context-menu.tsx: under
+//                                the pointer when it is over a page; from the
+//                                keyboard the objects overlapping the
+//                                selection's box).
+//                                Object ▸ Select next object below / above.
 // Each step is a selection change only: no undo step (D-15).
 
 import {
@@ -46,18 +43,17 @@ import {
   type MenuItemContribution,
   type PagedEditor,
 } from "@paged-media/shell";
-import type { ElementId } from "@paged-media/client";
-import { transformBounds, type Affine } from "@paged-media/helpers";
 import { defineMessages, t } from "@paged-media/strings";
 
-import { currentPageTarget } from "./insert-commands";
+import {
+  PAGED_EDIT_SELECT_ABOVE,
+  PAGED_EDIT_SELECT_BELOW,
+} from "./canvas-context-menu";
 import { objectVerbApplies } from "./object-commands";
 import { OBJECT_TREE_SURFACE } from "./ui/A11yObjectTree";
 
 const M = defineMessages("app.a11yCommands", {
   objectTree: "Go to object tree",
-  selectNextBelow: "Select next object below",
-  selectNextAbove: "Select next object above",
 });
 
 // The menu leaves (`menu.<label>`).
@@ -68,96 +64,11 @@ defineMessages("menu", {
 });
 
 export const A11Y_TREE_COMMAND = "paged.view.objectTree";
-export const SELECT_NEXT_BELOW_COMMAND = "paged.object.selectNextBelow";
-export const SELECT_NEXT_ABOVE_COMMAND = "paged.object.selectNextAbove";
+export const SELECT_NEXT_BELOW_COMMAND = PAGED_EDIT_SELECT_BELOW;
+export const SELECT_NEXT_ABOVE_COMMAND = PAGED_EDIT_SELECT_ABOVE;
 
 /** The panel the object tree docks in. */
 export const OBJECT_TREE_PANEL = "paged.tree";
-
-type Box = [number, number, number, number];
-
-const keyOf = (id: ElementId): string =>
-  `${id.kind}:${String((id as { id?: unknown }).id)}`;
-
-/** The next candidate: `stack` is top first; `current` the selected one's
- *  place in it, or -1. Wraps both ways. Pure, for the unit test. */
-export function nextInStack(
-  length: number,
-  current: number,
-  direction: "below" | "above",
-): number {
-  if (length === 0) return -1;
-  if (current < 0) return direction === "below" ? 0 : length - 1;
-  const step = direction === "below" ? 1 : -1;
-  return (current + step + length) % length;
-}
-
-/** The page-local box around `items` on the first one's page. */
-export function unionBox(
-  items: ReadonlyArray<{
-    pageId?: string | null;
-    bounds: readonly number[];
-    itemTransform?: readonly number[] | null;
-  }>,
-): { pageId: string; box: Box } | null {
-  const first = items.find((g) => g.pageId != null);
-  if (!first) return null;
-  let box: Box | null = null;
-  for (const g of items) {
-    if (g.pageId !== first.pageId) continue;
-    const b = transformBounds(
-      [...g.bounds] as Box,
-      (g.itemTransform as Affine | null | undefined) ?? null,
-    ) as Box;
-    box = box
-      ? [
-          Math.min(box[0], b[0]),
-          Math.min(box[1], b[1]),
-          Math.max(box[2], b[2]),
-          Math.max(box[3], b[3]),
-        ]
-      : b;
-  }
-  return box ? { pageId: String(first.pageId), box } : null;
-}
-
-/** Step the selection through the objects stacked where it is. */
-export async function cycleSelection(
-  paged: PagedEditor,
-  direction: "below" | "above",
-): Promise<ElementId | null> {
-  const client = paged.client;
-  const selection = paged.selection.elementSelection;
-  const group = paged.selection.activeGroup;
-  let area: { pageId: string; box: Box } | null = null;
-  if (selection.length > 0) {
-    area = unionBox(await client.elementGeometry([...selection]));
-  } else {
-    const target = currentPageTarget(paged);
-    if (target)
-      area = {
-        pageId: String(target.pageId),
-        box: [0, 0, target.rect.h, target.rect.w],
-      };
-  }
-  if (!area) return null;
-  const stack = await client.marqueeHits(area.pageId as never, area.box, {
-    mode: "intersect",
-    scope: group
-      ? ({ kind: "group", id: group } as never)
-      : ({ kind: "document" } as never),
-  });
-  const current =
-    selection.length === 1
-      ? stack.findIndex((id) => keyOf(id) === keyOf(selection[0]!))
-      : -1;
-  const next = stack[nextInStack(stack.length, current, direction)];
-  if (!next) return null;
-  const applied = await client.setElementSelection([next], "replace");
-  paged.selection.setElementSelection(applied);
-  paged.selection.setElementGeometry(await client.elementGeometry(applied));
-  return next;
-}
 
 /** Move focus between the canvas and the object tree. */
 async function toggleObjectTree(
@@ -215,26 +126,6 @@ export function buildA11yCommands(
       when: hasDocument,
       handler: (paged: unknown) =>
         toggleObjectTree(paged as PagedEditor, deps.showPanel),
-    },
-    {
-      id: SELECT_NEXT_BELOW_COMMAND,
-      get title() {
-        return t(M.selectNextBelow);
-      },
-      category: "Object",
-      when: cycleApplies,
-      handler: (paged: unknown) =>
-        cycleSelection(paged as PagedEditor, "below"),
-    },
-    {
-      id: SELECT_NEXT_ABOVE_COMMAND,
-      get title() {
-        return t(M.selectNextAbove);
-      },
-      category: "Object",
-      when: cycleApplies,
-      handler: (paged: unknown) =>
-        cycleSelection(paged as PagedEditor, "above"),
     },
   ];
 }

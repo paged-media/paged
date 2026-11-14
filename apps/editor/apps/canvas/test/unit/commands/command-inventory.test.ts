@@ -64,6 +64,7 @@ import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
+  SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
 } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
@@ -202,6 +203,7 @@ function tableIds(): string[] {
     ...buildAssetExportCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
+    SELECT_ABOVE_COMMAND,
     ...buildObjectCommands(noop),
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
@@ -303,6 +305,7 @@ describe("the host command inventory", () => {
       "buildAssetExportCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
+      "SELECT_ABOVE_COMMAND",
       "objectCommands",
       "pathfinderCommands",
       "cornerCommands",

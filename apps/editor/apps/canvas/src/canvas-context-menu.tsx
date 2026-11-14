@@ -49,9 +49,12 @@ import {
   type KeybindingContribution,
   type PagedEditor,
   type PickableObject,
+  nextAbove,
   nextBelow,
+  objectsOver,
   objectsUnder,
 } from "@paged-media/shell";
+import { transformBounds, type Affine } from "@paged-media/helpers";
 import {
   docToViewport,
   viewportToDoc,
@@ -83,6 +86,7 @@ import { defineMessages, t } from "@paged-media/strings";
 const M = defineMessages("app.canvasContextMenu", {
   showContextMenu: "Show context menu",
   selectBelow: "Select next object below",
+  selectAbove: "Select next object above",
   rectangle: "Rectangle",
   oval: "Ellipse",
   polygon: "Polygon",
@@ -93,6 +97,7 @@ const M = defineMessages("app.canvasContextMenu", {
 });
 
 export const PAGED_EDIT_SELECT_BELOW = "paged.edit.selectBelow";
+export const PAGED_EDIT_SELECT_ABOVE = "paged.edit.selectAbove";
 
 export const PAGED_EDIT_CONTEXT_MENU = "paged.edit.contextMenu";
 
@@ -237,9 +242,67 @@ export const CANVAS_CONTEXT_MENU_COMMAND: CommandContribution = {
   },
 };
 
+type Box = [number, number, number, number];
+
+/** The page-local box around `items` on the first one's page. Pure. */
+export function unionBox(
+  items: ReadonlyArray<{
+    pageId?: string | null;
+    bounds: readonly number[];
+    itemTransform?: readonly number[] | null;
+  }>,
+): { pageId: string; box: Box } | null {
+  const first = items.find((g) => g.pageId != null);
+  if (!first) return null;
+  let box: Box | null = null;
+  for (const g of items) {
+    if (g.pageId !== first.pageId) continue;
+    const b = transformBounds(
+      [...g.bounds] as Box,
+      (g.itemTransform as Affine | null | undefined) ?? null,
+    ) as Box;
+    box = box
+      ? [
+          Math.min(box[0], b[0]),
+          Math.min(box[1], b[1]),
+          Math.max(box[2], b[2]),
+          Math.max(box[3], b[3]),
+        ]
+      : b;
+  }
+  return box ? { pageId: String(first.pageId), box } : null;
+}
+
+/** The stack the cycle steps through, topmost first: the objects under
+ *  the pointer when it is over a page (IC6); from the keyboard, with no
+ *  pointer on the canvas, the objects that overlap the selection's box
+ *  (editor ADR "An accessible object tree", `UXI-A11Y-008`). A pointer off
+ *  the pages, or nothing selected and no pointer: nothing to step through. */
+async function cycleStack(editor: PagedEditor): Promise<ElementId[]> {
+  const group = editor.selection.activeGroup ?? null;
+  const pointer = scopeOf(editor).get(CANVAS_POINTER).get();
+  if (pointer) {
+    if (!pointer.pageId || !pointer.pagePoint) return [];
+    return objectsUnder(
+      editor.client,
+      pointer.pageId,
+      pointer.pagePoint,
+      group,
+    );
+  }
+  const selection = editor.selection.elementSelection;
+  if (selection.length === 0) return [];
+  const area = unionBox(await editor.client.elementGeometry([...selection]));
+  return area
+    ? objectsOver(editor.client, area.pageId as never, area.box, group)
+    : [];
+}
+
 /** IC6 (`UXI-HIT-006`) — the next object below the selection at the
  *  pointer, wrapping to the topmost: what lies under the topmost item is
- *  reached by the user's explicit choice, never by the default click. */
+ *  reached by the user's explicit choice, never by the default click.
+ *  From the keyboard (⌥⌘[) it steps through the objects stacked where the
+ *  selection is. */
 export const SELECT_BELOW_COMMAND: CommandContribution = {
   id: PAGED_EDIT_SELECT_BELOW,
   get title() {
@@ -248,15 +311,27 @@ export const SELECT_BELOW_COMMAND: CommandContribution = {
   category: "Edit",
   handler: async (paged) => {
     const editor = paged as PagedEditor;
-    const pointer = scopeOf(paged).get(CANVAS_POINTER).get();
-    if (!pointer?.pageId || !pointer.pagePoint) return;
-    const stack = await objectsUnder(
-      editor.client,
-      pointer.pageId,
-      pointer.pagePoint,
-      editor.selection.activeGroup ?? null,
+    const next = nextBelow(
+      await cycleStack(editor),
+      editor.selection.elementSelection,
     );
-    const next = nextBelow(stack, editor.selection.elementSelection);
+    if (next) await selectIds(editor, [next]);
+  },
+};
+
+/** The next object above, wrapping to the bottommost (⌥⌘]). */
+export const SELECT_ABOVE_COMMAND: CommandContribution = {
+  id: PAGED_EDIT_SELECT_ABOVE,
+  get title() {
+    return t(M.selectAbove);
+  },
+  category: "Edit",
+  handler: async (paged) => {
+    const editor = paged as PagedEditor;
+    const next = nextAbove(
+      await cycleStack(editor),
+      editor.selection.elementSelection,
+    );
     if (next) await selectIds(editor, [next]);
   },
 };
