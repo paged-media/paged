@@ -33,7 +33,11 @@
 // nothing while off, so "no lines" is its correct resting state — a
 // spec that only asserted absence would pass against an overlay that
 // never worked. Every assertion is paired: off → idle, on → PRESENT
-// with the right hop count and direction, off → idle again.
+// with the right hop count and direction, off → idle again. Text threads
+// is one of the editing aids (editor ADR 1212): with the aid off the
+// overlay host does not mount the overlay at all, so "idle" is the aid's
+// switch reading off in the bottom bar's control AND no overlay in the
+// DOM, never the absence alone.
 
 import { test, expect } from "@playwright/test";
 
@@ -54,6 +58,18 @@ async function toggleThreads(page: Page): Promise<void> {
     ).__canvas.registries.commands;
     await reg.invoke("paged.view.toggleTextThreads");
   });
+}
+
+/** The Text threads switch as the editing aids control shows it (the eye
+ *  button in the bottom bar, editor ADR 1212); the menu is closed again. */
+async function threadsAidOn(page: Page): Promise<boolean> {
+  await page.locator("[data-editing-aids-control]").click();
+  const item = page.locator('[data-editing-aid="textThreads"]');
+  await expect(item).toBeVisible();
+  const on = (await item.getAttribute("aria-checked")) === "true";
+  await page.keyboard.press("Escape");
+  await expect(item).toHaveCount(0);
+  return on;
 }
 
 async function link(page: Page, from: string, to: string): Promise<void> {
@@ -107,14 +123,19 @@ test.describe("journey · text thread overlay", () => {
     await link(page, a.frameId, b.frameId);
     await link(page, b.frameId, c.frameId);
 
-    // OFF — mounted and idle. The marker distinguishes "idle" from
-    // "never mounted", which are the same DOM when the off branch
-    // returns null.
-    await expect(page.locator('[data-thread-lines="off"]')).toHaveCount(1);
+    // OFF — the aid reads off and its overlay is not mounted: an aid that
+    // is off costs nothing (editor ADR 1212).
+    expect(await threadsAidOn(page)).toBe(false);
+    await expect(page.locator("[data-thread-lines]")).toHaveCount(0);
     await expect(page.locator("[data-thread-hop]")).toHaveCount(0);
 
-    // ON — three chained frames make exactly two hops.
+    // ON — the command and the control are one switch; three chained
+    // frames make exactly two hops.
     await toggleThreads(page);
+    expect(await threadsAidOn(page)).toBe(true);
+    await expect(page.locator('[data-thread-lines="ready"]')).toHaveCount(1, {
+      timeout: 15_000,
+    });
     await expect(page.locator("[data-thread-hop]")).toHaveCount(2, {
       timeout: 15_000,
     });
@@ -142,10 +163,11 @@ test.describe("journey · text thread overlay", () => {
     expect(Number.isFinite(y1) && Number.isFinite(y2)).toBe(true);
     expect(y2).toBeGreaterThan(y1);
 
-    // OFF again — the mirror is dropped, not merely hidden.
+    // OFF again — the overlay is unmounted, not merely hidden.
     await toggleThreads(page);
     await expect(page.locator("[data-thread-hop]")).toHaveCount(0);
-    await expect(page.locator('[data-thread-lines="off"]')).toHaveCount(1);
+    await expect(page.locator("[data-thread-lines]")).toHaveCount(0);
+    expect(await threadsAidOn(page)).toBe(false);
   });
 
   test("an unthreaded document draws nothing with the overlay ON @feat:editor-tools.text.thread-lines", async ({
