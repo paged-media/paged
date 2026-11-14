@@ -178,4 +178,9 @@ export class GestureSpine {
   cursorAt(e: CanvasPointerEvent) {
     return this.current?.handler.cursorAt?.(e);
   }
+  /** The mounted handler's cursor while its press holds the pointer
+   *  (`GestureHandler.pressCursor`), or undefined. */
+  pressCursor(e: CanvasPointerEvent) {
+    return this.current?.handler.pressCursor?.(e);
+  }
 }

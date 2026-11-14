@@ -91,3 +91,17 @@ and the engine offers no dry run of a Boolean or region operation to preview its
 - When track IC's cursor controller lands, the Pen's `cursorAt` answers through it unchanged.
 - A dry-run door in the engine (a mutation applied to a copy and answered as geometry) would let the
   Pathfinder and the suggestions preview their results; it is not built.
+
+## Amendment (2026-11-14): the Pen's nine states on the cursor controller
+
+Editor ADR 1227 gave the canvas one cursor controller. The Pen's states reach it through two of its
+layers, and nothing else writes the canvas's cursor: between presses the handler's `cursorAt` (start,
+draw, continue, close, join, finish, add, delete) is the hover layer, as before; while a press holds
+the pointer the handler's `pressCursor` — the same state function, read with the button down — is
+the session layer, set on the press and on each move of its drag and cleared when the press ends,
+committed or rolled back (`apps/canvas/src/ui/useGestureSpine.ts`). So the ninth state, the handle
+being pulled, now shows during the drag: before, the canvas asked for a cursor only while no drag
+was in flight, and `dragHandle` never reached the screen. `pressCursor` is a shell-side member of
+the gesture handler (as `busy` is), not the contract's. Test:
+`apps/editor/apps/canvas/test/tools/pen-cursor.dom.test.tsx` (the mounted canvas over the real
+engine: the session layer and the host's cursor during the pull, cleared on release).

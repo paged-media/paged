@@ -268,7 +268,9 @@ holds the canvas's cursor in layers — the session's (a handle's for the whole 
 closed hand while panning), a modifier's (the copy cursor while an Alt move duplicates), the
 hover's and the tool's — and is the only writer of it; the scrub fields, the loaded thread and an
 armed placement write theirs through the same two functions, and the single-owner rule
-`cursor-write` keeps it so.
+`cursor-write` keeps it so. The Pen's nine states are on it: eight through the hover, and the
+handle being pulled through the session layer for the whole of the press (ADR 1227, amendment;
+paged.draw ADR 370, amendment).
 
 Modifier hints (IC10; extensions ADR 1109): a strip over the canvas names what the modifiers do
 with the tool in hand — the host's words for the Selection tools and the shape tools, a handler's

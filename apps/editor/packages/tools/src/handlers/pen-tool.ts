@@ -58,6 +58,7 @@
 
 import type {
   CanvasPointerEvent,
+  CursorSpec,
   GestureHandler,
   PagedEditor,
 } from "@paged-media/shell";
@@ -258,6 +259,19 @@ export function createPenHandler(): GestureHandler {
         !snapshot.closePreview &&
         overLastAnchor(snapshot, point, CLOSE_TOLERANCE_PX * ptPerPx()),
     });
+
+  /** What a press here would do, as the machine last resolved it, named
+   *  as a state (UXI-DRW-003): each state has its own cursor. Asked for
+   *  the hover (`cursorAt`) and, while a press holds the pointer, for the
+   *  session (`pressCursor`): all nine states reach the cursor controller. */
+  const stateCursor = (e: CanvasPointerEvent): CursorSpec => {
+    const point = page
+      ? endLocalFor(page, e)
+      : e.pagePoint
+        ? ([e.pagePoint[0], e.pagePoint[1]] as Vec2)
+        : null;
+    return penCursor(stateAt(point));
+  };
 
   /** The hint beside the pointer, in the editor's language, on an overlay
    *  layer of its own (the tool-preview slot keeps the path). */
@@ -609,15 +623,9 @@ export function createPenHandler(): GestureHandler {
       // A path under construction: Escape cancels its open run.
       return page !== null && machine !== null;
     },
-    cursorAt(e: CanvasPointerEvent) {
-      // What a press here would do, as the machine last resolved it,
-      // named as a state (UXI-DRW-003): each state has its own cursor.
-      const point = page
-        ? endLocalFor(page, e)
-        : e.pagePoint
-          ? ([e.pagePoint[0], e.pagePoint[1]] as Vec2)
-          : null;
-      return penCursor(stateAt(point));
-    },
+    cursorAt: stateCursor,
+    // The press's own states (pulling a handle) show while it holds the
+    // pointer: the cursor contract's session layer (editor ADR 1227).
+    pressCursor: stateCursor,
   };
 }
