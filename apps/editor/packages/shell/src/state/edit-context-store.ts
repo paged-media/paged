@@ -18,7 +18,7 @@
  */
 
 // The edit-context stack as a reducer and a post-commit effect queue
-// (editor ADR 1212, task CM1; UXI-CTX-001, UXI-CTX-002, UXI-PLG-005).
+// (editor ADR 1214, task CM1; UXI-CTX-001, UXI-CTX-002, UXI-PLG-005).
 //
 // The stack used to live in a React `useState` and ran the contexts'
 // hooks (onEnter, onCommit, onCancel, onExit) INSIDE the `setStack`

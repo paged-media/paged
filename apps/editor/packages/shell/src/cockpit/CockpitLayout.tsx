@@ -91,6 +91,7 @@ import { HRuler, VRulerStrip } from "./canvas-frame/Rulers";
 import { ThreadingController } from "./canvas-frame/ThreadingController";
 import { ThumbnailRail } from "./canvas-frame/ThumbnailRail";
 import { CanvasLoadingStatus } from "./canvas-frame/LoadingStatus";
+import { ProofBadge } from "./canvas-frame/ProofBadge";
 import { useOptionalDocument } from "../state/document-context";
 import { useOptionalCockpitState } from "./cockpit-state-context";
 import {
@@ -393,6 +394,9 @@ export function CockpitLayout({
           {/* Progressive loading (F-53): the stage and, until the first
               page is composed, the pages' outlines. */}
           {!isOverride && <CanvasLoadingStatus />}
+          {/* Proof view says what it shows (editor ADR "Editing aids and
+              Proof view"). */}
+          {!isOverride && <ProofBadge />}
           {moduleView ? (
             <ModuleViewHost view={moduleView} />
           ) : (

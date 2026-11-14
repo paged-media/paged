@@ -338,7 +338,7 @@ film("designers", async (k) => {
   // ── Where the story goes. ──
   await k.scene("threads", async () => {
     k.unfocus();
-    await menu(k, ["View", "Show text threads"]);
+    await menu(k, ["View", "Editing aids", "Text threads"]);
     await expect(page.locator("[data-thread-hop]")).toHaveCount(1);
     // Punch-ins hold at least 2 s, or the compositor drops them as twitches.
     k.focus(COPY);

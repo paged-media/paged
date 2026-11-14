@@ -38,7 +38,6 @@ import { useContextWorkspace } from "../catalog/binding-providers";
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { baseToPage, workspaceDocRect } from "../state/context-workspace";
 import { useOptionalGuideDrag } from "../state/guide-drag-context";
-import { useOptionalScreenMode } from "../state/screen-mode-context";
 
 /** Screen-space hit tolerance for grabbing a placed guide, px. The
  *  controller converts to doc-space via the camera so the grab zone
@@ -125,9 +124,8 @@ function WorkspaceGuides(props: OverlayProps) {
 
 function GuideOverlayRender(props: OverlayProps) {
   const gd = useOptionalGuideDrag();
-  // Concept 1 (T7) — guides are non-printing chrome: Normal mode only.
-  const screenMode = useOptionalScreenMode();
-  if (screenMode && screenMode.screenMode !== "normal") return null;
+  // Guides are an editing aid: the overlay host hides them when the aid
+  // is off or the view is a proof (state/editing-aids.ts).
   if (!gd) return null;
 
   const inv = 1 / (props.camera.scale || 1);

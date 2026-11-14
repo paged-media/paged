@@ -42,7 +42,8 @@ import { ptPerRulerUnit } from "../../state/context-workspace";
 import { useOptionalDocument } from "../../state/document-context";
 import { useOptionalGuideDrag } from "../../state/guide-drag-context";
 import { layoutPageRects } from "./page-layout";
-import { RULER_LABEL_INSET, rulerMarks } from "./ruler-marks";
+import { zoomTier } from "../../state/semantic-zoom";
+import { RULER_LABEL_INSET, rulerMarks, rulerMinorTicks } from "./ruler-marks";
 
 /** The frame the rulers count in: document pt per ruler unit and the
  *  document coordinate of the zero, per axis — the page's (pt from the
@@ -81,6 +82,16 @@ export function HRuler() {
     camera.tx + frame.zero[0] * camera.scale,
     viewportSize[0] || 0,
   );
+  // Semantic zoom: zoomed in to detail, the minor ticks between the
+  // labelled marks (editor ADR "Page lenses and semantic zoom").
+  const minor =
+    zoomTier(camera.scale) === "detail"
+      ? rulerMinorTicks(
+          camera.scale * frame.ptPerUnit,
+          camera.tx + frame.zero[0] * camera.scale,
+          viewportSize[0] || 0,
+        )
+      : [];
   return (
     <div
       data-h-ruler
@@ -109,6 +120,19 @@ export function HRuler() {
         cursor: guideDrag ? "ns-resize" : undefined,
       }}
     >
+      {minor.map((px) => (
+        <div
+          key={`minor:${px}`}
+          data-ruler-minor=""
+          style={{
+            position: "absolute",
+            left: px,
+            bottom: 0,
+            height: 5,
+            borderLeft: "1px solid var(--chrome-divider)",
+          }}
+        />
+      ))}
       {marks.map((m) => (
         <div
           key={m.value}
@@ -154,6 +178,14 @@ export function VRulerStrip() {
     camera.ty + frame.zero[1] * camera.scale,
     viewportSize[1] || 0,
   );
+  const minor =
+    zoomTier(camera.scale) === "detail"
+      ? rulerMinorTicks(
+          camera.scale * frame.ptPerUnit,
+          camera.ty + frame.zero[1] * camera.scale,
+          viewportSize[1] || 0,
+        )
+      : [];
   return (
     <div
       data-v-ruler
@@ -181,6 +213,19 @@ export function VRulerStrip() {
         cursor: guideDrag ? "ew-resize" : undefined,
       }}
     >
+      {minor.map((px) => (
+        <div
+          key={`minor:${px}`}
+          data-ruler-minor=""
+          style={{
+            position: "absolute",
+            top: px,
+            right: 0,
+            width: 5,
+            borderTop: "1px solid var(--chrome-divider)",
+          }}
+        />
+      ))}
       {marks.map((m) => (
         <div
           key={m.value}

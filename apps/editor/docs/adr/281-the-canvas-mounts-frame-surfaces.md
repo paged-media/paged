@@ -41,7 +41,7 @@ and end the context when the surface asks.
 
 ## Amendment 2026-11-13
 
-[ADR 1212](1212-one-way-out-of-a-context.md): a press outside the surface leaves the context
+[ADR 1214](1214-one-way-out-of-a-context.md): a press outside the surface leaves the context
 through the exit resolver (`leave("click-outside")`), not a plain commit; the selection moving
 away leaves it the same way (`leaveAll("selection-change")`), and only when the selection lies
 outside the context's scope. A dirty context whose module asks to be asked puts up the resolve

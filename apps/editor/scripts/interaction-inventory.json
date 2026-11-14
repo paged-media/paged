@@ -2936,7 +2936,7 @@
       "site": "apps/editor/packages/shell/src/state/use-edit-context-entry.tsx",
       "listener": "element",
       "states": ["idle", "pressed", "pending-hit", "settled"],
-      "permission": "Entering a context changes no document state; the context's write scope is its root plus the engine's edit scope of it (client.editScope, EN5, engine ADR 1301; editor ADR 1212)",
+      "permission": "Entering a context changes no document state; the context's write scope is its root plus the engine's edit scope of it (client.editScope, EN5, engine ADR 1301; editor ADR 1214)",
       "cancel": "Nothing to cancel on entry; the hit test that picks the target carries no epoch (IC3).",
       "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
       "uxi": [
@@ -2948,7 +2948,7 @@
         "UXI-TXT-002"
       ],
       "status": "legacy",
-      "notes": "A picture frame enters its content level first and Edit image on a second double-click, Enter or the level control (D-05, editor ADR 1213); tryEnterEditContext decides every double-click, picture frames included. Stays legacy until track IC's ContentContextAdapter routes the canvas's double-click through it."
+      "notes": "A picture frame enters its content level first and Edit image on a second double-click, Enter or the level control (D-05, editor ADR 1215); tryEnterEditContext decides every double-click, picture frames included. Stays legacy until track IC's ContentContextAdapter routes the canvas's double-click through it."
     },
     {
       "id": "edit-context.content-pointer",
@@ -2983,7 +2983,7 @@
       "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
       "listener": "element",
       "states": ["idle", "pressed", "settled"],
-      "permission": "Leaves through resolveContextExit (editor ADR 1212): a clean context commits at once; a dirty one commits when its module declares commit-if-safe, asks (Keep / Discard / Cancel) when it declares ask.",
+      "permission": "Leaves through resolveContextExit (editor ADR 1214): a clean context commits at once; a dirty one commits when its module declares commit-if-safe, asks (Keep / Discard / Cancel) when it declares ask.",
       "cancel": "An open resolve prompt holds the press (Cancel keeps the context); otherwise the press falls through to select what is under it (D-04).",
       "surfaceIds": [],
       "uxi": ["UXI-HIT-005", "UXI-CTX-006", "UXI-CTX-007"],
@@ -3909,7 +3909,7 @@
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "The context tiers of the Escape arbiter (editor ADR 1207): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand); a clean context leaves one level through resolveContextExit (editor ADR 1212: cancel, or commit for a commit-if-safe module); a header edited in place leaves its Escape to the text.",
+      "cancel": "The context tiers of the Escape arbiter (editor ADR 1207): a dirty sub-edit resolves through the context's onContentKey (or the tool in hand); a clean context leaves one level through resolveContextExit (editor ADR 1214: cancel, or commit for a commit-if-safe module); a header edited in place leaves its Escape to the text.",
       "surfaceIds": [],
       "uxi": ["UXI-CTX-003", "UXI-CTX-006", "UXI-CTX-007", "UXI-ESC-001"],
       "status": "migrated"

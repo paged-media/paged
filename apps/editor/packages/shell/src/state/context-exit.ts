@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// One way out of an edit context (editor ADR 1212; the interaction
+// One way out of an edit context (editor ADR 1214; the interaction
 // specification's D-04, UXI-CTX-006, UXI-CTX-007).
 //
 // An edit context used to end in five ways with five meanings: Escape

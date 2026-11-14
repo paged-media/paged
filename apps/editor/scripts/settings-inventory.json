@@ -299,9 +299,79 @@
       "kind": "view-option",
       "storage": "memory",
       "default": false,
-      "effect": "View > Show text threads: the thread lines overlay",
+      "effect": "View > Editing aids > Text threads: the thread lines overlay (remembered in paged.view.editingAids)",
       "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
       "marker": "textThreads: false",
+      "sites": []
+    },
+    {
+      "id": "view.frameEdges",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Editing aids > Frame edges: the edge of every page item (remembered in paged.view.editingAids; editor ADR \"Editing aids and Proof view\")",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "frameEdges: false",
+      "sites": []
+    },
+    {
+      "id": "view.marginsColumns",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Editing aids > Margins and columns: the margin and column guides (remembered in paged.view.editingAids)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "marginsColumns: true",
+      "sites": []
+    },
+    {
+      "id": "view.guides",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Editing aids > Ruler guides: the document's ruler guides; hidden, they do not snap (UXI-GDE-004; remembered in paged.view.editingAids)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "guides: true",
+      "sites": []
+    },
+    {
+      "id": "view.baselineGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Editing aids > Baseline grid: the document's baseline grid (remembered in paged.view.editingAids)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "baselineGrid: false",
+      "sites": []
+    },
+    {
+      "id": "view.oversetMarkers",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Editing aids > Overset markers: the red plus on every frame whose story runs over (remembered in paged.view.editingAids)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "oversetMarkers: true",
+      "sites": []
+    },
+    {
+      "id": "view.hiddenCharacters",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Editing aids > Hidden characters: shown disabled, not supported yet (the engine does not report where spaces, tabs and returns are)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "hiddenCharacters: false",
+      "sites": []
+    },
+    {
+      "id": "view.nonprinting",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Editing aids > Nonprinting items: shown on and disabled, not supported yet (the engine always draws them on screen and leaves them out of export)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "nonprinting: true",
       "sites": []
     },
     {
@@ -534,6 +604,21 @@
         ["getItem", "STORAGE_KEY"],
         ["removeItem", "STORAGE_KEY"],
         ["setItem", "STORAGE_KEY"]
+      ]
+    },
+    {
+      "id": "paged.view.editingAids",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.view.editingAids",
+      "default": "{ frameEdges: false, marginsColumns: true, guides: true, baselineGrid: false, textThreads: false, oversetMarkers: true, hiddenCharacters: false, nonprinting: true }",
+      "effect": "the editing aids' toggles, each remembered on its own (View > Editing aids and the bottom bar's control; editor ADR \"Editing aids and Proof view\"); read field by field, a value that is not a boolean ignored (ADR 247)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "\"paged.view.editingAids\"",
+      "sites": [
+        ["getItem", "AIDS_STORAGE_KEY"],
+        ["setItem", "AIDS_STORAGE_KEY"],
+        ["removeItem", "AIDS_STORAGE_KEY"]
       ]
     },
     {

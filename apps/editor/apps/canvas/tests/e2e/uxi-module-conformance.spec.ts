@@ -27,7 +27,7 @@
 //   focus          Escape on the canvas is the context's: one press leaves
 //                  one level, the frame stays selected (UXI-CTX-003);
 //   commit/cancel  leaving a clean context changes no document state and
-//                  adds no undo step (ADR 1212);
+//                  adds no undo step (ADR 1214);
 //   inspector      the context's own panel is offered while it is active.
 //
 // Then the scenarios of the specification's group C: a text frame's
@@ -244,7 +244,7 @@ test.describe("UXI module conformance (G2)", () => {
         expect(await historyDepth(page)).toEqual(history);
       } else {
         // paged.image takes the picture in on entry (a marker of its own
-        // on the frame, ADR 1213); the frame's geometry stays.
+        // on the frame, ADR 1215); the frame's geometry stays.
         const g = await geometry(page, frame);
         expect(g?.bounds).toEqual([400, 300, 600, 580]);
       }

@@ -17,13 +17,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Frame · Content · Edit control (editor ADR 1213; the UX strategy's
+// The Frame · Content · Edit control (editor ADR 1215; the UX strategy's
 // §3.2; UXI-CTX-013). A compact segmented control in the context toolbar
 // for the selected frame, or the frame the active context was entered on:
 // which level is being edited, and a press to change it. Shown only for a
 // frame that has more than one level (a picture frame; content a module
 // owns). Going up leaves the levels above through the exit resolver
-// (ADR 1212); going down enters the level — "Edit image" is D-05's
+// (ADR 1214); going down enters the level — "Edit image" is D-05's
 // explicit action. It sits in a bar of fixed height, so it never moves
 // the page (UXI-CTX-008).
 

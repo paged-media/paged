@@ -65,7 +65,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
 | [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
 | [249](249-offered-only-where-it-applies.md) | A control is offered only where it applies: the command's when, the field's kind | Accepted 2026-10-19 |
-| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201, 1207 and 1212) |
+| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 (amended 2026-11-13 by 1201, 1207 and 1214) |
 | [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
 | [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
@@ -77,7 +77,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [259](259-landmarks-tabs-and-headings.md) | Landmarks, the dock's tabs and panel headings | Accepted 2026-10-20 |
 | [261](261-the-insert-menu-draws-what-the-tools-draw.md) | Insert ▸ Rectangle and Ellipse draw what the drawing tools draw | Accepted 2026-10-20 |
 | [262](262-a-file-opened-with-nothing-open-becomes-a-document.md) | A file opened with nothing open becomes a document | Accepted 2026-10-20 |
-| [263](263-ruler-labels-thin-as-you-zoom-out.md) | Ruler labels thin as you zoom out | Accepted 2026-10-20 |
+| [263](263-ruler-labels-thin-as-you-zoom-out.md) | Ruler labels thin as you zoom out | Accepted 2026-10-20 (amended 2026-11-13 by 1213) |
 | [264](264-a-remembered-grant-is-the-documents-own.md) | A remembered grant is the document's own, keyed by what the host opened | Accepted 2026-10-20 |
 | [265](265-dock-tabs-fit-the-dock.md) | The dock's tabs fit the dock | Accepted 2026-10-20 |
 | [266](266-one-source-for-the-print-output-facts.md) | One source for the print-output facts | Accepted 2026-10-20 |
@@ -92,12 +92,12 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [275](275-features-gate-what-is-offered.md) | Features gate what is offered, over surface ids | Accepted 2026-10-22 |
 | [276](276-filling-a-template.md) | Filling a template | Accepted 2026-10-22 |
 | [277](277-the-editor-mounts-as-an-instance.md) | The editor mounts as an instance | Accepted 2026-10-23 |
-| [281](281-the-canvas-mounts-frame-surfaces.md) | The canvas mounts a bundle's frame surface over the active frame | Accepted 2026-10-22 (amended 2026-11-13 by 1212) |
-| [282](282-enter-enters-owned-content.md) | Enter enters the content a plugin owns | Accepted 2026-10-23 (amended 2026-11-13 by 1201 and 1213) |
+| [281](281-the-canvas-mounts-frame-surfaces.md) | The canvas mounts a bundle's frame surface over the active frame | Accepted 2026-10-22 (amended 2026-11-13 by 1214) |
+| [282](282-enter-enters-owned-content.md) | Enter enters the content a plugin owns | Accepted 2026-10-23 (amended 2026-11-13 by 1201 and 1215) |
 | [283](283-a-frame-surface-goes-full-screen.md) | A frame surface goes full screen through a chrome override | Accepted 2026-10-23 |
-| [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 (amended 2026-11-13 by 1213) |
+| [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 (amended 2026-11-13 by 1215) |
 | [285](285-the-history-panel.md) | The History panel lists every step by name, and a snapshot restore is one step | Accepted 2026-10-24 |
-| [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 |
+| [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 (amended 2026-11-13 by 1212) |
 | [289](289-the-vector-clipboard.md) | The vector clipboard: copy writes SVG, paste reads SVG | Accepted 2026-10-28 |
 | [288](288-asset-export.md) | Asset Export | Accepted 2026-10-28 |
 | [290](290-the-ml-service.md) | The ML service: in-browser models on demand, a local image model through the editor's own origin | Accepted 2026-10-24 |
@@ -130,13 +130,15 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [1204](1204-recovery-journal.md) | The recovery journal: per-editor checkpoints of unsaved work in the origin-private file system, a crashed session's work offered back as Restore (a new document, never over the source), Compare or Discard; bounded and purged on save and close | Accepted 2026-11-13 |
 | [1205](1205-drop-says-what-it-will-do.md) | A drop says what it will do: one resolver (place, place in the frame under the pointer, replace its picture, import, open, replace the document, refuse) shown at the pointer before the drop and carried out on it; a file that is no package replaces nothing; the open picker and the empty canvas offer every format | Accepted 2026-11-13; amends 258 |
 | [1206](1206-focus-returns-to-the-opener.md) | Focus returns to the opener, else to the canvas: one focus-return service for dialogs, the palette, menus and the context menu | Accepted 2026-11-13 |
-| [1207](1207-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13 (amended 2026-11-13 by 1212); amends 250 |
+| [1207](1207-one-escape.md) | One Escape: an arbiter per editor resolves each press once, in the specification's §12.1 order; handlers by tier, the gestures still to join defer; ratchets `escape-listener` and `raw-window-key-listener` | Accepted 2026-11-13 (amended 2026-11-13 by 1214); amends 250 |
 | [1208](1208-docks-are-resizable-and-the-workspace-adapts.md) | Docks are resizable and the workspace adapts: dividers and per-mode widths, wide / laptop / narrow by the width the cockpit is given, the camera keeps the centre on a resize, the Focus workspace, progressive loading stages, the header and the Window menu | Accepted 2026-11-13; amends 002, 207, 237 |
 | [1209](1209-density-presets.md) | Density presets: Comfortable, Professional and Compact through `[data-density]` tokens; density never sizes the document | Accepted 2026-11-13; amends 210 |
 | [1210](1210-the-interaction-coordinator.md) | The interaction coordinator: one per editor, with sessions (owners ranked by §3.4, legal phase edges, ended exactly once), epochs and guarded tokens for late answers, and a trace with no user text; the terminal events (blur, a hidden page, a lost capture, a document or tool switch, a failed worker, unmount) end every session; no refused begin and no Escape turns a drag into a pan; behind the `coordinator` flag first | Accepted 2026-11-13 |
 | [1211](1211-navigation-history-and-one-current-page.md) | Navigation history and one current page: one rule for the current page (rotation included), Back and Forward through explicit navigations, every zoom route in the one range, an editable zoom field, Actual size and a calibrated size, reduced motion and tweens that yield | Accepted 2026-11-13; amends 246, 257 |
-| [1212](1212-one-way-out-of-a-context.md) | One way out of a context: one exit resolver (reason × dirty × the module's `exitPolicy`) for every exit, a resolve prompt, the document switch resolved before the replace question; the stack as a reducer with a post-commit effect queue, hooks by frame id, the scope query, groups in the breadcrumb | Accepted 2026-11-13; amends 250 and 281 |
-| [1213](1213-frame-content-edit.md) | Frame, content, edit: a picture frame enters its content first (the picture moves, the frame stays), Edit image explicitly (D-05); labels name the content; the trail lives in the context toolbar's fixed bar | Accepted 2026-11-13; amends 282 and 284 |
+| [1212](1212-editing-aids-and-proof-view.md) | Editing aids and Proof view: eight aids each remembered on its own (two disabled until the engine supports them), one overlay rule in the host, hidden guides do not snap, Proof view masks the pasteboard at the trim or the bleed and keeps the selection | Accepted 2026-11-13; amends 287 |
+| [1213](1213-page-lenses-and-semantic-zoom.md) | Page lenses and semantic zoom: the document map as Pages, Structure, Layers, Issues and Data lenses with one search, every jump recorded for Back; overview, page and detail tiers decide which handles and ruler ticks draw, never the selection or the tool; page names off the pages | Accepted 2026-11-13; amends 263 |
+| [1214](1214-one-way-out-of-a-context.md) | One way out of a context: one exit resolver (reason × dirty × the module's `exitPolicy`) for every exit, a resolve prompt, the document switch resolved before the replace question; the stack as a reducer with a post-commit effect queue, hooks by frame id, the scope query, groups in the breadcrumb | Accepted 2026-11-13; amends 250 and 281 |
+| [1215](1215-frame-content-edit.md) | Frame, content, edit: a picture frame enters its content first (the picture moves, the frame stays), Edit image explicitly (D-05); labels name the content; the trail lives in the context toolbar's fixed bar | Accepted 2026-11-13; amends 282 and 284 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

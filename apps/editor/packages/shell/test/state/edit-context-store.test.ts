@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 1212 — the edit-context stack as a reducer and a post-commit
+// Editor ADR 1214 — the edit-context stack as a reducer and a post-commit
 // effect queue, and the one exit resolver. Pure: no React, no engine.
 
 import { describe, expect, test } from "bun:test";

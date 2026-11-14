@@ -57,7 +57,7 @@ spec's test `UXI-T07`; `F-nn` is a finding of the October UX audit
 | EN1–EN4, the engine and protocol 79                            | Done: a gesture holds the document; the marquee's mode, scope and canvas rectangle; snap hysteresis, current zoom, ranking and target kinds; the live duplicate preview                                                                                    | §6; engine ADR 1300, amendments to 125, 193, 1011      |
 | EN5–EN8, the engine and protocol 80                            | Done: the edit scope; losses on load and export; the press in one call; coalesced writes; copies all or nothing and paths following their box (GF-5, GF-6)                                                                                                 | §6; engine ADRs 1301–1305, amendment 2 to 193          |
 | IC1–IC3 the coordinator, the terminal events, the stale guards | Done, behind `?debug=coordinator` until IC4: sessions, epochs, the trace, `abortAll` on every terminal event, no pan fallback, late hit tests dropped                                                                                                      | ADR 1210                                               |
-| CM1–CM4 contexts and modules                                   | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced | editor ADRs 1212, 1213; extensions ADR 1106            |
+| CM1–CM4 contexts and modules                                   | Done: one exit resolver over each module's `exitPolicy`, the resolve prompt, the stack as a reducer with an effect queue, the edit scope; Frame · Content · Edit (D-05); the trail in the fixed context toolbar; the module conformance suite; G2 enforced | editor ADRs 1214, 1215; extensions ADR 1106            |
 | Tracks KF, IC, EN, WS, DF, FI, CM, AP, PX                      | Not started                                                                                                                                                                                                                                                | §4–§12                                                 |
 
 ## 1. Facts in the code that shape the plan
@@ -353,8 +353,14 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   left to IC (the bounds are ignored already).
 - **WS9 Editing aids.** One control for frame edges, margins, guides, the baseline grid, threads,
   overset, hidden characters and non-printing items, and a Proof view
-  (`SH/state/view-toggles.ts`).
+  (`SH/state/view-toggles.ts`). **Done** ([ADR 1212](adr/1212-editing-aids-and-proof-view.md)):
+  the overlay host applies one rule (`SH/state/editing-aids.ts`); Proof view is the Preview screen
+  mode completed; hidden characters and nonprinting items wait for engine view options (recorded
+  there).
 - **WS10 Page lenses** (Pages, Structure, Layers, Issues, Data) and semantic zoom. Closes F-57.
+  **Done** ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the lenses live in the
+  document map (`CV/panels/cockpit/page-lenses.tsx`); the tiers in `SH/state/semantic-zoom.ts`
+  join the overlay host's rule; the Issues lens is the page data DF7's markers draw on.
 
 ## 8. Track DF — Documents, files and feedback (spec wave 5)
 

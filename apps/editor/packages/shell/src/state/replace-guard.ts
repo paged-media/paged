@@ -92,7 +92,7 @@ interface GuardState {
    *  or take the tab down. */
   beforeReplace: (() => Promise<unknown>) | null;
   /** Resolves the open edit contexts before the question (editor ADR
-   *  1212, D-04): false keeps the document and the contexts. */
+   *  1214, D-04): false keeps the document and the contexts. */
   contexts: (() => Promise<boolean>) | null;
   readonly queue: PendingReplace[];
   readonly listeners: Set<() => void>;
@@ -187,7 +187,7 @@ export function setBeforeReplace(
 /** Register how `scope`'s open edit contexts are resolved before a
  *  document replaces this one (the edit-context stack does): a dirty
  *  context is committed, discarded or kept as its module's `exitPolicy`
- *  and the user say (editor ADR 1212). `false` keeps the document.
+ *  and the user say (editor ADR 1214). `false` keeps the document.
  *  Returns the unregister. */
 export function setContextResolver(
   scope: EditorScope,

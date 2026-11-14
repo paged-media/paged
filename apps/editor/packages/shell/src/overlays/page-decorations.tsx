@@ -20,15 +20,54 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
 import type { PageId } from "@paged-media/client";
+import { defineMessages, t } from "@paged-media/strings";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useDocument } from "../state/document-context";
-import { useOptionalScreenMode } from "../state/screen-mode-context";
 import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
 import { useEditorScope } from "../state/editor-scope";
 
+const M = defineMessages("shell.pageDecorations", {
+  caption: "Page {n}",
+});
+
+/** The pasteboard a caption needs under its page, CSS px. */
+export const CAPTION_ROOM_PX = 18;
+
+interface CaptionRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /**
- * Per-page labels: "page N" caption under the page, plus heading-
+ * Where page `i`'s caption goes (editor ADR "Page lenses and semantic
+ * zoom", UX audit F-57): under the page while `CAPTION_ROOM_PX` of
+ * pasteboard is free below it at `scale`, else beside its top-left corner,
+ * outside the page, so it never lies on the next page's content (the
+ * stacked pages' 24 pt gap is 2 px at 10 %).
+ */
+export function captionPlace(
+  rects: ReadonlyArray<CaptionRect>,
+  i: number,
+  scale: number,
+): "below" | "side" {
+  const r = rects[i];
+  if (!r) return "below";
+  const bottom = r.y + r.h;
+  let room = Infinity;
+  rects.forEach((q, j) => {
+    if (j === i) return;
+    const overlapsX = q.x < r.x + r.w && q.x + q.w > r.x;
+    if (overlapsX && q.y >= bottom) room = Math.min(room, q.y - bottom);
+  });
+  return room * scale >= CAPTION_ROOM_PX ? "below" : "side";
+}
+
+/**
+ * Per-page labels: "Page N" caption under the page (or beside it, when
+ * zoomed too far out for the gap below), plus heading-
  * anchor badges (Tier 3 resolution data). The caption count comes
  * from the registry's `pageRects` map; anchor badges come from the
  * resolution table on DocumentContext, and only when View ▸ Show
@@ -42,29 +81,32 @@ function PageDecorationsRender(props: OverlayProps) {
     (l) => subscribeViewToggles(scope, l),
     () => getViewToggle(scope, "headingAnchors"),
   );
-  // Concept 1 (T7) — captions/badges are non-printing chrome: Normal
-  // mode only; Preview / Bleed / Slug / Presentation hide them.
-  const screenMode = useOptionalScreenMode();
+  // Captions and badges are editing chrome: the overlay host hides them
+  // in a proof (state/editing-aids.ts).
   const inv = 1 / props.camera.scale;
-  if (screenMode && screenMode.screenMode !== "normal") return null;
   const out: ReactNode[] = [];
 
+  const rects = [...props.pageRects.values()];
   let i = 0;
   for (const [pageId, r] of props.pageRects) {
-    const cx = r.x + r.w / 2;
-    const cy = r.y + r.h + 14 * inv;
+    const place = captionPlace(rects, i, props.camera.scale);
+    const below = place === "below";
+    const x = below ? r.x + r.w / 2 : r.x - 8 * inv;
+    const y = below ? r.y + r.h + 14 * inv : r.y + 11 * inv;
     out.push(
       <g
         key={`caption:${pageId}`}
-        transform={`translate(${cx}, ${cy}) scale(${inv})`}
+        data-page-caption={i + 1}
+        data-caption-place={place}
+        transform={`translate(${x}, ${y}) scale(${inv})`}
       >
         <text
-          textAnchor="middle"
+          textAnchor={below ? "middle" : "end"}
           fontSize={11}
           fontFamily="var(--font-sans)"
           fill="var(--pg-muted-fg)"
         >
-          page {i + 1}
+          {t(M.caption, { n: i + 1 })}
         </text>
       </g>,
     );

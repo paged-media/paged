@@ -1112,7 +1112,7 @@ Live adjustments work: dragging Exposure updates the frame while the slider move
 
 **Screenshots:** `F-43-image-context-toolsets.png`
 
-**Partly fixed (2026-11-13, editor ADR 1213).** A picture frame now shows its levels, Frame ·
+**Partly fixed (2026-11-13, editor ADR 1215).** A picture frame now shows its levels, Frame ·
 Content · Edit image, in the context toolbar: a double-click positions the picture first, and
 the image tools appear only once Edit image is entered. The two tool sets inside the raster
 context, the uncounted embedded image and the "Colour" spelling are not changed.
@@ -1165,7 +1165,7 @@ A web frame shows as "Rectangle" in the control bar and a placed sheet range as 
 
 **Screenshots:** `F-45-web-frame-labelled-rectangle.png`
 
-**Fixed (2026-11-13, editor ADR 1213, extensions ADR 1106).** A module names its edit context
+**Fixed (2026-11-13, editor ADR 1215, extensions ADR 1106).** A module names its edit context
 (`label`): the breadcrumb, the context toolbar and the control bar's selection label read "Web
 frame", "Spreadsheet", "Image", "Chart" in the editor's language, not the host kind. The Insert ▸
 Web frame… ellipsis is not changed.
@@ -1513,7 +1513,7 @@ Entering a sheet, vector or raster context inserts an "EDITING …" breadcrumb r
 
 **Screenshots:** `F-48-context-layout-shift.png`
 
-**Fixed (2026-11-13, editor ADR 1213).** The trail is in the context toolbar, whose height is
+**Fixed (2026-11-13, editor ADR 1215).** The trail is in the context toolbar, whose height is
 fixed; entering or leaving a context (or a group) inserts no row and moves nothing. Where a
 profile shows no context toolbar the trail floats over the work area.
 
@@ -1536,6 +1536,11 @@ At 11% the "page N" labels sit on top of the next page's content. The leftmost r
 **Recommendation:** Place page labels in the gap between pages, and hide them when the gap is too small. Clamp the label density of the ruler.
 
 **Screenshots:** `F-57-page-labels-overlap.png`, `F-57-ruler-minus-clipped.png`
+
+**Fixed (2026-11-13).** A page's caption sits under the page only while the gap below it has room
+on screen, else beside the page's top-left corner, so it never lies on the next page; zoomed far
+out the handles give way while page names, the selection's outline and markers stay (editor ADR
+1213; the ruler half closed with ADR 263).
 
 ### DTP expectations
 

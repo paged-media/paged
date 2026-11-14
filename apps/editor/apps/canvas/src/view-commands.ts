@@ -35,8 +35,12 @@
 
 import {
   getViewToggle,
+  isProofMode,
   scopeOf,
   toggleViewToggle,
+  UNSUPPORTED_AIDS,
+  type EditingAidToggle,
+  type PagedEditor,
   type ViewToggle,
 } from "@paged-media/shell";
 import type {
@@ -59,6 +63,14 @@ const M = defineMessages("app.viewCommands", {
   rotateCounterclockwise: "Rotate view 15° counterclockwise",
   resetRotation: "Reset view rotation",
   preferences: "Guides & grid preferences…",
+  frameEdges: "Show frame edges",
+  marginsColumns: "Show margins and columns",
+  guides: "Show ruler guides",
+  baselineGrid: "Show baseline grid",
+  oversetMarkers: "Show overset markers",
+  hiddenCharacters: "Show hidden characters",
+  nonprinting: "Show nonprinting items",
+  notSupported: "{aid} (not supported yet)",
 });
 
 defineMessages("menu", {
@@ -76,6 +88,16 @@ defineMessages("menu", {
   "15° counterclockwise": "15° counterclockwise",
   "Reset rotation": "Reset rotation",
   "Guides & grid preferences…": "Guides & grid preferences…",
+  "Editing aids": "Editing aids",
+  "Frame edges": "Frame edges",
+  "Margins and columns": "Margins and columns",
+  "Ruler guides": "Ruler guides",
+  "Baseline grid": "Baseline grid",
+  "Text threads": "Text threads",
+  "Overset markers": "Overset markers",
+  "Hidden characters": "Hidden characters",
+  "Nonprinting items": "Nonprinting items",
+  "Proof view": "Proof view",
 });
 
 export const PAGED_VIEW_OUTLINE = "paged.view.outline";
@@ -90,6 +112,48 @@ export const PAGED_VIEW_ROTATE_CW = "paged.view.rotateClockwise";
 export const PAGED_VIEW_ROTATE_CCW = "paged.view.rotateCounterclockwise";
 export const PAGED_VIEW_RESET_ROTATION = "paged.view.resetRotation";
 export const PAGED_VIEW_PREFERENCES = "paged.view.guidesAndGridPreferences";
+
+// Editor ADR "Editing aids and Proof view" — one command per editing aid,
+// each flipping its remembered toggle (`view-toggles.ts`). Text threads
+// keeps its older id (app-commands.ts).
+export const PAGED_VIEW_TOGGLE_FRAME_EDGES = "paged.view.toggleFrameEdges";
+export const PAGED_VIEW_TOGGLE_MARGINS_COLUMNS =
+  "paged.view.toggleMarginsColumns";
+export const PAGED_VIEW_TOGGLE_GUIDES = "paged.view.toggleGuides";
+export const PAGED_VIEW_TOGGLE_BASELINE_GRID = "paged.view.toggleBaselineGrid";
+export const PAGED_VIEW_TOGGLE_OVERSET_MARKERS =
+  "paged.view.toggleOversetMarkers";
+export const PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS =
+  "paged.view.toggleHiddenCharacters";
+export const PAGED_VIEW_TOGGLE_NONPRINTING = "paged.view.toggleNonprinting";
+
+export const EDITING_AID_COMMANDS: Readonly<Record<EditingAidToggle, string>> =
+  {
+    frameEdges: PAGED_VIEW_TOGGLE_FRAME_EDGES,
+    marginsColumns: PAGED_VIEW_TOGGLE_MARGINS_COLUMNS,
+    guides: PAGED_VIEW_TOGGLE_GUIDES,
+    baselineGrid: PAGED_VIEW_TOGGLE_BASELINE_GRID,
+    textThreads: "paged.view.toggleTextThreads",
+    oversetMarkers: PAGED_VIEW_TOGGLE_OVERSET_MARKERS,
+    hiddenCharacters: PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS,
+    nonprinting: PAGED_VIEW_TOGGLE_NONPRINTING,
+  };
+
+/** The aids' rows of View ▸ Editing aids, in the control's order. */
+const AID_ROWS: ReadonlyArray<[EditingAidToggle, string]> = [
+  ["frameEdges", "Frame edges"],
+  ["marginsColumns", "Margins and columns"],
+  ["guides", "Ruler guides"],
+  ["baselineGrid", "Baseline grid"],
+  ["textThreads", "Text threads"],
+  ["oversetMarkers", "Overset markers"],
+  ["hiddenCharacters", "Hidden characters"],
+  ["nonprinting", "Nonprinting items"],
+];
+
+/** Proof view is the Preview screen mode (InDesign's W, the shell's
+ *  `paged.view.toggleScreenPreview`). */
+const PROOF_VIEW_COMMAND = "paged.view.toggleScreenPreview";
 
 /** The step of the Rotate View commands, degrees. */
 export const ROTATE_VIEW_STEP_DEG = 15;
@@ -185,6 +249,52 @@ export function buildViewCommands(
       category: "View",
       handler: (paged: unknown) => handlers.openPreferences(paged),
     },
+    // The editing aids. An aid the engine cannot do yet is a visible,
+    // disabled command (ADR 207): listed, never pretending to work.
+    {
+      id: PAGED_VIEW_TOGGLE_FRAME_EDGES,
+      title: t(M.frameEdges),
+      category: "View",
+      handler: flip("frameEdges"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_MARGINS_COLUMNS,
+      title: t(M.marginsColumns),
+      category: "View",
+      handler: flip("marginsColumns"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_GUIDES,
+      title: t(M.guides),
+      category: "View",
+      handler: flip("guides"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_BASELINE_GRID,
+      title: t(M.baselineGrid),
+      category: "View",
+      handler: flip("baselineGrid"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_OVERSET_MARKERS,
+      title: t(M.oversetMarkers),
+      category: "View",
+      handler: flip("oversetMarkers"),
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS,
+      title: t(M.hiddenCharacters),
+      category: "View",
+      when: () => false,
+      handler: () => {},
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_NONPRINTING,
+      title: t(M.nonprinting),
+      category: "View",
+      when: () => false,
+      handler: () => {},
+    },
   ];
 }
 
@@ -193,7 +303,34 @@ const checked =
   (paged: unknown): boolean =>
     getViewToggle(scopeOf(paged), toggle);
 
+/** Is the editor `paged` in a proof screen mode? */
+const proofOn = (paged: unknown): boolean =>
+  isProofMode((paged as PagedEditor | null)?.screenMode?.screenMode);
+
 export const VIEW_MENU_ITEMS: MenuItemContribution[] = [
+  // Editor ADR "Editing aids and Proof view": Proof view with the screen
+  // modes; the aids in their own submenu with the other extras.
+  {
+    path: "View/Proof view",
+    command: PROOF_VIEW_COMMAND,
+    checked: proofOn,
+    order: 16,
+    group: "modes",
+  },
+  ...AID_ROWS.map(([aid, row], i): MenuItemContribution => ({
+    path: `View/Editing aids/${row}`,
+    command: EDITING_AID_COMMANDS[aid],
+    // The submenu sits where its rows' order puts it: in the extras,
+    // before Show heading anchors (65).
+    order: 58 + i / 10,
+    group: "extras",
+    ...(UNSUPPORTED_AIDS[aid]
+      ? {
+          disabled: true,
+          labelFor: () => t(M.notSupported, { aid: t(`menu.${row}`) }),
+        }
+      : { checked: checked(aid) }),
+  })),
   // Illustrator's View menu opens with the screen modes; they sit above
   // the zoom group (orders 20–50).
   {

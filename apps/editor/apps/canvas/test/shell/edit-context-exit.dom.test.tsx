@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// One way out of an edit context (editor ADR 1212), on a mounted PagedShell
+// One way out of an edit context (editor ADR 1214), on a mounted PagedShell
 // over the real engine: every exit — a press outside the frame, Escape, the
 // breadcrumb, another tool, another selection, another document — goes
 // through the one resolver; a dirty context whose module asks to be asked
@@ -212,7 +212,7 @@ function contribution(
   };
 }
 
-describe("one way out of a context (ADR 1212)", () => {
+describe("one way out of a context (ADR 1214)", () => {
   test("UXI-T40 — entering the same context twice under StrictMode: one frame, one onEnter @feat:plugin-platform.edit-context @level:edge", async () => {
     const s = await mountShell({ strict: true });
     const calls: string[] = [];

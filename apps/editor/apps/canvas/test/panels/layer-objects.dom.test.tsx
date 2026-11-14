@@ -174,6 +174,7 @@ describe("Layers objects: the tree's arithmetic", () => {
     ).toEqual({
       layerId: null,
       appearance: false,
+      name: null,
     });
     expect(
       readItem([e("frameOpacity", { type: "length", value: 40 })]).appearance,
@@ -195,6 +196,10 @@ describe("Layers objects: the tree's arithmetic", () => {
     expect(
       readItem([e("itemLayer", { type: "text", value: "L3" })]).layerId,
     ).toBe("L3");
+    // The name the user gave it (the Layers lens shows and searches it).
+    expect(
+      readItem([e("itemName", { type: "text", value: "Masthead" })]).name,
+    ).toBe("Masthead");
   });
 
   test("a drop's mutation: a slot, a layer, both as one batch, or nothing", () => {

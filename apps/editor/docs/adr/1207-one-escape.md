@@ -101,6 +101,6 @@ the opposite: the first applicable case wins, and no press does two things.
 
 ## Amendment 2026-11-13
 
-[ADR 1212](1212-one-way-out-of-a-context.md): the `context` tier leaves through the one exit
+[ADR 1214](1214-one-way-out-of-a-context.md): the `context` tier leaves through the one exit
 resolver (`leave("escape")`): a clean context cancels, or commits when its module declares
 `commit-if-safe`. The `context-dirty` tier is unchanged: a sub-edit resolves first.

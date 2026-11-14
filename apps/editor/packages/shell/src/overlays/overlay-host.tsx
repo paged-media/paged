@@ -18,7 +18,7 @@
  */
 
 import { isEnabled } from "../registries/types";
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, useSyncExternalStore, type CSSProperties } from "react";
 
 import { cameraMatrix, type Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
@@ -27,6 +27,14 @@ import type { OverlayPageRect, OverlayProps } from "../registries/overlay";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
+import { useEditorScope } from "../state/editor-scope";
+import { overlayShown } from "../state/editing-aids";
+import { useOptionalScreenMode } from "../state/screen-mode-context";
+import {
+  EDITING_AID_TOGGLES,
+  getViewToggle,
+  subscribeViewToggles,
+} from "../state/view-toggles";
 
 export interface OverlayHostProps {
   /** Current camera. */
@@ -58,12 +66,31 @@ export function OverlayHost(props: OverlayHostProps) {
   const overlays = useRegistryView(registries.overlays);
   const features = useRegistryView(registries.features);
   const paged = useOptionalPaged();
-  // An overlay draws while its `when` holds and the editor offers it (a
-  // feature, `overlay:<id>`); `when` was declared and never read before.
+  const scope = useEditorScope();
+  // The editing aids' states as one string, so a toggle re-renders the
+  // host (editor ADR "Editing aids and Proof view").
+  const aids = useSyncExternalStore(
+    (l) => subscribeViewToggles(scope, l),
+    () =>
+      EDITING_AID_TOGGLES.map((a) => (getViewToggle(scope, a) ? 1 : 0)).join(
+        "",
+      ),
+    () => "",
+  );
+  const screenMode = useOptionalScreenMode()?.screenMode ?? null;
+  const aidOn = (which: Parameters<typeof getViewToggle>[1]) =>
+    aids !== "" && getViewToggle(scope, which);
+  // An overlay draws while its `when` holds, the editor offers it (a
+  // feature, `overlay:<id>`), and the editing aids and Proof view show it
+  // (`overlayShown`: an aid's overlay while its aid is on, the editing
+  // chrome outside a proof, the handles not zoomed far out).
   const sorted = overlays
     .list()
     .filter(
-      (c) => features.allows("overlay", c.id) && isEnabled(c.when, () => paged),
+      (c) =>
+        features.allows("overlay", c.id) &&
+        overlayShown(c.id, aidOn, screenMode, props.camera.scale) &&
+        isEnabled(c.when, () => paged),
     )
     .sort((a, b) => (a.z ?? 100) - (b.z ?? 100));
 

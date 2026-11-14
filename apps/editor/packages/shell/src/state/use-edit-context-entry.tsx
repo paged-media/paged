@@ -32,7 +32,7 @@
 // the element's properties ONCE and hands each contribution ONLY its own
 // envelope (a plugin never sees a foreign namespace).
 //
-// PICTURE FRAMES (editor ADR 1213, D-05). A frame holding a placed image
+// PICTURE FRAMES (editor ADR 1215, D-05). A frame holding a placed image
 // offers Frame · Content · Edit image (state/frame-content.ts). A pointer
 // entry (the double-click) enters CONTENT first — the picture moves inside
 // the frame; the frame stays. A second double-click on it, Enter, or the
@@ -457,7 +457,7 @@ export function useEditContextEntry() {
     [tryEnterEditContext],
   );
 
-  /** Editor ADR 1213 — go to `level` of frame `element` (the context
+  /** Editor ADR 1215 — go to `level` of frame `element` (the context
    *  toolbar's level control): Frame leaves the frame's own contexts,
    *  Content and Edit enter them. `editType` names the Edit level's
    *  context for a frame a plugin owns. */

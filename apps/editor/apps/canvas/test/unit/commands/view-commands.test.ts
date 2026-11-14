@@ -29,6 +29,7 @@ import {
   createCommandRegistry,
   createEditorScope,
   getViewToggle,
+  isEnabled,
   viewModeOf,
 } from "@paged-media/shell";
 
@@ -164,5 +165,65 @@ describe("View ▸ screen modes, grids and snapping", () => {
     const own = VIEW_KEYBINDINGS.map((k) => k.key);
     expect(own.filter((k) => app.has(k))).toEqual([]);
     expect(new Set(own).size).toBe(own.length);
+  });
+});
+
+describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () => {
+  test("each aid's command flips its own remembered toggle; the two the engine cannot do are disabled", async () => {
+    covers(
+      "command:paged.view.toggleFrameEdges",
+      "command:paged.view.toggleMarginsColumns",
+      "command:paged.view.toggleGuides",
+      "command:paged.view.toggleBaselineGrid",
+      "command:paged.view.toggleOversetMarkers",
+      "command:paged.view.toggleHiddenCharacters",
+      "command:paged.view.toggleNonprinting",
+    );
+    const { registry, scope } = harness();
+    for (const [id, toggle] of [
+      ["paged.view.toggleFrameEdges", "frameEdges"],
+      ["paged.view.toggleMarginsColumns", "marginsColumns"],
+      ["paged.view.toggleGuides", "guides"],
+      ["paged.view.toggleBaselineGrid", "baselineGrid"],
+      ["paged.view.toggleOversetMarkers", "oversetMarkers"],
+    ] as const) {
+      const before = getViewToggle(scope, toggle);
+      await registry.invoke(id);
+      expect({ id, on: getViewToggle(scope, toggle) }).toEqual({
+        id,
+        on: !before,
+      });
+      await registry.invoke(id);
+      expect(getViewToggle(scope, toggle)).toBe(before);
+    }
+    for (const [id, toggle] of [
+      ["paged.view.toggleHiddenCharacters", "hiddenCharacters"],
+      ["paged.view.toggleNonprinting", "nonprinting"],
+    ] as const) {
+      const before = getViewToggle(scope, toggle);
+      expect(isEnabled(registry.get(id)?.when, () => null)).toBe(false);
+      await registry.invoke(id);
+      expect(getViewToggle(scope, toggle)).toBe(before);
+    }
+    // The submenu's rows: the unsupported two disabled, the rest ticked
+    // from the toggles.
+    const rows = VIEW_MENU_ITEMS.filter((m) =>
+      m.path.startsWith("View/Editing aids/"),
+    );
+    expect(rows.map((r) => r.path.split("/")[2])).toEqual([
+      "Frame edges",
+      "Margins and columns",
+      "Ruler guides",
+      "Baseline grid",
+      "Text threads",
+      "Overset markers",
+      "Hidden characters",
+      "Nonprinting items",
+    ]);
+    for (const r of rows)
+      expect({ row: r.path, disabled: r.disabled === true }).toEqual({
+        row: r.path,
+        disabled: /Hidden characters|Nonprinting items/.test(r.path),
+      });
   });
 });

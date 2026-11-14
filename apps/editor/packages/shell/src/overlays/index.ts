@@ -23,7 +23,11 @@ export { hitMarkerContribution } from "./hit-marker";
 export { marqueeContribution } from "./marquee";
 export { toolPreviewContribution, renderPreviewShape } from "./tool-preview";
 export { pluginOverlayLayersContribution } from "./plugin-layers";
-export { pageDecorationsContribution } from "./page-decorations";
+export {
+  CAPTION_ROOM_PX,
+  captionPlace,
+  pageDecorationsContribution,
+} from "./page-decorations";
 export {
   isolationDimContribution,
   isolationOutline,
@@ -46,6 +50,15 @@ export { guideOverlayContribution } from "./guide-overlay";
 export { selectionChromeContribution } from "./selection-chrome";
 export { threadingPortsContribution } from "./threading-ports";
 export { threadLinesContribution } from "./thread-lines";
+// Editor ADR "Editing aids and Proof view".
+export { frameEdgesContribution, frameEdgePoints } from "./frame-edges";
+export {
+  baselineGridContribution,
+  baselineGridLines,
+  BASELINE_GRID_MIN_SPACING_PX,
+} from "./baseline-grid";
+export { oversetMarkersContribution } from "./overset-markers";
+export { proofSurfaceContribution, proofBox } from "./proof-surface";
 export {
   dataMarkersContribution,
   elementOfPlacement,

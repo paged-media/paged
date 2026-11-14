@@ -23,7 +23,7 @@
 // entered contexts and the chrome/scope they imply.
 //
 // The stack itself is `edit-context-store.ts`: a reducer and a post-commit
-// effect queue (editor ADR 1212), so every hook runs exactly once, after
+// effect queue (editor ADR 1214), so every hook runs exactly once, after
 // the stack has changed, in the order of the actions. This file puts one
 // store in front of React (`useSyncExternalStore`), wires its resolve
 // prompt and the engine's scope query, and registers it with the replace
@@ -107,7 +107,7 @@ export interface EditContextStackValue {
     at?: EnterPoint,
   ): EditContextFrame;
   /** Leave the TOP frame for `reason` through the one exit resolver
-   *  (editor ADR 1212, D-04). */
+   *  (editor ADR 1214, D-04). */
   leave(reason: ContextExitReason): ContextLeave;
   /** Leave every frame, top to root, for `reason`; false when the user
    *  kept a context (Cancel in the resolve prompt). */
@@ -200,7 +200,7 @@ export function useEditContextStack(): EditContextStackValue {
 }
 
 /** The one exit resolver for a caller that decides at once (editor ADR
- *  1212). */
+ *  1214). */
 export interface ContextExit {
   /** What leaving the top context for `reason` would do now; null with
    *  no context. Asks nothing, changes nothing. */

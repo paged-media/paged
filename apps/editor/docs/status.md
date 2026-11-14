@@ -185,8 +185,20 @@ Forward through the places explicit navigations leave (Layout ▸ Go back / Go f
 Cmd/Ctrl+PageUp / PageDown, buttons in the bottom bar; UXI-T55's navigation half), every zoom
 route inside 5–4,000 %, an editable zoom field with the fits, Actual size (an inch as 96 CSS px)
 and Calibrated size (from a screen calibration) beside 100 % (UXI-T48), and camera jumps that
-respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 and WS10 (editing
-aids and Proof view, page lenses and semantic zoom) are planned.
+respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 has landed
+([ADR 1212](adr/1212-editing-aids-and-proof-view.md)): eight editing aids, each remembered on its
+own, in View ▸ Editing aids and the bottom bar (frame edges, margins and columns, ruler guides, the
+baseline grid, text threads, overset markers on every overset frame; hidden characters and
+nonprinting items are listed but disabled until the engine supports them), hidden ruler guides no
+longer snap, and Proof view (the former Preview screen mode, W) hides every aid and the selection's
+handles, masks the pasteboard at the trim or the bleed with crop marks and a badge, and keeps the
+selection. WS10 has landed ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the
+document map navigates through five lenses with one search — Pages, Structure (sections,
+headings, bookmarks, stories), Layers (named objects), Issues (pages with missing or
+low-resolution images, overset stories and preflight findings) and Data (placed records, with a
+binding) — each jump recorded for Back; zoomed below 15 % the handles and points give way while
+the selection outline, markers and page names (now beside a page when the gap under it is too
+small) stay, and from 400 % the rulers draw minor ticks (F-57).
 
 Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
 interaction coordinator that holds the session owning the pointer, the epochs a late answer is
@@ -199,8 +211,8 @@ a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a doubl
 context menu's hit test that answers after a newer press, document or context is dropped
 (`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
 
-Track CM's first part has landed (CM1–CM4; [ADR 1212](adr/1212-one-way-out-of-a-context.md),
-[ADR 1213](adr/1213-frame-content-edit.md), extensions ADR 1106): every way out of an edit
+Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
+[ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit
 context — Escape, the breadcrumb, another tool, another selection, a document switch — goes
 through one exit resolver that weighs the reason, whether the context holds unfinished work and
 the module's declared `exitPolicy`; a dirty context whose module asks puts up a small Keep /

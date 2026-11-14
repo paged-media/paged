@@ -29,6 +29,7 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 import { ZoomControl } from "./ZoomControl";
+import { EditingAidsControl } from "./EditingAidsControl";
 import { useWorkspaceClass } from "../cockpit/workspace-class";
 import { useCamera, useNavigationHistoryState } from "../state/camera-context";
 import { ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from "../state/zoom-range";
@@ -101,7 +102,8 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
   );
 }
 
-/** Kit chrome.jsx — the bottom-right zoom cluster: Back and Forward
+/** Kit chrome.jsx — the bottom-right zoom cluster: the editing aids and
+ *  Proof view, Back and Forward
  *  through the navigation history, the zoom field and its menu (fits,
  *  named views, presets) and a log-scale slider that zooms around the
  *  viewport centre. */
@@ -138,6 +140,7 @@ function ZoomCluster({ slider }: { slider: boolean }) {
       data-zoom-cluster
       style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}
     >
+      <EditingAidsControl side="top" />
       {commands.get("paged.view.navigateBack") && (
         <div style={{ display: "inline-flex", gap: 2 }} data-navigation-history>
           <HistoryButton

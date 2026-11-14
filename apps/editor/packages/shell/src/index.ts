@@ -518,7 +518,7 @@ export {
   type EditContextStackValue,
   type EnterPoint,
 } from "./state/edit-context-stack";
-// Editor ADR 1212 — one way out of an edit context.
+// Editor ADR 1214 — one way out of an edit context.
 export {
   DEFAULT_EXIT_POLICY,
   askContextExit,
@@ -546,7 +546,7 @@ export {
   type ScopeQuery,
 } from "./state/edit-context-store";
 export { ContextExitPrompt } from "./chrome/ContextExitPrompt";
-// Editor ADR 1213 — Frame, Content, Edit.
+// Editor ADR 1215 — Frame, Content, Edit.
 export {
   IMAGE_CONTENT_CONTEXT,
   contentToPage,
@@ -878,6 +878,14 @@ export {
   selectionChromeContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  frameEdgesContribution,
+  frameEdgePoints,
+  baselineGridContribution,
+  baselineGridLines,
+  BASELINE_GRID_MIN_SPACING_PX,
+  oversetMarkersContribution,
+  proofSurfaceContribution,
+  proofBox,
   dataMarkersContribution,
   elementOfPlacement,
   markersOf,
@@ -1241,15 +1249,36 @@ export {
 } from "./state/library-document";
 
 export {
+  EDITING_AID_TOGGLES,
   getViewToggle,
   resetViewToggles,
   setViewToggle,
   subscribeViewToggles,
   toggleViewToggle,
   viewModeOf,
+  type EditingAidToggle,
   type ViewModeName,
   type ViewToggle,
 } from "./state/view-toggles";
+export {
+  AID_OVERLAYS,
+  EDITING_AID_LABELS,
+  editingAidLabel,
+  isProofMode,
+  overlayShown,
+  PROOF_HIDDEN_OVERLAYS,
+  PROOF_SURFACE_OVERLAY,
+  UNSUPPORTED_AIDS,
+  unsupportedAidReason,
+} from "./state/editing-aids";
+export { EditingAidsControl } from "./chrome/EditingAidsControl";
+export {
+  DETAIL_MIN_SCALE,
+  OVERVIEW_HIDDEN_OVERLAYS,
+  OVERVIEW_MAX_SCALE,
+  zoomTier,
+  type ZoomTier,
+} from "./state/semantic-zoom";
 export {
   DEFAULT_VIEW_PREFERENCES,
   gridStep,

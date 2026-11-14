@@ -1,4 +1,4 @@
-# ADR 1212 — One way out of a context: an exit resolver, and a stack that runs each hook once
+# ADR 1214 — One way out of a context: an exit resolver, and a stack that runs each hook once
 
 - **Status:** Accepted 2026-11-13.
 - **Scope:** `packages/shell/src/state/context-exit.ts` (`resolveContextExit`, the resolve

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Frame, content, edit (editor ADR 1213, D-05) on a mounted PagedShell over
+// Frame, content, edit (editor ADR 1215, D-05) on a mounted PagedShell over
 // the real engine: a picture frame's double-click enters its content level,
 // a second one (or Enter's keyboard entry) enters the context that declares
 // `editsPlacedImages`; the level control shows the levels and changes
@@ -155,7 +155,7 @@ async function mount() {
 
 const top = (s: EditContextStackValue) => s.active?.type ?? null;
 
-describe("frame, content, edit (ADR 1213)", () => {
+describe("frame, content, edit (ADR 1215)", () => {
   test("a double-click on a picture frame enters its content; a second enters Edit image; Escape-like leaving climbs back", async () => {
     const m = await mount();
     const undo = (await m.client.undoLog(0)).undoLen;

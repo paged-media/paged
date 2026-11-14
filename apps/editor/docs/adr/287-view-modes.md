@@ -131,3 +131,12 @@ left for the Free Transform work (WP4.1). The rulers do not turn with the view.
 - Engine ADR 146 (GPU/CPU parity), ADR 101 (display-list digest), ADR 205 (the canvas's markers)
 - [ADR 246](246-one-zoom-range.md) — every camera write passes `CameraProvider`
 - [ADR 247](247-stored-settings-are-shape-checked.md) — stored preferences
+
+## Amendment 2026-11-13 (ADR 1212)
+
+[ADR 1212](1212-editing-aids-and-proof-view.md) adds the editing aids to the View menu's toggles
+(frame edges, margins and columns, ruler guides, baseline grid, text threads, overset markers;
+hidden characters and nonprinting items listed, disabled, until the engine supports them), each
+remembered as `paged.view.editingAids`, in View ▸ Editing aids and a control in the bottom bar.
+The Preview screen mode is Proof view: every aid and the editing chrome hidden, the pasteboard
+masked at the trim (or the bleed), the selection kept. Hidden ruler guides no longer snap.

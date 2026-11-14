@@ -102,7 +102,7 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
                 <span style={sepStyle} aria-hidden />
               </>
             )}
-            {/* Editor ADR 1213 — Frame · Content · Edit for a selected
+            {/* Editor ADR 1215 — Frame · Content · Edit for a selected
                 frame that has more than one level. */}
             <FrameLevelControl />
             {Left ? (

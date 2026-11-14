@@ -90,7 +90,7 @@ const HOST_MENU = [
   "Layout/Previous page",
   "Layout/Next page",
   "Layout/Last page",
-  "View/Show text threads",
+  "View/Editing aids/Text threads",
   "View/Snap to points",
   "View/Show heading anchors",
   "View/Show data markers",
@@ -124,6 +124,22 @@ const HOST_MENU = [
   "Edit/Settings/Interface density/Professional",
   "Edit/Settings/Interface density/Compact",
   "View/Focus workspace",
+  // Editor ADR 1211 — the named views beside 100 %, the calibration, and
+  // Back / Forward through the navigation history.
+  "View/Actual size",
+  "View/Calibrated size",
+  "View/Calibrate screen size…",
+  "Layout/Go back",
+  "Layout/Go forward",
+  // Editor ADR "Editing aids and Proof view".
+  "View/Proof view",
+  "View/Editing aids/Frame edges",
+  "View/Editing aids/Margins and columns",
+  "View/Editing aids/Ruler guides",
+  "View/Editing aids/Baseline grid",
+  "View/Editing aids/Overset markers",
+  "View/Editing aids/Hidden characters",
+  "View/Editing aids/Nonprinting items",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
@@ -466,7 +482,7 @@ test.describe("the host menu bar", () => {
         "menu:Layout/Previous page",
         "menu:Layout/Next page",
         "menu:Layout/Last page",
-        "menu:View/Show text threads",
+        "menu:View/Editing aids/Text threads",
         "menu:View/Snap to points",
         "menu:View/Show heading anchors",
         "menu:Edit/Select all",
@@ -717,7 +733,7 @@ test.describe("the host menu bar", () => {
       "menu:Layout/Previous page",
       "menu:Layout/Next page",
       "menu:Layout/Last page",
-      "menu:View/Show text threads",
+      "menu:View/Editing aids/Text threads",
       "menu:View/Snap to points",
       "menu:View/Show heading anchors",
       "menu:Edit/Select all",
@@ -900,7 +916,7 @@ test.describe("the host menu bar", () => {
         "menu:Layout/Previous page",
         "menu:Layout/Next page",
         "menu:Layout/Last page",
-        "menu:View/Show text threads",
+        "menu:View/Editing aids/Text threads",
         "menu:View/Snap to points",
         "menu:View/Show heading anchors",
         "menu:Edit/Select all",
@@ -1051,6 +1067,24 @@ test.describe("the host menu bar", () => {
       for (const setup of [
         () => select(page, [SHELL.frame]),
         () => select(page, []),
+        // Layout ▸ Go back / Go forward (editor ADR 1211) enable once the
+        // navigation history holds a place each way.
+        () =>
+          page.evaluate(() => {
+            type Nav = {
+              record(from: object, to: object): void;
+              back(current: object): unknown;
+            };
+            const nav = (
+              globalThis as unknown as {
+                __paged?: { camera?: { navigation?: Nav } };
+              }
+            ).__paged?.camera?.navigation;
+            const at = (tx: number) => ({ scale: 1, tx, ty: 0, rotation: 0 });
+            nav?.record(at(0), at(500));
+            nav?.record(at(500), at(1000));
+            nav?.back(at(1000));
+          }),
       ]) {
         await setup();
         for (const row of hostRows(await liveMenu(page)).filter(inUnit)) {
@@ -1109,11 +1143,11 @@ test.describe("the host menu bar", () => {
       expect({ p, on: on.get(p) }).toEqual({ p, on: false });
   });
 
-  // Finding SH-4 (fixed): the View toggles (Show text threads, Snap to
+  // Finding SH-4 (fixed): the View toggles (Text threads, Snap to
   // points, Show heading anchors) rendered as plain items with no checked
   // state; they are menuitemcheckbox rows now (`checked` on the item).
   test("SH-4: a View toggle shows its checked state", async ({ page }) => {
-    covers("menu:View/Show text threads", "menu:View/Snap to points");
+    covers("menu:View/Editing aids/Text threads", "menu:View/Snap to points");
     await openShell(page, { doc: true });
     await page.locator('[data-menu-trigger="View"]').click();
     // Snap to points is ON by default.
