@@ -53,6 +53,9 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   dataMarkers: false,
   // Editor ADR 1223.
   issueMarkers: false,
+  // Editor ADRs 1237, 1238.
+  xray: false,
+  typography: false,
   // Editor ADR 287.
   outline: false,
   overprintPreview: false,
@@ -70,6 +73,8 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   oversetMarkers: true,
   hiddenCharacters: false,
   nonprinting: true,
+  // Editor ADR 1233.
+  constraints: true,
 };
 
 describe("view toggles", () => {
@@ -160,6 +165,8 @@ describe("view toggles", () => {
       "setting:view.nonprinting",
       // Data ADR 566 — the binding badges are an editing aid.
       "setting:view.dataMarkers",
+      // Editor ADR 1233 — the design constraints' glyphs.
+      "setting:view.constraints",
     );
     const storage = memoryStorage();
     const before = createEditorScope();
@@ -178,6 +185,7 @@ describe("view toggles", () => {
       hiddenCharacters: false,
       nonprinting: true,
       dataMarkers: true,
+      constraints: true,
     });
     const after = createEditorScope();
     setEditorStorage(after, storage);
@@ -251,6 +259,17 @@ describe('the overlay rule (editor ADR "Editing aids and Proof view")', () => {
     );
     // Without a screen mode (no provider) nothing is a proof.
     expect(overlayShown("paged.selection-chrome", on, null)).toBe(true);
+  });
+
+  test("X-Ray and the Typography Debugger are diagnostic views a proof hides (editor ADRs 1237, 1238)", () => {
+    const on = (which: ViewToggle) => getViewToggle(scope, which);
+    for (const id of ["paged.overlay.xray", "paged.overlay.typography"]) {
+      expect(overlayShown(id, on, "normal")).toBe(true);
+      expect(overlayShown(id, on, "preview")).toBe(false);
+    }
+    expect(toggleViewToggle(scope, "xray")).toBe(true);
+    expect(toggleViewToggle(scope, "typography")).toBe(true);
+    expect(getViewToggle(scope, "frameEdges")).toBe(false);
   });
 });
 

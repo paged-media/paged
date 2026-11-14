@@ -149,7 +149,9 @@ export function FrameFittingPanel() {
           data-active={isFillProp ? "" : undefined}
           className="h-[28px] rounded-[6px] border px-[10px] text-[11px]"
           style={{
-            borderColor: isFillProp ? "var(--pg-accent)" : "var(--input)",
+            borderColor: isFillProp
+              ? "var(--pg-accent)"
+              : "var(--pg-control-border)",
             background: isFillProp ? "var(--pg-accent)" : "var(--background)",
             color: isFillProp ? "var(--pg-accent-fg)" : "var(--pg-fg)",
             opacity: fittingDisabled ? 0.55 : 1,

@@ -84,6 +84,8 @@ const M = defineMessages("app.appCommands", {
   showHeadingAnchors: "Show heading anchors",
   showDataMarkers: "Show data markers",
   showIssueMarkers: "Show issue markers",
+  showXray: "X-Ray",
+  showTypography: "Typography debugger",
   docs: "Documentation",
   idmlReference: "IDML format reference",
   reportIssue: "Report an issue…",
@@ -133,6 +135,8 @@ defineMessages("menu", {
   "Last page": "Last page",
   "Snap to points": "Snap to points",
   "Show heading anchors": "Show heading anchors",
+  "X-Ray": "X-Ray",
+  "Typography debugger": "Typography debugger",
   Documentation: "Documentation",
   "IDML format reference": "IDML format reference",
   "Report an issue…": "Report an issue…",
@@ -194,6 +198,13 @@ export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS =
 export const PAGED_VIEW_TOGGLE_DATA_MARKERS = "paged.view.toggleDataMarkers";
 /** Editor ADR 1223 — View ▸ Show issue markers. */
 export const PAGED_VIEW_TOGGLE_ISSUE_MARKERS = "paged.view.toggleIssueMarkers";
+/** Editor ADR 1237 — View ▸ X-Ray: every item outlined by the style or
+ *  the source that shapes it, with a legend per page. */
+export const PAGED_VIEW_TOGGLE_XRAY = "paged.view.toggleXray";
+/** Editor ADR 1238 — View ▸ Typography debugger: the selected story's
+ *  lines coloured by how tightly they are set, with their breaks. */
+export const PAGED_VIEW_TOGGLE_TYPOGRAPHY =
+  "paged.view.toggleTypographyDebugger";
 
 /** Help — the places the app sends you to learn it. */
 const HELP_LINKS = [
@@ -572,6 +583,22 @@ export function buildAppCommands(
         toggleViewToggle(scopeOf(paged), "issueMarkers");
       },
     },
+    {
+      id: PAGED_VIEW_TOGGLE_XRAY,
+      title: t(M.showXray),
+      category: "View",
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "xray");
+      },
+    },
+    {
+      id: PAGED_VIEW_TOGGLE_TYPOGRAPHY,
+      title: t(M.showTypography),
+      category: "View",
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "typography");
+      },
+    },
     ...HELP_LINKS.map((l) => ({
       id: l.id,
       title: t(l.label),
@@ -816,6 +843,20 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     command: PAGED_VIEW_TOGGLE_ISSUE_MARKERS,
     checked: (paged) => getViewToggle(scopeOf(paged), "issueMarkers"),
     order: 67,
+    group: "extras",
+  },
+  {
+    path: "View/X-Ray",
+    command: PAGED_VIEW_TOGGLE_XRAY,
+    checked: (paged) => getViewToggle(scopeOf(paged), "xray"),
+    order: 68,
+    group: "extras",
+  },
+  {
+    path: "View/Typography debugger",
+    command: PAGED_VIEW_TOGGLE_TYPOGRAPHY,
+    checked: (paged) => getViewToggle(scopeOf(paged), "typography"),
+    order: 69,
     group: "extras",
   },
 ];

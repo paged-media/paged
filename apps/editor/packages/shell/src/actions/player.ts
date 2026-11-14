@@ -43,6 +43,16 @@
 //     undo (paged.image's raster journal) writes that journal, not the
 //     document — Cmd-Z there is the context's, one entry per command.
 
+//
+// WHAT IT WILL NOT DO (editor ADR 1240, `UXI-MUT-014`). Right before each
+// step it asks again whether the step applies here — its command's
+// applicability, the edit context it was recorded in, the selection its
+// payload names as an intent. A step that does not is REFUSED by name and
+// the run ends there; what the run had written is undone (it is one undo
+// step), so a refused run leaves the document as it found it rather than
+// half-done or done to something else. The provider checked the same
+// before the run (`run-plan.ts`); this catches what earlier steps changed.
+
 import {
   isStopStep,
   planReplay,
@@ -50,6 +60,13 @@ import {
   type PlannedStep,
   type SkipReason,
 } from "./model";
+import {
+  applyParams,
+  resolveSelection,
+  selectionTokensIn,
+  unresolvableToken,
+  type SelectionAddresses,
+} from "./intent";
 
 export interface PlayedStep {
   index: number;
@@ -69,9 +86,16 @@ export type PlayerStatus =
   /** Halted at an inserted stop; `message` says why. */
   | "stopped"
   | "done"
-  | "cancelled";
+  | "cancelled"
+  /** Editor ADR 1240 — a step did not apply when it was reached; `refusal`
+   *  says which and why. Nothing after it ran. */
+  | "refused";
 
 export interface PlayerState {
+  /** Why the run was refused (status `refused`), in words. */
+  refusal: string | null;
+  /** A refused run's writes were undone, so the document is as it was. */
+  rolledBack: boolean;
   status: PlayerStatus;
   /** The action step the player waits before (paused / stopped: the
    *  step AFTER the stop), or null. */
@@ -100,6 +124,29 @@ export interface PlayerDeps {
     writes: number;
     lastSeq: number | null;
   } | null>;
+  /** Editor ADR 1240 — does the command apply right now, and if not why
+   *  (the registry's applicability, editor ADR 1218). Absent: not asked. */
+  applicability?(command: string): { state: string; reason?: string };
+  /** The selection a selection token resolves to, at the step. Absent:
+   *  payloads are sent as recorded. */
+  selection?(): SelectionAddresses;
+  /** The active edit context's type (null on the page). Absent: not
+   *  checked. */
+  context?(): string | null;
+  /** Undo the step `seq` when it is still the newest; resolves whether it
+   *  did (the rollback of a refused run). */
+  rollback?(seq: number): Promise<boolean>;
+  /** A refusal's words: the step, its index and why. */
+  refusalText?(
+    command: string,
+    title: string,
+    index: number,
+    why: string,
+  ): string;
+  /** Why a selection token cannot be resolved, in words. */
+  selectionText?(kind: "elements" | "element" | "text"): string;
+  /** Why the context differs, in words. */
+  contextText?(recorded: string | null, current: string | null): string;
 }
 
 export interface PlayerOptions {
@@ -149,6 +196,8 @@ export class ActionPlayer {
     this.groupsKnown = !!deps.beginUndoGroup && !!deps.endUndoGroup;
     this.snapshot = {
       status: "idle",
+      refusal: null,
+      rolledBack: false,
       pausedAt: null,
       message: null,
       ran: [],
@@ -175,8 +224,43 @@ export class ActionPlayer {
 
   get finished(): boolean {
     return (
-      this.snapshot.status === "done" || this.snapshot.status === "cancelled"
+      this.snapshot.status === "done" ||
+      this.snapshot.status === "cancelled" ||
+      this.snapshot.status === "refused"
     );
+  }
+
+  /** Editor ADR 1240 — why `step` cannot run now, in words, or null. */
+  private refusalOf(
+    index: number,
+    command: string,
+    title: string,
+    payload: unknown,
+    context: string | null | undefined,
+  ): string | null {
+    const say = (why: string) =>
+      this.deps.refusalText?.(command, title, index, why) ?? why;
+    if (context !== undefined && this.deps.context) {
+      const current = this.deps.context();
+      if ((context ?? null) !== current)
+        return say(
+          this.deps.contextText?.(context ?? null, current) ??
+            `recorded in ${context ?? "the page"}, now in ${current ?? "the page"}`,
+        );
+    }
+    if (payload !== undefined && this.deps.selection) {
+      const selection = this.deps.selection();
+      for (const kind of selectionTokensIn(payload)) {
+        if (unresolvableToken(kind, selection))
+          return say(
+            this.deps.selectionText?.(kind) ?? `needs a ${kind} selection`,
+          );
+      }
+    }
+    const verdict = this.deps.applicability?.(command);
+    if (verdict && verdict.state !== "here")
+      return say(verdict.reason ?? verdict.state);
+    return null;
   }
 
   subscribe(fn: (s: PlayerState) => void): () => void {
@@ -264,7 +348,28 @@ export class ActionPlayer {
         halt = { status: "stopped", pausedAt: next, message };
         break;
       }
-      const error = await invokeStep(this.deps, step.command, step.payload);
+      const withParams =
+        step.payload === undefined
+          ? undefined
+          : applyParams(step.payload, index, this.action.params);
+      const refusal = this.refusalOf(
+        index,
+        step.command,
+        step.title,
+        withParams,
+        step.context,
+      );
+      if (refusal) {
+        halt = { status: "refused", refusal, pausedAt: null, message: null };
+        break;
+      }
+      const payload =
+        withParams !== undefined &&
+        this.deps.selection &&
+        selectionTokensIn(withParams).size > 0
+          ? resolveSelection(withParams, this.deps.selection())
+          : withParams;
+      const error = await invokeStep(this.deps, step.command, payload);
       this.push({ index, command: step.command, title: step.title, error });
       ranOne = true;
     }
@@ -275,6 +380,21 @@ export class ActionPlayer {
         undoSteps: this.snapshot.undoSteps + group.steps,
         writes: this.snapshot.writes + group.writes,
       });
+    }
+    if (halt?.status === "refused") {
+      // All or nothing (D-16): a run that is one undo step is taken back
+      // whole; one the chain could not hold stays, and the report says so.
+      let rolledBack = false;
+      if (
+        this.snapshot.writes > 0 &&
+        this.snapshot.undoSteps === 1 &&
+        this.lastSeq !== null &&
+        this.deps.rollback
+      ) {
+        rolledBack = await this.deps.rollback(this.lastSeq);
+      }
+      this.set({ ...halt, rolledBack });
+      return this.snapshot;
     }
     if (this.snapshot.status === "cancelled") return this.snapshot;
     if (halt) {

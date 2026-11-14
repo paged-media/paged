@@ -61,6 +61,8 @@ import {
   live,
 } from "../live-bridge";
 import { downloadBytes } from "../shell-file-saver";
+import { keepBefore } from "../checkpoints/checkpoints";
+import { CheckpointTimeline } from "../checkpoints/timeline";
 import { color, font, radius, status } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -86,6 +88,7 @@ const M = defineMessages("app.libraryPanel", {
   restoreTitle:
     "Make this version current again, as a new version; nothing is lost",
   restore: "Restore",
+  beforeRestore: "Before restoring version {n}",
   download: "Download",
   releaseTitle: "Name this version; a release never moves",
   release: "Release",
@@ -377,6 +380,12 @@ export function LibraryPanel() {
               {strings.t(M.exportHistory)}
             </button>
           </div>
+          {/* Editor ADR 1234 — the named checkpoints of this document. */}
+          <CheckpointTimeline
+            library={library}
+            doc={current}
+            version={version}
+          />
           <ul
             data-library-versions
             style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}
@@ -457,6 +466,13 @@ export function LibraryPanel() {
                         style={button}
                         title={strings.t(M.restoreTitle)}
                         onClick={act(async () => {
+                          // Editor ADR 1234 — what is open is kept first.
+                          await keepBefore(
+                            editor,
+                            strings.t(M.beforeRestore, {
+                              n: log.length - i,
+                            }),
+                          );
                           await library.restore(current.id, c.hash);
                           await open(current);
                         })}

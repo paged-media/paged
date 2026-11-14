@@ -45,7 +45,11 @@ export type IssueKind =
   | "color-space"
   | "missing-data"
   | "import-loss"
-  | "output-standard";
+  | "output-standard"
+  // Editor ADR 1233 — a design constraint of the document that does not hold.
+  | "constraint"
+  // Editor ADR 1236 — a requirement of the publication contract not met.
+  | "contract";
 
 export type IssueSeverity = "error" | "warning" | "info";
 
@@ -75,6 +79,9 @@ export interface IssuesSnapshot {
 }
 
 interface IssuesSlot extends IssuesSnapshot {
+  /** Each gatherer's set, by source: the publication's own reads, the
+   *  design constraints (ADR 1233), the publication contract (ADR 1236). */
+  sources: Map<string, readonly PublicationIssue[]>;
   /** How the app goes to an issue (set by the canvas app). */
   activate: ((issue: PublicationIssue) => void) | null;
   listeners: Set<() => void>;
@@ -82,6 +89,7 @@ interface IssuesSlot extends IssuesSnapshot {
 }
 
 const ISSUES = scoped("publicationIssues", (): IssuesSlot => ({
+  sources: new Map(),
   issues: [],
   active: null,
   returnView: null,
@@ -99,13 +107,17 @@ function emit(slot: IssuesSlot): void {
   for (const l of [...slot.listeners]) l();
 }
 
-/** The app publishes the issues it gathered (replacing the last set). */
+/** A gatherer publishes the issues it found (replacing its last set; the
+ *  other gatherers' sets stay). The set the markers, the overview and the
+ *  list read is every source's, in the order the sources first published. */
 export function setPublicationIssues(
   scope: EditorScope,
   issues: readonly PublicationIssue[],
+  source = "publication",
 ): void {
   const slot = scope.get(ISSUES);
-  slot.issues = issues;
+  slot.sources.set(source, issues);
+  slot.issues = [...slot.sources.values()].flat();
   if (slot.active && !issues.some((i) => i.id === slot.active))
     slot.active = null;
   emit(slot);

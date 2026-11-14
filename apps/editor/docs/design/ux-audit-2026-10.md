@@ -978,7 +978,7 @@ With text selected, ⌘⇧> (size up) left the size at 12 pt. No keybinding exis
 
 #### F-35 · The Pen tool drops back to Selection after each path
 
-> **Withdrawn (2026-10-19): does not reproduce.** The audit read `__canvas.activeTool`, a legacy test-handle field that reports `select` for every tool except Type. The editor's own tool state shows the Pen stays active after Enter. `tests/e2e/ux-audit-gestures.spec.ts` keeps this as a passing guard test. The original text follows for the record.
+> **Withdrawn (2026-10-19): does not reproduce.** The audit read `__canvas.activeTool`, a legacy test-handle field that reports `select` for every tool except Type. The editor's own tool state shows the Pen stays active after Enter. `tests/e2e/ux-audit-gestures.spec.ts` keeps this as a passing guard test. The original text follows for the record. Since IC11 (2026-11-14) `UXI-T17` (`tests/e2e/uxi-path.spec.ts`) holds it too, for a path closed on its first anchor as well as one ended with Enter, each path one undo step.
 
 **Severity:** polish · **Effort:** S · **Affects:** Illustrators.
 
@@ -1268,6 +1268,16 @@ A 10-slide deck opens as a vertical page stack at 11%. The "page N" labels sit o
 **Recommendation:** Let the module set page nouns ("Slide") and the default view. Add Play.
 
 **Screenshots:** `F-47-slide-deck-surface.png`
+
+**Fixed (2026-11-14, slide ADR 725, extensions ADR 1111).** A module names its document's pages
+through its document context (`pageNoun`): a deck's are slides — "Slide 1" (no "Cover") and
+"Slides 2–3" in the document map and its Slides lens, "Slide 4" in the page lenses, "Slide 3"
+beside each slide on the canvas and "Go to slide 3" in the palette. In the Slides panel a slide's
+Duplicate, Delete and Hide show on the slide in view and on the one the pointer or the keyboard is
+on, not under every thumbnail. The rest had landed: the first slide is fitted when a deck opens
+(editor ADR 1208), a caption sits beside its page when the gap below is too small (editor ADR
+1213), and Slide Show ▸ From Beginning (F5, Play), Presenter View and View ▸ Slide Sorter are
+paged.slide's (slide ADR 716).
 
 ### Keyboard and accessibility
 

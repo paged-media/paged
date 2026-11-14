@@ -32,8 +32,10 @@ import {
   opacity,
   SCRIPT,
   SUMMARY_TURN,
+  TEXT_FRAME_ID,
   textTurn,
   TOOL_TURN,
+  toolCallTurn,
   aiServiceIsThere,
 } from "./ai-fixtures";
 
@@ -152,7 +154,19 @@ test.describe("Script panel — Ask Claude", () => {
       return route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: sent.length === 1 ? TOOL_TURN : SUMMARY_TURN,
+        // Editor ADR 1241: the assistant proposes; the palette's request
+        // runs in the read-only propose mode.
+        body: toolCallTurn("propose_changes", {
+          summary: "Set the frame's opacity to 40%.",
+          changes: [
+            {
+              address: `textFrame:${TEXT_FRAME_ID}`,
+              path: "frameOpacity",
+              value: 40,
+              reason: "as asked",
+            },
+          ],
+        }),
       });
     });
     await page.evaluate(() =>
@@ -172,10 +186,14 @@ test.describe("Script panel — Ask Claude", () => {
       ),
     );
     const panel = page.locator("[data-ai-assistant]");
-    await expect(panel.locator("[data-ai-summary]")).toHaveText(
+    // Consent first (editor ADR 1241), then the proposal, then Apply.
+    await page.locator("[data-cockpit-action=ai-consent-send]").click();
+    await expect(panel.locator("[data-ai-proposal-summary]")).toHaveText(
       "Set the frame's opacity to 40%.",
     );
     expect(sent[0]).toContain("Request: make the text frame 40% opaque");
+    await panel.locator("[data-cockpit-action=ai-proposal-apply]").click();
+    await expect(panel.locator("[data-ai-applied]")).toBeVisible();
     expect(await opacity(page)).toBe(40);
   });
 

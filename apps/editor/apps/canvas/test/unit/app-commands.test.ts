@@ -170,6 +170,22 @@ test("show issue markers flips its own flag (editor ADR 1223) [editor-shell.pane
   expect(getViewToggle(scope, "issueMarkers")).toBe(false);
 });
 
+test("X-Ray and the Typography debugger flip their own flags (editor ADRs 1237, 1238) [editor-shell.panels.inspector]", async () => {
+  covers(
+    "command:paged.view.toggleXray",
+    "command:paged.view.toggleTypographyDebugger",
+  );
+  const { registry, scope } = harness();
+  expect(getViewToggle(scope, "xray")).toBe(false);
+  await registry.invoke("paged.view.toggleXray");
+  expect(getViewToggle(scope, "xray")).toBe(true);
+  expect(getViewToggle(scope, "typography")).toBe(false);
+  await registry.invoke("paged.view.toggleTypographyDebugger");
+  expect(getViewToggle(scope, "typography")).toBe(true);
+  await registry.invoke("paged.view.toggleXray");
+  expect(getViewToggle(scope, "xray")).toBe(false);
+});
+
 test("Open recent… opens its dialog; Close needs an open document (UX audit F-06) [editor-shell.file-intake]", async () => {
   covers("command:paged.file.openRecent", "command:paged.file.close");
   const { registry, scope } = harness();

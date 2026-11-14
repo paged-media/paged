@@ -120,6 +120,11 @@ function effectKinds(root) {
  *  `<kind> <file>`; each says why the site is not a static surface. */
 export const DYNAMIC_SITES = new Map([
   [
+    "command apps/editor/packages/shell/src/actions/actions-context.tsx",
+    "editor ADR 1240's palette entry per saved action (`paged.actions.run:<id>`): its ids are " +
+      "the user's recorded actions, made at run time; record, stop and play are listed inline.",
+  ],
+  [
     "command apps/editor/packages/shell/src/bundles/loader.ts",
     "the worker-bundle protocol's passthrough: it registers whatever command a sandboxed " +
       "bundle sends over postMessage; the bundles' own ids are enumerated from their manifests.",

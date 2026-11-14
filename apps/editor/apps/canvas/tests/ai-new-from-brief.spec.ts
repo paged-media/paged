@@ -85,6 +85,10 @@ test("a brief becomes a document @feat:editor-shell.ai-new-from-brief @feat:edit
     .fill("A two-page spring catalogue for a tea shop");
   await dialog.locator("[data-brief-size]").selectOption("a4");
   await dialog.locator("[data-cockpit-action=brief-generate]").click();
+  // Editor ADR 1241: the brief is sent only after the consent card's Send.
+  await expect(panel.locator("[data-ai-consent=brief]")).toBeVisible();
+  expect(sent).toHaveLength(0);
+  await panel.locator("[data-cockpit-action=ai-consent-send]").click();
 
   await expect(panel.locator("[data-brief-summary]")).toHaveText(
     "Built a two-page spring tea catalogue.",

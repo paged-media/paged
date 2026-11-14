@@ -29,6 +29,15 @@ import type { PagedEditor, PublicationIssue } from "@paged-media/shell";
 import { defineMessages, t } from "@paged-media/strings";
 
 import { relinkFromPicker } from "./relink";
+import { moveFixWords, CONSTRAINT_WORDS } from "./constraints/describe";
+import type { Box } from "./constraints/evaluate";
+import { applyMoveFix } from "./constraints/fixes";
+import { constraintStateOf } from "./constraints/store";
+import {
+  CONTRACT_PANEL,
+  contractCheckId,
+  contractStateOf,
+} from "./contract/source";
 
 const M = defineMessages("app.issueFixes", {
   expandFrame: "Expand frame",
@@ -44,6 +53,7 @@ const M = defineMessages("app.issueFixes", {
   openPreflight: "Open Preflight",
   openReport: "Open the compatibility report",
   openData: "Open Data",
+  openContract: "Open the publication contract",
 });
 
 /** One fix: a label, what it will do, and how. */
@@ -52,10 +62,15 @@ export interface IssueFix {
   label: string;
   /** What it will do, said before it runs. */
   preview?: string;
-  /** A document change (one undo step), or a panel to open. */
+  /** Where it would put what it moves or grows, page-local: drawn on the
+   *  canvas while the fix has the pointer or the focus (editor ADR 1233). */
+  ghosts?: ReadonlyArray<{ pageId: string; box: Box }>;
+  /** A document change (one undo step), a panel to open, or advice only
+   *  (what the user has to do; the editor has no change to offer). */
   run:
     | { kind: "mutate"; apply: (paged: PagedEditor) => Promise<boolean> }
-    | { kind: "panel"; panel: string };
+    | { kind: "panel"; panel: string }
+    | { kind: "note" };
 }
 
 /** How far a frame can grow down: to its page's bottom margin, for a frame
@@ -63,10 +78,16 @@ export interface IssueFix {
 export async function expandFramePlan(
   paged: PagedEditor,
   frame: ElementId,
-): Promise<{ bounds: [number, number, number, number]; grow: number } | null> {
+): Promise<{
+  bounds: [number, number, number, number];
+  grow: number;
+  /** The frame as it would be, page-local `[x, y, w, h]`, and its page. */
+  pageId: string;
+  box: Box;
+} | null> {
   const [g] = await paged.client.elementGeometry([frame]);
   if (!g?.pageId || g.bounds.length < 4) return null;
-  const [a, b, c, d, , ty] = (g.itemTransform ?? [
+  const [a, b, c, d, tx, ty] = (g.itemTransform ?? [
     1, 0, 0, 1, 0, 0,
   ]) as number[];
   if (
@@ -88,7 +109,79 @@ export async function expandFramePlan(
   const limit = page.sizePt[1] - (page.marginBottomPt ?? 0) - (ty ?? 0);
   const grow = Math.round((limit - bottom) * 100) / 100;
   if (grow < 0.5) return null;
-  return { bounds: [top, left, limit, right], grow };
+  return {
+    bounds: [top, left, limit, right],
+    grow,
+    pageId: g.pageId,
+    box: [left + (tx ?? 0), top + (ty ?? 0), right - left, limit - top],
+  };
+}
+
+/** The Expand frame fix of an overset frame, planned. */
+async function expandFrameFix(
+  paged: PagedEditor,
+  frame: ElementId,
+): Promise<IssueFix | null> {
+  const plan = await expandFramePlan(paged, frame).catch(() => null);
+  if (!plan) return null;
+  return {
+    id: "expand-frame",
+    label: t(M.expandFrame),
+    preview: t(M.expandFramePreview, { grow: plan.grow }),
+    ghosts: [{ pageId: plan.pageId, box: plan.box }],
+    run: {
+      kind: "mutate",
+      apply: async (p) => {
+        const reply = await p.client.mutate({
+          op: "resizeFrame",
+          args: { frameId: frame.id as string, bounds: plan.bounds },
+        });
+        return reply.kind === "mutationApplied";
+      },
+    },
+  };
+}
+
+/** A design constraint's fixes (editor ADR 1233): the moves its evaluation
+ *  planned, Expand frame for text that must fit, or what the user has to
+ *  do when only other words or other type would make it hold. */
+async function constraintFixes(
+  paged: PagedEditor,
+  issue: PublicationIssue,
+): Promise<IssueFix[]> {
+  const id = issue.id.replace(/^constraint:/, "");
+  const { constraints, results } = constraintStateOf(paged.scope);
+  const c = constraints.find((x) => x.id === id);
+  const plan = results.get(id)?.fix;
+  if (!c || !plan) return [];
+  switch (plan.kind) {
+    case "move": {
+      if (plan.moves.length === 0) return [];
+      const words = moveFixWords(c, plan);
+      return [
+        {
+          id: "constraint-move",
+          label: words.label,
+          preview: words.preview,
+          ghosts: plan.ghosts,
+          run: { kind: "mutate", apply: (p) => applyMoveFix(p, plan) },
+        },
+      ];
+    }
+    case "expand-frame": {
+      const fix = await expandFrameFix(paged, plan.member);
+      return fix ? [fix] : [];
+    }
+    case "edit-text":
+      return [
+        {
+          id: "constraint-edit-text",
+          label: t(CONSTRAINT_WORDS.fixEditText),
+          preview: t(CONSTRAINT_WORDS.fixEditTextPreview),
+          run: { kind: "note" },
+        },
+      ];
+  }
 }
 
 /** The fixes of `issue`. Async: a fix that changes the document is
@@ -102,23 +195,8 @@ export async function fixesOf(
       const out: IssueFix[] = [];
       const frame = issue.element;
       if (frame && typeof frame.id === "string") {
-        const plan = await expandFramePlan(paged, frame).catch(() => null);
-        if (plan)
-          out.push({
-            id: "expand-frame",
-            label: t(M.expandFrame),
-            preview: t(M.expandFramePreview, { grow: plan.grow }),
-            run: {
-              kind: "mutate",
-              apply: async (p) => {
-                const reply = await p.client.mutate({
-                  op: "resizeFrame",
-                  args: { frameId: frame.id as string, bounds: plan.bounds },
-                });
-                return reply.kind === "mutationApplied";
-              },
-            },
-          });
+        const fix = await expandFrameFix(paged, frame);
+        if (fix) out.push(fix);
       }
       out.push({
         id: "show-stories",
@@ -175,6 +253,29 @@ export async function fixesOf(
           run: { kind: "panel", panel: "paged.import-report" },
         },
       ];
+    case "constraint":
+      return constraintFixes(paged, issue);
+    case "contract": {
+      // Editor ADR 1236 — the panel that meets the requirement, and the
+      // contract itself.
+      const id = contractCheckId(issue.id);
+      const check = contractStateOf(paged.scope).assessment?.checks.find(
+        (c) => c.id === id,
+      );
+      const out: IssueFix[] = [];
+      if (check?.fix && check.fix.panel !== CONTRACT_PANEL)
+        out.push({
+          id: "contract-fix",
+          label: check.fix.label,
+          run: { kind: "panel", panel: check.fix.panel },
+        });
+      out.push({
+        id: "open-contract",
+        label: t(M.openContract),
+        run: { kind: "panel", panel: CONTRACT_PANEL },
+      });
+      return out;
+    }
     case "missing-data":
       return [
         {

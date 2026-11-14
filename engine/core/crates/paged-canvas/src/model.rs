@@ -973,7 +973,7 @@ fn node_address(node: &paged_mutate::NodeId) -> String {
 /// element kind including Oval / Group; the apply layer may refuse
 /// some `(NodeId, PropertyPath)` combinations, but routing decides
 /// that at apply time.
-fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate::NodeId {
+pub(crate) fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate::NodeId {
     use crate::element_selection::ElementId;
     use paged_mutate::NodeId;
     match id {
@@ -2913,7 +2913,20 @@ impl CanvasModel {
             (doc, Some(opened.archive))
         };
         phase_log("CanvasModel::load parse", t_parse);
+        Self::from_scene(doc_id, scene, source_archive, import_notes, bytes, opts)
+    }
 
+    /// A model over a parsed `scene`: [`Self::load`] after the parse, and a
+    /// sandbox's copy of a document (engine ADR 1310). `bytes` is the
+    /// source package kept for save-back.
+    fn from_scene(
+        doc_id: String,
+        scene: Document,
+        source_archive: Option<idml_import::SourceArchive>,
+        import_notes: Vec<String>,
+        bytes: &[u8],
+        opts: CanvasOptions,
+    ) -> Result<Self, LoadError> {
         // Honour the first font and the ICC profile. Take ownership
         // up-front so the model is self-contained — no caller-managed
         // lifetimes leaking through.
@@ -15712,6 +15725,45 @@ impl CanvasModel {
     /// scene: the live rebuild's options with every cross-build cache and
     /// hint left out. The registries (fonts, profiles, scene layers) are
     /// inputs, not caches, and are shared.
+    /// A copy of the document in a model of its own (engine ADR 1310): the
+    /// scene cloned and built cold with this model's fonts, profiles,
+    /// colour settings, session policy and id floor. A write applied to it
+    /// goes through the whole write path — lowering, permissions, the
+    /// operation layer, the rebuild — and touches nothing of this model:
+    /// not the scene, the build, the undo history nor the revision.
+    pub fn sandbox(&self) -> Result<CanvasModel, LoadError> {
+        let opts = CanvasOptions {
+            fonts: self.font_bytes.clone().into_iter().collect(),
+            font_registry: self.font_registry.clone(),
+            scene_font_registry: self.scene_font_registry.clone(),
+            cmyk_icc_profile: self.icc_bytes.clone(),
+            color_profiles: self
+                .color_profiles
+                .iter()
+                .map(|(name, bytes)| ColorProfileEntry {
+                    name: name.clone(),
+                    bytes: bytes.clone(),
+                })
+                .collect(),
+        };
+        let mut copy = Self::from_scene(
+            self.doc_id.clone(),
+            self.scene.clone(),
+            None,
+            Vec::new(),
+            &self.source_idml,
+            opts,
+        )?;
+        copy.source_id_floor = self.source_id_floor;
+        copy.last_applied_seq = self.last_applied_seq;
+        copy.color_settings = self.color_settings.clone();
+        copy.document_defaults = self.document_defaults.clone();
+        copy.session_policy = self.session_policy.clone();
+        copy.snap_settings = self.snap_settings;
+        copy.view_settings = self.view_settings;
+        Ok(copy)
+    }
+
     fn cold_build(&self) -> Result<BuiltDocument, crate::channel::LoadError> {
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
         let resource_providers = self.resource_tiles.provider_entries();

@@ -176,6 +176,42 @@ elementId, uri, bytes? } })` — or `mutateWithBytes` with `bytes: []` and
   transparent ground; `screenExtent(pageId)` says where the tile goes, the
   rect the GPU lane clips to.
 
+## X-Ray and line evidence (protocol 82)
+
+- **Document X-Ray** (engine ADR 1309). `explain(item, { aspect?, selection? })`
+  answers why `item` (a page item, or a story range in character offsets) looks
+  and behaves as it does, from the model alone: per text property the winning
+  level of the style cascade (`character`, `paragraph`, a style with its
+  `depth` down the based-on chain, `item`, `default`) and the levels it
+  shadows; the layer; the reasons it is locked (`item`, `container`, `layer`,
+  `role`) or hidden; its picture's link (status, ppi, fitting, the frames
+  sharing the file); its data bindings, template fields, placeholders and
+  variables; its thread and overset; its object style, fill and stroke with
+  their sources, its effects; and per applied style what editing it changes
+  (the styles based on it, the uses, the pages). `unknown` lists what the
+  document does not store. `selection` explains the text of a content
+  selection (caret units). `aspect: "overview"` answers only what a page is
+  coloured by.
+- **Line evidence** (engine ADR 1310). `lineEvidence({ story, frame?, range?,
+preview? })` answers per composed line the measure, the natural width, the
+  breaker's ratio, the word spacing as set (% of the font's space) and the
+  letters' spread, why it broke (`wordSpace`, `hyphen`,
+  `discretionaryHyphen`, `hardHyphen`, `forcedLineBreak`, `paragraphEnd`,
+  `storyEnd`, `emergency`), the hyphenation points the dictionary offered,
+  its tightness against the paragraph's word spacing, outliers and the
+  baseline grid's shift; each paragraph's composition settings; the overset.
+  With `preview` (any write), the evidence of a copy of the document with
+  the write applied: the document, its history and its revision are
+  untouched, and applying it is an ordinary `mutate`.
+- **The dry run** (engine ADR 1310). `preview({ mutation, items?, story? })`
+  applies any write — a batch, a Pathfinder Boolean or region verb, a
+  property, a text edit — to a copy of the document through the engine's
+  whole write path and answers what it would create and remove, the
+  geometry and the outlines (`PathAnchorsResult`: anchors and the transform
+  onto the page) it would leave for those and the asked `items`, and the
+  asked `story`'s line evidence; a refused write answers `applied: false`
+  and the engine's reason. Nothing in the document changes.
+
 ## Typed changes (editor ADR 1232 amendment)
 
 `mutate(mutation, { typing: true })` is a typed key's insert: the call

@@ -43,7 +43,7 @@ import { PanelIntro } from "./panel-parts";
 const M = defineMessages("draw.generativePanel", {
   title: "Generative",
   summary:
-    "Draw from a prompt: the Claude agent writes vector artwork, or recolours the selection. Nothing is drawn until you press the button.",
+    "Draw from a prompt: the Claude agent writes vector artwork, or recolors the selection. Nothing is drawn until you press the button.",
   textToVector: "Text to vector",
   subject: "What to draw",
   subjectHint: "A lighthouse on a cliff at dusk",
@@ -53,11 +53,11 @@ const M = defineMessages("draw.generativePanel", {
   routeImage: "Generate a picture and trace it",
   draw: "Draw",
   recolor: "Generative recolor",
-  wish: "How to recolour the selection",
-  wishHint: "Warm autumn colours, keep the outlines dark",
+  wish: "How to recolor the selection",
+  wishHint: "Warm autumn colors, keep the outlines dark",
   apply: "Recolor",
   working: "Working…",
-  note: "Route one sends your prompt, and the list of the selection's colours for a recolour, to Claude through the editor's proxy. The picture route runs the local image model and never leaves this machine. Both are one undo step, except tracing a picture, which is two.",
+  note: "Route one sends your prompt, and the list of the selection's colors for a recolor, to Claude through the editor's proxy. The picture route runs the local image model and never leaves this machine. Both are one undo step, except tracing a picture, which is two.",
 });
 
 export const GENERATIVE_PANEL_NOTE = M.note;

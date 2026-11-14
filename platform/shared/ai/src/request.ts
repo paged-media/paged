@@ -25,7 +25,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { renderCatalog, type ApiCatalog } from "./catalog";
 import { AUTHORING_GUIDE } from "./guide";
 import { DEFAULT_MODEL, MODE_SPECS, type AiMode } from "./model";
-import { SCRIPT_TOOLS } from "./tools";
+import { PROPOSE_TOOLS, SCRIPT_TOOLS } from "./tools";
 
 const MODE_NOTES: Record<AiMode, string> = {
   script: "",
@@ -33,6 +33,9 @@ const MODE_NOTES: Record<AiMode, string> = {
 
 You are the AI Assistant inside the paged editor. The user message describes the current selection and asks for one change. Make that change and nothing else: keep every other frame, story and style as it is. Prefer the smallest edit that does the job.`,
   complete: "",
+  propose: `# This request
+
+You are the AI Assistant inside the paged editor, in PROPOSAL mode. You cannot change the document and you have no script tool. Read what you need with read_objects (and lookup_api for property paths and their values), then call propose_changes exactly once with the change set that answers the request: each change is one ordinary property write — an object's address, a property path from the catalog, the new value, and a one-line reason. The user sees every change with its value before and after, and applies only what they approve. Propose the smallest set that does what was asked; never touch what the request does not name. If nothing needs to change, call propose_changes with no changes and say why in the summary.`,
   document: `# This request
 
 You are building a whole document from a brief, starting from the document that is open (often one blank page). Work in this order: decide the page size, a palette and a small set of paragraph and character styles; create the styles and swatches; then build the document one page at a time, checking each page for overset text and, where layout matters, rendering it before you move on. Write real, specific copy that fits the brief; never leave placeholder text such as "Lorem ipsum" unless the brief asks for it.`,
@@ -78,7 +81,11 @@ export function buildRequest(
         cache_control: { type: "ephemeral" },
       },
     ],
-    ...(spec.tools ? { tools: SCRIPT_TOOLS } : {}),
+    ...(spec.tools === "script"
+      ? { tools: SCRIPT_TOOLS }
+      : spec.tools === "propose"
+        ? { tools: PROPOSE_TOOLS }
+        : {}),
     messages: options.messages,
   };
 }

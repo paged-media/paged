@@ -49,14 +49,17 @@ import { commandNeeds } from "../../src/registries/command-reasons";
 import {
   RegistriesProvider,
   useRegistries,
+  type ShellRegistries,
 } from "../../src/state/registries-context";
 
 let commands: CommandRegistry | null = null;
+let registries: ShellRegistries | null = null;
 
 function Grab() {
   const r = useRegistries();
   useEffect(() => {
     commands = r.commands;
+    registries = r;
   });
   return null;
 }
@@ -100,6 +103,7 @@ afterEach(() => {
   cleanup();
   resetAiAvailability();
   commands = null;
+  registries = null;
 });
 
 describe("UXI-CMD-002 — the palette lists what does not apply, with why @uxi:UXI-PNL-004", () => {
@@ -155,6 +159,49 @@ describe("UXI-CMD-002 — the palette lists what does not apply, with why @uxi:U
     expect(row.textContent).toContain("Go to page B-2");
     fireEvent.click(row);
     await waitFor(() => expect(sent).toEqual([{ page: "p3" }]));
+  });
+
+  test("a deck's pages are slides: “slide 2” goes to the page, and a slide that does not exist is said (extensions ADR 1111)", async () => {
+    setAiAvailability("available");
+    const sent: unknown[] = [];
+    mount();
+    act(() => {
+      commands!.register({
+        id: GO_TO_PAGE_COMMAND,
+        title: "Go to page…",
+        category: "Layout",
+        handler: (_p, payload) => void sent.push(payload),
+      });
+      registries!.editContexts.register({
+        type: "testDeck",
+        entry: "doubleClick",
+        matches: () => false,
+        pageNoun: { one: "slide", other: "slides" },
+      });
+      registries!.documentContext.set("test.deck", "testDeck");
+      notifyPalette(detachedEditorScope(), "open");
+    });
+    await typeQuery("go to slide 2");
+    const row = await waitFor(() => {
+      const el = document.body.querySelector<HTMLElement>(
+        '[data-palette-goto="p2"]',
+      );
+      if (!el) throw new Error("no go-to row");
+      return el;
+    });
+    expect(row.textContent).toContain("Go to slide B-1");
+    fireEvent.click(row);
+    await waitFor(() => expect(sent).toEqual([{ page: "p2" }]));
+    act(() => notifyPalette(detachedEditorScope(), "open"));
+    await typeQuery("slide 40");
+    const missing = await waitFor(() => {
+      const el = document.body.querySelector<HTMLElement>(
+        "[data-palette-goto]",
+      );
+      if (!el || !el.textContent?.includes("40")) throw new Error("no row");
+      return el;
+    });
+    expect(missing.textContent).toContain("No slide 40 in this document");
   });
 
   test("a page that does not exist is said, not offered", async () => {

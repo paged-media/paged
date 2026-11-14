@@ -26,7 +26,7 @@
 import type { DocumentEntry } from "@paged-media/repository";
 
 import { loadDocumentFile } from "./document-loader";
-import { getLibrary } from "./library-document";
+import { getLibrary, setCurrentLibraryRef } from "./library-document";
 import type { PagedEditor } from "./paged-editor";
 import { confirmDiscard } from "./replace-guard";
 
@@ -40,13 +40,20 @@ export async function openLibraryDocument(
     /** The replace question's action ("Opening Annual"). */
     action: string;
     target?: string;
+    /** The caller has kept the open document already (a checkpoint, editor
+     *  ADR 1234): nothing is lost, so the replace question is not asked. */
+    confirmed?: boolean;
+    /** The layout variant opened (its ref, editor ADR 1235): later saves
+     *  commit there. Absent: the main layout. */
+    variant?: string;
     setStatus?: (s: string) => void;
     pushWarning?: (w: string) => void;
   },
 ): Promise<boolean> {
   const library = getLibrary(editor.scope);
   if (!library) return false;
-  if (!(await confirmDiscard(editor, options.action))) return false;
+  if (!options.confirmed && !(await confirmDiscard(editor, options.action)))
+    return false;
   const bytes = await library.exportPaged(entry.id, options.target ?? "main");
   const doc = editor.document;
   await loadDocumentFile(
@@ -66,5 +73,6 @@ export async function openLibraryDocument(
       scope: editor.scope,
     },
   );
+  setCurrentLibraryRef(editor.scope, options.variant ?? null);
   return true;
 }

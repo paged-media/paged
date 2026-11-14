@@ -17,12 +17,14 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type { ModifierHint } from "@paged-media/plugin-api";
 import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import {
@@ -31,6 +33,7 @@ import {
   escapeKeyEvent,
   isEscapeKey,
   resolveCursorCss,
+  useCursorController,
   useEscapeHandler,
   usePaged,
   useRegistryView,
@@ -77,9 +80,13 @@ export function useGestureSpine(): {
    *  behaviour that ISN'T a gesture handler (Hand → pan, Zoom →
    *  click-zoom) through its proven legacy machinery. */
   effectiveTool: string;
+  /** What the modifiers do with the handler in hand (its contract's
+   *  `modifierHints`; IC10), or null. */
+  modifierHints: readonly ModifierHint[] | null;
 } {
   const keys = useEditorKeys();
   const paged = usePaged();
+  const cursors = useCursorController();
   const [spine] = useState(() => new GestureSpine());
 
   // Every render's editor reaches the mounted handler (it holds the
@@ -124,6 +131,13 @@ export function useGestureSpine(): {
     resolve: (e) => spine.key(e),
   });
 
+  // The handler in hand's modifier hints, as they change with it.
+  const modifierHints = useSyncExternalStore(
+    spine.subscribe,
+    spine.modifierHints,
+    spine.modifierHints,
+  );
+
   // Tear the handler down on unmount.
   useEffect(() => () => spine.clear(), [spine]);
 
@@ -140,14 +154,47 @@ export function useGestureSpine(): {
     : undefined;
 
   // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    // The cursor contract's session layer for a tool's own press (editor
+    // ADR 1227): a handler whose cursor follows its press (the Pen's
+    // states, paged.draw ADR 370) answers `pressCursor` on the press and
+    // on every move of its drag; the layer is cleared when the press ends,
+    // committed or rolled back. A handler without it leaves the layer to
+    // the canvas.
+    let pressing = false;
+    let held = false;
+    const pressCursor = (e: CanvasPointerEvent) => {
+      const spec = spine.pressCursor(e);
+      if (!spec) return;
+      held = true;
+      cursors.set("session", resolveCursorCss(spec));
+    };
+    const endPress = () => {
+      pressing = false;
+      if (!held) return;
+      held = false;
+      cursors.set("session", null);
+    };
+    return {
       toolGesture: hasHandler
         ? {
-            onDown: (e: CanvasPointerEvent) => spine.pointerDown(e),
-            onMove: (e: CanvasPointerEvent) => spine.pointerMove(e),
-            onUp: (e: CanvasPointerEvent) => spine.pointerUp(e),
-            onCancel: () => spine.key(escapeKeyEvent()),
+            onDown: (e: CanvasPointerEvent) => {
+              spine.pointerDown(e);
+              pressing = true;
+              pressCursor(e);
+            },
+            onMove: (e: CanvasPointerEvent) => {
+              spine.pointerMove(e);
+              if (pressing) pressCursor(e);
+            },
+            onUp: (e: CanvasPointerEvent) => {
+              spine.pointerUp(e);
+              endPress();
+            },
+            onCancel: () => {
+              spine.key(escapeKeyEvent());
+              endPress();
+            },
             hoverCursor: hasCursorAt
               ? (e: CanvasPointerEvent) => {
                   const spec = spine.cursorAt(e);
@@ -159,7 +206,15 @@ export function useGestureSpine(): {
         : null,
       cursor,
       effectiveTool,
-    }),
-    [hasHandler, hasCursorAt, cursor, effectiveTool, spine],
-  );
+      modifierHints,
+    };
+  }, [
+    hasHandler,
+    hasCursorAt,
+    cursor,
+    effectiveTool,
+    spine,
+    cursors,
+    modifierHints,
+  ]);
 }

@@ -122,6 +122,12 @@ export const PALETTE = defineMessages("shell.palette", {
   goToPage: "Go to page {page}",
   goToPageWords: "go to page, go to, goto, page, p",
   noSuchPage: "No page {page} in this document",
+  /** Under the noun the document declares for its pages (extensions ADR
+   *  1111): "Go to slide 3", and "go to slide, slide" as the query's
+   *  words. */
+  goToNamed: "Go to {noun} {page}",
+  goToNamedWords: "go to {noun}, {noun}",
+  noSuchNamed: "No {noun} {page} in this document",
   help: "Help",
   helpTopic: "Help: {title}",
   helpWords: "help, how do i, how to",
@@ -141,6 +147,15 @@ export const HEADER = defineMessages("shell.header", {
 
 /** The header's save status (editor ADR 1203): a label per state, and the
  *  details its popover gives (where, when, why, Retry). */
+/** The publication's readiness against its contract (editor ADR 1236). */
+export const READINESS = defineMessages("shell.readiness", {
+  label: "Publication contract: {state}",
+  blocked: "Blocked",
+  attention: "Needs attention",
+  ready: "Ready",
+  approved: "Approved",
+});
+
 export const SAVE_STATUS = defineMessages("shell.saveStatus", {
   noChanges: "No changes",
   notSavedYet: "Not saved yet",
@@ -219,6 +234,18 @@ export const ENGINE_FAILURE = defineMessages("shell.engineFailure", {
 
 /** Hover preselection and the locked mark (editor ADR 235, amended by
  *  IC6): the type of the item a click would select. */
+/** The modifier hint strip (IC10). */
+export const MODIFIER_HINTS = defineMessages("shell.modifierHints", {
+  label: "Modifier keys",
+  toggle: "Add to or remove from the selection",
+  duplicate: "Duplicate while moving",
+  noSnap: "Ignore snapping",
+  pan: "Pan",
+  square: "Square or circle",
+  fromCentre: "From the centre",
+  keepVisible: "Keep modifier hints visible",
+});
+
 export const HOVER = defineMessages("shell.hover", {
   rectangle: "Rectangle",
   oval: "Ellipse",

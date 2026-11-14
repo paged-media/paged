@@ -62,11 +62,13 @@ import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
+import { buildVerbCommands } from "../../../src/verb-commands";
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   SELECT_ABOVE_COMMAND,
   SELECT_BELOW_COMMAND,
 } from "../../../src/canvas-context-menu";
+import { ADD_CONSTRAINT_COMMAND } from "../../../src/constraints/add-constraint";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildEffectMenuCommands } from "../../../src/effect-menu";
 import { buildViewCommands } from "../../../src/view-commands";
@@ -104,10 +106,12 @@ const noop = new Proxy({}, { get: () => () => {} }) as never;
 /** Every `.commands.register(` call site, per file. A new site fails
  *  here: list it, and the ids it registers below. */
 const SITES: Record<string, number> = {
-  "packages/shell/src/PagedShell.tsx": 12,
+  "packages/shell/src/PagedShell.tsx": 13,
   "packages/shell/src/state/commands/registry-derived.ts": 3,
   "packages/shell/src/chrome/FillStrokeCluster.tsx": 3,
-  "packages/shell/src/actions/actions-context.tsx": 3,
+  // Record, stop, play, and editor ADR 1240's "Run action: <name>" (one per
+  // saved action, ids the user's: not part of the static surface).
+  "packages/shell/src/actions/actions-context.tsx": 4,
   // Editor ADR 1208 / 1209 — the workspace's own commands.
   "packages/shell/src/cockpit/focus-workspace.ts": 1,
   "packages/shell/src/cockpit/workspace-class.ts": 1,
@@ -130,6 +134,7 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.view.toggleChrome",
     "paged.chrome.togglePanels",
     "paged.preferences.tabHidesPanels",
+    "paged.preferences.modifierHints",
     // The rest of PagedShell's sites register the shell builders:
     "paged.view.toggleScreenPreview",
     "paged.file.openIdml",
@@ -201,9 +206,11 @@ function tableIds(): string[] {
     ...buildClipboardCommands(noop),
     ...buildSvgCommands(noop),
     ...buildAssetExportCommands(),
+    ...buildVerbCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
     SELECT_ABOVE_COMMAND,
+    ADD_CONSTRAINT_COMMAND,
     ...buildObjectCommands(noop),
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
@@ -303,9 +310,11 @@ describe("the host command inventory", () => {
       "clipboardCommands",
       "svgCommands",
       "buildAssetExportCommands()",
+      "buildVerbCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
       "SELECT_ABOVE_COMMAND",
+      "ADD_CONSTRAINT_COMMAND",
       "objectCommands",
       "pathfinderCommands",
       "cornerCommands",

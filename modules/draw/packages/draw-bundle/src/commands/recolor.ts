@@ -95,7 +95,7 @@ import { batchMutationFor } from "./batch-handles";
 
 const M = defineMessages("draw.recolor", {
   recolor:
-    "Color: Recolor artwork (harmony, reduce to N colours, library or a colour map — one undo step)",
+    "Color: Recolor artwork (harmony, reduce to N colors, library or a color map — one undo step)",
   recolorOptions: "Color: Recolor artwork…",
 });
 
@@ -700,7 +700,7 @@ export async function applyRecolorArtwork(
   const read = await readArtworkColors(host);
   if (read.colors.length === 0) {
     host.log.warn(
-      `${label}: the selection carries no colour to recolour (fills, ` +
+      `${label}: the selection carries no color to recolor (fills, ` +
         "strokes, gradient stops and appearance layers were read) — no-op",
     );
     return none;
@@ -712,14 +712,14 @@ export async function applyRecolorArtwork(
   if (request.mode === "library" && library.length === 0) {
     host.log.warn(
       `${label}: the library is empty${
-        request.colorGroup ? ` (colour group "${request.colorGroup}")` : ""
+        request.colorGroup ? ` (color group "${request.colorGroup}")` : ""
       } — no-op`,
     );
     return none;
   }
   const targets = recolorTargetsFor(read.colors, request, library);
   if (targets.size === 0) {
-    host.log.info(`${label}: every colour already is its target — no-op`);
+    host.log.info(`${label}: every color already is its target — no-op`);
     return none;
   }
   const plan = recolorBatchFor(read, targets);
@@ -731,7 +731,7 @@ export async function applyRecolorArtwork(
     return none;
   }
   host.log.info(
-    `${label}: ${targets.size} of ${read.colors.length} colour(s) changed ` +
+    `${label}: ${targets.size} of ${read.colors.length} color(s) changed ` +
       `(${request.mode}), ${plan.created.length} swatch(es) and ` +
       `${plan.gradients.size} gradient(s) created, ${plan.rewritten} paint ` +
       "slot(s) re-pointed, in 1 undo step; element tints are kept",
@@ -766,7 +766,7 @@ export function contributeRecolorCommands(host: BundleHost): Disposable {
         }
         host.log.info(
           `${RECOLOR_ARTWORK_OPTIONS_COMMAND_ID}: this host cannot raise the ` +
-            "Recolor Artwork panel — applying the default (complementary) recolour",
+            "Recolor Artwork panel — applying the default (complementary) recolor",
         );
         await applyRecolorArtwork(host, {});
       },

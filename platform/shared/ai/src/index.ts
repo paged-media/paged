@@ -41,9 +41,22 @@ export {
   RUN_SCRIPT,
   LOOKUP_API,
   RENDER_PAGE,
+  READ_OBJECTS,
+  READ_OBJECTS_LIMIT,
+  PROPOSE_CHANGES,
+  PROPOSE_CHANGES_LIMIT,
+  PROPOSE_TOOLS,
   parseToolInput,
+  type ProposedChangeInput,
   type ToolInput,
 } from "./tools";
+export {
+  runProposalAgent,
+  type ProposalEvent,
+  type ProposalOptions,
+  type ProposalReader,
+  type ProposalResult,
+} from "./propose";
 export {
   buildRequest,
   systemPrompt,

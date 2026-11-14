@@ -109,12 +109,17 @@ import { ScriptEditorPanel } from "./script-editor";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { ImportReportPanel } from "./import-report-panel";
+import { XRayPanel } from "./xray-panel";
+import { TypographyPanel } from "./typography-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
 import { HistoryPanel } from "./history-panel";
 import { GenerateImagePanel } from "./generate-image-panel";
 import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
+import { ConstraintsPanel } from "./constraints-panel";
+import { ContractPanel } from "./contract-panel";
+import { VariantsPanel } from "./variants-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
 import { PreflightPanel } from "./cockpit/preflight-panel";
@@ -227,10 +232,15 @@ const M = defineMessages("app.builtInPanels", {
   generateImage: "Generate image",
   problems: "Problems",
   importReport: "Compatibility report",
+  xray: "X-Ray",
+  typography: "Typography debugger",
   journal: "Journal",
   data: "Data",
   history: "History",
   library: "Library",
+  constraints: "Design constraints",
+  contract: "Publication contract",
+  variants: "Layout variants",
   table: "Table",
   tabs: "Tabs",
   glyphs: "Glyphs",
@@ -330,6 +340,28 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "left",
     defaultGroup: "cockpit",
     icon: "ui-warn",
+  },
+  {
+    // Editor ADR 1236 — the publication contract and its readiness.
+    id: "paged.publication-contract",
+    get title() {
+      return t(M.contract);
+    },
+    component: ContractPanel,
+    defaultDock: "left",
+    defaultGroup: "cockpit",
+    icon: "ui-target",
+  },
+  {
+    // Editor ADR 1233 — the document's design constraints.
+    id: "paged.constraints",
+    get title() {
+      return t(M.constraints);
+    },
+    component: ConstraintsPanel,
+    defaultDock: "left",
+    defaultGroup: "cockpit",
+    icon: "ui-target",
   },
   {
     id: "paged.stories",
@@ -1276,6 +1308,29 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultGroup: "console",
   },
   {
+    // Editor ADR 1237 — Document X-Ray, the "Why?" inspector: the engine's
+    // facts on why the selection looks and behaves as it does.
+    id: "paged.xray",
+    get title() {
+      return t(M.xray);
+    },
+    component: XRayPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
+    // Editor ADR 1238 — the Typography Debugger: the story's lines, how
+    // tightly each is set and why it broke there; a change previewed in a
+    // copy before it is applied.
+    id: "paged.typography",
+    get title() {
+      return t(M.typography);
+    },
+    component: TypographyPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
     // ADR 025 — the journal: a LOCAL flight recorder. Sits beside Problems
     // because they are the two halves of the same question and are read
     // together: Problems is what is wrong with the DOCUMENT, the journal is
@@ -1299,6 +1354,15 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: DataPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
+  },
+  {
+    // Editor ADR 1235 — the layout's variants, on the library's refs.
+    id: "paged.variants",
+    get title() {
+      return t(M.variants);
+    },
+    component: VariantsPanel,
+    defaultDock: "right",
   },
   {
     // ADR 180 — the local library: this document's versions (save = a

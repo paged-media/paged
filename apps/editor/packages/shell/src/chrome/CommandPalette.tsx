@@ -53,6 +53,7 @@ import { useOptionalCanvasClient } from "../state/canvas-client-context";
 import type { CommandApplicability } from "./applicability";
 import { APPLICABILITY } from "./messages";
 import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
+import { useDeclaredPageNoun } from "../state/page-noun";
 import { categoryLabel, PALETTE } from "./messages";
 
 /**
@@ -308,8 +309,16 @@ export function CommandPalette() {
   // "Go to page 14", "page B-3" (the strategy's §5.7): navigation in the
   // palette, through the same command a script runs.
   const pages = usePalettePages(open);
+  // A deck's pages are slides (extensions ADR 1111): "go to slide 3" and
+  // "slide 3" find them too, and the row says "Go to slide 3".
+  const noun = useDeclaredPageNoun();
   const pageToken = open
-    ? goToPageQuery(query, strings.t(PALETTE.goToPageWords))
+    ? goToPageQuery(
+        query,
+        noun
+          ? `${strings.t(PALETTE.goToNamedWords, { noun: noun.one })}, ${strings.t(PALETTE.goToPageWords)}`
+          : strings.t(PALETTE.goToPageWords),
+      )
     : null;
   const pageTarget = pageToken && pages ? pageNamed(pages, pageToken) : null;
   // A token that names no page is only worth a "no such page" when it is
@@ -447,10 +456,20 @@ export function CommandPalette() {
                 />
                 <span>
                   {pageTarget
-                    ? strings.t(PALETTE.goToPage, {
-                        page: pageTarget.name || String(pageTarget.index),
-                      })
-                    : strings.t(PALETTE.noSuchPage, { page: pageToken })}
+                    ? noun
+                      ? strings.t(PALETTE.goToNamed, {
+                          noun: noun.one,
+                          page: pageTarget.name || String(pageTarget.index),
+                        })
+                      : strings.t(PALETTE.goToPage, {
+                          page: pageTarget.name || String(pageTarget.index),
+                        })
+                    : noun
+                      ? strings.t(PALETTE.noSuchNamed, {
+                          noun: noun.one,
+                          page: pageToken,
+                        })
+                      : strings.t(PALETTE.noSuchPage, { page: pageToken })}
                 </span>
               </CommandItem>
             </CommandGroup>

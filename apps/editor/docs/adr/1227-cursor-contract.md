@@ -45,3 +45,12 @@ and nothing said which source should win (`UXI-OVR-010`, the specification's §1
 - `UXI-OVR-010` is proven by `tests/e2e/uxi-cursor.spec.ts` and the controller's unit test
   (`packages/shell/test/tools/cursor-controller.test.ts`).
 - The modifier hints (IC10) read the same layers' causes: the session and the keys held.
+
+## Amendment (2026-11-14): a tool's press sets the session layer
+
+A built-in tool whose cursor follows its own press — the Pen pulling a handle (paged.draw ADR 370)
+— answers the shell-side `GestureHandler.pressCursor`; `useGestureSpine` sets the session layer from
+it on the press and on every move of the tool's drag, and clears it on the release and on every
+rollback (`onCancel`). A handler without the member leaves the layer to the canvas, so a press keeps
+the cursor it started with, as before. The writes still go through the controller: the
+`cursor-write` rule is unchanged.

@@ -42,6 +42,7 @@ import {
 } from "../../../src/panels/shape-suggestions";
 import {
   operandPreview,
+  resultPreview,
   specialRole,
   type OperandBox,
 } from "../../../src/panels/pathfinder-preview";
@@ -229,5 +230,50 @@ describe("the Pathfinder's outline before the click (paged.draw ADR 370)", () =>
       false,
     ]);
     expect(divide.some((s) => s.kind === "text")).toBe(false);
+  });
+
+  test("the dry run's result: each contour solid on its page, the consumed operand dashed, the first named (ADR 370 amendment 1)", () => {
+    const shapes = resultPreview(
+      {
+        applied: true,
+        refused: null,
+        created: [],
+        removed: [b],
+        geometry: [],
+        lines: null,
+        revision: 1,
+        outlines: [
+          {
+            id: a,
+            pageId: "p",
+            spreadId: null,
+            // Two contours: a square and a triangle, moved by 100 pt.
+            anchors: [
+              corner(0, 0),
+              corner(10, 0),
+              corner(10, 10),
+              corner(0, 10),
+              corner(20, 0),
+              corner(30, 0),
+              corner(25, 10),
+            ],
+            subpathStarts: [0, 4],
+            subpathOpen: [false, false],
+            itemTransform: [1, 0, 0, 1, 100, 0],
+          },
+        ],
+      } as never,
+      boxes,
+      "Result",
+    );
+    const paths = shapes.filter((s) => "anchors" in s);
+    expect(paths.map((p) => p.dashed)).toEqual([true, false, false]);
+    expect(
+      (paths[1]!.anchors as Array<{ anchor: number[] }>)[0]!.anchor,
+    ).toEqual([100, 0]);
+    expect((paths[2]!.anchors as unknown[]).length).toBe(3);
+    expect(shapes.filter((s) => s.kind === "text")).toEqual([
+      expect.objectContaining({ text: "Result", x: 100 }),
+    ]);
   });
 });

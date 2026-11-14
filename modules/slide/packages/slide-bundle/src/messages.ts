@@ -298,6 +298,10 @@ export const DECK = defineMessages("slide.deck", {
   notFromDeck:
     "This document was not opened from a PowerPoint deck, so it cannot be exported as one yet.",
   fontsUsed: "Fonts used: {fonts}",
+  /** What a deck's pages are called, as the words read inside a sentence
+   *  (extensions ADR 1111): the host says "Slide 3", "Go to slide 3". */
+  pageNounOne: "slide",
+  pageNounOther: "slides",
   // A ")" right after a "}" ends a message object for the strings guard,
   // which reads these calls as text: the parentheses close in a second
   // literal.
@@ -461,7 +465,7 @@ export const DESIGN = defineMessages("slide.design", {
   remapTo: "Replace {id} with",
   none: "(none)",
   refused: "The theme could not be applied.",
-  note: "A theme recolours every theme colour of the deck and sets its heading and body fonts, in one undo step.",
+  note: "A theme recolors every theme color of the deck and sets its heading and body fonts, in one undo step.",
 });
 
 defineTranslations("de", de);

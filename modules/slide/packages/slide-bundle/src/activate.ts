@@ -590,6 +590,9 @@ export function activate(host: BundleHost): BundleHandle {
         type: DECK_CONTEXT,
         entry: "doubleClick",
         matches: () => false,
+        // A deck's pages are slides (extensions ADR 1111; slide ADR 725):
+        // the document map, the captions and Go to say "Slide 3".
+        pageNoun: { one: t(DECK.pageNounOne), other: t(DECK.pageNounOther) },
       }).dispose,
     );
     deckContext = true;

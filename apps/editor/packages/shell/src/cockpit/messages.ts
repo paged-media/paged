@@ -52,4 +52,7 @@ export const PAGES = defineMessages("shell.pages", {
   cover: "Cover",
   page: "Page {range}",
   pages: "Pages {range}",
+  /** A page under the noun its document declares (extensions ADR 1111):
+   *  "Slide 3", "Slides 2–3". */
+  named: "{noun} {range}",
 });

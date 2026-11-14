@@ -278,6 +278,11 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
+/** The content selection context, or `null` outside its provider. */
+export function useOptionalContentSelection(): ContentSelectionContextValue | null {
+  return useContext(Context);
+}
+
 export function useContentSelection(): ContentSelectionContextValue {
   const ctx = useContext(Context);
   if (!ctx) {

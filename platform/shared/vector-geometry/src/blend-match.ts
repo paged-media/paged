@@ -313,7 +313,7 @@ export function matchRamps(
   if (a.length === 0 || b.length === 0) {
     return {
       ok: false,
-      reason: "a gradient without stops has no colour to blend",
+      reason: "a gradient without stops has no color to blend",
     };
   }
   const sa = [...a].sort((p, q) => p.location - q.location);

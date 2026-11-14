@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // AGPL-3.0-only OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.81.0-dev
+// Synced from @paged-media/canvas-wasm@0.82.0-dev
 /* tslint:disable */
 /* eslint-disable */
 
@@ -70,6 +70,15 @@ export interface GradientMapStop {
 export type SceneBlendMode = "multiply" | "screen" | "overlay" | "darken" | "lighten" | "colorDodge" | "colorBurn" | "hardLight" | "softLight" | "difference" | "exclusion" | "hue" | "saturation" | "color" | "luminosity";
 
 /**
+ * A condition on text.
+ */
+export interface ConditionFact {
+    id: string;
+    name: string;
+    visible: boolean;
+}
+
+/**
  * A content-space mutation. Phase 1 carries the *envelope* only —
  * the worker rejects each variant with `WorkerError::NotImplemented`.
  * Phase 3 lights these up incrementally.
@@ -79,6 +88,51 @@ export type SceneBlendMode = "multiply" | "screen" | "overlay" | "darken" | "lig
  * See the crate docs.
  */
 export type Mutation = { op: "insertText"; args: { storyId: string; offset: number; text: string; cell?: TextCellAddr | null } } | { op: "deleteRange"; args: { storyId: string; start: number; end: number; cell?: TextCellAddr | null } } | { op: "applyStyle"; args: { storyId: string; start: number; end: number; style: string; scope: StyleScope; cell?: TextCellAddr | null; paragraph?: number | null } } | { op: "insertField"; args: { storyId: string; offset: number; field: FieldKind; contentOffset?: number } } | { op: "insertAnchoredFrame"; args: { storyId: string; offset: number; width: number; height: number; imageUri?: string | null; paragraph?: number | null; kind?: AnchoredFrameInsertKind | null; layout?: AnchoredLayoutSpec | null; cell?: TextCellAddr | null } } | { op: "insertHyperlink"; args: { storyId: string; start: number; end: number; url: string; page?: PageId | null } } | { op: "insertFootnote"; args: { storyId: string; offset: number; paragraph?: number | null; text?: string } } | { op: "deleteFootnote"; args: { storyId: string; footnoteId: string } } | { op: "deleteHyperlink"; args: { hyperlinkId: string } } | { op: "insertItemHyperlink"; args: { item: string; url?: string; page?: PageId | null; name?: string | null } } | { op: "editHyperlink"; args: { hyperlinkId: string; name?: string | null; url?: string | null; page?: PageId | null } } | { op: "updateTableOfContents"; args: { storyId: string } } | { op: "generateIndex"; args: { storyId: string } } | { op: "updateCrossReferences"; args: { sourceId?: string | null } } | { op: "insertNote"; args: { storyId: string; offset: number; paragraph?: number | null; text?: string; user?: string | null; date?: string | null } } | { op: "editNote"; args: { noteId: string; text: string; date?: string | null } } | { op: "deleteNote"; args: { noteId: string } } | { op: "acceptTrackedChange"; args: { storyId: string; offset: number } } | { op: "rejectTrackedChange"; args: { storyId: string; offset: number } } | { op: "convertNoteToText"; args: { noteId: string } } | { op: "createBookmark"; args: { name: string; page?: PageId | null; destination?: string | null; parent?: string | null; index?: number | null } } | { op: "deleteBookmark"; args: { bookmarkId: string } } | { op: "renameBookmark"; args: { bookmarkId: string; name: string } } | { op: "insertEndnote"; args: { storyId: string; offset: number; paragraph?: number | null; text?: string } } | { op: "deleteEndnote"; args: { endnoteId: string } } | { op: "convertFootnoteToEndnote"; args: { storyId: string; footnoteId: string } } | { op: "moveBookmark"; args: { bookmarkId: string; parent?: string | null; index?: number | null } } | { op: "setFieldValue"; args: { storyId: string; offset: number; value?: string | null } } | { op: "placeImage"; args: { elementId: string; uri: string; fit?: string | null } } | { op: "replaceImageBytes"; args: { elementId: string; bytes?: number[] | null } } | { op: "relinkImage"; args: { elementId: string; uri: string; bytes?: number[] | null } } | { op: "moveFrame"; args: { frameId: string; transform: [number, number, number, number, number, number] } } | { op: "resizeFrame"; args: { frameId: string; bounds: [number, number, number, number] } } | { op: "linkFrames"; args: { from: string; to: string } } | { op: "unlinkFrames"; args: { frame: string } } | { op: "insertPage"; args: { afterPageId: PageId | null; masterId: string | null } } | { op: "deletePage"; args: { pageId: PageId } } | { op: "resizePage"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "insertFrame"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "insertTextFrame"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "deleteFrame"; args: { frameId: string } } | { op: "insertLine"; args: { pageId: PageId; start: [number, number]; end: [number, number] } } | { op: "insertPath"; args: { pageId: PageId; anchors: PathAnchorSpec[]; open: boolean; smooth?: boolean } } | { op: "setDocumentDefaults"; args: { fillColor: string | null; strokeColor: string | null; strokeWeight: number | null } } | { op: "setColorSettings"; args: { cmykProfileName: string | null; rgbPolicy: string | null; intent: string | null; bpc: boolean | null } } | { op: "setProofSetup"; args: { profileName: string | null; simulatePaperWhite?: boolean; intent: string | null } } | { op: "importSwatchLibrary"; args: { bytes: number[]; groupName?: string | null } } | { op: "setInkSetting"; args: { spotId: string; convertToProcess?: boolean; aliasTo?: string | null } } | { op: "setUseStandardLabForSpots"; args: { enabled: boolean } } | { op: "pathPointInsert"; args: { elementId: ElementId; index: number; anchor: PathAnchorSpec; prevSubpathStarts?: number[] | null } } | { op: "pathPointRemove"; args: { elementId: ElementId; index: number } } | { op: "pathOpenAt"; args: { elementId: ElementId; index: number } } | { op: "outlineStroke"; args: { elementId: ElementId; width: number; cap: string; join: string; miterLimit: number } } | { op: "offsetPath"; args: { elementId: ElementId; delta: number; join: string; miterLimit: number; side?: string | null } } | { op: "simplifyPath"; args: { elementId: ElementId; tolerance: number } } | { op: "closePath"; args: { elementId: ElementId; subpath?: number | null } } | { op: "joinPaths"; args: { elementId: ElementId; otherId: ElementId } } | { op: "pasteInto"; args: { containerId: ElementId; childId: ElementId } } | { op: "releaseFrom"; args: { childId: ElementId } } | { op: "reorderElement"; args: { elementId: ElementId; to: ZOrderTarget } } | { op: "applyOpacityMask"; args: { targetId: ElementId; maskId: ElementId; maskType?: string | null; invert?: boolean | null; clip?: boolean | null } } | { op: "releaseOpacityMask"; args: { targetId: ElementId } } | { op: "attachTextToPath"; args: { elementId: ElementId; storyId: string; pathTypeAlignment?: string | null; flipPathEffect?: string | null; startBracket?: number | null; endBracket?: number | null } } | { op: "detachTextFromPath"; args: { elementId: ElementId } } | { op: "createGroup"; args: { memberIds: ElementId[]; clip?: boolean } } | { op: "dissolveGroup"; args: { groupId: string } } | { op: "duplicateElements"; args: { elementIds: ElementId[]; offset: [number, number] } } | { op: "pasteElements"; args: { snippet: string; pageId: PageId; center?: [number, number] | null } } | { op: "setGroupTransform"; args: { groupId: string; transform?: [number, number, number, number, number, number] | null } } | { op: "setPluginMetadata"; args: { elementId: ElementId; key: string; value?: string | null; caller?: string | null } } | { op: "setPageMetadata"; args: { page: PageId; key: string; value?: string | null; caller?: string | null } } | { op: "setDocumentMetadata"; args: { key: string; value?: string | null; caller?: string | null } } | { op: "pathPointCurveType"; args: { elementId: ElementId; index: number; smooth: boolean } } | { op: "pathPointSet"; args: { elementId: ElementId; index: number; role: PathPointRole; position: [number, number] } } | { op: "batch"; args: { ops: Mutation[] } } | { op: "bindCreated"; args: { handle: string } } | { op: "layerSetVisible"; args: { layerId: string; visible: boolean } } | { op: "layerSetLocked"; args: { layerId: string; locked: boolean } } | { op: "layerSetPrintable"; args: { layerId: string; printable: boolean } } | { op: "layerSetName"; args: { layerId: string; name: string } } | { op: "layerMove"; args: { layerId: string; newIndex: number } } | { op: "layerInsert"; args: { position: number; name: string } } | { op: "layerRemove"; args: { layerId: string } } | { op: "setElementProperty"; args: { elementId: ElementId; path: PropertyPath; value: Value } } | { op: "set"; args: { address: string; path: string; value: Value } } | { op: "pathfinderBoolean"; args: { kept: ElementId; others: ElementId[]; kind: PathfinderKind } } | { op: "pathfinderDivide"; args: { elementIds: ElementId[] } } | { op: "pathfinderTrim"; args: { elementIds: ElementId[] } } | { op: "pathfinderMerge"; args: { elementIds: ElementId[] } } | { op: "pathfinderCrop"; args: { elementIds: ElementId[] } } | { op: "pathfinderOutline"; args: { elementIds: ElementId[] } } | { op: "pathfinderMinusBack"; args: { elementIds: ElementId[] } } | { op: "pathfinderFaces"; args: { elementIds: ElementId[]; faces: string[]; mode: FaceSelectMode } } | { op: "createSwatch"; args: { spec: SwatchSpec } } | { op: "editSwatch"; args: { swatchId: string; spec: SwatchSpec } } | { op: "deleteSwatch"; args: { swatchId: string } } | { op: "createGradient"; args: { spec: GradientSpec } } | { op: "editGradient"; args: { gradientId: string; spec: GradientSpec } } | { op: "deleteGradient"; args: { gradientId: string } } | { op: "createColorGroup"; args: { spec: ColorGroupSpec } } | { op: "editColorGroup"; args: { groupId: string; spec: ColorGroupSpec } } | { op: "deleteColorGroup"; args: { groupId: string } } | { op: "createNumberingList"; args: { spec: NumberingListSpec } } | { op: "editNumberingList"; args: { listId: string; spec: NumberingListSpec } } | { op: "deleteNumberingList"; args: { listId: string } } | { op: "createParagraphStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameParagraphStyle"; args: { styleId: string; name: string } } | { op: "deleteParagraphStyle"; args: { styleId: string } } | { op: "createCharacterStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameCharacterStyle"; args: { styleId: string; name: string } } | { op: "deleteCharacterStyle"; args: { styleId: string } } | { op: "createObjectStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameObjectStyle"; args: { styleId: string; name: string } } | { op: "deleteObjectStyle"; args: { styleId: string } } | { op: "createCellStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameCellStyle"; args: { styleId: string; name: string } } | { op: "deleteCellStyle"; args: { styleId: string } } | { op: "createTableStyle"; args: { selfId?: string | null; name?: string | null; basedOn?: string | null } } | { op: "renameTableStyle"; args: { styleId: string; name: string } } | { op: "deleteTableStyle"; args: { styleId: string } } | { op: "setStyleProperty"; args: { collection: StyleCollection; styleId: string; path: PropertyPath; value: Value } } | { op: "setStyleBasedOn"; args: { collection: StyleCollection; styleId: string; basedOn?: string | null } } | { op: "setListLevel"; args: { storyId: string; start: number; end: number; level?: number | null; delta?: number | null } } | { op: "restartNumbering"; args: { storyId: string; start: number; end: number; startAt?: number | null; continueNumbering?: boolean } } | { op: "findReplace"; args: { spec: FindSpec; replace: string; replaceAll?: boolean; paragraphStyle?: string | null; characterStyle?: string | null } } | { op: "updateFields"; args: { storyId?: string | null; offset?: number | null; now?: string | null } } | { op: "insertTextAnchor"; args: { storyId: string; offset: number; contentOffset?: number | null; name: string } } | { op: "deleteTextAnchor"; args: { anchorId: string } } | { op: "insertCrossReference"; args: { storyId: string; offset: number; contentOffset?: number | null; target: CrossReferenceTarget; referTo?: CrossReferenceKind; hyperlink?: boolean | null } } | { op: "insertTableOfContents"; args: { storyId: string; offset: number; contentOffset?: number | null; levels: TocLevelSpec[]; title?: string | null; tocStyleName?: string | null; pageNumbers?: boolean | null; leader?: string | null; tabPosition?: number | null } } | { op: "insertIndexMarker"; args: { storyId: string; offset: number; contentOffset?: number | null; topic: string[]; sortOrder?: string | null } } | { op: "recordChange"; args: { storyId: string; start: number; end: number; cell?: TextCellAddr | null; paragraph?: number | null; change: ChangeSpec } } | { op: "acceptChange"; args: { storyId?: string | null; id?: string | null; author?: string | null } } | { op: "rejectChange"; args: { storyId?: string | null; id?: string | null; author?: string | null } } | { op: "insertComment"; args: { storyId: string; start: number; end: number; cell?: TextCellAddr | null; comment: CommentSpec } } | { op: "replyComment"; args: { parentId: string; comment: CommentSpec } } | { op: "resolveComment"; args: { commentId: string; resolved: boolean } } | { op: "deleteComment"; args: { commentId: string } } | { op: "editComment"; args: { commentId: string; text: string; date?: string | null } } | { op: "insertCommentThread"; args: { anchor: CommentAnchorSpec; threadKind?: string | null; comment: CommentSpec } } | { op: "setCommentAnchor"; args: { threadId: string; anchor: CommentAnchorSpec } } | { op: "setPerson"; args: { person: PersonSpec } } | { op: "setTheme"; args: { theme: ThemeSpec } } | { op: "setThemeColor"; args: { slot: string; value: string } } | { op: "setThemeFonts"; args: { which: string; fonts: ThemeFontsSpec } } | { op: "createThemeFromSwatches"; args: { name?: string; slots: ThemeSlotSwatchSpec[]; relink?: boolean } } | { op: "setStyleThemeFont"; args: { collection: StyleCollection; styleId: string; which?: string | null } } | { op: "insertOval"; args: { pageId: PageId; bounds: [number, number, number, number] } } | { op: "insertGuide"; args: { spreadId: string; orientation: GuideOrientationSpec; position: number; pageIndex?: number } } | { op: "moveGuide"; args: { guideId: string; position: number } } | { op: "deleteGuide"; args: { guideId: string } } | { op: "setConditionVisible"; args: { condition: string; visible: boolean } } | { op: "setFlowGrowRule"; args: { storyId: string; grow: boolean; maxPages?: number | null; copyFrameOptions?: boolean | null; master?: string | null; firstMaster?: string | null; evenMaster?: string | null; sectionStart?: SectionStartSpec | null } } | { op: "createTextVariable"; args: { name: string; contents?: string | null; textBefore?: string | null; textAfter?: string | null } } | { op: "deleteTextVariable"; args: { variableId: string } } | { op: "createXmlTag"; args: { name: string; color?: string | null } } | { op: "deleteXmlTag"; args: { name: string } } | { op: "tagItem"; args: { item: string; tag: string; selfId?: string | null } } | { op: "untagItem"; args: { item: string } } | { op: "tagRange"; args: { storyId: string; start: number; end: number; tag: string; selfId?: string | null } } | { op: "untagRange"; args: { element: string } } | { op: "setXmlAttribute"; args: { element: string; name: string; value?: string | null } } | { op: "activateConditionSet"; args: { set: string } } | { op: "applyMasterToPage"; args: { page: PageId; master?: string | null } } | { op: "duplicatePage"; args: { page: PageId } } | { op: "onMaster"; args: { master: string; mutation: Mutation } } | { op: "createMaster"; args: { master: string; name?: string | null; widthPt?: number; heightPt?: number; duplicateOf?: string | null } } | { op: "deleteMaster"; args: { master: string } } | { op: "renameMaster"; args: { master: string; name?: string | null } } | { op: "setPageOverrides"; args: { page: PageId; overrides: string[] } } | { op: "overrideMasterItems"; args: { page: PageId; items: string[]; emptyText?: boolean } } | { op: "movePage"; args: { page: PageId; after?: PageId | null } } | { op: "placePage"; args: { page: PageId; originPt?: [number, number] | null } } | { op: "createSymbol"; args: { name: string; elementIds: ElementId[]; symbolId?: string | null; replace?: boolean | null; nineSlice?: [number, number, number, number] | null } } | { op: "redefineSymbol"; args: { symbolId: string; elementIds?: ElementId[]; name?: string | null; nineSlice?: number[] | null; replace?: boolean | null } } | { op: "placeSymbolInstance"; args: { symbolId: string; pageId: PageId; at?: [number, number] | null; linear?: [number, number, number, number] | null; nineSlice?: [number, number, number, number] | null } } | { op: "breakSymbolLink"; args: { elementId: ElementId } } | { op: "deleteSymbol"; args: { symbolId: string } } | { op: "expandAppearance"; args: { elementId: ElementId } } | { op: "insertSection"; args: { atPage: PageId; prefix?: string | null; numberingStyle?: string | null; startAt?: number | null } } | { op: "editSection"; args: { sectionId: string; prefix?: string | null | null; numberingStyle?: string | null; startAt?: number | null | null } } | { op: "deleteSection"; args: { sectionId: string } } | { op: "setRowHeight"; args: { storyId: string; tableId: string; row: number; height?: number | null; autoGrow?: boolean | null } } | { op: "setColumnWidth"; args: { storyId: string; tableId: string; col: number; width?: number | null } } | { op: "insertTableRow"; args: { storyId: string; tableId: string; at: number } } | { op: "deleteTableRow"; args: { storyId: string; tableId: string; at: number } } | { op: "insertTableColumn"; args: { storyId: string; tableId: string; at: number } } | { op: "deleteTableColumn"; args: { storyId: string; tableId: string; at: number } } | { op: "insertHeaderRow"; args: { storyId: string; tableId: string } } | { op: "removeHeaderRow"; args: { storyId: string; tableId: string } } | { op: "insertFooterRow"; args: { storyId: string; tableId: string } } | { op: "removeFooterRow"; args: { storyId: string; tableId: string } } | { op: "setCellSpan"; args: { storyId: string; tableId: string; row: number; col: number; rowSpan: number; columnSpan: number } } | { op: "insertTable"; args: { storyId: string; rows: number; cols: number; headerRows?: number; footerRows?: number; columnWidths?: number[]; rowHeights?: number[]; cell?: TextCellAddr | null; paragraph?: number | null; word?: WordTableSpec | null } } | { op: "deleteTable"; args: { storyId: string; tableId: string } } | { op: "setContentControlValue"; args: { storyId: string; controlId: string; value: string } } | { op: "toggleContentControl"; args: { storyId: string; controlId: string } } | { op: "chooseContentControlItem"; args: { storyId: string; controlId: string; index: number } };
+
+/**
+ * A data or template binding on the item or its text.
+ */
+export interface BindingFacts {
+    /**
+     * `data` (a paged.data binding), `template` (a template field),
+     * `placeholder` (a module\'s placeholder in the text) or `variable`
+     * (a text variable).
+     */
+    origin: string;
+    /**
+     * The binding\'s kind (`variable`, `image`, `table`, `recordFlow`, …),
+     * a template field\'s kind, or the placeholder\'s module.
+     */
+    kind: string;
+    /**
+     * The binding\'s id, when it has one.
+     */
+    id: string | null;
+    /**
+     * What supplies the value: the binding expression, the field\'s name,
+     * the placeholder\'s key, the variable\'s name.
+     */
+    field: string | null;
+    /**
+     * The query the expression reads.
+     */
+    query: string | null;
+    /**
+     * The data source the query reads (its name, else its location).
+     */
+    source: string | null;
+}
+
+/**
+ * A fact the model cannot answer, and why.
+ */
+export interface UnknownFact {
+    /**
+     * Which fact (`binding.record`, `text.cell`, …).
+     */
+    fact: string;
+    reason: string;
+}
 
 /**
  * A field: an open part of the template.
@@ -415,6 +469,24 @@ export interface SpreadPlacement {
 export type StyleFamily = "paragraph" | "character" | "object" | "cell" | "table";
 
 /**
+ * A style, named.
+ */
+export interface StyleRef {
+    /**
+     * `paragraph`, `character` or `object`.
+     */
+    collection: string;
+    /**
+     * The style\'s `Self` id.
+     */
+    id: string;
+    /**
+     * Its name as the user sees it (`$ID/` dropped).
+     */
+    name: string;
+}
+
+/**
  * A tag that did not become a field, and why.
  */
 export interface SkippedTag {
@@ -424,6 +496,14 @@ export interface SkippedTag {
      */
     tag: string;
     reason: string;
+}
+
+/**
+ * A value and its source, one level of the cascade.
+ */
+export interface SourcedValue {
+    value: unknown;
+    source: ValueSource;
 }
 
 /**
@@ -535,6 +615,35 @@ export interface SnapAxisHit {
      * That point, so a host can draw the guide from it to the pointer.
      */
     through?: [number, number] | null;
+}
+
+/**
+ * An applied style and the styles it is based on, nearest first.
+ */
+export interface StyleChain {
+    /**
+     * The applied style first, then its `BasedOn`, then that one\'s.
+     */
+    chain: StyleRef[];
+    /**
+     * A `BasedOn` names a style the document does not define.
+     */
+    broken: boolean;
+}
+
+/**
+ * An effect on the item.
+ */
+export interface EffectFact {
+    /**
+     * `object`, `fill`, `stroke` or `content`.
+     */
+    target: string;
+    /**
+     * The effect (`dropShadow`, `feather`, `innerGlow`, …).
+     */
+    effect: string;
+    enabled: boolean;
 }
 
 /**
@@ -1108,7 +1217,7 @@ export type CaretDirection = "up" | "down";
 /**
  * Discriminated payload of a `WorkerToMain` message.
  */
-export type WorkerToMainKind = { kind: "ready"; payload: { protocol: ProtocolVersion } } | { kind: "documentLoaded"; payload: DocumentHandle } | { kind: "loadFailed"; payload: { error: LoadError } } | { kind: "mutationFailed"; payload: { error: WorkerError } } | { kind: "displayListReady"; payload: { pageId: PageId; lod: LodTier; commands: number; layoutGeneration: number; numberingGeneration: number } } | { kind: "hitResult"; payload: HitResult } | { kind: "pagesDirty"; payload: { pageIds: PageId[] } } | { kind: "storyDirty"; payload: { storyId: string } } | { kind: "warning"; payload: { kind: string; details: string } } | { kind: "stats"; payload: DocumentStats } | { kind: "snapshotReady"; payload: SnapshotPng } | { kind: "svgImportPlanned"; payload: SvgImportPlan } | { kind: "psdLayersPlanned"; payload: PsdPlacePlan } | { kind: "svgExported"; payload: { svg: string; report: SvgReport } } | { kind: "exportSvgFailed"; payload: { error: string } } | { kind: "snapshotFailed"; payload: { error: SnapshotError } } | { kind: "mutationApplied"; payload: { clientSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; createdId?: ElementId | null; minted?: MintedElement[]; createdPages?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][]; reflow?: FrameReflowInfo | null } } | { kind: "selectionGeometry"; payload: { rects: SelectionRect[] } } | { kind: "caretGeometry"; payload: { caret: CaretGeometry | null } } | { kind: "caretNavResult"; payload: { offset?: number | null } } | { kind: "lineBoundsResult"; payload: { bounds?: LineBounds | null } } | { kind: "wordBoundsResult"; payload: { bounds?: WordBounds | null } } | { kind: "paragraphBoundsResult"; payload: { bounds?: ParagraphBounds | null } } | { kind: "storyContentResult"; payload: { content?: StoryContent | null } } | { kind: "elementsExported"; payload: { snippet?: string | null; text?: string; count?: number; refused?: string | null } } | { kind: "undoApplied"; payload: { undoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; steps?: number; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "undoLog"; payload: { undo: UndoLogEntryWire[]; redo: UndoLogEntryWire[]; undoLen: number; redoLen: number; depth: number; evicted: number } } | { kind: "historyDepthApplied"; payload: { depth: number } } | { kind: "stepLabeled"; payload: { appliedSeq: number; labeled: boolean } } | { kind: "redoApplied"; payload: { redoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; steps?: number; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "fontRegistered"; payload: { family: string; pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "fontRegistryCleared"; payload: { pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "colorProfileRegistered"; payload: { name: string } } | { kind: "elementSelectionApplied"; payload: { ids: ElementId[] } } | { kind: "marqueeHits"; payload: { ids: ElementId[] } } | { kind: "elementGeometry"; payload: { items: ElementGeometryItem[] } } | { kind: "groupLeaves"; payload: { ids: ElementId[] } } | { kind: "pathAnchors"; payload: { result: PathAnchorsResult | null } } | { kind: "textOutlines"; payload: { result: TextOutlinesResult | null } } | { kind: "snapPoint"; payload: { result: SnapPointResult } } | { kind: "snapSettingsApplied"; payload: { settings: SnapSettings } } | { kind: "viewSettingsApplied"; payload: { settings: ViewSettings; rebuilt?: boolean } } | { kind: "sessionPolicyApplied"; payload: { policy: SessionPolicy } } | { kind: "templateFieldsRefused"; payload: { problems: TemplateFieldProblem[] } } | { kind: "foundText"; payload: { hits: FindHit[]; error?: string } } | { kind: "derivedTemplateFields"; payload: { derivation: Derivation } } | { kind: "planarRegions"; payload: { result: PlanarRegionsResult } } | { kind: "nearestPathPoint"; payload: { result: NearestPathPointResult | null } } | { kind: "layers"; payload: { items: LayerSummary[] } } | { kind: "collectionReply"; payload: { name: CollectionName; items: any } } | { kind: "frameChainResult"; payload: { links: FrameChainLink[] } } | { kind: "documentPlaceholders"; payload: { items: PlaceholderItem[] } } | { kind: "queryResult"; payload: { addresses: string[]; error: GrammarError | null } } | { kind: "propertyValue"; payload: { address: string; path: string; value: Value | null; error: string | null; code?: string | null; mixed?: boolean } } | { kind: "placedAssetBytes"; payload: { elementId: string; found: boolean; uri: string; width: number; height: number; encoded: number[] } } | { kind: "fontFaceBytes"; payload: { found: boolean; family: string; style: string | null; postscriptName: string | null; format: string; bytes: number[] } } | { kind: "measureTextResult"; payload: { advance: number; ascender: number; descender: number } } | { kind: "sceneLayerApplied"; payload: { elementId: string; applied: boolean; pageIds?: PageId[]; fontFallbacks?: string[] } } | { kind: "resourceClaimApplied"; payload: { imageId: string; applied: boolean; needed?: ResourceTilesNeededWire[] } } | { kind: "resourceTilesNeeded"; payload: ResourceTilesNeededWire } | { kind: "frameReflow"; payload: { frameId: string; contentBox: [number, number, number, number] } } | { kind: "documentMetaReply"; payload: { meta: DocumentMeta } } | { kind: "colorPreviewReply"; payload: { result: ColorPreview | null } } | { kind: "colorComputeReply"; payload: { rgbHex: string; cmyk: [number, number, number, number] | null; outOfGamut: boolean } } | { kind: "gradientDetailReply"; payload: { result: GradientDetail | null } } | { kind: "swatchLibraryExported"; payload: { aseBytes: number[] } } | { kind: "exportPdfBegun"; payload: { session: number; pageCount: number } } | { kind: "exportPdfProgress"; payload: { session: number; done: number; total: number } } | { kind: "pdfExported"; payload: { pdfBytes: number[]; diagnostics: string[]; findings?: PreflightFinding[] } } | { kind: "exportPdfCancelled"; payload: { session: number } } | { kind: "exportPdfFailed"; payload: { error: string } } | { kind: "idmlExported"; payload: { idmlBytes: number[]; lost?: LossEntry[]; links?: ExportedLinkWire[] } } | { kind: "exportIdmlFailed"; payload: { error: string } } | { kind: "pagedPartWritten"; payload: {} } | { kind: "pagedPartRead"; payload: { found: boolean; bytes: number[] } } | { kind: "pagedPartList"; payload: { paths: string[] } } | { kind: "pagedPartDeleted"; payload: { existed: boolean } } | { kind: "pagedExported"; payload: { bytes: number[] } } | { kind: "pagedPartFailed"; payload: { error: string } } | { kind: "elementProperties"; payload: { result: ElementProperties | null } } | { kind: "styleProperties"; payload: { result: StyleProperties | null } } | { kind: "sceneTree"; payload: { roots: SceneTreeNode[] } } | { kind: "scriptResult"; payload: { output: string[]; error: string | null; budgetKind?: ScriptBudgetKind; stats?: DocumentStats; writes?: number; pageIds?: PageId[]; appliedSeq?: number } } | { kind: "requestHostObjects"; payload: { session: number; calls: HostObjectCall[] } } | { kind: "gestureBegun"; payload: { handle: GestureHandle } } | { kind: "gestureUpdated"; payload: { handle: GestureHandle; pageIds: PageId[]; snapLines?: SnapLine[]; duplicateRefused?: DuplicateRefusal } } | { kind: "gestureCommitted"; payload: { handle: GestureHandle; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; reflow?: FrameReflowInfo } } | { kind: "gestureCancelled"; payload: { handle: GestureHandle; pageIds: PageId[] } } | { kind: "gestureFailed"; payload: { error: GestureFailure } } | { kind: "attachReady"; payload: { gpuActive: boolean; sceneCacheBudget: number } } | { kind: "gestureSnapLines"; payload: { snapLines: SnapLine[]; duplicateRefused?: DuplicateRefusal } } | { kind: "resolutionDone"; payload: ResolutionResult } | { kind: "gestureBegunAt"; payload: { hit: HitResult; target: ElementId | null; selection: ElementId[]; selectionChanged: boolean; handle: GestureHandle | null; marquee: boolean; outOfScope: boolean; refused: GestureFailure | null } } | { kind: "scopeContains"; payload: { root: ElementId; found: boolean; contains: boolean[]; members: ElementId[] | null; stories: string[] | null; revision: number } } | { kind: "coalesceEnded"; payload: { appliedSeq: number | null } } | { kind: "hiddenCharacters"; payload: { pages: PageHiddenCharacters[]; revision: number } } | { kind: "frameBaselineGrids"; payload: { grids: FrameBaselineGrid[]; revision: number } };
+export type WorkerToMainKind = { kind: "ready"; payload: { protocol: ProtocolVersion } } | { kind: "documentLoaded"; payload: DocumentHandle } | { kind: "loadFailed"; payload: { error: LoadError } } | { kind: "mutationFailed"; payload: { error: WorkerError } } | { kind: "displayListReady"; payload: { pageId: PageId; lod: LodTier; commands: number; layoutGeneration: number; numberingGeneration: number } } | { kind: "hitResult"; payload: HitResult } | { kind: "pagesDirty"; payload: { pageIds: PageId[] } } | { kind: "storyDirty"; payload: { storyId: string } } | { kind: "warning"; payload: { kind: string; details: string } } | { kind: "stats"; payload: DocumentStats } | { kind: "snapshotReady"; payload: SnapshotPng } | { kind: "svgImportPlanned"; payload: SvgImportPlan } | { kind: "psdLayersPlanned"; payload: PsdPlacePlan } | { kind: "svgExported"; payload: { svg: string; report: SvgReport } } | { kind: "exportSvgFailed"; payload: { error: string } } | { kind: "snapshotFailed"; payload: { error: SnapshotError } } | { kind: "mutationApplied"; payload: { clientSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; createdId?: ElementId | null; minted?: MintedElement[]; createdPages?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][]; reflow?: FrameReflowInfo | null } } | { kind: "selectionGeometry"; payload: { rects: SelectionRect[] } } | { kind: "caretGeometry"; payload: { caret: CaretGeometry | null } } | { kind: "caretNavResult"; payload: { offset?: number | null } } | { kind: "lineBoundsResult"; payload: { bounds?: LineBounds | null } } | { kind: "wordBoundsResult"; payload: { bounds?: WordBounds | null } } | { kind: "paragraphBoundsResult"; payload: { bounds?: ParagraphBounds | null } } | { kind: "storyContentResult"; payload: { content?: StoryContent | null } } | { kind: "elementsExported"; payload: { snippet?: string | null; text?: string; count?: number; refused?: string | null } } | { kind: "undoApplied"; payload: { undoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; steps?: number; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "undoLog"; payload: { undo: UndoLogEntryWire[]; redo: UndoLogEntryWire[]; undoLen: number; redoLen: number; depth: number; evicted: number } } | { kind: "historyDepthApplied"; payload: { depth: number } } | { kind: "stepLabeled"; payload: { appliedSeq: number; labeled: boolean } } | { kind: "redoApplied"; payload: { redoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; steps?: number; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "fontRegistered"; payload: { family: string; pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "fontRegistryCleared"; payload: { pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; pageOriginsPt?: [number, number][] } } | { kind: "colorProfileRegistered"; payload: { name: string } } | { kind: "elementSelectionApplied"; payload: { ids: ElementId[] } } | { kind: "marqueeHits"; payload: { ids: ElementId[] } } | { kind: "elementGeometry"; payload: { items: ElementGeometryItem[] } } | { kind: "groupLeaves"; payload: { ids: ElementId[] } } | { kind: "pathAnchors"; payload: { result: PathAnchorsResult | null } } | { kind: "textOutlines"; payload: { result: TextOutlinesResult | null } } | { kind: "snapPoint"; payload: { result: SnapPointResult } } | { kind: "snapSettingsApplied"; payload: { settings: SnapSettings } } | { kind: "viewSettingsApplied"; payload: { settings: ViewSettings; rebuilt?: boolean } } | { kind: "sessionPolicyApplied"; payload: { policy: SessionPolicy } } | { kind: "templateFieldsRefused"; payload: { problems: TemplateFieldProblem[] } } | { kind: "foundText"; payload: { hits: FindHit[]; error?: string } } | { kind: "derivedTemplateFields"; payload: { derivation: Derivation } } | { kind: "planarRegions"; payload: { result: PlanarRegionsResult } } | { kind: "nearestPathPoint"; payload: { result: NearestPathPointResult | null } } | { kind: "layers"; payload: { items: LayerSummary[] } } | { kind: "collectionReply"; payload: { name: CollectionName; items: any } } | { kind: "frameChainResult"; payload: { links: FrameChainLink[] } } | { kind: "documentPlaceholders"; payload: { items: PlaceholderItem[] } } | { kind: "queryResult"; payload: { addresses: string[]; error: GrammarError | null } } | { kind: "propertyValue"; payload: { address: string; path: string; value: Value | null; error: string | null; code?: string | null; mixed?: boolean } } | { kind: "placedAssetBytes"; payload: { elementId: string; found: boolean; uri: string; width: number; height: number; encoded: number[] } } | { kind: "fontFaceBytes"; payload: { found: boolean; family: string; style: string | null; postscriptName: string | null; format: string; bytes: number[] } } | { kind: "measureTextResult"; payload: { advance: number; ascender: number; descender: number } } | { kind: "sceneLayerApplied"; payload: { elementId: string; applied: boolean; pageIds?: PageId[]; fontFallbacks?: string[] } } | { kind: "resourceClaimApplied"; payload: { imageId: string; applied: boolean; needed?: ResourceTilesNeededWire[] } } | { kind: "resourceTilesNeeded"; payload: ResourceTilesNeededWire } | { kind: "frameReflow"; payload: { frameId: string; contentBox: [number, number, number, number] } } | { kind: "documentMetaReply"; payload: { meta: DocumentMeta } } | { kind: "colorPreviewReply"; payload: { result: ColorPreview | null } } | { kind: "colorComputeReply"; payload: { rgbHex: string; cmyk: [number, number, number, number] | null; outOfGamut: boolean } } | { kind: "gradientDetailReply"; payload: { result: GradientDetail | null } } | { kind: "swatchLibraryExported"; payload: { aseBytes: number[] } } | { kind: "exportPdfBegun"; payload: { session: number; pageCount: number } } | { kind: "exportPdfProgress"; payload: { session: number; done: number; total: number } } | { kind: "pdfExported"; payload: { pdfBytes: number[]; diagnostics: string[]; findings?: PreflightFinding[] } } | { kind: "exportPdfCancelled"; payload: { session: number } } | { kind: "exportPdfFailed"; payload: { error: string } } | { kind: "idmlExported"; payload: { idmlBytes: number[]; lost?: LossEntry[]; links?: ExportedLinkWire[] } } | { kind: "exportIdmlFailed"; payload: { error: string } } | { kind: "pagedPartWritten"; payload: {} } | { kind: "pagedPartRead"; payload: { found: boolean; bytes: number[] } } | { kind: "pagedPartList"; payload: { paths: string[] } } | { kind: "pagedPartDeleted"; payload: { existed: boolean } } | { kind: "pagedExported"; payload: { bytes: number[] } } | { kind: "pagedPartFailed"; payload: { error: string } } | { kind: "elementProperties"; payload: { result: ElementProperties | null } } | { kind: "styleProperties"; payload: { result: StyleProperties | null } } | { kind: "sceneTree"; payload: { roots: SceneTreeNode[] } } | { kind: "scriptResult"; payload: { output: string[]; error: string | null; budgetKind?: ScriptBudgetKind; stats?: DocumentStats; writes?: number; pageIds?: PageId[]; appliedSeq?: number } } | { kind: "requestHostObjects"; payload: { session: number; calls: HostObjectCall[] } } | { kind: "gestureBegun"; payload: { handle: GestureHandle } } | { kind: "gestureUpdated"; payload: { handle: GestureHandle; pageIds: PageId[]; snapLines?: SnapLine[]; duplicateRefused?: DuplicateRefusal } } | { kind: "gestureCommitted"; payload: { handle: GestureHandle; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; reflow?: FrameReflowInfo } } | { kind: "gestureCancelled"; payload: { handle: GestureHandle; pageIds: PageId[] } } | { kind: "gestureFailed"; payload: { error: GestureFailure } } | { kind: "attachReady"; payload: { gpuActive: boolean; sceneCacheBudget: number } } | { kind: "gestureSnapLines"; payload: { snapLines: SnapLine[]; duplicateRefused?: DuplicateRefusal } } | { kind: "resolutionDone"; payload: ResolutionResult } | { kind: "gestureBegunAt"; payload: { hit: HitResult; target: ElementId | null; selection: ElementId[]; selectionChanged: boolean; handle: GestureHandle | null; marquee: boolean; outOfScope: boolean; refused: GestureFailure | null } } | { kind: "scopeContains"; payload: { root: ElementId; found: boolean; contains: boolean[]; members: ElementId[] | null; stories: string[] | null; revision: number } } | { kind: "coalesceEnded"; payload: { appliedSeq: number | null } } | { kind: "hiddenCharacters"; payload: { pages: PageHiddenCharacters[]; revision: number } } | { kind: "frameBaselineGrids"; payload: { grids: FrameBaselineGrid[]; revision: number } } | { kind: "explained"; payload: Explanation } | { kind: "lineEvidence"; payload: LineEvidenceReport } | { kind: "previewed"; payload: PreviewReport };
 
 /**
  * Editor-ops — wire mirror of `paged_model::GradientFeatherParams`.
@@ -2267,6 +2376,11 @@ export interface SvgExportOptions {
 }
 
 /**
+ * How tightly a line is set, against the paragraph\'s word spacing.
+ */
+export type Tightness = "veryTight" | "tight" | "normal" | "loose" | "veryLoose";
+
+/**
  * Illustrator\'s four screen modes.
  */
 export type ViewMode = "preview" | "outline" | "overprintPreview" | "pixelPreview";
@@ -2530,6 +2644,92 @@ export interface SceneGradientStop {
     g: number;
     b: number;
     a: number;
+}
+
+/**
+ * One composed line.
+ */
+export interface LineEvidence {
+    pageId: PageId;
+    frameId: string | null;
+    /**
+     * Paragraph (0-based) and line within it.
+     */
+    paragraph: number;
+    line: number;
+    /**
+     * The line\'s characters, story character offsets `[start, end)`.
+     */
+    start: number;
+    end: number;
+    /**
+     * The same in the editor\'s caret units (UTF-8 bytes, one separator
+     * per paragraph), as a content selection counts them.
+     */
+    caretStart: number;
+    caretEnd: number;
+    text: string;
+    /**
+     * Page-local pt: the baseline, and the line\'s extent.
+     */
+    baseline: number;
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    /**
+     * The measure the line was composed into, pt.
+     */
+    available: number;
+    /**
+     * Its width at natural spacing, pt.
+     */
+    natural: number;
+    /**
+     * The breaker\'s adjustment ratio (0 natural, above 0 stretched,
+     * below 0 shrunk; its scale is the breaker\'s own); 0 for a ragged
+     * line. The spacing below is the comparable measure.
+     */
+    ratio: number;
+    /**
+     * The line\'s word spaces as set, in % of the font\'s space (mean,
+     * smallest, largest), the scale of the paragraph\'s word spacing
+     * settings; none on a line without one.
+     */
+    wordSpacing: number | null;
+    wordSpacingMin: number | null;
+    wordSpacingMax: number | null;
+    /**
+     * The space added between letters, mean pt per letter (justification
+     * letter-spacing a line, a single word set to the measure).
+     */
+    letterSpacing: number;
+    breakKind: BreakKind;
+    /**
+     * The next line is set in another frame.
+     */
+    frameEnd: boolean;
+    /**
+     * The story continues past this line and is not placed (overset).
+     */
+    oversetAfter: boolean;
+    hyphenation: HyphenationEvidence | null;
+    tightness: Tightness;
+    /**
+     * What is out of the paragraph\'s bounds: `wordSpacingAboveMaximum`,
+     * `wordSpacingBelowMinimum`, `letterSpacing`, `overfull`.
+     */
+    outliers: string[];
+    /**
+     * `paragraph`, `singleLine` or `wordFirstFit`.
+     */
+    composer: string;
+    justified: boolean;
+    /**
+     * The line aligns to the baseline grid, moved this much (pt) to
+     * stand on it; none when it does not align.
+     */
+    gridShift: number | null;
 }
 
 /**
@@ -2840,6 +3040,35 @@ export interface TemplateFinding {
      * The finding in English.
      */
     message: string;
+}
+
+/**
+ * One property\'s provenance.
+ */
+export interface PropertyFact {
+    /**
+     * The property, as the wire names it (`pointSize`, `fillColor`,
+     * `spaceBefore`, …).
+     */
+    property: string;
+    /**
+     * The value in force; null where the default is the engine\'s and has
+     * no value of its own to show (a font left to the document default).
+     */
+    value: unknown;
+    /**
+     * `pt`, `%`, `em/1000` (tracking), or none.
+     */
+    unit: string | null;
+    /**
+     * Where the value in force comes from.
+     */
+    source: ValueSource;
+    /**
+     * The levels below the winner that set the property too, nearest
+     * first: what a local override overrides.
+     */
+    shadowed: SourcedValue[];
 }
 
 /**
@@ -4174,6 +4403,124 @@ export interface SvgImportPlan {
 }
 
 /**
+ * The answer to `RequestExplain`.
+ */
+export interface Explanation {
+    item: ElementId;
+    /**
+     * The id names something in the document.
+     */
+    found: boolean;
+    /**
+     * `textFrame`, `rectangle`, …, `storyRange`.
+     */
+    kind: string;
+    name: string | null;
+    page: PageFact | null;
+    layer: LayerFact | null;
+    lock: LockFacts;
+    visibility: VisibilityFacts;
+    /**
+     * The applied object style and its chain.
+     */
+    objectStyle: StyleChain | null;
+    /**
+     * The item\'s fill, stroke and stroke weight, with their sources.
+     */
+    appearance: PropertyFact[];
+    /**
+     * The item\'s opacity, percent; none at 100.
+     */
+    opacity: number | null;
+    blendMode: string | null;
+    effects: EffectFact[];
+    link: LinkFacts | null;
+    bindings: BindingFacts[];
+    flow: FlowFacts | null;
+    text: TextFacts | null;
+    /**
+     * For the applied paragraph, character and object styles.
+     */
+    dependents: StyleDependents[];
+    unknown: UnknownFact[];
+    /**
+     * The document revision the answer holds for (engine ADR 1301).
+     */
+    revision: number;
+}
+
+/**
+ * The answer to `RequestLineEvidence`.
+ */
+export interface LineEvidenceReport {
+    storyId: string;
+    /**
+     * The story exists.
+     */
+    found: boolean;
+    /**
+     * The evidence is a preview\'s: the document with `preview` applied
+     * to a copy. The document itself is unchanged.
+     */
+    preview: boolean;
+    /**
+     * Why a preview could not be made (`unsupported`, a refusal); the
+     * lines are then the document\'s own.
+     */
+    refused: string | null;
+    lines: LineEvidence[];
+    paragraphs: ParagraphComposition[];
+    overset: OversetEvidence | null;
+    /**
+     * The document revision the answer holds for (engine ADR 1301); a
+     * preview\'s holds for the document it was made from.
+     */
+    revision: number;
+}
+
+/**
+ * The answer to `RequestPreview`.
+ */
+export interface PreviewReport {
+    /**
+     * The write applied to the copy; false when it was refused.
+     */
+    applied: boolean;
+    /**
+     * Why the write was refused (the engine\'s refusal, in words), or why
+     * no copy could be made.
+     */
+    refused: string | null;
+    /**
+     * The page items the write would create, in document order.
+     */
+    created: ElementId[];
+    /**
+     * The asked items the write would remove.
+     */
+    removed: ElementId[];
+    /**
+     * The geometry of the created items and of the asked items that
+     * remain, as the write would leave them.
+     */
+    geometry: ElementGeometryItem[];
+    /**
+     * Their outlines (anchors in the item\'s space and its transform onto
+     * the page), for the items drawn from a path or a box.
+     */
+    outlines: PathAnchorsResult[];
+    /**
+     * The asked story\'s line evidence after the write.
+     */
+    lines: LineEvidenceReport | null;
+    /**
+     * The document revision the preview was made from (engine ADR 1301):
+     * it does not move.
+     */
+    revision: number;
+}
+
+/**
  * The axis a [`GestureType::Shear`] slants along (see
  * [`GestureAnchor::shear_axis`]).
  */
@@ -4194,7 +4541,7 @@ export type Operation = { kind: "SetProperty"; node: NodeId; path: PropertyPath;
  * variants so e.g. `cmyk_icc_profile` becomes `cmykIccProfile` on
  * the wire — the TS protocol mirror locks the camelCase contract.
  */
-export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null; pages?: number; facingPages?: boolean } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[]; scope?: FontScope } } | { kind: "clearFontRegistry"; payload: ClearFontRegistryPayload | null } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "amendMutation"; payload: { appliedSeq: number; mutation: Mutation; label?: string } } | { kind: "labelStep"; payload: { appliedSeq: number; label: string } } | { kind: "requestUndoLog"; payload: { limit?: number } } | { kind: "undoTo"; payload: { appliedSeq: number } } | { kind: "redoTo"; payload: { appliedSeq: number } } | { kind: "restoreTo"; payload: { appliedSeq: number; label?: string } } | { kind: "setHistoryDepth"; payload: { depth: number } } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null; hideItems?: ElementId[]; markers?: boolean; only?: ElementId[]; clip?: SnapshotClip; format?: SnapshotFormat; background?: SnapshotBackground; trim?: boolean; quality?: number; story?: SnapshotStory } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number]; mode?: MarqueeMode; scope?: MarqueeScope } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestTextOutlines"; payload: { id: ElementId } } | { kind: "requestSnapPoint"; payload: { query: SnapPointQuery } } | { kind: "setSnapSettings"; payload: { settings: SnapSettings } } | { kind: "setViewSettings"; payload: { settings: ViewSettings } } | { kind: "setSessionPolicy"; payload: { policy: SessionPolicy } } | { kind: "setTemplateFields"; payload: { values: TemplateFieldValue[] } } | { kind: "requestDerivedTemplateFields"; payload: { options?: DeriveOptions } } | { kind: "requestFindText"; payload: { spec: FindSpec } } | { kind: "openAsTemplate"; payload: { options?: DeriveOptions; only?: string[] | null } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "exportElements"; payload: { elementIds: ElementId[] } } | { kind: "requestSvgImport"; payload: { pageId: PageId; bytes: number[]; options?: SvgImportOptions } } | { kind: "requestPsdLayersPlace"; payload: { pageId: PageId; bytes: number[]; options?: PsdPlaceOptions } } | { kind: "exportSvg"; payload: { pageId: PageId; elementIds?: ElementId[]; options?: SvgExportOptions } } | { kind: "requestStyleProperties"; payload: { collection: StyleCollection; styleId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestQuery"; payload: { selector: string } } | { kind: "requestGet"; payload: { address: string; path: string } } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null; hostObjects?: boolean } } | { kind: "hostObjectsResult"; payload: { session: number; answers: HostObjectAnswer[]; committed?: number[] } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "deletePagedPart"; payload: { path: string; caller?: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null; modifiers?: GestureModifiers } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers; cameraScale?: number } } | { kind: "commitGesture"; payload: { handle: GestureHandle; label?: string } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } } | { kind: "beginGestureAt"; payload: GesturePress } | { kind: "requestScopeContains"; payload: { root: ElementId; ids?: ElementId[]; members?: boolean } } | { kind: "mutateCoalesced"; payload: { coalesce: string; mutation: Mutation; label?: string } } | { kind: "endCoalesce"; payload: { coalesce?: string } } | { kind: "requestHiddenCharacters"; payload: { pageIds: PageId[] } } | { kind: "requestFrameBaselineGrids"; payload: { pageIds?: PageId[] } };
+export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null; pages?: number; facingPages?: boolean } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[]; scope?: FontScope } } | { kind: "clearFontRegistry"; payload: ClearFontRegistryPayload | null } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "amendMutation"; payload: { appliedSeq: number; mutation: Mutation; label?: string } } | { kind: "labelStep"; payload: { appliedSeq: number; label: string } } | { kind: "requestUndoLog"; payload: { limit?: number } } | { kind: "undoTo"; payload: { appliedSeq: number } } | { kind: "redoTo"; payload: { appliedSeq: number } } | { kind: "restoreTo"; payload: { appliedSeq: number; label?: string } } | { kind: "setHistoryDepth"; payload: { depth: number } } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null; hideItems?: ElementId[]; markers?: boolean; only?: ElementId[]; clip?: SnapshotClip; format?: SnapshotFormat; background?: SnapshotBackground; trim?: boolean; quality?: number; story?: SnapshotStory } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number]; mode?: MarqueeMode; scope?: MarqueeScope } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestTextOutlines"; payload: { id: ElementId } } | { kind: "requestSnapPoint"; payload: { query: SnapPointQuery } } | { kind: "setSnapSettings"; payload: { settings: SnapSettings } } | { kind: "setViewSettings"; payload: { settings: ViewSettings } } | { kind: "setSessionPolicy"; payload: { policy: SessionPolicy } } | { kind: "setTemplateFields"; payload: { values: TemplateFieldValue[] } } | { kind: "requestDerivedTemplateFields"; payload: { options?: DeriveOptions } } | { kind: "requestFindText"; payload: { spec: FindSpec } } | { kind: "openAsTemplate"; payload: { options?: DeriveOptions; only?: string[] | null } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "exportElements"; payload: { elementIds: ElementId[] } } | { kind: "requestSvgImport"; payload: { pageId: PageId; bytes: number[]; options?: SvgImportOptions } } | { kind: "requestPsdLayersPlace"; payload: { pageId: PageId; bytes: number[]; options?: PsdPlaceOptions } } | { kind: "exportSvg"; payload: { pageId: PageId; elementIds?: ElementId[]; options?: SvgExportOptions } } | { kind: "requestStyleProperties"; payload: { collection: StyleCollection; styleId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestQuery"; payload: { selector: string } } | { kind: "requestGet"; payload: { address: string; path: string } } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null; hostObjects?: boolean } } | { kind: "hostObjectsResult"; payload: { session: number; answers: HostObjectAnswer[]; committed?: number[] } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "deletePagedPart"; payload: { path: string; caller?: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null; modifiers?: GestureModifiers } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers; cameraScale?: number } } | { kind: "commitGesture"; payload: { handle: GestureHandle; label?: string } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } } | { kind: "beginGestureAt"; payload: GesturePress } | { kind: "requestScopeContains"; payload: { root: ElementId; ids?: ElementId[]; members?: boolean } } | { kind: "mutateCoalesced"; payload: { coalesce: string; mutation: Mutation; label?: string } } | { kind: "endCoalesce"; payload: { coalesce?: string } } | { kind: "requestHiddenCharacters"; payload: { pageIds: PageId[] } } | { kind: "requestFrameBaselineGrids"; payload: { pageIds?: PageId[] } } | { kind: "requestExplain"; payload: { item: ElementId; aspect?: ExplainAspect; selection?: ContentSelection } } | { kind: "requestLineEvidence"; payload: LineEvidenceQuery } | { kind: "requestPreview"; payload: PreviewQuery };
 
 /**
  * The document\'s policy.
@@ -4313,6 +4660,41 @@ export interface SnapSettings {
 }
 
 /**
+ * The hyphenation points around a break.
+ */
+export interface HyphenationEvidence {
+    /**
+     * The word at the break: the one broken, or the one that went to the
+     * next line whole.
+     */
+    word: string;
+    /**
+     * Its first character (story character offset).
+     */
+    wordStart: number;
+    /**
+     * Where the dictionary allowed a hyphen under the paragraph\'s limits
+     * (story character offsets of the character after the break). A
+     * word with discretionary hyphens offers those alone.
+     */
+    points: number[];
+    /**
+     * The point the line broke at; none when the word went whole.
+     */
+    used: number | null;
+    /**
+     * The paragraph hyphenates (its own setting); discretionary hyphens
+     * break either way.
+     */
+    hyphenationOn: boolean;
+    /**
+     * Why the word offers no point, when it offers none: `short`,
+     * `capitalized`, `lastWord`, `noLanguage`, `off`, `noPattern`.
+     */
+    reason: string | null;
+}
+
+/**
  * The invisibles of one composed line.
  */
 export interface HiddenCharacterLine {
@@ -4349,6 +4731,32 @@ export interface HiddenCharacterLine {
 export interface PageHiddenCharacters {
     pageId: PageId;
     lines: HiddenCharacterLine[];
+}
+
+/**
+ * The item\'s layer.
+ */
+export interface LayerFact {
+    id: string;
+    name: string;
+    /**
+     * Through its parent layers.
+     */
+    visible: boolean;
+    locked: boolean;
+    printable: boolean;
+}
+
+/**
+ * The item\'s page.
+ */
+export interface PageFact {
+    id: string;
+    /**
+     * 0-based, in document order.
+     */
+    index: number;
+    name: string;
 }
 
 /**
@@ -4396,6 +4804,105 @@ export interface SnapSegmentHit {
 export interface SessionPolicy {
     role: Role;
     overrides?: [Permission, Override][];
+}
+
+/**
+ * The settings a paragraph\'s lines were composed with.
+ */
+export interface ParagraphComposition {
+    paragraph: number;
+    /**
+     * `paragraph`, `singleLine` or `wordFirstFit`.
+     */
+    composer: string;
+    /**
+     * IDML\'s `Justification` (`LeftAlign`, `LeftJustified`, …).
+     */
+    justification: string;
+    hyphenation: boolean;
+    hyphenationZone: number | null;
+    hyphenateAfterFirst: number;
+    hyphenateBeforeLast: number;
+    hyphenateWordsLongerThan: number;
+    hyphenateCapitalizedWords: boolean;
+    hyphenateLastWord: boolean;
+    /**
+     * Hyphens in a row; 0 for no limit.
+     */
+    hyphenateLadderLimit: number;
+    /**
+     * The dictionary\'s language; none when the paragraph is not
+     * hyphenated by one (`[No Language]` or one without patterns).
+     */
+    language: string | null;
+    /**
+     * Minimum, desired and maximum word spacing, %.
+     */
+    wordSpacing: [number, number, number];
+    /**
+     * Minimum, desired and maximum letter spacing, %.
+     */
+    letterSpacing: [number, number, number];
+    /**
+     * Minimum, desired and maximum glyph scaling, %.
+     */
+    glyphScaling: [number, number, number];
+    /**
+     * The baseline grid alignment (`None`, `AlignBaseline`, …).
+     */
+    gridAlignment: string;
+}
+
+/**
+ * The story\'s text past its last frame.
+ */
+export interface OversetEvidence {
+    /**
+     * The first character not placed (story character offset).
+     */
+    from: number;
+    /**
+     * How many characters are not placed.
+     */
+    characters: number;
+}
+
+/**
+ * The text the explanation is about.
+ */
+export interface TextFacts {
+    storyId: string;
+    /**
+     * The character the facts describe (character offset in the story,
+     * as `storyRange` counts).
+     */
+    offset: number;
+    /**
+     * The paragraph it stands in (0-based).
+     */
+    paragraph: number;
+    paragraphStyle: StyleChain;
+    /**
+     * None for `[No character style]`.
+     */
+    characterStyle: StyleChain | null;
+    /**
+     * Character properties, then paragraph properties.
+     */
+    properties: PropertyFact[];
+    /**
+     * How many of `properties` are local overrides.
+     */
+    overrides: number;
+    /**
+     * The range holds more than one run or paragraph: the facts are its
+     * first character\'s.
+     */
+    mixed: boolean;
+    /**
+     * The conditions applied to the text, with whether each shows.
+     */
+    conditions: ConditionFact[];
 }
 
 /**
@@ -4841,6 +5348,24 @@ export type FrameGridReference = "topOfPage" | "topOfMargin" | "topOfFrame" | "t
 export type PaintLayerKind = "fill" | "stroke" | "frameFill" | "frameStroke";
 
 /**
+ * What a request asks for: the story, optionally one frame\'s lines and a
+ * character range, and an optional write to preview.
+ */
+export interface LineEvidenceQuery {
+    story: string;
+    frame?: string;
+    /**
+     * Story character offsets `[start, end)`: only the lines that touch it.
+     */
+    range?: [number, number];
+    /**
+     * A write to preview (a property of a story range, a paragraph or a
+     * style): applied to a copy, never to the document.
+     */
+    preview?: Mutation;
+}
+
+/**
  * What a snap landed on.
  */
 export type SnapSource = "anchor" | "corner" | "center" | "page" | "guide" | "grid" | "extra" | "pixel" | "angle" | "intersection" | "spacing" | "margin" | "column";
@@ -4851,6 +5376,39 @@ export type SnapSource = "anchor" | "corner" | "center" | "page" | "guide" | "gr
  * line break, `#` the end of a story, and a break character\'s own glyph.
  */
 export type HiddenCharacterKind = "space" | "nonBreakingSpace" | "fixedSpace" | "tab" | "forcedLineBreak" | "discretionaryLineBreak" | "anchoredObject" | "paragraphEnd" | "columnBreak" | "frameBreak" | "pageBreak" | "oddPageBreak" | "evenPageBreak" | "storyEnd";
+
+/**
+ * What editing a style changes.
+ */
+export interface StyleDependents {
+    style: StyleRef;
+    /**
+     * The styles based on it, directly or further down: they inherit
+     * what it sets and change with it.
+     */
+    basedOnIt: StyleRef[];
+    /**
+     * Paragraphs (paragraph style) or runs (character style) or items
+     * (object style) that use it or a style based on it.
+     */
+    uses: number;
+    /**
+     * The stories they stand in (text styles).
+     */
+    stories: number;
+    /**
+     * The frames they are set in, or the items (object styles).
+     */
+    items: string[];
+    /**
+     * The pages that would change (0-based page indices, ascending).
+     */
+    pages: number[];
+    /**
+     * Uses whose text is not placed on any page (overset).
+     */
+    unplaced: number;
+}
 
 /**
  * What else besides XML tags becomes a field.
@@ -4939,6 +5497,26 @@ export interface ResolutionResult {
 export type HitFilter = "frame" | "text" | "any";
 
 /**
+ * What to preview, and what to answer about.
+ */
+export interface PreviewQuery {
+    /**
+     * The write, as `Mutate` takes it.
+     */
+    mutation: Mutation;
+    /**
+     * Items to answer the geometry and outline of after the write (the
+     * ones it takes, typically); the items it creates are answered
+     * whatever this lists.
+     */
+    items?: ElementId[];
+    /**
+     * A story to answer the line evidence of after the write.
+     */
+    story?: string;
+}
+
+/**
  * When the medium starts in a presentation.
  */
 export type MediaPlay = "onClick" | "auto";
@@ -4947,6 +5525,48 @@ export type MediaPlay = "onClick" | "auto";
  * Where a derived field\'s value lives.
  */
 export type DerivedTarget = { kind: "item"; itemId: string } | { kind: "story"; storyId: string; frameId: string } | { kind: "range"; storyId: string; elementId: string; start: number; end: number; text: string } | { kind: "placeholder"; storyId: string; plugin: string; key: string };
+
+/**
+ * Where a placed picture comes from.
+ */
+export interface LinkFacts {
+    /**
+     * The link as the document names it (a path, a URI, a data URI).
+     */
+    uri: string;
+    /**
+     * `ok`, `missing` or `undecoded` (engine ADRs 198, 207).
+     */
+    status: string;
+    /**
+     * The picture\'s bytes are in the document.
+     */
+    embedded: boolean;
+    colorspace: string | null;
+    /**
+     * The picture\'s own resolution, ppi, as the document records it.
+     */
+    actualPpi: number | null;
+    /**
+     * Its resolution at the size it is placed, ppi.
+     */
+    effectivePpi: number | null;
+    /**
+     * What replacing the picture does: the frame keeps its size and
+     * place and fits the new picture by this option (IDML\'s
+     * `FittingOnEmptyFrame`); none keeps the picture\'s own size.
+     */
+    fitting: string | null;
+    /**
+     * The session may replace it (the template policy\'s `image.replace`).
+     */
+    replacePermitted: boolean;
+    /**
+     * The other frames that place the same link: relinking it changes
+     * them too.
+     */
+    sameLink: string[];
+}
 
 /**
  * Where a story\'s flow overran its frame chain — the first-class overset
@@ -4962,9 +5582,65 @@ export interface OversetAt {
 }
 
 /**
+ * Where a value comes from.
+ */
+export type ValueSource = { kind: "character" } | { kind: "paragraph" } | { kind: "item" } | { kind: "style"; style: StyleRef; depth: number } | { kind: "default" };
+
+/**
  * Where the medium\'s bytes are.
  */
 export type MediaSource = { type: "part"; path: string } | { type: "link"; uri: string };
+
+/**
+ * Where the text of a frame flows.
+ */
+export interface FlowFacts {
+    storyId: string;
+    /**
+     * The frames of the thread, in order.
+     */
+    frames: string[];
+    /**
+     * This frame\'s place in it (0-based); none for a story range whose
+     * text is not placed.
+     */
+    index: number | null;
+    previous: string | null;
+    next: string | null;
+    /**
+     * The story runs past its last frame.
+     */
+    overset: boolean;
+    /**
+     * Characters not placed in any frame.
+     */
+    oversetCharacters: number;
+    /**
+     * The first character not placed (story character offset).
+     */
+    oversetFrom: number | null;
+    /**
+     * Characters in the story.
+     */
+    characters: number;
+}
+
+/**
+ * Whether and why an item is locked.
+ */
+export interface LockFacts {
+    locked: boolean;
+    reasons: LockReason[];
+}
+
+/**
+ * Whether and why an item shows and prints.
+ */
+export interface VisibilityFacts {
+    visible: boolean;
+    prints: boolean;
+    reasons: HiddenReason[];
+}
 
 /**
  * Whether the medium has pictures.
@@ -4977,6 +5653,14 @@ export type MediaKind = "movie" | "sound";
  * line breaks too.
  */
 export type TextBreaks = "none" | "line" | "paragraph";
+
+/**
+ * Which facts to answer. `All` (the default) answers every one;
+ * `Overview` only what the canvas\'s X-Ray mode colours by (the kind, the
+ * layer, the lock and the winning style), cheap enough for every item on
+ * a page.
+ */
+export type ExplainAspect = "all" | "overview";
 
 /**
  * Which item a press on a group member takes.
@@ -5010,12 +5694,27 @@ export type Role = "author" | "editor" | "filler" | "viewer";
 export type DerivedFrom = "tag" | "name" | "placeholder";
 
 /**
+ * Why a line ends where it does.
+ */
+export type BreakKind = "wordSpace" | "hyphen" | "discretionaryHyphen" | "hardHyphen" | "forcedLineBreak" | "paragraphEnd" | "storyEnd" | "emergency";
+
+/**
  * Why a value was not taken.
  */
 export interface TemplateFieldProblem {
     name: string;
     problem: string;
 }
+
+/**
+ * Why an item does not show or print.
+ */
+export type HiddenReason = { kind: "item" } | { kind: "layer"; id: string; name: string } | { kind: "layerNonprinting"; id: string; name: string } | { kind: "nonprinting" } | { kind: "condition"; id: string; name: string };
+
+/**
+ * Why an item is locked.
+ */
+export type LockReason = { kind: "item" } | { kind: "container"; id: string } | { kind: "layer"; id: string; name: string } | { kind: "role"; role: string; denied: string[] };
 
 /**
  * Wire description of a colour group, mirroring `ColorGroupEntry`.

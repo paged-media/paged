@@ -95,6 +95,9 @@ const HOST_MENU = [
   "View/Show heading anchors",
   // Editor ADR 1223.
   "View/Show issue markers",
+  // Editor ADRs 1237, 1238.
+  "View/X-Ray",
+  "View/Typography debugger",
   // Editor ADR 287.
   "View/Outline view",
   "View/Overprint Preview",
@@ -128,6 +131,8 @@ const HOST_MENU = [
   "Edit/Settings/Contrast/As the system",
   "Edit/Settings/Contrast/Standard",
   "Edit/Settings/Contrast/High",
+  // Track IC's modifier hints (IC10): the setting that keeps the strip.
+  "Edit/Settings/Keep modifier hints visible",
   // Editor ADR 1230 — the object tree, from the canvas.
   "View/Go to object tree",
   "View/Focus workspace",
@@ -148,6 +153,9 @@ const HOST_MENU = [
   "View/Editing aids/Hidden characters",
   "View/Editing aids/Nonprinting items",
   "View/Editing aids/Data bindings",
+  // Editor ADR 1233 — the design constraints.
+  "View/Editing aids/Design constraints",
+  "Object/Add constraint…",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
@@ -584,6 +592,8 @@ test.describe("the host menu bar", () => {
         "menu:File/New from a brief…",
         "menu:File/Open recent…",
         "menu:View/Show issue markers",
+        "menu:View/X-Ray",
+        "menu:View/Typography debugger",
         "menu:File/Close",
         "menu:File/Package…",
         "menu:File/Print…",
@@ -831,6 +841,8 @@ test.describe("the host menu bar", () => {
       "menu:File/New from a brief…",
       "menu:File/Open recent…",
       "menu:View/Show issue markers",
+      "menu:View/X-Ray",
+      "menu:View/Typography debugger",
       "menu:File/Close",
       "menu:File/Package…",
       "menu:File/Print…",
@@ -1015,6 +1027,8 @@ test.describe("the host menu bar", () => {
         "menu:File/New from a brief…",
         "menu:File/Open recent…",
         "menu:View/Show issue markers",
+        "menu:View/X-Ray",
+        "menu:View/Typography debugger",
         "menu:File/Close",
         "menu:File/Package…",
         "menu:File/Print…",

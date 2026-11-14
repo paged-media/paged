@@ -320,7 +320,7 @@ export const FORMAT = defineMessages("sheet.format", {
     "Number format, font, fill, alignment and iterative calculation are in",
   properties: "Sheet properties",
   borderStyle: "Border style",
-  borderColour: "Border colour",
+  borderColour: "Border color",
   bordersRemoved: "Borders removed.",
   bordersApplied: "{edges} borders applied.",
   layout: "Layout",
@@ -535,7 +535,7 @@ export const CHART_STYLE = defineMessages("sheet.chartStyle", {
   tickLabels: "Axis labels",
   legend: "Legend",
   dataLabels: "Data labels",
-  swatch: "Colour",
+  swatch: "Color",
   paragraphStyle: "Paragraph style",
   characterStyle: "Character style",
   noParagraphStyle: "No paragraph style",
@@ -543,15 +543,15 @@ export const CHART_STYLE = defineMessages("sheet.chartStyle", {
   none: "None",
   fromDefault: "Default: {name}",
   followDefault: "Workbook default",
-  seriesColors: "Series colours",
-  themeColors: "Theme colours",
+  seriesColors: "Series colors",
+  themeColors: "Theme colors",
   makeDefault: "Use as default for this workbook",
   resetToDefault: "Reset to default",
   updated: "Chart style updated.",
   failed: "The chart style could not be changed.",
   noDocumentStyles:
-    "The document has no swatches yet: add swatches to the document to colour charts with them.",
-  note: "Charts use the document's swatches and styles: editing a swatch recolours every placed chart.",
+    "The document has no swatches yet: add swatches to the document to color charts with them.",
+  note: "Charts use the document's swatches and styles: editing a swatch recolors every placed chart.",
 });
 
 defineTranslations("de", de);

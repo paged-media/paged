@@ -920,7 +920,30 @@ export type WorkerToMain = WorkerToMainKind & {
 //     bytes? }` points a picture at a new source in one undo step, keeping
 //     its frame, its fitting and its size.
 //   New message kinds an older worker cannot answer, hence the bump.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(81);
+// v82 — Document X-Ray and the Typography Debugger (editor ADRs 1237 and
+//   1238, tasks PX1 and PX2 of the editor's interaction plan):
+//   - X-Ray (engine ADR 1309): `RequestExplain { item, aspect?,
+//     selection? }` answers
+//     `Explained(Explanation)` — the provenance of an item's look and
+//     behaviour from the model: the style cascade per property with the
+//     winning source and the levels it shadows, the layer, why it is
+//     locked or hidden, its link, its bindings, its thread and overset,
+//     its object style and effects, what editing its styles changes, and
+//     what the document does not store (`unknown`).
+//   - Line evidence (engine ADR 1310): `RequestLineEvidence { story,
+//     frame?, range?, preview? }` answers `LineEvidence(LineEvidenceReport)`
+//     — per composed line the measure, the natural width, the ratio, the
+//     word and letter spacing, why it broke, the hyphenation points, the
+//     grid; with `preview`, a copy's, the document untouched.
+//     `LineLayout` keeps the composer's record of each line
+//     (`LineComposition`) on every build.
+//   - The dry run (engine ADR 1310): `RequestPreview { mutation, items?,
+//     story? }` answers `Previewed(PreviewReport)` — any write applied to a
+//     sandbox (a copy of the document in a model of its own), answered as
+//     what it creates and removes, the geometry and outlines it leaves and
+//     the line evidence; the document untouched.
+//   New message kinds an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(82);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -2287,6 +2310,37 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         page_ids: Vec<PageId>,
     },
+    /// v82 (engine ADR 1309) — Document X-Ray: why `item` (a page item or
+    /// a story range) looks and behaves as it does, from the model alone.
+    /// `aspect` `overview` answers only what the canvas's X-Ray mode
+    /// colours by. A read. Reply: `Explained`.
+    RequestExplain {
+        item: crate::element_selection::ElementId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        aspect: Option<crate::explain::ExplainAspect>,
+        /// Text the editor has selected, in its caret units (UTF-8 bytes,
+        /// one separator per paragraph): when given, it is explained as
+        /// the story range it covers, and `item` names its frame.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        selection: Option<crate::selection::ContentSelection>,
+    },
+    /// v82 (engine ADR 1310) — the Typography Debugger's evidence for a
+    /// story's composed lines (one frame's, those touching a range); with
+    /// `preview`, the evidence of a copy of the document with that write
+    /// applied — the document, its history and its revision untouched. A
+    /// read. Reply: `LineEvidence`.
+    RequestLineEvidence(crate::line_evidence::LineEvidenceQuery),
+    /// v82 (engine ADR 1310) — the dry run of any write: `mutation` (a
+    /// batch, a Boolean, a region verb, a property, a text edit) applied
+    /// through the whole write path to a copy of the document in a model
+    /// of its own, answered as the items it would create and remove, the
+    /// geometry and outlines it would leave for those and the asked
+    /// `items`, and the asked `story`'s line evidence. A read: the
+    /// document, its history and its revision are untouched. Reply:
+    /// `Previewed`.
+    RequestPreview(crate::preview::PreviewQuery),
 }
 
 /// Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -3249,6 +3303,12 @@ pub enum WorkerToMainKind {
         /// The document revision the answer holds for.
         revision: u64,
     },
+    /// v82 (engine ADR 1309) — `RequestExplain` reply.
+    Explained(Box<crate::explain::Explanation>),
+    /// v82 (engine ADR 1310) — `RequestLineEvidence` reply.
+    LineEvidence(crate::line_evidence::LineEvidenceReport),
+    /// v82 (engine ADR 1310) — `RequestPreview` reply.
+    Previewed(crate::preview::PreviewReport),
 }
 
 impl From<crate::hit::HitTestResult> for HitResult {

@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 971,
+    "command": 984,
     "keybinding": 216,
-    "menu": 706,
-    "panel": 153,
+    "menu": 711,
+    "panel": 158,
     "tool": 123
   },
   "features": [
@@ -4231,6 +4231,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.object.addConstraint",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.object.bringForward",
       "kind": "command",
       "owner": "editor"
@@ -4417,6 +4422,11 @@
     },
     {
       "id": "command:paged.pathfinder.unite",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.preferences.modifierHints",
       "kind": "command",
       "owner": "editor"
     },
@@ -4626,6 +4636,46 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.verb.bindData",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.copy",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.export",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.inspect",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.style",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.transform",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.validate",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.version",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.actualSize",
       "kind": "command",
       "owner": "editor"
@@ -4806,6 +4856,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.toggleConstraints",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.toggleDataMarkers",
       "kind": "command",
       "owner": "editor"
@@ -4862,6 +4917,16 @@
     },
     {
       "id": "command:paged.view.toggleTextThreads",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleTypographyDebugger",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleXray",
       "kind": "command",
       "owner": "editor"
     },
@@ -6621,6 +6686,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Edit/Settings/Keep modifier hints visible",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Edit/Settings/Models…",
       "kind": "menu",
       "owner": "editor"
@@ -8226,6 +8296,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Add constraint…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Appearance/Add fill",
       "kind": "menu",
       "owner": "editor"
@@ -9191,6 +9266,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Editing aids/Design constraints",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Editing aids/Frame edges",
       "kind": "menu",
       "owner": "editor"
@@ -9444,6 +9524,16 @@
       "id": "menu:View/Story view",
       "kind": "menu",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "menu:View/Typography debugger",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/X-Ray",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:View/Zoom in",
@@ -9861,6 +9951,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.constraints",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.control",
       "kind": "panel",
       "owner": "editor"
@@ -10126,6 +10221,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.publication-contract",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.publication-health",
       "kind": "panel",
       "owner": "editor"
@@ -10257,6 +10357,21 @@
     },
     {
       "id": "panel:paged.tree",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.typography",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.variants",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.xray",
       "kind": "panel",
       "owner": "editor"
     },
@@ -10876,36 +10991,5 @@
       "owner": "editor"
     }
   ],
-  "deprecated": [
-    {
-      "id": "menu:Draw/Path/Close path",
-      "replacement": "menu:Object/Path/Close path",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:Draw/Path/Outline stroke",
-      "replacement": "menu:Object/Path/Outline stroke…",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:File/Open recent",
-      "replacement": "menu:File/Open recent…",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:View/Show data markers",
-      "replacement": "menu:View/Editing aids/Data bindings",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    },
-    {
-      "id": "menu:View/Show text threads",
-      "replacement": "menu:View/Editing aids/Text threads",
-      "deprecatedIn": "0.80.0",
-      "removeIn": "0.82.0"
-    }
-  ]
+  "deprecated": []
 }

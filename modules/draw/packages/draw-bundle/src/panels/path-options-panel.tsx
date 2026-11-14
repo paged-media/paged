@@ -98,7 +98,7 @@ const M = defineMessages("draw.pathOptionsPanel", {
     "Set the values for the path commands in the Draw menu, then apply them to the selected paths or insert a new shape.",
   note: "Apply runs the operation with these values and remembers them: the same command run from the menu or the command palette repeats the values last applied here, except Outline stroke, which then uses each path's own stroke. Offset, Simplify and Outline stroke are one undo step per selected path; each Insert is one undo step; Select same only changes the selection. Image Trace has no options here yet.",
   selectSameNote:
-    "Matches every object whose stroke weight is within this many points of the first selected object's, the reference included; 0 is an exact match. Colours take no tolerance: an object's fill and stroke are read as swatch references, and this plugin cannot read a swatch's colour values to compare them yet.",
+    "Matches every object whose stroke weight is within this many points of the first selected object's, the reference included; 0 is an exact match. Colors take no tolerance: an object's fill and stroke are read as swatch references, and this plugin cannot read a swatch's color values to compare them yet.",
   widthProfileNote:
     "Replaces each selected open path with its outline, its width running from the start through the middle to the end. The outline is a filled shape and cannot be edited as a stroke again; closed and compound paths are left as they are.",
   ownStroke: "{width} pt · {cap} cap · {join} join · miter limit {miterLimit}",

@@ -86,3 +86,13 @@ single-spread rules of engine ADR 1307. Tests: `new-document-presets.test.ts` (t
 preview's spread, the writes per side), `new-document-dialog.dom.test.tsx` (the switch and the
 preview), `apps/canvas/tests/e2e/new-document-dialog.spec.ts` (four pages: sides, spreads,
 margins, one undo step).
+
+## Amendment (2026-11-14): the dialog says a count's range
+
+The one numeric field (ADR 1216) refuses a typed value outside its own `min` and `max` before
+its owner sees it, so the page count and column count fields, which carried the dialog's ranges
+as bounds, never let a count of 0 reach the setup: the dialog's own reason ("Between 1 and 999
+pages.") was never shown, the setup stayed on its preset, and Create did not wait. The two fields
+no longer carry bounds; the range is the dialog's validation alone (decision 3), so an
+out-of-range count makes the setup custom, says why under the field and holds Create back
+(`new-document-dialog.dom.test.tsx`).

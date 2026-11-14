@@ -70,6 +70,8 @@ import {
   threadLinesContribution,
   dataMarkersContribution,
   issueMarkersContribution,
+  previewTargetsContribution,
+  setActionsDoor,
   commentPinsContribution,
   setCommentAnchorLookup,
   loadDocumentFile,
@@ -364,6 +366,7 @@ import {
   ASSET_EXPORT_MENU_ITEMS,
   buildAssetExportCommands,
 } from "../asset-export/commands";
+import { buildVerbCommands } from "../verb-commands";
 import {
   addPage,
   buildInsertCommands,
@@ -393,6 +396,20 @@ import {
 } from "../panels/compatibility-report-store";
 import { usePublicationIssuesSource } from "../publication-issues";
 import {
+  ADD_CONSTRAINT_COMMAND,
+  AddConstraintDialog,
+  CONSTRAINT_MENU_ITEMS,
+} from "../constraints/add-constraint";
+import {
+  constraintGlyphsContribution,
+  fixPreviewContribution,
+} from "../constraints/overlay";
+import { useDesignConstraintsSource } from "../constraints/source";
+import { useAutomaticCheckpoints } from "../checkpoints/checkpoints";
+import { usePublicationContractSource } from "../contract/source";
+import { CompareDialog } from "../compare/compare-dialog";
+import { setSideEngineFactory } from "../compare/side-engine";
+import {
   markStartDecided,
   useRememberLastDocument,
   useReopenLastDocument,
@@ -420,6 +437,8 @@ import {
 } from "../select-all";
 import { CorpusPicker } from "../ui/CorpusPicker";
 import { templateFieldsContribution } from "../overlays/template-fields";
+import { xrayOverlayContribution } from "../overlays/xray-overlay";
+import { typographyOverlayContribution } from "../overlays/typography-overlay";
 import { liveShapeHandlesContribution } from "../overlays/live-shape-handles";
 import {
   EditorInstanceProvider,
@@ -492,6 +511,18 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 1223 — View ▸ Show issue markers: the publication's issues
   // where they stand. Draws nothing until toggled on.
   issueMarkersContribution,
+  // Editor ADRs 1240, 1241 — what a previewed action or a proposed change
+  // will touch. Draws nothing without a preview.
+  previewTargetsContribution,
+  // Editor ADR 1233 — the design constraints' glyphs (an editing aid) and
+  // where a previewed fix would move things.
+  constraintGlyphsContribution,
+  fixPreviewContribution,
+  // Editor ADRs 1237 and 1238 — View ▸ X-Ray (every item outlined by
+  // what shapes it) and View ▸ Typography debugger (the selected story's
+  // lines by how tightly they are set). Draw nothing until toggled on.
+  xrayOverlayContribution,
+  typographyOverlayContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,
@@ -727,6 +758,10 @@ function PluginBundles() {
       notifySink: notifySinkOf(scope),
       pages,
     });
+    // Editor ADR 1240 — the user's recorded actions on the `actions@1`
+    // door every bundle host shares.
+    if (hostOptions.shared.actions)
+      setActionsDoor(scope, hostOptions.shared.actions);
     // Editor ADRs 291, 292: the Data panel and the bind popover read the
     // document's data from the same shared backend the bundles meet at.
     const dataBackend = hostOptions.shared.data;
@@ -942,6 +977,14 @@ function CanvasAppIntegration() {
   // Editor ADR 1223 — the publication's issues, gathered for the markers,
   // the page overview and Publication health.
   usePublicationIssuesSource();
+  // Editor ADR 1233 — the design constraints, evaluated as the document
+  // changes; what does not hold joins those issues.
+  useDesignConstraintsSource();
+  // Editor ADR 1234 — a checkpoint after every export.
+  useAutomaticCheckpoints();
+  // Editor ADR 1236 — the publication contract, assessed as the document
+  // changes: the header's readiness and its unmet requirements as issues.
+  usePublicationContractSource();
   // UX audit F-06 — the document open last comes back at the next start
   // (unless the recovery journal offers unsaved work first).
   useRememberLastDocument();
@@ -1849,9 +1892,13 @@ function CanvasAppIntegration() {
       ...svgCommands,
       // Editor ADR 288 — Asset Export.
       ...buildAssetExportCommands(),
+      // Editor ADR 1242 — the verbs every object answers.
+      ...buildVerbCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       SELECT_BELOW_COMMAND,
       SELECT_ABOVE_COMMAND,
+      // Editor ADR 1233 — Object ▸ Add constraint….
+      ADD_CONSTRAINT_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
@@ -1890,6 +1937,7 @@ function CanvasAppIntegration() {
       ...SVG_MENU_ITEMS,
       ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
+      ...CONSTRAINT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
       ...TEXT_FORMAT_MENU_ITEMS,
@@ -2072,7 +2120,25 @@ function CanvasAppRoot() {
     });
     setClient(c);
     instance.onClient?.(c);
+    // Editor ADRs 1234 and 1235 — a second engine on the same worker build
+    // and default fonts, for reading a checkpoint's or a variant's state
+    // without touching the open document. Made per use, disposed after.
+    setSideEngineFactory(
+      instance.scope,
+      () =>
+        new CanvasClient({
+          workerFactory: () => {
+            const w = new CanvasRenderWorker();
+            if (instance.engineWasm)
+              w.postMessage({ kind: "engineWasm", url: instance.engineWasm });
+            return w;
+          },
+          defaultFontProvider: fetchDefaultFont,
+          defaultFontFaces: fetchDefaultFontFaces,
+        }),
+    );
     return () => {
+      setSideEngineFactory(instance.scope, null);
       c.dispose();
       setClient(null);
     };
@@ -2132,6 +2198,10 @@ function CanvasAppRoot() {
       <ViewPreferencesDialog />
       {/* UX audit F-06 — File ▸ Open recent… */}
       <OpenRecentDialog />
+      {/* Editor ADR 1233 — Object ▸ Add constraint… */}
+      <AddConstraintDialog />
+      {/* Editor ADRs 1234 and 1235 — a checkpoint's preview, a comparison. */}
+      <CompareDialog />
       <ScreenCalibrationDialog />
       <TransformEachDialog />
       <ReflectDialog />

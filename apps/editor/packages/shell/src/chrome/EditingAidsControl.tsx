@@ -73,7 +73,7 @@ export function EditingAidsControl({
           justifyContent: "center",
           width: 28,
           height: 26,
-          border: "1px solid var(--pg-border)",
+          border: "1px solid var(--pg-control-border)",
           borderRadius: "var(--radius-md)",
           background: proof ? "var(--pg-primary)" : "transparent",
           color: proof ? "var(--pg-primary-fg)" : "var(--chrome-menu-text)",

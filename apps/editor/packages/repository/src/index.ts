@@ -25,9 +25,19 @@
 
 export { memoryFs, opfsFs, type RepoFs } from "./fs.ts";
 export {
+  checkpointRef,
+  CheckpointRefused,
   Library,
+  MAX_AUTO_CHECKPOINTS,
+  MAX_CHECKPOINT_BYTES,
+  MAX_NAMED_CHECKPOINTS,
   parsePagedRef,
   RemoteError,
+  type CheckpointEntry,
+  type CheckpointKind,
+  variantRef,
+  variantSlug,
+  type VariantEntry,
   type PagedRef,
   type CommitInfo,
   type Remote,
