@@ -43,17 +43,5 @@
   "UXI-T68": {
     "task": "DF6",
     "reason": "No test claims it yet: export does not prevalidate the requested standard yet (DF6). Claim it in a test title (UXI-T68 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T71": {
-    "task": "AP4",
-    "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T71 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T72": {
-    "task": "AP4",
-    "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T72 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T73": {
-    "task": "CM5",
-    "reason": "No test claims it yet: the template-fill flow has not been reworked for touch on phones yet (CM5). Claim it in a test title (UXI-T73 — …) when that lands, or sooner where today's code already passes (W0.7)."
   }
 }

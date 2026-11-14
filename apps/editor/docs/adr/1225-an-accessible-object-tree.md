@@ -1,15 +1,17 @@
 # ADR 1225 — An accessible object tree
 
 - **Status:** Accepted 2026-11-14. Implements decision D-13 of
-  [ADR 1201](1201-interaction-decisions.md) (plan tasks AP1, AP2 of
+  [ADR 1201](1201-interaction-decisions.md) (plan tasks AP1, AP2 and AP4 of
   [`interaction-plan.md`](../interaction-plan.md)).
 - **Scope:** `apps/canvas/src/ui/A11yObjectTree.tsx` (the tree), `panels/tree-panel.tsx` (the
   Tree panel, `paged.tree`, retitled "Object tree"), `a11y-commands.ts` (the reach command
   and the selection cycle), `reflect-commands.ts` (the rotate and scale steps),
   `insert-commands.ts` (`boundsInView`), `packages/shell/src/registries/keybinding.ts` (the
-  brackets matched by their physical key).
+  brackets matched by their physical key), `modules/draw/packages/draw-bundle/src/handlers/brush.ts`
+  (pen pressure only).
 - **Requirements:** `UXI-A11Y-002`, `A11Y-003`, `A11Y-004`, `A11Y-006`, `A11Y-007`,
-  `A11Y-008` of the interaction specification (§19.1, §19.2). Tests `UXI-T69`, `UXI-T70`.
+  `A11Y-008`, `A11Y-009`, `A11Y-010`, `A11Y-011`, `UXI-CAM-012`, `CAM-013` of the interaction
+  specification (§13.3, §19.1–§19.3). Tests `UXI-T69` to `UXI-T73`.
 
 ## Context
 
@@ -67,8 +69,26 @@ keyboard but the inspector's fields.
    Alt by their physical key, as it already did for letters, digits, `=`, `-` and `'`.
    Track IC's object picker (IC6) reuses these commands.
 
+8. **Touch and pen (AP4).** A pointer event carries the pen's pressure, tilt and pointer
+   type to every tool's handler (B-08, unchanged); a tool declares pen support by reading
+   them, and only for `pointerType === "pen"`: the Pencil tapers a pen stroke by its
+   pressure and draws a mouse stroke plainly, and the brushes (paged.draw's Paintbrush, Blob
+   Brush) now do the same — Pointer Events report a mouse's pressure as 0 on its release,
+   which tapered the last anchor of every mouse stroke. Selection, navigation and the
+   inspector treat a pen as a mouse. A second finger takes the touch over from whatever the
+   first began — a press still waiting for its hit test included — rolls it back and pinches
+   (ADR 294, the coordinator's preempting `pinch` session of ADR 1210): the camera changes,
+   the document and the selection do not, no gesture is left open. In the fill shapes on a
+   phone a finger fills and navigates (ADR 294); the authoring editor keeps selection
+   explicit (no long-press).
+
 ## Consequences
 
+- `UXI-T71`, `UXI-T72` and `UXI-T73` are claimed (`tests/e2e/uxi-touch-pen.spec.ts`, through
+  the browser's own CDP touch and pen input: a pinch over a press held by fixture H's slow
+  hit test; a probe tool that records what its handler receives, the Pencil by mouse and by
+  pen, a pen click that selects; the fill shape on an emulated phone). The brush's pressure
+  rule is held by `modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts`.
 - `UXI-T69` and `UXI-T70` are claimed (`tests/e2e/uxi-accessibility.spec.ts`), with the
   component layer in `test/panels/tree-panel.dom.test.tsx` (levels, names, virtualization,
   the keys, the selection both ways, no mutation) and the units in

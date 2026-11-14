@@ -41,8 +41,7 @@
 // named in PAGED_PERF_LARGE_IDML (comma-separated paths; local only; the
 // test reports `unavailable` for a path that is not there, never a pass).
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename } from "node:path";
+import { existsSync, statSync, writeFileSync } from "node:fs";
 
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
@@ -71,6 +70,10 @@ export const BUDGETS = {
   memoryGeneratedBytes: 3 * 1024 ** 3,
 };
 
+// The full Chromium (new headless), not the headless shell: the shell
+// refuses `measureUserAgentSpecificMemory` even when isolated.
+test.use({ channel: "chromium" });
+
 const results: Record<string, unknown> = {};
 
 test.afterAll(() => {
@@ -98,6 +101,7 @@ interface CanvasGlobal {
     ready?: boolean;
     elementSelection?: Array<{ kind: string; id: string }>;
     client: {
+      setElementSelection(ids: unknown[], mode: string): Promise<unknown[]>;
       mutate(m: unknown): Promise<unknown>;
       drainJournal(): Promise<{
         entries: Array<{ code: string; durMs?: number; data?: unknown }>;
@@ -118,26 +122,41 @@ async function selectionLatency(page: Page): Promise<number[]> {
   for (let i = 0; i < ROUNDS; i++) {
     const t = targets[i % targets.length]!;
     // Start from nothing selected, so every click changes the selection.
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
+      await c.client.setElementSelection([], "replace");
       c.setElementSelection([]);
     });
     const at = await clientPointOf(page, { at: t.at });
-    const pending = page.evaluate((want) => {
-      const c = (globalThis as unknown as CanvasGlobal).__canvas;
-      return new Promise<number>((resolve) => {
+    // The listener is in place before the click is sent (one evaluate
+    // installs it, a second awaits it), and a click that selects nothing
+    // gives up after 5 s rather than hanging the run.
+    await page.evaluate((want) => {
+      const w = globalThis as unknown as CanvasGlobal & {
+        __selectionProbe?: Promise<number>;
+      };
+      w.__selectionProbe = new Promise<number>((resolve) => {
         let t0 = -1;
+        const started = performance.now();
         const onDown = () => {
           t0 = performance.now();
           window.removeEventListener("pointerdown", onDown, true);
         };
         window.addEventListener("pointerdown", onDown, true);
         const poll = () => {
-          const sel = c.elementSelection ?? [];
+          // The handle is re-published as the editor renders: read it
+          // fresh.
+          const sel =
+            (globalThis as unknown as CanvasGlobal).__canvas.elementSelection ??
+            [];
           if (t0 >= 0 && sel.some((s) => `${s.kind}:${s.id}` === want)) {
             requestAnimationFrame(() =>
               setTimeout(() => resolve(performance.now() - t0), 0),
             );
+            return;
+          }
+          if (performance.now() - started > 5_000) {
+            resolve(-1);
             return;
           }
           requestAnimationFrame(poll);
@@ -146,21 +165,29 @@ async function selectionLatency(page: Page): Promise<number[]> {
       });
     }, `${t.id.kind}:${t.id.id}`);
     await page.mouse.click(at.x, at.y);
-    out.push(await pending);
+    const ms = await page.evaluate(
+      () =>
+        (globalThis as unknown as { __selectionProbe: Promise<number> })
+          .__selectionProbe,
+    );
+    if (ms >= 0) out.push(ms);
   }
   return out;
 }
 
 /** Typing latency: keydown → the reply that carried the key's character
  *  → the next frame, per key, at `delayMs` between keys. */
-async function typingLatency(page: Page, delayMs: number): Promise<number[]> {
+async function typingLatency(
+  page: Page,
+  delayMs: number,
+): Promise<{ latencies: number[]; inserts: number }> {
   const text = "the quick brown fox jumps over the lazy dog ".repeat(2);
   await page.evaluate((storyId) => {
     const w = globalThis as unknown as CanvasGlobal & {
-      __typing?: { downs: number[]; done: number[]; chars: number };
+      __typing?: { downs: number[]; done: number[]; inserts: number };
     };
     w.__canvas.setContentSelection({ storyId, start: 0, end: 0 });
-    const probe = { downs: [] as number[], done: [] as number[], chars: 0 };
+    const probe = { downs: [] as number[], done: [] as number[], inserts: 0 };
     w.__typing = probe;
     window.addEventListener(
       "keydown",
@@ -173,6 +200,7 @@ async function typingLatency(page: Page, delayMs: number): Promise<number[]> {
       const reply = await mutate(m);
       const op = m as { op?: string; args?: { text?: string } };
       if (op.op === "insertText") {
+        probe.inserts += 1;
         const n = [...(op.args?.text ?? "")].length;
         requestAnimationFrame(() =>
           setTimeout(() => {
@@ -207,10 +235,13 @@ async function typingLatency(page: Page, delayMs: number): Promise<number[]> {
   return page.evaluate(() => {
     const p = (
       globalThis as unknown as {
-        __typing: { downs: number[]; done: number[] };
+        __typing: { downs: number[]; done: number[]; inserts: number };
       }
     ).__typing;
-    return p.done.map((d, i) => d - (p.downs[i] ?? d));
+    return {
+      latencies: p.done.map((d, i) => d - (p.downs[i] ?? d)),
+      inserts: p.inserts,
+    };
   });
 }
 
@@ -243,20 +274,29 @@ async function memoryBytes(page: Page): Promise<number | null> {
   });
 }
 
-/** Open `bytes` as `name` and time it: ready, the worker's first paint,
- *  and the audit's screenshot first paint. */
-async function openAndTime(page: Page, name: string, bytes: Buffer) {
+/** Open a document (bytes as `name`, or a file by its path) and time it:
+ *  ready, the worker's first paint, and the audit's screenshot first paint. */
+async function openAndTime(
+  page: Page,
+  file: { name: string; bytes: Buffer } | string,
+) {
   await page.evaluate(() => {
     const c = (globalThis as unknown as Partial<CanvasGlobal>).__canvas;
     if (c) c.ready = false;
     void c?.client.drainJournal();
   });
   const t0 = Date.now();
-  await page.setInputFiles('input[type="file"]', {
-    name,
-    mimeType: "application/vnd.adobe.indesign-idml-package",
-    buffer: bytes,
-  });
+  await page.setInputFiles(
+    'input[type="file"]',
+    // Past 50 MB Playwright takes a path, not a buffer.
+    typeof file === "string"
+      ? file
+      : {
+          name: file.name,
+          mimeType: "application/vnd.adobe.indesign-idml-package",
+          buffer: file.bytes,
+        },
+  );
   await expect
     .poll(
       () =>
@@ -332,12 +372,14 @@ test.describe("performance budgets", () => {
     await loadUxiFixture(page, "A");
     const idle = await memoryBytes(page);
     const selection = percentiles(await selectionLatency(page));
-    const normal = percentiles(await typingLatency(page, 150));
-    const burst = percentiles(await typingLatency(page, 18));
+    const typedNormal = await typingLatency(page, 150);
+    const typedBurst = await typingLatency(page, 18);
+    const normal = percentiles(typedNormal.latencies);
+    const burst = percentiles(typedBurst.latencies);
     results.interaction = {
       selection,
-      typingNormal: normal,
-      typingBurst: burst,
+      typingNormal: { ...normal, inserts: typedNormal.inserts },
+      typingBurst: { ...burst, inserts: typedBurst.inserts },
       memoryIdleBytes: idle,
     };
     if (ASSERT) {
@@ -351,11 +393,10 @@ test.describe("performance budgets", () => {
     page,
   }) => {
     await openCanvas(page);
-    const timing = await openAndTime(
-      page,
-      "stress.idml",
-      Buffer.from(stressIdml()),
-    );
+    const timing = await openAndTime(page, {
+      name: "stress.idml",
+      bytes: Buffer.from(stressIdml()),
+    });
     // Sustained use: walk the pages and zoom, then measure again.
     for (let i = 0; i < 20; i++) {
       await page.keyboard.press("PageDown");
@@ -382,8 +423,8 @@ test.describe("performance budgets", () => {
         return;
       }
       await openCanvas(page);
-      const bytes = readFileSync(path);
-      const timing = await openAndTime(page, basename(path), bytes);
+      const size = statSync(path).size;
+      const timing = await openAndTime(page, path);
       const opened = await memoryBytes(page);
       for (let k = 0; k < 20; k++) {
         await page.keyboard.press("PageDown");
@@ -391,7 +432,7 @@ test.describe("performance budgets", () => {
       }
       const used = await memoryBytes(page);
       results[`large${i + 1}`] = {
-        megabytes: Math.round(bytes.length / 1e5) / 10,
+        megabytes: Math.round(size / 1e5) / 10,
         ...timing,
         memoryOpenedBytes: opened,
         memoryAfterUseBytes: used,
