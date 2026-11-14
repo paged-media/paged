@@ -47,7 +47,13 @@ import {
 } from "../../src/state/editor-scope";
 import { setViewToggle } from "../../src/state/view-toggles";
 
-afterEach(cleanup);
+// The data markers are an editing aid, remembered in the editor's storage
+// (data ADR 566; editor ADR 1212): each test starts from the defaults, not
+// from the aid a test before it turned on.
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 const PAGE = "p1" as PageId;
 const pageRects = new Map([[PAGE, { x: 0, y: 1000, w: 612, h: 792 }]]);
