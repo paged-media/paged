@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 
 import type { Mutation } from "@paged-media/plugin-api";
+import { covers } from "@paged-media/test-kit";
 
 import {
   StoryView,
@@ -175,6 +176,7 @@ describe("story view", () => {
 
 describe("story map panel", () => {
   it("lists threads with overset and unplaced stories, and its chips navigate", async () => {
+    covers("panel:media.paged.doc.panel.storyMap");
     const map = storyMap(
       [
         { selfId: "a", characterCount: 50, paragraphCount: 2 },

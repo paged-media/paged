@@ -27,7 +27,10 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { covers } from "@paged-media/test-kit";
+
 import { historyDepth } from "./harness/history";
+import { clickMenuRow } from "./harness/shell-surface";
 import { dumpStory } from "./harness/model-dump";
 import { selectedIds } from "./harness/gesture-kit";
 import { UXI_C, openUxiFixture } from "./harness/uxi-fixtures";
@@ -71,11 +74,13 @@ test.describe("doc: Story view and Story Map", () => {
   test("the Story view writes the engine's story as one undo step and gives the canvas back where it was @feat:plugin-doc.outline-panel @level:edge", async ({
     page,
   }) => {
+    covers("command:media.paged.doc.command.storyView", "menu:View/Story view");
     await openUxiFixture(page, "C");
     const before = await camera(page);
     const history = await historyDepth(page);
 
-    await invoke(page, "media.paged.doc.command.storyView");
+    // View ▸ Story view: the command, from the menu bar.
+    await clickMenuRow(page, "View/Story view");
     const view = page.locator(`[data-story-view="${UXI_C.storyId}"]`);
     await expect(view).toBeVisible();
     const fields = view.locator("textarea[data-story-paragraph]");
@@ -121,9 +126,15 @@ test.describe("doc: Story view and Story Map", () => {
   test("the Story Map shows the thread by page; a frame chip selects the frame and Go back returns @feat:editor-tools.text.thread-lines @level:edge", async ({
     page,
   }) => {
+    covers(
+      "command:media.paged.doc.command.storyMap",
+      "menu:View/Story map",
+      "command:media.paged.doc.command.nextOverset",
+      "menu:View/Go to next overset story",
+    );
     await openUxiFixture(page, "C");
     const history = await historyDepth(page);
-    await invoke(page, "media.paged.doc.command.storyMap");
+    await clickMenuRow(page, "View/Story map");
     const row = page.locator(`[data-story-map-story="${UXI_C.storyId}"]`);
     await expect(row).toBeVisible();
     const chips = row.locator("[data-story-map-frame]");
@@ -149,5 +160,40 @@ test.describe("doc: Story view and Story Map", () => {
     await expect.poll(() => camera(page)).toEqual(before);
     // Reading the map and navigating change nothing in the document.
     expect(await historyDepth(page)).toEqual(history);
+
+    // Overset: more text than the two frames hold. The map puts the story
+    // first with its Overset marker, and View ▸ Go to next overset story
+    // selects the thread's last frame.
+    await page.evaluate(async (storyId) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: { mutate(m: unknown): Promise<unknown> };
+          };
+        }
+      ).__canvas.client;
+      await c.mutate({
+        op: "insertText",
+        args: { storyId, offset: 0, text: "Overflowing text. ".repeat(160) },
+      });
+    }, UXI_C.storyId);
+    await expect(row).toHaveAttribute("data-overset", "true");
+    await expect(
+      row.locator(`[data-story-map-overset="${UXI_C.storyId}"]`),
+    ).toBeVisible();
+    await page.evaluate(async () => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              setElementSelection(i: unknown[], m: string): Promise<unknown>;
+            };
+          };
+        }
+      ).__canvas.client;
+      await c.setElementSelection([], "replace");
+    });
+    await clickMenuRow(page, "View/Go to next overset story");
+    await expect.poll(() => selectedIds(page)).toEqual([UXI_C.second.id.id]);
   });
 });
