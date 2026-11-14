@@ -1290,7 +1290,9 @@ function ShellChrome({
       setDebugHandle(scope, "canvas", {
         client,
         handle,
-        ready: handle != null,
+        // A provisional document (engine ADR 1314) is ready once its
+        // composition is final: a script or a test reads every page.
+        ready: handle != null && handle.provisional !== true,
         snapshotsReady,
         elementSelection,
         // SDK Phase 3 — tests need to drive the SelectionContext
@@ -1497,6 +1499,13 @@ function ShellChrome({
           // handle changes only when it differs.
           rereadPages();
         }
+      } else if (msg.kind === "compositionProgress" && msg.payload.done) {
+        // v84 (engine ADR 1314) — the whole document's build replaced the
+        // provisional pages; it may have added pages (a growing story). An
+        // update, not a value: the step can arrive before the handle the
+        // loader set has rendered, and it is that handle that turns final
+        // (the loader folds a step that came earlier still).
+        setHandle((prev) => (prev ? client.composedHandle(prev) : prev));
       } else if (msg.kind === "scriptResult") {
         // A script (the Script panel, Claude) can add or resize pages
         // without the mutationApplied that carries the page list, so the

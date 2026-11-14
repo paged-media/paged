@@ -35,6 +35,8 @@
 //   sizeOverrides  consistency: text whose size overrides its paragraph
 //                  style's: clear the override, so the style governs.
 
+import { srgbToLinear } from "@paged-media/helpers";
+
 import type { ShellObjectsSurface } from "../catalog/object-model-types";
 import type { ChangeItem } from "./change-set";
 
@@ -235,10 +237,9 @@ export function luminance(hex: string): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return 1;
   const n = parseInt(m[1]!, 16);
-  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
-    const v = c / 255;
-    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  });
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) =>
+    srgbToLinear(c / 255),
+  );
   return 0.2126 * ch[0]! + 0.7152 * ch[1]! + 0.0722 * ch[2]!;
 }
 

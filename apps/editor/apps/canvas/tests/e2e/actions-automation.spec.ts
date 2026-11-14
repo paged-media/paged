@@ -26,6 +26,11 @@
 // to an object the document no longer holds is refused by name, the model
 // and the history unchanged (UXI-MUT-014). Every test asserts the model and
 // the engine's undo log.
+//
+// Amendment 1 (editor ADR 1240): a drag and a handle resize on the canvas
+// record as what they did to the selection — a move by (dx, dy) pt and a
+// resize to w × h keeping the opposite corner — and replay on another
+// selection as the same transform, one undo step.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -33,7 +38,14 @@ import { covers } from "@paged-media/test-kit";
 
 import { openPanel } from "../fidelity/canvas-driver";
 import { elementPageRectPt } from "./harness/fixtures";
-import { selectElements } from "./harness/gesture-kit";
+import { idsOfKind, selectElements } from "./harness/gesture-kit";
+import {
+  activateTool,
+  dragBy,
+  dragStartOnObject,
+  movePointerBy,
+  releasePointer,
+} from "./harness/interaction";
 import { historyDepth, undoDepth } from "./harness/history";
 import { modelSnapshot } from "./harness/model-dump";
 import { openUxiFixture, UXI_A } from "./harness/uxi-fixtures";
@@ -178,6 +190,169 @@ test.describe("Actions record what you meant (PX4, ADR 1240)", () => {
     );
 
     // One Undo takes the whole run back.
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+    );
+    await expect.poll(() => modelSnapshot(page)).toBe(model);
+  });
+
+  test("a drag and a resize on the canvas, recorded, replay on another selection as the same transform in ONE undo step @feat:editor-shell.panels.actions @feat:editor-tools.move.translate @feat:editor-tools.resize.handles @level:gesture @uxi:UXI-MUT-013 @uxi:UXI-MUT-004", async ({
+    page,
+  }) => {
+    covers(
+      "panel:paged.actions",
+      "tool:paged.tool.select",
+      "command:paged.object.transformSelection",
+    );
+    await openUxiFixture(page, "A");
+    await activateTool(page, "paged.tool.select");
+    await selectElements(page, [A.free.id]);
+    const freeBefore = (await elementPageRectPt(page, A.free.id))!;
+    let moved = freeBefore;
+    const id = await record(page, "Drag and resize", async () => {
+      // A drag of the selected rectangle…
+      const depth = await undoDepth(page);
+      await dragBy(page, A.free.id, 60, 40);
+      await expect.poll(() => undoDepth(page)).toBe(depth + 1);
+      moved = (await elementPageRectPt(page, A.free.id))!;
+      expect(moved.left).not.toBeCloseTo(freeBefore.left, 1);
+      // …then its south-east handle.
+      const handle = page
+        .locator(
+          '[data-selection-handle="southEast"] > rect[data-handle="southEast"]',
+        )
+        .last();
+      await expect(handle).toHaveCount(1);
+      const box = (await handle.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 50, box.y + 30, { steps: 8 });
+      await page.mouse.up();
+      await expect.poll(() => undoDepth(page)).toBe(depth + 2);
+      // The recorder has both commits as steps.
+      await expect(page.locator("[data-actions-step-count]")).toHaveText("2");
+    });
+    await expect(
+      panel(page).locator(`[data-actions-detail="${id}"]`),
+    ).toBeVisible();
+    const steps = panel(page).locator("[data-actions-step]");
+    await expect(steps).toHaveCount(2);
+    await expect(steps.nth(0)).toContainText("Move the selection by");
+    await expect(steps.nth(1)).toContainText("Resize to");
+    await expect(steps.nth(1)).toContainText("keeping the top left corner");
+    // Recorded as intents on the selection: no ids, nothing uncaptured.
+    await expect(panel(page).locator("[data-actions-verdict]")).toHaveText([
+      "portable",
+      "portable",
+    ]);
+    const done = (await elementPageRectPt(page, A.free.id))!;
+    const dx = moved.left - freeBefore.left;
+    const dy = moved.top - freeBefore.top;
+    const width = done.right - done.left;
+    const height = done.bottom - done.top;
+    expect(width).not.toBeCloseTo(freeBefore.right - freeBefore.left, 1);
+
+    // Another selection: the back rectangle, of another size.
+    await selectElements(page, [A.back.id]);
+    const model = await modelSnapshot(page);
+    const history = await historyDepth(page);
+    const backBefore = (await elementPageRectPt(page, A.back.id))!;
+
+    // The preview outlines it and changes nothing.
+    await btn(page, `actions-preview-${id}`).click();
+    const preview = page.locator(`[data-actions-preview="${id}"]`);
+    await expect(preview).toBeVisible();
+    await expect(
+      preview.locator("[data-actions-undo-statement]"),
+    ).toHaveAttribute("data-actions-undo-statement", "one");
+    await expect(page.locator("[data-preview-target]")).toHaveCount(1);
+    await expect(page.locator("[data-preview-target]")).toHaveAttribute(
+      "data-preview-target",
+      addressOf(A.back.id),
+    );
+    expect(await modelSnapshot(page), "a preview changes nothing").toBe(model);
+    expect(await historyDepth(page)).toEqual(history);
+
+    // Run: one undo step; the back rectangle moved by the same (dx, dy)
+    // and took the same size, its top left corner where the move put it.
+    await btn(page, "actions-run").click();
+    await expect.poll(() => undoDepth(page)).toBe(history.undo + 1);
+    const backAfter = (await elementPageRectPt(page, A.back.id))!;
+    expect(backAfter.left).toBeCloseTo(backBefore.left + dx, 2);
+    expect(backAfter.top).toBeCloseTo(backBefore.top + dy, 2);
+    expect(backAfter.right - backAfter.left).toBeCloseTo(width, 2);
+    expect(backAfter.bottom - backAfter.top).toBeCloseTo(height, 2);
+    expect(await elementPageRectPt(page, A.free.id)).toEqual(done);
+
+    // One Undo takes the whole run back.
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+    );
+    await expect.poll(() => modelSnapshot(page)).toBe(model);
+  });
+
+  test("an Alt-drag copy, recorded, replays on another selection as a copy at the same offset in ONE undo step @feat:editor-shell.panels.actions @feat:editor-tools.move.duplicate-drag @level:gesture @uxi:UXI-MUT-013", async ({
+    page,
+  }) => {
+    covers(
+      "panel:paged.actions",
+      "tool:paged.tool.select",
+      "command:paged.object.transformSelection",
+    );
+    await openUxiFixture(page, "A");
+    await activateTool(page, "paged.tool.select");
+    await selectElements(page, [A.free.id]);
+    const freeBefore = (await elementPageRectPt(page, A.free.id))!;
+    const before = await idsOfKind(page, "rectangle");
+    const id = await record(page, "Copy aside", async () => {
+      const depth = await undoDepth(page);
+      await page.keyboard.down("Alt");
+      await dragStartOnObject(page, A.free.id);
+      await movePointerBy(page, 60, 40);
+      await releasePointer(page);
+      await page.keyboard.up("Alt");
+      await expect.poll(() => undoDepth(page)).toBe(depth + 1);
+      await expect(page.locator("[data-actions-step-count]")).toHaveText("1");
+    });
+    await expect(panel(page).locator("[data-actions-step]")).toContainText(
+      "Copy the selection, offset",
+    );
+    // The copy the drag left, and its offset from the original.
+    const copy = (await idsOfKind(page, "rectangle")).find(
+      (r) => !before.includes(r),
+    )!;
+    const copied = (await elementPageRectPt(page, {
+      kind: "rectangle",
+      id: copy,
+    }))!;
+    const dx = copied.left - freeBefore.left;
+    const dy = copied.top - freeBefore.top;
+    expect(Math.abs(dx)).toBeGreaterThan(1);
+
+    // Another selection: the back rectangle gets a copy at that offset.
+    await selectElements(page, [A.back.id]);
+    const model = await modelSnapshot(page);
+    const history = await historyDepth(page);
+    const backBefore = (await elementPageRectPt(page, A.back.id))!;
+    const known = await idsOfKind(page, "rectangle");
+    await btn(page, `actions-play-${id}`).click();
+    await expect.poll(() => undoDepth(page)).toBe(history.undo + 1);
+    const made = (await idsOfKind(page, "rectangle")).filter(
+      (r) => !known.includes(r),
+    );
+    expect(made).toHaveLength(1);
+    const backCopy = (await elementPageRectPt(page, {
+      kind: "rectangle",
+      id: made[0]!,
+    }))!;
+    expect(backCopy.left).toBeCloseTo(backBefore.left + dx, 2);
+    expect(backCopy.top).toBeCloseTo(backBefore.top + dy, 2);
+    expect(backCopy.right - backCopy.left).toBeCloseTo(
+      backBefore.right - backBefore.left,
+      2,
+    );
+    expect(await elementPageRectPt(page, A.back.id)).toEqual(backBefore);
+
     await page.evaluate(() =>
       (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
     );

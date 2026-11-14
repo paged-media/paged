@@ -74,6 +74,14 @@ export const PROPOSAL = defineMessages("shell.aiProposal", {
     "It goes to Anthropic through this editor's AI service and is not kept by the editor.",
   consentNothing:
     "Claude only reads and proposes; nothing changes until you approve.",
+  consentScript:
+    "{lines, plural, one {the script in the Script panel (# line)} other {the script in the Script panel (# lines)}}",
+  consentNoScript: "not the script in the Script panel",
+  consentDocument:
+    "what the scripts Claude runs read from this document (objects, values and text) and pictures of its pages",
+  consentScriptRuns:
+    "Claude writes and runs scripts on this document: each one shows in the panel, and each change undoes like a script you run.",
+  sendScript: "Send the script in the Script panel",
   allowText: "Claude may read the text",
   send: "Send to Claude",
   cancel: "Cancel",

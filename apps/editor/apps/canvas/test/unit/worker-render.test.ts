@@ -52,9 +52,15 @@ afterAll(() => {
     realBitmap;
 });
 
-function rig(pages: number, budget?: number, failing: string[] = []) {
+function rig(
+  pages: number,
+  budget?: number,
+  failing: string[] = [],
+  composed?: Set<number>,
+) {
   const rendered: string[] = [];
   const wasm: RendererWasm = {
+    ...(composed ? { pageComposed: (i: number) => composed.has(i) } : {}),
     pageCount: () => pages,
     pageInfo: (i) => (i < pages ? [`p${i}`, PAGE[0], PAGE[1]] : undefined),
     renderTilePng: (pageId, width) => {
@@ -150,6 +156,23 @@ describe("the worker's CPU render schedule", () => {
     for (let i = 0; i < 8; i++) await frame();
     expect(rendered.filter((p) => p === "p4")).toHaveLength(1);
     expect(rendered).toContain("p3");
+    expect(rendered).toContain("p5");
+  });
+
+  test("v82: a page a progressive load has not composed is outlined, never rendered; the pages in view come first", async () => {
+    // Engine ADR 1314: only page 4 is composed so far.
+    const composed = new Set([4]);
+    const { r, rendered, lookAt, frame } = rig(10, undefined, [], composed);
+    lookAt(4, 0.3);
+    for (let i = 0; i < 6; i++) await frame();
+    expect(rendered).toEqual(["p4"]);
+    // The composition's order: the pages in view, the centre's first.
+    expect(r.priorityPages()[0]).toBe(4);
+    expect(r.priorityPages().slice(1).sort()).toEqual([2, 3, 5, 6]);
+    // A step composes page 5: its tile is rendered on the next draws.
+    composed.add(5);
+    r.markDirty(["p5" as never]);
+    for (let i = 0; i < 2; i++) await frame();
     expect(rendered).toContain("p5");
   });
 });

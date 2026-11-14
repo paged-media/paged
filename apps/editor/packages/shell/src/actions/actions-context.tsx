@@ -50,6 +50,13 @@
 //     outlines what a run touches and says how it undoes, precise refusals
 //     before anything runs, a palette entry per action, the `actions@1`
 //     door and a `paged.*` script.
+//
+// Its amendment 1 adds a fourth tap, on the interaction coordinator's
+// committed sessions: a move, copy, resize, scale or rotate of the
+// selection on the canvas ends its session with what it did, measured
+// from the document (`interaction/transform-intent.ts`), and records as one
+// `paged.object.transformSelection` step on the selection — no longer an
+// uncaptured gesture.
 
 import { t } from "@paged-media/strings";
 import { ACTIONS } from "./messages";
@@ -74,6 +81,7 @@ import {
   SET_PROPERTY_COMMAND,
   isRecordable,
   newActionId,
+  stepFromIntent,
   stepFromInvocation,
   stepsFromObjectWrite,
   ACTIONS_SCHEMA_VERSION,
@@ -137,6 +145,7 @@ import {
   showPreviewTargets,
 } from "../state/preview-targets";
 import { reportOperation } from "../state/operation-feedback";
+import { useInteractionCoordinator } from "../interaction/coordinator";
 
 export interface RecordingState {
   startedAt: number;
@@ -626,6 +635,33 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     });
     return () => off();
   }, [client]);
+
+  // ── the gesture tap (editor ADR 1240, amendment 1) ─────────────
+  // Observed only while recording: the canvas measures a commit (a
+  // geometry read before and after) only when someone observes. The
+  // gesture's `gestureCommitted` was counted as uncaptured a moment
+  // earlier; a recorded one is taken off that count.
+  const interactions = useInteractionCoordinator();
+  const isRecording = recording !== null;
+  useEffect(() => {
+    if (!isRecording) return;
+    return interactions.onCommitted(({ intent }) => {
+      if (!recordingRef.current || replayingRef.current) return;
+      const step = stepFromIntent(intent, liveRef.current);
+      setRecording((prev) =>
+        prev
+          ? {
+              ...prev,
+              steps: [...prev.steps, step],
+              uncaptured: {
+                ...prev.uncaptured,
+                gestures: Math.max(0, prev.uncaptured.gestures - 1),
+              },
+            }
+          : prev,
+      );
+    });
+  }, [isRecording, interactions]);
 
   // ── the object-write tap (editor ADR 1240) ─────────────────────
   // The panels below write through this wrapped model: a field's commit

@@ -65,6 +65,9 @@ function changedPages(msg: WorkerToMain): readonly PageId[] | null {
       return msg.payload.pageIds;
     case "sceneLayerApplied":
       return msg.payload.applied ? (msg.payload.pageIds ?? null) : null;
+    // v84 (engine ADR 1314) — the final build of a progressive load.
+    case "compositionProgress":
+      return msg.payload.done ? msg.payload.pageIds : null;
     default:
       return null;
   }

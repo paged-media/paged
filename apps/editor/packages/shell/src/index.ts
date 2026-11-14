@@ -89,7 +89,23 @@ export {
   type InteractionSnapshot,
   type SessionSpec,
   type Stale,
+  type CommittedSession,
 } from "./interaction/coordinator";
+// Editor ADR 1240, amendment 1 — what a committed canvas gesture did.
+export {
+  OPPOSITE_ANCHOR,
+  TRANSFORM_ANCHORS,
+  anchorOf,
+  anchorPoint,
+  isTransformAnchor,
+  measureTransformIntent,
+  roundPt,
+  unionBox,
+  type GestureMeasure,
+  type MeasuredGeometry,
+  type TransformAnchor,
+  type TransformIntent,
+} from "./interaction/transform-intent";
 export {
   INTERACTION_OWNERS,
   INTERACTION_PHASES,
@@ -1270,6 +1286,9 @@ export {
   AIAssistant,
   type AssistantKind,
 } from "./components/cockpit/ai-assistant";
+// Editor ADR 1241 amendment — the one consent card, also the Script panel's.
+export { ConsentCard } from "./components/cockpit/ai-proposals";
+export type { ClaudeRequest, ConsentPatch } from "./ai/proposal-session";
 export {
   assistantSession,
   openAssistant,

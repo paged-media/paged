@@ -954,7 +954,15 @@ export type WorkerToMain = WorkerToMainKind & {
 //     and a picture whose bytes live in the document with no link source is
 //     listed as `inline:<host id>`; an anchored picture relinks by bytes.
 //   A mutation an older worker cannot apply, hence the bump.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(83);
+// v84 — the first page first (engine ADR 1314): `LoadDocument` (and the
+//   binary `loadDocumentDirect`) take `firstPages`, composing those pages
+//   first and answering a provisional document (`DocumentHandle.provisional`,
+//   `composedPages`); `ComposeNext { priority }` composes the pages in view,
+//   then the whole document, and answers `CompositionProgress { pageIds,
+//   composed, pageCount, done, pageStructureChanged, pageSizesPt?,
+//   pageOriginsPt? }`; the wasm `pageComposed(index)`. A new message kind an
+//   older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(84);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -1364,6 +1372,13 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         #[tsify(type = "number[] | null")]
         cmyk_icc_profile: Option<ByteBuf>,
+        /// v84 (engine ADR 1314) — compose these pages (indices) first and
+        /// answer with a provisional document (`DocumentHandle.provisional`),
+        /// the rest composed by `ComposeNext`. Absent: the whole document
+        /// is built before the reply, as before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        first_pages: Option<Vec<u32>>,
     },
     /// Replace the active document with a freshly-minted EMPTY one: a
     /// single page sized `width_pt` × `height_pt` (points), seeded with
@@ -2352,6 +2367,15 @@ pub enum MainToWorkerKind {
     /// document, its history and its revision are untouched. Reply:
     /// `Previewed`.
     RequestPreview(crate::preview::PreviewQuery),
+    /// v84 (engine ADR 1314) — the next step of a progressive composition
+    /// (a `LoadDocument` with `firstPages`): the first page of `priority`
+    /// (page indices, the pages in view first) not yet composed is composed
+    /// provisionally; with none left, the whole document is built and
+    /// replaces every provisional page. Reply: `CompositionProgress`.
+    ComposeNext {
+        #[serde(default)]
+        priority: Vec<u32>,
+    },
 }
 
 /// Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -3301,6 +3325,26 @@ pub enum WorkerToMainKind {
     /// v80 (engine ADR 1304) — `EndCoalesce` reply: the step the run ended
     /// in, null when no run was open.
     CoalesceEnded { applied_seq: Option<u64> },
+    /// v84 (engine ADR 1314) — `ComposeNext` reply: the pages the step
+    /// composed (provisionally), or, when `done`, every page of the whole
+    /// document's build, which replaced the provisional ones. `composed`
+    /// of `page_count` pages are composed now. The final build can change
+    /// the page list (a growing story's pages): `page_structure_changed`,
+    /// with the sizes and places as `MutationApplied` carries them.
+    CompositionProgress {
+        page_ids: Vec<PageId>,
+        composed: u32,
+        page_count: u32,
+        done: bool,
+        #[serde(default)]
+        page_structure_changed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        page_sizes_pt: Option<Vec<(f32, f32)>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
+    },
     /// v81 (engine ADR 1306) — `RequestHiddenCharacters` reply: one entry
     /// per known page asked for, in order.
     HiddenCharacters {
@@ -5727,6 +5771,7 @@ mod tests {
                 bytes: ByteBuf::from(vec![1, 2, 3]),
                 font: None,
                 cmyk_icc_profile: None,
+                first_pages: None,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
@@ -5779,6 +5824,8 @@ mod tests {
             },
             ruler_guides: Vec::new(),
             losses: Vec::new(),
+            provisional: false,
+            composed_pages: Vec::new(),
         };
         let json = serde_json::to_string(&h).unwrap();
         for needle in [

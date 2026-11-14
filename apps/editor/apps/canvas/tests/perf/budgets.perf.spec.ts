@@ -28,7 +28,7 @@
 //               the engine's reply that carried its character → the next
 //               frame; at a normal pace and in a burst (F-56)
 //   first paint a document opened → the worker's first visible page
-//               (`worker.firstPaint`) and, as the audit took it, the first
+//               (`worker.paint.first`) and, as the audit took it, the first
 //               screenshot of the viewport more than 20 % non-dark
 //   memory      `performance.measureUserAgentSpecificMemory()` (page and
 //               workers; the editor is cross-origin isolated)
@@ -387,7 +387,7 @@ async function openAndTime(
         30_000,
       ),
     );
-    const hit = drain?.entries.find((e) => e.code === "worker.firstPaint");
+    const hit = drain?.entries.find((e) => e.code === "worker.paint.first");
     if (hit) workerMs = Math.round(hit.durMs ?? 0);
     else await page.waitForTimeout(250);
   }

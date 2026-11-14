@@ -4,7 +4,7 @@
   [`interaction-plan.md`](../interaction-plan.md)).
 - **Scope:** `apps/canvas/src/worker/render.ts` (the CPU path's schedule and tile budget),
   `apps/canvas/src/ui/typing-coalescer.ts` and `ui/useTextEditing.ts` (typing),
-  `packages/client/src/journal/codes.ts` (`worker.firstPaint`),
+  `packages/client/src/journal/codes.ts` (`worker.paint.first`),
   `apps/canvas/tests/perf/budgets.perf.spec.ts` (the budgets and the stress suite),
   `.github/workflows/editor-perf-nightly.yml`, `docs/reference/performance.md` (the method and
   the numbers), the inventory's exception `EXC-003`.
@@ -32,7 +32,7 @@ reached the screen, and kept every tile it ever decoded. Every typed character w
 1. **Measured, with the audit's methods**, by `tests/perf/budgets.perf.spec.ts` (the `perf`
    Playwright project): selection (a real click to the selection mirror to the next frame),
    typing (a keydown to the reply that carried its character to the next frame, at a normal
-   pace and in a burst), the first visible paint (the worker's own `worker.firstPaint`
+   pace and in a burst), the first visible paint (the worker's own `worker.paint.first`
    journal entry, and the audit's screenshot poll beside it), and memory
    (`measureUserAgentSpecificMemory`, page and workers). Every latency is reported as p50,
    p95, p99 and max. The method and the numbers, with the machine's load at the time, are in
@@ -116,3 +116,18 @@ document's is a property test now: seeded bursts of folded inserts, paragraph br
 backspaces on six generated documents, each operation checked against a cold build
 (`engine/core/crates/paged-canvas/tests/it/typing_bursts.rs`). F-56 is closed on these numbers;
 the nightly keeps measuring.
+
+## Amendment 2026-11-14: the first page is composed first (engine ADR 1314)
+
+A file the editor opens is loaded progressively (`loadDocument(…, { firstPages: [0] })`): the
+engine composes the spreads of the first page and answers a provisional document, and the worker
+composes the pages in view, then the whole document, one step per task (`ComposeNext`), reading
+the pages in view from its last draw, so a camera move between two steps changes what the next
+composes. A page not composed yet is outlined on the canvas and never drawn blank; the loading
+status says "Composing pages · 3 of 12 · provisional" in real counts (editor ADR 1208 amended),
+and the thumbnails of pages 2 onward are taken once the composition is final. The final
+composition is the whole document's build, and a test holds it equal page for page to a model
+loaded whole and to a cold build (engine `tests/it/progressive_composition.rs`). On the 54 MB
+template the first paint moved from 4.4 s to 3.7 s after the layout: the package's parse and
+the first GPU present of a page of photographs, not the composition, are what remains
+(`reference/performance.md`).

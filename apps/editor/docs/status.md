@@ -374,7 +374,9 @@ viewport's centre first, one tile per tick, within a 64 MB tile budget; typing t
 engine folds into one insert per round trip, and a burst of keys is one change for the panels
 (F-56 closed: 56 to 62 requests per key instead of 204 to 236). Placed pictures are decoded at the size
 they are shown, from one store per worker with a 256 MiB budget (engine ADR 1311; the
-inventory's exception `EXC-003` is closed).
+inventory's exception `EXC-003` is closed). A file opens progressively: its first page is composed and shown
+while the worker composes the pages in view and then the whole document, and the loading
+status counts the pages composed while the composition is provisional (engine ADR 1314).
 
 Track PX (the strategy's Phase 3 concepts), design constraints
 ([ADR 1233](adr/1233-constraints-are-validated-intent.md), PX3): Object ▸ Add constraint… (and the
@@ -417,7 +419,13 @@ runs: the steps with the objects each acts on, outlined on the canvas, and how i
 step, or how many and why). A command, an object, a context, a selection or a value that does not
 hold refuses the run by step and reason, and nothing runs; a step that no longer applies when it
 is reached stops the run and takes it back. Every saved action is a palette entry ("Run action:
-…"), an `actions@1` action and a `paged.*` script.
+…"), an `actions@1` action and a `paged.*` script. A committed move, Alt-drag copy, handle resize,
+scale or rotation on the canvas records as what it did to the selection (amendment 1): measured
+from the document by the interaction coordinator's committed sessions — "Move the selection by
+(dx, dy) pt", "Resize to w × h pt, keeping the top left corner", "Rotate the selection θ°" —
+never in screen pixels, its numbers parameters, and it replays on another selection through
+`paged.object.transformSelection` as one undo step; nudges were already steps. Typing, path
+edits, content transforms and the tools' drawing are still counted as uncaptured.
 The assistant proposes, the user approves ([ADR 1241](adr/1241-the-assistant-proposes-you-approve.md),
 PX6): a request to Claude first shows what will leave the device and is sent only on Send, every
 time; Claude then only reads (a read-only `propose` mode) and answers a change set of ordinary
@@ -425,7 +433,9 @@ property writes, which the panel previews — each object, its value now and pro
 outlined on the canvas — with nothing changed; Apply writes the ticked ones as one undo step, and
 the panel's Undo takes exactly that step back. The checks on this device (small text, contrast,
 alternative text, sizes that override their style) propose the same way and are what the panel
-offers without an AI service. The Script panel's own Ask bar is unchanged.
+offers without an AI service. The Script panel's own Ask bar asks the same consent (amendment 1,
+owner decision 2026-11-14): its request, the script in the panel (sent only when ticked) and what
+Claude's scripts read from the document are listed, and nothing is sent before Send, every time.
 Every object answers the same verbs ([ADR 1242](adr/1242-every-object-answers-the-same-verbs.md),
 PX9): Inspect, Transform…, Copy, Bind to data…, Style…, Save a version, Validate and Export… are
 the canvas context menu's first group (also inside a module's frame) and palette entries, on a

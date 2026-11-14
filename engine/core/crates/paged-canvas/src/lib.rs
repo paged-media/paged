@@ -53,6 +53,9 @@ pub mod blank;
 pub mod camera;
 pub mod channel;
 mod comment_export;
+/// Engine ADR 1314 — progressive composition: the reduced document a
+/// provisional build lays out.
+pub(crate) mod compose;
 pub mod element_selection;
 pub mod explain;
 pub mod export;
@@ -189,8 +192,9 @@ pub use idml_export::{ExportedLink, FontFace};
 pub use model::virtual_set::ReadError;
 pub use model::{
     font_face_lookup, font_postscript_name, registry_faces, sniff_font_format, AppliedRecord,
-    CanvasModel, CanvasOptions, ColorProfileEntry, ColorSettingsState, DocumentHandle,
-    DocumentStats, FontEntry, FrameMutationOutcome, LoggedMutation, RebuildStats, MAX_APPLIED_LOG,
+    CanvasModel, CanvasOptions, ColorProfileEntry, ColorSettingsState, CompositionStep,
+    DocumentHandle, DocumentStats, FontEntry, FrameMutationOutcome, LoggedMutation, RebuildStats,
+    MAX_APPLIED_LOG,
 };
 /// Reads faces off the filesystem, so it exists only where there is one.
 #[cfg(not(target_arch = "wasm32"))]

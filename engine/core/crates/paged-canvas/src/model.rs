@@ -218,6 +218,17 @@ pub struct DocumentHandle {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[tsify(type = "LossEntry[]", optional)]
     pub losses: Vec<LossEntry>,
+    /// v84 (engine ADR 1314) — the pages are a provisional composition (a
+    /// progressive load): only `composedPages` are laid out, and those as a
+    /// reduced document lays them out; `ComposeNext` steps until the whole
+    /// document's build replaces them. Absent (false) for a final document.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[tsify(optional)]
+    pub provisional: bool,
+    /// v84 (engine ADR 1314) — while `provisional`, the pages composed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[tsify(optional)]
+    pub composed_pages: Vec<PageId>,
 }
 
 /// Plan-2 §8.3 — wire shape of a ruler guide. `page_id` matches one
@@ -2318,6 +2329,25 @@ pub struct CanvasModel {
     /// of every build's dirty pages since: what a script run reports as
     /// `ScriptResult.page_ids`.
     page_changes: Option<std::collections::BTreeSet<PageId>>,
+    /// Engine ADR 1314 — while the composition is provisional, which pages
+    /// (by index) a provisional build has composed; `None` once the whole
+    /// document's build is the model's (every load but a progressive one,
+    /// and every rebuild).
+    composed: Option<Vec<bool>>,
+}
+
+/// Engine ADR 1314 — what one step of a progressive composition did
+/// ([`CanvasModel::compose_next`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CompositionStep {
+    /// The pages the step composed (provisionally), or every page when the
+    /// step was the whole document's build.
+    pub pages: Vec<PageId>,
+    /// The whole document's build replaced the provisional pages: the
+    /// composition is final.
+    pub done: bool,
+    /// The final build changed the page list (a growing story added pages).
+    pub page_structure_changed: bool,
 }
 
 /// ADR 027 plan step 7 — how far the pages a build reports as
@@ -2907,6 +2937,34 @@ impl CanvasModel {
         bytes: &[u8],
         opts: CanvasOptions,
     ) -> Result<Self, LoadError> {
+        Self::load_with(doc_id, bytes, opts, None)
+    }
+
+    /// Engine ADR 1314 — [`Self::load`], composing first only the pages
+    /// `first` names (indices of the document's pages; the closure of their
+    /// spreads, [`crate::compose::closure`]): the model is provisional until
+    /// [`Self::compose_next`] has built the whole document. An empty `first`
+    /// composes page 1.
+    pub fn load_progressive(
+        doc_id: impl Into<String>,
+        bytes: &[u8],
+        opts: CanvasOptions,
+        first: &[usize],
+    ) -> Result<Self, LoadError> {
+        Self::load_with(
+            doc_id,
+            bytes,
+            opts,
+            Some(if first.is_empty() { &[0] } else { first }),
+        )
+    }
+
+    fn load_with(
+        doc_id: impl Into<String>,
+        bytes: &[u8],
+        opts: CanvasOptions,
+        first: Option<&[usize]>,
+    ) -> Result<Self, LoadError> {
         let doc_id = doc_id.into();
         let t_parse = phase_now();
         // Load-time sniff (N3): a `.paged` carrying the native model part
@@ -2939,7 +2997,15 @@ impl CanvasModel {
             (doc, Some(opened.archive))
         };
         phase_log("CanvasModel::load parse", t_parse);
-        Self::from_scene(doc_id, scene, source_archive, import_notes, bytes, opts)
+        Self::from_scene(
+            doc_id,
+            scene,
+            source_archive,
+            import_notes,
+            bytes,
+            opts,
+            first,
+        )
     }
 
     /// A model over a parsed `scene`: [`Self::load`] after the parse, and a
@@ -2952,6 +3018,8 @@ impl CanvasModel {
         import_notes: Vec<String>,
         bytes: &[u8],
         opts: CanvasOptions,
+        // Engine ADR 1314 — the pages a progressive load composes first.
+        first: Option<&[usize]>,
     ) -> Result<Self, LoadError> {
         // Honour the first font and the ICC profile. Take ownership
         // up-front so the model is self-contained — no caller-managed
@@ -2992,6 +3060,19 @@ impl CanvasModel {
         let resolver = build_font_resolver(&font_registry, font_bytes.as_deref());
 
         let t_build = phase_now();
+        // Engine ADR 1314 — the spreads a progressive load composes first.
+        // A closure that takes every spread of a document no story of which
+        // grows is the document: built whole, it is final at once.
+        let keep: Option<std::collections::BTreeSet<usize>> = first
+            .map(|first| {
+                let spreads = crate::compose::page_spreads(&scene);
+                let seed = first
+                    .iter()
+                    .filter_map(|&i| spreads.get(i).copied())
+                    .collect();
+                crate::compose::closure(&scene, seed)
+            })
+            .filter(|keep| keep.len() < scene.spreads.len() || !scene.growing_stories().is_empty());
         // Perf-S — image-decode cache populated by the initial
         // build_document then stored on Self below for subsequent
         // rebuilds. The cold load pays the full decode cost; every
@@ -3041,9 +3122,28 @@ impl CanvasModel {
             // Phase 4 Step 1 — install an empty cache for the initial
             // build. Every paragraph misses; the cache fills up so
             // subsequent mutation-driven rebuilds can hit.
-            paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
-                pipeline::build_document(&scene, &options)
-            })
+            match &keep {
+                None => {
+                    paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
+                        pipeline::build_document(&scene, &options)
+                    })
+                }
+                // Engine ADR 1314 — a provisional build of the reduced
+                // document, with no cross-build emit cache (its deltas
+                // would be the reduced document's) and no grow hint.
+                Some(keep) => {
+                    let reduced = crate::compose::reduced_scene(&scene, keep);
+                    let options = PipelineOptions {
+                        master_text_emit_cache: None,
+                        body_story_emit_cache: None,
+                        grow_hint: None,
+                        ..options
+                    };
+                    paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
+                        pipeline::build_document(&reduced, &options)
+                    })
+                }
+            }
         };
         // W1.24 (audit B18) — capture the cold build duration before
         // the `?` so the seeded `rebuild_stats` carries real timing even
@@ -3069,6 +3169,12 @@ impl CanvasModel {
         let initial_state_hash = scene.canonical_hash();
         let story_pages = compute_story_pages(&built);
         phase_log("CanvasModel::load post (index+hash+story_pages)", t_post);
+        let composed: Option<Vec<bool>> = keep.map(|keep| {
+            crate::compose::page_spreads(&scene)
+                .iter()
+                .map(|s| keep.contains(s))
+                .collect()
+        });
         Ok(Self {
             doc_id,
             scene,
@@ -3167,6 +3273,7 @@ impl CanvasModel {
             last_dirty_pages: Vec::new(),
             last_dirty_narrowed: false,
             page_changes: None,
+            composed,
         })
     }
 
@@ -3296,6 +3403,18 @@ impl CanvasModel {
             stats,
             ruler_guides,
             losses: self.import_losses(),
+            provisional: self.is_provisional(),
+            composed_pages: match &self.composed {
+                Some(mask) => self
+                    .built
+                    .pages
+                    .iter()
+                    .zip(mask)
+                    .filter(|(_, c)| **c)
+                    .map(|(p, _)| p.id.clone())
+                    .collect(),
+                None => Vec::new(),
+            },
         }
     }
 
@@ -3315,6 +3434,11 @@ impl CanvasModel {
 
     pub fn page(&self, id: &PageId) -> Option<&BuiltPage> {
         self.page_index.get(id).map(|&i| &self.built.pages[i])
+    }
+
+    /// The index of page `id` in the built document, if it has one.
+    pub fn page_position(&self, id: &PageId) -> Option<usize> {
+        self.page_index.get(id).copied()
     }
 
     /// Tier 4 seam: the per-page display list the worker hands to
@@ -15609,6 +15733,154 @@ impl CanvasModel {
         })
     }
 
+    /// Engine ADR 1314 — whether the model's pages are a provisional
+    /// composition (a progressive load before its final build).
+    pub fn is_provisional(&self) -> bool {
+        self.composed.is_some()
+    }
+
+    /// Engine ADR 1314 — whether page `index` is composed: always once the
+    /// composition is final; while it is provisional, whether a provisional
+    /// build has laid it out (a page not composed is empty).
+    pub fn page_composed(&self, index: usize) -> bool {
+        match &self.composed {
+            None => index < self.built.pages.len(),
+            Some(mask) => mask.get(index).copied().unwrap_or(false),
+        }
+    }
+
+    /// Engine ADR 1314 — how many pages are composed (all of them once
+    /// the composition is final).
+    pub fn composed_page_count(&self) -> usize {
+        match &self.composed {
+            None => self.built.pages.len(),
+            Some(mask) => mask.iter().filter(|c| **c).count(),
+        }
+    }
+
+    /// Engine ADR 1314 — the next step of a progressive composition. The
+    /// first page of `priority` (page indices, the pages in view first) a
+    /// provisional build has not composed is composed now, with the
+    /// spreads its stories come from; with none left there, the whole
+    /// document is built and replaces every provisional page: the model is
+    /// final (`done`). A final model (a write's rebuild ended the
+    /// composition before its last step) answers `done` with every page
+    /// and builds nothing; while a gesture holds the document the step
+    /// composes nothing.
+    pub fn compose_next(
+        &mut self,
+        priority: &[usize],
+    ) -> Result<CompositionStep, crate::channel::LoadError> {
+        let Some(mask) = &self.composed else {
+            return Ok(CompositionStep {
+                pages: self.built.pages.iter().map(|p| p.id.clone()).collect(),
+                done: true,
+                page_structure_changed: false,
+            });
+        };
+        // A gesture holds the document (engine ADR 1300): the step waits.
+        if self.active_gesture.is_some() {
+            return Ok(CompositionStep::default());
+        }
+        let next = priority
+            .iter()
+            .copied()
+            .find(|&i| mask.get(i).is_some_and(|c| !c));
+        match next {
+            Some(page) => self.compose_provisional(&[page]),
+            None => self.finish_composition(),
+        }
+    }
+
+    /// Engine ADR 1314 — compose page `page_id` now if a provisional build
+    /// has not (a snapshot of it was asked for). `true` when a build ran.
+    pub fn ensure_composed(&mut self, page_id: &PageId) -> Result<bool, crate::channel::LoadError> {
+        let Some(&index) = self.page_index.get(page_id) else {
+            return Ok(false);
+        };
+        if self.page_composed(index) {
+            return Ok(false);
+        }
+        self.compose_provisional(&[index])?;
+        Ok(true)
+    }
+
+    /// A provisional build of the closure of `pages`' spreads; its pages
+    /// replace the model's (every other page is kept as it is).
+    fn compose_provisional(
+        &mut self,
+        pages: &[usize],
+    ) -> Result<CompositionStep, crate::channel::LoadError> {
+        let spreads = crate::compose::page_spreads(&self.scene);
+        let seed = pages
+            .iter()
+            .filter_map(|&i| spreads.get(i).copied())
+            .collect();
+        let keep = crate::compose::closure(&self.scene, seed);
+        let reduced = crate::compose::reduced_scene(&self.scene, &keep);
+        let cache = std::mem::take(&mut self.layout_cache);
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
+        let resource_providers = self.resource_tiles.provider_entries();
+        let mut options = self.pipeline_options(
+            PipelinePurpose::Live,
+            resolver
+                .as_ref()
+                .map(|r| r as &dyn paged_renderer::AssetResolver),
+            &resource_providers,
+        );
+        options.master_text_emit_cache = None;
+        options.body_story_emit_cache = None;
+        options.keep_seeds = None;
+        options.keep_seed_hints = None;
+        options.story_resume = None;
+        options.edit_spans = None;
+        options.emission_prints = None;
+        options.grow_hint = None;
+        let (built, cache) = paged_text::cache::with_layout_cache(cache, || {
+            pipeline::build_document(&reduced, &options)
+        });
+        self.layout_cache = cache;
+        let mut built = built.map_err(|e| crate::channel::LoadError::Build(e.to_string()))?;
+        let mut composed_now = Vec::new();
+        let mask = self.composed.get_or_insert_with(Vec::new);
+        for (i, spread) in spreads.iter().enumerate() {
+            if !keep.contains(spread) || mask.get(i).copied().unwrap_or(false) {
+                continue;
+            }
+            let (Some(slot), Some(fresh)) = (self.built.pages.get_mut(i), built.pages.get_mut(i))
+            else {
+                continue;
+            };
+            if slot.id != fresh.id {
+                continue;
+            }
+            std::mem::swap(slot, fresh);
+            if let Some(m) = mask.get_mut(i) {
+                *m = true;
+            }
+            composed_now.push(slot.id.clone());
+        }
+        self.story_pages = compute_story_pages(&self.built);
+        self.build_generation += 1;
+        Ok(CompositionStep {
+            pages: composed_now,
+            done: false,
+            page_structure_changed: false,
+        })
+    }
+
+    /// The whole document's build replaces the provisional pages.
+    fn finish_composition(&mut self) -> Result<CompositionStep, crate::channel::LoadError> {
+        let before: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+        self.commit_and_rebuild(Invalidation::Everything)?;
+        let pages: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+        Ok(CompositionStep {
+            page_structure_changed: pages != before,
+            pages,
+            done: true,
+        })
+    }
+
     pub fn rebuild_after_mutation(&mut self) -> Result<(), crate::channel::LoadError> {
         // Perf-Batch — inside a batch the children each ask for a
         // rebuild and only the last one is worth running. Record the
@@ -15619,6 +15891,12 @@ impl CanvasModel {
         if self.rebuild_deferred {
             self.rebuild_owed = true;
             return Ok(());
+        }
+        // Engine ADR 1314 — a rebuild is the whole document's build: it
+        // ends a provisional composition, and no provisional page is
+        // adopted or reported as unchanged.
+        if self.composed.is_some() {
+            self.pending_dirty_scope = DirtyScope::Everything;
         }
         if std::mem::take(&mut self.font_check_owed) {
             self.refresh_font_table(false);
@@ -15753,6 +16031,7 @@ impl CanvasModel {
         }
         *self.export_build_cache.get_mut() = None;
         self.built = built;
+        self.composed = None;
         self.pending_keep_hints.clear();
         self.pending_edit_spans.clear();
         self.build_generation += 1;
@@ -15819,6 +16098,7 @@ impl CanvasModel {
             Vec::new(),
             &self.source_idml,
             opts,
+            None,
         )?;
         copy.source_id_floor = self.source_id_floor;
         copy.last_applied_seq = self.last_applied_seq;

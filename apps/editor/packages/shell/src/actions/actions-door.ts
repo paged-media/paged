@@ -37,6 +37,7 @@
 // pretend.
 
 import type { ActionDefinition, ActionInfo } from "@paged-media/plugin-api";
+import { fnv1a32Hex } from "@paged-media/helpers";
 
 import {
   createValueStore,
@@ -97,12 +98,7 @@ export function actionRevision(action: PagedAction): string {
     action.params ?? [],
     action.includeDocumentBound,
   ]);
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
+  return fnv1a32Hex(text);
 }
 
 /** What the door answers for one action over one selection. */

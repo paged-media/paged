@@ -73,6 +73,13 @@ test.describe("Script panel — Ask Claude", () => {
       .locator("[data-script-ask-input]")
       .fill("make the text frame 40% opaque");
     await panel.locator("[data-action=ask]").click();
+    // Editor ADR 1241, amendment 1: nothing is sent before the consent
+    // card's Send, which lists what goes.
+    const consent = panel.locator('[data-ai-consent="script"]');
+    await expect(consent).toBeVisible();
+    await expect(consent).toContainText("make the text frame 40% opaque");
+    expect(sent).toHaveLength(0);
+    await consent.locator('[data-cockpit-action="ai-consent-send"]').click();
 
     await expect(panel.locator("[data-script-note]").last()).toHaveText(
       "Claude: Set the frame's opacity to 40%.",
@@ -131,6 +138,7 @@ test.describe("Script panel — Ask Claude", () => {
     const panel = page.locator("[data-script-editor]");
     await panel.locator("[data-script-ask-input]").fill("anything");
     await panel.locator("[data-action=ask]").click();
+    await panel.locator('[data-cockpit-action="ai-consent-send"]').click();
     await expect(panel.locator("[data-script-error]").last()).toContainText(
       "not configured on this deployment",
     );

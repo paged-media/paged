@@ -77,4 +77,24 @@ export const ACTIONS = defineMessages("shell.actions", {
   scriptEditorOnly:
     "an editor command ({command}): a paged.* script cannot run it",
   documentFull: "The document's actions are larger than a label holds.",
+  // Editor ADR 1240, amendment 1 — a recorded canvas gesture.
+  gestureMove: "Move the selection by {dx} pt, {dy} pt",
+  gestureDuplicate: "Copy the selection, offset {dx} pt, {dy} pt",
+  gestureResize: "Resize to {size}, keeping {anchor}",
+  gestureScale: "Scale the selection to {size}, keeping {anchor}",
+  gestureRotateCw: "Rotate the selection {angle}° clockwise about its center",
+  gestureRotateCcw:
+    "Rotate the selection {angle}° counterclockwise about its center",
+  sizeBoth: "{width} × {height} pt",
+  sizeWidth: "a width of {width} pt",
+  sizeHeight: "a height of {height} pt",
+  anchorNorth: "the top edge",
+  anchorSouth: "the bottom edge",
+  anchorEast: "the right edge",
+  anchorWest: "the left edge",
+  anchorNorthEast: "the top right corner",
+  anchorNorthWest: "the top left corner",
+  anchorSouthEast: "the bottom right corner",
+  anchorSouthWest: "the bottom left corner",
+  anchorCenter: "the center",
 });

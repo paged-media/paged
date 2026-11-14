@@ -61,6 +61,7 @@ import {
   type InteractionPhase,
   type InteractionSession,
   type SessionSpec,
+  type TransformIntent,
 } from "@paged-media/shell";
 
 import type { CanvasClient, GesturePressResult } from "@paged-media/client";
@@ -96,6 +97,11 @@ import {
 } from "./layout";
 import { pinchCamera, startPinch, type Pinch } from "./pinch";
 import { routePress, type PressRouteKind } from "./press-route";
+import {
+  measureCommitted,
+  measuredGesture,
+  sceneItemKeys,
+} from "./gesture-intent";
 import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
@@ -732,10 +738,47 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     s: InteractionSession | null | undefined,
     result: EndResult,
     reason?: string,
+    intent?: TransformIntent | null,
   ) => {
     if (!s || s.ended) return;
     rollBacksRef.current.delete(s.id);
-    interactions.end(s, result, reason);
+    interactions.end(s, result, reason, intent);
+  };
+
+  /** Editor ADR 1240, amendment 1 — a gesture's commit landed: its
+   *  session ends with what it did to the selection when someone observes
+   *  committed sessions (the actions recorder), measured from the
+   *  document; otherwise at once, with nothing read. */
+  const finishCommitted = (
+    gs: GestureState,
+    session: InteractionSession | null | undefined,
+  ) => {
+    const before = gs.before;
+    if (!before || before.length === 0 || !interactions.observesCommits()) {
+      finishSession(session, "commit");
+      return;
+    }
+    void measureCommitted(props.client, {
+      spec: gs.spec,
+      handle: gs.handleName ?? null,
+      target: gs.target,
+      modifiers: gs.modifiers,
+      before,
+      sceneBefore: gs.sceneBefore ?? null,
+    })
+      .catch(() => null)
+      .then((intent) => finishSession(session, "commit", undefined, intent));
+  };
+
+  /** Observed, a move remembers the scene's items before anything of it
+   *  reaches the engine (an Alt move's copies are found against them). */
+  const readSceneBefore = (gs: GestureState) => {
+    if (
+      gs.sceneBefore === undefined &&
+      gs.spec.kind === "translate" &&
+      interactions.observesCommits()
+    )
+      gs.sceneBefore = sceneItemKeys(props.client);
   };
 
   /** IC3 — a late answer is applied only while the epochs it was asked
@@ -800,6 +843,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     gs: GestureState,
     anchor: GestureAnchor | null,
   ) => {
+    // An Alt move copies from its begin: the scene is read before it.
+    if (gs.modifiers.alt) readSceneBefore(gs);
     void props.client
       .beginGesture(gs.target, gs.spec, anchor, gs.modifiers)
       .then((handle) => adoptHandle(gs, handle))
@@ -820,6 +865,30 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           void props.client.cancelGesture(handle).catch(() => {});
           return;
         }
+        // Editor ADR 1240, amendment 1 — observed (an action is being
+        // recorded), the targets are read once before the first update
+        // reaches the engine: the moves that come meanwhile wait in
+        // `pendingDelta`, as they do for the begin.
+        if (
+          gs.before === undefined &&
+          measuredGesture(gs.spec) !== null &&
+          interactions.observesCommits()
+        ) {
+          gs.before = null;
+          readSceneBefore(gs);
+          void props.client
+            .elementGeometry([...gs.target])
+            .then(
+              (items) => {
+                gs.before = items;
+              },
+              () => {
+                gs.before = [];
+              },
+            )
+            .then(() => adoptHandle(gs, handle));
+          return;
+        }
         gs.handle = handle;
         const pending = gs.pendingDelta;
         if (gs.release === "commit") {
@@ -830,7 +899,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             .then(() => {
               setSnapLines([]);
               props.onGestureCommitted?.();
-              finishSession(session, "commit");
+              finishCommitted(gs, session);
             })
             .catch(() => finishSession(session, "abort", "commit failed"));
           return;
@@ -1240,6 +1309,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           modifiers: { shift: e.shiftKey, alt: e.altKey },
           scale: scale ?? undefined,
           ...(rotatePivot ? { pivot: rotatePivot } : {}),
+          ...(handleAttr && handleAttr !== "rotate"
+            ? { handleName: handleAttr }
+            : {}),
         };
         beginWorkerGesture(gestureState, scale ? scaleAnchor(scale) : anchor);
       } else if (containing && props.onHit && !modifiers.cmd) {
@@ -1344,6 +1416,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       pointerRef.current?.session ?? null,
     );
     const modifiers = { shift: drag.modifiers.shift, alt: press.alt };
+    // Observed, an Alt press copies from its begin: the scene is read
+    // before it (editor ADR 1240, amendment 1).
+    const sceneBefore =
+      press.alt && interactions.observesCommits()
+        ? sceneItemKeys(props.client)
+        : undefined;
     void props.client
       .beginGestureAt({
         pageId: press.pageId,
@@ -1405,6 +1483,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           spec: { kind: "translate" },
           modifiers,
           session: drag.pressSession ?? null,
+          ...(sceneBefore ? { sceneBefore } : {}),
         };
         drag.mode = "gesture";
         drag.gestureState = gs;
@@ -2040,7 +2119,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           .then(() => {
             setSnapLines([]);
             props.onGestureCommitted?.();
-            finishSession(session, "commit");
+            finishCommitted(gs, session);
           })
           .catch(() => finishSession(session, "abort", "commit failed"));
       }
@@ -2490,6 +2569,14 @@ interface GestureState {
   release?: "commit";
   /** A rotation: the centre it turns about, document pt (the readout). */
   pivot?: [number, number];
+  /** A handle drag's handle (a scale names it nowhere else). */
+  handleName?: ResizeHandle;
+  /** Editor ADR 1240, amendment 1 — the targets' geometry before the
+   *  gesture moved anything, read only while committed sessions are
+   *  observed: undefined not read, null being read. */
+  before?: ElementGeometryItem[] | null;
+  /** …and a move's scene items before it began (an Alt copy's). */
+  sceneBefore?: Promise<ReadonlySet<string> | null>;
 }
 
 type Pt = [number, number];

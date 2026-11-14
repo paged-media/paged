@@ -228,6 +228,26 @@ The worker's `perfCounters()` reports the engine's decoded-picture store
 `imageStoreEvictions`), and every journal drain records it as
 `worker.caches`, with the CPU tile bytes and the GPU scene count.
 
+## The first page first (protocol 84)
+
+`loadDocument(bytes, font?, cmyk?, { firstPages: [0] })` (engine ADR 1314)
+composes those pages first and answers a `provisional` handle
+(`composedPages` names the pages laid out so far; the others are empty and the
+worker does not draw them). The worker then composes the rest one step at a
+time, the pages in view first, and each step arrives as an unsolicited
+`compositionProgress { pageIds, composed, pageCount, done }`; the last step
+(`done`) is the whole document's build, which replaces every provisional page
+and may add pages (a growing story: `pageStructureChanged`, `pageSizesPt`,
+`pageOriginsPt`). A provisional page shows what the pages composed so far can
+know: a list continued from another story, a running header, a
+cross-reference's page are final only with `done`. `isProvisional()` and
+`whenComposed()` say where it stands; `composedHandle(handle)` is the handle as
+the composition left it (final, with the final build's page list), however
+early the last step arrived: a small document's can come before the caller has
+set the handle it was answered. Any edit ends the composition (its rebuild is
+the whole document's; the next step answers `done` with every page). Without
+`firstPages` a load is built whole, as before.
+
 ## The catalog
 
 `api-catalog.json`, shipped in this package, is the machine-readable

@@ -137,7 +137,7 @@ export const CODES: Readonly<Record<string, CodeSpec>> = {
   },
   // Editor ADR "Performance budgets" — the first page on screen after a
   // document's layout, from the worker's clock (the perf probe reads it).
-  "worker.firstPaint": {
+  "worker.paint.first": {
     text: "The first page showed after the layout",
     policy: ALWAYS,
     data: ["pages", "gpu"],

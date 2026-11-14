@@ -47,7 +47,10 @@ import { useInteractionCoordinator } from "../interaction/coordinator";
  *               pages will be while the first one is composed
  *   firstPaint  the first page is composed and on the canvas
  *   refining    the remaining pages are being prepared, `pagesReady` of
- *               `pageCount` so far
+ *               `pageCount` so far; while the composition is
+ *               `provisional` (a progressive load, engine ADR 1314), the
+ *               pages composed so far, the pages in view first, until the
+ *               whole document's build makes every page final
  *
  * Ready is the end of the load: `loading` is null again and the document
  * context's `snapshotsReady` is true.
@@ -64,12 +67,21 @@ export interface LoadingState {
   pageCount?: number;
   /** Pages prepared so far, from the first useful paint on. */
   pagesReady?: number;
+  /** v84 (engine ADR 1314) — the pages are a provisional composition: only
+   *  `composedPageIds` are laid out, and none is final until the last
+   *  composition step. */
+  provisional?: boolean;
+  /** v84 — while `provisional`, the pages composed so far. */
+  composedPageIds?: readonly PageId[];
 }
 
 interface DocumentContextValue {
   /** Loaded document descriptor; null until the first IDML loads. */
   handle: DocumentHandle | null;
-  setHandle: (h: DocumentHandle | null) => void;
+  /** A handle, or (v84, engine ADR 1314) an update of the latest one: the
+   *  end of a progressive load's composition patches the handle the
+   *  loader set even before it renders. */
+  setHandle: React.Dispatch<React.SetStateAction<DocumentHandle | null>>;
 
   /** U14 — the loaded file's display name (extension stripped), set by
    * the loader from `File.name`. Fallback identity for documents whose

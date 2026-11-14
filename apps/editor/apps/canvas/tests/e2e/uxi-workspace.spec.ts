@@ -319,8 +319,13 @@ test.describe("UXI workspace and camera", () => {
     expect(seen.stages[seen.stages.length - 1]).toBe("ready");
     // Real counts in words, never an invented percentage.
     for (const w of seen.words) expect(w).not.toMatch(/\d\s*%/);
-    // While the first page was composed, the 20 pages were outlined.
-    if (seen.placeholders > 0) expect(seen.placeholders).toBe(20);
+    // While the first page was composed, the 20 pages were outlined; while
+    // the composition was provisional (engine ADR 1314), the pages not
+    // composed yet.
+    if (seen.placeholders > 0) {
+      expect(seen.placeholders).toBeGreaterThanOrEqual(19);
+      expect(seen.placeholders).toBeLessThanOrEqual(20);
+    }
     await expect(page.locator("[data-loading-status]")).toHaveCount(0);
 
     // The first page fits, not slivers of the whole document.
