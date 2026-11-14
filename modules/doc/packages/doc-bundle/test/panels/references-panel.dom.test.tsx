@@ -149,9 +149,10 @@ describe("the References panel", () => {
     const { calls, actions } = recorder();
     const root = await mounted(actions);
     fireEvent.click(q(root, '[data-ref-action="orientation"]'));
-    fireEvent.change(q(root, '[data-ref-input="marginLeftPt"]'), {
-      target: { value: "36" },
-    });
+    // The numeric field commits when it is left (editor ADR 1216).
+    const margin = q(root, '[data-ref-input="marginLeftPt"] input');
+    fireEvent.change(margin, { target: { value: "36" } });
+    fireEvent.blur(margin);
     await act(async () => {
       fireEvent.click(q(root, '[data-ref-action="pageSetup"]'));
     });

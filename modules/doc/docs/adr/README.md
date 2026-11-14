@@ -40,6 +40,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [627](627-word-shapes-are-anchored-frames-along-their-outline.md) | Word's shapes without text (presets, literal custom geometry) are anchored Rectangle frames drawn along their outline, with `wps:style` completing the look; the engine's anchored frame holds the outline | Accepted 2026-11-08 |
 | [628](628-word-charts-drawn-from-their-cached-values.md) | Word's charts are drawn from their cached values by paged.slide's chart layout as anchored groups of outlined frames and labels; the chart parts stay byte-identical on save; the doc wasm's ceiling is 9 MiB; amendment 1: a chart in a table cell is placed and drawn | Accepted 2026-11-08 |
 | [629](629-word-smartart-drawn-from-the-saved-layout.md) | SmartArt is drawn from the layout Word saved (the `dsp:drawing` part) as an anchored group of shapes and text frames; shapes take every Annex D preset through `dml-geom`; the diagram parts stay byte-identical on save; amendment 2: a diagram in a table cell is placed and drawn | Accepted 2026-11-08 |
+| [630](630-story-view-and-story-map.md) | Story view: the same story as continuous text in a module view, written through the engine (no second text model); Story Map: every story's thread by page, overset and unplaced stories first, a click goes to the frame; next overset story | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

@@ -317,7 +317,6 @@
         "modules/data/packages/data-bundle/src/panels/bindings-panel.tsx",
         "modules/data/packages/data-bundle/src/panels/pagination-panel.tsx",
         "modules/data/packages/data-bundle/src/panels/sources-panel.tsx",
-        "modules/doc/packages/doc-bundle/src/panels/references-panel.tsx",
         "modules/draw/packages/draw-bundle/src/panels/blend-panel.tsx",
         "modules/draw/packages/draw-bundle/src/panels/brushes-panel.tsx",
         "modules/draw/packages/draw-bundle/src/panels/image-trace-panel.tsx",
