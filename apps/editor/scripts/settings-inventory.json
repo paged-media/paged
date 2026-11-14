@@ -458,7 +458,7 @@
       "kind": "view-option",
       "storage": "memory",
       "default": false,
-      "effect": "View > Show data markers: the data field markers overlay (editor ADR 291)",
+      "effect": "View > Editing aids > Data bindings: the data field markers overlay (editor ADR 291; remembered in paged.view.editingAids since data ADR 566)",
       "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
       "marker": "dataMarkers: false",
       "sites": []
@@ -670,7 +670,7 @@
       "kind": "preference",
       "storage": "localStorage",
       "key": "paged.view.editingAids",
-      "default": "{ frameEdges: false, marginsColumns: true, guides: true, baselineGrid: false, textThreads: false, oversetMarkers: true, hiddenCharacters: false, nonprinting: true }",
+      "default": "{ frameEdges: false, marginsColumns: true, guides: true, baselineGrid: false, textThreads: false, oversetMarkers: true, hiddenCharacters: false, nonprinting: true, dataMarkers: false }",
       "effect": "the editing aids' toggles, each remembered on its own (View > Editing aids and the bottom bar's control; editor ADR \"Editing aids and Proof view\"); read field by field, a value that is not a boolean ignored (ADR 247)",
       "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
       "marker": "\"paged.view.editingAids\"",

@@ -118,6 +118,7 @@ function fakeSession(
     grabAt: () => "cell" as const,
     selectionAreas: () => [],
     pageWindowsOnLeave: () => [],
+    publicationPreview: () => null,
     scrollInFrame: (dRows, dCols) => (
       calls.push(["scroll", dRows, dCols]),
       true

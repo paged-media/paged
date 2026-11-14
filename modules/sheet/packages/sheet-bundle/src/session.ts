@@ -113,6 +113,13 @@ import {
   type LoweredTableInfo,
 } from "./lower";
 import { NOTICES } from "./messages";
+import {
+  blockOf,
+  fittedWindow,
+  previewOf,
+  type CellBlock,
+  type PublicationPreview,
+} from "./publication-preview";
 import { createDataTools, type DataToolsApi } from "./data-tools";
 import type { EnterResult } from "./engine-w2";
 import {
@@ -1117,6 +1124,12 @@ export interface WorkbookSession extends DataToolsApi {
     bottom: number;
     right: number;
   }[];
+  /** Sheet ADR 532 — the publication preview of the selection: how the
+   *  selected cells land in the entered frame when it is left (the page
+   *  windows of a window frame, a fitted range's tracks against its box):
+   *  which rows and columns print, which overflow the frame. Null when no
+   *  placed frame is entered or nothing is selected. */
+  publicationPreview(): PublicationPreview | null;
   /** What a press at `(x, y)` would grab: the selection's border (move),
    *  the fill handle, or a cell — for the pointer's cursor. */
   grabAt(contentX: number, contentY: number): "move" | "fill" | "cell" | null;
@@ -7599,6 +7612,25 @@ export function createWorkbookSession(
         left,
         right,
       }));
+    },
+
+    publicationPreview() {
+      const sel = state.gridSelection;
+      const id = enteredContinuation?.head ?? lastFrameId;
+      if (!sel || !id || !inFrameActive) return null;
+      const info = loweredTables.get(id);
+      if (!info || info.sheet !== state.activeSheet) return null;
+      let windows: CellBlock[];
+      if (info.sizing === "window") {
+        windows = api.pageWindowsOnLeave();
+      } else {
+        const fitted = info.content
+          ? fittedWindow(info.content, info.boxPt)
+          : null;
+        windows = fitted ? [fitted] : [];
+      }
+      if (windows.length === 0) return null;
+      return previewOf(windows, blockOf(sel));
     },
 
     selectionAreas() {

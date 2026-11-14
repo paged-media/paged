@@ -46,8 +46,8 @@ import { openUxiFixture, UXI_A } from "./harness/uxi-fixtures";
 
 const A = UXI_A;
 
-/** The coordinator's flag (until it is the default) and the slow worker. */
-const FLAGS = "?debug=coordinator,chaos";
+/** The slow worker (fixture H). */
+const FLAGS = "?debug=chaos";
 
 interface TraceEntry {
   event: string;

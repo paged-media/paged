@@ -93,6 +93,12 @@ import { frameFittingComposition } from "./frame-fitting.composition";
 import { objectTransformComposition } from "./object-transform.composition";
 import { paragraphComposition } from "./paragraph.composition";
 import { strokeComposition } from "./stroke.composition";
+import { AnchorPointsSection } from "./anchor-points-section";
+import {
+  ShapeSuggestionsSection,
+  useShapeFacts,
+  useShapeSuggestions,
+} from "./shape-suggestions-section";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import {
@@ -108,6 +114,12 @@ const M = defineMessages("app.propertiesPanel", {
   text: "Text",
   image: "Image",
   page: "Page",
+  points: "Points",
+  shapeSuggestions: "Shape suggestions",
+  kwPoints:
+    "point, points, anchor, anchors, corner, smooth, align, average, delete, x, y",
+  kwShape:
+    "suggestion, round corners, smooth, simplify, offset, repeat, mirror, shape",
   properties: "Properties",
   objectCount: "{count, plural, one {# object} other {# objects}}",
   groupCount: "{count, plural, one {# group} other {# groups}}",
@@ -177,7 +189,10 @@ const M = defineMessages("app.propertiesPanel", {
     "Type +=5 mm or *110% in a field to change each object by its own value.",
 });
 
-type InspectorKind = "text" | "image" | "frame" | "page" | "none";
+type InspectorKind = "text" | "image" | "frame" | "page" | "points" | "none";
+
+/** The path kinds the Shape suggestions apply to (paged.draw ADR 370). */
+const SHAPE_KINDS = new Set(["polygon", "rectangle", "graphicLine"]);
 type Group = "frame" | "content" | "text";
 
 /** One section of the inspector. */
@@ -207,7 +222,13 @@ const GROUP_TITLE: Record<Group, string> = {
 export function PropertiesPanel() {
   const scope = useEditorScope();
   const strings = useStrings();
-  const { elementSelection, elementGeometry } = useSelection();
+  const {
+    elementSelection,
+    elementGeometry,
+    pathEditMode,
+    pathEditSession,
+    selectedAnchors,
+  } = useSelection();
   const { contentSelection } = useContentSelection();
   const cockpit = useOptionalCockpitState();
   // Plugin-owned content: SELECTING a classified object (webFrame,
@@ -257,15 +278,21 @@ export function PropertiesPanel() {
   if (steerAt.steer !== steer) setSteerAt({ steer, key: selectionKey });
   const pinnedKey = steerAt.steer === steer ? steerAt.key : selectionKey;
   const imageSteer = steer === "image" && pinnedKey === selectionKey;
-  const kind: InspectorKind = hasContent
-    ? "text"
-    : hasImage
-      ? "image"
-      : hasElement
-        ? imageSteer
-          ? "image"
-          : "frame"
-        : (steer ?? "none");
+  // Anchors selected inside the path being edited: the points, not the
+  // frame (the UX strategy's §7.1; paged.draw ADR 370).
+  const pointsSelected =
+    pathEditMode && pathEditSession !== null && selectedAnchors.length > 0;
+  const kind: InspectorKind = pointsSelected
+    ? "points"
+    : hasContent
+      ? "text"
+      : hasImage
+        ? "image"
+        : hasElement
+          ? imageSteer
+            ? "image"
+            : "frame"
+          : (steer ?? "none");
 
   // A group is not a frame: InDesign names it "Group". A selection of
   // groups and frames together is named for both.
@@ -293,7 +320,9 @@ export function PropertiesPanel() {
           ? noun
           : kind === "page"
             ? strings.t(M.page)
-            : strings.t(M.properties));
+            : kind === "points"
+              ? strings.t(M.points)
+              : strings.t(M.properties));
 
   // The gallery's selection sub-header — "Text · 1 frame", "Group · 2
   // objects" (a lone group counts what is in it).
@@ -308,13 +337,25 @@ export function PropertiesPanel() {
         .filter(Boolean)
         .join(", ");
   const selectionLabel =
-    kind === "text"
-      ? strings.t(M.textSelection)
-      : hasElement
-        ? [kind === "image" ? strings.t(M.image) : noun, counted]
-            .filter(Boolean)
-            .join(" · ")
-        : null;
+    kind === "points"
+      ? null
+      : kind === "text"
+        ? strings.t(M.textSelection)
+        : hasElement
+          ? [kind === "image" ? strings.t(M.image) : noun, counted]
+              .filter(Boolean)
+              .join(" · ")
+          : null;
+
+  // paged.draw ADR 370 — the one selected path the Shape suggestions read.
+  const shapeTarget =
+    kind === "frame" &&
+    elementSelection.length === 1 &&
+    SHAPE_KINDS.has(elementSelection[0].kind)
+      ? elementSelection[0]
+      : null;
+  const shapeFacts = useShapeFacts(shapeTarget);
+  const shapeSuggestions = useShapeSuggestions(shapeFacts);
 
   // The sections, in the order they are offered (grouped when shown).
   const sections: SectionDef[] = [];
@@ -377,7 +418,19 @@ export function PropertiesPanel() {
       body: <PanelHost id={metadataOwner.panelIds[0]} />,
     });
   }
-  if (hasElement) {
+  // paged.draw ADR 370 — the selected anchors, in place of the frame's
+  // sections.
+  if (kind === "points") {
+    sections.push({
+      id: "points",
+      group: "content",
+      level: "common",
+      title: strings.t(M.points),
+      keywords: strings.t(M.kwPoints),
+      body: <AnchorPointsSection session={pathEditSession} />,
+    });
+  }
+  if (hasElement && kind !== "points") {
     const transform = objectTransformComposition(strings);
     sections.push({
       id: "object",
@@ -406,7 +459,7 @@ export function PropertiesPanel() {
         (g as { hasImage?: boolean } | undefined)?.hasImage === true,
     });
   }
-  if (hasElement) {
+  if (hasElement && kind !== "points") {
     sections.push({
       id: "stroke",
       group: "frame",
@@ -416,6 +469,24 @@ export function PropertiesPanel() {
       title: strings.t(M.sectionStroke),
       composition: strokeComposition(strings),
       keywords: strings.t(M.kwStroke),
+    });
+  }
+  // paged.draw ADR 370 — quick actions for one selected path, when the
+  // shape gives them something to do.
+  if (shapeTarget && shapeFacts && shapeSuggestions.length > 0) {
+    sections.push({
+      id: "shape-suggestions",
+      group: "frame",
+      level: "common",
+      title: strings.t(M.shapeSuggestions),
+      keywords: strings.t(M.kwShape),
+      body: (
+        <ShapeSuggestionsSection
+          id={shapeTarget}
+          shape={shapeFacts}
+          suggestions={shapeSuggestions}
+        />
+      ),
     });
   }
   if (hasContent && kind !== "text") typeSections();

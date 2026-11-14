@@ -37,7 +37,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
-import type { FrameSurfaceProps } from "@paged-media/plugin-api";
+import type {
+  FrameSurfaceProps,
+  NumericFieldProps,
+  WidgetSurface,
+} from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 
 import {
   DEFAULT_HEADING_STYLE,
@@ -59,6 +64,9 @@ import {
 import type { WorkbookSession } from "../session";
 import type { DataToolsApi } from "../data-tools";
 import { DataCards } from "./data-cards";
+import { EditCellsStrip } from "./edit-cells-strip";
+import { SURFACE } from "../messages";
+import { useStrings } from "@paged-media/strings";
 import { usePictureImages } from "./picture-images";
 import { useDocStyleLooks, withDocumentStyles } from "./doc-style-looks";
 import {
@@ -96,6 +104,7 @@ export type FrameSurfaceSession = Pick<
   | "grabAt"
   | "selectionAreas"
   | "pageWindowsOnLeave"
+  | "publicationPreview"
   | "scrollInFrame"
   | "pointerUpInFrame"
   | "wheelInFrame"
@@ -204,6 +213,8 @@ export interface SheetFrameSurface {
  *  field so the bar can hand focus back to the grid. */
 interface SurfaceLink {
   session: FrameSurfaceSession;
+  /** The host's numeric field (editor ADR 1216) for the bar's cards. */
+  NumericField: ComponentType<NumericFieldProps>;
 }
 
 /** Each surface's text field, by link (so the bar can focus it). */
@@ -211,8 +222,9 @@ const editors = new WeakMap<SurfaceLink, HTMLTextAreaElement>();
 
 export function makeSheetFrameSurface(
   session: FrameSurfaceSession,
+  widgets: Pick<WidgetSurface, "NumericField"> = FALLBACK_WIDGETS,
 ): SheetFrameSurface {
-  const link: SurfaceLink = { session };
+  const link: SurfaceLink = { session, NumericField: widgets.NumericField };
   // Named bindings the React Compiler can see; the components they render
   // are declared at module level.
   const SheetFrameSurface = (props: FrameSurfaceProps) =>
@@ -1958,8 +1970,11 @@ function SheetBarView({
       filterHeader: filterHeaderText(session),
       // ADR 510 — a window frame's lock (null: not a window frame).
       lock: session.frameView(props.elementId)?.lock ?? null,
+      // Sheet ADR 532 — how the selection lands in the frame.
+      preview: session.publicationPreview(),
     };
   });
+  const { t } = useStrings();
   const inputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     const el = inputRef.current;
@@ -1997,6 +2012,18 @@ function SheetBarView({
   const fullscreen = props.presentation === "fullscreen";
   return (
     <div style={{ position: "relative" }}>
+      <EditCellsStrip
+        preview={view.preview}
+        card={bar}
+        button={button}
+        refocus={() => requestAnimationFrame(focusGrid)}
+        onDone={() => {
+          // A cell still being typed is kept, as Enter would (Done is no
+          // cancel); then the frame is left like Escape on a clean grid.
+          if (session.isCellEditing()) session.commitCellEdit();
+          props.exit({ commit: true });
+        }}
+      />
       {fullscreen ? (
         <div
           data-testid="sheet-fullscreen-header"
@@ -2008,10 +2035,10 @@ function SheetBarView({
           }}
         >
           <nav
-            aria-label="Where you are"
+            aria-label={t(SURFACE.whereYouAre)}
             style={{ color: "var(--pg-muted-fg, #5b5b57)" }}
           >
-            Page › Sheet frame ›{" "}
+            {t(SURFACE.trail)}{" "}
             <strong style={{ color: "var(--pg-fg, #1a1a1a)" }}>
               {view.sheet}
             </strong>
@@ -2022,7 +2049,7 @@ function SheetBarView({
                 type="button"
                 data-testid="sheet-browser-fullscreen"
                 style={button}
-                title="Use the whole screen (the browser's full screen)"
+                title={t(SURFACE.wholeScreenTitle)}
                 onClick={() => {
                   if (document.fullscreenElement)
                     void document.exitFullscreen();
@@ -2030,21 +2057,21 @@ function SheetBarView({
                   requestAnimationFrame(focusGrid);
                 }}
               >
-                Whole screen
+                {t(SURFACE.wholeScreen)}
               </button>
             ) : null}
             <button
               type="button"
               data-testid="sheet-back-to-page"
               style={button}
-              title="Back to the frame on the page (Esc)"
+              title={t(SURFACE.backToPageTitle)}
               onClick={() => {
                 if (document.fullscreenElement) void document.exitFullscreen();
                 props.requestPresentation("frame");
                 requestAnimationFrame(focusGrid);
               }}
             >
-              Back to page
+              {t(SURFACE.backToPage)}
             </button>
           </span>
         </div>
@@ -2060,7 +2087,7 @@ function SheetBarView({
           <>
             <button
               type="button"
-              aria-label="Cancel"
+              aria-label={t(SURFACE.cancelEdit)}
               style={button}
               onClick={() => {
                 session.cancelCellEdit();
@@ -2071,7 +2098,7 @@ function SheetBarView({
             </button>
             <button
               type="button"
-              aria-label="Enter"
+              aria-label={t(SURFACE.commitEdit)}
               style={button}
               onClick={() => {
                 session.commitCellEdit();
@@ -2090,7 +2117,7 @@ function SheetBarView({
         <input
           ref={inputRef}
           data-testid="sheet-bar-formula"
-          aria-label="Formula"
+          aria-label={t(SURFACE.formula)}
           spellCheck={false}
           defaultValue={view.input}
           style={{ ...box, flex: 1, minWidth: 180 }}
@@ -2197,6 +2224,7 @@ function SheetBarView({
           style: bar,
           button,
           done: () => requestAnimationFrame(focusGrid),
+          NumericField: link.NumericField,
         }}
         card={view.card}
         alert={view.alert}

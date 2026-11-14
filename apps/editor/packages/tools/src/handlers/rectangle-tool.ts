@@ -140,9 +140,13 @@ export function createRectangleHandler(
       paged = p;
     },
     onDeactivate(reason) {
-      // Spring-load suspend keeps the in-flight gesture (and its
-      // preview) so it resumes when the override is released (AC 5).
-      if (reason === "suspend") return;
+      // A spring-load suspend keeps the in-flight drag, so it resumes
+      // when the override is released (AC 5), but not its preview: a
+      // suspended tool draws nothing (IC4). The next move repaints it.
+      if (reason === "suspend") {
+        clearPreview();
+        return;
+      }
       cancel();
     },
     onPointerDown(e: CanvasPointerEvent) {

@@ -23,6 +23,7 @@ import type { ElementGeometryItem, ResizeHandle } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useSelection } from "../state/selection-context";
+import { useLockedKeys } from "../state/locked";
 
 import { applyAffine } from "./affine";
 import { groupByPage, unionAabb } from "./selection-chrome";
@@ -44,19 +45,42 @@ import { groupByPage, unionAabb } from "./selection-chrome";
  * visible square and just inside it.
  */
 function ResizeHandlesRender(props: OverlayProps) {
-  const { placedGeometry: elementGeometry, pathEditMode } = useSelection();
+  const {
+    placedGeometry: elementGeometry,
+    pathEditMode,
+    elementSelection,
+  } = useSelection();
+  // D-08 — a locked selection's handles say they will not move it: hollow,
+  // dashed, the not-allowed cursor (`UXI-TRN-006`).
+  const locked = useLockedKeys(elementSelection);
+  const allLocked =
+    elementSelection.length > 0 &&
+    elementSelection.every((id) =>
+      locked.has(`${id.kind}:${String((id as { id?: unknown }).id)}`),
+    );
   // Path-edit mode edits the element's POINTS, and every press on the
   // canvas is the path's there — a frame handle would be drawn and
   // dead. The outline stays; the handles come back with the mode off.
   if (pathEditMode) return null;
   if (elementGeometry.length === 0) return null;
-  if (elementGeometry.length === 1) {
-    return renderSingle(elementGeometry[0], props);
-  }
-  return renderUnion(elementGeometry, props);
+  const handles =
+    elementGeometry.length === 1
+      ? renderSingle(elementGeometry[0], props, allLocked)
+      : renderUnion(elementGeometry, props, allLocked);
+  return allLocked ? (
+    <g data-handles-locked="" opacity={0.55}>
+      {handles}
+    </g>
+  ) : (
+    handles
+  );
 }
 
-function renderSingle(item: ElementGeometryItem, props: OverlayProps) {
+function renderSingle(
+  item: ElementGeometryItem,
+  props: OverlayProps,
+  locked = false,
+) {
   // C-23 — no page found for it ⇒ no space to draw in.
   const pageId = item.pageId;
   const pr = pageId ? props.pageRects.get(pageId) : undefined;
@@ -67,10 +91,17 @@ function renderSingle(item: ElementGeometryItem, props: OverlayProps) {
   const positions = handlePositions(left, top, right, bottom, cx, cy);
   const inv = 1 / props.camera.scale;
   const [ccx, ccy] = applyAffine(item.itemTransform, cx, cy);
+  const rotation = props.camera.rotation ?? 0;
   return (
     <>
-      {positions.map(({ name, local, cursor }) => {
+      {positions.map(({ name, local }) => {
         const [wx, wy] = applyAffine(item.itemTransform, local[0], local[1]);
+        // The way the handle pulls, on screen (`UXI-OVR-010`, IC7): its
+        // direction from the centre through the item's transform and the
+        // view's rotation picks the resize cursor.
+        const cursor = locked
+          ? "not-allowed"
+          : resizeCursor([wx - ccx, wy - ccy], rotation);
         return renderHandle(
           name,
           pageId,
@@ -89,6 +120,7 @@ function renderSingle(item: ElementGeometryItem, props: OverlayProps) {
 function renderUnion(
   geometry: ReadonlyArray<ElementGeometryItem>,
   props: OverlayProps,
+  locked = false,
 ) {
   const byPage = groupByPage(geometry);
   const inv = 1 / props.camera.scale;
@@ -108,7 +140,11 @@ function renderUnion(
       cx,
       cy,
     );
-    for (const { name, local, cursor } of positions) {
+    const rotation = props.camera.rotation ?? 0;
+    for (const { name, local } of positions) {
+      const cursor = locked
+        ? "not-allowed"
+        : resizeCursor([local[0] - cx, local[1] - cy], rotation);
       out.push(
         renderHandle(
           name,
@@ -124,6 +160,21 @@ function renderUnion(
     }
   }
   return <>{out}</>;
+}
+
+/** The resize cursor for a pull direction on screen (radians of view
+ *  rotation added): the nearest of the four double arrows. */
+export function resizeCursor(
+  pull: readonly [number, number],
+  viewRotation: number,
+): string {
+  if (pull[0] === 0 && pull[1] === 0) return "move";
+  let deg = ((Math.atan2(pull[1], pull[0]) + viewRotation) * 180) / Math.PI;
+  deg = ((deg % 180) + 180) % 180;
+  if (deg < 22.5 || deg >= 157.5) return "ew-resize";
+  if (deg < 67.5) return "nwse-resize";
+  if (deg < 112.5) return "ns-resize";
+  return "nesw-resize";
 }
 
 function handlePositions(
@@ -201,7 +252,10 @@ function renderHandle(
           fill="transparent"
           data-handle="rotate"
           data-rotate-band={name}
-          style={{ cursor: ROTATE_CURSOR, pointerEvents: "all" }}
+          style={{
+            cursor: cursor === "not-allowed" ? cursor : ROTATE_CURSOR,
+            pointerEvents: "all",
+          }}
         />
       ) : null}
       <rect
@@ -209,7 +263,7 @@ function renderHandle(
         y={-visiblePx / 2}
         width={visiblePx}
         height={visiblePx}
-        fill="white"
+        fill={cursor === "not-allowed" ? "none" : "white"}
         stroke="var(--overlay-selection)"
         strokeWidth={1}
         data-handle={name}

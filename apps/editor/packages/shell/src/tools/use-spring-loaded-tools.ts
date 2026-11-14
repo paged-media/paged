@@ -30,6 +30,7 @@ import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
 import { useEditorKeys } from "../state/editor-root";
 import { useRegistries } from "../state/registries-context";
+import { useInteractionCoordinator } from "../interaction/coordinator";
 
 // Concept 1 (T2) — spring-loaded momentary tools. Holding a key pushes
 // a transient override onto the active-tool stack; releasing it pops.
@@ -46,6 +47,12 @@ import { useRegistries } from "../state/registries-context";
 // ADR 234) or while the canvas text caret is active (Space must type a
 // space). Window blur clears every override — Cmd+Tab away means the
 // key-ups never arrive.
+//
+// D-09 (editor ADR 1201; the interaction specification's UXI-OWN-011):
+// while a document-changing drag holds the pointer (a move, a resize, a
+// drawing tool's drag — the interaction coordinator's mutating session),
+// the override waits until the drag settles: the drag keeps its tool, and
+// the held key takes effect then (or never, if it is let go first).
 
 export function useSpringLoadedTools(): void {
   const keys = useEditorKeys();
@@ -57,6 +64,9 @@ export function useSpringLoadedTools(): void {
   // Which override each physical key pushed, so its key-up pops
   // exactly that id even if the modifier state changed in between.
   const pushedByKey = useRef(new Map<string, ToolId>());
+  // D-09 — overrides held back until the drag in progress settles.
+  const deferredByKey = useRef(new Map<string, ToolId>());
+  const interactions = useInteractionCoordinator();
 
   useEffect(() => {
     const keyFor = (e: KeyboardEvent): string | null => {
@@ -68,7 +78,8 @@ export function useSpringLoadedTools(): void {
     const onKeyDown = (e: KeyboardEvent) => {
       const key = keyFor(e);
       if (!key || e.repeat) return;
-      if (pushedByKey.current.has(key)) return;
+      if (pushedByKey.current.has(key) || deferredByKey.current.has(key))
+        return;
       if (canvasKeyYields(e)) return;
       // Editor ADR 299 — a scoped binding of the active context owns its
       // key (Cmd+Space clears character formatting in a Word document).
@@ -91,6 +102,18 @@ export function useSpringLoadedTools(): void {
           ? ZOOM_TOOL_ID
           : DIRECT_SELECT_TOOL_ID;
       }
+      if (interactions.mutatingActive()) {
+        // D-09 — the drag keeps its tool; the override comes when it settles.
+        deferredByKey.current.set(key, id);
+        interactions.deferred("spring-load", "canvas-camera");
+        void interactions.whenIdle().then(() => {
+          if (deferredByKey.current.get(key) !== id) return;
+          deferredByKey.current.delete(key);
+          pushedByKey.current.set(key, id);
+          pushOverride(id);
+        });
+        return;
+      }
       pushedByKey.current.set(key, id);
       pushOverride(id);
     };
@@ -98,6 +121,8 @@ export function useSpringLoadedTools(): void {
     const onKeyUp = (e: KeyboardEvent) => {
       const key = keyFor(e);
       if (!key) return;
+      // Let go before the drag settled: the override never comes.
+      if (deferredByKey.current.delete(key)) return;
       const id = pushedByKey.current.get(key);
       if (id === undefined) return;
       pushedByKey.current.delete(key);
@@ -105,6 +130,7 @@ export function useSpringLoadedTools(): void {
     };
 
     const onBlur = () => {
+      deferredByKey.current.clear();
       if (pushedByKey.current.size === 0) return;
       pushedByKey.current.clear();
       clearOverrides();
@@ -121,6 +147,7 @@ export function useSpringLoadedTools(): void {
       window.removeEventListener("blur", onBlur);
     };
   }, [
+    interactions,
     keys,
     pushOverride,
     popOverride,

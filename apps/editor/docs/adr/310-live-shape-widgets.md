@@ -117,3 +117,18 @@ paged.draw's Corner Radius tool went those contexts had no way to round a corner
   mode: four corner widgets, no side or star widget, a drag rounds every corner in one step) and
   `apps/canvas/tests/host-panels-every-context.spec.ts` (`HPX-P2-*`: the drag in every module's
   context, which it does not leave).
+
+## Amendment (2026-11-14): a widget takes only its own target (IC7)
+
+A corner widget sat 14 px inside its corner with a 14 px hit circle, so its target reached the
+corner's resize handle and the band where a press moves the shape: a press meant to move or
+resize near a corner changed the corner radius instead, at 100 % and more so at 800 %. The
+widgets now give the resize handles and the move interior a fixed priority (the interaction
+specification's `UXI-HND-002`, `UXI-HND-004`; editor plan task IC7):
+
+- a widget's hit target is 12 px across about its 7 px disc, the smallest a mouse target may be
+  (`UXI-HND-001`), in screen pixels at every zoom;
+- a corner widget sits 20 px inside its corner, so the corner's resize square and the band
+  between them stay the resize's and the move's;
+- beside a widget, a press moves the shape; on the corner's square it resizes; on the disc it
+  changes the radius (`tests/e2e/uxi-geometry.spec.ts`, at 100 % and 800 %).

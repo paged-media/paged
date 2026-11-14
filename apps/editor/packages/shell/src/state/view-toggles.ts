@@ -78,7 +78,9 @@ export type EditingAidToggle =
   | "textThreads"
   | "oversetMarkers"
   | "hiddenCharacters"
-  | "nonprinting";
+  | "nonprinting"
+  // Data ADR 566 — the binding badges of paged.data (the data markers).
+  | "dataMarkers";
 
 /** The editing aids in the order the control lists them. */
 export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
@@ -90,6 +92,7 @@ export const EDITING_AID_TOGGLES: readonly EditingAidToggle[] = [
   "oversetMarkers",
   "hiddenCharacters",
   "nonprinting",
+  "dataMarkers",
 ];
 
 const isAid = (t: ViewToggle): t is EditingAidToggle =>

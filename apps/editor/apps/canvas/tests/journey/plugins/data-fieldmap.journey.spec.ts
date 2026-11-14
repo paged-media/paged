@@ -163,10 +163,10 @@ test.describe("journey · paged.data field-mapping wizard", () => {
     //    grows with the generated variable bindings (v_name, v_role). ──
     await confirm.click();
     await expect(wizardColumns).toBeHidden({ timeout: 6_000 });
-    await expect(page.getByText(/bindings:.*v_name/i).first()).toBeVisible({
+    await expect(page.getByText(/Bindings.*v_name/).first()).toBeVisible({
       timeout: 6_000,
     });
-    await expect(page.getByText(/bindings:.*v_role/i).first()).toBeVisible({
+    await expect(page.getByText(/Bindings.*v_role/).first()).toBeVisible({
       timeout: 6_000,
     });
   });

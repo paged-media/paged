@@ -54,3 +54,15 @@ export const GRADIENT_TOOL = defineMessages("tools.gradient", {
   spread: "Spread",
   points: "{count, plural, one {# gradient point} other {# gradient points}}",
 });
+
+// The Pen's hints beside the pointer, one per state (paged.draw ADR 370).
+export const PEN_TOOL = defineMessages("tools.pen", {
+  hintDraw: "Click: corner · drag: smooth · Enter: finish · Esc: cancel",
+  hintContinue: "Continue this path",
+  hintClose: "Close the path",
+  hintJoin: "Join the two paths",
+  hintDragHandle: "Pulling the handle · Alt: break · Shift: 45°",
+  hintFinish: "Finish the open path",
+  hintAdd: "Add an anchor",
+  hintDelete: "Delete this anchor",
+});

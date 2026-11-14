@@ -46,6 +46,7 @@ import { scoped, type EditorScope } from "./editor-scope";
 import { queryEditor } from "./editor-dom";
 import { editorRootOf } from "./editor-root";
 import { escapeArbiterOf } from "../interaction/escape-arbiter";
+import { interactionCoordinatorOf } from "../interaction/coordinator";
 
 /** A client-space point the user clicked, or `null` when they cancelled. */
 export interface PlacementPoint {
@@ -114,9 +115,21 @@ export function awaitPlacementPoint(
     let dragging = false;
 
     let settled = false;
+    // The armed placement is a mode of the interaction coordinator (editor
+    // ADR 1210, IC4): a document switch, a tool switch or unmount stands it
+    // down, placing nothing; a blur leaves it armed.
+    const interactions = interactionCoordinatorOf(scope);
+    const session = interactions.begin({
+      owner: "drag-drop",
+      kind: "placement",
+      transient: true,
+      onAbort: () => finish(null),
+    });
     const finish = (value: PlacementPoint | null) => {
       if (settled) return;
       settled = true;
+      if (session && !session.ended)
+        interactions.end(session, value ? "commit" : "cancel");
       armed.cancel = null;
       root.removeAttribute(ARMED_ATTR);
       if (previous)

@@ -52,6 +52,10 @@ import {
   type EscapeArbiter,
 } from "../interaction/escape-arbiter";
 import { scoped, type EditorScope } from "./editor-scope";
+import {
+  interactionCoordinatorOf,
+  type InteractionCoordinator,
+} from "../interaction/coordinator";
 import type { EditContextContribution } from "../registries/edit-context";
 import { contextLabel, type EditContextFrame } from "./edit-context-store";
 
@@ -77,7 +81,7 @@ export interface FrameContentFacts {
   imageEditor: Pick<EditContextContribution, "type" | "label"> | null;
   /** The module context that owns the frame's content (an object type's
    *  claim), when it is not the image editor. */
-  owner: Pick<EditContextContribution, "type" | "label"> | null;
+  owner: Pick<EditContextContribution, "type" | "label" | "editLabel"> | null;
 }
 
 /** The registered context that edits placed images (D-05), if any. */
@@ -94,9 +98,12 @@ export function frameLevels(facts: FrameContentFacts): FrameLevel[] {
     { id: "frame", label: t(FRAME_CONTENT.frame), contextType: null },
   ];
   if (facts.owner) {
+    // What entering does ("Edit cells"), else the context's name
+    // (extensions ADR 1108).
+    const action = facts.owner.editLabel?.trim();
     levels.push({
       id: "edit",
-      label: contextLabel(facts.owner),
+      label: action ? action : contextLabel(facts.owner),
       contextType: facts.owner.type,
     });
     return levels;
@@ -158,6 +165,12 @@ export interface ImageContentDeps {
   cameraScale(): number;
   /** The editor's Escape arbiter: a drag registers its cancel there. */
   arbiter(): EscapeArbiter | null;
+  /** The editor's interaction coordinator: the drag lives inside the
+   *  session of the press that began it (the canvas's `frame-content`
+   *  session), and ends when that session is aborted — a lost capture, a
+   *  blur, a hidden page, a document or tool switch, unmount (editor ADR
+   *  1210; `UXI-INV-001`, `UXI-INV-014`). */
+  interactions?(): InteractionCoordinator | null;
   /** Called after a drag committed, with the frame's fresh geometry. */
   onCommitted(geometry: ElementGeometryItem[]): void;
 }
@@ -301,6 +314,11 @@ export function createImageContentContext(
       };
       const onUp = () => end("commit", frame);
       const onCancel = () => end("cancel", frame);
+      // The press's session (the canvas opened it before this call): its
+      // abort is this drag's cancel.
+      const session = deps.interactions?.()?.current() ?? null;
+      const onAbort = () => end("cancel", frame);
+      session?.signal.addEventListener("abort", onAbort);
       window.addEventListener("pointermove", onMove, true);
       window.addEventListener("pointerup", onUp, true);
       window.addEventListener("pointercancel", onCancel, true);
@@ -321,6 +339,7 @@ export function createImageContentContext(
           window.removeEventListener("pointermove", onMove, true);
           window.removeEventListener("pointerup", onUp, true);
           window.removeEventListener("pointercancel", onCancel, true);
+          session?.signal.removeEventListener("abort", onAbort);
           offEscape();
         },
       };
@@ -367,6 +386,7 @@ const CONTENT_LEVEL = scoped("imageContentLevel", (scope): ContentLevel => {
     client: () => wired?.client ?? null,
     cameraScale: () => cameraScaleOf(wired?.client ?? null),
     arbiter: () => escapeArbiterOf(scope),
+    interactions: () => interactionCoordinatorOf(scope),
     onCommitted: (geometry) => wired?.onCommitted(geometry),
   });
   return {

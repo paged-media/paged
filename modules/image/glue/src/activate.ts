@@ -47,6 +47,7 @@ import {
 import { placeLayersAsFrames } from "./place-layers";
 import { contributeMenu } from "./menu";
 import { defineMessages, defineTranslations, t } from "@paged-media/strings";
+import { makeEditKindGroup } from "./panels/edit-kind-group";
 
 import de from "../locales/de.json" with { type: "json" };
 
@@ -2353,6 +2354,17 @@ export function activate(host: BundleHost): BundleHandle {
     },
   });
 
+  // Image ADR 487 — what the next edit changes, beside the tool in hand
+  // in the context toolbar: pixels, the mask, or a non-destructive layer.
+  const editKindGroup = host.supports("contribute.controlBarGroup@1")
+    ? host.contribute.controlBarGroup({
+        id: "media.paged.image.controlBar.editKind",
+        scope: { editContext: "rasterImage" },
+        order: 10,
+        render: makeEditKindGroup(session),
+      })
+    : null;
+
   // ADR-023 phase D — the two providers that make the HOST panels
   // show RASTER content while this context is active.
   // A provider's lifetime is BORROWED from the context's enter/exit
@@ -2458,6 +2470,7 @@ export function activate(host: BundleHost): BundleHandle {
   return {
     dispose() {
       actionsSub?.dispose();
+      editKindGroup?.dispose();
       // Providers first, then the subscription that feeds them, then
       // the session they read. Reverse registration order: a handle
       // disposed after its session would be a live provider over a

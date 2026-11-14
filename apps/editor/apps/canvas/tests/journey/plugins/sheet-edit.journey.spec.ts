@@ -139,7 +139,7 @@ test.describe("journey · paged.sheet edit ops", () => {
     await page.locator("[data-sheet-range]").fill("A1:A2"); // the two numeric cells
     // The Workbook's sections are collapsed except "Place on page".
     await page.locator('[data-sheet-section="sort"] > summary').click();
-    await page.locator("[data-sheet-sort-key]").fill("1");
+    await page.locator("[data-sheet-sort-key] input").fill("1");
     await page.locator("[data-sheet-sort-dir]").selectOption("desc");
     await page.locator("[data-sheet-sort]").click();
     const sortMsg = page.locator("[data-sheet-sort-msg]");

@@ -33,6 +33,7 @@ their status says so.
 | [367](367-envelopes-and-graphic-styles-on-native-appearance.md) | Draw's appearance runs on the engine: the host panel, envelopes as stack entries, graphic styles on native appearance | Accepted 2026-10-31 (amends 354, 355) |
 | [368](368-pattern-options-save-an-engine-pattern-swatch.md) | Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork | Accepted 2026-10-29 |
 | [369](369-text-to-vector-and-generative-recolor.md) | Text to vector and Generative recolor ride the host's agent and ML doors | Accepted 2026-11-01 |
+| [370](370-vector-editing-with-feedback.md) | Vector editing with feedback: the Pen's named states, a precision magnifier, point-level controls, shape suggestions, and saying what a path operation takes | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

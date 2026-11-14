@@ -48,6 +48,25 @@ const TODAY = "2026-11-13";
 const spec = readSpec();
 const schema = readJson(SCHEMA);
 const real = () => structuredClone(readJson(INVENTORY));
+/** The real inventory with one exception of the ledger's shape: the real
+ *  ledger is empty since IC4 retired EXC-001. */
+const withException = () => {
+  const inv = real();
+  inv.exceptions.push({
+    id: "EXC-090",
+    contract: ["UXI-ESC-001", "UXI-MIG-002"],
+    scope: "a test exception: two Escape listeners in one scope",
+    interactions: ["escape.viewport", "escape.tool-handler"],
+    tests: ["UXI-T07"],
+    why: "A test exception of the ledger's shape: two Escape handlers in one scope.",
+    issue: "IC4",
+    owner: "editor shell",
+    severity: "major",
+    expiry: "2027-01-31",
+    repro: "Press Escape during a move.",
+  });
+  return inv;
+};
 const check = (inv, opts = {}) =>
   checkInventory(inv, { spec, schema, today: TODAY, ...opts });
 const matching = (errors, re) => errors.filter((e) => re.test(e));
@@ -301,7 +320,7 @@ describe("the guard", () => {
   });
 
   it("fails a reference that resolves to nothing", () => {
-    const inv = real();
+    const inv = withException();
     inv.tests[0].requirements.push("UXI-SEL-999");
     inv.interactions[0].uxi.push("UXI-NOPE-001");
     inv.interactions[0].states.push("hovering");
@@ -363,7 +382,7 @@ describe("the guard", () => {
   });
 
   it("fails an exception past its expiry", () => {
-    const inv = real();
+    const inv = withException();
     const e = inv.exceptions[0];
     expect(matching(check(inv, { today: e.expiry }), /EXPIRED/)).toEqual([]);
     const after = new Date(Date.parse(`${e.expiry}T00:00:00Z`) + 86_400_000)
@@ -415,11 +434,15 @@ describe("the guard", () => {
     ).toHaveLength(1);
   });
 
-  it("the seeded Escape listeners collide, and stand only because EXC-001 lists them", () => {
+  it("the canvas's Escape handlers are scoped apart: no exception holds them since IC4 retired EXC-001", () => {
+    expect(matching(check(real()), /^UXI-MIG-002/)).toEqual([]);
+    // Put back in one scope, they collide.
     const inv = real();
-    inv.exceptions = inv.exceptions.filter((e) => e.id !== "EXC-001");
+    for (const x of inv.interactions)
+      if (["escape.viewport", "escape.tool-handler"].includes(x.id))
+        x.scope = "editor";
     expect(
-      matching(check(inv), /^UXI-MIG-002: key:Escape @ editor/),
+      matching(check(inv), /^UXI-MIG-002: key:Escape @ editor /),
     ).toHaveLength(1);
   });
 
@@ -432,7 +455,7 @@ describe("the guard", () => {
   });
 
   it("an exception's task is a task of the plan", () => {
-    const inv = real();
+    const inv = withException();
     inv.exceptions[0].issue = "IC99";
     const plan = planTasks(ROOT);
     expect(check(real(), { plan })).toEqual([]);

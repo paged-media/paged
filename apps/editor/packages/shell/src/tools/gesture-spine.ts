@@ -26,15 +26,24 @@ import type {
 } from "./gesture-handler";
 
 // Concept 1 (Phase 2) — the gesture spine. Framework-agnostic: it
-// owns the single mounted GestureHandler and swaps it when the
-// effective tool changes, deactivating the OUTGOING handler before
-// activating the INCOMING one (AC 6). Spring-load passes
-// `reason: "suspend"` so a momentary tool doesn't cancel an in-flight
-// gesture (AC 5). The canvas app drives it via `useGestureSpine`,
+// owns the mounted GestureHandler and swaps it when the effective tool
+// changes, deactivating the OUTGOING handler before activating the
+// INCOMING one (AC 6). The canvas app drives it via `useGestureSpine`,
 // feeding pointer events already resolved to document coordinates.
+//
+// A spring-load (`reason: "suspend"`, holding Space for the Hand) does not
+// drop the outgoing handler: it is kept on a STACK, with whatever it was
+// building (a Pen path between two clicks), and the SAME handler is the
+// one in hand again when the override is released — not a fresh one that
+// forgot the path (the interaction contract's RegisteredGestureAdapter,
+// editor ADR 1210, IC4). A permanent switch ends every suspended handler
+// too. A suspension never lands mid-drag: the spring-load waits for a
+// document-changing drag to settle (D-09).
 
 export class GestureSpine {
   private current: { id: ToolId; handler: GestureHandler } | null = null;
+  /** Handlers a spring-load suspended, innermost last. */
+  private suspended: Array<{ id: ToolId; handler: GestureHandler }> = [];
   /** The editor handle as of the latest render. */
   private latest: PagedEditor | null = null;
   /**
@@ -79,15 +88,46 @@ export class GestureSpine {
     reason: DeactivateReason,
   ): void {
     this.latest = paged;
+    // A permanent switch ends what every suspended handler was building.
+    if (reason === "switch") this.dropSuspended();
     if (this.current?.id === id) return;
-    if (this.current) this.current.handler.onDeactivate(reason);
+    if (this.current) {
+      this.current.handler.onDeactivate(reason);
+      if (reason === "suspend") this.suspended.push(this.current);
+    }
+    this.current = null;
+    // A released override hands back the handler it suspended.
+    if (reason === "suspend") {
+      let at = this.suspended.length - 1;
+      while (at >= 0 && this.suspended[at]!.id !== id) at--;
+      if (at >= 0) {
+        this.current = this.suspended[at]!;
+        this.suspended.splice(at, 1);
+        return;
+      }
+    }
     const handler = paged.registries.tools.get(id)?.gesture?.();
     if (handler) {
       handler.onActivate(this.live);
       this.current = { id, handler };
-    } else {
-      this.current = null;
     }
+  }
+
+  /** The handlers a spring-load holds, innermost last (diagnostics). */
+  get suspendedIds(): ToolId[] {
+    return this.suspended.map((s) => s.id);
+  }
+
+  /** Does the handler in hand hold something Escape would cancel (a Pen
+   *  path between two clicks)? */
+  busy(): boolean {
+    return this.current?.handler.busy?.() === true;
+  }
+
+  private dropSuspended(): void {
+    const held = this.suspended;
+    this.suspended = [];
+    for (const s of held.reverse()) s.handler.onDeactivate("switch");
   }
 
   /** Tear down the current handler (e.g. on unmount). */
@@ -96,6 +136,7 @@ export class GestureSpine {
       this.current.handler.onDeactivate(reason);
       this.current = null;
     }
+    this.dropSuspended();
   }
 
   pointerDown(e: CanvasPointerEvent): void {

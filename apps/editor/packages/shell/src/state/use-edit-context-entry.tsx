@@ -57,7 +57,9 @@ import { pageToContentPoint } from "./content-point";
 import { useEditContextStack, type EnterPoint } from "./edit-context-stack";
 import { useEditorScope } from "./editor-scope";
 import { useRegistries } from "./registries-context";
-import { TEXT_TOOL_ID } from "./tool-context";
+import { TEXT_TOOL_ID, useOptionalTool } from "./tool-context";
+import { useContentSelection } from "./content-selection-context";
+import { useSubContextEntry } from "./sub-context-controller";
 import {
   IMAGE_CONTENT_CONTEXT,
   imageContentLevelOf,
@@ -88,6 +90,29 @@ export type MetaEnvelope = {
   data: Record<string, unknown>;
   engine?: Record<string, string>;
 };
+
+/** Where a double-click on the canvas landed, and what it is checked
+ *  against (the ContentContextAdapter, editor ADR 1210, IC4). */
+export interface CanvasDoubleClick {
+  pageId: PageId;
+  /** The point, page-local pt. */
+  pagePoint: [number, number];
+  /** The Type tool is in hand: its double-click is a word (the canvas's
+   *  click run), so only a sub-context may take it. */
+  typeTool: boolean;
+  /** The group the selection is scoped to (ADR 250), or null. */
+  activeGroup: string | null;
+  /** A grouped item outside the active group: enter its group instead
+   *  (Track L). Absent: groups are not descended. */
+  descend?: (
+    groupId: string,
+    element: ElementId | null,
+    groupChain: readonly string[],
+  ) => void;
+  /** Is the double-click's answer still wanted? (No newer press, no other
+   *  document or context — the coordinator's token.) */
+  isCurrent: () => boolean;
+}
 
 /** Parse the `x-paged:<key>` metadata envelope out of an element's
  *  property entries (the `pluginMetadata` typed value). Returns null
@@ -457,6 +482,80 @@ export function useEditContextEntry() {
     [tryEnterEditContext],
   );
 
+  // The ONE double-click path of the canvas (the ContentContextAdapter):
+  // a sub-context (a header, a footer, a note edited in place, ADR 301);
+  // then, as in InDesign, TEXT FIRST — a double-click on a text frame's
+  // text puts the caret there with the Type tool, in the cell when the
+  // point is in a table cell, unless a plugin owns the frame (a lowered
+  // sheet table, a web frame), which enters that plugin; a grouped item
+  // outside the active group enters its group (Track L, F-29); anything
+  // else consults the edit-context registry (a picture frame's content, a
+  // polygon's vector editing). Each step checks that the answer is still
+  // wanted.
+  const { trySubContext } = useSubContextEntry();
+  const tool = useOptionalTool();
+  const { setContentSelection } = useContentSelection();
+  const enterByDoubleClick = async (at: CanvasDoubleClick): Promise<void> => {
+    const { pageId, pagePoint } = at;
+    if (await trySubContext({ pageId, pagePoint })) return;
+    if (!at.isCurrent()) return;
+    if (!at.descend || at.typeTool) return;
+    const reply = await client.send({
+      kind: "hitTest",
+      payload: { pageId, docPoint: pagePoint, filter: "any" },
+    });
+    if (!at.isCurrent()) return;
+    if (reply.kind !== "hitResult") return;
+    const hit = reply.payload;
+    const chain = hit.groupChain ?? [];
+    const element = hit.element ?? null;
+    // A grouped frame descends into its group first; the next
+    // double-click, inside the group, reaches the text.
+    const inGroupScope =
+      chain.length === 0 ||
+      (at.activeGroup !== null && chain.includes(at.activeGroup));
+    if (
+      element?.kind === "textFrame" &&
+      inGroupScope &&
+      hit.storyId &&
+      hit.offsetWithinStory != null
+    ) {
+      const owned = await tryEnterOwnedContent({
+        element,
+        groupChain: chain,
+        pageId,
+        pagePoint,
+      });
+      if (owned || !at.isCurrent()) return;
+      const tc = hit.tableContext ?? null;
+      tool?.setBaseTool(TEXT_TOOL_ID);
+      setContentSelection({
+        storyId: hit.storyId,
+        start: hit.offsetWithinStory,
+        end: hit.offsetWithinStory,
+        affinity: false,
+        cell: tc
+          ? { tableId: tc.tableId, row: tc.row, col: tc.col }
+          : undefined,
+      });
+      return;
+    }
+    if (!inGroupScope) {
+      at.descend(chain[0]!, element, chain);
+      return;
+    }
+    // The edit-context registry answers every double-click, picture frames
+    // included: their content first, Edit image by a second (editor ADR
+    // 1215, D-05).
+    if (!at.isCurrent()) return;
+    await tryEnterEditContext({
+      element,
+      groupChain: chain,
+      pageId,
+      pagePoint,
+    });
+  };
+
   /** Editor ADR 1215 — go to `level` of frame `element` (the context
    *  toolbar's level control): Frame leaves the frame's own contexts,
    *  Content and Edit enter them. `editType` names the Edit level's
@@ -490,6 +589,7 @@ export function useEditContextEntry() {
     tryEnterOwnedContent,
     enterContextByType,
     isOwnedContent,
+    enterByDoubleClick,
     enterFrameLevel,
   };
 }

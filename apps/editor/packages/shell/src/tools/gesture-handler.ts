@@ -100,6 +100,12 @@ export interface GestureHandler extends Api.GestureHandler {
   /** Keyboard while the tool is active (e.g. Enter commits a pen path). */
   onKey?(e: KeyboardEvent): void;
 
+  /** Does the handler hold something uncommitted that Escape cancels when
+   *  no drag is under way (a Pen path between two clicks)? The Escape
+   *  arbiter's transient tier asks (editor ADR 1207, §12.1 case 4). A
+   *  shell-side member: a contract handler without it is never busy. */
+  busy?(): boolean;
+
   /** State-dependent cursor (Pen near an anchor differs from Pen on
    *  empty canvas). Returning undefined falls back to the tool's base
    *  cursor. */

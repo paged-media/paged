@@ -39,6 +39,7 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
   const onChange = mock((_p: Record<string, FilterValue>) => {});
   const onPreview = mock((_on: boolean) => {});
   const onBefore = mock((_b: boolean) => {});
+  const onSplit = mock((_s: number | null) => {});
   const onOk = mock(() => {});
   const onCancel = mock(() => {});
   const onChooseImage = mock((_k: string, _c: 0 | 1) => {});
@@ -48,6 +49,8 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
       values: filterDefaults(def),
       preview: true,
       before: false,
+      split: null,
+      quality: "full",
       applied: true,
       files: {},
     });
@@ -69,6 +72,10 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
           onBefore(b);
           setDialog((d) => ({ ...d, before: b }));
         }}
+        onSplit={(sp) => {
+          onSplit(sp);
+          setDialog((d) => ({ ...d, split: sp }));
+        }}
         onOk={onOk}
         onCancel={onCancel}
         onChooseImage={onChooseImage}
@@ -85,6 +92,7 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
     onChange,
     onPreview,
     onBefore,
+    onSplit,
     onOk,
     onCancel,
     onChooseImage,

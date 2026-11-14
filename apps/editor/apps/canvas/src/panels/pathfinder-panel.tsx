@@ -49,17 +49,37 @@
 //
 // HONEST SEAMS, still: the CONVERT SHAPE row + the corner option (no
 // Operations behind them).
+//
+// BEFORE THE CLICK (paged.draw ADR 370). The engine has no dry run of
+// these operations, so the panel says plainly that a button applies on
+// click (one undo step) and, while a button is hovered or focused,
+// outlines on the canvas the objects it will take — the one that keeps
+// the result (or that Crop cuts with) solid and named, the others dashed
+// (`pathfinder-preview.ts`).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { StatusLine } from "@paged-media/panel-kit";
-import { useCanvasClient, useSelection, Icon } from "@paged-media/shell";
+import {
+  useCanvasClient,
+  useOptionalOverlaySignals,
+  useSelection,
+  Icon,
+} from "@paged-media/shell";
 
 import {
+  paintOrder,
   runRegionVerb,
   runShapeMode,
+  topToBottom,
   type PathfinderRegionVerb,
 } from "../pathfinder-commands";
+import {
+  operandPreview,
+  specialRole,
+  type OperandBox,
+  type PathfinderOp,
+} from "./pathfinder-preview";
 import { CoreCommandButton } from "../core-command-dialog";
 import { CORE_COMMAND_ENTRIES } from "../core-command-entries";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -113,7 +133,15 @@ const M = defineMessages("app.pathfinderPanel", {
   convertShape: "Convert shape",
   corner: "Corner",
   cornerSample: "Rounded · 4 pt",
+  appliesOnClick:
+    "{count, plural, one {Applies on click to # object} other {Applies on click to # objects}} · one undo step. Point at a button to see what it takes.",
+  roleResult: "Keeps the result",
+  roleKept: "Kept",
+  roleCutter: "Cuts the others",
 });
+
+/** The overlay layer the operands are outlined on. */
+const PREVIEW_LAYER = "paged.pathfinder.operands";
 
 // Icon + 9.5px label tiles in the deep1 3×2 grid (glyph stand-ins
 // from the existing registry). `label` and `hint` are message keys.
@@ -206,6 +234,67 @@ export function PathfinderPanel() {
   const { elementSelection, setElementSelection } = useSelection();
   const [status, setStatus] = useState<string | null>(null);
   const enabled = elementSelection.length >= 2;
+  const signals = useOptionalOverlaySignals();
+  // The hover the outline answers; a newer hover (or leaving) wins.
+  const previewSeq = useRef(0);
+
+  /** Outline what `op` will take (or clear it, `op` null). */
+  const preview = (op: PathfinderOp | null) => {
+    const seq = ++previewSeq.current;
+    if (!signals) return;
+    if (!op || !enabled) {
+      signals.removeOverlayLayer(PREVIEW_LAYER);
+      return;
+    }
+    const ids = [...elementSelection] as ElementId[];
+    void Promise.all([
+      client.elementGeometry(ids),
+      client.sceneTree().catch(() => []),
+    ])
+      .then(([geometry, tree]) => {
+        if (seq !== previewSeq.current) return;
+        const same = (a: ElementId, b: ElementId) =>
+          a.kind === b.kind && String(a.id) === String(b.id);
+        const boxes: OperandBox[] = ids.flatMap((id, i) => {
+          // The reply follows the request's order; match by id all the
+          // same (an id the engine dropped leaves a gap).
+          const g =
+            geometry[i] && same(geometry[i].id, id)
+              ? geometry[i]
+              : geometry.find((x) => same(x.id, id));
+          return g?.pageId && g.bounds
+            ? [{ id, pageId: g.pageId, bounds: g.bounds }]
+            : [];
+        });
+        const front = topToBottom(ids, paintOrder(tree))[0] ?? null;
+        const role = specialRole(op)?.role ?? null;
+        const label =
+          role === "result"
+            ? strings.t(M.roleResult)
+            : role === "kept"
+              ? strings.t(M.roleKept)
+              : role === "cutter"
+                ? strings.t(M.roleCutter)
+                : null;
+        signals.setOverlayLayer(
+          PREVIEW_LAYER,
+          operandPreview(op, boxes, front, label) as never,
+        );
+      })
+      .catch(() => {
+        /* no outline: the click still says what it did */
+      });
+  };
+  // The outline goes with the panel. The remover is stable; the signals
+  // object itself changes with every overlay update (a cleanup keyed on it
+  // would take the outline down as soon as it was drawn).
+  const removeLayer = signals?.removeOverlayLayer;
+  useEffect(
+    () => () => {
+      removeLayer?.(PREVIEW_LAYER);
+    },
+    [removeLayer],
+  );
 
   const deps = {
     client,
@@ -242,10 +331,16 @@ export function PathfinderPanel() {
             type="button"
             key={btn.kind}
             data-pathfinder-kind={btn.kind}
+            data-applies-on-click=""
             disabled={!enabled}
             title={strings.t(btn.hint)}
             className={TILE_CLASS}
+            onPointerEnter={() => preview(btn.kind)}
+            onPointerLeave={() => preview(null)}
+            onFocus={() => preview(btn.kind)}
+            onBlur={() => preview(null)}
             onClick={() => {
+              preview(null);
               void run(btn.kind, strings.t(btn.label));
             }}
           >
@@ -271,10 +366,16 @@ export function PathfinderPanel() {
             type="button"
             key={btn.verb}
             data-pathfinder-verb={btn.verb}
+            data-applies-on-click=""
             disabled={!enabled}
             title={strings.t(btn.hint)}
             className={TILE_CLASS}
+            onPointerEnter={() => preview(btn.verb)}
+            onPointerLeave={() => preview(null)}
+            onFocus={() => preview(btn.verb)}
+            onBlur={() => preview(null)}
             onClick={() => {
+              preview(null);
               void runRegion(btn.verb, strings.t(btn.label));
             }}
           >
@@ -289,7 +390,15 @@ export function PathfinderPanel() {
           </button>
         ))}
       </div>
-      {enabled ? null : (
+      {enabled ? (
+        <div
+          className="text-xs text-muted-foreground"
+          data-pathfinder-applies
+          style={{ lineHeight: 1.5 }}
+        >
+          {strings.t(M.appliesOnClick, { count: elementSelection.length })}
+        </div>
+      ) : (
         <div className="text-xs text-muted-foreground" data-pathfinder-hint>
           {strings.t(M.selectTwo)}
         </div>

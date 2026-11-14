@@ -190,6 +190,8 @@ export function makeWorkbookPanel(
 ): () => ReactElement {
   // A declaration, so the React Compiler sees the component (it cannot
   // see `return function WorkbookPanel()`, editor ADR 229).
+  // The host's numeric field (editor ADR 1216): one field for every number.
+  const NumericField = host.widgets.NumericField;
   function WorkbookPanel(): ReactElement {
     // Re-render on every session change (import, sheet/range edits): the
     // session as a render value (react-live, editor ADR 229), a new view
@@ -595,14 +597,19 @@ export function makeWorkbookPanel(
                   title={t(M.headerRowsTitle)}
                 >
                   {t(M.headerRows)}
-                  <input
+                  <span
                     data-sheet-paginate-header-rows
-                    type="number"
-                    min={0}
-                    value={headerRows}
-                    onChange={(e) => setHeaderRows(Number(e.target.value))}
-                    style={{ ...input, width: 52 }}
-                  />
+                    style={{ display: "inline-flex" }}
+                  >
+                    <NumericField
+                      value={headerRows}
+                      min={0}
+                      step={1}
+                      precision={0}
+                      ariaLabel={t(M.headerRows)}
+                      onCommit={(v) => setHeaderRows(Math.round(v))}
+                    />
+                  </span>
                 </label>
               </div>
               {placeMsg && (
@@ -693,6 +700,7 @@ export function makeWorkbookPanel(
 
             <Section id="format" title={t(M.formatSection)}>
               <FormatSection
+                NumericField={NumericField}
                 session={session}
                 styles={{ kicker, body, input, button: secondaryButton, row }}
                 openProperties={openProperties}
@@ -720,15 +728,20 @@ export function makeWorkbookPanel(
                   }}
                 >
                   {t(M.keyColumn)}
-                  <input
+                  <span
                     data-sheet-sort-key
-                    type="number"
-                    min={1}
-                    value={sortKey}
-                    onChange={(e) => setSortKey(Number(e.target.value))}
                     title={t(M.keyColumnTitle)}
-                    style={{ ...input, width: 52 }}
-                  />
+                    style={{ display: "inline-flex" }}
+                  >
+                    <NumericField
+                      value={sortKey}
+                      min={1}
+                      step={1}
+                      precision={0}
+                      ariaLabel={t(M.keyColumn)}
+                      onCommit={(v) => setSortKey(Math.round(v))}
+                    />
+                  </span>
                 </label>
                 <select
                   data-sheet-sort-dir

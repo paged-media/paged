@@ -29,9 +29,12 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ComponentType,
   type CSSProperties,
   type ReactNode,
 } from "react";
+
+import type { NumericFieldProps } from "@paged-media/plugin-api";
 
 import type { WorkbookSession } from "../session";
 import type {
@@ -56,6 +59,8 @@ interface CardChrome {
   button: CSSProperties;
   /** Hand the keys back to the grid. */
   done: () => void;
+  /** The host's numeric field (editor ADR 1216). */
+  NumericField: ComponentType<NumericFieldProps>;
 }
 
 const group: CSSProperties = {
@@ -981,17 +986,21 @@ export function FilterMenuCard({
             <option value="top">Top</option>
             <option value="bottom">Bottom</option>
           </select>
-          <input
-            aria-label="Count"
+          <span
             data-testid="sheet-filter-top-n"
-            type="number"
-            min={1}
-            value={top.n}
-            style={{ ...field, width: 64 }}
-            onChange={(e) =>
-              setTop({ ...top, n: Number(e.currentTarget.value) || 1 })
-            }
-          />
+            style={{ display: "inline-flex" }}
+          >
+            <chrome.NumericField
+              value={top.n}
+              min={1}
+              step={1}
+              precision={0}
+              ariaLabel="Count"
+              onCommit={(v) =>
+                setTop({ ...top, n: Math.max(1, Math.round(v)) })
+              }
+            />
+          </span>
           <select
             aria-label="Items or percent"
             value={top.percent ? "percent" : "items"}

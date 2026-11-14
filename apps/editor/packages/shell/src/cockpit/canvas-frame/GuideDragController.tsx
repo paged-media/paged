@@ -77,6 +77,7 @@ import {
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
 import { queryEditor, useEditorRoot } from "../../state/editor-root";
 import { useEscapeHandler } from "../../interaction/escape-arbiter";
+import { useInteractionCoordinator } from "../../interaction/coordinator";
 
 /** Whole-pt snap (GD spec: release snaps to whole pt). */
 function snapPt(v: number): number {
@@ -397,8 +398,20 @@ export function GuideDragController() {
 
   // ── window listeners, mounted only while a drag is live ──────────
   const dragActive = drag != null;
+  const interactions = useInteractionCoordinator();
   useEffect(() => {
     if (!dragActive) return;
+    // The guide drag owns the pointer as a session of the interaction
+    // coordinator (editor ADR 1210, IC4; `UXI-GDE-001`): a blur, a hidden
+    // page, a document or tool switch and unmount end it with nothing
+    // written, as Escape does (GD-03).
+    let released = false;
+    const session = interactions.begin({
+      owner: "ruler-guide",
+      kind: "guide",
+      mutating: true,
+      onAbort: () => clearDrag(),
+    });
 
     const onMove = (e: PointerEvent) => {
       const d = currentDrag();
@@ -407,6 +420,7 @@ export function GuideDragController() {
     };
 
     const onUp = (e: PointerEvent) => {
+      released = true;
       const d = currentDrag();
       clearDrag();
       if (!d) return;
@@ -422,11 +436,13 @@ export function GuideDragController() {
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      if (session && !session.ended)
+        interactions.end(session, released ? "commit" : "cancel");
     };
     // Listeners read the live drag / preview-resolver / settle through
     // effect events, so they bind exactly once per drag (mount/unmount on
     // dragActive).
-  }, [dragActive, updateDrag, clearDrag]);
+  }, [dragActive, updateDrag, clearDrag, interactions]);
 
   // GD-03 — Escape cancels: nothing was mutated yet, so just drop the live
   // preview; a move's original guide is untouched. A transient mode of the

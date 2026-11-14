@@ -163,7 +163,7 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     await addBindingThroughPanel(page, "table", "name, role");
     // The panel's snapshot now lists the wired bindings (the engine accepted
     // the define_binding calls — the resolution graph has nodes).
-    await expect(page.getByText(/bindings:\s*(?!none)/i).first()).toBeVisible({
+    await expect(page.getByText(/Bindings\s*(?!None)/).first()).toBeVisible({
       timeout: 6_000,
     });
 
@@ -194,7 +194,7 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     //    records) and commits the resolved content as native Paged Mutations.
     //    The blank page now carries the data-driven content. ──
     const beforeLower = await designer.renderBytes();
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    await page.getByRole("button", { name: /^place on page$/i }).click();
 
     // ── 5. RENDER ASSERTION (HARD) — the resolved/computed value visibly
     //    reached the page (the §9 lowering lanes lowered real content). The

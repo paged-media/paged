@@ -670,6 +670,9 @@ export function activate(host: BundleHost): BundleHandle {
     // sub-edit (Escape cancels it, ADR 1207) and asks before a document
     // switch.
     label: t(PANELS.contextLabel),
+    // Extensions ADR 1108, sheet ADR 532 — the frame's Edit level says
+    // what entering does: "Frame · Edit cells" (the strategy's §7.3).
+    editLabel: t(PANELS.editCells),
     exitPolicy: "commit-if-safe",
     // ADR 024 — NO CANVAS TOOL EDITS A SPREADSHEET, and saying so is
     // now possible: a declared-empty list restricts to nothing, where
@@ -767,7 +770,7 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("editContext.frameSurface@1")) {
     host.contribute.frameSurface({
       contextType: "sheet",
-      ...makeSheetFrameSurface(session),
+      ...makeSheetFrameSurface(session, host.widgets),
     });
   }
 

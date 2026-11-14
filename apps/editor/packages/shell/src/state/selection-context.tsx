@@ -361,6 +361,12 @@ function usePlacedGeometry(
   }, [geometry, known, handle]);
 }
 
+/** The selection, or null outside a SelectionProvider (a chrome piece
+ *  that also renders standalone). */
+export function useOptionalSelection(): SelectionContextValue | null {
+  return useContext(Context);
+}
+
 const sameElement = (a: ElementId, b: ElementId) =>
   a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id);
 

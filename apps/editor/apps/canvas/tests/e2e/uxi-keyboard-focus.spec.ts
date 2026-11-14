@@ -143,7 +143,10 @@ test.describe("UXI keyboard and focus (track KF)", () => {
     await openShell(page, { doc: true });
     await blurAll(page);
     const seen: Array<{ canvas: boolean; ring: boolean; tools: boolean }> = [];
-    for (let i = 0; i < 16; i++) {
+    // Walk until one stop past the canvas (the chrome grows; a fixed count
+    // of presses breaks when a stop is added before the canvas).
+    for (let i = 0; i < 40; i++) {
+      if (seen.length > 1 && seen.at(-2)?.canvas) break;
       await page.keyboard.press("Tab");
       seen.push(
         await page.evaluate(() => {

@@ -24,7 +24,7 @@
 // commit real mutations; the table path uses the native insertTable op (D-02
 // retired). The variable CARET position is still coarse (no caret-read door).
 
-import { useState, type CSSProperties, type ReactElement } from "react";
+import { useRef, useState, type CSSProperties, type ReactElement } from "react";
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type {
   IdmlFit,
@@ -56,7 +56,20 @@ import { TemplateFieldsSection } from "./template-fields-section";
 import { useSessionSnapshot } from "./use-session";
 import { color, font, space, status } from "@paged-media/panel-kit";
 import { t as tActive, useStrings } from "@paged-media/strings";
-import { BINDINGS as M } from "../messages";
+import { BINDINGS as M, WORKFLOW } from "../messages";
+import {
+  findOutliers,
+  overflowCandidates,
+  type FieldValues,
+  type Outlier,
+} from "../outliers";
+import { workflowStates, type WorkflowStepId } from "../workflow";
+import {
+  OutlierFinder,
+  RecordScrubber,
+  WorkflowSteps,
+  measureImageRatio,
+} from "./data-workflow";
 
 /** The binding kinds the panel defines. */
 type BindKind =
@@ -196,6 +209,12 @@ const SYMBOLOGY_OPTIONS: { value: BarcodeSymbology; label: string }[] = [
   { value: "qr", label: M.symbologyQr },
 ];
 
+/** F-46: the checkboxes take the editor's accent, not the OS's. */
+const kitCheckbox: CSSProperties = { accentColor: "var(--pg-primary)" };
+
+/** The outlier finder reads at most this many records per field. */
+const OUTLIER_CAP = 500;
+
 const wrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -218,6 +237,8 @@ const mono: CSSProperties = {
 
 /** The panel the empty state sends the user to (activate.ts registers it). */
 const SOURCES_PANEL_ID = "media.paged.data.panel.sources";
+/** The query panel (Choose records). */
+const QUERY_PANEL_ID = "media.paged.data.panel.query";
 
 /** One entry of the "Records from" picker: a saved query, or all rows of a
  *  source (`sql` set: the query is defined when a binding first uses it). */
@@ -458,6 +479,7 @@ export function makeBindingsPanel(
         template: mergeKeep ? "keep" : "consume",
         ...(mergeNewDoc ? { destination: "newDocument" as const } : {}),
       });
+      if (r.ok) setPublished(true);
       setMergeMsg(
         r.ok
           ? t(M.merged, {
@@ -482,6 +504,14 @@ export function makeBindingsPanel(
           Math.max(0, recordTotal - 1),
         )
       : 0;
+    // Data ADR 566 — the outlier finder: the records most likely to break
+    // the layout, from the bound fields' values (null: not scanned yet).
+    const [outliers, setOutliers] = useState<Outlier[] | null>(null);
+    const [scanned, setScanned] = useState<FieldValues[]>([]);
+    const [scanning, setScanning] = useState(false);
+    const [checking, setChecking] = useState(false);
+    const [published, setPublished] = useState(false);
+    const rootRef = useRef<HTMLDivElement | null>(null);
     // §9 field-mapping wizard: the engine's column → binding suggestions.
     const [mappings, setMappings] = useState<ColumnMapping[]>([]);
     const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -633,6 +663,79 @@ export function makeBindingsPanel(
         await session.previewRecord(id, clamped);
       }
       refresh();
+    }
+
+    /** Data ADR 566 — read every bound field of the picked query over its
+     *  records (at most OUTLIER_CAP) as the fields show them, then rank
+     *  what stands out. Reading writes nothing. */
+    async function scanOutliers(): Promise<void> {
+      const q = ensurePicked();
+      if (!q) {
+        setStepMsg(t(M.importFirst));
+        return;
+      }
+      setScanning(true);
+      try {
+        let total = (await session.recordCount(q)) ?? 0;
+        if (total === 0) {
+          await session.refreshData();
+          total = (await session.recordCount(q)) ?? 0;
+        }
+        const n = Math.min(total, OUTLIER_CAP);
+        const fields: FieldValues[] = [];
+        for (const b of session.boundFields().filter((f) => f.query === q)) {
+          const values: (string | null)[] = [];
+          for (let i = 0; i < n; i++) {
+            const r = await session.evaluateAt(q, b.expr, i);
+            values.push(r.error ? null : r.display);
+          }
+          const image = b.kind === "image";
+          fields.push({
+            bindingId: b.id,
+            label: b.expr,
+            kind: image ? "image" : "text",
+            values,
+            ...(image
+              ? {
+                  ratios: await Promise.all(
+                    values.map((v) => (v ? measureImageRatio(v) : null)),
+                  ),
+                }
+              : {}),
+          });
+        }
+        setScanned(fields);
+        setOutliers(findOutliers(fields));
+      } finally {
+        setScanning(false);
+        refresh();
+      }
+    }
+
+    /** Render the records with the longest values one by one and note the
+     *  ones whose text oversets; the preview returns to where it was. */
+    async function checkOverflow(): Promise<void> {
+      const q = ensurePicked();
+      if (!q || !outliers) return;
+      setChecking(true);
+      const back = previewIndex;
+      const oversetNow = async () =>
+        (
+          await host.document.collection<{ overset?: boolean }>("stories")
+        ).filter((st) => st.overset).length;
+      try {
+        const baseline = await oversetNow();
+        const over: number[] = [];
+        for (const record of overflowCandidates(outliers)) {
+          await stepTo(record);
+          if ((await oversetNow()) > baseline) over.push(record);
+        }
+        await stepTo(back);
+        setOutliers(findOutliers(scanned, over));
+      } finally {
+        setChecking(false);
+        refresh();
+      }
     }
 
     /** Where a rule applies, from what the user has selected: a table cell
@@ -878,8 +981,31 @@ export function makeBindingsPanel(
       refresh();
     }
 
+    // Data ADR 566 — the six steps, read from the session as it is.
+    const states = workflowStates({
+      sources: snapshot.sources.length,
+      records: recordTotal,
+      bindings: snapshot.bindings.length,
+      previewed:
+        stepQuery !== null && snapshot.preview?.[stepQuery] !== undefined,
+      problems: outliers === null ? null : outliers.length,
+      published,
+    });
+    const goTo = (step: WorkflowStepId) => {
+      if (step === "connect") host.shell.openPanel(SOURCES_PANEL_ID);
+      else if (step === "records") host.shell.openPanel(QUERY_PANEL_ID);
+      else if (step === "bind") void openWizard();
+      else if (step === "validate") void scanOutliers();
+      else {
+        const at = step === "preview" ? "preview-stepper" : "merge-records";
+        rootRef.current
+          ?.querySelector(`[data-testid="${at}"]`)
+          ?.scrollIntoView({ block: "nearest" });
+      }
+    };
     return (
-      <div style={wrap}>
+      <div style={wrap} ref={rootRef}>
+        <WorkflowSteps states={states} onGo={goTo} />
         {(snapshot.relink ?? []).length > 0 && (
           <div style={note} data-data-relink>
             {t(M.relink, { sources: (snapshot.relink ?? []).join(", ") })}
@@ -964,6 +1090,7 @@ export function makeBindingsPanel(
                   <input
                     data-data-bind-invert
                     type="checkbox"
+                    style={kitCheckbox}
                     checked={invert}
                     onChange={(e) => setInvert(e.target.checked)}
                   />{" "}
@@ -1158,24 +1285,22 @@ export function makeBindingsPanel(
                   </select>
                   <label>
                     {t(M.rowSpacing)}{" "}
-                    <input
-                      type="number"
+                    <host.widgets.NumericField
                       value={mergeRowSpacing}
-                      onChange={(e) =>
-                        setMergeRowSpacing(Number(e.target.value))
-                      }
-                      style={{ width: 48 }}
+                      length
+                      min={0}
+                      ariaLabel={t(M.rowSpacing)}
+                      onCommit={(v) => setMergeRowSpacing(v)}
                     />
                   </label>
                   <label>
                     {t(M.columnSpacing)}{" "}
-                    <input
-                      type="number"
+                    <host.widgets.NumericField
                       value={mergeColSpacing}
-                      onChange={(e) =>
-                        setMergeColSpacing(Number(e.target.value))
-                      }
-                      style={{ width: 48 }}
+                      length
+                      min={0}
+                      ariaLabel={t(M.columnSpacing)}
+                      onCommit={(v) => setMergeColSpacing(v)}
                     />
                   </label>
                 </>
@@ -1183,6 +1308,7 @@ export function makeBindingsPanel(
               <label>
                 <input
                   type="checkbox"
+                  style={kitCheckbox}
                   checked={mergeBlank}
                   onChange={(e) => setMergeBlank(e.target.checked)}
                 />{" "}
@@ -1191,6 +1317,7 @@ export function makeBindingsPanel(
               <label title={t(M.keepTemplateTitle)}>
                 <input
                   type="checkbox"
+                  style={kitCheckbox}
                   checked={mergeKeep}
                   onChange={(e) => setMergeKeep(e.target.checked)}
                 />{" "}
@@ -1205,6 +1332,7 @@ export function makeBindingsPanel(
               >
                 <input
                   type="checkbox"
+                  style={kitCheckbox}
                   data-data-merge-new-doc
                   disabled={!hasDocumentsDoors(host)}
                   checked={mergeNewDoc}
@@ -1215,6 +1343,7 @@ export function makeBindingsPanel(
               <button
                 type="button"
                 data-data-merge-run
+                data-testid="merge-records"
                 title={t(M.mergeRunTitle)}
                 onClick={() => {
                   void runMerge();
@@ -1254,7 +1383,10 @@ export function makeBindingsPanel(
               <button
                 type="button"
                 onClick={() => {
-                  void session.lowerAll().then(refresh);
+                  void session.lowerAll().then(() => {
+                    setPublished(true);
+                    refresh();
+                  });
                 }}
               >
                 {t(M.lower)}
@@ -1271,58 +1403,26 @@ export function makeBindingsPanel(
                 {t(M.refreshFields)}
               </button>
             </div>
-            <div style={row} data-testid="preview-stepper">
-              <span style={note}>{t(M.previewRecord)}</span>
-              <button
-                type="button"
-                title={t(M.previousTitle)}
-                disabled={recordTotal === 0 || previewIndex <= 0}
-                onClick={() => {
-                  void stepTo(previewIndex - 1);
-                }}
-              >
-                {t(M.previous)}
-              </button>
-              <span data-testid="preview-position">
-                {recordTotal === 0
-                  ? "— / —"
-                  : `${previewIndex + 1} / ${recordTotal}`}
-              </span>
-              <button
-                type="button"
-                title={t(M.nextTitle)}
-                // Before the query ran, "next" runs it and shows record 1.
-                disabled={
-                  recordTotal === 0
-                    ? !stepQuery
-                    : previewIndex >= recordTotal - 1
-                }
-                onClick={() => {
-                  void stepTo(recordTotal === 0 ? 0 : previewIndex + 1);
-                }}
-              >
-                {t(M.next)}
-              </button>
-              {stepMsg && (
-                <span style={note} data-data-step-msg>
-                  {stepMsg}
-                </span>
-              )}
-              <label style={note}>
-                {t(M.jumpTo)}{" "}
-                <input
-                  type="number"
-                  min={1}
-                  max={Math.max(1, recordTotal)}
-                  value={recordTotal === 0 ? "" : previewIndex + 1}
-                  style={{ width: "4em" }}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isFinite(n)) void stepTo(n - 1);
-                  }}
-                />
-              </label>
-            </div>
+            <RecordScrubber
+              index={previewIndex}
+              total={recordTotal}
+              canRun={!!stepQuery}
+              onPreview={(n) => void stepTo(n)}
+              NumericField={host.widgets.NumericField}
+              message={stepMsg}
+            />
+            <OutlierFinder
+              outliers={outliers}
+              scanning={scanning}
+              checking={checking}
+              onScan={() => void scanOutliers()}
+              onCheckOverflow={() => void checkOverflow()}
+              onPreview={(n) => void stepTo(n)}
+              current={recordTotal > 0 ? previewIndex : null}
+            />
+            <small style={note} data-data-badges-hint>
+              {t(WORKFLOW.badgesHint)}
+            </small>
             <div style={row} data-testid="field-mapping-wizard">
               <button
                 type="button"
@@ -1356,6 +1456,7 @@ export function makeBindingsPanel(
                   >
                     <input
                       type="checkbox"
+                      style={kitCheckbox}
                       disabled={!m.mappable}
                       checked={chosen.has(m.column)}
                       onChange={(e) => {
@@ -1634,21 +1735,30 @@ export function makeBindingsPanel(
                           draft.kind === "percent") && (
                           <label style={note}>
                             {t(M.decimals)}{" "}
-                            <input
+                            <span
                               data-data-format-decimals
-                              type="number"
-                              min={0}
-                              max={10}
-                              value={draft.decimals}
-                              style={{ width: "3.5em" }}
-                              onChange={(e) => {
-                                setDraft({
-                                  ...draft,
-                                  decimals: e.target.value,
-                                });
-                                refresh();
-                              }}
-                            />
+                              style={{ display: "inline-flex" }}
+                            >
+                              <host.widgets.NumericField
+                                value={
+                                  draft.decimals === ""
+                                    ? null
+                                    : Number(draft.decimals)
+                                }
+                                min={0}
+                                max={10}
+                                step={1}
+                                precision={0}
+                                ariaLabel={t(M.decimals)}
+                                onCommit={(v) => {
+                                  setDraft({
+                                    ...draft,
+                                    decimals: String(Math.round(v)),
+                                  });
+                                  refresh();
+                                }}
+                              />
+                            </span>
                           </label>
                         )}
                         {draft.kind === "currency" && (

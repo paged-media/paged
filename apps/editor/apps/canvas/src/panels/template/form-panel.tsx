@@ -26,7 +26,7 @@
 // block) reads and writes through its module (module-field.tsx). The canvas
 // shows the same values, because both read the document.
 
-import { useState, type ReactElement } from "react";
+import { useRef, useState, type ReactElement } from "react";
 
 import type {
   TemplateFieldSummary,
@@ -46,6 +46,7 @@ import {
   useCanvasClient,
   useCollection,
   useCompactLayout,
+  useRegistries,
   useSelection,
   useTouchSized,
 } from "@paged-media/shell";
@@ -53,6 +54,7 @@ import {
 import { useStrings } from "@paged-media/strings";
 
 import { FORM, problemText } from "./messages";
+import { fieldFilled, formProgress, nextIncomplete } from "./progress";
 import { ModuleFieldControl } from "./module-field";
 import { StyledTextControl, type Breaks, type StyledRun } from "./styled-text";
 
@@ -140,7 +142,14 @@ function PictureInput({
   );
 }
 
-function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
+function FieldRow({
+  row,
+  showMissing,
+}: {
+  row: TemplateFieldSummary;
+  /** Finish was asked for: an empty required field says so. */
+  showMissing: boolean;
+}): ReactElement {
   const client = useCanvasClient();
   const strings = useStrings();
   // A fill shape on a phone or tablet: touch-sized controls, and a
@@ -385,8 +394,16 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
           }}
         >
           <span>
-            {label}
-            {field.required ? " *" : ""}
+            {label} {/* Editor ADR 1225 — required or optional, in words. */}
+            <span
+              data-field-required={field.required ? "required" : "optional"}
+              style={{
+                fontWeight: 400,
+                color: field.required ? "var(--pg-fg)" : "var(--pg-muted-fg)",
+              }}
+            >
+              {strings.t(field.required ? FORM.required : FORM.optional)}
+            </span>
           </span>
           {max !== null &&
           !styled &&
@@ -405,6 +422,11 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
             {field.help}
           </div>
         ) : null}
+        {showMissing && field.required && !fieldFilled(row) ? (
+          <StatusLine tone="warn" attr="data-field-missing">
+            {strings.t(FORM.missing)}
+          </StatusLine>
+        ) : null}
         {row.overset ? (
           <StatusLine tone="warn" attr="data-field-overset">
             {strings.t(FORM.overset)}
@@ -421,8 +443,10 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
 /** The rows of a form, under the author's group headings. */
 function FieldGroups({
   rows,
+  showMissing,
 }: {
   rows: readonly TemplateFieldSummary[];
+  showMissing: boolean;
 }): ReactElement {
   const groups = new Map<string, TemplateFieldSummary[]>();
   for (const row of rows) {
@@ -439,12 +463,208 @@ function FieldGroups({
             </h3>
           ) : null}
           {members.map((row) => (
-            <FieldRow key={row.field.name} row={row} />
+            <FieldRow
+              key={row.field.name}
+              row={row}
+              showMissing={showMissing}
+            />
           ))}
         </section>
       ))}
     </>
   );
+}
+
+/**
+ * Editor ADR 1225 — where the filler is: how many fields hold a value, how
+ * many required ones are empty, and the way to the next one; at the end,
+ * Finish checks the fields and offers the export and the save. The page is
+ * the live preview: every value shows there as it is written.
+ */
+function FormProgressBar({
+  rows,
+  onNext,
+}: {
+  rows: readonly TemplateFieldSummary[];
+  onNext(): void;
+}): ReactElement {
+  const strings = useStrings();
+  const touch = touchTargetStyle(useTouchSized());
+  const p = formProgress(rows);
+  const share = p.total === 0 ? 0 : p.filled / p.total;
+  return (
+    <div data-form-progress="" style={{ display: "grid", gap: space[1] }}>
+      <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+        <span data-form-progress-text="" style={{ flex: 1, fontSize: 12 }}>
+          {strings.t(FORM.progress, { filled: p.filled, total: p.total })}
+        </span>
+        {p.next ? (
+          <button
+            type="button"
+            data-form-next=""
+            title={strings.t(FORM.nextFieldTitle)}
+            style={{ ...sheetButton, ...touch }}
+            onClick={onNext}
+          >
+            {strings.t(FORM.nextField)}
+          </button>
+        ) : null}
+      </div>
+      <div
+        role="progressbar"
+        aria-label={strings.t(FORM.progressLabel)}
+        aria-valuemin={0}
+        aria-valuemax={p.total}
+        aria-valuenow={p.filled}
+        style={{
+          height: 4,
+          borderRadius: 2,
+          background: "var(--pg-border)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.round(share * 100)}%`,
+            height: "100%",
+            background: "var(--pg-primary)",
+          }}
+        />
+      </div>
+      <span
+        data-form-required-left={p.requiredMissing.length}
+        style={{
+          fontSize: 11,
+          color:
+            p.requiredMissing.length > 0
+              ? "var(--pg-warning, #b54708)"
+              : "var(--pg-muted-fg)",
+        }}
+      >
+        {p.requiredMissing.length > 0
+          ? strings.t(FORM.requiredLeft, { count: p.requiredMissing.length })
+          : p.next === null
+            ? strings.t(FORM.allFilled)
+            : null}
+      </span>
+    </div>
+  );
+}
+
+function FinishSection({
+  rows,
+  onBlocked,
+}: {
+  rows: readonly TemplateFieldSummary[];
+  /** Finish was asked for while fields are missing: show them. */
+  onBlocked(first: string | null): void;
+}): ReactElement {
+  const strings = useStrings();
+  const registries = useRegistries();
+  const touch = touchTargetStyle(useTouchSized());
+  const [stage, setStage] = useState<"form" | "blocked" | "ready">("form");
+  const p = formProgress(rows);
+  const run = (id: string) => {
+    if (registries.commands.get(id)) void registries.commands.invoke(id);
+  };
+  return (
+    <div data-form-finish-area="" style={{ display: "grid", gap: space[2] }}>
+      {stage === "ready" && p.ready ? (
+        <div
+          data-form-ready=""
+          role="status"
+          style={{
+            display: "grid",
+            gap: space[2],
+            padding: space[2],
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--pg-border)",
+          }}
+        >
+          <span style={{ fontSize: 12 }}>{strings.t(FORM.ready)}</span>
+          <div style={{ display: "flex", gap: space[2], flexWrap: "wrap" }}>
+            <button
+              type="button"
+              data-form-export=""
+              style={{
+                ...sheetButton,
+                ...touch,
+                background: "var(--pg-primary)",
+                color: "var(--pg-primary-fg)",
+              }}
+              onClick={() => run("paged.file.exportPdf")}
+            >
+              {strings.t(FORM.exportPdf)}
+            </button>
+            <button
+              type="button"
+              data-form-save=""
+              style={{ ...sheetButton, ...touch }}
+              onClick={() => run("paged.file.savePaged")}
+            >
+              {strings.t(FORM.save)}
+            </button>
+            <button
+              type="button"
+              data-form-back=""
+              style={{ ...sheetButton, ...touch }}
+              onClick={() => setStage("form")}
+            >
+              {strings.t(FORM.backToForm)}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-form-finish=""
+          title={strings.t(FORM.finishTitle)}
+          style={{ ...sheetButton, ...touch, justifySelf: "start" }}
+          onClick={() => {
+            if (p.ready) {
+              setStage("ready");
+              return;
+            }
+            setStage("blocked");
+            onBlocked(p.requiredMissing[0] ?? p.overset[0] ?? null);
+          }}
+        >
+          {strings.t(FORM.finish)}
+        </button>
+      )}
+      {stage === "blocked" && !p.ready ? (
+        <div data-form-blocked="" role="alert" style={{ fontSize: 12 }}>
+          {p.requiredMissing.length > 0
+            ? strings.t(FORM.finishBlocked, {
+                count: p.requiredMissing.length,
+              })
+            : strings.t(FORM.finishOverset, { count: p.overset.length })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Put the caret into field `name`'s control (and, on a phone, its sheet:
+ *  the sheet shows the field whose frame is selected). */
+function useFieldFocus(rows: readonly TemplateFieldSummary[]) {
+  const root = useRef<HTMLDivElement | null>(null);
+  const { setElementSelection } = useSelection();
+  const focus = (name: string | null) => {
+    if (!name) return;
+    const row = rows.find((r) => r.field.name === name);
+    if (row?.elementId) setElementSelection([row.elementId]);
+    requestAnimationFrame(() => {
+      const el = root.current?.querySelector<HTMLElement>(
+        `[data-template-field="${CSS.escape(name)}"] input, ` +
+          `[data-template-field="${CSS.escape(name)}"] textarea, ` +
+          `[data-template-field="${CSS.escape(name)}"] button`,
+      );
+      el?.focus();
+      el?.scrollIntoView({ block: "nearest" });
+    });
+  };
+  return { root, focus };
 }
 
 const sheetButton = {
@@ -471,6 +691,8 @@ function FieldSheet({
   const strings = useStrings();
   const { elementSelection, setElementSelection } = useSelection();
   const [all, setAll] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
+  const { root, focus } = useFieldFocus(rows);
   const active = rows.find((row) =>
     elementSelection.some((id) => sameElement(id, row.elementId)),
   );
@@ -478,10 +700,17 @@ function FieldSheet({
   const touch = touchTargetStyle(true);
   return (
     <div
+      ref={root}
       data-template-form
       data-template-form-sheet={active ? active.field.name : ""}
       style={{ display: "grid", gap: space[3], padding: space[3] }}
     >
+      <FormProgressBar
+        rows={rows}
+        onNext={() =>
+          focus(nextIncomplete(rows, active ? active.field.name : null))
+        }
+      />
       <div
         style={{
           display: "flex",
@@ -522,7 +751,16 @@ function FieldSheet({
           </button>
         ) : null}
       </div>
-      {shown.length ? <FieldGroups rows={shown} /> : null}
+      {shown.length ? (
+        <FieldGroups rows={shown} showMissing={showMissing} />
+      ) : null}
+      <FinishSection
+        rows={rows}
+        onBlocked={(first) => {
+          setShowMissing(true);
+          focus(first);
+        }}
+      />
     </div>
   );
 }
@@ -544,12 +782,40 @@ export function TemplateFormPanel(): ReactElement {
     );
   }
   if (sheet) return <FieldSheet rows={rows} />;
+  return <DockedForm rows={rows} />;
+}
+
+/** The form docked beside the page: the progress, every field, Finish. */
+function DockedForm({
+  rows,
+}: {
+  rows: readonly TemplateFieldSummary[];
+}): ReactElement {
+  const [showMissing, setShowMissing] = useState(false);
+  const [last, setLast] = useState<string | null>(null);
+  const { root, focus } = useFieldFocus(rows);
   return (
     <div
+      ref={root}
       data-template-form
       style={{ display: "grid", gap: space[3], padding: space[3] }}
     >
-      <FieldGroups rows={rows} />
+      <FormProgressBar
+        rows={rows}
+        onNext={() => {
+          const next = nextIncomplete(rows, last);
+          setLast(next);
+          focus(next);
+        }}
+      />
+      <FieldGroups rows={rows} showMissing={showMissing} />
+      <FinishSection
+        rows={rows}
+        onBlocked={(first) => {
+          setShowMissing(true);
+          focus(first);
+        }}
+      />
     </div>
   );
 }

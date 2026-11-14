@@ -888,6 +888,17 @@ export interface DataSourceSession
   /** The defined bindings + their kinds — panel-facing read of session
    *  state (the dataset panel's batch RUN needs the record-flow binding). */
   listBindings(): { id: string; kind: string }[];
+  /** Data ADR 566 — the bindings that show one value per record (a
+   *  variable field, an image, a barcode): their query and expression, for
+   *  the outlier finder. */
+  boundFields(): { id: string; kind: string; query: string; expr: string }[];
+  /** Data ADR 566 — an expression's value at a record, as a field shows it
+   *  (`evaluate_at`); an error when the engine cannot preview. */
+  evaluateAt(
+    query: string,
+    expr: string,
+    record: number,
+  ): Promise<{ display: string; value: unknown; error?: string }>;
   /** D-12: paginate a record-flow binding over the LIVE host frame chain
    *  (`host.document.frameChain(storyId)` + content-box capacities), re-splitting
    *  when the chain reflows. Returns the paginated flow IR (the host renders it).
@@ -3382,6 +3393,30 @@ export function createSession(
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    boundFields() {
+      const all = ((engine?.payload() as { bindings?: unknown[] } | undefined)
+        ?.bindings ?? []) as Array<{
+        id?: unknown;
+        kind?: unknown;
+        query?: unknown;
+        expr?: unknown;
+      }>;
+      return all.flatMap((b) =>
+        typeof b.id === "string" &&
+        typeof b.kind === "string" &&
+        ["variable", "image", "barcode"].includes(b.kind) &&
+        typeof b.query === "string" &&
+        typeof b.expr === "string"
+          ? [{ id: b.id, kind: b.kind, query: b.query, expr: b.expr }]
+          : [],
+      );
+    },
+    async evaluateAt(query, expr, record) {
+      const e = await ensureEngine();
+      if (typeof e.evaluate_at !== "function")
+        return { display: "", value: null, error: "no preview lane" };
+      return e.evaluate_at(query, expr, record);
+    },
     publishIssuesToProblems(on) {
       issuesToProblems = on;
     },

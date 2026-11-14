@@ -34,11 +34,12 @@
 // keeps doing exactly what it did, and only a DRAG reaches this file —
 // which is precisely the InDesign split.
 //
-// WHAT IT DELIBERATELY DOES NOT DO. A drag that STARTS over an existing
-// text frame creates nothing. In InDesign that gesture selects a range
-// of text, and this handler is not that; creating a frame on top of the
-// one the user was aiming at would be worse than doing nothing, so it
-// bails and leaves the frame alone. Range-drag-select stays as it was.
+// A DRAG THAT STARTS OVER TEXT selects text, as in InDesign (the
+// interaction specification's UXI-TXT-011; editor ADR 1210, IC4): from
+// the story offset under the press to the one under the pointer, in story
+// order across lines and threaded frames, and it creates nothing. (It
+// used to do nothing at all: a frame pulled out on top of the one the
+// user aimed at would have been worse.)
 
 import type {
   CanvasPointerEvent,
@@ -116,10 +117,55 @@ export function createTypeHandler(): GestureHandler {
    *  drag may already be under way when the answer arrives — which is
    *  why it is checked at pointer-up rather than gating pointer-down. */
   let overExistingText = false;
+  /** The story offset under the press, when it landed on text. */
+  let anchor: { storyId: string; offset: number } | null = null;
+  /** One hit test at a time while a text range is dragged; the latest
+   *  pointer waits for it. */
+  let rangeBusy = false;
+  let rangePending: CanvasPointerEvent | null = null;
+
+  /** Extend the text range to the offset under `e` (same story). */
+  const extendRange = (e: CanvasPointerEvent): void => {
+    if (!paged || !anchor || !e.pageId || !e.pagePoint) return;
+    if (rangeBusy) {
+      rangePending = e;
+      return;
+    }
+    rangeBusy = true;
+    const from = anchor;
+    const editor = paged;
+    void editor.client
+      .send({
+        kind: "hitTest",
+        payload: { pageId: e.pageId, docPoint: e.pagePoint, filter: "text" },
+      })
+      .then((reply) => {
+        if (anchor !== from || reply.kind !== "hitResult") return;
+        const hit = reply.payload;
+        if (hit.storyId !== from.storyId || hit.offsetWithinStory == null)
+          return;
+        const to = hit.offsetWithinStory;
+        editor.contentSelection.setContentSelection({
+          storyId: from.storyId,
+          start: Math.min(from.offset, to),
+          end: Math.max(from.offset, to),
+          affinity: false,
+        });
+      })
+      .catch(() => {})
+      .then(() => {
+        rangeBusy = false;
+        const next = rangePending;
+        rangePending = null;
+        if (next) extendRange(next);
+      });
+  };
 
   const reset = () => {
     drag = null;
     overExistingText = false;
+    anchor = null;
+    rangePending = null;
     paged?.overlaySignals.setToolPreview(null);
   };
 
@@ -154,6 +200,7 @@ export function createTypeHandler(): GestureHandler {
       }
       drag = started;
       overExistingText = false;
+      anchor = null;
       // Ask whether a text frame is already here. Filter "text" because
       // dragging across a rectangle to make a text frame is legitimate —
       // only an existing TEXT frame is the case we decline.
@@ -168,6 +215,13 @@ export function createTypeHandler(): GestureHandler {
           });
           if (reply.kind === "hitResult" && reply.payload.element) {
             overExistingText = true;
+            const hit = reply.payload;
+            if (
+              drag === started &&
+              hit.storyId &&
+              hit.offsetWithinStory != null
+            )
+              anchor = { storyId: hit.storyId, offset: hit.offsetWithinStory };
           }
         } catch {
           // No answer — treat the canvas as empty. Refusing to create on
@@ -179,7 +233,10 @@ export function createTypeHandler(): GestureHandler {
     onPointerMove(e: CanvasPointerEvent) {
       if (!paged || !drag) return;
       if (e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
-      if (overExistingText) return;
+      if (overExistingText) {
+        extendRange(e);
+        return;
+      }
       paged.overlaySignals.setToolPreview({
         pageId: drag.pageId,
         rect: boundsFor(endLocalFor(drag, e)),
@@ -193,6 +250,15 @@ export function createTypeHandler(): GestureHandler {
       const bounds = boundsFor(endLocalFor(drag, e));
       const pageId = drag.pageId;
       const declined = overExistingText;
+      // A drag over text ends where it was let go.
+      if (declined && e.maxDelta > CLICK_DRAG_THRESHOLD_PX) {
+        rangePending = null;
+        extendRange(e);
+        drag = null;
+        overExistingText = false;
+        paged.overlaySignals.setToolPreview(null);
+        return;
+      }
       reset();
       // A click is the caret's (the legacy path), never a frame.
       if (declined || e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;

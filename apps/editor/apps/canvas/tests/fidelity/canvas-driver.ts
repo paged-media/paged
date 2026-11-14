@@ -29,7 +29,7 @@
 
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 import { FIDELITY_DPI } from "./fixtures";
 import { loadPackFonts } from "./fonts";
@@ -138,27 +138,6 @@ export async function loadViaFileInput(
     .toBe(true);
 }
 
-/** The project's debug flags (`metadata.debugFlags` in
- *  playwright.config.ts) added to a page's query: the `uxi-coordinator`
- *  project runs the interaction specs with `?debug=coordinator` this way. */
-function withProjectDebugFlags(search: string): string {
-  let flags: readonly string[] = [];
-  try {
-    flags =
-      (test.info().project.metadata as { debugFlags?: string[] } | undefined)
-        ?.debugFlags ?? [];
-  } catch {
-    // Not inside a running test: no project, no flags.
-  }
-  if (flags.length === 0) return search;
-  const params = new URLSearchParams(
-    search.startsWith("?") ? search.slice(1) : search,
-  );
-  const have = (params.get("debug") ?? "").split(",").filter(Boolean);
-  params.set("debug", [...new Set([...have, ...flags])].join(","));
-  return `?${params.toString().replaceAll("%2C", ",")}`;
-}
-
 /** Pages whose dialog listener `openCanvas` registered, and the options
  *  it answers with (the latest call's). */
 const dialogAnswered = new WeakSet<Page>();
@@ -239,7 +218,7 @@ export async function openCanvas(
       /* no storage: the editor's default */
     }
   }, options.adaptiveWorkspace === true);
-  await page.goto(`/${withProjectDebugFlags(options.search ?? "")}`);
+  await page.goto(`/${options.search ?? ""}`);
   // Pull console output into the Playwright test log so render
   // panics surface in the test report instead of vanishing.
   page.on("console", (msg) => {

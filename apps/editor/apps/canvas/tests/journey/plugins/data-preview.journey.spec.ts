@@ -142,28 +142,57 @@ test.describe("journey · paged.data preview stepper + change report", () => {
     await page.getByRole("button", { name: /refresh data/i }).click();
     await page.waitForTimeout(500);
 
-    // ── 3. PREVIEW STEPPER — the fixture has 3 records. Jump to record 2 via
-    //    the stepper's "jump to" input (which reads `recordCount` for the
+    // ── 3. RECORD SCRUBBER (data ADR 566) — the fixture has 3 records. Jump
+    //    to record 2 through the scrubber's record number (which reads `recordCount` for the
     //    of-N bound + resolves every binding against the chosen record), then
     //    assert the position label reflects the stepped-to record of the total. ──
     const stepper = page.locator('[data-testid="preview-stepper"]');
     await expect(stepper).toBeVisible();
     const position = page.locator('[data-testid="preview-position"]');
 
-    const jump = stepper.locator('input[type="number"]');
+    // The record number is the host's numeric field: Enter commits.
+    const jump = stepper.locator("[data-data-record-field] input");
     await jump.fill("2");
-    await jump.dispatchEvent("change");
-    // The fixture ingests 3 records → "2 / 3". The stepper resolved every
-    // binding against record index 1 through the engine's resolve_at lane.
-    await expect(position).toHaveText("2 / 3", { timeout: 8_000 });
+    await jump.press("Enter");
+    // The fixture ingests 3 records → "Record 2 of 3". The scrubber resolved
+    // every binding against record index 1 through the engine's resolve_at
+    // lane.
+    await expect(position).toHaveText("Record 2 of 3", { timeout: 8_000 });
 
-    // Step back one with "‹ prev" (now enabled) → "1 / 3".
-    await page.getByRole("button", { name: /‹ prev/ }).click();
-    await expect(position).toHaveText("1 / 3", { timeout: 6_000 });
+    // Step back one with Previous (now enabled) → record 1.
+    await stepper.locator('[data-data-scrub="previous"]').click();
+    await expect(position).toHaveText("Record 1 of 3", { timeout: 6_000 });
 
-    // Step forward with "next ›" → "2 / 3".
-    await page.getByRole("button", { name: /next ›/ }).click();
-    await expect(position).toHaveText("2 / 3", { timeout: 6_000 });
+    // Step forward with Next → record 2.
+    await stepper.locator('[data-data-scrub="next"]').click();
+    await expect(position).toHaveText("Record 2 of 3", { timeout: 6_000 });
+
+    // ── 3b. OUTLIER FINDER (data ADR 566) — reading every bound field over
+    //    the records writes nothing; the people fixture has no missing or
+    //    unusually long name, so nothing stands out and Validate is done. ──
+    const undoLen = () =>
+      page.evaluate(
+        async () =>
+          (
+            await (
+              globalThis as unknown as {
+                __canvas: {
+                  client: { undoLog(): Promise<{ undoLen: number }> };
+                };
+              }
+            ).__canvas.client.undoLog()
+          ).undoLen,
+      );
+    const before = await undoLen();
+    await page.locator("[data-data-outliers-scan]").click();
+    await expect(page.locator("[data-data-outliers-none]")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.locator('[data-data-step="validate"]')).toHaveAttribute(
+      "data-state",
+      "done",
+    );
+    expect(await undoLen()).toBe(before);
 
     // ── 4. CHANGE REPORT — "What changed?" refreshes the data then diffs every
     //    binding's resolved content vs the prior snapshot. The first report is

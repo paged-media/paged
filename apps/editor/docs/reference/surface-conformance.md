@@ -317,7 +317,10 @@ Tab's chrome toggle; the palette's Escape; text input; and Escape, resolved once
 Escape arbiter (ADR 1207: the text, the entered group, the edit context, the transient modes and
 the selection are its tiers). One exception: EXC-001 (the viewport's drag cancel, the gesture
 handlers and path editing still listen on their own, until IC4). EXC-002 (issue #32, the
-palette's Escape on real Chrome) closed with KF1/KF5.
+palette's Escape on real Chrome) closed with KF1/KF5. EXC-001 closed with IC4: the three answer
+in the arbiter's tiers (the gesture tier while a pointer is held, the transient tier for a busy
+handler and path editing), and the inventory scopes them apart (`editor/pointer-held`,
+`editor/tool-busy`, `editor/path-edit`); the ledger is empty.
 
 ### Claiming a scenario
 

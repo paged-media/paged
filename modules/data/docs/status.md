@@ -73,6 +73,14 @@ exports still link. An `asset:<id>` image value is placed from those parts, in t
 
 ## Shipped
 
+- **The workflow is legible (ADR 566, 2026-11-14).** The Bindings panel opens with six steps,
+  Connect source → Choose records → Bind fields → Preview variants → Validate → Publish, each
+  saying its state and going there. A record scrubber (Previous, Next, a slider, a record
+  number) replaces the stepper. **Find outliers** ranks the records most likely to break the
+  layout — missing values, the longest text per field, pictures of unusual proportions — and
+  **Check for overflow** renders the longest and notes those that overset; a row previews its
+  record. The binding badges are the editing aid **Data bindings**. The panel's words are
+  sentence case (F-46).
 - **The session is saved with the document** (since 2026-10-05). Sources, queries,
   binding definitions, data sets, the locale, pinned bindings and the imported CSV text are
   written to this plugin's `session` container part (`paged/media.paged.data/session.json`,

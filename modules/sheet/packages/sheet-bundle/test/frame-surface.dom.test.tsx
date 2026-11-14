@@ -42,6 +42,7 @@ import {
   withSwatchColors,
 } from "../src/surface/sheet-frame-surface";
 import { dataToolsStub } from "./data-tools-stub";
+import { previewOf, type PublicationPreview } from "../src/publication-preview";
 
 afterEach(cleanup);
 
@@ -75,6 +76,7 @@ function fakeSession(shown: GridScene = scene) {
   let lock = false;
   let pasteCard = false;
   let activeSheet = 0;
+  let preview: PublicationPreview | null = null;
   const session: FrameSurfaceSession = {
     ...dataToolsStub(),
     undoCellEdit: () => false,
@@ -175,6 +177,7 @@ function fakeSession(shown: GridScene = scene) {
     grabAt: () => "cell" as const,
     selectionAreas: () => [],
     pageWindowsOnLeave: () => [],
+    publicationPreview: () => preview,
     scrollInFrame: (dRows, dCols) => (
       calls.push(["scroll", dRows, dCols]),
       true
@@ -204,7 +207,11 @@ function fakeSession(shown: GridScene = scene) {
     pasteCard = true;
     changed();
   };
-  return { session, calls, openPaste };
+  const setPreview = (next: PublicationPreview | null) => {
+    preview = next;
+    changed();
+  };
+  return { session, calls, openPaste, setPreview };
 }
 
 function props(over: Partial<FrameSurfaceProps> = {}): FrameSurfaceProps {
@@ -568,5 +575,81 @@ describe("sheet frame surface", () => {
     expect(stepZoom(1.1, -1)).toBe(1);
     expect(stepZoom(4, 1)).toBe(4);
     expect(stepZoom(0.1, -1)).toBe(0.1);
+  });
+});
+
+// Sheet ADR 532 — the bar's first row while the cells are edited: the mode,
+// Done, and the publication preview of the selection.
+describe("editing cells: the mode, Done and the print preview", () => {
+  it("names the mode and leaves through the host's exit, committing an open cell first", () => {
+    const { session, calls } = fakeSession();
+    const exits: boolean[] = [];
+    const r = render(
+      createElement(
+        makeSheetFrameSurface(session).bar!,
+        props({ exit: ({ commit }) => exits.push(commit) }),
+      ),
+    );
+    expect(r.getByTestId("sheet-bar-mode").textContent).toBe("Editing cells");
+    // A cell being typed is kept, not dropped, by Done.
+    act(() => {
+      session.beginCellEdit("7", "enter");
+    });
+    fireEvent.click(r.getByTestId("sheet-bar-exit"));
+    expect(calls).toContainEqual(["commit"]);
+    expect(exits).toEqual([true]);
+  });
+
+  it("says the selection prints, and warns with counts when rows and columns overflow the frame", () => {
+    const { session, setPreview } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar!, props()),
+    );
+    // No placed frame: no status.
+    expect(r.queryByTestId("sheet-print-status")).toBeNull();
+    act(() =>
+      setPreview(
+        previewOf([{ top: 0, left: 0, bottom: 9, right: 3 }], {
+          top: 2,
+          left: 1,
+          bottom: 4,
+          right: 2,
+        }),
+      ),
+    );
+    const status = r.getByTestId("sheet-print-status");
+    expect(status.getAttribute("data-fits")).toBe("true");
+    expect(status.textContent).toBe("Prints in the frame");
+    act(() =>
+      setPreview(
+        previewOf([{ top: 0, left: 0, bottom: 9, right: 3 }], {
+          top: 8,
+          left: 2,
+          bottom: 12,
+          right: 4,
+        }),
+      ),
+    );
+    expect(status.getAttribute("data-fits")).toBe("false");
+    expect(status.textContent).toBe("⚠ 4 rows or columns do not print");
+    fireEvent.click(r.getByTestId("sheet-print-preview-toggle"));
+    const card = r.getByTestId("sheet-print-preview");
+    expect(card.textContent).toContain("Selection C9:E13 in this frame");
+    const notes = [
+      ...r.getByTestId("sheet-print-preview-notes").querySelectorAll("li"),
+    ].map((li) => li.textContent);
+    expect(notes).toEqual([
+      "Prints 2 × 2 of the selection",
+      "3 selected rows are below the frame's edge and will not print",
+      "1 selected column is past the frame's right edge and will not print",
+    ]);
+    // The schematic: 15 selected cells, 4 print (rows 9–10 × columns C–D).
+    expect(card.querySelectorAll('[data-preview-cell="prints"]').length).toBe(
+      4,
+    );
+    expect(card.querySelectorAll('[data-preview-cell="overflow"]').length).toBe(
+      11,
+    );
+    expect(card.querySelectorAll("[data-preview-frame]").length).toBe(1);
   });
 });

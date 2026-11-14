@@ -386,23 +386,96 @@ test.describe("UXI module conformance (G2)", () => {
   }) => {
     await openUxiFixture(page, "E");
     const { sheet } = await placeModuleFrames(page);
+    // The web frame was placed last: a click selects the sheet frame.
+    const { elementScreenCenter } = await import(
+      "../journey/plugins/sheet-kit"
+    );
+    const at = await elementScreenCenter(page, sheet);
+    await page.mouse.click(at.x, at.y);
+    await expect.poll(() => selectedIds(page)).toEqual([sheet.id]);
     const frameBefore = await geometry(page, sheet);
-    await enterByDoor(page, "sheet", sheet);
+    const before = await stage(page);
+    const history = await historyDepth(page);
+
+    // Sheet frame selected → Edit cells (sheet ADR 532, extensions ADR
+    // 1107): the level control names the transition; entering it moves
+    // neither the camera nor the canvas.
+    const edit = page.locator('[data-frame-levels] [data-frame-level="edit"]');
+    await expect(edit).toHaveText("Edit cells");
+    await expect(
+      page.locator('[data-frame-levels] [data-frame-level="frame"]'),
+    ).toHaveAttribute("aria-checked", "true");
+    await edit.click();
+    await expect.poll(() => activeEditContext(page)).toBe("sheet");
     await expect(page.locator('[data-edit-context-crumb="sheet"]')).toHaveText(
       "Spreadsheet",
     );
+    await expect(page.getByTestId("sheet-bar-mode")).toHaveText(
+      "Editing cells",
+    );
+    expect(await stage(page), "entering moves nothing").toEqual(before);
+    const editor = page.getByTestId("sheet-cell-editor");
+    await expect(editor).toBeFocused();
+
+    // The arrows are the grid's: the active cell moves, the frame does not.
+    const name = page.getByTestId("sheet-bar-name");
+    await expect(name).toHaveText("A1");
     for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"])
       await page.keyboard.press(key);
+    await expect(name).toHaveText("A1");
+    await page.keyboard.press("ArrowDown");
+    await expect(name).toHaveText("A2");
+    await page.keyboard.press("ArrowUp");
     expect(
       (await geometry(page, sheet))?.bounds,
       "the arrows are the grid's",
     ).toEqual(frameBefore?.bounds);
-    expect(await activeEditContext(page)).toBe("sheet");
-    // Leaving keeps the workbook's committed edits and moves nothing.
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
+
+    // Typing edits the active cell; Enter commits and moves down. The cell
+    // edit is the workbook's (the session's journal): the document's
+    // history does not move while the cells are edited, and Cmd/Ctrl+Z
+    // inside undoes the cell, not a document step.
+    const formula = page.getByTestId("sheet-bar-formula");
+    await page.keyboard.type("42");
+    await page.keyboard.press("Enter");
+    await expect(name).toHaveText("A2");
+    await page.keyboard.press("ArrowUp");
+    await expect(formula).toHaveValue("42");
+    expect(await historyDepth(page)).toEqual(history);
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect(formula).not.toHaveValue("42");
+    expect(await historyDepth(page)).toEqual(history);
+    await page.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(formula).toHaveValue("42");
+
+    // The publication preview: the selection inside the placed range
+    // prints; extended past the frame's last row it warns, with counts.
+    const status = page.getByTestId("sheet-print-status");
+    await expect(status).toHaveAttribute("data-fits", "true");
+    for (let i = 0; i < 6; i++) await page.keyboard.press("Shift+ArrowDown");
+    await expect(status).toHaveAttribute("data-fits", "false");
+    await expect(status).toContainText("do not print");
+    await page.getByTestId("sheet-print-preview-toggle").click();
+    const card = page.getByTestId("sheet-print-preview");
+    await expect(card).toContainText("below the frame's edge");
+    expect(
+      await card.locator('[data-preview-cell="overflow"]').count(),
+    ).toBeGreaterThan(0);
+    // The preview is a view: the document did not change.
+    expect(await historyDepth(page)).toEqual(history);
+
+    // Done leaves the cells: the frame stays selected, nothing moved, and
+    // the page shows the edit as one document step.
+    await page.getByTestId("sheet-bar-exit").click();
     await expect.poll(() => activeEditContext(page)).toBe(null);
+    expect(await selectedIds(page)).toContain(sheet.id);
+    expect(await stage(page), "leaving moves nothing").toEqual(before);
     expect((await geometry(page, sheet))?.bounds).toEqual(frameBefore?.bounds);
+    const { placedValues } = await import("../journey/plugins/sheet-kit");
+    await expect
+      .poll(async () => (await placedValues(page))[0]?.[0])
+      .toBe("42");
+    expect((await historyDepth(page)).undo).toBeGreaterThan(history.undo);
   });
 
   test("UXI-T39 — a web frame's source: entering and leaving are defined, nothing else in the document changes @feat:plugin-web.in-frame-edit @level:edge", async ({

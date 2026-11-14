@@ -114,10 +114,15 @@ const SELECTION_TOOLS: ReadonlySet<string> = new Set([
   "paged.tool.directSelect",
 ]);
 
-/** Screen px. */
+/** Screen px. A widget takes the press on its own target only: 12 px, the
+ *  smallest a mouse target may be (`UXI-HND-001`), about its 7 px disc.
+ *  A corner widget sits 20 px inside its corner, so the corner's resize
+ *  square and the band between them stay the resize's and the move's
+ *  (`UXI-HND-002`, `UXI-HND-004`; IC7): a press meant to move or resize
+ *  near a corner does that, at any zoom. */
 const WIDGET_PX = 7;
-const HIT_PX = 14;
-const CORNER_MIN_OFFSET_PX = 14;
+const HIT_PX = 12;
+const CORNER_MIN_OFFSET_PX = 20;
 const SIDES_OFFSET_PX = 16;
 /** More corners than this (a dense star, a traced outline): no widgets. */
 const MAX_POLYGON_CORNER_WIDGETS = 48;

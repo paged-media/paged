@@ -97,6 +97,7 @@ defineMessages("menu", {
   "Overset markers": "Overset markers",
   "Hidden characters": "Hidden characters",
   "Nonprinting items": "Nonprinting items",
+  "Data bindings": "Data bindings",
   "Proof view": "Proof view",
 });
 
@@ -137,6 +138,8 @@ export const EDITING_AID_COMMANDS: Readonly<Record<EditingAidToggle, string>> =
     oversetMarkers: PAGED_VIEW_TOGGLE_OVERSET_MARKERS,
     hiddenCharacters: PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS,
     nonprinting: PAGED_VIEW_TOGGLE_NONPRINTING,
+    // Data ADR 566 — the binding badges keep their older id (app-commands).
+    dataMarkers: "paged.view.toggleDataMarkers",
   };
 
 /** The aids' rows of View ▸ Editing aids, in the control's order. */
@@ -149,6 +152,7 @@ const AID_ROWS: ReadonlyArray<[EditingAidToggle, string]> = [
   ["oversetMarkers", "Overset markers"],
   ["hiddenCharacters", "Hidden characters"],
   ["nonprinting", "Nonprinting items"],
+  ["dataMarkers", "Data bindings"],
 ];
 
 /** Proof view is the Preview screen mode (InDesign's W, the shell's

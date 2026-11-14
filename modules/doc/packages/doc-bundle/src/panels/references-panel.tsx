@@ -24,7 +24,12 @@
 // door, so the dialogs are sections of a docked panel; the commands that
 // open them name the section (`openPanel(id, { target })`).
 
-import type { PanelProps } from "@paged-media/plugin-api";
+import type {
+  NumericFieldProps,
+  PanelProps,
+  WidgetSurface,
+} from "@paged-media/plugin-api";
+import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 import { t as tActive, useStrings } from "@paged-media/strings";
 import * as React from "react";
 
@@ -282,7 +287,13 @@ const SIZES: Array<{ name: string; w: number; h: number }> = [
   { name: "A5", w: 419.5, h: 595.3 },
 ];
 
-function PageSetupSection({ actions }: { actions: ReferencesActions }) {
+function PageSetupSection({
+  actions,
+  NumericField,
+}: {
+  actions: ReferencesActions;
+  NumericField: React.ComponentType<NumericFieldProps>;
+}) {
   const { t } = useStrings();
   const [setup, setSetup] = React.useState<PageSetup | null>(null);
   const [msg, done] = useOutcome();
@@ -304,17 +315,26 @@ function PageSetupSection({ actions }: { actions: ReferencesActions }) {
     );
   }
   const landscape = setup.widthPt > setup.heightPt;
+  // The host's numeric field (editor ADR 1216): margins are lengths in
+  // the document's unit ("2 cm", "0.5 in"), set in points.
   const num = (key: keyof PageSetup, label: string) => (
     <label style={{ display: "grid", fontSize: 12 }}>
       {label}
-      <input
-        type="number"
-        value={Math.round(setup[key] * 100) / 100}
-        onChange={(e) =>
-          setSetup({ ...setup, [key]: Number(e.target.value) || 0 })
-        }
-        data-ref-input={key}
-      />
+      <span data-ref-input={key} style={{ display: "inline-flex" }}>
+        <NumericField
+          value={Math.round(setup[key] * 100) / 100}
+          length={key !== "columns"}
+          min={key === "columns" ? 1 : 0}
+          precision={key === "columns" ? 0 : 2}
+          ariaLabel={label}
+          onCommit={(v) =>
+            setSetup({
+              ...setup,
+              [key]: key === "columns" ? Math.round(v) : v,
+            })
+          }
+        />
+      </span>
     </label>
   );
   return (
@@ -383,7 +403,9 @@ function PageSetupSection({ actions }: { actions: ReferencesActions }) {
 
 export function makeReferencesPanel(
   actions: ReferencesActions,
+  widgets: Pick<WidgetSurface, "NumericField"> = FALLBACK_WIDGETS,
 ): PanelDescriptor {
+  const NumericField = widgets.NumericField;
   const Component: React.FC<PanelProps> = () => (
     <div style={{ fontSize: 13 }} data-doc-panel="references">
       <Bookmark actions={actions} />
@@ -391,7 +413,7 @@ export function makeReferencesPanel(
       <Field actions={actions} />
       <IndexEntry actions={actions} />
       <Notes actions={actions} />
-      <PageSetupSection actions={actions} />
+      <PageSetupSection actions={actions} NumericField={NumericField} />
     </div>
   );
   return {

@@ -184,8 +184,8 @@ editor's keys; Tab moves focus everywhere, the chrome toggle is `paged.view.togg
 commits once and the input follows the rotated view; focus returns to the opener of a dialog,
 the palette or a menu, else the canvas ([ADR 1206](adr/1206-focus-returns-to-the-opener.md);
 issue #32); lists and selects keep their keys, and Alt+arrows set leading and tracking (UX audit
-F-34). The viewport's drag cancel, the gesture spine and path editing still answer Escape on
-their own listeners until track IC moves them onto the arbiter.
+F-34). The viewport's drag cancel, the gesture spine and path editing answer Escape through the
+arbiter too (ADR 1210).
 
 Track WS's first part has landed (WS0–WS7; [ADR 1208](adr/1208-docks-are-resizable-and-the-workspace-adapts.md),
 [ADR 1209](adr/1209-density-presets.md)): the docks are resizable (240–480 px, per mode) and the
@@ -219,16 +219,48 @@ binding) — each jump recorded for Back; zoomed below 15 % the handles and poin
 the selection outline, markers and page names (now beside a page when the gap under it is too
 small) stay, and from 400 % the rulers draw minor ticks (F-57).
 
-Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
-interaction coordinator that holds the session owning the pointer, the epochs a late answer is
-checked against and a development trace (`__interaction`, no user text). It is behind the
-`?debug=coordinator` flag until the adapters land (IC4): with the flag, every pointer sequence on
-the canvas is a session, and a lost pointer capture, a window blur, a hidden page, a document or
-tool switch, a failed worker and unmount end it once, rolled back; a begin the engine refuses and
-Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
-a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a double-click's and the
-context menu's hit test that answers after a newer press, document or context is dropped
-(`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
+Track IC's interaction coordinator is the canvas's default ([ADR 1210](adr/1210-the-interaction-coordinator.md)):
+each editor holds the session owning the pointer, the epochs a late answer is checked against and a
+development trace (`__interaction`, no user text). A press is routed once, at pointerdown, by one
+table (`press-route.ts`), and its session ends exactly once: a lost pointer capture, a window
+blur, a hidden page, a document or tool switch, a failed worker and unmount roll it back; a begin
+the engine refuses and Escape never turn the rest of the drag into a pan, and Escape cancels a
+marquee or a press too, through the Escape arbiter (`UXI-T07`–`T10`, `UXI-T61`). A click's, a
+press's, a double-click's and the context menu's hit test answered after a newer press, document
+or context is dropped (`UXI-T57`, `UXI-T59`). Space (and Cmd, Cmd+Space) held during a
+document-changing drag waits until it settles (D-09), and a suspended Pen resumes its path; a
+wheel takes the camera from an animation (`UXI-T52`); a pinch takes over a pending press
+(`UXI-T71`); an Alt-drag commits the copy it previewed (`UXI-T06`); a Type-tool drag that starts
+over text selects text. A press off the selection is answered in one call (hit, selection and
+move), and a drag that outruns the answer moves from the press point (`UXI-T58`). The guide drag, the loaded thread cursor and an armed placement are
+sessions too. Since IC6 it is the one pointer path (`UXI-MIG-002`; ADR 1210, amendment 4).
+
+The selection model of ADR 1201 has landed (IC6; [ADR 235](adr/235-the-selection-tools-pointer-model.md),
+amendment 2026-11-14): Shift-click toggles; a marquee drawn left to right takes what it wholly
+contains and right to left what it touches, starts on the pasteboard and takes the group at the
+top level, the members inside an entered group (`UXI-T03`, `UXI-T04`); hovering outlines what a
+click would select and names it; the context menu's Select ▸ lists the objects under the pointer
+and `paged.edit.selectBelow` cycles down through them; the context menu selects the group as a
+click does (`UXI-T29`); a locked item is dashed, carries a padlock and hollow handles, stays
+selectable and does not move (`UXI-T13`).
+
+What the user sees is what a press takes (IC7; [ADR 310](adr/310-live-shape-widgets.md), amendment
+2026-11-14): a turned item's body is its oriented box, so a press in the empty corner of its
+bounding box selects nothing; a resize handle's cursor points the way it pulls through the item's
+transform and the view's rotation; the rotate zone shows the angle beside the pointer while it
+turns (`UXI-T14`); guides and handles follow the full camera transform with the view turned
+(`UXI-T56`); and a live shape's corner widget takes only its own 12 px target, 20 px inside the
+corner, so a press beside it moves and one on the corner's square resizes, at 100 % and 800 %.
+
+Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
+Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
+print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
+Story view — the same story as continuous text, written into the engine's story — and the Story
+Map of every thread with overset and unplaced stories (doc ADR 630). paged.data shows its
+workflow as six steps, a record scrubber and an outlier finder; its binding badges are the
+editing aid Data bindings (data ADR 566; F-46). Template fill says Required or Optional, the
+progress and the next field, blocks Finish on missing content and then offers export and save,
+on phones too (ADR 1225, `UXI-T73`).
 
 Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
 [ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit
@@ -244,6 +276,21 @@ control, Enter, or a second double-click) enters paged.image (D-05). A conforman
 every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, `UXI-T51`), and
 gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
 resolver there.
+
+Track CM's module streams (CM5) have begun. paged.draw (ADR 370 in its range): the Pen names its
+state — start, draw, continue, close, join, pulling a handle, finish, add, delete — with its cursor
+and a hint beside the pointer, and a click on the run's last anchor finishes the open path;
+holding Control with a tool that places or drags anchors shows a precision magnifier (a loupe at
+four times the view, read from an engine snapshot, no document change); with anchors selected the
+Properties panel edits the points, not the frame; one selected path offers Shape suggestions; the
+Pathfinder says that it applies on click and outlines what a button takes.
+paged.image (ADR 487 in its range; UX audit F-43's two tool sets): inside any module's context the
+tools are the rail's, and the context toolbar names the tool in hand and carries its options
+instead of repeating every tool as an icon; the layer rows and the toolbar say what an edit
+changes — pixels, a non-destructive adjustment, smart, fill or type layer, the mask, or (on a
+picture frame's Content level) the placement; the filter dialog shows a before/after split and
+says whether the frame shows a draft, the full-resolution pass rendering or the result; the Image
+panel shows the picture's own pixels at 100–800 %.
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,

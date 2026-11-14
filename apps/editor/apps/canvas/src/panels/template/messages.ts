@@ -40,6 +40,28 @@ export const FORM = defineMessages("templateForm", {
   allFields: "All fields",
   hideFields: "Hide fields",
   done: "Done",
+  // Editor ADR 1225 — the filler's progress, the field's status, Finish.
+  required: "Required",
+  optional: "Optional",
+  missing: "Required: fill this in.",
+  progress: "{filled} of {total} fields filled",
+  progressLabel: "Fields filled",
+  requiredLeft:
+    "{count, plural, one {# required field is empty} other {# required fields are empty}}",
+  nextField: "Next field",
+  nextFieldTitle: "Go to the next field that still needs a value",
+  allFilled: "Every field is filled in.",
+  finish: "Finish…",
+  finishTitle: "Check the fields, then export or save",
+  finishBlocked:
+    "{count, plural, one {Fill in # required field first.} other {Fill in # required fields first.}}",
+  finishOverset:
+    "{count, plural, one {# field's text does not fit its frame.} other {# fields' text does not fit their frames.}}",
+  ready:
+    "All required fields are filled. The page shows what will be published.",
+  exportPdf: "Export PDF",
+  save: "Save",
+  backToForm: "Back to the form",
 });
 
 /** The engine's reasons a value does not fit its field (paged-canvas

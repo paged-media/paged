@@ -203,12 +203,14 @@ export function makeSourcesPanel(
             <option value="never">{t(M.policyNever)}</option>
           </select>
           {p.policy === "interval" ? (
-            <input
-              type="number"
-              min={MIN_INTERVAL_SECS}
+            <host.widgets.NumericField
               value={p.secs}
-              style={{ width: 64 }}
-              onChange={(e) => onInterval(name, Number(e.target.value))}
+              min={MIN_INTERVAL_SECS}
+              step={1}
+              precision={0}
+              suffix="s"
+              ariaLabel={t(M.intervalSeconds)}
+              onCommit={(v) => onInterval(name, Math.round(v))}
             />
           ) : null}
           {snapshot.polling.includes(name) ? (

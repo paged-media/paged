@@ -55,6 +55,8 @@ import {
 
 import type {
   ElementId,
+  GesturePressResult,
+  PressTarget,
   SelectionMode,
   TextCellAddr,
 } from "@paged-media/client";
@@ -287,32 +289,23 @@ export function CanvasPanel(_props: PanelProps) {
       .catch(() => {});
   };
 
-  // The canvas's Escape handlers (editor ADR 1207, §12.1). Path editing
-  // is a transient mode whose own listener (usePathEditMode) leaves it or
-  // cancels the drag in it; it joins the arbiter with the rest of the
-  // canvas's gestures (track IC). An entered group climbs one level. At
+  // The canvas's Escape handlers (editor ADR 1207, §12.1). The canvas's
+  // own gesture, a tool's state between presses (the Pen's path, its
+  // handler's `busy()`) and path editing answer in the gesture and
+  // transient tiers (ViewportCanvas, useGestureSpine, usePathEditMode;
+  // editor ADR 1210). Below them an entered group climbs one level, and at
   // the top level Escape clears the selection (ADR 1201, amending ADR 250
-  // decision 3). The group climb and the clear answer only while the tool
-  // in hand has no gesture handler of its own: a drawing tool's handler
-  // hears every key (the Pen cancels the path it is drawing), and until it
-  // tells the arbiter whether a gesture is under way the press stays its.
-  const objectLevelEscape = toolGesture === null;
-  useEscapeHandler({
-    id: "paged.pathEdit",
-    tier: "transient",
-    isActive: () => pathEditMode,
-    resolve: () => "defer",
-  });
+  // decision 3), whatever tool is in hand.
   useEscapeHandler({
     id: "paged.group.climb",
     tier: "group",
-    isActive: () => objectLevelEscape && activeGroup !== null,
+    isActive: () => activeGroup !== null,
     resolve: () => climbOut(),
   });
   useEscapeHandler({
     id: "paged.selection.clear",
     tier: "selection",
-    isActive: () => objectLevelEscape && elementSelection.length > 0,
+    isActive: () => elementSelection.length > 0,
     resolve: () => {
       void client
         .setElementSelection([], "replace")
@@ -336,11 +329,10 @@ export function CanvasPanel(_props: PanelProps) {
       // text click into a cell keeps it addressed for the Table panel).
       resolveTableCell(s);
       if (activeTool === "select") {
-        const mode: SelectionMode = modifiers?.shift
-          ? "add"
-          : modifiers?.cmd
-            ? "toggle"
-            : "replace";
+        // D-01 (editor ADR 1201, amending ADR 235): Shift-click toggles
+        // membership; Cmd (Ctrl) does the same, as before.
+        const mode: SelectionMode =
+          modifiers?.shift || modifiers?.cmd ? "toggle" : "replace";
         if (s && s.hit.element) {
           // Track L — selection target depends on `activeGroup`:
           //   activeGroup === null
@@ -460,20 +452,61 @@ export function CanvasPanel(_props: PanelProps) {
     ],
   );
 
+  // IC5 (engine ADR 1303) — the press off the selection asks the engine
+  // once (`beginGestureAt`): it picks by the click's group rule (the
+  // outermost group; inside an entered group, its member; with Direct
+  // Selection, the leaf) and selects, and the canvas mirrors what it chose.
+  const pressTarget: PressTarget = directSelect
+    ? { kind: "leaf" }
+    : activeGroup !== null
+      ? { kind: "inGroup", id: activeGroup }
+      : { kind: "outermost" };
+  const onPressSelected = (
+    result: GesturePressResult,
+    pageId: import("@paged-media/client").PageId,
+    pagePoint: [number, number],
+  ) => {
+    setHitSelection({ pageId, docPoint: pagePoint, hit: result.hit });
+    if (!result.selectionChanged && result.target === null) return;
+    const chain = result.hit.groupChain ?? [];
+    if (!directSelect && activeGroup !== null && !chain.includes(activeGroup))
+      setActiveGroup(null);
+    groupChainRef.current = chain;
+    setContentSelection(null);
+    setElementSelection(result.selection);
+    void client
+      .elementGeometry(result.selection)
+      .then(setElementGeometry)
+      .catch(() => {});
+  };
+
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onMarquee = useCallback(
     (
       pageId: import("@paged-media/client").PageId,
       rect: [number, number, number, number],
       modifiers?: { shift?: boolean; cmd?: boolean },
+      direction?: "contain" | "intersect",
     ) => {
+      // A Shift marquee adds what it takes; Cmd toggles (ADR 235, amended).
       const mode: SelectionMode = modifiers?.shift
         ? "add"
         : modifiers?.cmd
           ? "toggle"
           : "replace";
+      // D-01 — by direction, and by the click's group rule: the top-level
+      // items (a group as one), the entered group's members, or with Direct
+      // Selection the leaves.
+      const scope = directSelect
+        ? undefined
+        : activeGroup !== null
+          ? { kind: "group" as const, id: activeGroup }
+          : { kind: "document" as const };
       void client
-        .marqueeHits(pageId, rect)
+        .marqueeHits(pageId, rect, {
+          mode: direction ?? "intersect",
+          ...(scope ? { scope } : {}),
+        })
         .then((ids) => client.setElementSelection(ids, mode))
         .then((ids) => {
           setElementSelection(ids);
@@ -482,7 +515,13 @@ export function CanvasPanel(_props: PanelProps) {
         .then(setElementGeometry)
         .catch(() => {});
     },
-    [client, setElementGeometry, setElementSelection],
+    [
+      client,
+      setElementGeometry,
+      setElementSelection,
+      directSelect,
+      activeGroup,
+    ],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
@@ -616,6 +655,11 @@ export function CanvasPanel(_props: PanelProps) {
         // so the canvas hit-tests and anchors gestures in the same space.
         elementGeometry={placedGeometry}
         onHit={onHit}
+        pressAt={
+          activeTool === "select"
+            ? { target: pressTarget, onSelected: onPressSelected }
+            : null
+        }
         onMarquee={onMarquee}
         onGestureCommitted={onGestureCommitted}
         onDoubleClickGroup={onDoubleClickGroup}

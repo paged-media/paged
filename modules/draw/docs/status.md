@@ -159,6 +159,18 @@ canary added is under [Releases](#releases).
   keep a slightly different number of anchors (the panel says so). A simplify never adds
   anchors.
 - **Menu.** 94 menu entries on a host that offers the menu door.
+- **Vector editing with feedback ([ADR 370](adr/370-vector-editing-with-feedback.md)), in
+  the editor's half of drawing.** The host's Pen names its state with its cursor and a hint
+  beside the pointer — start, draw, continue, close, join, pulling a handle, finish, add,
+  delete — and a click on the run's last anchor finishes the open path (one undo step).
+  Holding Control with the Pen, Direct Selection, Curvature or an anchor tool (or with path
+  editing on) shows a precision magnifier: the page at four times the view around the
+  pointer, read from an engine snapshot, never a document change. With anchors selected, the
+  Properties panel shows Points (position, Corner / Smooth, align on the average, delete;
+  each one batch) instead of the frame; one selected shape shows Shape suggestions (Round
+  corners, Smooth, Simplify, Offset path, Repeat, Mirror, as the shape allows); the
+  Pathfinder says it applies on click and outlines what a button takes before it is pressed.
+  The engine has no dry run, so a Boolean's result is not previewed.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per
@@ -513,6 +525,8 @@ Recolouring a raster is pixel work and is not registered.
   "save group"; Recolor Artwork's per-row colour editing in the panel (the `map` payload
   does it).
 - Lottie export.
+- A preview of a Boolean, region or offset operation's RESULT before it is applied: the
+  engine offers no dry run (the Pathfinder outlines its operands instead, ADR 370).
 
 ## Releases
 
