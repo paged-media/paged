@@ -356,8 +356,11 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   overset, hidden characters and non-printing items, and a Proof view
   (`SH/state/view-toggles.ts`). **Done** ([ADR 1212](adr/1212-editing-aids-and-proof-view.md)):
   the overlay host applies one rule (`SH/state/editing-aids.ts`); Proof view is the Preview screen
-  mode completed; hidden characters and nonprinting items wait for engine view options (recorded
-  there).
+  mode completed. Its engine gaps are closed by engine ADR 1306 (protocol 81, track EN part 3):
+  the hidden characters are reported per composed line and drawn as an overlay, nonprinting items
+  and a proof's page edge and markers are view options of the live build, both lanes draw a page
+  to one screen extent, and frames' own baseline grids are on the wire (ADR 1212, amendment
+  2026-11-14).
 - **WS10 Page lenses** (Pages, Structure, Layers, Issues, Data) and semantic zoom. Closes F-57.
   **Done** ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the lenses live in the
   document map (`CV/panels/cockpit/page-lenses.tsx`); the tiers in `SH/state/semantic-zoom.ts`

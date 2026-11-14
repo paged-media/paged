@@ -57,8 +57,8 @@ read field by field (ADR 247). The other view toggles stay in memory.
 | Baseline grid | off | `baseline-grid.tsx`: the document's grid preferences (`DocumentMeta.baselineGrid*`, relative to the page or the top margin), InDesign's 36 / 12 pt without them |
 | Text threads | off | `thread-lines.tsx` (the old View ▸ Show text threads, same command) |
 | Overset markers | on | `overset-markers.tsx`: the red plus at the out port of every frame whose story runs over, selected or not |
-| Hidden characters | off, **disabled** | not supported yet: the engine does not report where spaces, tabs and returns are |
-| Nonprinting items | on, **disabled** | not supported yet: the engine always draws nonprinting items on screen (and leaves them out of export); hiding them needs a view option the engine's `ViewSettings` lacks |
+| Hidden characters | off | `hidden-characters.tsx`, from the engine's `hiddenCharacters` (amendment 2026-11-14; was disabled) |
+| Nonprinting items | on | a render option: off, the engine leaves them off the screen (`ViewSettings.hideNonprinting`, amendment 2026-11-14; was disabled) |
 
 The two engine gaps are visible, disabled entries with their reason (ADR 207), never toggles that
 do nothing. The aids are in View ▸ Editing aids (a submenu with the extras; View ▸ Show text
@@ -116,3 +116,35 @@ fidelity stays Proof colors' (soft proofing); Proof view promises none.
 - [ADR 207](207-honest-seams.md) — the disabled aids.
 - [ADR 247](247-stored-settings-are-shape-checked.md) — the stored aids.
 - [ADR 1211](1211-navigation-history-and-one-current-page.md) — the bottom bar the control joins.
+
+## Amendment (2026-11-14): the engine gaps are closed
+
+Engine ADR 1306 (protocol 81) closes the five engine gaps recorded above; the two disabled aids
+work and ADR 207's visible stubs are gone (`UNSUPPORTED_AIDS`, `unsupportedAidReason` and their
+strings removed).
+
+- **Hidden characters.** The engine reports, per page and per composed line, where the spaces,
+  tabs, returns, forced line breaks, break characters and the story's end stand
+  (`client.hiddenCharacters(pageIds)`). The aid's overlay, `overlays/hidden-characters.tsx`
+  (`paged.overlay.hiddenCharacters`, an aid's overlay under the one rule), draws InDesign's marks
+  (`·` `°` `»` `¶` `¬` `#` and a break character's glyph) in the violet of the other aids, at the
+  line's text size and through its turn, for the pages in view only, re-read when the document
+  changes or other pages come into view; each line is at most two SVG text runs, and zoomed out
+  past legibility nothing is drawn. Why an overlay and not a render layer: engine ADR 1306.
+- **Nonprinting items.** A render option, not an overlay (`RENDER_AIDS` in `editing-aids.ts`):
+  `view-settings-sync.tsx` sends `hideNonprinting` while the aid is off or a proof is on, and the
+  engine rebuilds the screen without them (what nothing on screen shows is not hit either).
+- **Proof view** also sends `proof`: the page edge leaves both lanes and the degraded-asset
+  markers leave the page, so the proof is the export's page. The aids keep their states.
+- **Bleed.** Both lanes draw a page's artwork past its trim to one screen extent (the worker's
+  tiles carry their extent, `render.ts`); the proof surface's mask is what cuts it.
+- **Per-frame baseline grids.** The Baseline grid aid draws each text frame's own grid over the
+  frame, through its turn, from `client.frameBaselineGrids()`, in the aids' violet over the
+  document's grid.
+
+Tests: `apps/canvas/tests/e2e/editing-aids.spec.ts` (every aid enabled; hidden characters drawn
+with the spaces, returns and story end; nonprinting items off the screen and not hit, back on;
+a frame's own grid; Proof view sets `proof` and hides nonprinting items, and leaving it restores
+both; the document and the history unchanged), `apps/canvas/test/unit/worker-render.test.ts`
+(the tile at its extent, no page edge in a proof), `packages/shell/test/overlays/editing-aids.test.ts`
+(the marks' runs, the pages in view, a frame's grid lines), `apps/canvas/test/unit/commands/view-commands.test.ts`.

@@ -984,6 +984,22 @@ pub(crate) fn apply_inner(
             image_uri,
             fit,
         } => place_image::apply_place_image(doc, frame, image_uri.as_deref(), fit.as_deref()),
+        Operation::RelinkImage {
+            frame,
+            image_uri,
+            bytes,
+            image_transform,
+            metadata_json,
+            has_image_element,
+        } => relink_image::apply_relink_image(
+            doc,
+            frame,
+            image_uri.as_deref(),
+            bytes.as_deref(),
+            *image_transform,
+            metadata_json.as_deref(),
+            *has_image_element,
+        ),
         Operation::ReplaceImageBytes {
             frame,
             bytes,
@@ -1537,6 +1553,7 @@ mod planar_ops;
 /// every cell added to it later wear the same InDesign defaults.
 pub(crate) use path_topology::new_table_cell;
 pub use planar_ops::element_path;
+mod relink_image;
 mod remove_node;
 mod reorder;
 mod replace_image_bytes;

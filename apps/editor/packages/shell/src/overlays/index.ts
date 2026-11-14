@@ -55,9 +55,17 @@ export { frameEdgesContribution, frameEdgePoints } from "./frame-edges";
 export {
   baselineGridContribution,
   baselineGridLines,
+  frameGridLines,
   BASELINE_GRID_MIN_SPACING_PX,
 } from "./baseline-grid";
 export { oversetMarkersContribution } from "./overset-markers";
+export {
+  hiddenCharactersContribution,
+  hiddenCharacterRuns,
+  pagesInView,
+  HIDDEN_CHARACTER_GLYPHS,
+  HIDDEN_CHARACTERS_MIN_PX,
+} from "./hidden-characters";
 export { proofSurfaceContribution, proofBox } from "./proof-surface";
 export {
   dataMarkersContribution,

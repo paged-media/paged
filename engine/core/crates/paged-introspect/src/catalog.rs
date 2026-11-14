@@ -435,6 +435,8 @@ fn host_functions() -> Vec<HostFn> {
            "Set an XML element's attribute; no value removes it. label, maxLength and required are a template field's metadata."),
         f!("paged.setFieldValue", "(storyId, offset, value?)", "bool", "write", "Update a placeholder field's cached display value (null ⇒ unresolved)."),
         f!("paged.replaceImageBytes", "(frameId, bytes?)", "bool", "write", "Commit inline image bytes (number[] of u8) on a graphic frame; null clears."),
+        f!("paged.relinkImage", "(frameId, uri, bytes?)", "bool", "write",
+           "Relink a graphic frame's picture to uri (with its bytes, number[] of u8, when the engine cannot read the source); the frame, its fitting and the picture's size stay. One undo step."),
         // --- tables ---
         f!("paged.insertTable", "(storyId, spec)", "string | null", "author",
            "Create a <Table> at the end of a story; spec = { rows, cols, headerRows?, footerRows?, columnWidths?, rowHeights? }. Returns the table id."),

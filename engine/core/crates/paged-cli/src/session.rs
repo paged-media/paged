@@ -386,6 +386,8 @@ fn handle(live: &mut Live, req: Request) -> Result<Value> {
                 width_pt: width,
                 height_pt: height,
                 font,
+                pages: None,
+                facing_pages: false,
             })?;
             let handle = expect_reply!(reply, WorkerToMainKind::DocumentLoaded(h) => h,
                 "new blank document")?;

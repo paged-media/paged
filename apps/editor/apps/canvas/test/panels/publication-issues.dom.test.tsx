@@ -77,6 +77,11 @@ describe("Publication health: the issues where they are", () => {
     await h.user.click(row.querySelector("[data-issue-go]")!);
     await h.settle();
     expect(row.getAttribute("data-active")).toBe("true");
+    // Engine ADR 1308: the picture is relinked in place; the Links panel
+    // stays beside it.
+    expect(row.querySelector('[data-issue-fix="relink"]')!.textContent).toBe(
+      "Relink…",
+    );
     expect(
       row.querySelector('[data-issue-fix="open-links"]')!.textContent,
     ).toBe("Open Links");

@@ -18,8 +18,9 @@
  */
 
 // Links (paged.links): the placed-image links with their status (a dot,
-// a "missing" badge), colour space and resolution; the toolbar is three
-// seams (update, relink history, go to link).
+// a "missing" badge), colour space and resolution; Relink… for a picked
+// link (engine ADR 1308) and three seams (update, relink history, go to
+// link).
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
@@ -134,6 +135,51 @@ describe("Links panel: controls", () => {
       await h.click(b);
     }
     expect(h.mutations(from)).toEqual([]);
+  });
+});
+
+// Engine ADR 1308 — a document link is relinked: Relink… waits for a picked
+// row, and the relink the button sends (`relinkImage`, a picked file's name
+// and bytes) gives the row its new name and draws.
+describe("Links panel: relink", () => {
+  // A 1 × 1 PNG.
+  const PNG = Uint8Array.from(
+    atob(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    ),
+    (c) => c.charCodeAt(0),
+  );
+  test("Relink… waits for a picked link; a relink renames the row and it draws", async () => {
+    covers("panel:paged.links");
+    const h = await mount();
+    const button = () =>
+      h.root.querySelector<HTMLButtonElement>(
+        '[data-link-action="relink-document"]',
+      )!;
+    expect(button().disabled).toBe(true);
+    await h.click(
+      h.root.querySelector(`[data-list-row="${STRUCTURE.imageFrame.id}"]`)!,
+    );
+    expect(button().disabled).toBe(false);
+    const reply = await h.mutate({
+      op: "relinkImage",
+      args: {
+        elementId: STRUCTURE.imageFrame.id,
+        uri: "file:///photo-v2.png",
+        bytes: Array.from(PNG),
+      },
+    } as never);
+    expect((reply as { kind: string }).kind).toBe("mutationApplied");
+    await h.settle();
+    expect(rows(h.root)).toEqual([
+      {
+        key: STRUCTURE.imageFrame.id,
+        primary: "photo-v2.png",
+        secondary: "Rectangle",
+        badge: null,
+        selected: true,
+      },
+    ]);
   });
 });
 

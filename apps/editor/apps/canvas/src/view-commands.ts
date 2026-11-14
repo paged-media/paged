@@ -38,7 +38,6 @@ import {
   isProofMode,
   scopeOf,
   toggleViewToggle,
-  UNSUPPORTED_AIDS,
   type EditingAidToggle,
   type PagedEditor,
   type ViewToggle,
@@ -70,7 +69,6 @@ const M = defineMessages("app.viewCommands", {
   oversetMarkers: "Show overset markers",
   hiddenCharacters: "Show hidden characters",
   nonprinting: "Show nonprinting items",
-  notSupported: "{aid} (not supported yet)",
 });
 
 defineMessages("menu", {
@@ -281,19 +279,19 @@ export function buildViewCommands(
       category: "View",
       handler: flip("oversetMarkers"),
     },
+    // Engine ADR 1306 — the engine reports the hidden characters, and it
+    // leaves nonprinting items off the screen while their aid is off.
     {
       id: PAGED_VIEW_TOGGLE_HIDDEN_CHARACTERS,
       title: t(M.hiddenCharacters),
       category: "View",
-      when: () => false,
-      handler: () => {},
+      handler: flip("hiddenCharacters"),
     },
     {
       id: PAGED_VIEW_TOGGLE_NONPRINTING,
       title: t(M.nonprinting),
       category: "View",
-      when: () => false,
-      handler: () => {},
+      handler: flip("nonprinting"),
     },
   ];
 }
@@ -324,12 +322,7 @@ export const VIEW_MENU_ITEMS: MenuItemContribution[] = [
     // before Show heading anchors (65).
     order: 58 + i / 10,
     group: "extras",
-    ...(UNSUPPORTED_AIDS[aid]
-      ? {
-          disabled: true,
-          labelFor: () => t(M.notSupported, { aid: t(`menu.${row}`) }),
-        }
-      : { checked: checked(aid) }),
+    checked: checked(aid),
   })),
   // Illustrator's View menu opens with the screen modes; they sit above
   // the zoom group (orders 20–50).

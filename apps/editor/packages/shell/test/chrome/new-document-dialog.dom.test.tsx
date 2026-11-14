@@ -147,13 +147,17 @@ describe("New document", () => {
     expect(preview.getAttribute("data-preview-columns")).toBe("3");
     expect(preview.getAttribute("data-preview-bleed")).toBe("true");
     expect(q("[data-preview-bleed-box]")).not.toBeNull();
-    // The engine has no spread layout: facing pages are said to be
-    // unavailable, never offered as a switch that does nothing.
+    // Facing pages are a switch (engine ADR 1307); on, the preview draws
+    // the spread and the setup says so.
+    const facing = need("[data-new-document-facing]") as HTMLInputElement;
+    expect(facing.checked).toBe(false);
+    expect(preview.getAttribute("data-preview-facing")).toBe("false");
+    fireEvent.click(facing);
     expect(
-      need("[data-new-document-facing]").getAttribute(
-        "data-new-document-facing",
-      ),
-    ).toBe("unavailable");
+      (need("[data-new-document-facing]") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(preview.getAttribute("data-preview-facing")).toBe("true");
+    expect(q("[data-preview-facing-page]")).not.toBeNull();
     // A Digital preset: pixels, no bleed in the preview.
     fireEvent.click(need('[data-new-document-category="digital"]'));
     fireEvent.click(need('[data-new-document-preset-option="presentation"]'));

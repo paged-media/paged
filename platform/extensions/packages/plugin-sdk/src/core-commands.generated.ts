@@ -41,6 +41,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "setFieldValue": { args: {"kind":"struct","fields":{"storyId":{"kind":"ref","to":"story"},"offset":{"kind":"number"},"value":{"kind":"text","optional":true}}}, nullFill: [] },
   "placeImage": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"frame"},"uri":{"kind":"text"},"fit":{"kind":"text","optional":true}}}, nullFill: [] },
   "replaceImageBytes": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"frame"},"bytes":{"kind":"list","of":{"kind":"number"},"optional":true}}}, nullFill: [] },
+  "relinkImage": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"frame"},"uri":{"kind":"text"},"bytes":{"kind":"list","of":{"kind":"number"},"optional":true}}}, nullFill: [] },
   "moveFrame": { args: {"kind":"struct","fields":{"frameId":{"kind":"ref","to":"frame"},"transform":{"kind":"transform"}}}, nullFill: [] },
   "resizeFrame": { args: {"kind":"struct","fields":{"frameId":{"kind":"ref","to":"frame"},"bounds":{"kind":"bounds"}}}, nullFill: [] },
   "linkFrames": { args: {"kind":"struct","fields":{"from":{"kind":"ref","to":"frame"},"to":{"kind":"ref","to":"frame"}}}, nullFill: [] },

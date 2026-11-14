@@ -195,13 +195,30 @@ mod wasm {
         ///
         /// Returns `None` (→ `undefined` on the JS side) if no
         /// document is loaded or the page id is unknown.
+        ///
+        /// v81 (engine ADR 1306) — the tile is the page's screen extent
+        /// (its trim grown to its bleed and pasteboard artwork, the rect
+        /// the GPU lane clips to), `target_width_px` across the TRIM, on a
+        /// transparent ground: the render loop lays the paper under the
+        /// trim and draws the tile at [`Self::screen_extent`].
         #[wasm_bindgen(js_name = renderTilePng)]
         pub fn render_tile_png(&self, page_id: &str, target_width_px: u32) -> Option<Vec<u8>> {
             let model = self.core.model.as_ref()?;
             let pid = paged_canvas::PageId(page_id.to_string());
-            paged_canvas::render_snapshot_png(model, &pid, target_width_px)
+            paged_canvas::snapshot::render_screen_tile_png(model, &pid, target_width_px)
                 .ok()
-                .map(|s| s.png_bytes)
+                .map(|(png, _)| png)
+        }
+
+        /// v81 (engine ADR 1306) — where a page draws on screen, page-local
+        /// pt `[x, y, w, h]` (`(0, 0)` = the trim's top-left): the rect
+        /// `renderTilePng`'s tile covers and the GPU lane clips to.
+        /// `undefined` for an unknown page or no document.
+        #[wasm_bindgen(js_name = screenExtent)]
+        pub fn screen_extent(&self, page_id: &str) -> Option<Vec<f32>> {
+            let model = self.core.model.as_ref()?;
+            let page = model.page(&paged_canvas::PageId(page_id.to_string()))?;
+            Some(paged_canvas::view::screen_extent(page).to_vec())
         }
 
         /// Per-page dimensions for the worker's render loop. Returns
@@ -624,6 +641,8 @@ mod wasm {
                 return Ok(false);
             };
             let mode = model.view_settings().mode;
+            // A proof draws the pages without their edge (engine ADR 1306).
+            let border = !model.view_settings().proof;
 
             // Document space (pt) → surface (device px). Each page sits at
             // its place on the canvas (engine ADR 1011:
@@ -680,7 +699,7 @@ mod wasm {
                         });
                     let view = SceneView::for_page(mode, overprints, k);
                     if self.scene_cache.get((idx, view)).is_none() {
-                        let scene = build_view_scene(built_page, view);
+                        let scene = build_view_scene(built_page, view, border);
                         self.scene_cache.insert((idx, view), scene);
                     }
                     visible.push((idx, view, x_pt, y_pt));
@@ -1113,13 +1132,15 @@ mod wasm {
     fn build_view_scene(
         page: &paged_canvas::BuiltPage,
         view: crate::scene_cache::SceneView,
+        border: bool,
     ) -> paged_gpu::VelloScene {
         use crate::scene_cache::SceneView;
         match view {
-            SceneView::Knockout => paged_gpu::SurfacePresenter::build_page_scene(
+            SceneView::Knockout => paged_gpu::SurfacePresenter::build_page_scene_framed(
                 &page.list,
                 page.width_pt,
                 page.height_pt,
+                border,
             ),
             SceneView::Outline(_) => paged_gpu::SurfacePresenter::build_page_scene_view(
                 &page.list,
@@ -1127,24 +1148,39 @@ mod wasm {
                 page.height_pt,
                 paged_gpu::RasterView::Outline,
                 view.scale().unwrap_or(1.0),
+                border,
             ),
             SceneView::OverprintRaster(_) => {
                 // The Vello lane draws overprints as knockouts; the CPU
-                // lane simulates them. Rasterise at the scale bucket,
-                // capped so a deep zoom does not ask for a giant page.
+                // lane simulates them. Rasterise the page's screen extent
+                // (engine ADR 1306) at the scale bucket, capped so a deep
+                // zoom does not ask for a giant page, on a transparent
+                // ground over the paper.
                 const MAX_SIDE_PX: f32 = 4096.0;
-                let longest = page.width_pt.max(page.height_pt).max(1.0);
+                let extent =
+                    paged_gpu::screen::screen_extent(&page.list, page.width_pt, page.height_pt)
+                        .rect;
+                let longest = extent.w.max(extent.h).max(1.0);
                 let px_per_pt = view.scale().unwrap_or(1.0).min(MAX_SIDE_PX / longest);
-                let mut opts = paged_gpu::RasterOptions::new(page.width_pt, page.height_pt);
+                let mut opts = paged_gpu::RasterOptions::new(extent.w, extent.h);
                 opts.dpi = 72.0 * px_per_pt;
+                opts.background = paged_compose::Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                };
                 let (w, h) = opts.pixel_size();
-                let img = paged_gpu::rasterize(&page.list, &opts);
+                let list = page.list.translated_for_raster(-extent.x, -extent.y);
+                let img = paged_gpu::rasterize(&list, &opts);
                 paged_gpu::SurfacePresenter::build_raster_page_scene(
                     img.into_raw(),
                     w,
                     h,
+                    extent,
                     page.width_pt,
                     page.height_pt,
+                    border,
                 )
             }
         }

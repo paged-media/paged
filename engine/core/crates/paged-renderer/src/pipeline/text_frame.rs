@@ -741,6 +741,47 @@ pub(super) fn frame_spread_top_left(b: paged_model::Bounds, m: Option<[f32; 6]>)
     }
 }
 
+/// Engine ADR 1306 — the page-local affine a line of `frame` is turned
+/// by on a page whose spread origin is `spread_origin`: the frame's
+/// linear part pivoted about its top-left, as [`rotate_transform_around`]
+/// applies it to the line's glyphs. `None` for an upright frame.
+pub(super) fn line_turn(
+    frame: &paged_model::TextFrame,
+    spread_origin: (f32, f32),
+) -> Option<[f32; 6]> {
+    let [a, b, c, d] = frame
+        .item_transform
+        .map(|m| [m[0], m[1], m[2], m[3]])
+        .unwrap_or([1.0, 0.0, 0.0, 1.0]);
+    let upright =
+        b.abs() < 1e-5 && c.abs() < 1e-5 && (a - 1.0).abs() < 1e-5 && (d - 1.0).abs() < 1e-5;
+    if upright {
+        return None;
+    }
+    let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+    let (px, py) = (sx - spread_origin.0, sy - spread_origin.1);
+    let mut m = Transform::IDENTITY;
+    rotate_transform_around(&mut m, [a, b, c, d], px, py);
+    Some(m.0)
+}
+
+/// `outer ∘ inner`: the affine that applies `inner` (identity when
+/// `None`), then `outer`.
+pub(super) fn compose_turn(outer: [f32; 6], inner: Option<[f32; 6]>) -> [f32; 6] {
+    let Some(i) = inner else {
+        return outer;
+    };
+    let [a, b, c, d, e, f] = outer;
+    [
+        a * i[0] + c * i[1],
+        b * i[0] + d * i[1],
+        a * i[2] + c * i[3],
+        b * i[2] + d * i[3],
+        a * i[4] + c * i[5] + e,
+        b * i[4] + d * i[5] + f,
+    ]
+}
+
 /// Whether items on `layer_ref` should render. Matches the
 /// `layer_visible` closure in `build_document`: missing layer (or
 /// unknown id) defaults to visible so single-layer IDMLs that omit
@@ -1571,6 +1612,7 @@ pub(crate) fn turned_for_vertical(frame: &paged_model::TextFrame) -> paged_model
 pub(super) fn apply_vertical_writing_rotation(
     pages: &mut [BuiltPage],
     pre_counts: &[usize],
+    pre_layout_counts: &[usize],
     chain: &[&paged_model::TextFrame],
     chain_pages: &[usize],
 ) {
@@ -1607,6 +1649,15 @@ pub(super) fn apply_vertical_writing_rotation(
             // it into the right half of the frame.
             xf.0[4] += frame_w;
         });
+        // The story's lines on this page turn with their glyphs (engine
+        // ADR 1306): their recorded positions stay upright.
+        let mut quarter = Transform::IDENTITY;
+        rotate_transform_around(&mut quarter, linear, pivot_x, pivot_y);
+        quarter.0[4] += frame_w;
+        let first = pre_layout_counts.get(page_idx).copied().unwrap_or(0);
+        for line in pages[page_idx].story_layout.iter_mut().skip(first) {
+            line.turn = Some(compose_turn(quarter.0, line.turn));
+        }
     }
 }
 

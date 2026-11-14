@@ -183,6 +183,14 @@ describe("the stored setup and a script's payload are read field by field (ADR 2
     expect(read.unit).toBe(fallback.unit);
     expect(read.pages).toBe(fallback.pages);
     expect(read.columns).toBe(3);
+    // Facing pages (engine ADR 1307): a boolean, absent when off.
+    expect(read.facingPages).toBeUndefined();
+    expect(
+      readStoredSetup({ ...stored, facingPages: true }, fallback)!.facingPages,
+    ).toBe(true);
+    expect(
+      readStoredSetup({ ...stored, facingPages: "yes" }, fallback)!.facingPages,
+    ).toBeUndefined();
   });
   test("nothing usable reads as nothing", () => {
     expect(readStoredSetup(null, fallback)).toBeNull();
@@ -229,6 +237,28 @@ describe("the preview is the setup to scale", () => {
     ).toBe(true);
     expect(previewGeometry({ ...s, bleedPt: 0, columns: 1 }).bleed).toBeNull();
     expect(previewGeometry({ ...s, columns: 1 }).columns).toEqual([]);
+    expect(g.facing).toBeNull();
+  });
+
+  test("facing pages show a spread: a left-hand page with its margins mirrored", () => {
+    const s: NewDocumentSetup = {
+      ...defaultSetup("a4"),
+      widthPt: 400,
+      heightPt: 300,
+      bleedPt: 0,
+      margins: { top: 20, bottom: 20, inside: 40, outside: 20 },
+      facingPages: true,
+    };
+    const g = previewGeometry(s, { width: 220, height: 170 });
+    const left = g.facing!;
+    // Two pages across: (220 - 12) / 800 decides.
+    const k = 208 / 800;
+    expect(close(g.page.w, 400 * k)).toBe(true);
+    expect(close(left.page.x + left.page.w, g.page.x)).toBe(true);
+    // The right-hand page's inside margin is on its left, the left-hand
+    // page's on its right.
+    expect(close(g.margins.x - g.page.x, 40 * k)).toBe(true);
+    expect(close(left.margins.x - left.page.x, 20 * k)).toBe(true);
   });
 });
 
@@ -286,6 +316,34 @@ describe("a setup becomes the engine's own writes", () => {
       value: { type: "length", value: 3 },
     });
   });
+  test("facing pages: the engine makes the pages, and a left-hand page binds on its right", () => {
+    const s: NewDocumentSetup = {
+      ...defaultSetup("a4"),
+      pages: 3,
+      margins: { top: 10, bottom: 10, inside: 30, outside: 15 },
+      facingPages: true,
+    };
+    const { pages, layout } = setupMutations(s, "p1");
+    expect(pages).toBeNull();
+    const ops = (
+      layout as { args: { ops: { args: Record<string, unknown> }[] } }
+    ).args.ops.map((o) => o.args);
+    const margin = (n: number, side: string) =>
+      (
+        ops.find((a) => a.address === `page:#${n}` && a.path === side)
+          ?.value as { value: number }
+      ).value;
+    expect([margin(1, "pageMarginLeft"), margin(1, "pageMarginRight")]).toEqual(
+      [30, 15],
+    );
+    expect([margin(2, "pageMarginLeft"), margin(2, "pageMarginRight")]).toEqual(
+      [15, 30],
+    );
+    expect([margin(3, "pageMarginLeft"), margin(3, "pageMarginRight")]).toEqual(
+      [30, 15],
+    );
+  });
+
   test("one page and no bleed: no page inserts, no bleed writes", () => {
     const { pages, layout } = setupMutations(defaultSetup("a4"), "p1");
     expect(pages).toBeNull();

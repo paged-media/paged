@@ -117,6 +117,9 @@ interface CanvasWorkerInstance {
     sizePt: number,
   ): { advance: number; ascender: number; descender: number } | null;
   renderTilePng(pageId: string, targetWidthPx: number): Uint8Array | undefined;
+  /** v81 (engine ADR 1306) — where a page's tile goes, page-local pt
+   *  `[x, y, w, h]`: the trim grown to its bleed and pasteboard artwork. */
+  screenExtent?(pageId: string): Float32Array | undefined;
   runResolveJson(): string | undefined;
   free(): void;
   // GPU surface, only present when the `gpu` feature is enabled at
@@ -673,8 +676,13 @@ function applyReplyEffects(reply: WorkerToMain): void {
     }
   } else if (reply.kind === "viewSettingsApplied") {
     // v77 (editor ADR 287) — the screen's view mode changed: every tile
-    // was drawn in the old one (the GPU scene cache is keyed by mode).
-    renderer?.setViewMode(reply.payload.settings.mode ?? "preview");
+    // was drawn in the old one (the GPU scene cache is keyed by mode). v81
+    // (engine ADR 1306) — a proof drops the page edge, and a changed build
+    // option rebuilt every page: all tiles go.
+    renderer?.setViewSettings(
+      reply.payload.settings,
+      reply.payload.rebuilt ?? false,
+    );
   } else if (reply.kind === "gestureCommitted") {
     // A moved frame can carry its heading to another page.
     scheduleResolution();
@@ -1147,6 +1155,7 @@ async function attachRenderer(
       return arr;
     },
     renderTilePng: (pageId, widthPx) => worker!.renderTilePng(pageId, widthPx),
+    screenExtent: (pageId) => worker!.screenExtent?.(pageId),
     presentFrame:
       gpuActive && worker.presentFrame
         ? (s, x, y, d, r) => worker!.presentFrame!(s, x, y, d, r)

@@ -456,7 +456,9 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::SetConditionVisible { .. }
         | O::ActivateConditionSet { .. }
         | O::RestoreConditionVisibility { .. } => vec![doc(P::DocumentStyles)],
-        O::PlaceImage { frame, .. } | O::ReplaceImageBytes { frame, .. } => {
+        O::PlaceImage { frame, .. }
+        | O::ReplaceImageBytes { frame, .. }
+        | O::RelinkImage { frame, .. } => {
             vec![item(P::ImageReplace, frame)]
         }
         O::InsertGuide { .. }

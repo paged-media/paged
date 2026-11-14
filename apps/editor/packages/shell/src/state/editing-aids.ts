@@ -60,11 +60,6 @@ export const EDITING_AID_LABELS = defineMessages("shell.editingAids", {
   nonprinting: "Nonprinting items",
   control: "Editing aids",
   proofView: "Proof view",
-  notSupported: "{aid} (not supported yet)",
-  hiddenCharactersWhy:
-    "Not supported yet: the engine does not report where spaces, tabs and returns are.",
-  nonprintingWhy:
-    "Not supported yet: the engine always draws nonprinting items on screen and leaves them out of export.",
 });
 
 /** An aid's name in the editor's language. */
@@ -72,20 +67,13 @@ export function editingAidLabel(aid: EditingAidToggle): string {
   return t(EDITING_AID_LABELS[aid]);
 }
 
-/** Why an unsupported aid is disabled, or null. */
-export function unsupportedAidReason(aid: EditingAidToggle): string | null {
-  if (aid === "hiddenCharacters")
-    return t(EDITING_AID_LABELS.hiddenCharactersWhy);
-  if (aid === "nonprinting") return t(EDITING_AID_LABELS.nonprintingWhy);
-  return null;
-}
-
-/** An aid the engine cannot draw or hide yet: shown in the control,
- *  disabled, with its reason (the visible-stub rule, ADR 207). */
-export const UNSUPPORTED_AIDS: Partial<Record<EditingAidToggle, true>> = {
-  hiddenCharacters: true,
-  nonprinting: true,
-};
+/** The aid that is a render option of the engine rather than an overlay:
+ *  with Nonprinting items off the engine leaves those items off the screen
+ *  (`ViewSettings.hideNonprinting`, engine ADR 1306), as it does in every
+ *  proof. `view-settings-sync.tsx` hands it over. */
+export const RENDER_AIDS: ReadonlySet<EditingAidToggle> = new Set([
+  "nonprinting",
+]);
 
 /** Is screen mode `mode` a proof (anything but Normal)? */
 export function isProofMode(mode: ScreenMode | null | undefined): boolean {
@@ -101,6 +89,7 @@ export const AID_OVERLAYS: Readonly<Record<string, EditingAidToggle>> = {
   "paged.overlay.baselineGrid": "baselineGrid",
   "paged.overlay.threadLines": "textThreads",
   "paged.overlay.oversetMarkers": "oversetMarkers",
+  "paged.overlay.hiddenCharacters": "hiddenCharacters",
 };
 
 /** The editing chrome Proof view hides as well as the aids: the

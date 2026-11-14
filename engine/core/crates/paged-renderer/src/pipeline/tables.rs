@@ -3508,6 +3508,9 @@ pub(super) fn emit_cell_paragraph(
                     ..model_byte(placeholder_bytes, line.byte_range.end as u32),
                 clusters,
                 marker: Vec::new(),
+                turn: em.chain.get(em.frame_idx).and_then(|f| {
+                    super::text_frame::line_turn(f, pages[target_page].spread_origin)
+                }),
             });
         }
     }

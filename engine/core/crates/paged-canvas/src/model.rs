@@ -891,7 +891,8 @@ fn missing_frame_target(mutation: &Mutation) -> Option<&str> {
         | Mutation::MoveFrame { frame_id, .. }
         | Mutation::DeleteFrame { frame_id } => Some(frame_id),
         Mutation::PlaceImage { element_id, .. }
-        | Mutation::ReplaceImageBytes { element_id, .. } => Some(element_id),
+        | Mutation::ReplaceImageBytes { element_id, .. }
+        | Mutation::RelinkImage { element_id, .. } => Some(element_id),
         _ => None,
     }
 }
@@ -3143,7 +3144,20 @@ impl CanvasModel {
         height_pt: f32,
         opts: CanvasOptions,
     ) -> Result<Self, LoadError> {
-        let bytes = crate::blank::blank_idml(width_pt, height_pt);
+        Self::new_blank_layout(doc_id, width_pt, height_pt, 1, false, opts)
+    }
+
+    /// v81 (engine ADR 1307) — [`Self::new_blank`] with `pages` pages, laid
+    /// out as facing spreads when `facing` (page 1 a right-hand page).
+    pub fn new_blank_layout(
+        doc_id: impl Into<String>,
+        width_pt: f32,
+        height_pt: f32,
+        pages: u32,
+        facing: bool,
+        opts: CanvasOptions,
+    ) -> Result<Self, LoadError> {
+        let bytes = crate::blank::blank_idml_layout(width_pt, height_pt, pages, facing);
         Self::load(doc_id, &bytes, opts)
     }
 
@@ -6100,6 +6114,51 @@ impl CanvasModel {
                     prior_has_image_element: None,
                 })
             }
+            // v81 (engine ADR 1308) — relink: the new source, its bytes
+            // when the host has them, the picture's transform kept at the
+            // size it had, the old source's metadata dropped.
+            Mutation::RelinkImage {
+                element_id,
+                uri,
+                bytes,
+            } => {
+                // A picture anchored in the text (ADR 208) is a Rectangle the
+                // page-item lookup does not reach.
+                let anchored = || {
+                    self.scene
+                        .stories
+                        .iter()
+                        .any(|s| {
+                            paged_model::anchored_frame_in(&s.story.paragraphs, element_id)
+                                .is_some()
+                        })
+                        .then(|| paged_mutate::NodeId::Rectangle(element_id.clone()))
+                };
+                let node = self.resolve_frame_node_id(element_id).or_else(anchored)?;
+                let id = match &node {
+                    paged_mutate::NodeId::Rectangle(id)
+                    | paged_mutate::NodeId::Oval(id)
+                    | paged_mutate::NodeId::Polygon(id) => id.clone(),
+                    _ => String::new(),
+                };
+                let bytes = bytes.as_ref().map(|b| b.0.clone());
+                let new_size = match &bytes {
+                    Some(b) => paged_raster::probe(b).ok().map(|i| (i.width, i.height)),
+                    None => self
+                        .image_decode_cache
+                        .borrow()
+                        .get(uri)
+                        .map(|img| (img.width, img.height)),
+                };
+                Some(Operation::RelinkImage {
+                    image_transform: self.relinked_image_transform(&id, new_size),
+                    frame: node,
+                    image_uri: Some(uri.clone()),
+                    bytes,
+                    metadata_json: None,
+                    has_image_element: None,
+                })
+            }
             Mutation::InsertGuide {
                 spread_id,
                 orientation,
@@ -6932,7 +6991,9 @@ impl CanvasModel {
             Operation::SetProperty { node, path, .. } => {
                 is_paint_path(path) && self.is_plain_page_item(node)
             }
-            Operation::ReplaceImageBytes { frame, .. } => self.is_plain_page_item(frame),
+            Operation::ReplaceImageBytes { frame, .. } | Operation::RelinkImage { frame, .. } => {
+                self.is_plain_page_item(frame)
+            }
             Operation::Batch { ops } => {
                 !ops.is_empty() && ops.iter().all(|op| self.paints_a_plain_page_item(op))
             }
@@ -13082,6 +13143,51 @@ impl CanvasModel {
         Some((uri.clone(), img.width, img.height, img.encoded.to_vec()))
     }
 
+    /// Engine ADR 1308 — the picture transform a relink of the graphic
+    /// frame `id` keeps: its current one, scaled so a source of `new_size`
+    /// pixels fits the box the old picture covered (InDesign's "Preserve
+    /// image dimensions when relinking"), or unchanged when either source's
+    /// size is unknown (an old link that never drew). `None` for a frame
+    /// whose picture has no transform of its own (it fills the frame).
+    fn relinked_image_transform(&self, id: &str, new_size: Option<(u32, u32)>) -> Option<[f32; 6]> {
+        let current = self.scene.spreads.iter().find_map(|parsed| {
+            let s = &parsed.spread;
+            let is = |sid: &Option<String>| sid.as_deref() == Some(id);
+            s.rectangles
+                .iter()
+                .find(|f| is(&f.self_id))
+                .map(|f| f.image_item_transform)
+                .or_else(|| {
+                    s.ovals
+                        .iter()
+                        .find(|f| is(&f.self_id))
+                        .map(|f| f.image_item_transform)
+                })
+                .or_else(|| {
+                    s.polygons
+                        .iter()
+                        .find(|f| is(&f.self_id))
+                        .map(|f| f.image_item_transform)
+                })
+        });
+        // A picture anchored in the text keeps its transform on the story.
+        let current = current.or_else(|| {
+            self.scene.stories.iter().find_map(|s| {
+                paged_model::anchored_frame_in(&s.story.paragraphs, id)
+                    .map(|af| af.image_item_transform)
+            })
+        })??;
+        let (Some((nw, nh)), Some((_, ow, oh, _))) = (new_size, self.placed_asset_bytes(id)) else {
+            return Some(current);
+        };
+        if nw == 0 || nh == 0 || ow == 0 || oh == 0 {
+            return Some(current);
+        }
+        let k = (ow as f32 / nw as f32).min(oh as f32 / nh as f32);
+        let [a, b, c, d, e, f] = current;
+        Some([a * k, b * k, c * k, d * k, e, f])
+    }
+
     /// SDK Phase 5 (v1 sweep) — list every object style in the
     /// document. Backs `documentCollection:objectStyles` per
     /// `panel-catalog-and-sdk-extension.md` §5.1. The Object Styles
@@ -13786,21 +13892,12 @@ impl CanvasModel {
     /// synthetic `\n` that the offset contract accounts for, so the
     /// string is index-compatible with every stream offset on the wire.
     /// `None` when the story / table / cell address doesn't resolve.
-    fn stream_byte_text(
+    pub(crate) fn stream_byte_text(
         &self,
         story_id: &str,
         cell: Option<&crate::selection::TextCellAddr>,
     ) -> Option<String> {
-        let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
-        let paragraphs: &[paged_model::Paragraph] = match cell {
-            None => &story.story.paragraphs,
-            Some(addr) => paged_model::cell_paragraphs_in(
-                &story.story.paragraphs,
-                &addr.table_id,
-                addr.col,
-                addr.row,
-            )?,
-        };
+        let paragraphs = self.stream_paragraphs(story_id, cell)?;
         let mut text = String::new();
         for (i, para) in paragraphs.iter().enumerate() {
             if i > 0 {
@@ -13813,6 +13910,26 @@ impl CanvasModel {
         Some(text)
     }
 
+    /// The paragraphs of a text stream: a story's body, or one cell of a
+    /// table in it.
+    pub(crate) fn stream_paragraphs(
+        &self,
+        story_id: &str,
+        cell: Option<&crate::selection::TextCellAddr>,
+    ) -> Option<&[paged_model::Paragraph]> {
+        let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
+        match cell {
+            None => Some(story.story.paragraphs.as_slice()),
+            Some(addr) => paged_model::cell_paragraphs_in(
+                &story.story.paragraphs,
+                &addr.table_id,
+                addr.col,
+                addr.row,
+            )
+            .map(|v| v.as_slice()),
+        }
+    }
+
     /// The built page a spread item belongs to: the page of its PARENT
     /// spread that holds its transformed centroid, the rule
     /// `element_geometry`, `path_anchors` and `moveFrame` share.
@@ -13821,7 +13938,7 @@ impl CanvasModel {
     /// vecs carries bounds in spread-B coords, which would alias
     /// spread A's page rectangles in a flat all-pages search. `None`
     /// is the pasteboard.
-    fn host_page(
+    pub(crate) fn host_page(
         &self,
         spread: &paged_model::Spread,
         bounds: paged_model::Bounds,
@@ -14617,8 +14734,13 @@ impl CanvasModel {
                     self.resource_render_scale.max(LIVE_IMAGE_ADJUST_PX_PER_PT),
                 ),
                 // A5 — live rebuilds keep the degraded-asset markers on
-                // (mirrors the initial load); an export stays faithful.
-                degraded_asset_markers: true,
+                // (mirrors the initial load); an export stays faithful. A
+                // proof (engine ADR 1306) draws the page as the export
+                // does, without them.
+                degraded_asset_markers: !self.view_settings.proof,
+                // Engine ADR 1306 — the view may leave nonprinting items
+                // off the screen, as the export leaves them out of print.
+                omit_nonprinting: self.view_settings.hide_nonprinting,
                 ..base
             },
             // Concept 3 — the export-time ONE-SHOT build: glyph side-channel
@@ -14677,13 +14799,15 @@ impl CanvasModel {
     /// a document with some counts as marked, which costs an export build
     /// and never a wrong pixel.
     pub fn live_build_has_markers(&self) -> bool {
-        self.built.diagnostics.items.iter().any(|d| {
-            matches!(
-                d.code,
-                paged_renderer::DiagnosticCode::FontSubstituted
-                    | paged_renderer::DiagnosticCode::ImageContentUnrenderable
-            )
-        })
+        // A proof (engine ADR 1306) builds without them.
+        !self.view_settings.proof
+            && self.built.diagnostics.items.iter().any(|d| {
+                matches!(
+                    d.code,
+                    paged_renderer::DiagnosticCode::FontSubstituted
+                        | paged_renderer::DiagnosticCode::ImageContentUnrenderable
+                )
+            })
     }
 
     /// ADR 205 — whether the live build draws every page as an export
@@ -14694,6 +14818,10 @@ impl CanvasModel {
         self.proof_state.is_none()
             && self.resource_render_scale == 1.0
             && !self.live_build_has_markers()
+            // The export leaves nonprinting items out (engine ADR 1095);
+            // the live build does too only while the view hides them
+            // (engine ADR 1306).
+            && (self.view_settings.hide_nonprinting || !self.scene.has_nonprinting())
     }
 
     /// ADR 205 — the document as the exports draw it, for a snapshot that
@@ -16135,9 +16263,21 @@ impl CanvasModel {
     }
 
     /// v77 — replace the view settings. Session state: not saved, not
-    /// undoable, and no rebuild — the build does not depend on them.
-    pub fn set_view_settings(&mut self, settings: crate::view::ViewSettings) {
+    /// undoable. The view mode is drawn at raster time; hiding
+    /// nonprinting items and a proof's markers are options of the live
+    /// build (v81, engine ADR 1306), so a change to either rebuilds every
+    /// page, dropping the cross-build emit caches that were filled under
+    /// the other options. Returns whether it rebuilt.
+    pub fn set_view_settings(
+        &mut self,
+        settings: crate::view::ViewSettings,
+    ) -> Result<bool, crate::channel::LoadError> {
+        let rebuild = self.view_settings.build_differs(&settings);
         self.view_settings = settings;
+        if rebuild {
+            self.commit_and_rebuild(Invalidation::Everything)?;
+        }
+        Ok(rebuild)
     }
 
     /// v75 — the session's role and overrides (engine ADR 1000).

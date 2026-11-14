@@ -23,9 +23,12 @@
 // tile cache, and the setTimeout-driven render loop (workers have no
 // requestAnimationFrame; spec §3.1 accepts this).
 //
-// The CPU path: every tile is a 256-px `vello_cpu` snapshot
-// (via `renderTilePng`). Composition is `ctx.drawImage` over the
-// OffscreenCanvasRenderingContext2D. Per spec AC-V-7 no rendering
+// The CPU path: every tile is a `vello_cpu` raster of the page's screen
+// extent, 256 px across the trim (via `renderTilePng`): the trim grown to
+// the bleed and the pasteboard artwork the page paints, on a transparent
+// ground, the rect the GPU lane clips to (engine ADR 1306). Composition is
+// the paper over the trim, then `ctx.drawImage` of the tile at its extent,
+// then the page edge (not in a proof). Per spec AC-V-7 no rendering
 // happens on the main thread; the main thread only writes the camera
 // SAB and posts attach/resize messages.
 //
@@ -53,6 +56,9 @@ export interface RendererWasm {
     index: number,
   ): [string, number, number, number?, number?] | undefined;
   renderTilePng(pageId: string, targetWidthPx: number): Uint8Array | undefined;
+  /** v81 (engine ADR 1306) — the rect a page's tile covers, page-local pt
+   *  `[x, y, w, h]`; an older engine has none, and its tile is the trim. */
+  screenExtent?(pageId: string): ArrayLike<number> | undefined;
   /**
    * When set, the renderer uses Vello via the worker's WebGPU
    * surface for the hot path. Returns true on a successful present;
@@ -89,6 +95,9 @@ interface CachedTile {
   bitmap: ImageBitmap;
   widthPx: number;
   heightPx: number;
+  /** Where the tile goes, page-local pt `[x, y, w, h]` (the trim when the
+   *  engine does not say). */
+  extent: readonly [number, number, number, number] | null;
 }
 
 interface RendererOptions {
@@ -143,6 +152,8 @@ export class WorkerRenderer {
    *  `viewSettingsApplied` reply. Pixel Preview draws the CPU tiles at
    *  72 ppi (one pixel per point) and enlarges them unsmoothed. */
   private viewMode: string = "preview";
+  /** v81 (engine ADR 1306) — a proof draws the pages without their edge. */
+  private proof = false;
 
   private lastCameraGeneration = -1n;
   /** Set when something changed and the next tick must redraw even if camera is steady. */
@@ -236,6 +247,23 @@ export class WorkerRenderer {
   setViewMode(mode: string): void {
     if (mode === this.viewMode) return;
     this.viewMode = mode;
+    this.markDirty([]);
+  }
+
+  /**
+   * v81 (engine ADR 1306) — the view settings now in force: the mode (as
+   * {@link setViewMode}), whether the screen is a proof (no page edge), and
+   * whether the change rebuilt the pages (every tile goes).
+   */
+  setViewSettings(
+    settings: { mode?: string | null; proof?: boolean | null },
+    rebuilt: boolean,
+  ): void {
+    const mode = settings.mode ?? "preview";
+    const proof = settings.proof === true;
+    if (mode === this.viewMode && proof === this.proof && !rebuilt) return;
+    this.viewMode = mode;
+    this.proof = proof;
     this.markDirty([]);
   }
 
@@ -381,9 +409,10 @@ export class WorkerRenderer {
     if (!ctx) return;
     const r = page.rect;
 
-    // Page chrome: white background + thin border. The browser
-    // device-pixel-rounds 1px strokes so they stay visible at any
-    // camera scale.
+    // Page chrome: the paper over the trim, then the tile (the artwork out
+    // to the page's screen extent, engine ADR 1306), then a thin border
+    // unless the screen is a proof. The browser device-pixel-rounds 1px
+    // strokes so they stay visible at any camera scale.
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(r.x, r.y, r.w, r.h);
 
@@ -392,13 +421,16 @@ export class WorkerRenderer {
     // where the tier decision lives.
     const tile = this.bestTileFor(page);
     if (tile) {
-      ctx.drawImage(tile.bitmap, r.x, r.y, r.w, r.h);
+      const [ex, ey, ew, eh] = tile.extent ?? [0, 0, r.w, r.h];
+      ctx.drawImage(tile.bitmap, r.x + ex, r.y + ey, ew, eh);
     }
 
     // Border drawn last so it sits on top of the tile.
-    ctx.lineWidth = 1 / (this.dpr || 1);
-    ctx.strokeStyle = "#cccccc";
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    if (!this.proof) {
+      ctx.lineWidth = 1 / (this.dpr || 1);
+      ctx.strokeStyle = "#cccccc";
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
   }
 
   private bestTileFor(page: PageGeometry): CachedTile | undefined {
@@ -427,6 +459,10 @@ export class WorkerRenderer {
         // Unknown page or no document — drop.
         return;
       }
+      // Read in the same turn as the tile, so both describe one build.
+      const e = this.wasm.screenExtent?.(pageId);
+      const extent =
+        e && e.length >= 4 ? ([e[0], e[1], e[2], e[3]] as const) : null;
       // ImageBitmap is the fastest decode path in workers — the
       // browser does the PNG decode + GPU upload in parallel and
       // returns a transferable handle.
@@ -436,6 +472,7 @@ export class WorkerRenderer {
         bitmap,
         widthPx: bitmap.width,
         heightPx: bitmap.height,
+        extent,
       });
       this.dirty = true;
     } finally {

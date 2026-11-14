@@ -169,7 +169,7 @@ describe("View ▸ screen modes, grids and snapping", () => {
 });
 
 describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () => {
-  test("each aid's command flips its own remembered toggle; the two the engine cannot do are disabled", async () => {
+  test("each aid's command flips its own remembered toggle, hidden characters and nonprinting items too", async () => {
     covers(
       "command:paged.view.toggleFrameEdges",
       "command:paged.view.toggleMarginsColumns",
@@ -186,7 +186,12 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       ["paged.view.toggleGuides", "guides"],
       ["paged.view.toggleBaselineGrid", "baselineGrid"],
       ["paged.view.toggleOversetMarkers", "oversetMarkers"],
+      // Engine ADR 1306: the engine reports the hidden characters and
+      // hides nonprinting items on screen.
+      ["paged.view.toggleHiddenCharacters", "hiddenCharacters"],
+      ["paged.view.toggleNonprinting", "nonprinting"],
     ] as const) {
+      expect(isEnabled(registry.get(id)?.when, () => null)).toBe(true);
       const before = getViewToggle(scope, toggle);
       await registry.invoke(id);
       expect({ id, on: getViewToggle(scope, toggle) }).toEqual({
@@ -196,17 +201,7 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       await registry.invoke(id);
       expect(getViewToggle(scope, toggle)).toBe(before);
     }
-    for (const [id, toggle] of [
-      ["paged.view.toggleHiddenCharacters", "hiddenCharacters"],
-      ["paged.view.toggleNonprinting", "nonprinting"],
-    ] as const) {
-      const before = getViewToggle(scope, toggle);
-      expect(isEnabled(registry.get(id)?.when, () => null)).toBe(false);
-      await registry.invoke(id);
-      expect(getViewToggle(scope, toggle)).toBe(before);
-    }
-    // The submenu's rows: the unsupported two disabled, the rest ticked
-    // from the toggles.
+    // The submenu's rows, every one enabled and ticked from its toggle.
     const rows = VIEW_MENU_ITEMS.filter((m) =>
       m.path.startsWith("View/Editing aids/"),
     );
@@ -221,9 +216,10 @@ describe('View ▸ Editing aids (editor ADR "Editing aids and Proof view")', () 
       "Nonprinting items",
     ]);
     for (const r of rows)
-      expect({ row: r.path, disabled: r.disabled === true }).toEqual({
+      expect({
         row: r.path,
-        disabled: /Hidden characters|Nonprinting items/.test(r.path),
-      });
+        disabled: r.disabled === true,
+        ticked: typeof r.checked,
+      }).toEqual({ row: r.path, disabled: false, ticked: "function" });
   });
 });

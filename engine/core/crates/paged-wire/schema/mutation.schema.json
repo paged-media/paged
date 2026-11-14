@@ -1202,6 +1202,46 @@
           ]
         },
         {
+          "description": "v81 (engine ADR 1308) — relink a placed picture: the graphic frame\n`element_id` (a Rectangle / Oval / Polygon) takes `uri` as its link\nsource (IDML `LinkResourceURI`; for a picked file, `file:///<name>`),\nand `bytes`, when given, as the new source's contents (embedded,\nfor a source the engine cannot read itself). The frame, its\nfitting and the picture's place in it stay; the picture keeps the\nsize it had on the page when both sources' pixel sizes are known\n(InDesign's \"Preserve image dimensions when relinking\"). The old\nsource's recorded colour space and ppi are dropped. One undo step.\nRoutes to `Operation::RelinkImage`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "relinkImage"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "elementId": {
+                  "type": "string"
+                },
+                "uri": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ByteBuf"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "elementId",
+                "uri"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "Set a page item's whole placement transform, in the space\n`elementGeometry` reads it: the page the item sits on, its origin\nat `(0, 0)` (spread space for an item on the pasteboard). The\nengine adds the page's origin inside its spread back before\nstoring the `ItemTransform`, so read, translate, write moves the\nitem by exactly the step on any page. The `frameTransform`\nproperty is the stored, spread-space matrix.",
           "type": "object",
           "properties": {

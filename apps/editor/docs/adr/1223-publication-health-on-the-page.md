@@ -51,3 +51,11 @@ located some of them with its own reads, and nothing offered to fix one.
   `test/panels/cockpit-publication-health-panel.dom.test.tsx`, and `UXI-T55` in
   `apps/canvas/tests/e2e/uxi-issues.spec.ts` (go, select, return with the model and the history
   untouched; markers and overview; Expand frame is one undo step).
+
+## Amendment (2026-11-14): Relink
+
+Engine ADR 1308 (protocol 81) relinks a picture in one undo step, so the fix for a missing,
+low-resolution or wrong-colour-space picture is now **Relink…** ("Choose the picture's file: the
+frame, its fitting and the picture's size stay. One undo step."): a file picker, then
+`relinkImage` with the file's name and bytes (`apps/canvas/src/relink.ts`); **Open Links** stays
+beside it. The Links panel's Relink… does the same for the link the user picks.

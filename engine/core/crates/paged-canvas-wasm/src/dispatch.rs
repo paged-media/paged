@@ -417,7 +417,10 @@ impl WorkerCore {
                 match CanvasModel::load(doc_id, bytes.as_slice(), opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
-                        model.set_view_settings(self.view_settings);
+                        // v81 — a build option the session holds rebuilds
+                        // the fresh document under it; a build that fails
+                        // under it keeps the load's.
+                        let _ = model.set_view_settings(self.view_settings);
                         model.set_session_policy(self.session_policy.clone());
                         if let Some(depth) = self.history_depth {
                             model.set_history_depth(depth);
@@ -440,6 +443,8 @@ impl WorkerCore {
                 width_pt,
                 height_pt,
                 font,
+                pages,
+                facing_pages,
             } => {
                 // Same install+reply contract as LoadDocument; only the
                 // source differs (an engine-minted blank package vs the
@@ -452,10 +457,22 @@ impl WorkerCore {
                     color_profiles: self.color_profiles.clone(),
                 };
                 let doc_id = format!("doc-{}", msg.seq);
-                match CanvasModel::new_blank(doc_id, width_pt, height_pt, opts) {
+                // v81 (engine ADR 1307) — the page count and the spreads.
+                let pages = pages.unwrap_or(1).clamp(1, 999);
+                match CanvasModel::new_blank_layout(
+                    doc_id,
+                    width_pt,
+                    height_pt,
+                    pages,
+                    facing_pages,
+                    opts,
+                ) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
-                        model.set_view_settings(self.view_settings);
+                        // v81 — a build option the session holds rebuilds
+                        // the fresh document under it; a build that fails
+                        // under it keeps the load's.
+                        let _ = model.set_view_settings(self.view_settings);
                         model.set_session_policy(self.session_policy.clone());
                         if let Some(depth) = self.history_depth {
                             model.set_history_depth(depth);
@@ -1201,10 +1218,51 @@ impl WorkerCore {
             }
             MainToWorkerKind::SetViewSettings { settings } => {
                 self.view_settings = settings;
+                let mut rebuilt = false;
                 if let Some(m) = self.model.as_mut() {
-                    m.set_view_settings(settings);
+                    // v81 (engine ADR 1306) — a build option changed:
+                    // every page was rebuilt, and every cached scene (the
+                    // page edge is in it too) is stale.
+                    match m.set_view_settings(settings) {
+                        Ok(true) => {
+                            rebuilt = true;
+                            effect = CacheEffect::ClearAll;
+                        }
+                        Ok(false) => {}
+                        Err(e) => reply!(WorkerToMainKind::MutationFailed {
+                            error: WorkerError::NotImplemented {
+                                what: format!("rebuild after SetViewSettings: {e}"),
+                            },
+                        }),
+                    }
                 }
-                WorkerToMainKind::ViewSettingsApplied { settings }
+                WorkerToMainKind::ViewSettingsApplied { settings, rebuilt }
+            }
+            // v81 (engine ADR 1306) — the hidden characters of the pages
+            // in view.
+            MainToWorkerKind::RequestHiddenCharacters { page_ids } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                WorkerToMainKind::HiddenCharacters {
+                    pages: model.hidden_characters(&page_ids),
+                    revision: model.document_revision(),
+                }
+            }
+            // v81 (engine ADR 1306) — the text frames with a grid of their
+            // own.
+            MainToWorkerKind::RequestFrameBaselineGrids { page_ids } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                WorkerToMainKind::FrameBaselineGrids {
+                    grids: model.frame_baseline_grids(&page_ids),
+                    revision: model.document_revision(),
+                }
             }
             MainToWorkerKind::RequestNearestPathPoint { id, point } => {
                 let result = self
@@ -2552,16 +2610,18 @@ impl WorkerCore {
     }
 }
 
-/// Hand `slot` to the first `ReplaceImageBytes` (depth-first through
-/// batches) whose bytes are present and empty. Leaves `slot` `Some` when
-/// there is none.
+/// Hand `slot` to the first `ReplaceImageBytes` or (v81, engine ADR 1308)
+/// `RelinkImage` (depth-first through batches) whose bytes are present and
+/// empty. Leaves `slot` `Some` when there is none.
 fn fill_bytes_slot(m: &mut paged_canvas::channel::Mutation, slot: &mut Option<Vec<u8>>) {
     use paged_canvas::channel::Mutation as M;
     if slot.is_none() {
         return;
     }
     match m {
-        M::ReplaceImageBytes { bytes: Some(b), .. } if b.as_slice().is_empty() => {
+        M::ReplaceImageBytes { bytes: Some(b), .. } | M::RelinkImage { bytes: Some(b), .. }
+            if b.as_slice().is_empty() =>
+        {
             if let Some(v) = slot.take() {
                 *b = v.into();
             }

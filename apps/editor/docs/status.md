@@ -165,12 +165,12 @@ extensions ADR 1107; F-02); the compatibility report lists every import's and ex
 (the engine's loss report, now also on the IDML load and export) explained, located and with each
 format's round-trip risk, and says an import's summary once (DF4,
 [ADR 1222](adr/1222-compatibility-report.md), `UXI-T66`); File ▸ New document… opens a dialog of
-purpose presets and a custom setup with a live preview (DF5, [ADR 1220](adr/1220-new-document.md);
-F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
+purpose presets and a custom setup with a live preview, facing pages included since engine ADR
+1307 (DF5, [ADR 1220](adr/1220-new-document.md); F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
 stages and Cancel, a verified result — in kit controls with a page scope and presets, and the
 Layout rows open their panels (DF6, [ADR 1221](adr/1221-guided-export.md), `UXI-T68`; F-12,
 F-15); the publication's issues are on the page as markers, in a page overview and in the Issues
-lens, one click to the item with targeted fixes (DF7,
+lens, one click to the item with targeted fixes, Relink… among them since engine ADR 1308 (DF7,
 [ADR 1223](adr/1223-publication-health-on-the-page.md), `UXI-T55`; F-09); the clipboard's verbs run
 in the order they were given and paste keeps relative geometry, Paste in place its positions
 (DF9, [ADR 231](adr/231-page-item-clipboard.md) amended, `UXI-T65`); and the document open last
@@ -207,11 +207,15 @@ and Calibrated size (from a screen calibration) beside 100 % (UXI-T48), and came
 respect reduced motion and yield to the next wheel or pan (UXI-T53; F-52). WS9 has landed
 ([ADR 1212](adr/1212-editing-aids-and-proof-view.md)): eight editing aids, each remembered on its
 own, in View ▸ Editing aids and the bottom bar (frame edges, margins and columns, ruler guides, the
-baseline grid, text threads, overset markers on every overset frame; hidden characters and
-nonprinting items are listed but disabled until the engine supports them), hidden ruler guides no
-longer snap, and Proof view (the former Preview screen mode, W) hides every aid and the selection's
-handles, masks the pasteboard at the trim or the bleed with crop marks and a badge, and keeps the
-selection. WS10 has landed ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the
+baseline grid, text threads, overset markers on every overset frame, hidden characters and
+nonprinting items), hidden ruler guides no longer snap, and Proof view (the former Preview screen
+mode, W) hides every aid and the selection's handles, masks the pasteboard at the trim or the
+bleed with crop marks and a badge, and keeps the selection. Engine ADR 1306 (protocol 81) closed
+its engine gaps: the hidden characters come from the engine (InDesign's marks where the composed
+lines hold them, for the pages in view), nonprinting items leave the screen while their aid is off
+and in every proof, a proof drops the page edge and the degraded-asset markers on both lanes, both
+lanes draw a page's bleed and pasteboard artwork to one screen extent, and the Baseline grid aid
+draws each frame's own grid. WS10 has landed ([ADR 1213](adr/1213-page-lenses-and-semantic-zoom.md)): the
 document map navigates through five lenses with one search — Pages, Structure (sections,
 headings, bookmarks, stories), Layers (named objects), Issues (pages with missing or
 low-resolution images, overset stories and preflight findings) and Data (placed records, with a

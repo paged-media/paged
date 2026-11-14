@@ -20,7 +20,9 @@
 // The editing aids' geometry (editor ADR "Editing aids and Proof view"):
 // a frame's edge through its turn and its page, the baseline grid's lines
 // from the document's grid preferences (and none when they would be a
-// fill), and the box Proof view shows of a page.
+// fill) and a frame's own grid (engine ADR 1306), the hidden characters'
+// marks as text runs and the pages they are read for, and the box Proof
+// view shows of a page.
 
 import { describe, expect, test } from "bun:test";
 
@@ -30,7 +32,13 @@ import { frameEdgePoints } from "../../src/overlays/frame-edges";
 import {
   BASELINE_GRID_MIN_SPACING_PX,
   baselineGridLines,
+  frameGridLines,
 } from "../../src/overlays/baseline-grid";
+import {
+  HIDDEN_CHARACTER_GLYPHS,
+  hiddenCharacterRuns,
+  pagesInView,
+} from "../../src/overlays/hidden-characters";
 import { proofBox } from "../../src/overlays/proof-surface";
 
 describe("frame edges", () => {
@@ -87,6 +95,63 @@ describe("the baseline grid", () => {
       baselineGridLines({ baselineGridDivision: 0, baselineGridStart: 0 }, 24),
     ).toEqual([0, 12, 24]);
     expect(BASELINE_GRID_MIN_SPACING_PX).toBeGreaterThan(1);
+  });
+});
+
+describe("a frame's own baseline grid", () => {
+  test("from its first line every increment down to the frame's bottom, in its own coordinates", () => {
+    covers("setting:view.baselineGrid");
+    // A frame 200..300 pt, its grid 5 pt below its top, every 13 pt.
+    expect(
+      frameGridLines({ bounds: [200, 20, 300, 200], start: 5, increment: 13 }),
+    ).toEqual([205, 218, 231, 244, 257, 270, 283, 296]);
+    // A first line above the frame's top (a page-relative grid) starts
+    // inside it.
+    expect(
+      frameGridLines({ bounds: [100, 0, 130, 50], start: -14, increment: 12 }),
+    ).toEqual([110, 122]);
+    expect(
+      frameGridLines({ bounds: [0, 0, 10, 10], start: 0, increment: 0 }),
+    ).toEqual([]);
+  });
+});
+
+describe("hidden characters", () => {
+  test("a line's marks are two runs: the spaces centred in their width, the rest where they stand", () => {
+    covers("setting:view.hiddenCharacters");
+    const runs = hiddenCharacterRuns([
+      { kind: "space", x: 30, width: 4 },
+      { kind: "tab", x: 60, width: 20 },
+      { kind: "space", x: 90, width: 3 },
+      { kind: "forcedLineBreak", x: 120, width: 0 },
+      { kind: "paragraphEnd", x: 140, width: 0 },
+      { kind: "storyEnd", x: 150, width: 0 },
+    ]);
+    expect(runs.centred).toEqual({ text: "··", xs: [32, 91.5] });
+    expect(runs.start).toEqual({ text: "»¬¶#", xs: [60, 120, 140, 150] });
+    // InDesign's marks for the five the strategy names.
+    expect(
+      ["space", "tab", "paragraphEnd", "forcedLineBreak", "storyEnd"].map(
+        (k) => HIDDEN_CHARACTER_GLYPHS[k as "space"],
+      ),
+    ).toEqual(["·", "»", "¶", "¬", "#"]);
+  });
+
+  test("only the pages in view are read", () => {
+    const rects = new Map([
+      ["p1" as never, { x: 0, y: 0, w: 612, h: 792 }],
+      ["p2" as never, { x: 0, y: 816, w: 612, h: 792 }],
+      ["p3" as never, { x: 0, y: 1632, w: 612, h: 792 }],
+    ]);
+    // At 100 %, a 1000 × 600 viewport over the first page's foot and the
+    // second page's head (document y 700 to 1300).
+    const camera = { scale: 1, tx: 0, ty: -700 };
+    expect(pagesInView(rects, camera, [1000, 600])).toEqual(["p1", "p2"]);
+    expect(pagesInView(rects, { ...camera, ty: -1700 }, [1000, 600])).toEqual([
+      "p3",
+    ]);
+    // An unmeasured viewport: every page.
+    expect(pagesInView(rects, camera, [0, 0])).toEqual(["p1", "p2", "p3"]);
   });
 });
 

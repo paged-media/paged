@@ -24,10 +24,10 @@
 // preview. Lengths are points, the model's unit; the dialog shows them in
 // the setup's unit (ADR 245).
 //
-// Facing pages are not offered as a choice: the engine has no operation
-// that lays pages out as spreads (`InsertPage` mints a spread per page and
-// a blank document is single-sided), so the dialog says so instead of a
-// switch that would do nothing.
+// Facing pages are a choice (engine ADR 1307): the engine makes the blank
+// document's pages as facing spreads — page 1 alone as a right-hand page,
+// then left/right pairs — and a left-hand page takes its inside margin on
+// its right.
 
 import type { LengthUnit } from "@paged-media/ui";
 
@@ -81,6 +81,8 @@ export interface NewDocumentSetup {
   margins: Margins;
   columns: number;
   gutterPt: number;
+  /** Facing spreads (engine ADR 1307); absent: single pages. */
+  facingPages?: boolean;
 }
 
 /** A paper family: the size a paper-sized preset takes where the reader
@@ -570,6 +572,11 @@ export function readStoredSetup(
     columns: num(r.columns, fallback.columns),
     gutterPt: num(r.gutterPt, fallback.gutterPt),
   };
+  const facing =
+    typeof r.facingPages === "boolean"
+      ? r.facingPages
+      : fallback.facingPages === true;
+  if (facing) setup.facingPages = true;
   // A stored setup that cannot be created is not offered back.
   return isValidSetup(setup) ? setup : null;
 }
@@ -615,6 +622,9 @@ export interface PreviewGeometry {
   page: PreviewRect;
   margins: PreviewRect;
   columns: PreviewRect[];
+  /** Facing pages: the left-hand page of the spread beside `page` (a
+   *  right-hand page), with its margins mirrored (inside on its right). */
+  facing: { page: PreviewRect; margins: PreviewRect } | null;
 }
 
 export function previewGeometry(
@@ -625,14 +635,17 @@ export function previewGeometry(
   const h = Math.max(1, setup.heightPt);
   const bleed = Math.max(0, setup.bleedPt);
   const pad = 6;
+  // Facing pages show a spread: two pages wide.
+  const spread = setup.facingPages === true;
+  const across = spread ? 2 * w : w;
   const scale = Math.min(
-    (box.width - 2 * pad) / (w + 2 * bleed),
+    (box.width - 2 * pad) / (across + 2 * bleed),
     (box.height - 2 * pad) / (h + 2 * bleed),
   );
   const pw = w * scale;
   const ph = h * scale;
   const page: PreviewRect = {
-    x: (box.width - pw) / 2,
+    x: spread ? box.width / 2 : (box.width - pw) / 2,
     y: (box.height - ph) / 2,
     w: pw,
     h: ph,
@@ -657,15 +670,27 @@ export function previewGeometry(
         w: colW,
         h: margins.h,
       });
+  const left: PreviewRect = { ...page, x: page.x - pw };
   return {
     width: box.width,
     height: box.height,
     bleed:
       b > 0
-        ? { x: page.x - b, y: page.y - b, w: pw + 2 * b, h: ph + 2 * b }
+        ? spread
+          ? { x: left.x - b, y: page.y - b, w: 2 * pw + 2 * b, h: ph + 2 * b }
+          : { x: page.x - b, y: page.y - b, w: pw + 2 * b, h: ph + 2 * b }
         : null,
     page,
     margins,
     columns,
+    facing: spread
+      ? {
+          page: left,
+          margins: {
+            ...margins,
+            x: left.x + Math.max(0, m.outside) * scale,
+          },
+        }
+      : null,
   };
 }

@@ -539,6 +539,90 @@ fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
     build_scene_with_transform_filtered(list, page_to_px, false, Some(options.dpi))
 }
 
+/// Engine ADR 1306 — a page as the GPU lane draws it on screen, in page
+/// space (pt): the white paper over the trim, the editor's 1 pt grey page
+/// edge when `border` (a proof leaves it out, editor ADR 1212), and the
+/// page's artwork over them, clipped to the page's
+/// [`crate::screen::screen_extent`] when it reaches past it — the rect the
+/// CPU lane's tile covers, so the two lanes show the same bleed and the
+/// same pasteboard.
+pub fn screen_page_scene(list: &DisplayList, width_pt: f32, height_pt: f32, border: bool) -> Scene {
+    let mut scene = Scene::new();
+    let trim = kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64);
+    scene.fill(
+        Fill::NonZero,
+        kurbo::Affine::IDENTITY,
+        PenikoColor::from_rgba8(255, 255, 255, 255),
+        None,
+        &trim,
+    );
+    if border {
+        scene.stroke(
+            &kurbo::Stroke::new(1.0),
+            kurbo::Affine::IDENTITY,
+            PenikoColor::from_rgba8(180, 180, 180, 255),
+            None,
+            &trim,
+        );
+    }
+    let content = build_scene_with_transform_filtered(list, kurbo::Affine::IDENTITY, false, None);
+    let extent = crate::screen::screen_extent(list, width_pt, height_pt);
+    if extent.clipped {
+        let [x0, y0, x1, y1] = extent.edges();
+        scene.push_clip_layer(
+            Fill::NonZero,
+            kurbo::Affine::IDENTITY,
+            &kurbo::Rect::new(x0 as f64, y0 as f64, x1 as f64, y1 as f64),
+        );
+        scene.append(&content, None);
+        scene.pop_layer();
+    } else {
+        scene.append(&content, None);
+    }
+    scene
+}
+
+impl VelloRasterizer {
+    /// Engine ADR 1306 — render the GPU lane's screen scene of a page
+    /// ([`screen_page_scene`]) over the region `origin_pt` + `options`'
+    /// page size at `options.dpi`, onto `options.background`: what the
+    /// editor's screen shows of that region, for the screen parity test
+    /// against the CPU lane's tile. Empty when no GPU device is available.
+    pub fn rasterize_screen_region(
+        &self,
+        list: &DisplayList,
+        page_size_pt: (f32, f32),
+        origin_pt: (f32, f32),
+        border: bool,
+        options: &RasterOptions,
+    ) -> Vec<u8> {
+        let (px_w, px_h) = options.pixel_size();
+        let mut state_borrow = self.state.borrow_mut();
+        if state_borrow.is_none() {
+            *state_borrow = match init_gpu() {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    tracing::warn!(error = %e, "vello: GPU init failed; returning empty image");
+                    return vec![0; (px_w * px_h * 4) as usize];
+                }
+            };
+        }
+        let state = state_borrow.as_mut().unwrap();
+        let page = screen_page_scene(list, page_size_pt.0, page_size_pt.1, border);
+        let scale = (options.dpi / 72.0) as f64;
+        let mut scene = Scene::new();
+        scene.append(
+            &page,
+            Some(
+                kurbo::Affine::scale(scale)
+                    * kurbo::Affine::translate((-origin_pt.0 as f64, -origin_pt.1 as f64)),
+            ),
+        );
+        render_scene_to_buffer(state, &scene, options)
+            .unwrap_or_else(|_| vec![0; (px_w * px_h * 4) as usize])
+    }
+}
+
 /// Surface-presenter entrypoint. Same scene-building as `build_scene`
 /// but parameterised by the editor's `Viewport` (page → device-pixel
 /// transform). Lives behind the wasm32 cfg because `Viewport` is in

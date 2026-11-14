@@ -84,6 +84,10 @@ export function buildNewDocumentCommand(options: {
         editor,
         [setup.widthPt, setup.heightPt],
         options,
+        // Engine ADR 1307 — facing spreads are the engine's to lay out.
+        setup.facingPages === true
+          ? { pages: setup.pages, facingPages: true }
+          : undefined,
       );
       if (handle) await applyDocumentSetup(editor, handle, setup, options);
     },
@@ -113,11 +117,12 @@ export async function mintBlankDocument(
     setStatus: (s: string) => void;
     pushWarning: (w: string) => void;
   },
+  layout?: { pages?: number; facingPages?: boolean },
 ): Promise<DocumentHandle | null> {
   const [widthPt, heightPt] = sizePt;
   return createBlankDocument(
     editor.client,
-    { widthPt, heightPt },
+    { widthPt, heightPt, ...layout },
     {
       setHandle: editor.document.setHandle,
       setSourceName: editor.document.setSourceName,

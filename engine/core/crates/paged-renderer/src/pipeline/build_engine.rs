@@ -3623,6 +3623,8 @@ pub(super) fn build_document_inner(
             // when StoryDirection="VerticalWritingDirection".
             let pre_story_cmd_counts: Vec<usize> =
                 pages.iter().map(|p| p.list.commands.len()).collect();
+            let pre_story_layout_counts: Vec<usize> =
+                pages.iter().map(|p| p.story_layout.len()).collect();
             // ADR 027 plan step 6 — a resumable story carries no
             // footnotes, so every pass is a keeps pass and may resume.
             let plan = plan_for(&forced_breaks, &pages);
@@ -3737,6 +3739,7 @@ pub(super) fn build_document_inner(
                 apply_vertical_writing_rotation(
                     &mut pages,
                     &pre_story_cmd_counts,
+                    &pre_story_layout_counts,
                     &chain_for_post,
                     &chain_pages_for_post,
                 );
@@ -7090,6 +7093,7 @@ fn emit_paragraph_lines(
                         advance_pt: 0.0,
                     }],
                     marker: Vec::new(),
+                    turn: super::text_frame::line_turn(frame, (ox, oy)),
                 });
             }
         }
@@ -9419,6 +9423,7 @@ fn emit_paragraph_lines(
                     ..seg.byte_base + model_byte(line.byte_range.end as u32),
                 clusters,
                 marker,
+                turn: super::text_frame::line_turn(frame, (ox, oy)),
             });
         }
         // The notes whose reference stands on this line go to its frame; all

@@ -50,6 +50,7 @@ import {
   frameEdgesContribution,
   baselineGridContribution,
   oversetMarkersContribution,
+  hiddenCharactersContribution,
   proofSurfaceContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -452,6 +453,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   marginGuidesContribution,
   frameEdgesContribution,
   oversetMarkersContribution,
+  // Engine ADR 1306 — the hidden characters, where the engine says they
+  // stand.
+  hiddenCharactersContribution,
   // Editor ADR 287 — View ▸ Show grid / Show pixel grid.
   gridOverlayContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only
