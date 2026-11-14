@@ -402,6 +402,9 @@ import {
   fixPreviewContribution,
 } from "../constraints/overlay";
 import { useDesignConstraintsSource } from "../constraints/source";
+import { useAutomaticCheckpoints } from "../checkpoints/checkpoints";
+import { CompareDialog } from "../compare/compare-dialog";
+import { setSideEngineFactory } from "../compare/side-engine";
 import {
   markStartDecided,
   useRememberLastDocument,
@@ -959,6 +962,8 @@ function CanvasAppIntegration() {
   // Editor ADR 1233 — the design constraints, evaluated as the document
   // changes; what does not hold joins those issues.
   useDesignConstraintsSource();
+  // Editor ADR 1234 — a checkpoint after every export.
+  useAutomaticCheckpoints();
   // UX audit F-06 — the document open last comes back at the next start
   // (unless the recovery journal offers unsaved work first).
   useRememberLastDocument();
@@ -2092,7 +2097,25 @@ function CanvasAppRoot() {
     });
     setClient(c);
     instance.onClient?.(c);
+    // Editor ADRs 1234 and 1235 — a second engine on the same worker build
+    // and default fonts, for reading a checkpoint's or a variant's state
+    // without touching the open document. Made per use, disposed after.
+    setSideEngineFactory(
+      instance.scope,
+      () =>
+        new CanvasClient({
+          workerFactory: () => {
+            const w = new CanvasRenderWorker();
+            if (instance.engineWasm)
+              w.postMessage({ kind: "engineWasm", url: instance.engineWasm });
+            return w;
+          },
+          defaultFontProvider: fetchDefaultFont,
+          defaultFontFaces: fetchDefaultFontFaces,
+        }),
+    );
     return () => {
+      setSideEngineFactory(instance.scope, null);
       c.dispose();
       setClient(null);
     };
@@ -2154,6 +2177,8 @@ function CanvasAppRoot() {
       <OpenRecentDialog />
       {/* Editor ADR 1233 — Object ▸ Add constraint… */}
       <AddConstraintDialog />
+      {/* Editor ADRs 1234 and 1235 — a checkpoint's preview, a comparison. */}
+      <CompareDialog />
       <ScreenCalibrationDialog />
       <TransformEachDialog />
       <ReflectDialog />

@@ -35,7 +35,7 @@ import type { Box, ConstraintResult } from "./evaluate";
 import type { Constraint } from "./model";
 import { useConstraintState, useFixPreview } from "./store";
 
-const HOLDS = "var(--overlay-guide, #8b5cf6)";
+const HOLDS = "var(--overlay-guide)";
 const BROKEN = "var(--status-review)";
 const UNKNOWN = "var(--pg-muted-fg)";
 
@@ -56,21 +56,15 @@ function onPage(
   };
 }
 
-function Glyph({
-  c,
-  r,
-  props,
-}: {
-  c: Constraint;
-  r: ConstraintResult;
-  props: OverlayProps;
-}) {
-  const px = 1 / props.camera.scale;
-  const stroke =
-    r.status === "holds" ? HOLDS : r.status === "broken" ? BROKEN : UNKNOWN;
-  const rects = r.boxes.map((b) => onPage(props, b));
-  const present = rects.filter((x): x is Rect => x !== null);
-  if (present.length === 0) return null;
+/** The parts of one constraint's glyph (a plain function: the component
+ *  below only places them). */
+function glyphParts(
+  c: Constraint,
+  r: ConstraintResult,
+  present: readonly Rect[],
+  px: number,
+  stroke: string,
+): React.ReactNode[] {
   const line = (
     x1: number,
     y1: number,
@@ -90,8 +84,8 @@ function Glyph({
       opacity={r.status === "holds" ? 0.55 : 0.9}
     />
   );
-  const tag = (x: number, y: number, text: string) => (
-    <g transform={`translate(${x}, ${y}) scale(${px})`}>
+  const tag = (x: number, y: number, text: string, key: string) => (
+    <g key={key} transform={`translate(${x}, ${y}) scale(${px})`}>
       <rect
         x={0}
         y={-12}
@@ -114,110 +108,112 @@ function Glyph({
     </g>
   );
   const parts: React.ReactNode[] = [];
-  switch (c.kind) {
-    case "align": {
-      const edge = c.params.edge!;
-      const key = present[0]!;
-      const minX = Math.min(...present.map((p) => p.x));
-      const maxX = Math.max(...present.map((p) => p.x + p.w));
-      const minY = Math.min(...present.map((p) => p.y));
-      const maxY = Math.max(...present.map((p) => p.y + p.h));
-      if (edge === "left" || edge === "right" || edge === "centerX") {
-        const x =
-          edge === "left"
-            ? key.x
-            : edge === "right"
-              ? key.x + key.w
-              : key.x + key.w / 2;
-        parts.push(line(x, minY - 6 * px, x, maxY + 6 * px, "a"));
-      } else if (edge === "baseline") {
-        for (const [i, p] of present.entries())
-          parts.push(
-            line(
-              p.x,
-              p.y + p.h,
-              p.x + Math.min(p.w, 24 * px),
-              p.y + p.h,
-              `b${i}`,
-            ),
-          );
-      } else {
-        const y =
-          edge === "top"
-            ? key.y
-            : edge === "bottom"
-              ? key.y + key.h
-              : key.y + key.h / 2;
-        parts.push(line(minX - 6 * px, y, maxX + 6 * px, y, "a"));
-      }
-      break;
-    }
-    case "equal-spacing": {
-      const horizontal = c.params.axis === "horizontal";
-      const sorted = [...present].sort((a, b) =>
-        horizontal ? a.x - b.x : a.y - b.y,
-      );
-      for (let i = 1; i < sorted.length; i++) {
-        const a = sorted[i - 1]!;
-        const b = sorted[i]!;
-        const cx = horizontal ? (a.x + a.w + b.x) / 2 : a.x + a.w / 2;
-        const cy = horizontal ? a.y + a.h / 2 : (a.y + a.h + b.y) / 2;
+  if (c.kind === "align") {
+    const edge = c.params.edge!;
+    const key = present[0]!;
+    const minX = Math.min(...present.map((p) => p.x));
+    const maxX = Math.max(...present.map((p) => p.x + p.w));
+    const minY = Math.min(...present.map((p) => p.y));
+    const maxY = Math.max(...present.map((p) => p.y + p.h));
+    if (edge === "left" || edge === "right" || edge === "centerX") {
+      const x =
+        edge === "left"
+          ? key.x
+          : edge === "right"
+            ? key.x + key.w
+            : key.x + key.w / 2;
+      parts.push(line(x, minY - 6 * px, x, maxY + 6 * px, "a"));
+    } else if (edge === "baseline") {
+      present.forEach((p, i) =>
         parts.push(
-          line(cx - 4 * px, cy - 2 * px, cx + 4 * px, cy - 2 * px, `e${i}a`),
-          line(cx - 4 * px, cy + 2 * px, cx + 4 * px, cy + 2 * px, `e${i}b`),
-        );
-      }
-      break;
+          line(
+            p.x,
+            p.y + p.h,
+            p.x + Math.min(p.w, 24 * px),
+            p.y + p.h,
+            `b${i}`,
+          ),
+        ),
+      );
+    } else {
+      const y =
+        edge === "top"
+          ? key.y
+          : edge === "bottom"
+            ? key.y + key.h
+            : key.y + key.h / 2;
+      parts.push(line(minX - 6 * px, y, maxX + 6 * px, y, "a"));
     }
-    case "min-gap": {
-      const [a, b] = present;
-      if (!a || !b) break;
-      const measure = r.measure?.kind === "min-gap" ? r.measure : null;
-      if (measure?.axis === "vertical") {
-        const top = a.y < b.y ? a : b;
-        const bottom = top === a ? b : a;
-        const x = Math.max(top.x, bottom.x) + 4 * px;
-        parts.push(line(x, top.y + top.h, x, bottom.y, "g"));
+  } else if (c.kind === "equal-spacing") {
+    const horizontal = c.params.axis === "horizontal";
+    const sorted = [...present].sort((a, b) =>
+      horizontal ? a.x - b.x : a.y - b.y,
+    );
+    for (let i = 1; i < sorted.length; i++) {
+      const a = sorted[i - 1]!;
+      const b = sorted[i]!;
+      const cx = horizontal ? (a.x + a.w + b.x) / 2 : a.x + a.w / 2;
+      const cy = horizontal ? a.y + a.h / 2 : (a.y + a.h + b.y) / 2;
+      parts.push(
+        line(cx - 4 * px, cy - 2 * px, cx + 4 * px, cy - 2 * px, `e${i}a`),
+        line(cx - 4 * px, cy + 2 * px, cx + 4 * px, cy + 2 * px, `e${i}b`),
+      );
+    }
+  } else if (c.kind === "min-gap") {
+    const [a, b] = present;
+    const measure = r.measure?.kind === "min-gap" ? r.measure : null;
+    if (a && b && measure?.axis === "vertical") {
+      const top = a.y < b.y ? a : b;
+      const bottom = top === a ? b : a;
+      const x = Math.max(top.x, bottom.x) + 4 * px;
+      parts.push(line(x, top.y + top.h, x, bottom.y, "g"));
+    } else if (a && b) {
+      const left = a.x < b.x ? a : b;
+      const right = left === a ? b : a;
+      const y = Math.max(left.y, right.y) + 4 * px;
+      parts.push(line(left.x + left.w, y, right.x, y, "g"));
+    }
+  } else if (c.kind === "max-lines") {
+    const p = present[0]!;
+    parts.push(tag(p.x, p.y, `≤${c.params.lines}`, "t"));
+  } else if (c.kind === "fits") {
+    const p = present[0]!;
+    parts.push(tag(p.x, p.y + p.h + 14 * px, "fit", "t"));
+  } else {
+    const m = r.measure?.kind === "margin" ? r.measure : null;
+    present.forEach((p, i) => {
+      const side = m?.side ?? "left";
+      const offset = m?.offsets[i] ?? 0;
+      if (side === "left" || side === "right") {
+        const x = side === "left" ? p.x : p.x + p.w;
+        parts.push(line(x, p.y + p.h / 2, x - offset, p.y + p.h / 2, `m${i}`));
+        parts.push(line(x - offset, p.y, x - offset, p.y + p.h, `n${i}`));
       } else {
-        const left = a.x < b.x ? a : b;
-        const right = left === a ? b : a;
-        const y = Math.max(left.y, right.y) + 4 * px;
-        parts.push(line(left.x + left.w, y, right.x, y, "g"));
+        const y = side === "top" ? p.y : p.y + p.h;
+        parts.push(line(p.x + p.w / 2, y, p.x + p.w / 2, y - offset, `m${i}`));
+        parts.push(line(p.x, y - offset, p.x + p.w, y - offset, `n${i}`));
       }
-      break;
-    }
-    case "max-lines": {
-      const p = present[0]!;
-      parts.push(<g key="t">{tag(p.x, p.y, `≤${c.params.lines}`)}</g>);
-      break;
-    }
-    case "fits": {
-      const p = present[0]!;
-      parts.push(<g key="t">{tag(p.x, p.y + p.h + 14 * px, "fit")}</g>);
-      break;
-    }
-    case "margin": {
-      const m = r.measure?.kind === "margin" ? r.measure : null;
-      for (const [i, p] of present.entries()) {
-        const side = m?.side ?? "left";
-        const offset = m?.offsets[i] ?? 0;
-        if (side === "left" || side === "right") {
-          const x = side === "left" ? p.x : p.x + p.w;
-          parts.push(
-            line(x, p.y + p.h / 2, x - offset, p.y + p.h / 2, `m${i}`),
-          );
-          parts.push(line(x - offset, p.y, x - offset, p.y + p.h, `n${i}`));
-        } else {
-          const y = side === "top" ? p.y : p.y + p.h;
-          parts.push(
-            line(p.x + p.w / 2, y, p.x + p.w / 2, y - offset, `m${i}`),
-          );
-          parts.push(line(p.x, y - offset, p.x + p.w, y - offset, `n${i}`));
-        }
-      }
-      break;
-    }
+    });
   }
+  return parts;
+}
+
+function Glyph({
+  c,
+  r,
+  props,
+}: {
+  c: Constraint;
+  r: ConstraintResult;
+  props: OverlayProps;
+}) {
+  const px = 1 / props.camera.scale;
+  const stroke =
+    r.status === "holds" ? HOLDS : r.status === "broken" ? BROKEN : UNKNOWN;
+  const present = r.boxes
+    .map((b) => onPage(props, b))
+    .filter((x): x is Rect => x !== null);
+  if (present.length === 0) return null;
   return (
     <g
       data-constraint-glyph={c.id}
@@ -225,7 +221,7 @@ function Glyph({
       data-constraint-status={r.status}
     >
       <title>{c.kind}</title>
-      {parts}
+      {glyphParts(c, r, present, px, stroke)}
     </g>
   );
 }

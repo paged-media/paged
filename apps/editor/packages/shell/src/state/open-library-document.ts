@@ -40,13 +40,17 @@ export async function openLibraryDocument(
     /** The replace question's action ("Opening Annual"). */
     action: string;
     target?: string;
+    /** The caller has kept the open document already (a checkpoint, editor
+     *  ADR 1234): nothing is lost, so the replace question is not asked. */
+    confirmed?: boolean;
     setStatus?: (s: string) => void;
     pushWarning?: (w: string) => void;
   },
 ): Promise<boolean> {
   const library = getLibrary(editor.scope);
   if (!library) return false;
-  if (!(await confirmDiscard(editor, options.action))) return false;
+  if (!options.confirmed && !(await confirmDiscard(editor, options.action)))
+    return false;
   const bytes = await library.exportPaged(entry.id, options.target ?? "main");
   const doc = editor.document;
   await loadDocumentFile(

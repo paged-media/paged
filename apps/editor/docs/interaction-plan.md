@@ -514,7 +514,13 @@ In scope. They start after G2, and each lands with its own ADR.
   a sandbox), approve, apply through the normal batch and undo; consent, scope and permissions
   (extends `SH/components/cockpit/ai-assistant.tsx` and `platform/shared/ai`).
 - **PX7 Publication time travel.** A timeline of named checkpoints (DF2 and the repository's
-  commits), a read-only preview, a visual diff.
+  commits), a read-only preview, a visual diff. **Done**
+  ([ADR 1234](adr/1234-named-checkpoints.md)): checkpoints are commits on the person's draft ref
+  `drafts/<person>/checkpoints` (never main, never a save), indexed in `checkpoints.json`; the
+  import, Save checkpoint…, every reported export and every replacing operation keep one; bounded
+  (256 MB, 20 automatic, 100 named); the Library panel's timeline offers Preview, Compare with
+  current (a second engine renders the other state; regions boxed, changes listed from the
+  engines' facts) and Restore as new version (the open state kept first).
 - **PX8 A living publication contract.** The contract in the document's properties (output
   standard, dimensions, bleed, profile, fonts, image resolution, data completeness, approvals),
   evaluated continuously through DF7 and preflight.

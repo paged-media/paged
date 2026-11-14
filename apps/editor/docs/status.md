@@ -372,6 +372,13 @@ is an issue in Publication health whose fix says what it will do, draws where it
 while it has the pointer or the focus, and applies as one undo step. Nothing moves by itself. The
 constraints draw as faint glyphs (View ▸ Editing aids ▸ Design constraints) and are listed in
 Window ▸ Output ▸ Design constraints.
+Publication time travel ([ADR 1234](adr/1234-named-checkpoints.md), PX7): the Library panel shows
+the document's timeline — the import, the checkpoints the user names with Save checkpoint…, one
+after every export and one before an operation that replaces the open document — as commits on
+the person's own checkpoints ref, so keeping one never moves the saved version. A checkpoint
+previews read-only, compares with the open document side by side (the regions that differ boxed,
+the frames, pictures, text, formatting and styles that changed listed) in a second engine, and
+restores as a new version with the open state kept first. Bounded as the recovery journal is.
 
 Otherwise the editor behaves as
 the sections above and the existing records describe: Shift-click adds and Cmd-click toggles,

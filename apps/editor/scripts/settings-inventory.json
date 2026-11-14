@@ -793,7 +793,7 @@
     {
       "key": "OPFS <library root>, OPFS paged-recovery",
       "storage": "opfs",
-      "reason": "the local document library's repositories (documents and their versions), and the recovery journal's checkpoints of unsaved work (editor ADR 1204, root paged-recovery, opened through the same opfsFs): user data, not configuration.",
+      "reason": "the local document library's repositories (documents and their versions, with each document's timeline of named checkpoints, checkpoints.json, editor ADR 1234), and the recovery journal's checkpoints of unsaved work (editor ADR 1204, root paged-recovery, opened through the same opfsFs): user data, not configuration.",
       "source": "apps/editor/packages/repository/src/fs.ts",
       "marker": "storage.getDirectory()",
       "sites": [["getDirectory", ""]]
