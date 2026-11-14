@@ -128,7 +128,10 @@ import {
 export interface TextEditingContext {
   client: CanvasClient | null;
   selection: ContentSelection | null;
-  setSelection: (s: ContentSelection | null) => void;
+  setSelection: (
+    s: ContentSelection | null,
+    opts?: { typing?: boolean },
+  ) => void;
   /** ADR-012 — true while an active edit context owns undo (it declares
    *  `onUndo`). The edit-context controller routes Cmd-Z to that context;
    *  this hook must then leave the document stack alone. */
@@ -233,6 +236,12 @@ export function useTextEditing(ctx: TextEditingContext) {
     const setSel = (s: ContentSelection | null) => {
       selRef.current = s;
       latest().setSelection(s);
+    };
+    // The caret a typed key advanced: its listeners hear of it once the
+    // keys pause (editor ADR 1232 amendment, F-56).
+    const setTypedSel = (s: ContentSelection | null) => {
+      selRef.current = s;
+      latest().setSelection(s, { typing: true });
     };
     // F-56 — keys that outrun the engine fold into one insert per round
     // trip (ui/typing-coalescer.ts); every request of this handler goes
@@ -435,7 +444,7 @@ export function useTextEditing(ctx: TextEditingContext) {
         if (canvasSurfaceOf(e.target) === "text") return;
         e.preventDefault();
         anchorRef.current = null;
-        enqueue((sel, c) => insertAt(c, sel, key, setSel));
+        enqueue((sel, c) => insertAt(c, sel, key, setTypedSel));
         focusTextSurface(root);
         return;
       }
@@ -446,7 +455,7 @@ export function useTextEditing(ctx: TextEditingContext) {
         e.stopPropagation();
         anchorRef.current = null;
         const text = e.shiftKey ? FORCED_LINE_BREAK : "\n";
-        enqueue((sel, c) => insertAt(c, sel, text, setSel));
+        enqueue((sel, c) => insertAt(c, sel, text, setTypedSel));
         return;
       }
 
@@ -457,7 +466,7 @@ export function useTextEditing(ctx: TextEditingContext) {
         e.preventDefault();
         e.stopPropagation();
         anchorRef.current = null;
-        enqueue((sel, c) => insertAt(c, sel, "\t", setSel));
+        enqueue((sel, c) => insertAt(c, sel, "\t", setTypedSel));
         return;
       }
 
@@ -582,7 +591,7 @@ export function useTextEditing(ctx: TextEditingContext) {
           const text = e.data ?? e.dataTransfer?.getData("text/plain") ?? "";
           if (!text || !selRef.current || leavingRef.current) return;
           anchorRef.current = null;
-          enqueue((sel, c) => insertAt(c, sel, text, setSel));
+          enqueue((sel, c) => insertAt(c, sel, text, setTypedSel));
           return;
         }
         case "insertLineBreak":

@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod appearance_parity;
+mod image_store;
 mod scene_layer_parity;
 mod screen_parity;
 mod svg_reference;

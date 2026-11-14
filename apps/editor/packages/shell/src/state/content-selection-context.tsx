@@ -27,10 +27,12 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import type {
-  CaretGeometry,
-  ContentSelection,
-  SelectionRect,
+import {
+  TYPING_HOLD_MAX_MS,
+  TYPING_SETTLE_MS,
+  type CaretGeometry,
+  type ContentSelection,
+  type SelectionRect,
 } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";
@@ -39,8 +41,15 @@ interface ContentSelectionContextValue {
   /** Canonical content selection (story + offsets + affinity). */
   contentSelection: ContentSelection | null;
   /** Setter that round-trips through the worker — every change posts
-   * `SetSelection` and refreshes caret + selection geometry. */
-  setContentSelection: (sel: ContentSelection | null) => void;
+   * `SetSelection` and refreshes caret + selection geometry. `typing`: the
+   * caret a typed key advanced (editor ADR 1232 amendment, F-56) — the
+   * selection's listeners (`subscribeSelection`: the plugins' readers of
+   * the caret's formatting) hear of it once the keys pause, as the panels
+   * hear of the document change. */
+  setContentSelection: (
+    sel: ContentSelection | null,
+    opts?: { typing?: boolean },
+  ) => void;
 
   /** Caret position for the current selection's start offset. */
   caret: CaretGeometry | null;
@@ -173,18 +182,41 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   // panel while it renders. It keeps this provider uncompiled (ADR 229).
   contentSelectionRef.current = contentSelection;
 
+  // A typed caret's notice to the selection's listeners, held while keys
+  // keep coming (F-56): when it was first held, and the timer that sends it.
+  const heldNotice = useRef<{
+    since: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const setContentSelection = useCallback(
-    (sel: ContentSelection | null) => {
+    (sel: ContentSelection | null, opts?: { typing?: boolean }) => {
       setContentSelectionRaw(sel);
       // The ref leads the render, so a listener reads the new selection.
       contentSelectionRef.current = sel;
-      for (const fn of [...selectionListeners]) {
-        try {
-          fn();
-        } catch {
-          /* a listener's failure is its own */
+      const notify = () => {
+        const held = heldNotice.current;
+        if (held) clearTimeout(held.timer);
+        heldNotice.current = null;
+        for (const fn of [...selectionListeners]) {
+          try {
+            fn();
+          } catch {
+            /* a listener's failure is its own */
+          }
         }
+      };
+      if (opts?.typing) {
+        const now = Date.now();
+        const since = heldNotice.current?.since ?? now;
+        if (heldNotice.current) clearTimeout(heldNotice.current.timer);
+        const wait = Math.max(
+          0,
+          Math.min(TYPING_SETTLE_MS, since + TYPING_HOLD_MAX_MS - now),
+        );
+        heldNotice.current = { since, timer: setTimeout(notify, wait) };
+      } else {
+        notify();
       }
       // A new selection is a new insertion point: the style held for the
       // old caret goes (an insert applies it before it moves the caret).

@@ -212,6 +212,22 @@ preview? })` answers per composed line the measure, the natural width, the
   asked `story`'s line evidence; a refused write answers `applied: false`
   and the engine's reason. Nothing in the document changes.
 
+## Typed changes (editor ADR 1232 amendment)
+
+`mutate(mutation, { typing: true })` is a typed key's insert: the call
+resolves with its reply at once, but subscribers hear of the change once the
+keys pause (`TYPING_SETTLE_MS`, at least every `TYPING_HOLD_MAX_MS`), as one
+`mutationApplied` naming every page the held keys changed (the last step's
+`appliedSeq`); any other change of the document lets the held one out first.
+
+## Decoded pictures (engine ADR 1311)
+
+The worker's `perfCounters()` reports the engine's decoded-picture store
+(`imageStoreBytes`, `imageStorePeakBytes`, `imageStoreBudget`,
+`imageStoreEntries`, `imageStoreDecodes`, `imageStoreHits`,
+`imageStoreEvictions`), and every journal drain records it as
+`worker.caches`, with the CPU tile bytes and the GPU scene count.
+
 ## The catalog
 
 `api-catalog.json`, shipped in this package, is the machine-readable

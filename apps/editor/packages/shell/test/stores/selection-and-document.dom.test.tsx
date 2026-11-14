@@ -334,4 +334,31 @@ describe("content selection", () => {
     expect(result.current.contentSelection).toBeNull();
     expect(result.current.caret).toBeNull();
   });
+
+  // Editor ADR 1232 amendment (F-56): the caret a typed key advanced is
+  // posted and drawn at once, but the selection's listeners (the plugins'
+  // readers of the caret's formatting) hear of a burst once, when the keys
+  // pause; any other selection change tells them at once, held one first.
+  test("F-56: typed carets reach the selection's listeners once per burst", async () => {
+    const c = contentClient();
+    const { result } = mount(c.client);
+    let heard = 0;
+    act(() => {
+      result.current.subscribeSelection(() => (heard += 1));
+    });
+    act(() => {
+      for (let i = 1; i <= 4; i++) {
+        result.current.setContentSelection(SEL(i, i), { typing: true });
+      }
+    });
+    expect(c.sent).toHaveLength(4);
+    expect(result.current.contentSelectionRef.current).toEqual(SEL(4, 4));
+    expect(heard).toBe(0);
+    await waitFor(() => expect(heard).toBe(1));
+    act(() => result.current.setContentSelection(SEL(9, 9), { typing: true }));
+    act(() => result.current.setContentSelection(SEL(2, 7)));
+    expect(heard).toBe(2);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(heard).toBe(2);
+  });
 });

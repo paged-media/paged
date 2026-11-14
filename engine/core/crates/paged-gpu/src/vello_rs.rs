@@ -225,65 +225,6 @@ impl VelloRasterizer {
     }
 }
 
-/// Walk the display list and tally `*Overprint` commands. Cheap (the
-/// list is in-memory and the match is one branch per command). Drives
-/// the policy decision in `rasterize` between the plain and the
-/// GPU-compute paths.
-/// Materialise an RGBA8 buffer from encoded image bytes at the
-/// dimensions the build phase recorded. Used by the wasm32 lazy
-/// path (`DecodedImage.rgba` empty, `encoded` populated) so peak
-/// heap stays at one decoded image at a time. `vcpu.rs` has a helper of
-/// the same name so each lane builds without the other's feature; both
-/// are `paged_raster::decode_rgba8_at_with`.
-fn decode_image_for_render(
-    bytes: &[u8],
-    expected_w: u32,
-    expected_h: u32,
-    rendering: Option<paged_raster::Rendering>,
-) -> Option<Vec<u8>> {
-    // One function for both lanes: paged-raster decodes (a TIFF or PSD
-    // capped at the recorded size) and resamples to it, converting with
-    // the frame's rendering intent that the build recorded on the lazy
-    // image.
-    let conv = paged_raster::PagedColour::new(rendering.unwrap_or_default());
-    paged_raster::decode_rgba8_at_with(bytes, expected_w, expected_h, &conv)
-}
-
-/// Decoded image pixels kept across scene builds, keyed by the identity
-/// of the image's buffer.
-///
-/// A page scene is rebuilt whenever the scene cache drops it — after
-/// every write that is not a text edit — and the wasm32 lazy path used to
-/// decode each visible image from its encoded bytes on every rebuild:
-/// on the 134-page annual that was ~310 ms of JPEG/WebP decoding after
-/// each write, ahead of the next request. The key is the buffer's
-/// address and length (plus the target size), which is stable because
-/// the pipeline's own decode cache hands out clones of the same `Bytes`
-/// on every rebuild; each entry holds a clone of the image, so its
-/// buffer stays alive and the address cannot be reused by another
-/// image while the entry exists. Bounded by [`DECODED_IMAGE_BUDGET`]
-/// (least recently used first), so peak heap stays capped.
-struct DecodedImageCache {
-    entries: std::collections::HashMap<
-        (usize, usize, u32, u32),
-        (paged_compose::DecodedImage, ImageData),
-    >,
-    order: std::collections::VecDeque<(usize, usize, u32, u32)>,
-    bytes: usize,
-}
-
-/// Decoded RGBA held across scene builds. 256 MiB is ~16 full-page
-/// 2000×2000 photos — the visible pages plus their neighbours.
-const DECODED_IMAGE_BUDGET: usize = 256 * 1024 * 1024;
-
-thread_local! {
-    static DECODED_IMAGES: RefCell<DecodedImageCache> = RefCell::new(DecodedImageCache {
-        entries: std::collections::HashMap::new(),
-        order: std::collections::VecDeque::new(),
-        bytes: 0,
-    });
-}
-
 /// A mesh raster's cache key and its peniko image.
 type MeshImage = ((u64, i32), ImageData);
 
@@ -354,69 +295,13 @@ fn pattern_image_data(raster: &crate::pattern_raster::PatternRaster) -> ImageDat
     })
 }
 
-/// The image's pixels as a peniko `ImageData`, decoded at most once per
-/// image while it stays within the budget. `None` when the image has
+/// The image's pixels as a peniko `ImageData` at `level` (engine ADR
+/// 1311): from the decoded-picture store both lanes share, decoded once per
+/// picture and level while the store holds it, so a later scene gets the
+/// same blob (no re-decode, no re-upload). `None` when the image has
 /// neither usable RGBA nor decodable encoded bytes.
-fn cached_image_data(img: &paged_compose::DecodedImage) -> Option<ImageData> {
-    let expected_len = img.width as usize * img.height as usize * 4;
-    let eager = img.rgba.len() == expected_len;
-    let source: &[u8] = if eager { &img.rgba } else { &img.encoded };
-    if !eager && source.is_empty() {
-        return None;
-    }
-    let key = (
-        source.as_ptr() as usize,
-        source.len(),
-        img.width,
-        img.height,
-    );
-    let hit = DECODED_IMAGES.with(|c| {
-        let mut c = c.borrow_mut();
-        let data = c.entries.get(&key).map(|(_, d)| d.clone())?;
-        if let Some(at) = c.order.iter().position(|k| *k == key) {
-            c.order.remove(at);
-        }
-        c.order.push_back(key);
-        Some(data)
-    });
-    if hit.is_some() {
-        return hit;
-    }
-    paged_compose::perf::count(|c| c.scene_image_decodes += 1);
-    let pixels: Box<[u8]> = if eager {
-        img.rgba.as_ref().to_vec().into_boxed_slice()
-    } else {
-        decode_image_for_render(&img.encoded, img.width, img.height, img.rendering)?
-            .into_boxed_slice()
-    };
-    let size = pixels.len();
-    let data = ImageData {
-        data: Blob::new(Arc::new(pixels)),
-        format: ImageFormat::Rgba8,
-        // The display list's RGBA buffer is straight (un-premultiplied)
-        // alpha — pipeline decoders emit straight RGBA8. Mark it so
-        // peniko's sampler does the right multiply at draw time.
-        alpha_type: ImageAlphaType::Alpha,
-        width: img.width,
-        height: img.height,
-    };
-    if size <= DECODED_IMAGE_BUDGET {
-        DECODED_IMAGES.with(|c| {
-            let mut c = c.borrow_mut();
-            while c.bytes + size > DECODED_IMAGE_BUDGET {
-                let Some(old) = c.order.pop_front() else {
-                    break;
-                };
-                if let Some((_, d)) = c.entries.remove(&old) {
-                    c.bytes -= d.data.data().len();
-                }
-            }
-            c.bytes += size;
-            c.order.push_back(key);
-            c.entries.insert(key, (img.clone(), data.clone()));
-        });
-    }
-    Some(data)
+fn cached_image_data(img: &paged_compose::DecodedImage, level: u8) -> Option<ImageData> {
+    crate::image_store::image_data(img, level)
 }
 
 /// Render `scene` through `renderer`, the way every render in this crate
@@ -536,7 +421,7 @@ fn init_gpu() -> Result<GpuState, String> {
 fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
     let scale = options.dpi / 72.0;
     let page_to_px = kurbo::Affine::scale(scale as f64);
-    build_scene_with_transform_filtered(list, page_to_px, false, Some(options.dpi))
+    build_scene_with_transform_filtered(list, page_to_px, false, Some(options.dpi), Some(1.0))
 }
 
 /// Engine ADR 1306 — a page as the GPU lane draws it on screen, in page
@@ -546,7 +431,16 @@ fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
 /// [`crate::screen::screen_extent`] when it reaches past it — the rect the
 /// CPU lane's tile covers, so the two lanes show the same bleed and the
 /// same pasteboard.
-pub fn screen_page_scene(list: &DisplayList, width_pt: f32, height_pt: f32, border: bool) -> Scene {
+///
+/// `image_px_per_pt` is the device scale the placed pictures are decoded
+/// for (engine ADR 1311; `None`: at their recorded size).
+pub fn screen_page_scene(
+    list: &DisplayList,
+    width_pt: f32,
+    height_pt: f32,
+    border: bool,
+    image_px_per_pt: Option<f32>,
+) -> Scene {
     let mut scene = Scene::new();
     let trim = kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64);
     scene.fill(
@@ -565,7 +459,13 @@ pub fn screen_page_scene(list: &DisplayList, width_pt: f32, height_pt: f32, bord
             &trim,
         );
     }
-    let content = build_scene_with_transform_filtered(list, kurbo::Affine::IDENTITY, false, None);
+    let content = build_scene_with_transform_filtered(
+        list,
+        kurbo::Affine::IDENTITY,
+        false,
+        None,
+        image_px_per_pt.map(f64::from),
+    );
     let extent = crate::screen::screen_extent(list, width_pt, height_pt);
     if extent.clipped {
         let [x0, y0, x1, y1] = extent.edges();
@@ -608,8 +508,14 @@ impl VelloRasterizer {
             };
         }
         let state = state_borrow.as_mut().unwrap();
-        let page = screen_page_scene(list, page_size_pt.0, page_size_pt.1, border);
         let scale = (options.dpi / 72.0) as f64;
+        let page = screen_page_scene(
+            list,
+            page_size_pt.0,
+            page_size_pt.1,
+            border,
+            Some(scale as f32),
+        );
         let mut scene = Scene::new();
         scene.append(
             &page,
@@ -639,9 +545,29 @@ pub(crate) fn build_scene_for_surface(
     build_scene_with_transform(list, page_to_surface)
 }
 
+/// A page's scene in page space (pt), its placed pictures decoded for
+/// `image_px_per_pt` device pixels per point (engine ADR 1311; `None`: at
+/// their recorded size): a scene the presenter places with its own scale.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn build_page_space_scene(list: &DisplayList, image_px_per_pt: Option<f32>) -> Scene {
+    build_scene_with_transform_filtered(
+        list,
+        kurbo::Affine::IDENTITY,
+        false,
+        None,
+        image_px_per_pt.map(f64::from),
+    )
+}
+
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn build_scene_with_transform(list: &DisplayList, page_to_px: kurbo::Affine) -> Scene {
-    build_scene_with_transform_filtered(list, page_to_px, /*skip_overprints=*/ false, None)
+    build_scene_with_transform_filtered(
+        list,
+        page_to_px,
+        /*skip_overprints=*/ false,
+        None,
+        Some(1.0),
+    )
 }
 
 /// Same as `build_scene_with_transform`, but with the option to skip
@@ -955,11 +881,17 @@ fn draw_photoshop_bake(
 /// `bake_dpi` is the device resolution a scene drawn in device pixels
 /// is rendered at (its Photoshop-mode bakes then land pixel for pixel);
 /// `None` for a scene the presenter scales later.
+///
+/// `image_scale` is the device pixels per scene unit the placed pictures
+/// are decoded for (engine ADR 1311): `Some(1.0)` for a scene in device
+/// pixels, the presentation scale for a scene in page space, `None` to
+/// draw every picture at its recorded size (level 0).
 fn build_scene_with_transform_filtered(
     list: &DisplayList,
     page_to_px: kurbo::Affine,
     skip_overprints: bool,
     bake_dpi: Option<f32>,
+    image_scale: Option<f64>,
 ) -> Scene {
     // Stack of in-flight scenes. The bottom entry is the final
     // returned scene; additional entries are sub-scenes captured
@@ -1489,22 +1421,29 @@ fn build_scene_with_transform_filtered(
                 // pixels come from `cached_image_data`, which decodes a
                 // lazy image once and hands back the SAME blob on every
                 // later scene build (no re-decode, no re-upload).
-                let Some(image_data) = cached_image_data(img) else {
-                    continue;
-                };
-                let brush = ImageBrush::new(image_data);
                 // Compose the placement transform: the display-list
                 // `transform` maps the unit rect (0..1, 0..1) → page
                 // coords. Vello's `draw_image` expects a transform
                 // that maps the source pixel rect (0..w, 0..h) → final
                 // device pixels. So: page_to_px ∘ unit_to_page ∘
-                // pixel_to_unit.
-                let inv_w = 1.0 / img.width as f64;
-                let inv_h = 1.0 / img.height as f64;
+                // pixel_to_unit, the picture at the level its device
+                // extent needs (engine ADR 1311).
                 let [a, b, c, d, tx, ty] = transform.0;
                 let unit_to_page = kurbo::Affine::new([
                     a as f64, b as f64, c as f64, d as f64, tx as f64, ty as f64,
                 ]);
+                let level = image_scale.map_or(0, |s| {
+                    crate::image_store::level_for_draw(
+                        img,
+                        (kurbo::Affine::scale(s) * page_to_px * unit_to_page).as_coeffs(),
+                    )
+                });
+                let Some(image_data) = cached_image_data(img, level) else {
+                    continue;
+                };
+                let inv_w = 1.0 / image_data.width as f64;
+                let inv_h = 1.0 / image_data.height as f64;
+                let brush = ImageBrush::new(image_data);
                 let pixel_to_unit = kurbo::Affine::scale_non_uniform(inv_w, inv_h);
                 let pixel_to_px = page_to_px * unit_to_page * pixel_to_unit;
                 scene.draw_image(&brush, pixel_to_px);
@@ -2354,6 +2293,7 @@ fn gpu_compute_overprint_path(
         kurbo::Affine::scale(scale as f64),
         /*skip_overprints=*/ true,
         Some(options.dpi),
+        Some(1.0),
     );
     let vello_target = create_storage_texture(
         &state.device,
@@ -3140,12 +3080,12 @@ mod tests {
         let red = lazy(png([255, 0, 0, 255]));
         let blue = lazy(png([0, 0, 255, 255]));
 
-        let first = super::cached_image_data(&red).expect("decodes");
-        let again = super::cached_image_data(&red).expect("cached");
+        let first = super::cached_image_data(&red, 0).expect("decodes");
+        let again = super::cached_image_data(&red, 0).expect("cached");
         assert_eq!(first.data.id(), again.data.id(), "same image, same blob");
         assert_eq!(&first.data.data()[..4], &[255, 0, 0, 255]);
 
-        let other = super::cached_image_data(&blue).expect("decodes");
+        let other = super::cached_image_data(&blue, 0).expect("decodes");
         assert_ne!(
             other.data.id(),
             first.data.id(),
@@ -3157,7 +3097,7 @@ mod tests {
         // on the next rebuild) shares the buffer, so it hits too.
         let rebuilt = red.clone();
         assert_eq!(
-            super::cached_image_data(&rebuilt).unwrap().data.id(),
+            super::cached_image_data(&rebuilt, 0).unwrap().data.id(),
             first.data.id()
         );
     }

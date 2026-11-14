@@ -166,6 +166,7 @@ mod toc_ops;
 mod tracked_change_ops;
 mod translate_gesture;
 mod translate_path_gesture;
+mod typing_bursts;
 mod typography_evidence;
 mod undo_log;
 mod utf8_offsets;

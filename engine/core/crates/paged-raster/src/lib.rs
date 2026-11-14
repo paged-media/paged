@@ -466,13 +466,22 @@ pub fn decode_rgba8_at(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>>
 
 /// [`decode_rgba8_at`] with the colour conversion given (the frame's
 /// rendering intent, recorded on the lazy image).
+///
+/// A gray or YCbCr JPEG at least twice the target on both axes is decoded
+/// at its DCT scale (an eighth, a quarter or a half of its size: the
+/// decoder skips the coefficients a smaller picture does not need) and
+/// resampled from there, so a page thumbnail of a 6 000 px photo decodes
+/// some 750 px instead of 6 000 (engine ADR 1311).
 pub fn decode_rgba8_at_with(
     bytes: &[u8],
     width: u32,
     height: u32,
     conv: &dyn ColourConvert,
 ) -> Option<Vec<u8>> {
-    let decoded = decode_rgba8_with(bytes, Some(width.max(height)), conv).ok()?;
+    let decoded = match jpeg_at_dct_scale(bytes, width, height) {
+        Some(d) => d,
+        None => decode_rgba8_with(bytes, Some(width.max(height)), conv).ok()?,
+    };
     if decoded.width == width && decoded.height == height {
         return Some(decoded.data);
     }
@@ -485,6 +494,48 @@ pub fn decode_rgba8_at_with(
         paged_resample::Filter::Bilinear,
     )
     .ok()
+}
+
+/// A JPEG of one (gray) or three (YCbCr or RGB) 8-bit components decoded
+/// at the smallest DCT scale that still covers `width × height`, when that
+/// is a half or less of its size. `None` for anything else: CMYK and YCCK
+/// keep the decode that converts their inks, a target near full size gains
+/// nothing.
+fn jpeg_at_dct_scale(bytes: &[u8], width: u32, height: u32) -> Option<Rgba8> {
+    if sniff(bytes) != Some(Format::Jpeg) {
+        return None;
+    }
+    let header = jpeg::jpeg_header(bytes)?;
+    if !matches!(header.components, 1 | 3) || header.precision != 8 {
+        return None;
+    }
+    if header.width < width.saturating_mul(2) || header.height < height.saturating_mul(2) {
+        return None;
+    }
+    let mut decoder = jpeg_decoder::Decoder::new(bytes);
+    decoder.read_info().ok()?;
+    let clamp = |v: u32| v.clamp(1, u32::from(u16::MAX)) as u16;
+    let (w, h) = decoder.scale(clamp(width), clamp(height)).ok()?;
+    let pixels = decoder.decode().ok()?;
+    let (w, h) = (u32::from(w), u32::from(h));
+    let n = w as usize * h as usize;
+    let data = match decoder.info()?.pixel_format {
+        jpeg_decoder::PixelFormat::L8 if pixels.len() == n => {
+            pixels.iter().flat_map(|&g| [g, g, g, 255]).collect()
+        }
+        jpeg_decoder::PixelFormat::RGB24 if pixels.len() == n * 3 => pixels
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|&[r, g, b]| [r, g, b, 255])
+            .collect(),
+        _ => return None,
+    };
+    Some(Rgba8 {
+        width: w,
+        height: h,
+        data,
+    })
 }
 
 /// The formats [`decode_rgba8`] reads through this crate's own decoders

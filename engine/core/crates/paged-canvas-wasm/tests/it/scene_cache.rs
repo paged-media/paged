@@ -21,14 +21,14 @@
 //! finds the earlier one, and an edit drops every view of the page.
 
 use paged_canvas::ViewMode;
-use paged_canvas_wasm::scene_cache::{paged_gpu_bucket, SceneCache, SceneView};
+use paged_canvas_wasm::scene_cache::{paged_gpu_bucket, picture_octave, SceneCache, SceneView};
 
 #[test]
 #[allow(non_snake_case)]
 fn each_view_has_its_own_scene_of_a_page__feat__the_renderer_view_modes() {
     let mut cache: SceneCache<&'static str> = SceneCache::new(8);
-    let preview = SceneView::for_page(ViewMode::Preview, false, 2.0);
-    let outline = SceneView::for_page(ViewMode::Outline, false, 2.0);
+    let preview = SceneView::for_page(ViewMode::Preview, false, false, 2.0);
+    let outline = SceneView::for_page(ViewMode::Outline, false, false, 2.0);
     assert_ne!(preview, outline);
     cache.insert((0, preview), "preview");
     assert!(
@@ -49,37 +49,37 @@ fn each_view_has_its_own_scene_of_a_page__feat__the_renderer_view_modes() {
 fn outline_scenes_are_rebuilt_per_zoom_bucket_not_per_frame() {
     // Hairlines are one device pixel at the scale the scene was built
     // for, so the key carries the scale's quarter-octave bucket.
-    let a = SceneView::for_page(ViewMode::Outline, false, 2.0);
-    let b = SceneView::for_page(ViewMode::Outline, false, 2.05);
-    let c = SceneView::for_page(ViewMode::Outline, false, 3.0);
+    let a = SceneView::for_page(ViewMode::Outline, false, false, 2.0);
+    let b = SceneView::for_page(ViewMode::Outline, false, false, 2.05);
+    let c = SceneView::for_page(ViewMode::Outline, false, false, 3.0);
     assert_eq!(a, b, "a small zoom step keeps the scene");
     assert_ne!(a, c, "a larger one rebuilds it");
     assert_eq!(a.scale(), Some(2.0));
     // Preview scenes are vector scenes at any zoom.
     assert_eq!(
-        SceneView::for_page(ViewMode::Preview, false, 2.0),
-        SceneView::for_page(ViewMode::Preview, false, 7.0)
+        SceneView::for_page(ViewMode::Preview, false, false, 2.0),
+        SceneView::for_page(ViewMode::Preview, false, false, 7.0)
     );
 }
 
 #[test]
 fn overprint_preview_rasterises_only_pages_that_overprint() {
     assert_eq!(
-        SceneView::for_page(ViewMode::OverprintPreview, false, 2.0),
+        SceneView::for_page(ViewMode::OverprintPreview, false, false, 2.0),
         SceneView::Knockout,
         "a page with no overprint draws the same in both modes"
     );
     assert!(matches!(
-        SceneView::for_page(ViewMode::OverprintPreview, true, 2.0),
+        SceneView::for_page(ViewMode::OverprintPreview, true, false, 2.0),
         SceneView::OverprintRaster(_)
     ));
     // Preview and Pixel Preview draw overprints as knockouts.
     assert_eq!(
-        SceneView::for_page(ViewMode::Preview, true, 2.0),
+        SceneView::for_page(ViewMode::Preview, true, false, 2.0),
         SceneView::Knockout
     );
     assert_eq!(
-        SceneView::for_page(ViewMode::PixelPreview, true, 2.0),
+        SceneView::for_page(ViewMode::PixelPreview, true, false, 2.0),
         SceneView::Knockout
     );
 }
@@ -105,4 +105,26 @@ fn the_bucket_matches_the_rasterizers_and_the_budget_evicts_lru() {
     );
     cache.set_max_entries(1);
     assert_eq!(cache.len(), 1);
+}
+
+#[test]
+fn a_page_with_pictures_is_rebuilt_per_octave_of_zoom() {
+    // Engine ADR 1311: its pictures are decoded for the octave's scale, so
+    // a zoom inside an octave keeps the scene and one past it rebuilds it.
+    let at = |k: f32| SceneView::for_page(ViewMode::Preview, false, true, k);
+    assert_eq!(at(1.2), at(1.9));
+    assert_ne!(at(1.9), at(2.1));
+    assert_eq!(at(1.5).scale(), Some(2.0));
+    assert_eq!(picture_octave(0.3), 0.5);
+    assert_eq!(picture_octave(4.0), 4.0);
+    // A page without pictures is one vector scene at any zoom.
+    assert_eq!(
+        SceneView::for_page(ViewMode::Preview, false, false, 1.2),
+        SceneView::for_page(ViewMode::Preview, false, false, 9.0)
+    );
+    // Outline and Overprint Preview keep their own keys.
+    assert!(matches!(
+        SceneView::for_page(ViewMode::Outline, false, true, 2.0),
+        SceneView::Outline(_)
+    ));
 }

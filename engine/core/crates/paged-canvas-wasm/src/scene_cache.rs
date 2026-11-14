@@ -39,6 +39,11 @@ pub enum SceneView {
     /// Vector scene, overprints as knockouts: Preview and Pixel Preview,
     /// and Overprint Preview of a page with no overprint.
     Knockout,
+    /// [`SceneView::Knockout`] of a page with placed pictures: they are
+    /// decoded for the scale octave (the bucket's `f32` bits; engine ADR
+    /// 1311), so a zoom past an octave rebuilds the scene with the
+    /// pictures at the level it needs and a smaller one keeps it.
+    Pictures(u32),
     /// Hairline outlines built for the camera scale bucket (the bucket's
     /// `f32` bits).
     Outline(u32),
@@ -47,12 +52,14 @@ pub enum SceneView {
 }
 
 impl SceneView {
-    /// The scene `mode` needs for a page at device scale `px_per_pt`.
-    pub fn for_page(mode: ViewMode, page_overprints: bool, px_per_pt: f32) -> Self {
+    /// The scene `mode` needs for a page at device scale `px_per_pt`;
+    /// `pictures` says whether the page places any.
+    pub fn for_page(mode: ViewMode, page_overprints: bool, pictures: bool, px_per_pt: f32) -> Self {
         let bucket = || paged_gpu_bucket(px_per_pt).to_bits();
         match mode {
             ViewMode::Outline => SceneView::Outline(bucket()),
             ViewMode::OverprintPreview if page_overprints => SceneView::OverprintRaster(bucket()),
+            _ if pictures => SceneView::Pictures(picture_octave(px_per_pt).to_bits()),
             _ => SceneView::Knockout,
         }
     }
@@ -61,9 +68,9 @@ impl SceneView {
     pub fn scale(self) -> Option<f32> {
         match self {
             SceneView::Knockout => None,
-            SceneView::Outline(bits) | SceneView::OverprintRaster(bits) => {
-                Some(f32::from_bits(bits))
-            }
+            SceneView::Outline(bits)
+            | SceneView::OverprintRaster(bits)
+            | SceneView::Pictures(bits) => Some(f32::from_bits(bits)),
         }
     }
 }
@@ -75,6 +82,14 @@ pub fn paged_gpu_bucket(px_per_pt: f32) -> f32 {
     let s = px_per_pt.max(1e-3);
     let step = (s.log2() * 4.0).round();
     (step / 4.0).exp2()
+}
+
+/// The power of two at or above `px_per_pt`, the scale a page's pictures
+/// are decoded for (engine ADR 1311): the level a draw takes changes once
+/// per octave, so the scene does too.
+pub fn picture_octave(px_per_pt: f32) -> f32 {
+    let s = px_per_pt.clamp(1.0 / 64.0, 64.0);
+    s.log2().ceil().exp2()
 }
 
 /// LRU cache of page scenes. Keys are `(page index, view)`; eviction drops

@@ -77,7 +77,7 @@ import { WorkerRenderer, type RendererWasm } from "./render";
 // a fingerprinted asset and the URL is inlined. We pass that URL to
 // `default(wasmUrl)` below.
 import canvasWasmUrl from "@paged-media/canvas-wasm/paged_canvas_wasm_bg.wasm?url";
-import { drainWorkerJournal } from "./journal";
+import { drainWorkerJournal, workerJournal } from "./journal";
 
 interface CanvasWorkerInstance {
   protocolVersion: number;
@@ -120,6 +120,12 @@ interface CanvasWorkerInstance {
   /** v81 (engine ADR 1306) — where a page's tile goes, page-local pt
    *  `[x, y, w, h]`: the trim grown to its bleed and pasteboard artwork. */
   screenExtent?(pageId: string): Float32Array | undefined;
+  /** The engine's work counters and, since engine ADR 1311, its
+   *  decoded-picture store (`imageStore*`: bytes held, peak, budget,
+   *  entries, decodes, hits, evictions). */
+  perfCounters?(): Record<string, number>;
+  /** GPU page scenes held (the `gpu` build only). */
+  sceneCacheSize?(): number;
   runResolveJson(): string | undefined;
   free(): void;
   // GPU surface, only present when the `gpu` feature is enabled at
@@ -701,6 +707,25 @@ function applyReplyEffects(reply: WorkerToMain): void {
   }
 }
 
+/** Journal what the worker's caches hold now: the engine's decoded
+ *  pictures (engine ADR 1311), the CPU tiles and the GPU page scenes. */
+function recordCaches(): void {
+  const c = worker?.perfCounters?.() ?? {};
+  workerJournal.record({
+    code: "worker.caches",
+    data: {
+      imageBytes: c.imageStoreBytes ?? 0,
+      imagePeakBytes: c.imageStorePeakBytes ?? 0,
+      imageBudget: c.imageStoreBudget ?? 0,
+      imageEntries: c.imageStoreEntries ?? 0,
+      imageDecodes: c.imageStoreDecodes ?? 0,
+      imageEvictions: c.imageStoreEvictions ?? 0,
+      tileBytes: renderer?.tileBytes() ?? 0,
+      scenes: worker?.sceneCacheSize?.() ?? 0,
+    },
+  });
+}
+
 function dispatchError(seq: number, details: string): void {
   postBack({
     seq,
@@ -910,7 +935,9 @@ async function dispatch(data: IncomingMessage): Promise<void> {
   }
   if (data.kind === "journalDrain") {
     // Drain, never stream: the cost lands when somebody actually looks
-    // (panel open, export), not on the render loop.
+    // (panel open, export), not on the render loop. Each drain says what
+    // the worker's caches hold at that moment (editor ADR 1232, PRF-004).
+    recordCaches();
     const drained = drainWorkerJournal();
     postBack({
       kind: "journalDrainReply",

@@ -300,6 +300,27 @@ export function gestureInProgressOf(reply: WorkerToMain): GestureHandle | null {
  *  the gesture still holds the document). */
 const GESTURE_WAIT_MS = 30_000;
 
+/** Editor ADR 1232 amendment (F-56) — how long after the last typed key its
+ *  change reaches subscribers (the panels that re-read the document). */
+export const TYPING_SETTLE_MS = 160;
+/** ...and the longest a typed change is held while keys keep coming. */
+export const TYPING_HOLD_MAX_MS = 600;
+/** The replies that change the document (or replace it): a held typed
+ *  change goes out before any of them. */
+const CHANGES_THE_DOCUMENT = new Set<string>([
+  "mutationApplied",
+  "undoApplied",
+  "redoApplied",
+  "gestureCommitted",
+  "scriptResult",
+  "documentLoaded",
+  "fontRegistered",
+  "fontRegistryCleared",
+  "sceneLayerApplied",
+  "pagedPartWritten",
+  "pagedPartDeleted",
+]);
+
 /** The document writes that wait for this client's own gesture to settle
  *  (engine ADR 1300): sent mid-gesture, the engine refuses them whole. */
 const WAITS_FOR_GESTURE: ReadonlySet<MainToWorkerKind["kind"]> = new Set<
@@ -720,9 +741,13 @@ export class CanvasClient {
 
   /** Post one message on the JSON channel. Synchronous up to the post, so
    *  messages reach the worker in call order (and it answers in order). */
-  private post(kind: MainToWorkerKind): Promise<WorkerToMain> {
+  private post(
+    kind: MainToWorkerKind,
+    options: { typing?: boolean } = {},
+  ): Promise<WorkerToMain> {
     if (this.fatal) return Promise.reject(this.fatal);
     const seq = this.nextSeq++;
+    if (options.typing) this.typingSeqs.add(seq);
     const envelope: MainToWorker = {
       seq,
       protocol: PROTOCOL_VERSION,
@@ -900,6 +925,54 @@ export class CanvasClient {
     return handle;
   }
 
+  /** Editor ADR 1232 amendment (F-56) — the seqs of typed inserts in
+   *  flight, and the typed changes held from subscribers. */
+  private readonly typingSeqs = new Set<number>();
+  private heldTyping: {
+    msg: Extract<WorkerToMain, { kind: "mutationApplied" }>;
+    pageIds: Set<PageId>;
+    since: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+
+  /** Merge a typed insert's change into the one held; it goes out when no
+   *  key has followed for {@link TYPING_SETTLE_MS}, and at least every
+   *  {@link TYPING_HOLD_MAX_MS} while keys keep coming. */
+  private holdTyping(
+    msg: Extract<WorkerToMain, { kind: "mutationApplied" }>,
+  ): void {
+    const now = Date.now();
+    const held = this.heldTyping;
+    if (held) clearTimeout(held.timer);
+    const pageIds = held?.pageIds ?? new Set<PageId>();
+    for (const id of msg.payload.pageIds) pageIds.add(id);
+    const since = held?.since ?? now;
+    const wait = Math.max(
+      0,
+      Math.min(TYPING_SETTLE_MS, since + TYPING_HOLD_MAX_MS - now),
+    );
+    this.heldTyping = {
+      msg,
+      pageIds,
+      since,
+      timer: setTimeout(() => this.releaseTyping(), wait),
+    };
+  }
+
+  /** Broadcast the held typed change, as one `mutationApplied` naming
+   *  every page the held keys changed (the last reply's step and stats). */
+  private releaseTyping(): void {
+    const held = this.heldTyping;
+    if (!held) return;
+    this.heldTyping = null;
+    clearTimeout(held.timer);
+    const merged = {
+      ...held.msg,
+      payload: { ...held.msg.payload, pageIds: [...held.pageIds] },
+    } as WorkerToMain;
+    for (const l of this.listeners) l(merged);
+  }
+
   /**
    * File ▸ New — replace the active document with a freshly-minted
    * EMPTY one at `widthPt` × `heightPt` (points). The engine synthesises
@@ -1075,8 +1148,21 @@ export class CanvasClient {
    */
   async mutate(
     mutation: Mutation,
-    options: { coalesce?: string; label?: string } = {},
+    options: {
+      coalesce?: string;
+      label?: string;
+      /** Editor ADR 1232 amendment (F-56) — a typed insert: its reply
+       *  resolves this call at once, but its broadcast to subscribers is
+       *  held while keys keep coming and goes as one change when they
+       *  stop ({@link TYPING_SETTLE_MS}), so the panels that re-read the
+       *  document on every change read it once per burst, not once per
+       *  key. */
+      typing?: boolean;
+    } = {},
   ): Promise<WorkerToMain> {
+    if (options.typing && options.coalesce === undefined && !this.undoGroup) {
+      return this.post({ kind: "mutate", payload: mutation }, { typing: true });
+    }
     if (options.coalesce !== undefined) {
       return this.send({
         kind: "mutateCoalesced",
@@ -3629,6 +3715,18 @@ export class CanvasClient {
       }
     }
     this.trackEdits(msg);
+    // Editor ADR 1232 amendment (F-56) — a typed insert's change is held
+    // and merged with the keys behind it; another change of the document
+    // first lets out what is held, so subscribers see the changes in the
+    // order they were made (a read's reply changes nothing and waits for
+    // nothing).
+    if (msg.seq !== null && this.typingSeqs.delete(msg.seq)) {
+      if (msg.kind === "mutationApplied") {
+        this.holdTyping(msg);
+        return;
+      }
+    }
+    if (CHANGES_THE_DOCUMENT.has(msg.kind)) this.releaseTyping();
     // Fan out to subscribers regardless of seq. Lets multiple parts
     // of the UI react to the same reply (e.g. CanvasApp updates the
     // cache-stats HUD on `mutationApplied` while the original

@@ -79,6 +79,10 @@ pub(crate) fn rgb_to_naive_cmyk_8bit(r: u8, g: u8, b: u8) -> (u8, u8, u8, u8) {
 pub(crate) mod blur;
 #[cfg(feature = "vello-backend")]
 pub mod cmyk_compute;
+/// Engine ADR 1311 — the decoded-picture store both lanes draw placed
+/// pictures from: decoded at the level the draw needs, within a budget.
+#[cfg(any(feature = "cpu", feature = "vello-backend"))]
+pub mod image_store;
 #[cfg(feature = "cpu")]
 pub(crate) mod ink_planes;
 #[cfg(any(feature = "cpu", feature = "vello-backend"))]

@@ -69,6 +69,22 @@ as edits. The headless harness handed only `mutate`, `undo` and `redo` replies t
   without those fields (an engine older than 0.71.13). The flag `document.onDidChange@3` says
   the host reads them.
 
+## Amendment — 2026-11-14 (editor ADR 1232, UX audit F-56)
+
+**A burst of typing is reported as one change.** The editor's text editor sends a typed key's
+insert with `mutate(…, { typing: true })` (its typing coalescer already folds the keys typed
+behind an insert in flight into one). The client resolves that call with its reply at once, but
+holds the reply's broadcast — what `document.onDidChange`, the parent index and the core object
+model hear — while keys keep coming: it goes out 160 ms after the last key
+(`TYPING_SETTLE_MS`), and at least every 600 ms during a long burst (`TYPING_HOLD_MAX_MS`), as one
+`mutationApplied` naming every page the held keys changed, with the last step's `appliedSeq`.
+Any other change of the document (an edit, an undo, a gesture, a script, a load) lets the held
+change out first, so changes still arrive in the order they were made, and a bundle still hears
+every change; it hears a burst of keys as one. The caret the keys advance reaches
+`host.text.onDidChangeSelection` the same way (ADR 348). Measured: typing in a burst sent some
+240 reads per key to the worker (each panel re-reading on every change), and the inserts waited
+behind them; see editor `docs/reference/performance.md`.
+
 ## Related
 
 - [ADR 310](310-one-write-door.md) — one write door, engine-owned history: these are the history's
