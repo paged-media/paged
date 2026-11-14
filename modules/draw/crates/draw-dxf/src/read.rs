@@ -506,7 +506,7 @@ impl<'a> Reader<'a> {
         if h.gradient {
             self.report.approximated(
                 "hatch.gradient",
-                "a gradient hatch is filled with its colour",
+                "a gradient hatch is filled with its color",
             );
         }
         if h.approximated {

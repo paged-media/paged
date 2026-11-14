@@ -648,7 +648,7 @@ impl Mapper {
                 self.lose(
                     "dml.pattern.mix",
                     LossSeverity::Approximated,
-                    "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
+                    "pattern fill drawn as the mix of its two colors (no pattern paint yet)",
                 );
                 self.palette.color(pp.mix().0)
             }
@@ -935,7 +935,7 @@ impl Mapper {
                 return None;
             }
             Paint::Pattern(pp) => {
-                self.lose("dml.overlay.pattern", LossSeverity::Approximated, "a pattern fill overlay is drawn as the mix of its two colours (no pattern paint yet)");
+                self.lose("dml.overlay.pattern", LossSeverity::Approximated, "a pattern fill overlay is drawn as the mix of its two colors (no pattern paint yet)");
                 let (rgb, alpha) = pp.mix();
                 (
                     Effect::ColorOverlay(ColorOverlayParams {
@@ -1083,7 +1083,7 @@ impl Mapper {
                 ),
                 ImageEffect::ColorReplace { rgb, alpha } => {
                     if *alpha < 0.999 {
-                        self.lose("dml.picture.clrReplAlpha", LossSeverity::Dropped, "a:clrRepl's transparency is not carried (the colour replaces opaquely, the picture's alpha kept)");
+                        self.lose("dml.picture.clrReplAlpha", LossSeverity::Dropped, "a:clrRepl's transparency is not carried (the color replaces opaquely, the picture's alpha kept)");
                     }
                     (
                         "a:clrRepl",

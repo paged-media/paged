@@ -312,7 +312,7 @@ fn pattern_pixels(
     }
     if planes.len() < colour_count {
         return Err(format!(
-            "{name}: {} of {colour_count} colour planes",
+            "{name}: {} of {colour_count} color planes",
             planes.len()
         ));
     }

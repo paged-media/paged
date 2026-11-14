@@ -1404,7 +1404,7 @@ impl crate::walk::Visitor for Lower<'_> {
         if !g.filters().is_empty() {
             self.report.dropped(
                 "filter",
-                "a filter effect (blur, shadow, colour matrix, …) is left out; the content is kept",
+                "a filter effect (blur, shadow, color matrix, …) is left out; the content is kept",
             );
         }
         if g.clip_path().is_some() || g.mask().is_some() {

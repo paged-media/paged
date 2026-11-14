@@ -76,14 +76,14 @@ impl Facts {
             b"prtr" => Class::Output,
             _ => Class::Other,
         };
-        let space = match &sig(bytes, 16).ok_or_else(|| bad("colour space"))? {
+        let space = match &sig(bytes, 16).ok_or_else(|| bad("color space"))? {
             b"GRAY" => Space::Gray,
             b"RGB " => Space::Rgb,
             b"CMYK" => Space::Cmyk,
             b"Lab " => Space::Lab,
             other => {
                 return Err(CmsError::Unsupported(format!(
-                    "profile colour space {:?}",
+                    "profile color space {:?}",
                     String::from_utf8_lossy(other)
                 )))
             }

@@ -797,7 +797,7 @@ fn decode_psd_samples(file: &PsdFile) -> Result<DecodedImage, IngestError> {
         let rgb: Vec<f32> = match c.mode {
             P::Indexed => {
                 let pal = file.indexed_palette().ok_or_else(|| {
-                    IngestError::Decode("an Indexed PSD without its colour table".into())
+                    IngestError::Decode("an Indexed PSD without its color table".into())
                 })?;
                 c.samples
                     .iter()

@@ -346,7 +346,7 @@ impl Adjustment {
                 extra_records.then_some("Levels on channels other than red, green and blue")
             }
             Adjustment::HueSaturation { bounds, .. } => (*bounds != HUE_RANGE_DEFAULTS)
-                .then_some("Hue/Saturation colour ranges moved off their defaults"),
+                .then_some("Hue/Saturation color ranges moved off their defaults"),
             Adjustment::BrightnessContrast { legacy, auto, .. } => {
                 (*legacy || *auto).then_some("a legacy or automatic Brightness/Contrast")
             }
@@ -356,11 +356,12 @@ impl Adjustment {
                 ..
             } => (!preserve_luminosity)
                 .then_some("a Color Balance that does not preserve luminosity"),
-            Adjustment::PhotoFilter { color, .. } => matches!(color, FilterColor::Xyz(_))
-                .then_some("a Photo Filter colour stored as XYZ"),
+            Adjustment::PhotoFilter { color, .. } => {
+                matches!(color, FilterColor::Xyz(_)).then_some("a Photo Filter color stored as XYZ")
+            }
             Adjustment::GradientMap { stops, opacity, .. } => {
                 if stops.len() < 2 {
-                    Some("a Gradient Map with fewer than two colour stops")
+                    Some("a Gradient Map with fewer than two color stops")
                 } else if stops[..stops.len() - 1].iter().any(|s| s.midpoint != 50) {
                     Some("a Gradient Map with moved midpoints")
                 } else if opacity.iter().any(|o| o.opacity != 255) {
@@ -796,7 +797,7 @@ fn parse_photo_filter(r: &mut ByteReader) -> Result<Adjustment> {
                 ]),
                 other => {
                     return Err(PsdError::Unsupported(format!(
-                        "a Photo Filter colour in colour space {other} (RGB and Lab are read)"
+                        "a Photo Filter color in color space {other} (RGB and Lab are read)"
                     )))
                 }
             }
@@ -854,7 +855,7 @@ fn parse_gradient_map(r: &mut ByteReader) -> Result<Adjustment> {
         let _pad = r.u16()?;
         if space != 0 {
             return Err(PsdError::Unsupported(format!(
-                "a Gradient Map stop in colour space {space} (RGB is read)"
+                "a Gradient Map stop in color space {space} (RGB is read)"
             )));
         }
         stops.push(GradientMapStop {

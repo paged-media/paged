@@ -82,7 +82,7 @@ pub enum AseError {
     BadSignature,
     #[error("truncated ASE data at offset {0}")]
     Truncated(usize),
-    #[error("unknown colour model tag {0:?}")]
+    #[error("unknown color model tag {0:?}")]
     UnknownModel([u8; 4]),
     #[error("malformed UTF-16 name")]
     BadName,

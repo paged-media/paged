@@ -117,7 +117,7 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
                     lost.push(LossEntry::new(
                         "dml.picture.hslRanges",
                         LossSeverity::Dropped,
-                        "a hue/saturation's colour ranges and colorize are not saved (a:hsl is \
+                        "a hue/saturation's color ranges and colorize are not saved (a:hsl is \
                          the master row)",
                     ));
                 }
@@ -137,8 +137,8 @@ pub fn effects_of(ops: &[RasterOp], px_per_pt: Option<f64>) -> (Vec<ImageEffect>
                     lost.push(LossEntry::new(
                         "dml.picture.clrChangeTolerance",
                         LossSeverity::Approximated,
-                        "a colour replace's tolerance is not saved (a:clrChange matches one \
-                         colour)",
+                        "a color replace's tolerance is not saved (a:clrChange matches one \
+                         color)",
                     ));
                 }
                 out.push(ImageEffect::ColorChange {

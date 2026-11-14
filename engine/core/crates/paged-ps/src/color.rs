@@ -244,7 +244,7 @@ pub fn parse_space(i: &mut Interp<'_>, o: &Obj, depth: usize) -> Result<ColorSpa
             i.report.unsupported(
                 "eps.color.cieBased",
                 paged_loss::LossSeverity::Approximated,
-                "CIE-based colour (approximated)",
+                "CIE-based color (approximated)",
             );
             ColorSpace::Cie(Rc::new(ColorSpace::Gray))
         }
@@ -252,7 +252,7 @@ pub fn parse_space(i: &mut Interp<'_>, o: &Obj, depth: usize) -> Result<ColorSpa
             i.report.unsupported(
                 "eps.color.cieBased",
                 paged_loss::LossSeverity::Approximated,
-                "CIE-based colour (approximated)",
+                "CIE-based color (approximated)",
             );
             ColorSpace::Cie(Rc::new(ColorSpace::Rgb))
         }
@@ -260,7 +260,7 @@ pub fn parse_space(i: &mut Interp<'_>, o: &Obj, depth: usize) -> Result<ColorSpa
             i.report.unsupported(
                 "eps.color.cieBased",
                 paged_loss::LossSeverity::Approximated,
-                "CIE-based colour (approximated)",
+                "CIE-based color (approximated)",
             );
             ColorSpace::Cie(Rc::new(ColorSpace::Cmyk))
         }

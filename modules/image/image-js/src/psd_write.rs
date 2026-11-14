@@ -772,7 +772,7 @@ fn built_record(
 
 fn converted_adjustment(l: &Layer) -> IngestError {
     IngestError::Unsupported(format!(
-        "adjustment layer \"{}\" is in a document converted to another colour mode: the stack \
+        "adjustment layer \"{}\" is in a document converted to another color mode: the stack \
          evaluates it in RGB, Photoshop would apply it to the new mode's channels",
         l.name
     ))
@@ -833,7 +833,7 @@ fn source_record(
         if l.live_blend_if().is_some() {
             return Err(IngestError::Unsupported(format!(
                 "layer \"{}\" has Blend If ranges, which are per channel: they do not carry \
-                 over to another colour mode",
+                 over to another color mode",
                 l.name
             )));
         }
@@ -1229,7 +1229,7 @@ fn write_single_image(
         (M::Indexed, t) => {
             let colours = t
                 .palette()
-                .ok_or_else(|| IngestError::Unsupported("Indexed without a colour table".into()))?;
+                .ok_or_else(|| IngestError::Unsupported("Indexed without a color table".into()))?;
             let mut raw = vec![0u8; 768];
             for (i, c) in colours.iter().take(256).enumerate() {
                 raw[i] = c[0];

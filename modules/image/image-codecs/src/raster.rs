@@ -273,7 +273,7 @@ fn to_layout(img: RasterImage, name: &'static str) -> Result<Decoded> {
             (other, _) => {
                 return Err(CodecError::Unsupported {
                     format: name,
-                    detail: format!("decoded colour model {other:?}"),
+                    detail: format!("decoded color model {other:?}"),
                 })
             }
         };

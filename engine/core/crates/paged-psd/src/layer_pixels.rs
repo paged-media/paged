@@ -1915,7 +1915,7 @@ impl PsdFile {
             return Err(PsdError::Malformed {
                 section: "layer channel image data",
                 detail: format!(
-                    "the colour transform answered {} values for {n} pixels",
+                    "the color transform answered {} values for {n} pixels",
                     rgb.len()
                 ),
             });

@@ -98,8 +98,8 @@ impl PsdSaveBackShape {
                 "the layers were written as the file's layers: unedited layers exactly as \
                  they were read (text, smart objects and vector masks included), edited and \
                  new ones with their pixels, masks, vector masks and shape layers, the paths, groups, opacity, fill opacity, blend, \
-                 Blend If, knockout, locks, colour labels, visibility, clipping, styles, \
-                 colour and gradient fill layers (pattern fills as their rendered pixels) \
+                 Blend If, knockout, locks, color labels, visibility, clipping, styles, \
+                 color and gradient fill layers (pattern fills as their rendered pixels) \
                  and adjustment layers"
             }
         }
@@ -1163,7 +1163,7 @@ mod tests {
         let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
         let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
         assert!(
-            err.to_string().contains("converted to another colour mode"),
+            err.to_string().contains("converted to another color mode"),
             "{err}"
         );
         // Only the depth changed: an adjustment layer is written.

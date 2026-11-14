@@ -252,7 +252,7 @@ impl NativeFx {
             out.push(match e.kind.as_str() {
                 "gaussianBlur" => "blur",
                 "reflection" => "reflection",
-                "colorOverlay" => "colour overlay",
+                "colorOverlay" => "color overlay",
                 _ => continue,
             });
         }
@@ -503,7 +503,7 @@ impl Lowering {
                 self.mapper.lose(
                     "dml.line.gradient",
                     LossSeverity::Approximated,
-                    "a gradient line is drawn in its first colour (lines take no gradient yet)",
+                    "a gradient line is drawn in its first color (lines take no gradient yet)",
                 );
                 stops.first().map(|st| hex(st.rgb))
             }

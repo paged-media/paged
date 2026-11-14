@@ -159,11 +159,11 @@ pub fn coerce(value: &Value, schema: Option<&TargetSchema>) -> Result<Coerced, S
         }
         TargetType::Color => {
             let Value::Text(t) = value else {
-                return mismatch("a colour (a swatch name, #rrggbb, RGB(), CMYK())");
+                return mismatch("a color (a swatch name, #rrggbb, RGB(), CMYK())");
             };
             let lit = parse_color(t).unwrap_or_else(|| ColorLiteral::Swatch(t.trim().to_string()));
             if matches!(&lit, ColorLiteral::Swatch(n) if n.is_empty()) {
-                return mismatch("a colour");
+                return mismatch("a color");
             }
             let intent = lit.intent();
             Ok((PropValue::Text(intent.name.clone()), Some(intent)))

@@ -162,7 +162,7 @@ impl Writer {
             usvg::Paint::Pattern(_) => {
                 self.report.approximated(
                     "paint.pattern",
-                    "a pattern paint is written as black: DXF entities have one colour",
+                    "a pattern paint is written as black: DXF entities have one color",
                 );
                 usvg::Color::black()
             }
@@ -173,7 +173,7 @@ impl Writer {
     fn gradient(&mut self) {
         self.report.approximated(
             "paint.gradient",
-            "a gradient is written as its first colour: DXF entities have one colour",
+            "a gradient is written as its first color: DXF entities have one color",
         );
     }
 

@@ -458,7 +458,7 @@ impl<'a> Writer<'a> {
                 let g = list.sweep_gradient(*id)?;
                 self.report.approximated(
                     "gradient.conic",
-                    "a conic (sweep) gradient is written as its mean colour (SVG has no conic gradient)",
+                    "a conic (sweep) gradient is written as its mean color (SVG has no conic gradient)",
                 );
                 let n = g.stops.len().max(1) as f32;
                 let mut m = Color::rgba(0.0, 0.0, 0.0, 0.0);

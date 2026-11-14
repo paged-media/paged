@@ -144,7 +144,7 @@ pub(crate) fn decode(bytes: &[u8], opts: DecodeOptions) -> Result<RasterImage> {
     headers.decode_headers().map_err(malformed)?;
     let input = headers
         .input_colorspace()
-        .ok_or_else(|| malformed("no colour space after the headers"))?;
+        .ok_or_else(|| malformed("no color space after the headers"))?;
     let (out_cs, model) = match input {
         ColorSpace::Luma => (ColorSpace::Luma, ColorModel::Gray),
         ColorSpace::YCbCr | ColorSpace::RGB => (ColorSpace::RGB, ColorModel::Rgb),
@@ -153,7 +153,7 @@ pub(crate) fn decode(bytes: &[u8], opts: DecodeOptions) -> Result<RasterImage> {
         other => {
             return Err(Error::Unsupported {
                 format: Format::Jpeg,
-                what: format!("colour space {other:?}"),
+                what: format!("color space {other:?}"),
             })
         }
     };

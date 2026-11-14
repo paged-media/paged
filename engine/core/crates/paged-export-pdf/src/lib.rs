@@ -351,10 +351,10 @@ impl ExportDiagnostic {
                 format!("placed image {image_index} had no usable bytes; placeholder drawn")
             }
             ExportDiagnostic::EffectRasterized { ppi } => format!(
-                "an object's blur, noise or colour adjustment has no PDF form; it was drawn as \
+                "an object's blur, noise or color adjustment has no PDF form; it was drawn as \
                  an image at {ppi:.0} ppi"
             ),
-            ExportDiagnostic::EffectNotRasterized => "an object's blur, noise or colour \
+            ExportDiagnostic::EffectNotRasterized => "an object's blur, noise or color \
                  adjustment has no PDF form and this build cannot rasterise it; the object was \
                  written without it"
                 .to_string(),

@@ -150,7 +150,7 @@ pub fn write_themes(
                 diagnostics,
                 "pptx.export.theme",
                 &format!(
-                    "{part}: the theme has no colour or font scheme to write; written as the deck had it"
+                    "{part}: the theme has no color or font scheme to write; written as the deck had it"
                 ),
             ),
         }

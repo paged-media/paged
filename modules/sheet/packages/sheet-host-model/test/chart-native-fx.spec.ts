@@ -119,7 +119,7 @@ const geom = (f: NativeFx = fx): ChartGeometry => ({
       count: 1,
       severity: "approximated",
       message:
-        "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
+        "pattern fill drawn as the mix of its two colors (no pattern paint yet)",
     },
   ],
 });

@@ -343,7 +343,7 @@ pub(crate) fn paint_v2_losses(
                         LossSeverity::Approximated,
                         Some(gid),
                         format!(
-                            "stop {} of gradient `{gid}` carries its own colour, which the \
+                            "stop {} of gradient `{gid}` carries its own color, which the \
                              exported gradient does not — the IDML exporter writes a changed \
                              source gradient as it was. Save as `.paged` to keep it.",
                             i + 1

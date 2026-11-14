@@ -576,7 +576,7 @@ fn cfa_pattern(d: &Dng) -> Result<Pattern> {
         let c = planes.get(*p as usize).copied().unwrap_or(*p);
         if !(0.0..=2.0).contains(&c) {
             return Err(unsupported(
-                "a CFA with colours other than red, green and blue",
+                "a CFA with colors other than red, green and blue",
             ));
         }
         colour.push(c as u8);

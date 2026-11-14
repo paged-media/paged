@@ -88,7 +88,7 @@ fn info(
         ColorMode::Multichannel => {
             return Err(Error::Unsupported {
                 format: Format::Psd,
-                what: "the multichannel colour mode".into(),
+                what: "the multichannel color mode".into(),
             })
         }
     };

@@ -138,7 +138,7 @@ pub enum CmsError {
     Unavailable(Backend),
     #[error("profile rejected: {0}")]
     BadProfile(String),
-    #[error("the profile's colour space is {profile:?}, the layout's is {layout:?}")]
+    #[error("the profile's color space is {profile:?}, the layout's is {layout:?}")]
     SpaceMismatch { profile: Space, layout: Space },
     #[error("unsupported: {0}")]
     Unsupported(String),

@@ -130,12 +130,12 @@ impl NativeLowering {
                     Paint::Linear { .. } | Paint::Radial { .. } => l.lose(
                         "dml.line.gradient",
                         LossSeverity::Approximated,
-                        "a gradient line is drawn in its first colour (lines take no gradient yet)",
+                        "a gradient line is drawn in its first color (lines take no gradient yet)",
                     ),
                     Paint::Pattern(_) => l.lose(
                         "xlsx.chart.patternLine",
                         LossSeverity::Approximated,
-                        "a pattern line is drawn in its foreground colour",
+                        "a pattern line is drawn in its foreground color",
                     ),
                     _ => {}
                 }
