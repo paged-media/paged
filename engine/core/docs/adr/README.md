@@ -218,6 +218,7 @@ is not written yet.
 | [1311](1311-a-picture-is-decoded-at-the-size-it-is-shown.md) | A picture is decoded at the size it is shown, from one store with a budget: the decoded-picture store both lanes draw from (levels by the draw's device size, a JPEG at its DCT scale, 256 MiB LRU, the GPU's page scenes per scale octave), reported in `perfCounters` | Accepted 2026-11-14 |
 | [1312](1312-facing-pages-on-an-existing-document.md) | Facing pages on an existing document: `setFacingPages` lays every page out again with its items, and a facing document's inserted or removed page keeps the pairs; undo through `RestoreSpreads` | Accepted 2026-11-14 |
 | [1313](1313-an-anchored-picture-has-an-embedded-lane.md) | An anchored picture has an embedded lane (drawn, saved as `<Contents>`, relinked by bytes), and an embedded picture is a link (`LinkSummary.embedded`, `inline:<id>`) | Accepted 2026-11-14 |
+| [1314](1314-the-first-page-is-composed-first.md) | The first page is composed first: `LoadDocument.firstPages` answers a provisional document, `ComposeNext` composes the pages in view and then the whole document, which replaces every provisional page; the handle and every step say whether it is final | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

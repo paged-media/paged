@@ -3003,3 +3003,128 @@ fn the_wire_previews_a_write_without_making_it() {
     assert_eq!(undo_len(&mut core, 5), steps, "a dry run is not a step");
     assert_eq!(geometry(&mut core, 6), before, "the document did not move");
 }
+
+// ---------------------------------------------------------------------
+// v84 (engine ADR 1314) — progressive composition over the wire
+// ---------------------------------------------------------------------
+
+/// Two spreads of one page each, a story on each: `p1` holds `story1`,
+/// `p2` holds `story2`.
+fn two_spread_idml() -> Vec<u8> {
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        let mut put = |name: &str, body: &str| {
+            zip.start_file(name, opts).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        };
+        put("mimetype", "application/vnd.adobe.indesign-idml-package");
+        put(
+            "META-INF/container.xml",
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+        );
+        put(
+            "designmap.xml",
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Spread src="Spreads/Spread_s2.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_story1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_story2.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+        );
+        for (s, p, tf, story) in [("s1", "p1", "tf1", "story1"), ("s2", "p2", "tf2", "story2")] {
+            put(
+                &format!("Spreads/Spread_{s}.xml"),
+                &format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="{s}" PageCount="1">
+<Page Self="{p}" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="{tf}" ParentStory="{story}" GeometricBounds="100 100 400 400" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#
+                ),
+            );
+            put(
+                &format!("Stories/Story_{story}.xml"),
+                &format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Story Self="{story}"><ParagraphStyleRange><CharacterStyleRange><Content>Text of {story}</Content></CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#
+                ),
+            );
+        }
+        zip.finish().unwrap();
+    }
+    buf
+}
+
+#[test]
+fn a_progressive_load_answers_provisional_and_compose_next_makes_it_final() {
+    let mut core = WorkerCore::new();
+    let bytes = two_spread_idml();
+    let loaded = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1, "protocol": protocol(), "kind": "loadDocument",
+            "payload": { "bytes": bytes, "firstPages": [0] }
+        }),
+    );
+    assert_eq!(loaded["kind"], "documentLoaded", "{loaded}");
+    assert_eq!(loaded["payload"]["provisional"], true);
+    assert_eq!(loaded["payload"]["pageCount"], 2);
+    assert_eq!(
+        loaded["payload"]["composedPages"],
+        serde_json::json!(["p1"])
+    );
+    // The page in view first: page 2, provisionally.
+    let (step, effect) = roundtrip_with_effect(
+        &mut core,
+        &serde_json::json!({
+            "seq": 2, "protocol": protocol(), "kind": "composeNext",
+            "payload": { "priority": [1] }
+        }),
+    );
+    assert_eq!(step["kind"], "compositionProgress", "{step}");
+    assert_eq!(step["payload"]["pageIds"], serde_json::json!(["p2"]));
+    assert_eq!(step["payload"]["composed"], 2);
+    assert_eq!(step["payload"]["done"], false);
+    assert!(matches!(effect, CacheEffect::InvalidatePages(ref p) if p == &vec![1]));
+    // Nothing left in view: the whole document's build, final.
+    let (last, effect) = roundtrip_with_effect(
+        &mut core,
+        &serde_json::json!({
+            "seq": 3, "protocol": protocol(), "kind": "composeNext",
+            "payload": { "priority": [] }
+        }),
+    );
+    assert_eq!(last["payload"]["done"], true, "{last}");
+    assert_eq!(last["payload"]["composed"], 2);
+    assert_eq!(last["payload"]["pageCount"], 2);
+    assert!(matches!(effect, CacheEffect::ClearAll));
+    // A final document answers done at once, with every page, and drops
+    // no cached scene.
+    let (again, effect) = roundtrip_with_effect(
+        &mut core,
+        &serde_json::json!({
+            "seq": 4, "protocol": protocol(), "kind": "composeNext",
+            "payload": { "priority": [0] }
+        }),
+    );
+    assert_eq!(again["payload"]["done"], true);
+    assert_eq!(again["payload"]["pageIds"], last["payload"]["pageIds"]);
+    assert_eq!(again["payload"]["pageStructureChanged"], false);
+    assert!(matches!(effect, CacheEffect::None));
+}
+
+#[test]
+fn a_load_without_first_pages_is_final() {
+    let mut core = WorkerCore::new();
+    let loaded = roundtrip(&mut core, &load_msg(1));
+    assert_eq!(loaded["kind"], "documentLoaded");
+    assert!(loaded["payload"].get("provisional").is_none());
+}

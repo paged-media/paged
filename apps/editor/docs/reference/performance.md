@@ -109,6 +109,28 @@ the GPU kept its own full-size copy. Of the 4.4 s left, 3.7 s is the first GPU p
 of nineteen photographs (the worker journal's `worker.frame`). The 105 MB template's first
 present came 10 ms after its layout in both runs; its pictures held after use are 67 MB (23).
 
+**The first page first** (engine ADR 1314; measured 2026-11-14 right after the decoded-picture
+runs above, the same machine and load). A file opened in the editor is composed progressively:
+the engine composes the first page's spreads and answers a provisional document, and the
+worker composes the pages in view, then the whole document, in steps between which it serves
+messages; the loading status counts the pages composed ("Composing pages · 3 of 12 ·
+provisional").
+
+| 54 MB template, 8 pages                      | Whole build first (ADR 1311 alone) | First page first (ADRs 1311 and 1314) |
+| -------------------------------------------- | ---------------------------------- | ------------------------------------- |
+| Ready (the handle, from the file)            | 2.3 s                              | 2.6 s                                 |
+| First paint, worker (from the layout)        | 4.4 s                              | 3.7 s                                 |
+| First paint, screenshot (from the file)      | 10.7 s                             | 11.3 s                                |
+| Memory, page and workers (opened, after use) | 347 MB, 237 MB                     | 238 MB, 241 MB                        |
+
+The parse of the package (88 MB of XML in five spreads, thirty embedded photographs) is most of
+the time to the handle, and the first GPU present of a page of photographs most of the time to
+the first paint, so composing one page instead of eight moves the first paint by 0.7 s; the
+screenshot measure, which waits for a fifth of the viewport to be lit, is within its noise.
+The browser's memory measure varies with its collector. Since then the automation handle's
+`ready`, which the suite's "Ready" waits for, means the composition is final (it meant the handle
+had arrived).
+
 **Typing in a burst** (editor ADR 1232 amendment of 2026-11-14; measured that day, load
 average 7–22, the same server and browser, the runs alternated). The engine lays a typed
 insert out incrementally (engine ADR 027: the edited story resumes at the edit and stops where
@@ -165,6 +187,10 @@ the CPU tiles and the GPU scenes hold (`worker.caches`); the suite reports it.
 
 ## What makes it fast
 
+- **The first page first.** A file opens progressively (engine ADR 1314): its first page is
+  composed and shown while the worker composes the pages in view, then the whole document, a
+  step per task; a page not composed yet is outlined, never drawn blank, and the composition
+  is provisional until its last step.
 - **The viewport first.** The CPU path renders one tile per tick, the visible page nearest the
   viewport's centre first, and plans every tick from the camera it then has, so nothing it
   renders was made stale by a camera move; the two pages either side follow while nothing on

@@ -405,6 +405,7 @@ impl WorkerCore {
                 bytes,
                 font,
                 cmyk_icc_profile,
+                first_pages,
             } => {
                 let opts = CanvasOptions {
                     fonts: font.map(|b| vec![b.into_vec()]).unwrap_or_default(),
@@ -414,7 +415,16 @@ impl WorkerCore {
                     color_profiles: self.color_profiles.clone(),
                 };
                 let doc_id = format!("doc-{}", msg.seq);
-                match CanvasModel::load(doc_id, bytes.as_slice(), opts) {
+                // v84 (engine ADR 1314) — `firstPages` composes those
+                // pages first; the rest comes with `ComposeNext`.
+                let loaded = match &first_pages {
+                    Some(first) => {
+                        let first: Vec<usize> = first.iter().map(|&i| i as usize).collect();
+                        CanvasModel::load_progressive(doc_id, bytes.as_slice(), opts, &first)
+                    }
+                    None => CanvasModel::load(doc_id, bytes.as_slice(), opts),
+                };
+                match loaded {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
                         // v81 — a build option the session holds rebuilds
@@ -753,6 +763,15 @@ impl WorkerCore {
                 quality,
                 story,
             } => {
+                // v84 (engine ADR 1314) — a page a progressive load has
+                // not composed yet is composed for its snapshot.
+                if let Some(model) = self.model.as_mut() {
+                    if let Ok(true) = model.ensure_composed(&page_id) {
+                        if let Some(i) = model.page_position(&page_id) {
+                            effect = CacheEffect::InvalidatePages(vec![i]);
+                        }
+                    }
+                }
                 let Some(model) = self.model.as_ref() else {
                     reply!(WorkerToMainKind::SnapshotFailed {
                         error: paged_canvas::SnapshotError::UnknownPage { page_id },
@@ -2190,6 +2209,49 @@ impl WorkerCore {
                     model.restore_coalesce_run(run);
                 }
                 return (reply, effect);
+            }
+            // v84 (engine ADR 1314) — one step of a progressive composition.
+            MainToWorkerKind::ComposeNext { priority } => {
+                let Some(model) = self.model.as_mut() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let priority: Vec<usize> = priority.iter().map(|&i| i as usize).collect();
+                // A model a write already made final builds nothing here.
+                let was_provisional = model.is_provisional();
+                match model.compose_next(&priority) {
+                    Ok(step) => {
+                        let indices: Vec<usize> = step
+                            .pages
+                            .iter()
+                            .filter_map(|id| model.page_position(id))
+                            .collect();
+                        effect = if step.done && !was_provisional {
+                            CacheEffect::None
+                        } else if step.done {
+                            CacheEffect::ClearAll
+                        } else {
+                            CacheEffect::InvalidatePages(indices)
+                        };
+                        let (page_sizes_pt, page_origins_pt) = if step.page_structure_changed {
+                            let (sizes, origins) = page_grid(page_table(model));
+                            (Some(sizes), Some(origins))
+                        } else {
+                            (None, None)
+                        };
+                        WorkerToMainKind::CompositionProgress {
+                            page_ids: step.pages,
+                            composed: model.composed_page_count() as u32,
+                            page_count: model.built().pages.len() as u32,
+                            done: step.done,
+                            page_structure_changed: step.page_structure_changed,
+                            page_sizes_pt,
+                            page_origins_pt,
+                        }
+                    }
+                    Err(error) => WorkerToMainKind::LoadFailed { error },
+                }
             }
             MainToWorkerKind::EndCoalesce { coalesce } => {
                 let applied_seq = self

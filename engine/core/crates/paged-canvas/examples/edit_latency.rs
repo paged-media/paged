@@ -273,6 +273,27 @@ fn main() {
                     png.png_bytes.len()
                 );
             }
+            // Engine ADR 1314 — the same file loaded progressively: page 1
+            // composed first, then the whole document's build.
+            let t = std::time::Instant::now();
+            let mut p = CanvasModel::load_progressive("file", &bytes, options(false), &[0])
+                .expect("progressive load");
+            let first_ms = t.elapsed().as_secs_f64() * 1e3;
+            let composed = p.composed_page_count();
+            let t = std::time::Instant::now();
+            let png = paged_canvas::render_snapshot_png(&p, &first, 256).expect("tile");
+            let tile_ms = t.elapsed().as_secs_f64() * 1e3;
+            let t = std::time::Instant::now();
+            let step = p.compose_next(&[]).expect("final build");
+            println!(
+                "file: progressive: page 1 composed {first_ms:.0} ms ({} of {} pages), its \
+                 tile {tile_ms:.0} ms ({} bytes); the whole build after it {:.0} ms (done {})",
+                composed,
+                p.built().pages.len(),
+                png.png_bytes.len(),
+                t.elapsed().as_secs_f64() * 1e3,
+                step.done
+            );
             if let Ok(story) = std::env::var("STORY") {
                 type_into("file", &mut m, &story, 0, edits);
             }

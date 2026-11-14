@@ -1445,6 +1445,16 @@ it will be. UXI-T49 asserts the stages and the first-page fit on a 20-page docum
 first page itself is composed (rendering it before its images resolve) is a performance matter,
 plan task AP5.
 
+**First page first (2026-11-14, engine ADRs 1311 and 1314).** A file opens progressively: the
+engine composes the first page's spreads and answers a provisional document, the worker composes
+the pages in view and then the whole document in steps, and the canvas outlines the pages not
+composed yet while the status counts them ("Composing pages · 3 of 12 · provisional"). Placed
+pictures are decoded at the size they are shown (engine ADR 1311). Measured on the 54 MB
+template (the headless browser's GPU path, a shared machine): the first page on screen 3.7 s
+after the layout (6.3 s before both, 4.4 s with the pictures alone) and 10.7–11.3 s after the
+file was chosen (17.0 s before; the audit's 14.6 s was another build and machine). What remains
+is the package's parse and the first GPU present of a page of nineteen photographs.
+
 <a id="f-54"></a>
 
 #### F-54 · Memory reaches 1.7–3.6 GB on large documents

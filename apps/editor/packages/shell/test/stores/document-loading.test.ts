@@ -138,6 +138,140 @@ beforeEach(() => {
 afterEach(() => unstubAllGlobals());
 
 describe("loading a file", () => {
+  test("v84: a progressive load — page 1 first, the composition's steps in real counts, the other thumbnails once it is final", async () => {
+    serveFont(TRUETYPE);
+    const { log, cb } = recorder();
+    // Engine ADR 1314: page 1 composed, pages 2 and 3 not yet.
+    const handle = {
+      ...handleOf("d1", ["p1", "p2", "p3"]),
+      provisional: true,
+      composedPages: ["p1"],
+    } as unknown as DocumentHandle;
+    const listeners = new Set<(m: WorkerToMain) => void>();
+    let composedResolve: () => void = () => {};
+    let provisional = true;
+    const composed = new Promise<void>(
+      (r) =>
+        (composedResolve = () => {
+          provisional = false;
+          r();
+        }),
+    );
+    const asked: unknown[] = [];
+    const snapshots: string[] = [];
+    const c = {
+      async loadDocument(
+        _bytes: Uint8Array,
+        _font?: Uint8Array,
+        _icc?: Uint8Array,
+        options?: unknown,
+      ) {
+        asked.push(options);
+        return handle;
+      },
+      async requestSnapshot(pageId: string) {
+        snapshots.push(pageId);
+        if (pageId === "p1") {
+          // While page 1's thumbnail is taken, the worker composes page 2,
+          // then builds the whole document.
+          queueMicrotask(() => {
+            const step = (payload: unknown) =>
+              listeners.forEach((l) =>
+                l({
+                  seq: null,
+                  kind: "compositionProgress",
+                  payload,
+                } as unknown as WorkerToMain),
+              );
+            setTimeout(() => {
+              step({ pageIds: ["p2"], composed: 2, pageCount: 3, done: false });
+              setTimeout(() => {
+                step({
+                  pageIds: ["p1", "p2", "p3"],
+                  composed: 3,
+                  pageCount: 3,
+                  done: true,
+                });
+                composedResolve();
+              }, 0);
+            }, 0);
+          });
+        }
+        return { pageId, pngBytes: [137, 80], widthPx: 256, heightPx: 1 };
+      },
+      subscribe(l: (m: WorkerToMain) => void) {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
+      whenComposed: () => composed,
+      isProvisional: () => provisional,
+      composedHandle: (h: DocumentHandle) =>
+        provisional ? h : { ...h, provisional: false, composedPages: [] },
+    } as unknown as CanvasClient;
+    await loadDocumentFile(c, new File([new Uint8Array(4)], "big.idml"), cb);
+    expect(asked).toEqual([{ firstPages: [0] }]);
+    expect(snapshots).toEqual(["p1", "p2", "p3"]);
+    expect(
+      log.filter((l) => l.startsWith("loading") || l.startsWith("snapshot")),
+    ).toEqual([
+      "loading big.idml recognized",
+      "loading big.idml geometry 0/3",
+      "snapshot p1",
+      "loading big.idml firstPaint 1/3",
+      // The composition is provisional: the pages composed, not thumbnails.
+      "loading big.idml refining 1/3",
+      "loading big.idml refining 2/3",
+      // Final: the other pages' thumbnails.
+      "snapshot p2",
+      "loading big.idml refining 2/3",
+      "snapshot p3",
+      "loading null",
+    ]);
+  });
+
+  test("v84: a composition final before the handle is set — the handle the shell gets is final and nothing waits", async () => {
+    serveFont(TRUETYPE);
+    const { log, cb } = recorder();
+    const handles: DocumentHandle[] = [];
+    const record = cb.setHandle;
+    cb.setHandle = (h) => {
+      if (h) handles.push(h);
+      record(h);
+    };
+    // A small document: its last composition step arrived while the load
+    // was still being answered (the default font's registration).
+    const handle = {
+      ...handleOf("d1", ["p1", "p2", "p3"]),
+      provisional: true,
+      composedPages: ["p1"],
+    } as unknown as DocumentHandle;
+    let waited = 0;
+    const snapshots: string[] = [];
+    const c = {
+      loadDocument: async () => handle,
+      async requestSnapshot(pageId: string) {
+        snapshots.push(pageId);
+        return { pageId, pngBytes: [137, 80], widthPx: 256, heightPx: 1 };
+      },
+      subscribe: () => () => undefined,
+      isProvisional: () => false,
+      whenComposed: () => {
+        waited += 1;
+        return Promise.resolve();
+      },
+      composedHandle: (h: DocumentHandle) => ({
+        ...h,
+        provisional: false,
+        composedPages: [],
+      }),
+    } as unknown as CanvasClient;
+    await loadDocumentFile(c, new File([new Uint8Array(4)], "small.idml"), cb);
+    expect(handles.map((h) => h.provisional)).toEqual([false]);
+    expect(snapshots).toEqual(["p1", "p2", "p3"]);
+    expect(waited).toBe(0);
+    expect(log.some((l) => l.includes("refining 1/3"))).toBe(false);
+  });
+
   test("reset → load with the default font → handle → every page snapshotted in order → ready", async () => {
     serveFont(TRUETYPE);
     const { log, cb } = recorder();

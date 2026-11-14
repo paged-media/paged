@@ -198,6 +198,7 @@ impl DocumentOptions {
             bytes: bytes.into(),
             font,
             cmyk_icc_profile: explicit_bytes.map(Into::into),
+            first_pages: None,
         })?;
         let handle = expect_reply!(reply, WorkerToMainKind::DocumentLoaded(h) => h,
             format!("load {}", path.display()))?;

@@ -59,6 +59,9 @@ export interface RendererWasm {
   /** v81 (engine ADR 1306) — the rect a page's tile covers, page-local pt
    *  `[x, y, w, h]`; an older engine has none, and its tile is the trim. */
   screenExtent?(pageId: string): ArrayLike<number> | undefined;
+  /** v84 (engine ADR 1314) — whether page `index` is composed; false only
+   *  while a progressive load has not laid it out yet. */
+  pageComposed?(index: number): boolean;
   /**
    * When set, the renderer uses Vello via the worker's WebGPU
    * surface for the hot path. Returns true on a successful present;
@@ -170,6 +173,8 @@ export class WorkerRenderer {
   private painted = false;
   /** The pages the last draw showed: their tiles are never evicted. */
   private visibleNow: readonly PageGeometry[] = [];
+  /** The viewport's centre at the last draw, document space. */
+  private visibleCentre = { x: 0, y: 0 };
   /** Tiles the engine could not render (no bytes, a throw, a failed
    *  decode), until the page or the layout changes: asked again every
    *  tick, one would hold the loop busy for good. */
@@ -398,6 +403,9 @@ export class WorkerRenderer {
       // is an `aggregate` code, so this emits ONE rollup per second, never
       // per frame.
       const t0 = performance.now();
+      // The pages in view, for the order a progressive composition takes
+      // (engine ADR 1314); the GPU path draws them itself.
+      this.noteVisible(camera);
       const presented = this.wasm.presentFrame(
         camera.scale,
         camera.tx,
@@ -469,15 +477,25 @@ export class WorkerRenderer {
     // visible page drawn, one neighbour per tick is rendered ahead.
     const visible: PageGeometry[] = [];
     const missing: PageGeometry[] = [];
+    let shown = 0;
     for (const page of this.pages) {
       if (!intersects(page.rect, docViewport)) continue;
       visible.push(page);
-      if (!this.drawPage(page)) missing.push(page);
+      // v84 (engine ADR 1314) — a page a progressive load has not
+      // composed yet is empty, not blank: its place is outlined and no
+      // tile is asked for until a composition step lays it out.
+      if (this.wasm.pageComposed?.(page.index) === false) {
+        this.drawUncomposed(page);
+        continue;
+      }
+      if (this.drawPage(page)) shown += 1;
+      else missing.push(page);
     }
-    const centre = {
+    this.visibleCentre = {
       x: docViewport.x + docViewport.w / 2,
       y: docViewport.y + docViewport.h / 2,
     };
+    const centre = this.visibleCentre;
     const waiting = (p: PageGeometry) => {
       const key = tileKey({ pageId: p.pageId, widthPx: this.tileWidthFor(p) });
       return this.pendingTiles.has(key) || this.failedTiles.has(key);
@@ -494,11 +512,45 @@ export class WorkerRenderer {
       this.dirty = true;
     }
     // The first visible paint: the first page that shows its content.
-    if (!this.painted && visible.length > missing.length) {
+    if (!this.painted && shown > 0) {
       this.notePainted(false);
     }
     this.visibleNow = visible;
     this.evictOverBudget(visible);
+  }
+
+  /**
+   * v84 (engine ADR 1314) — the pages in view, nearest the viewport's
+   * centre first, as page indices: the order a progressive composition
+   * lays them out in. Read from the last draw, so a camera move between
+   * two composition steps changes what the next one composes.
+   */
+  priorityPages(): number[] {
+    const c = this.visibleCentre;
+    const d = (p: PageGeometry) => {
+      const dx = p.rect.x + p.rect.w / 2 - c.x;
+      const dy = p.rect.y + p.rect.h / 2 - c.y;
+      return dx * dx + dy * dy;
+    };
+    return [...this.visibleNow].sort((a, b) => d(a) - d(b)).map((p) => p.index);
+  }
+
+  /** Record the pages `camera` shows and the viewport's centre (the GPU
+   *  path, which draws them in the engine). */
+  private noteVisible(camera: Camera): void {
+    const vp = this.docSpaceViewport(camera);
+    this.visibleNow = this.pages.filter((p) => intersects(p.rect, vp));
+    this.visibleCentre = { x: vp.x + vp.w / 2, y: vp.y + vp.h / 2 };
+  }
+
+  /** A page not composed yet: its outline, no paper and no tile. */
+  private drawUncomposed(page: PageGeometry): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const r = page.rect;
+    ctx.lineWidth = 1 / (this.dpr || 1);
+    ctx.strokeStyle = "#9ca3af";
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
   }
 
   /** The first page that shows after a layout: journaled once (the
@@ -533,6 +585,7 @@ export class WorkerRenderer {
           widthPx: this.tileWidthFor(p),
         });
         return (
+          this.wasm.pageComposed?.(p.index) !== false &&
           !this.tiles.has(key) &&
           !this.pendingTiles.has(key) &&
           !this.failedTiles.has(key)

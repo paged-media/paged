@@ -374,7 +374,9 @@ viewport's centre first, one tile per tick, within a 64 MB tile budget; typing t
 engine folds into one insert per round trip, and a burst of keys is one change for the panels
 (F-56 closed: 56 to 62 requests per key instead of 204 to 236). Placed pictures are decoded at the size
 they are shown, from one store per worker with a 256 MiB budget (engine ADR 1311; the
-inventory's exception `EXC-003` is closed).
+inventory's exception `EXC-003` is closed). A file opens progressively: its first page is composed and shown
+while the worker composes the pages in view and then the whole document, and the loading
+status counts the pages composed while the composition is provisional (engine ADR 1314).
 
 Track PX (the strategy's Phase 3 concepts), design constraints
 ([ADR 1233](adr/1233-constraints-are-validated-intent.md), PX3): Object ▸ Add constraint… (and the

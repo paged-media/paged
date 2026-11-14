@@ -120,6 +120,8 @@ interface CanvasWorkerInstance {
   /** v81 (engine ADR 1306) — where a page's tile goes, page-local pt
    *  `[x, y, w, h]`: the trim grown to its bleed and pasteboard artwork. */
   screenExtent?(pageId: string): Float32Array | undefined;
+  /** v84 (engine ADR 1314) — whether page `index` is composed yet. */
+  pageComposed?(index: number): boolean;
   /** The engine's work counters and, since engine ADR 1311, its
    *  decoded-picture store (`imageStore*`: bytes held, peak, budget,
    *  entries, decodes, hits, evictions). */
@@ -168,6 +170,8 @@ interface CanvasWorkerInstance {
     bytes: Uint8Array,
     font?: Uint8Array,
     cmykIccProfile?: Uint8Array,
+    /** v84 (engine ADR 1314) — compose these pages first (progressive). */
+    firstPages?: Uint32Array,
   ): string;
   // v66 binary doors (protocol 66). Optional so an older wasm still
   // satisfies the interface; a missing one answers the caller with a
@@ -461,6 +465,8 @@ type IncomingMessage =
       bytes: Uint8Array;
       font: Uint8Array | null;
       cmykIccProfile: Uint8Array | null;
+      /** v84 (engine ADR 1314) — the pages to compose first. */
+      firstPages?: number[] | null;
     }
   // v66 — the binary doors: pixels and part bytes as transferred
   // Uint8Arrays, never `number[]` through the JSON envelope. Replies that
@@ -705,6 +711,51 @@ function applyReplyEffects(reply: WorkerToMain): void {
     if (renderer && pageIds.length > 0) renderer.markDirty(pageIds);
     scheduleResolution();
   }
+}
+
+/**
+ * v84 (engine ADR 1314) — the steps of a progressive composition. Each is
+ * one task: the pages in view first (the renderer's last draw, so a camera
+ * move between two steps changes what the next one lays out), then the
+ * whole document's build, which makes the document final. Messages are
+ * served between the steps; nothing is queued that a camera move could
+ * make stale. Each step's `compositionProgress` goes to the main thread as
+ * an unsolicited notification.
+ */
+let composeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleCompose(delayMs: number): void {
+  if (composeTimer !== null) return;
+  composeTimer = setTimeout(composeStep, delayMs);
+}
+
+function composeStep(): void {
+  composeTimer = null;
+  if (!worker) return;
+  const replyJson = worker.handleMessage(
+    JSON.stringify({
+      seq: 0,
+      protocol: PROTOCOL_VERSION,
+      kind: "composeNext",
+      payload: { priority: renderer?.priorityPages() ?? [] },
+    }),
+  );
+  if (!replyJson) return;
+  const reply = JSON.parse(replyJson) as WorkerToMain;
+  if (reply.kind !== "compositionProgress") return;
+  const p = reply.payload;
+  if (renderer) {
+    if (p.pageStructureChanged) renderer.refreshLayout();
+    if (p.done) renderer.markDirty([]);
+    else if (p.pageIds.length > 0) renderer.markDirty(p.pageIds);
+  }
+  postBack({ ...reply, seq: null });
+  if (p.done) {
+    scheduleResolution();
+    return;
+  }
+  // A step that composed nothing (a gesture holds the document) waits.
+  scheduleCompose(p.pageIds.length > 0 ? 0 : 50);
 }
 
 /** Journal what the worker's caches hold now: the engine's decoded
@@ -988,6 +1039,7 @@ async function dispatch(data: IncomingMessage): Promise<void> {
       data.bytes,
       data.font ?? undefined,
       data.cmykIccProfile ?? undefined,
+      data.firstPages ? new Uint32Array(data.firstPages) : undefined,
     );
     (self as unknown as DedicatedWorkerGlobalScope).postMessage({
       kind: "loadDocumentBinaryReply",
@@ -1001,6 +1053,8 @@ async function dispatch(data: IncomingMessage): Promise<void> {
       if (reply.kind === "documentLoaded") {
         if (renderer) renderer.refreshLayout();
         postResolution();
+        // v84 (engine ADR 1314) — a provisional document: compose the rest.
+        if (reply.payload.provisional) scheduleCompose(0);
       }
     } catch (e) {
       console.warn("loadDocumentBinary post-process:", e);
@@ -1183,6 +1237,7 @@ async function attachRenderer(
     },
     renderTilePng: (pageId, widthPx) => worker!.renderTilePng(pageId, widthPx),
     screenExtent: (pageId) => worker!.screenExtent?.(pageId),
+    pageComposed: (index) => worker!.pageComposed?.(index) ?? true,
     presentFrame:
       gpuActive && worker.presentFrame
         ? (s, x, y, d, r) => worker!.presentFrame!(s, x, y, d, r)

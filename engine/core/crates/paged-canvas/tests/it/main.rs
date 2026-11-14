@@ -118,6 +118,7 @@ mod placed_pdf_page;
 mod placeholder_wire;
 mod planar_regions_wire;
 mod presets;
+mod progressive_composition;
 mod property_sweep;
 mod psd_place_layers;
 mod relink_and_facing;

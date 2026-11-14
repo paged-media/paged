@@ -121,3 +121,17 @@ never opened. The renamed menu ids are deprecated aliases until 0.80.0
 - A dock's divider is a tab stop between the dock and the canvas.
 - File ▸ "New document…" keeps its ellipsis: the New document dialog of the interaction plan
   (DF5) is what it opens.
+
+## Amendment 2026-11-14 (engine ADR 1314): a provisional composition
+
+A file opened in the editor is loaded progressively: the engine composes its first page first
+and answers a provisional document (`DocumentHandle.provisional`, `composedPages`), and the
+worker composes the rest a step at a time, the pages in view first, the last step being the
+whole document's build (engine ADR 1314). The loading stages show it, in real counts: after
+`firstPaint`, `refining` carries `provisional` and the pages composed so far ("Composing pages ·
+3 of 12 · provisional"; the header's short form "Composing 3 of 12"), the pages not composed yet
+stay outlined where they will be (`LoadingState.composedPageIds`), and the canvas draws them as
+outlines, never as blank pages. The thumbnails of pages 2 onward are taken once the composition
+is final, then "Preparing pages" counts them as before. A document whose first spread is the
+whole document is never provisional, and loads without `firstPages` (a plugin's, a test's) are
+built whole as before.

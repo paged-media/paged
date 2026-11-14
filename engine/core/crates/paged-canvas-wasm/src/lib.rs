@@ -230,6 +230,17 @@ mod wasm {
             Some(paged_canvas::view::screen_extent(page).to_vec())
         }
 
+        /// v84 (engine ADR 1314) — whether page `index` is composed: a page
+        /// a progressive load has not composed yet is empty and is not
+        /// drawn (the render loop shows its place only).
+        #[wasm_bindgen(js_name = pageComposed)]
+        pub fn page_composed(&self, index: usize) -> bool {
+            self.core
+                .model
+                .as_ref()
+                .is_some_and(|m| m.page_composed(index))
+        }
+
         /// Per-page dimensions for the worker's render loop. Returns
         /// a flat `[page_id_len, ...page_id_utf8, w_pt, h_pt]`-style
         /// blob? No — wasm-bindgen handles `Vec<JsValue>` poorly.
@@ -259,7 +270,9 @@ mod wasm {
         /// the JSON path). Returns a JSON string that the JS side
         /// parses with the same `WorkerToMain` shape `handleMessage`
         /// would produce — `documentLoaded` on success, `loadFailed`
-        /// otherwise.
+        /// otherwise. v84 (engine ADR 1314) — `firstPages` (page indices)
+        /// loads progressively: those pages composed first, the document
+        /// answered provisional, the rest composed by `composeNext`.
         #[wasm_bindgen(js_name = loadDocumentDirect)]
         pub fn load_document_direct(
             &mut self,
@@ -267,6 +280,7 @@ mod wasm {
             bytes: &[u8],
             font: Option<Vec<u8>>,
             cmyk_icc_profile: Option<Vec<u8>>,
+            first_pages: Option<Vec<u32>>,
         ) -> String {
             let opts = CanvasOptions {
                 fonts: font.map(|b| vec![b]).unwrap_or_default(),
@@ -279,7 +293,14 @@ mod wasm {
             // u64 because `WorkerToMain.seq` is u64 to match the
             // JSON-channel envelope's existing sequence width.
             let seq_u64 = seq as u64;
-            let reply = match paged_canvas::CanvasModel::load(doc_id, bytes, opts) {
+            let loaded = match first_pages {
+                Some(first) => {
+                    let first: Vec<usize> = first.iter().map(|&i| i as usize).collect();
+                    paged_canvas::CanvasModel::load_progressive(doc_id, bytes, opts, &first)
+                }
+                None => paged_canvas::CanvasModel::load(doc_id, bytes, opts),
+            };
+            let reply = match loaded {
                 Ok(mut model) => {
                     if let Some(depth) = self.core.history_depth {
                         model.set_history_depth(depth);
@@ -677,6 +698,11 @@ mod wasm {
             // touched, so their cache entries become LRU candidates.
             let mut visible: Vec<(usize, SceneView, f32, f32)> = Vec::new();
             for (idx, built_page) in model.built().pages.iter().enumerate() {
+                // v84 (engine ADR 1314) — a page a progressive load has not
+                // composed yet is not drawn: it is empty, not blank.
+                if !model.page_composed(idx) {
+                    continue;
+                }
                 let (x_pt, y_pt) = built_page.canvas_origin;
                 let corners = [
                     apply(camera, x_pt, y_pt),

@@ -27,7 +27,10 @@
 //   geometry    the pages' outlines, where each page will be, and "12 pages
 //               · composing the first page…"
 //   firstPaint  "First page ready · preparing 11 more…"
-//   refining    "Preparing pages · 4 of 12"
+//   refining    "Preparing pages · 4 of 12"; while a progressive load's
+//               composition is provisional (engine ADR 1314) "Composing
+//               pages · 3 of 12 · provisional", the pages not composed yet
+//               outlined where they will be
 //
 // Ready removes it. The status is a polite live region, so a screen reader
 // hears the stages too. It appears after a short delay (globals.css), so a
@@ -49,9 +52,11 @@ export const LOADING = defineMessages("shell.loading", {
   geometryMany: "{count} pages · composing the first page…",
   firstPaint: "First page ready · preparing {count} more…",
   refining: "Preparing pages · {done} of {count}",
+  composing: "Composing pages · {done} of {count} · provisional",
   short: "Opening…",
   shortGeometry: "Composing…",
   shortRefining: "Preparing {done} of {count}",
+  shortComposing: "Composing {done} of {count}",
 });
 
 type Strings = ReturnType<typeof useStrings>;
@@ -65,9 +70,11 @@ export function loadingWords(
   const stage = loading.stage ?? "recognized";
   const count = loading.pageCount ?? 0;
   const done = loading.pagesReady ?? 0;
+  const composing = stage === "refining" && loading.provisional === true;
   if (form === "short") {
     if (stage === "recognized") return strings.t(LOADING.short);
     if (stage === "geometry") return strings.t(LOADING.shortGeometry);
+    if (composing) return strings.t(LOADING.shortComposing, { done, count });
     return strings.t(LOADING.shortRefining, { done, count });
   }
   switch (stage) {
@@ -80,7 +87,9 @@ export function loadingWords(
     case "firstPaint":
       return strings.t(LOADING.firstPaint, { count: count - done });
     case "refining":
-      return strings.t(LOADING.refining, { done, count });
+      return composing
+        ? strings.t(LOADING.composing, { done, count })
+        : strings.t(LOADING.refining, { done, count });
   }
 }
 
@@ -94,10 +103,15 @@ export function CanvasLoadingStatus() {
   const stage = loading.stage ?? "recognized";
   const handle = doc?.handle ?? null;
   // Until the first page is composed, its place and its neighbours' are
-  // outlined, so the canvas shows the document's shape, not nothing.
+  // outlined, so the canvas shows the document's shape, not nothing; while
+  // a progressive load is provisional, the pages not composed yet are.
+  const composed = new Set(loading.composedPageIds ?? []);
   const rects =
-    stage === "geometry" && handle
-      ? layoutPageRects(handle.pageSizesPt, handle.pageOriginsPt)
+    handle && (stage === "geometry" || loading.provisional === true)
+      ? layoutPageRects(handle.pageSizesPt, handle.pageOriginsPt).filter(
+          (_, i) =>
+            stage === "geometry" || !composed.has(handle.pageIds[i] ?? ""),
+        )
       : [];
   const [a, b, c, d, e, f] = cameraMatrix(camera);
   return (

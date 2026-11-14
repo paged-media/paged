@@ -314,6 +314,7 @@ const CHANGES_THE_DOCUMENT = new Set<string>([
   "gestureCommitted",
   "scriptResult",
   "documentLoaded",
+  "compositionProgress",
   "fontRegistered",
   "fontRegistryCleared",
   "sceneLayerApplied",
@@ -887,6 +888,12 @@ export class CanvasClient {
     bytes: Uint8Array,
     font?: Uint8Array,
     cmykIccProfile?: Uint8Array,
+    /** v84 (engine ADR 1314) — `firstPages` (page indices) loads
+     *  progressively: those pages are composed first and the handle is
+     *  `provisional`; the worker composes the rest, the pages in view
+     *  first, and `compositionProgress` notifications report each step
+     *  ({@link whenComposed}). */
+    options: { firstPages?: readonly number[] } = {},
   ): Promise<DocumentHandle> {
     // U5/A7 — no explicit font ⇒ ask the provider, so a caller that
     // never thought about fonts (the plugin native-document fallback,
@@ -911,6 +918,7 @@ export class CanvasClient {
             bytes,
             font: fontBytes ?? null,
             cmykIccProfile: cmykIccProfile ?? null,
+            firstPages: options.firstPages ? [...options.firstPages] : null,
           },
           // Transfer ownership of the underlying buffers; the caller's
           // Uint8Array references become unusable after this. Saves a
@@ -921,6 +929,7 @@ export class CanvasClient {
       },
       () => true,
     );
+    this.composition.provisional = handle.provisional === true;
     await this.registerDefaultFontFaces();
     return handle;
   }
@@ -971,6 +980,64 @@ export class CanvasClient {
       payload: { ...held.msg.payload, pageIds: [...held.pageIds] },
     } as WorkerToMain;
     for (const l of this.listeners) l(merged);
+  }
+
+  /** v84 (engine ADR 1314) — the open document's composition: whether it
+   *  is still provisional, who waits for it to be final, and the last step
+   *  that made it final (null for a document loaded whole). */
+  private readonly composition: {
+    provisional: boolean;
+    waiters: Array<() => void>;
+    final:
+      Extract<WorkerToMain, { kind: "compositionProgress" }>["payload"] | null;
+  } = { provisional: false, waiters: [], final: null };
+
+  private settleComposition(
+    final:
+      | Extract<WorkerToMain, { kind: "compositionProgress" }>["payload"]
+      | null = null,
+  ): void {
+    this.composition.provisional = false;
+    this.composition.final = final;
+    const waiters = this.composition.waiters.splice(0);
+    for (const wake of waiters) wake();
+  }
+
+  /** v84 (engine ADR 1314) — whether the open document is a provisional
+   *  composition (a progressive load before its last step). */
+  isProvisional(): boolean {
+    return this.composition.provisional;
+  }
+
+  /** v84 (engine ADR 1314) — resolves once the open document's
+   *  composition is final (at once when it is; also when another
+   *  document replaces it). */
+  whenComposed(): Promise<void> {
+    if (!this.composition.provisional) return Promise.resolve();
+    return new Promise((resolve) => this.composition.waiters.push(resolve));
+  }
+
+  /** v84 (engine ADR 1314) — `handle` (the open document's, as
+   *  {@link loadDocument} answered it) as its composition left it: once the
+   *  composition is final, no longer `provisional`, with the final build's
+   *  page list when that build changed it (a growing story added pages).
+   *  A handle that is not provisional, or whose composition is still
+   *  going, comes back as it is. However early the last step arrived, the
+   *  handle this returns is the final one. */
+  composedHandle(handle: DocumentHandle): DocumentHandle {
+    if (handle.provisional !== true || this.composition.provisional) {
+      return handle;
+    }
+    const final = this.composition.final;
+    const rest = { ...handle, provisional: false, composedPages: [] };
+    if (!final?.pageStructureChanged || !final.pageSizesPt) return rest;
+    return {
+      ...rest,
+      pageCount: final.pageIds.length,
+      pageIds: final.pageIds,
+      pageSizesPt: final.pageSizesPt,
+      pageOriginsPt: final.pageOriginsPt ?? [],
+    };
   }
 
   /**
@@ -3286,6 +3353,8 @@ export class CanvasClient {
         // The engine's gesture went with the document it held.
         this.liveGestures.clear();
         this.noteGestureSettled();
+        // So did its composition: whoever waited for it is woken.
+        this.settleComposition();
       }
       return result;
     } catch (err) {
@@ -3715,6 +3784,9 @@ export class CanvasClient {
       }
     }
     this.trackEdits(msg);
+    if (msg.kind === "compositionProgress" && msg.payload.done) {
+      this.settleComposition(msg.payload);
+    }
     // Editor ADR 1232 amendment (F-56) — a typed insert's change is held
     // and merged with the keys behind it; another change of the document
     // first lets out what is held, so subscribers see the changes in the

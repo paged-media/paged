@@ -135,7 +135,11 @@ export async function loadDocumentFile(
     cb.libraryDocument || cb.remember === false ? null : bytes.slice();
   let handle: DocumentHandle;
   try {
-    handle = await client.loadDocument(bytes, fontBytes);
+    // v84 (engine ADR 1314) — the first page is composed first; the
+    // worker composes the rest after it, the pages in view first.
+    handle = await client.loadDocument(bytes, fontBytes, undefined, {
+      firstPages: [0],
+    });
   } catch (err) {
     if (load !== loads.newest) return;
     cb.setLoading(null);
@@ -187,12 +191,69 @@ export async function loadDocumentFile(
       ? { kind: "library", documentId: cb.libraryDocument.id }
       : sourceOfFile(file),
   );
+  // v84 (engine ADR 1314) — a small document's composition can be final
+  // before this line; the handle then says so.
+  if (handle.provisional === true) handle = client.composedHandle(handle);
   cb.setHandle(handle);
-  cb.setLoading({ ...loading, stage: "geometry", pageCount: handle.pageCount });
+  cb.setLoading({
+    ...loading,
+    stage: "geometry",
+    pageCount: handle.pageCount,
+    ...provisionalOf(handle),
+  });
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}; snapshotting…`,
   );
   await snapshotAllPages(client, handle, cb, load, loading);
+}
+
+/** v84 (engine ADR 1314) — the loading state's provisional fields of a
+ *  handle: nothing for a document composed whole. */
+function provisionalOf(
+  handle: DocumentHandle,
+): Pick<LoadingState, "provisional" | "composedPageIds"> {
+  return handle.provisional
+    ? { provisional: true, composedPageIds: handle.composedPages ?? [] }
+    : {};
+}
+
+/** v84 (engine ADR 1314) — wait until a provisional document's composition
+ *  is final, each step reported in the loading state (the pages composed,
+ *  in real counts). The handle as the composition left it, or null when
+ *  another load replaced the document meanwhile. The shell's own handle
+ *  turns final with the last step (PagedShell). */
+async function composeWhole(
+  client: CanvasClient,
+  handle: DocumentHandle,
+  cb: DocumentLoaderCallbacks,
+  load: number,
+  loading: LoadingState,
+): Promise<DocumentHandle | null> {
+  const loads = cb.scope.get(LOADS);
+  const composed = new Set<PageId>(handle.composedPages ?? []);
+  const report = (pagesReady: number) =>
+    cb.setLoading({
+      ...loading,
+      stage: "refining",
+      pageCount: handle.pageIds.length,
+      pagesReady,
+      provisional: true,
+      composedPageIds: [...composed],
+    });
+  const off = client.subscribe((msg) => {
+    if (msg.kind !== "compositionProgress" || msg.payload.done) return;
+    if (load !== loads.newest) return;
+    for (const id of msg.payload.pageIds) composed.add(id);
+    report(msg.payload.composed);
+  });
+  try {
+    if (client.isProvisional()) report(composed.size);
+    await client.whenComposed();
+  } finally {
+    off();
+  }
+  if (load !== loads.newest) return null;
+  return client.composedHandle(handle);
 }
 
 /** Size of a new blank document in points, [width, height]. */
@@ -401,9 +462,24 @@ async function snapshotAllPages(
   loading: LoadingState,
 ): Promise<void> {
   const loads = cb.scope.get(LOADS);
-  const pageCount = handle.pageIds.length;
-  for (const [i, pageId] of handle.pageIds.entries()) {
+  let pageIds = handle.pageIds;
+  let pageCount = pageIds.length;
+  let provisional = handle.provisional === true;
+  for (let i = 0; i < pageIds.length; i++) {
     if (load !== loads.newest) return;
+    // v84 (engine ADR 1314) — after the first page, a provisional document
+    // is composed whole before the other pages' thumbnails are taken, and
+    // the thumbnails show final pages.
+    if (i === 1 && provisional) {
+      const final = await composeWhole(client, handle, cb, load, loading);
+      if (final === null) return;
+      provisional = false;
+      // The whole document's build may have added pages (a growing story).
+      pageIds = final.pageIds;
+      pageCount = pageIds.length;
+      if (i >= pageIds.length) break;
+    }
+    const pageId = pageIds[i]!;
     try {
       const url = await requestPageThumbnail(client, pageId);
       if (load !== loads.newest) {
@@ -421,8 +497,17 @@ async function snapshotAllPages(
         stage: i === 0 ? "firstPaint" : "refining",
         pageCount,
         pagesReady: i + 1,
+        ...(i === 0 ? provisionalOf(handle) : {}),
       });
     }
+  }
+  // A one-page document is provisional only while a story of it grows: its
+  // composition ends before the load does.
+  if (
+    provisional &&
+    (await composeWhole(client, handle, cb, load, loading)) === null
+  ) {
+    return;
   }
   if (load !== loads.newest) return;
 

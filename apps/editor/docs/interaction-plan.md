@@ -489,7 +489,10 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   [`reference/performance.md`](reference/performance.md)): the CPU render one tile per tick from
   the viewport's centre, a 64 MB tile budget, typing folded per round trip, the budgets suite
   and its nightly workflow. Track EN part 4 closed the engine's gaps: placed pictures decoded
-  at the size they are shown, within a budget (engine ADR 1311; `EXC-003` closed).
+  at the size they are shown, within a budget (engine ADR 1311; `EXC-003` closed); a burst of
+  typing one change for the panels (F-56 closed); the first page composed first, the rest in
+  steps from the pages in view, provisional until the whole document is built (engine ADR
+  1314).
 
 ## 12. Track PX — The strategy's Phase 3 concepts
 
