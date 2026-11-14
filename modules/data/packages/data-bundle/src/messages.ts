@@ -125,30 +125,32 @@ export const BINDINGS = defineMessages("data.bindings", {
   noColumns: `No columns to map — "{query}" returned no data. Refresh data and try again.`,
   noRecordsYet: "No records yet — refresh data first.",
   enterField: "Enter the {field}",
-  variableBound: "Variable binding {id} — Place on page puts the field on the page",
+  variableBound:
+    "Variable binding {id} — Place on page puts the field on the page",
   selectRectangleImage: "Select a rectangle to bind the image into",
   selectRectangleBarcode: "Select a rectangle to bind the barcode into",
   imageBound: "Image binding {id} → the selected rectangle ({fit}" + ")",
   barcodeBound:
-    "barcode binding {id} → the selected rectangle ({symbology}" + ")",
-  tableBound: "Table binding {id} ({count} column(s)) — Place on page puts the table on the page",
+    "Barcode binding {id} → the selected rectangle ({symbology}" + ")",
+  tableBound:
+    "Table binding {id} ({count} column(s)) — Place on page puts the table on the page",
   selectVisibilityTarget: "Select the frame, shape or group to show or hide",
   visibilityBound: "Show/hide binding {id} → the selected {kind}",
   hiddenWhenTrue: " (hidden when true)",
   ruleNeedsStyle: "Enter the name of the document style the rule applies",
   ruleNeedsTarget:
-    "select a table cell, or put the text cursor in the story to style",
+    "Select a table cell, or put the text cursor in the story to style",
   ruleCellNeedsCell: "A cell style rule needs a selected table cell",
   ruleTextNeedsCaret:
-    "a character or paragraph rule needs the text cursor in a story",
+    "A character or paragraph rule needs the text cursor in a story",
   conditionUnusable: "The condition is not usable: {error}",
   conditionNoParse: "It does not parse",
   ruleBoundColumn:
-    "style rule {id}: when {field} → {style} on the selected column — Lower applies it",
+    "Style rule {id}: when {field} → {style} on the selected column — Place on page applies it",
   ruleBoundParagraphs:
-    "style rule {id}: when {field} → {style} on the paragraph of each record that fires — Lower applies it",
+    "Style rule {id}: when {field} → {style} on the paragraph of each record that fires — Place on page applies it",
   ruleBoundStory:
-    "style rule {id}: when {field} → {style} on the story — Lower applies it",
+    "Style rule {id}: when {field} → {style} on the story — Place on page applies it",
   flowBound: "Record flow {id} — Preview lists what it places",
   relink:
     "Re-link data: {sources} — the bindings came back from the document's labels, the data did not (import the file again in Data sources).",
@@ -173,7 +175,7 @@ export const BINDINGS = defineMessages("data.bindings", {
   addBinding: "Add binding",
   conditionDoesNotParse: "The condition does not parse",
   firesOn:
-    "fires on {fired} of {total, plural, one {# record} other {# records}}",
+    "Fires on {fired} of {total, plural, one {# record} other {# records}}",
   mergeTitle: "Merges the records picked under Records from",
   dataMerge: "Data Merge",
   mergeSingle: "Single record per page",
@@ -189,7 +191,7 @@ export const BINDINGS = defineMessages("data.bindings", {
   newDocumentTitle:
     "Copy this document, open the copy and merge into it, consuming the template (the current document is kept as it is)",
   noNewDocumentDoor:
-    "this editor version cannot open a second document — merge into the current document instead",
+    "This editor version cannot open a second document — merge into the current document instead",
   intoNewDocument: "Into a new document",
   mergeRunTitle:
     "Merge every record through the <<field>> frames on this page (one document; a second merge replaces the first)",
@@ -206,7 +208,7 @@ export const BINDINGS = defineMessages("data.bindings", {
   manualExprTitle: "Needs a manual expression",
   manualExpr: "Needs a manual expression",
   changedSinceSync:
-    "changed since last sync: {changed} changed · {unchanged} unchanged",
+    "Changed since last sync: {changed} changed · {unchanged} unchanged",
   changedAdded: " · {count} added",
   changedRemoved: " · {count} removed",
   changeChanged: "changed",
