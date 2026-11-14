@@ -233,7 +233,16 @@ wheel takes the camera from an animation (`UXI-T52`); a pinch takes over a pendi
 (`UXI-T71`); an Alt-drag commits the copy it previewed (`UXI-T06`); a Type-tool drag that starts
 over text selects text. A press off the selection is answered in one call (hit, selection and
 move), and a drag that outruns the answer moves from the press point (`UXI-T58`). The guide drag, the loaded thread cursor and an armed placement are
-sessions too. `?debug=legacy-pointer` keeps the old path until IC6 removes it.
+sessions too. Since IC6 it is the one pointer path (`UXI-MIG-002`; ADR 1210, amendment 4).
+
+The selection model of ADR 1201 has landed (IC6; [ADR 235](adr/235-the-selection-tools-pointer-model.md),
+amendment 2026-11-14): Shift-click toggles; a marquee drawn left to right takes what it wholly
+contains and right to left what it touches, starts on the pasteboard and takes the group at the
+top level, the members inside an entered group (`UXI-T03`, `UXI-T04`); hovering outlines what a
+click would select and names it; the context menu's Select ▸ lists the objects under the pointer
+and `paged.edit.selectBelow` cycles down through them; the context menu selects the group as a
+click does (`UXI-T29`); a locked item is dashed, carries a padlock and hollow handles, stays
+selectable and does not move (`UXI-T13`).
 
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
@@ -259,6 +268,14 @@ control, Enter, or a second double-click) enters paged.image (D-05). A conforman
 every module's context and the specification's group C (`UXI-T35` to `UXI-T46`, `UXI-T51`), and
 gate G2 is enforced. The canvas's press outside a context still commits until track IC calls the
 resolver there.
+
+Track CM's module streams (CM5) have begun. paged.draw (ADR 370 in its range): the Pen names its
+state — start, draw, continue, close, join, pulling a handle, finish, add, delete — with its cursor
+and a hint beside the pointer, and a click on the run's last anchor finishes the open path;
+holding Control with a tool that places or drags anchors shows a precision magnifier (a loupe at
+four times the view, read from an engine snapshot, no document change); with anchors selected the
+Properties panel edits the points, not the frame; one selected path offers Shape suggestions; the
+Pathfinder says that it applies on click and outlines what a button takes.
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,

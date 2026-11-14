@@ -27,6 +27,7 @@ import { covers, expectNoCommit, expectOneCommit } from "@paged-media/test-kit";
 
 import { createPencilHandler } from "../src/handlers/pencil-tool";
 import { createPenHandler } from "../src/handlers/pen-tool";
+import { penCursor } from "../src/handlers/pen-states";
 import { createTypeHandler } from "../src/handlers/type-tool";
 import { harness, lastPreview, leaves, ops, previews, rb } from "./support";
 
@@ -150,10 +151,8 @@ describe("Pen tool", () => {
       .settle()
       .hover([101, 101])
       .settle();
-    expect(await g.cursorAt([101, 101])).toEqual({
-      kind: "css",
-      token: "pointer",
-    });
+    // The close state's own cursor (pen-states.ts, paged.draw ADR 370).
+    expect(await g.cursorAt([101, 101])).toEqual(penCursor("close"));
   });
 
   it("pressing on an open path's endpoint continues THAT path (an edit, not a new path) @level:gesture", async () => {

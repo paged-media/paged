@@ -877,7 +877,6 @@ jobs:
             --project=chromium \
             --project=journeys \
             --project=integration \
-            --project=uxi-legacy-pointer \
             --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --global-timeout=3300000 \

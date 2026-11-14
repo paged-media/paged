@@ -102,6 +102,9 @@ export {
 export type { EpochSnapshot } from "./interaction/epochs";
 export type { TraceEntry } from "./interaction/trace";
 export { InteractionProvider } from "./interaction/interaction-provider";
+export { hoverPreselectContribution } from "./overlays/hover-preselect";
+export { nextBelow, objectsUnder } from "./state/objects-under";
+export { isLockedEntries, useLockedKeys } from "./state/locked";
 
 export {
   CanvasClientProvider,
@@ -193,6 +196,7 @@ export {
 export {
   SelectionProvider,
   SelectionSubset,
+  useOptionalSelection,
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
@@ -768,6 +772,7 @@ export {
   closeCanvasContextMenu,
   openCanvasContextMenu,
   type ContextMenuEntry,
+  type PickableObject,
 } from "./chrome/CanvasContextMenu";
 export {
   buildExportAseCommand,
@@ -962,6 +967,16 @@ export {
 } from "@paged-media/client";
 
 // ── Overlay layer ──────────────────────────────────────────────
+// paged.draw ADR 370 — the precision magnifier's rules.
+export {
+  MAGNIFIER_FACTOR,
+  MAGNIFIER_KEY,
+  MAGNIFIER_SIZE_PX,
+  PRECISION_TOOL_IDS,
+  magnifierPlacement,
+  magnifierRegion,
+  pointInLoupe,
+} from "./overlays/precision-magnifier-geometry";
 export {
   OverlayHost,
   caretContribution,

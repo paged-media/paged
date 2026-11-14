@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 959,
+    "command": 960,
     "keybinding": 211,
     "menu": 694,
     "panel": 153,
@@ -3932,6 +3932,11 @@
     },
     {
       "id": "command:paged.edit.selectAll",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.selectBelow",
       "kind": "command",
       "owner": "editor"
     },

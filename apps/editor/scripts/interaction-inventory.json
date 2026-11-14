@@ -3212,7 +3212,7 @@
     },
     {
       "id": "tool.pen",
-      "title": "Pen: clicks set corner anchors, drags set curves, Enter or the first anchor finishes",
+      "title": "Pen: clicks set corner anchors, drags set curves, Enter, the first anchor or the last anchor finishes",
       "owner": "canvas-draw",
       "eventClass": "pointer:primary-click",
       "scope": "canvas/tool:pen",
@@ -3228,11 +3228,11 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4). Enter or a click on the run's last anchor commits one insertPath; Control shows the precision magnifier, which only reads.",
       "surfaceIds": ["tool:paged.tool.pen"],
-      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004"],
+      "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004", "UXI-DRW-006"],
       "status": "migrated",
-      "notes": "The Pen returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
+      "notes": "The Pen names its state (start, draw, continue, close, join, dragHandle, finish, add, delete) with a cursor and a hint beside the pointer (paged.draw ADR 370). It returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
     },
     {
       "id": "tool.pencil",
