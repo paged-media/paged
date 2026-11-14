@@ -211,6 +211,16 @@ a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a doubl
 context menu's hit test that answers after a newer press, document or context is dropped
 (`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
 
+Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
+Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a
+print preview of the selection (sheet ADR 532, extensions ADR 1108; F-42). paged.doc adds the
+Story view — the same story as continuous text, written into the engine's story — and the Story
+Map of every thread with overset and unplaced stories (doc ADR 630). paged.data shows its
+workflow as six steps, a record scrubber and an outlier finder; its binding badges are the
+editing aid Data bindings (data ADR 566; F-46). Template fill says Required or Optional, the
+progress and the next field, blocks Finish on missing content and then offers export and save,
+on phones too (ADR 1225, `UXI-T73`).
+
 Track CM's first part has landed (CM1–CM4; [ADR 1214](adr/1214-one-way-out-of-a-context.md),
 [ADR 1215](adr/1215-frame-content-edit.md), extensions ADR 1106): every way out of an edit
 context — Escape, the breadcrumb, another tool, another selection, a document switch — goes

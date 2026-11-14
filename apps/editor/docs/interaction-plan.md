@@ -432,6 +432,15 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   cells, T38; a publication preview; F-42), doc (a story view and a story map), data (a record
   scrubber, an outlier finder, wording; F-46), web (source and render in sync), slide (the sorter
   as the default navigation; F-47), template fill (role-aware UX, forms on phones; T73).
+  **Built, part b (2026-11-14):** sheet — **Frame · Edit cells** (extensions ADR 1108), the bar's
+  Editing cells and Done, the publication preview of the selection with overflow warnings, T38
+  extended (sheet ADR 532; F-42 closed); doc — Story view (a module view writing the engine's
+  story, no second text model) and the Story Map with overset and unplaced stories, Go to next
+  overset story (doc ADR 630); data — the six workflow steps, the record scrubber, the outlier
+  finder, the binding badges as the editing aid Data bindings, F-46's wording (data ADR 566);
+  template fill — Required / Optional, progress, Next field, missing content, Finish with export
+  and save, T73 on a phone (editor ADR 1225). The modules' raw number inputs of sheet, doc and data
+  left the `raw-number-input` baseline.
 
 ## 11. Track AP — Accessibility, devices and performance (spec wave 6)
 

@@ -39,6 +39,7 @@ async function field(
   name: string,
   kind: "text" | "visibility",
   maxLength?: number,
+  required = false,
 ): Promise<{ id: unknown; storyId: string | null }> {
   await h.client.setSessionPolicy({ role: "author", overrides: [] });
   const op = kind === "text" ? "insertTextFrame" : "insertFrame";
@@ -59,6 +60,7 @@ async function field(
             name,
             kind,
             label: name.toUpperCase(),
+            ...(required ? { required: true } : {}),
             constraints: maxLength ? { maxLength } : {},
           },
         },
@@ -71,6 +73,59 @@ async function field(
 }
 
 describe("Template form", () => {
+  test("editor ADR 1225: progress, required and optional, missing content, and Finish", async () => {
+    covers("panel:paged.template.form");
+    const h = await mount();
+    await field(h, "headline", "text", undefined, true);
+    await field(h, "subline", "text");
+    await h.client.setSessionPolicy({ role: "filler", overrides: [] });
+    await h.settle();
+    const text = (sel: string) => h.root.querySelector(sel)?.textContent ?? "";
+    expect(text("[data-form-progress-text]")).toBe("0 of 2 fields filled");
+    expect(text("[data-form-required-left]")).toBe("1 required field is empty");
+    expect(text('[data-template-field="headline"] [data-field-required]')).toBe(
+      "Required",
+    );
+    expect(text('[data-template-field="subline"] [data-field-required]')).toBe(
+      "Optional",
+    );
+    // Finish with a required field empty: blocked, the field says so.
+    expect(h.root.querySelector("[data-field-missing]")).toBeNull();
+    await h.act(async () => {
+      await h.user.click(h.root.querySelector("[data-form-finish]")!);
+    });
+    expect(text("[data-form-blocked]")).toBe("Fill in 1 required field first.");
+    expect(
+      h.root.querySelector(
+        '[data-template-field="headline"] [data-field-missing]',
+      ),
+    ).not.toBeNull();
+    expect(
+      h.root.querySelector(
+        '[data-template-field="subline"] [data-field-missing]',
+      ),
+    ).toBeNull();
+    // Fill it: the progress moves, and Finish offers the export.
+    const input = h.root.querySelector<HTMLInputElement>(
+      '[data-field-input="headline"]',
+    )!;
+    await h.act(async () => {
+      input.focus();
+      await h.user.type(input, "Ada{Enter}");
+    });
+    await h.settle();
+    expect(text("[data-form-progress-text]")).toBe("1 of 2 fields filled");
+    await h.act(async () => {
+      await h.user.click(h.root.querySelector("[data-form-finish]")!);
+    });
+    expect(h.root.querySelector("[data-form-ready]")).not.toBeNull();
+    expect(h.root.querySelector("[data-form-export]")).not.toBeNull();
+    const [row] = (await h.client.templateFields()).filter(
+      (r) => r.field.name === "headline",
+    );
+    expect(row!.value).toEqual({ kind: "text", text: "Ada" });
+  });
+
   test("a document without fields says so", async () => {
     covers("panel:paged.template.form");
     const h = await mount();

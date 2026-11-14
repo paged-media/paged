@@ -103,7 +103,7 @@ async function touch(
 test.describe("journey · fill presets on a phone (Pixel 7)", () => {
   test.use(onChromium("Pixel 7"));
 
-  test("template-fill: tap a field, type, take a photo, pan and zoom @feat:editor-shell.solo-mode @level:happy", async ({
+  test("UXI-T73 — template-fill on a phone: tap a field, type (one undo step), take a photo, pan and zoom; targets sized @feat:editor-shell.solo-mode @level:happy", async ({
     page,
   }) => {
     covers("panel:paged.template.form");
@@ -136,9 +136,40 @@ test.describe("journey · fill presets on a phone (Pixel 7)", () => {
     const input = page.locator('[data-field-input="name"]');
     await expect(input).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-field-input="title"]')).toHaveCount(0);
+    // Editor ADR 1225: the sheet says where the filler is and whether the
+    // field is required, and its buttons are touch-sized.
+    await expect(page.locator("[data-form-progress]")).toBeVisible();
+    await expect(
+      page.locator('[data-template-field="name"] [data-field-required]'),
+    ).toHaveCount(1);
+    for (const button of await page
+      .locator(
+        "[data-sheet-all], [data-sheet-done], [data-form-next], [data-form-finish]",
+      )
+      .all()) {
+      const box = (await button.boundingBox())!;
+      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    }
     await input.tap();
     await input.fill("Grace Example");
     await input.press("Enter");
+    await page.locator("[data-sheet-done]").tap();
+    await expect(input).toHaveCount(0);
+
+    // The value is the document's: one undo step takes it back, redo
+    // brings it again (the form reads the engine's fields).
+    const openName = async () => {
+      const at = await outline(page, "name");
+      await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
+      await expect(input).toBeVisible({ timeout: 15_000 });
+    };
+    await page.locator('[data-region-command="paged.editor.undo"]').tap();
+    await openName();
+    await expect(input).not.toHaveValue("Grace Example");
+    await page.locator("[data-sheet-done]").tap();
+    await page.locator('[data-region-command="paged.editor.redo"]').tap();
+    await openName();
+    await expect(input).toHaveValue("Grace Example");
     await page.locator("[data-sheet-done]").tap();
     await expect(input).toHaveCount(0);
 

@@ -60,10 +60,6 @@
     "task": "AP4",
     "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T72 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T73": {
-    "task": "CM5",
-    "reason": "No test claims it yet: the template-fill flow has not been reworked for touch on phones yet (CM5). Claim it in a test title (UXI-T73 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T74": {
     "task": "AP3",
     "reason": "No test claims it yet: high contrast and 200 % UI zoom are not carried by the tokens yet (AP3). Claim it in a test title (UXI-T74 — …) when that lands, or sooner where today's code already passes (W0.7)."
