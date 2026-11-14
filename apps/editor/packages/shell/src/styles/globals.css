@@ -79,6 +79,29 @@
     outline: 2px solid hsl(var(--ring));
     outline-offset: 1px;
   }
+  /* High contrast (editor ADR "High contrast and AA"): a heavier ring
+   * with a band of the surface between it and the control — two tones,
+   * so it holds on any fill the control has. */
+  [data-paged-editor][data-contrast="more"]
+    :where(
+      a[href],
+      button,
+      input,
+      select,
+      textarea,
+      summary,
+      [tabindex],
+      [contenteditable="true"],
+      [role="button"],
+      [role="menuitem"],
+      [role="tab"],
+      [role="option"],
+      [role="treeitem"]
+    ):focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px hsl(var(--background));
+  }
   /* The canvas viewport draws the ring inside its edge. */
   [data-canvas-surface="viewport"]:focus-visible {
     outline-offset: -2px;
@@ -199,6 +222,26 @@
 }
 [stroke="var(--status-error)"] {
   stroke: var(--status-error);
+}
+
+/* High contrast (editor ADR "High contrast and AA"): every overlay cue —
+ * the selection's edges and handles, guides, snap lines, targets — is
+ * drawn with a two-tone halo (the theme's halo, then a hairline of the
+ * opposite tone), so it reads over white paper, a dark image and the
+ * canvas surround alike. The cue's own stroke and hue stay as they are. */
+[data-paged-editor][data-contrast="more"]
+  :is(
+    [stroke="var(--overlay-selection)"],
+    [fill="var(--overlay-selection)"],
+    [stroke="var(--overlay-guide)"],
+    [fill="var(--overlay-guide)"],
+    [stroke="var(--overlay-snap)"],
+    [fill="var(--overlay-snap)"],
+    [stroke="var(--overlay-target)"],
+    [fill="var(--overlay-target)"]
+  ) {
+  filter: drop-shadow(0 0 1px var(--overlay-halo))
+    drop-shadow(0 0 0.5px var(--overlay-halo-edge));
 }
 
 /* ── Panel baseline for NATIVE controls ─────────────────────────────

@@ -188,7 +188,7 @@ const M = defineMessages("app.builtInPanels", {
   align: "Align",
   pathfinder: "Pathfinder",
   outline: "Outline",
-  tree: "Tree",
+  tree: "Object tree",
   inspector: "Inspector",
   character: "Character",
   paragraph: "Paragraph",

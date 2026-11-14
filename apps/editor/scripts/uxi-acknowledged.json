@@ -92,14 +92,6 @@
     "task": "DF6",
     "reason": "No test claims it yet: export does not prevalidate the requested standard yet (DF6). Claim it in a test title (UXI-T68 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T69": {
-    "task": "AP1",
-    "reason": "No test claims it yet: there is no accessible object tree synchronized with the selection yet (AP1). Claim it in a test title (UXI-T69 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T70": {
-    "task": "AP2",
-    "reason": "No test claims it yet: keyboard-only creation and transform commands are not complete yet (AP2). Claim it in a test title (UXI-T70 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T71": {
     "task": "AP4",
     "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T71 — …) when that lands, or sooner where today's code already passes (W0.7)."
@@ -111,13 +103,5 @@
   "UXI-T73": {
     "task": "CM5",
     "reason": "No test claims it yet: the template-fill flow has not been reworked for touch on phones yet (CM5). Claim it in a test title (UXI-T73 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T74": {
-    "task": "AP3",
-    "reason": "No test claims it yet: high contrast and 200 % UI zoom are not carried by the tokens yet (AP3). Claim it in a test title (UXI-T74 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T75": {
-    "task": "AP3",
-    "reason": "No test claims it yet: high contrast and 200 % UI zoom are not carried by the tokens yet (AP3). Claim it in a test title (UXI-T75 — …) when that lands, or sooner where today's code already passes (W0.7)."
   }
 }

@@ -199,14 +199,14 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
         />
       ))}
       {model.noTools && (
-        <span style={{ opacity: 0.7, whiteSpace: "nowrap" }}>
+        <span style={{ color: "var(--pg-muted-fg)", whiteSpace: "nowrap" }}>
           {strings.t(CONTEXT_TOOLBAR.noTools)}
         </span>
       )}
       {/* Editor ADR 298 — the context's own control-bar groups (Word's
           Home group inside a Word document). */}
       <ContributedControlBarGroups editContext={frame.type} />
-      <span style={{ opacity: 0.6, whiteSpace: "nowrap" }}>
+      <span style={{ color: "var(--pg-muted-fg)", whiteSpace: "nowrap" }}>
         {strings.t(CONTEXT_TOOLBAR.escToLeave)}
       </span>
     </span>

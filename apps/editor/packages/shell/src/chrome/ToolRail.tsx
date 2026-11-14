@@ -1277,7 +1277,7 @@ const flyoutLabelStyle: CSSProperties = {
 
 const flyoutShortcutStyle: CSSProperties = {
   fontSize: 11,
-  opacity: 0.6,
+  color: "var(--pg-muted-fg)",
 };
 
 const tearOffStyle: CSSProperties = {

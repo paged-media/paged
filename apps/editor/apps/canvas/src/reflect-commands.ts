@@ -34,7 +34,12 @@
 //     reflects the SOURCES: the reflected object keeps its id and its slot,
 //     the untouched clone sits directly above it. An engine without the op
 //     refuses the whole batch; nothing is written.
-//  3. TRANSFORM AGAIN repeats the last transform of the session
+//  3. ROTATE AND SCALE BY A STEP (editor ADR "An accessible object tree",
+//     UXI-A11Y-006): 90° and 15° either way and 10 % up or down, about the
+//     selection's centre, as a `linear` record — the keyboard's way to turn
+//     and size what a pointer turns with the Rotate and Scale tools.
+//     Transform Again repeats them like a tool drag.
+//  4. TRANSFORM AGAIN repeats the last transform of the session
 //     (the editor scope's `TRANSFORM_MEMORY`: a reflect, or the linear part
 //     of a Rotate / Scale / Shear tool drag), re-centred on the CURRENT
 //     selection. Session state, never the document's.
@@ -65,6 +70,12 @@ const M = defineMessages("app.reflectCommands", {
   reflectV: "Transform: Reflect vertically",
   options: "Transform: Reflect…",
   again: "Transform: Transform again",
+  rotate90Cw: "Transform: Rotate 90° clockwise",
+  rotate90Ccw: "Transform: Rotate 90° counterclockwise",
+  rotateStepCw: "Transform: Rotate 15° clockwise",
+  rotateStepCcw: "Transform: Rotate 15° counterclockwise",
+  scaleUp: "Transform: Scale up 10%",
+  scaleDown: "Transform: Scale down 10%",
 });
 
 // The menu leaves (`menu.<label>`).
@@ -74,6 +85,12 @@ defineMessages("menu", {
   "Reflect vertically": "Reflect vertically",
   "Reflect…": "Reflect…",
   "Transform again": "Transform again",
+  "Rotate 90° clockwise": "Rotate 90° clockwise",
+  "Rotate 90° counterclockwise": "Rotate 90° counterclockwise",
+  "Rotate 15° clockwise": "Rotate 15° clockwise",
+  "Rotate 15° counterclockwise": "Rotate 15° counterclockwise",
+  "Scale up 10%": "Scale up 10%",
+  "Scale down 10%": "Scale down 10%",
 });
 defineMessages("commandCategory", { Transform: "Transform" });
 
@@ -84,6 +101,35 @@ export const PAGED_TRANSFORM_REFLECT_VERTICAL =
 /** Opens the Reflect dialog (angle, point, copy). */
 export const PAGED_TRANSFORM_REFLECT_OPTIONS = "paged.transform.reflectOptions";
 export const PAGED_TRANSFORM_AGAIN = "paged.transform.again";
+export const PAGED_TRANSFORM_ROTATE_90_CW = "paged.transform.rotate90Clockwise";
+export const PAGED_TRANSFORM_ROTATE_90_CCW =
+  "paged.transform.rotate90Counterclockwise";
+export const PAGED_TRANSFORM_ROTATE_STEP_CW =
+  "paged.transform.rotateStepClockwise";
+export const PAGED_TRANSFORM_ROTATE_STEP_CCW =
+  "paged.transform.rotateStepCounterclockwise";
+export const PAGED_TRANSFORM_SCALE_UP = "paged.transform.scaleUp";
+export const PAGED_TRANSFORM_SCALE_DOWN = "paged.transform.scaleDown";
+
+/** The rotation step, degrees, and the scale step, a factor. */
+export const ROTATE_STEP_DEG = 15;
+export const SCALE_STEP = 0.1;
+
+/** The linear part of a turn by `deg` CLOCKWISE on screen (y down):
+ *  `[cos, sin, -sin, cos]`, so +x turns toward +y. */
+export function rotationRecord(deg: number): TransformRecord {
+  const r = (deg * Math.PI) / 180;
+  // Exact quarter turns: no 6e-17 left where a 0 belongs.
+  const round = (v: number) => (Math.abs(v) < 1e-12 ? 0 : v);
+  const c = round(Math.cos(r));
+  const s = round(Math.sin(r));
+  return { kind: "linear", linear: [c, s, -s, c], copy: false };
+}
+
+/** The linear part of a uniform scale by `factor`. */
+export function scaleRecord(factor: number): TransformRecord {
+  return { kind: "linear", linear: [factor, 0, 0, factor], copy: false };
+}
 
 /** Axis angles (degrees from +x, y down) of the two quick reflects. */
 export const REFLECT_HORIZONTAL_DEG = 90;
@@ -149,12 +195,15 @@ export async function runTransformRecord(
   addresses: readonly string[],
   record: TransformRecord,
   pivot?: Point,
+  /** The undo step's name; the record's kind's by default. */
+  stepLabel?: string,
 ): Promise<ShellObjectWriteResult> {
   if (addresses.length === 0) return NOTHING;
   const targets = await deps.targets(addresses);
   const ops = planTransform(targets, record, pivot);
   if (ops.length === 0) return NOTHING;
-  const label = record.kind === "reflect" ? "reflect" : "transform again";
+  const label =
+    stepLabel ?? (record.kind === "reflect" ? "reflect" : "transform again");
   const result = await deps.batch(ops, { label });
   if (result.applied) deps.memory.remember(record);
   return result;
@@ -283,16 +332,78 @@ export function buildReflectCommands(
       handler: (paged: unknown) =>
         runTransformAgain(depsFor(paged), deps.selectionOf(paged)),
     },
+    ...(
+      [
+        [
+          PAGED_TRANSFORM_ROTATE_90_CW,
+          M.rotate90Cw,
+          rotationRecord(90),
+          "rotate",
+        ],
+        [
+          PAGED_TRANSFORM_ROTATE_90_CCW,
+          M.rotate90Ccw,
+          rotationRecord(-90),
+          "rotate",
+        ],
+        [
+          PAGED_TRANSFORM_ROTATE_STEP_CW,
+          M.rotateStepCw,
+          rotationRecord(ROTATE_STEP_DEG),
+          "rotate",
+        ],
+        [
+          PAGED_TRANSFORM_ROTATE_STEP_CCW,
+          M.rotateStepCcw,
+          rotationRecord(-ROTATE_STEP_DEG),
+          "rotate",
+        ],
+        [
+          PAGED_TRANSFORM_SCALE_UP,
+          M.scaleUp,
+          scaleRecord(1 + SCALE_STEP),
+          "scale",
+        ],
+        [
+          PAGED_TRANSFORM_SCALE_DOWN,
+          M.scaleDown,
+          scaleRecord(1 - SCALE_STEP),
+          "scale",
+        ],
+      ] as const
+    ).map(([id, title, record, label]): CommandContribution => ({
+      id,
+      get title() {
+        return t(title);
+      },
+      category: "Transform",
+      when: objectVerbApplies,
+      handler: (paged: unknown) =>
+        runTransformRecord(
+          depsFor(paged),
+          deps.selectionOf(paged),
+          record,
+          undefined,
+          label,
+        ),
+    })),
   ];
 }
 
-/** Object > Transform > Reflect horizontally, Reflect vertically, Reflect…
- *  and Transform again (beside Transform each…, order 10). */
+/** Object > Transform > Reflect horizontally, Reflect vertically, Reflect…,
+ *  Transform again and the rotate and scale steps (beside Transform each…,
+ *  order 10). */
 export const REFLECT_MENU_ITEMS: MenuItemContribution[] = [
   [PAGED_TRANSFORM_REFLECT_HORIZONTAL, "Reflect horizontally", 11],
   [PAGED_TRANSFORM_REFLECT_VERTICAL, "Reflect vertically", 12],
   [PAGED_TRANSFORM_REFLECT_OPTIONS, "Reflect…", 13],
   [PAGED_TRANSFORM_AGAIN, "Transform again", 14],
+  [PAGED_TRANSFORM_ROTATE_90_CW, "Rotate 90° clockwise", 15],
+  [PAGED_TRANSFORM_ROTATE_90_CCW, "Rotate 90° counterclockwise", 16],
+  [PAGED_TRANSFORM_ROTATE_STEP_CW, "Rotate 15° clockwise", 17],
+  [PAGED_TRANSFORM_ROTATE_STEP_CCW, "Rotate 15° counterclockwise", 18],
+  [PAGED_TRANSFORM_SCALE_UP, "Scale up 10%", 19],
+  [PAGED_TRANSFORM_SCALE_DOWN, "Scale down 10%", 19.5],
 ].map(([command, label, order]) => ({
   path: `Object/Transform/${label as string}`,
   command: command as string,
