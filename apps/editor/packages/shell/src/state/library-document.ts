@@ -41,6 +41,9 @@ import { scoped, type EditorScope } from "./editor-scope";
 interface LibraryState {
   library: LibraryClient | null;
   current: DocumentEntry | null;
+  /** The layout variant the open document is (its ref), or null for main
+   *  (editor ADR 1235): a save commits there. */
+  ref: string | null;
   /** The import of the file just opened, until it lands: a save that races
    *  it waits for it rather than minting a second document. */
   opening: Promise<void> | null;
@@ -51,6 +54,7 @@ interface LibraryState {
 const LIBRARY = scoped("libraryDocument", (): LibraryState => ({
   library: null,
   current: null,
+  ref: null,
   opening: null,
   version: 0,
   listeners: new Set(),
@@ -103,6 +107,24 @@ export function setCurrentLibraryDocument(
   const st = scope.get(LIBRARY);
   st.opening = null;
   st.current = entry;
+  st.ref = null;
+  changed(st);
+}
+
+/** The layout variant the open document is (its ref), or null for main. */
+export function currentLibraryRef(scope: EditorScope): string | null {
+  return scope.get(LIBRARY).ref;
+}
+
+/** The open document is the layout variant `ref` of its library document
+ *  (null: its main layout). Set after the variant is opened. */
+export function setCurrentLibraryRef(
+  scope: EditorScope,
+  ref: string | null,
+): void {
+  const st = scope.get(LIBRARY);
+  if (st.ref === ref) return;
+  st.ref = ref;
   changed(st);
 }
 
@@ -114,6 +136,7 @@ export function rememberOpenedFile(
 ): void {
   const st = scope.get(LIBRARY);
   st.current = null;
+  st.ref = null;
   if (!st.library) return changed(st);
   const lib = st.library;
   const run: Promise<void> = lib
@@ -151,8 +174,16 @@ export async function commitSave(
     changed(st);
     return { head: st.current.head ?? "", changed: true };
   }
-  const result = await st.library.save(st.current.id, bytes);
-  st.current = { ...st.current, head: result.head, updatedAt: Date.now() };
+  // A layout variant saves on its own ref (editor ADR 1235); main's head
+  // is what the entry records.
+  const result = st.ref
+    ? await st.library.save(st.current.id, bytes, "Save", st.ref)
+    : await st.library.save(st.current.id, bytes);
+  st.current = {
+    ...st.current,
+    ...(st.ref ? {} : { head: result.head }),
+    updatedAt: Date.now(),
+  };
   changed(st);
   return result;
 }

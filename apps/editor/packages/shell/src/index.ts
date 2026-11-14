@@ -707,6 +707,11 @@ export {
 export { SaveStateController } from "./state/save-state-controller";
 export { SaveStatus, saveStatusLabel } from "./chrome/SaveStatus";
 export { openLibraryDocument } from "./state/open-library-document";
+// Editor ADR 1235 — the layout variant the open document is.
+export {
+  currentLibraryRef,
+  setCurrentLibraryRef,
+} from "./state/library-document";
 // Editor ADR 1236 — the publication's readiness against its contract.
 export {
   publicationReadinessOf,

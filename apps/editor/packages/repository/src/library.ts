@@ -31,6 +31,8 @@
 //   repos/<id>/checkpoints.json the named points of its timeline (editor ADR
 //                               1234): commits on the `checkpoints` ref, or
 //                               an import's first version
+//   repos/<id>/variants.json    its layout variants (editor ADR 1235): each
+//                               a draft ref branched from main
 
 import type { RepoFs } from "./fs.ts";
 
@@ -278,6 +280,50 @@ export class CheckpointRefused extends Error {
     super(`checkpoint refused: ${reason}`);
     this.reason = reason;
   }
+}
+
+/** A layout variant's ref: a draft of the library's person,
+ *  `drafts/<owner>/variants/<slug>`, branched from main (editor ADR 1235). */
+export function variantRef(owner: string, slug: string): string {
+  return `drafts/${owner}/variants/${slug}`;
+}
+
+/** One layout variant of a document. */
+export interface VariantEntry {
+  slug: string;
+  name: string;
+  /** Its ref, and the version it holds now (null: none yet). */
+  ref: string;
+  head: string | null;
+  createdAt: number;
+  /** Main's version when it was branched: what "shared changes since"
+   *  are measured from. */
+  base: string;
+}
+
+function readVariant(v: unknown): Omit<VariantEntry, "ref" | "head"> | null {
+  if (!v || typeof v !== "object") return null;
+  const e = v as Record<string, unknown>;
+  if (typeof e.slug !== "string" || !/^[a-z0-9-]{1,48}$/.test(e.slug))
+    return null;
+  if (typeof e.name !== "string" || !e.name.trim()) return null;
+  if (typeof e.base !== "string" || !/^[0-9a-f]{64}$/.test(e.base)) return null;
+  if (typeof e.createdAt !== "number") return null;
+  return { slug: e.slug, name: e.name, base: e.base, createdAt: e.createdAt };
+}
+
+/** A variant's slug from its name, unique among `taken`. */
+export function variantSlug(name: string, taken: ReadonlySet<string>): string {
+  const base =
+    name
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "variant";
+  let slug = base;
+  for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+  return slug;
 }
 
 export interface EvidenceInfo {
@@ -580,20 +626,120 @@ export class Library {
     });
   }
 
-  /** Commits a save. Returns the head and whether this save made a commit. */
+  /** Commits a save on `ref` (main, or the layout variant that is open,
+   *  editor ADR 1235). Returns the ref's head and whether this save made a
+   *  commit. */
   save(
     id: string,
     bytes: Uint8Array,
     message = "Save",
+    ref = MAIN,
   ): Promise<{ head: string; changed: boolean }> {
     return this.serial(async () => {
       const o = await this.load(id);
-      const before = o.meta.head;
+      const before =
+        (JSON.parse(o.repo.refs()) as Record<string, string>)[ref] ?? null;
       const head = await this.faulting(o, () =>
-        o.repo.save(bytes, MAIN, this.owner, message, this.now()),
+        o.repo.save(bytes, ref, this.owner, message, this.now()),
       );
       await this.persist(o);
       return { head, changed: head !== before };
+    });
+  }
+
+  private async readVariants(
+    id: string,
+  ): Promise<Array<Omit<VariantEntry, "ref" | "head">>> {
+    const bytes = await this.fs.read(`repos/${id}/variants.json`);
+    if (!bytes) return [];
+    try {
+      const parsed = JSON.parse(dec.decode(bytes)) as { variants?: unknown };
+      return Array.isArray(parsed.variants)
+        ? parsed.variants
+            .map(readVariant)
+            .filter((v): v is Omit<VariantEntry, "ref" | "head"> => v !== null)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async writeVariants(
+    id: string,
+    list: Array<Omit<VariantEntry, "ref" | "head">>,
+  ): Promise<void> {
+    await this.fs.write(
+      `repos/${id}/variants.json`,
+      enc.encode(JSON.stringify({ v: 1, variants: list })),
+    );
+  }
+
+  /** The document's layout variants, oldest first. */
+  variants(id: string): Promise<VariantEntry[]> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
+      return (await this.readVariants(id)).map((v) => {
+        const ref = variantRef(this.owner, v.slug);
+        return { ...v, ref, head: refs[ref] ?? null };
+      });
+    });
+  }
+
+  /** Branches a layout variant named `name` from main, holding `bytes`
+   *  (the open layout, saved or not). Shares main's history; no file is
+   *  duplicated (the repository stores each part once). */
+  createVariant(
+    id: string,
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<VariantEntry> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
+      const base = refs[MAIN];
+      if (!base) throw new Error("the document has no saved version yet");
+      const list = await this.readVariants(id);
+      const slug = variantSlug(name, new Set(list.map((v) => v.slug)));
+      const ref = variantRef(this.owner, slug);
+      const now = this.now();
+      if (!refs[ref])
+        await this.faulting(o, () => o.repo.branch(MAIN, ref, this.owner, now));
+      const head = await this.faulting(o, () =>
+        o.repo.save(bytes, ref, this.owner, `Variant: ${name}`, now),
+      );
+      await this.persist(o);
+      const entry = { slug, name: name.trim(), base, createdAt: now };
+      await this.writeVariants(id, [...list, entry]);
+      return { ...entry, ref, head };
+    });
+  }
+
+  /** Makes a variant the main layout as a NEW version of main: main's
+   *  versions stay in its history, the variant stays a variant. */
+  promoteVariant(id: string, slug: string): Promise<string> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const ref = variantRef(this.owner, slug);
+      const head = (JSON.parse(o.repo.refs()) as Record<string, string>)[ref];
+      if (!head) throw new Error(`no variant ${slug}`);
+      const now = this.now();
+      const main = await this.faulting(o, () =>
+        o.repo.restore(head, MAIN, this.owner, now),
+      );
+      o.repo.record(this.owner, "promote-variant", ref, "ok", now);
+      await this.persist(o);
+      return main;
+    });
+  }
+
+  /** Takes a variant off the list. Its versions stay in the history. */
+  removeVariant(id: string, slug: string): Promise<void> {
+    return this.serial(async () => {
+      await this.writeVariants(
+        id,
+        (await this.readVariants(id)).filter((v) => v.slug !== slug),
+      );
     });
   }
 

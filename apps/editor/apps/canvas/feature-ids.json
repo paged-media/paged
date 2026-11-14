@@ -6,7 +6,7 @@
     "command": 982,
     "keybinding": 216,
     "menu": 709,
-    "panel": 155,
+    "panel": 156,
     "tool": 123
   },
   "features": [
@@ -10337,6 +10337,11 @@
     },
     {
       "id": "panel:paged.tree",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.variants",
       "kind": "panel",
       "owner": "editor"
     },

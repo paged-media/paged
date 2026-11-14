@@ -117,6 +117,7 @@ import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
 import { ConstraintsPanel } from "./constraints-panel";
 import { ContractPanel } from "./contract-panel";
+import { VariantsPanel } from "./variants-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
 import { PreflightPanel } from "./cockpit/preflight-panel";
@@ -235,6 +236,7 @@ const M = defineMessages("app.builtInPanels", {
   library: "Library",
   constraints: "Design constraints",
   contract: "Publication contract",
+  variants: "Layout variants",
   table: "Table",
   tabs: "Tabs",
   glyphs: "Glyphs",
@@ -1325,6 +1327,15 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: DataPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
+  },
+  {
+    // Editor ADR 1235 — the layout's variants, on the library's refs.
+    id: "paged.variants",
+    get title() {
+      return t(M.variants);
+    },
+    component: VariantsPanel,
+    defaultDock: "right",
   },
   {
     // ADR 180 — the local library: this document's versions (save = a

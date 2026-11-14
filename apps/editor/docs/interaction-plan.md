@@ -510,7 +510,11 @@ In scope. They start after G2, and each lands with its own ADR.
   (`UXI-MUT-013`) become a named action with parameters; a preview of the affected objects; one
   undo batch; export as a `paged.*` script (on `actions@1`, PM-0015).
 - **PX5 Layout variants** as library branches (the repository package), compared side by side
-  with a frame and typography diff; shared-style propagation explicit.
+  with a frame and typography diff; shared-style propagation explicit. **Done**
+  ([ADR 1235](adr/1235-layout-variants.md)): draft refs `drafts/<person>/variants/<slug>`
+  branched from main; an open variant takes the saves; Compare reuses PX7's dialog; Make main
+  is a new version of main; Apply shared changes previews and then writes style properties and
+  pictures through a second engine, the variants' own overrides kept.
 - **PX6 A trustworthy AI assistant.** Inspect, propose (a change set of operations), preview (in
   a sandbox), approve, apply through the normal batch and undo; consent, scope and permissions
   (extends `SH/components/cockpit/ai-assistant.tsx` and `platform/shared/ai`).

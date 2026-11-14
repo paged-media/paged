@@ -26,7 +26,7 @@
 import type { DocumentEntry } from "@paged-media/repository";
 
 import { loadDocumentFile } from "./document-loader";
-import { getLibrary } from "./library-document";
+import { getLibrary, setCurrentLibraryRef } from "./library-document";
 import type { PagedEditor } from "./paged-editor";
 import { confirmDiscard } from "./replace-guard";
 
@@ -43,6 +43,9 @@ export async function openLibraryDocument(
     /** The caller has kept the open document already (a checkpoint, editor
      *  ADR 1234): nothing is lost, so the replace question is not asked. */
     confirmed?: boolean;
+    /** The layout variant opened (its ref, editor ADR 1235): later saves
+     *  commit there. Absent: the main layout. */
+    variant?: string;
     setStatus?: (s: string) => void;
     pushWarning?: (w: string) => void;
   },
@@ -70,5 +73,6 @@ export async function openLibraryDocument(
       scope: editor.scope,
     },
   );
+  setCurrentLibraryRef(editor.scope, options.variant ?? null);
   return true;
 }

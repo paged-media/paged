@@ -302,7 +302,7 @@ export async function readStateFacts(
     for (const style of list) {
       const reply: WorkerToMain = await client.send({
         kind: "requestStyleProperties",
-        payload: { collection, styleId: style.selfId } as never,
+        payload: { collection: family, styleId: style.selfId },
       });
       if (reply.kind !== "styleProperties" || !reply.payload.result) continue;
       facts.styles.set(

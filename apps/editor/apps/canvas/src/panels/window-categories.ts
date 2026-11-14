@@ -101,6 +101,7 @@ export const WINDOW_CATEGORY: Readonly<Record<string, WindowCategory>> = {
   "paged.master-options": "Object & Layout",
   "paged.section-options": "Object & Layout",
   "paged.navigator": "Object & Layout",
+  "paged.variants": "Object & Layout",
   // ── Interactive ──
   "paged.hyperlinks": "Interactive",
   "paged.bookmarks": "Interactive",

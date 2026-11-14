@@ -331,3 +331,60 @@ test("PX7 — checkpoints are bounded: automatic ones pruned oldest first, a sta
   assert.ok(!(await lib.checkpoints(id)).some((c) => c.id === mine.id));
   assert.ok((await lib.exportPaged(id, mine.commit)).length > 0);
 });
+
+// Editor ADR 1235 — layout variants: branches of main on the person's draft
+// refs, sharing its history; saving a variant never moves main; promoting
+// one is a new version of main.
+test("PX5 — a variant branches from main, saves on its own ref, and promotes as a new version", async () => {
+  const { fs, lib } = library();
+  const { id } = await lib.importFile(doc(noise(300_000, 70)), "brochure.idml");
+  const main = (await lib.refs(id)).main;
+  const compact = await lib.createVariant(
+    id,
+    "Compact",
+    doc(noise(300_000, 71)),
+  );
+  assert.equal(compact.slug, "compact");
+  assert.equal(compact.ref, "drafts/user:local/variants/compact");
+  assert.equal(compact.base, main);
+  assert.equal((await lib.refs(id)).main, main, "main does not move");
+  // Its history starts with main's: shared, not duplicated.
+  const history = await lib.log(id, compact.ref);
+  assert.equal(history.length, 2);
+  assert.equal(history[1].hash, main);
+  // A save on the variant moves the variant only.
+  const saved = await lib.save(
+    id,
+    doc(noise(300_000, 72)),
+    "Save",
+    compact.ref,
+  );
+  assert.equal(saved.changed, true);
+  assert.equal((await lib.refs(id)).main, main);
+  // A second variant of the same name gets its own slug.
+  const again = await lib.createVariant(id, "Compact", doc(noise(300_000, 73)));
+  assert.equal(again.slug, "compact-2");
+  // From cold: both listed, with their heads.
+  const fresh = library(fs).lib;
+  assert.deepEqual(
+    (await fresh.variants(id)).map((v) => [v.name, v.slug, v.head]),
+    [
+      ["Compact", "compact", saved.head],
+      ["Compact", "compact-2", again.head],
+    ],
+  );
+  // Promote: the variant's state becomes main's newest version.
+  const variantBytes = await lib.exportPaged(id, compact.ref);
+  const head = await lib.promoteVariant(id, "compact");
+  const log = await lib.log(id);
+  assert.equal(log[0].hash, head);
+  assert.equal(log.length, 2, "import, then the promotion");
+  assert.deepEqual(await lib.exportPaged(id), variantBytes);
+  // Removing a variant takes it off the list; its versions stay.
+  await lib.removeVariant(id, "compact-2");
+  assert.deepEqual(
+    (await lib.variants(id)).map((v) => v.slug),
+    ["compact"],
+  );
+  assert.ok((await lib.exportPaged(id, again.head!)).length > 0);
+});

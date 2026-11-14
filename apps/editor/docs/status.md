@@ -389,6 +389,12 @@ check and the contract's additions; the header shows Blocked, Needs attention, R
 beside the save status, and an unmet requirement is an issue where it stands. Approving is an
 explicit step that keeps the approved state on the timeline; an edit after it reads "Approved,
 then edited".
+Layout variants ([ADR 1235](adr/1235-layout-variants.md), PX5): Window ▸ Object & Layout ▸ Layout
+variants branches the open layout into named alternatives on the document's own repository (no
+file duplicated); an open variant takes the saves while main stays as it was; any two layouts
+compare side by side; Make main makes a variant the main layout as a new version; and Apply shared
+changes to variants… previews, per variant, the styles and pictures main changed that the variant
+did not, then applies them — the variant's own changes are kept.
 Visual action automation ([ADR 1240](adr/1240-actions-record-what-you-meant.md), PX4): a
 recorded step keeps the selection it acted on as an intent and the edit context it ran in, and a
 panel field's commit (a font size, a style, a color) records as a step on the selection, so an

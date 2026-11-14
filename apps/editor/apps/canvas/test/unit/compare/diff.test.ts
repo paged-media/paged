@@ -149,7 +149,7 @@ describe("the items that differ", () => {
             : name === "paragraphStyles"
               ? [{ selfId: "ParagraphStyle/H", name: "H" }]
               : [],
-      send: async (m: { kind: string }) =>
+      send: async (m: { kind: string; payload: { collection?: string } }) =>
         m.kind === "requestStoryContent"
           ? {
               kind: "storyContentResult",
@@ -165,17 +165,19 @@ describe("the items that differ", () => {
                 },
               },
             }
-          : {
-              kind: "styleProperties",
-              payload: {
-                result: {
-                  collection: "paragraphStyles",
-                  styleId: "ParagraphStyle/H",
-                  basedOn: null,
-                  entries: [],
+          : m.payload.collection !== "paragraph"
+            ? { kind: "styleProperties", payload: { result: null } }
+            : {
+                kind: "styleProperties",
+                payload: {
+                  result: {
+                    collection: "paragraph",
+                    styleId: "ParagraphStyle/H",
+                    basedOn: null,
+                    entries: [],
+                  },
                 },
               },
-            },
     };
     const facts = await readStateFacts(client as never);
     expect(facts.items.get("r1")).toEqual({
