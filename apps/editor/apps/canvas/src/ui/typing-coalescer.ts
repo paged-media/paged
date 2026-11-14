@@ -104,7 +104,9 @@ export function createTypingCoalescer(client: CanvasClient): TypingCoalescer {
       for (const w of p.waiters) w(reply);
     };
     client
-      .mutate(p.insert)
+      // Editor ADR 1232 amendment: a typed insert; its change reaches the
+      // panels once per burst.
+      .mutate(p.insert, { typing: true })
       .then(settle, (err: unknown) => {
         settle({
           kind: "mutationFailed",

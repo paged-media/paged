@@ -95,12 +95,12 @@ worker's first paint is its first present). "Before" is `main` at the time, "aft
 tree with the store; the runs alternated. The 54 MB template embeds thirty RGB JPEGs of about
 2 MB each in its spreads.
 
-| 54 MB template, 8 pages                        | Before            | After                                        |
-| ---------------------------------------------- | ----------------- | -------------------------------------------- |
-| First paint, worker (from the layout)          | 6.3 s             | 4.4 s                                        |
-| First paint, screenshot (from the file)        | 17.0 s            | 10.7 s                                       |
-| Memory, page and workers (opened, after use)   | 347 MB, 237 MB    | 347 MB, 237 MB                               |
-| Decoded pictures held (opened, after use)      | not reported      | 36 MB (32 pictures), 62 MB (40), budget 256 MiB |
+| 54 MB template, 8 pages                      | Before         | After                                           |
+| -------------------------------------------- | -------------- | ----------------------------------------------- |
+| First paint, worker (from the layout)        | 6.3 s          | 4.4 s                                           |
+| First paint, screenshot (from the file)      | 17.0 s         | 10.7 s                                          |
+| Memory, page and workers (opened, after use) | 347 MB, 237 MB | 347 MB, 237 MB                                  |
+| Decoded pictures held (opened, after use)    | not reported   | 36 MB (32 pictures), 62 MB (40), budget 256 MiB |
 
 The pictures of a page drawn at fit size are now decoded at the level the draw needs (a JPEG
 at its DCT scale) and kept, within the budget, for the thumbnails, the tiles and the GPU scenes
@@ -108,6 +108,25 @@ alike; before, every draw decoded each one at the size the build recorded (up to
 the GPU kept its own full-size copy. Of the 4.4 s left, 3.7 s is the first GPU present of a page
 of nineteen photographs (the worker journal's `worker.frame`). The 105 MB template's first
 present came 10 ms after its layout in both runs; its pictures held after use are 67 MB (23).
+
+**Typing in a burst** (editor ADR 1232 amendment of 2026-11-14; measured that day, load
+average 7–22, the same server and browser, the runs alternated). The engine lays a typed
+insert out incrementally (engine ADR 027: the edited story resumes at the edit and stops where
+its flow rejoins; the other stories' emissions are reused; unchanged pages are adopted): the
+reply's own time per insert was 1 ms on fixture A and 7–10 ms (p95 11–14 ms) on the 40-page
+stress document. The latency was elsewhere: every insert's change made the panels re-read the
+document (the inspector's fields, the collections, the document meta, module stores), some 210
+requests per key on fixture A and 230 on the stress document, and the next insert waited behind
+them in the worker. A typed insert's change now reaches the panels once per burst (160 ms
+after the last key, at least every 600 ms), and the caret's listeners likewise; the caller and
+the caret itself are answered at once.
+
+| Typing at 55 a second                   | Before (two runs)                 | After (two runs)                |
+| --------------------------------------- | --------------------------------- | ------------------------------- |
+| Fixture A, p50 / p95 / p99              | 197 / 374 / 490 · 106 / 254 / 388 | 94 / 181 / 243 · 94 / 235 / 323 |
+| Stress document, p50 / p95 / p99        | 208 / 702 / 868 · 147 / 349 / 437 | 69 / 304 / 431 · 89 / 266 / 594 |
+| Requests per insert (fixture A, stress) | 212, 235 · 204, 236               | 56, 59 · 60, 62                 |
+| Engine time per insert, p50 / p95       | 1 / 2 ms; 7 / 13 ms               | 1 / 2 ms; 7–10 / 11–14 ms       |
 
 ## Budgets
 
@@ -126,15 +145,15 @@ real regression fails and a loaded runner does not:
 
 ## Caches, their owners and their budgets
 
-| Cache                                 | Owner                                                                 | Budget                                     | Eviction                                                                        |
-| ------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------- |
-| CPU page tiles (decoded bitmaps)      | `apps/canvas/src/worker/render.ts` (`TILE_BUDGET_BYTES`)              | 64 MB                                      | The tiles drawn longest ago first; never a tile on screen. All on a new layout. |
-| GPU page scenes                       | `engine/core/crates/paged-canvas-wasm/src/scene_cache.rs`             | 200 page scenes                            | LRU; a page's scenes on its edit; all on a new document.                        |
-| Page thumbnails (compressed PNG URLs) | `packages/shell/src/state/page-thumbnails.ts`, `document-loader.ts`   | One per page                               | Dropped and revoked with their page; re-taken after an edit.                    |
-| Undo history                          | the engine's undo log (`MAX_APPLIED_LOG`), the History panel's depth  | 10,000 steps (the setting may lower it)    | The oldest step first.                                                          |
-| Fonts                                 | the engine's font registry (`client.clearFontRegistry`)               | The document's own                         | With the document.                                                              |
-| Decoded pictures (pixels)             | the engine's decoded-picture store, `engine/core/crates/paged-gpu/src/image_store.rs` (engine ADR 1311) | 256 MiB (`DEFAULT_BUDGET_BYTES`) | The pictures drawn longest ago first; a decode larger than the budget is not kept. All with the document. |
-| Pictures' encoded bytes and sizes     | the live model's `image_decode_cache` (`engine/core/crates/paged-canvas/src/model.rs`) | The document's own pictures, and at most eight filter-stack twins a picture (engine ADR 1037) | With the document. |
+| Cache                                 | Owner                                                                                                   | Budget                                                                                        | Eviction                                                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| CPU page tiles (decoded bitmaps)      | `apps/canvas/src/worker/render.ts` (`TILE_BUDGET_BYTES`)                                                | 64 MB                                                                                         | The tiles drawn longest ago first; never a tile on screen. All on a new layout.                           |
+| GPU page scenes                       | `engine/core/crates/paged-canvas-wasm/src/scene_cache.rs`                                               | 200 page scenes                                                                               | LRU; a page's scenes on its edit; all on a new document.                                                  |
+| Page thumbnails (compressed PNG URLs) | `packages/shell/src/state/page-thumbnails.ts`, `document-loader.ts`                                     | One per page                                                                                  | Dropped and revoked with their page; re-taken after an edit.                                              |
+| Undo history                          | the engine's undo log (`MAX_APPLIED_LOG`), the History panel's depth                                    | 10,000 steps (the setting may lower it)                                                       | The oldest step first.                                                                                    |
+| Fonts                                 | the engine's font registry (`client.clearFontRegistry`)                                                 | The document's own                                                                            | With the document.                                                                                        |
+| Decoded pictures (pixels)             | the engine's decoded-picture store, `engine/core/crates/paged-gpu/src/image_store.rs` (engine ADR 1311) | 256 MiB (`DEFAULT_BUDGET_BYTES`)                                                              | The pictures drawn longest ago first; a decode larger than the budget is not kept. All with the document. |
+| Pictures' encoded bytes and sizes     | the live model's `image_decode_cache` (`engine/core/crates/paged-canvas/src/model.rs`)                  | The document's own pictures, and at most eight filter-stack twins a picture (engine ADR 1037) | With the document.                                                                                        |
 
 A placed picture's pixels live in one place: the engine's decoded-picture store, shared by the
 CPU tiles, the page thumbnails and the GPU page scenes. A draw asks for the picture at the
@@ -154,5 +173,11 @@ the CPU tiles and the GPU scenes hold (`worker.caches`); the suite reports it.
 - **Typing folds.** While one insert is in flight, the characters behind it wait in one
   pending insert at the advancing caret and go as one mutation with the reply: one relayout per
   round trip however fast the keys come (`apps/canvas/src/ui/typing-coalescer.ts`).
+- **A burst of keys is one change for the panels.** A typed insert (`mutate(…, { typing: true
+})`) answers its caller at once, but the client holds its broadcast — what the panels and the
+  plugins re-read the document on — until the keys pause (`TYPING_SETTLE_MS`, 160 ms; at least
+  every `TYPING_HOLD_MAX_MS`, 600 ms), as one change naming every page the keys changed; any
+  other change lets it out first. The caret a key advanced reaches the selection's listeners
+  the same way (`content-selection-context.tsx`).
 - **Nudges fold** the same way (ADR 251), and an inspector scrub is one coalesced undo step
   (engine ADR 1304).

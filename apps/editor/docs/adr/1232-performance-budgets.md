@@ -95,3 +95,24 @@ store, the CPU tiles, the GPU scenes), and the performance suite reports it with
 the 54 MB template the first visible page came 4.4 s after the layout instead of 6.3 s, 10.7 s
 after the file was chosen instead of 17.0 s, with 36 MB of pictures held when opened and 62 MB
 after use (`reference/performance.md`).
+
+## Amendment 2026-11-14: a burst of typing is one change for the panels (F-56)
+
+Measured with the engine's own time per insert and the requests sent while typing (both now in
+the suite's report): the engine lays a typed insert out incrementally (engine ADR 027) in 1 ms
+on fixture A and 7–10 ms on the 40-page stress document, and a burst was slow because every
+insert's change made the panels re-read the document — some 210 requests per key on fixture A,
+230 on the stress document — and the next insert waited behind them in the worker. The text
+editor now sends a typed insert as `mutate(…, { typing: true })`: the client answers the caller
+at once and holds the change's broadcast until the keys pause (`TYPING_SETTLE_MS`, 160 ms; at
+least every `TYPING_HOLD_MAX_MS`, 600 ms), merging the held changes into one (every page they
+changed, the last step); any other change of the document lets it out first, so subscribers
+still see changes in order (extensions ADR 327 amended). The caret a typed key advanced reaches
+the selection's listeners the same way. Typing in a burst on fixture A went from 197 / 374 / 490
+and 106 / 254 / 388 ms (p50 / p95 / p99, two runs) to 94 / 181 / 243 and 94 / 235 / 323; on the
+stress document from 208 / 702 / 868 and 147 / 349 / 437 to 69 / 304 / 431 and 89 / 266 / 594,
+with 56 to 62 requests per key instead of 204 to 236. That the layout stays the whole
+document's is a property test now: seeded bursts of folded inserts, paragraph breaks and
+backspaces on six generated documents, each operation checked against a cold build
+(`engine/core/crates/paged-canvas/tests/it/typing_bursts.rs`). F-56 is closed on these numbers;
+the nightly keeps measuring.

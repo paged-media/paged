@@ -29,6 +29,8 @@ export {
   changesTheDocument,
   GestureInProgressError,
   gestureInProgressOf,
+  TYPING_HOLD_MAX_MS,
+  TYPING_SETTLE_MS,
   type CanvasClientOptions,
   type EditScope,
   type GesturePressResult,

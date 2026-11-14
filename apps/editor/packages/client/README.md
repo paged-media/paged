@@ -176,6 +176,14 @@ elementId, uri, bytes? } })` — or `mutateWithBytes` with `bytes: []` and
   transparent ground; `screenExtent(pageId)` says where the tile goes, the
   rect the GPU lane clips to.
 
+## Typed changes (editor ADR 1232 amendment)
+
+`mutate(mutation, { typing: true })` is a typed key's insert: the call
+resolves with its reply at once, but subscribers hear of the change once the
+keys pause (`TYPING_SETTLE_MS`, at least every `TYPING_HOLD_MAX_MS`), as one
+`mutationApplied` naming every page the held keys changed (the last step's
+`appliedSeq`); any other change of the document lets the held one out first.
+
 ## Decoded pictures (engine ADR 1311)
 
 The worker's `perfCounters()` reports the engine's decoded-picture store

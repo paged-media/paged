@@ -1525,6 +1525,17 @@ latency (p50 186–233 ms before, 227–232 ms after; p95 433–509 ms before, 4
 not move beyond its noise, so the finding stays open until the nightly job's quiet runner shows
 the burst flat (`docs/reference/performance.md`).
 
+**Fixed (2026-11-14, editor ADR 1232 amendment).** Measured with the engine's own time per
+insert and the requests sent while typing: the engine lays a typed insert out incrementally
+(1 ms on a short story, 7–10 ms in the 40-page document), and the burst was slow because each
+insert's change made the panels re-read the document, some 210 to 236 requests per key, ahead
+of the next insert. A typed insert's change now reaches the panels once per burst (160 ms after
+the last key, at least every 600 ms) and the caret's listeners likewise. A burst of 55 keys a
+second: 94 / 181 / 243 and 94 / 235 / 323 ms (p50 / p95 / p99) on the short story, before 197 /
+374 / 490 and 106 / 254 / 388; 69 / 304 / 431 and 89 / 266 / 594 in the 40-page document, before
+208 / 702 / 868 and 147 / 349 / 437; 56 to 62 requests per key. Shared development machine (load
+7–22); the nightly on its quiet runner keeps the record.
+
 ### Visual consistency
 
 <a id="f-17"></a>

@@ -347,7 +347,8 @@ a pinch over a press still waiting for its hit test changes the camera and nothi
 nightly ([ADR 1232](adr/1232-performance-budgets.md),
 [`reference/performance.md`](reference/performance.md)): the CPU render draws the page at the
 viewport's centre first, one tile per tick, within a 64 MB tile budget; typing that outruns the
-engine folds into one insert per round trip (F-56). Placed pictures are decoded at the size
+engine folds into one insert per round trip, and a burst of keys is one change for the panels
+(F-56 closed: 56 to 62 requests per key instead of 204 to 236). Placed pictures are decoded at the size
 they are shown, from one store per worker with a 256 MiB budget (engine ADR 1311; the
 inventory's exception `EXC-003` is closed).
 
