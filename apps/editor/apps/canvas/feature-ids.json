@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 964,
+    "command": 968,
     "keybinding": 216,
-    "menu": 702,
-    "panel": 151,
+    "menu": 703,
+    "panel": 152,
     "tool": 123
   },
   "features": [
@@ -3946,6 +3946,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.file.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.file.exportPdf",
       "kind": "command",
       "owner": "editor"
@@ -3971,6 +3976,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.file.newDialog",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.file.newFromBrief",
       "kind": "command",
       "owner": "editor"
@@ -3982,6 +3992,11 @@
     },
     {
       "id": "command:paged.file.openPdf",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.openRecent",
       "kind": "command",
       "owner": "editor"
     },
@@ -4797,6 +4812,11 @@
     },
     {
       "id": "command:paged.view.toggleHiddenCharacters",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleIssueMarkers",
       "kind": "command",
       "owner": "editor"
     },
@@ -6691,7 +6711,7 @@
       "owner": "editor"
     },
     {
-      "id": "menu:File/Open recent",
+      "id": "menu:File/Open recent…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -9346,6 +9366,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Show issue markers",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Show pixel grid",
       "kind": "menu",
       "owner": "editor"
@@ -9902,6 +9927,11 @@
     },
     {
       "id": "panel:paged.hyperlinks",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.import-report",
       "kind": "panel",
       "owner": "editor"
     },
@@ -10821,6 +10851,12 @@
     {
       "id": "menu:Draw/Path/Outline stroke",
       "replacement": "menu:Object/Path/Outline stroke…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:File/Open recent",
+      "replacement": "menu:File/Open recent…",
       "deprecatedIn": "0.80.0",
       "removeIn": "0.82.0"
     },

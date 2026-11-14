@@ -1,4 +1,4 @@
-# ADR 1226 — High contrast and AA
+# ADR 1227 — High contrast and AA
 
 - **Status:** Accepted 2026-11-14 (plan task AP3 of
   [`interaction-plan.md`](../interaction-plan.md)).

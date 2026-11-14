@@ -358,17 +358,18 @@ function useSceneTree(): { roots: SceneTreeNode[]; rev: number } | null {
   } | null>(null);
   useEffect(() => {
     let live = true;
-    let rev = 0;
+    const reads = { n: 0 };
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const land = (roots: SceneTreeNode[]) => {
+      if (!live) return;
+      reads.n += 1;
+      setState({ roots, rev: reads.n });
+    };
     const refresh = () => {
       void client
         .sceneTree()
-        .then((roots) => {
-          if (live) setState({ roots, rev: ++rev });
-        })
-        .catch(() => {
-          if (live) setState({ roots: [], rev: ++rev });
-        });
+        .then(land)
+        .catch(() => land([]));
     };
     refresh();
     const off = client.subscribe((msg) => {

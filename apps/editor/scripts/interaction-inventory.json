@@ -4070,7 +4070,7 @@
     {
       "id": "EXC-003",
       "contract": ["UXI-PRF-004"],
-      "scope": "The engine's decoded-image cache (`image_decode_cache` in engine/core/crates/paged-canvas/src/model.rs) holds every image of the open document at full resolution for as long as it is open; the editor's own caches (the worker's CPU tiles, the GPU scene cache, the page thumbnails) have budgets and eviction rules (editor ADR 1227)",
+      "scope": "The engine's decoded-image cache (`image_decode_cache` in engine/core/crates/paged-canvas/src/model.rs) holds every image of the open document at full resolution for as long as it is open; the editor's own caches (the worker's CPU tiles, the GPU scene cache, the page thumbnails) have budgets and eviction rules (editor ADR 1228)",
       "interactions": [],
       "tests": [],
       "why": "Every rebuild composes every page, so a decoded image the budget evicted would be decoded again on the next edit; a budget that holds needs images decoded at the resolution they are shown (proxies), and the visible pages composed first — engine work with its own record and protocol.",

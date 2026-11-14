@@ -125,11 +125,11 @@ const HOST_MENU = [
   "Edit/Settings/Interface density/Comfortable",
   "Edit/Settings/Interface density/Professional",
   "Edit/Settings/Interface density/Compact",
-  // Editor ADR 1226 — the contrast preference.
+  // Editor ADR 1227 — the contrast preference.
   "Edit/Settings/Contrast/As the system",
   "Edit/Settings/Contrast/Standard",
   "Edit/Settings/Contrast/High",
-  // Editor ADR 1225 — the object tree, from the canvas.
+  // Editor ADR 1226 — the object tree, from the canvas.
   "View/Go to object tree",
   "View/Focus workspace",
   // Editor ADR 1211 — the named views beside 100 %, the calibration, and
@@ -155,7 +155,7 @@ const HOST_MENU = [
   "Object/Group",
   "Object/Ungroup",
   "Object/Select parent group",
-  // Editor ADR 1225 — the selection cycle through overlapping objects.
+  // Editor ADR 1226 — the selection cycle through overlapping objects.
   "Object/Select next object below",
   "Object/Select next object above",
   "Object/Nudge left",
@@ -277,7 +277,7 @@ const HOST_MENU = [
   "Object/Transform/Reflect vertically",
   "Object/Transform/Reflect…",
   "Object/Transform/Transform again",
-  // Editor ADR 1225 — the keyboard's rotate and scale steps.
+  // Editor ADR 1226 — the keyboard's rotate and scale steps.
   "Object/Transform/Rotate 90° clockwise",
   "Object/Transform/Rotate 90° counterclockwise",
   "Object/Transform/Rotate 15° clockwise",

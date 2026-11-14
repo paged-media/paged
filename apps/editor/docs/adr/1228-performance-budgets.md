@@ -1,4 +1,4 @@
-# ADR 1227 — Performance budgets
+# ADR 1228 — Performance budgets
 
 - **Status:** Accepted 2026-11-14 (plan task AP5 of
   [`interaction-plan.md`](../interaction-plan.md)).

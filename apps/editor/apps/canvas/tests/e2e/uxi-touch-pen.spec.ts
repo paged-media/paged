@@ -125,6 +125,9 @@ test.describe("touch", () => {
     const other = await clientPointOf(page, { at: A.emptyAt });
     // The first finger's press waits for its hit test while the second
     // lands: a selection candidate, pending.
+    // (The press in one call, IC5, asks `beginGestureAt`; the legacy
+    // pointer path, `hitTest`. Both are held.)
+    await delayReply(page, "beginGestureAt", 800);
     await delayReply(page, "hitTest", 800);
     await expectHistoryUnchanged(
       page,
