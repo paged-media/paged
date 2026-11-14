@@ -1,4 +1,4 @@
-# ADR 1236 — Document X-Ray answers from the model
+# ADR 1237 — Document X-Ray answers from the model
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `apps/canvas/src/panels/xray-panel.tsx` (new: the "Why?" inspector),

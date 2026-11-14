@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Document X-Ray's "Why?" inspector (editor ADR 1236): the engine's facts
+// Document X-Ray's "Why?" inspector (editor ADR 1237): the engine's facts
 // for the caret's text and the selected item, shown as they come — the
 // winning style level per property and what a local override overrides,
 // the lock with its reason and Unlock, the picture, the flow, what a style

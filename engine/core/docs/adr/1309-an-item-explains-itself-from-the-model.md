@@ -7,7 +7,7 @@
   `paged-scene` (`applied_paragraph_style` is public), the editor's client (`CanvasClient.explain`).
   Implements the X-Ray half of task PX1 of `apps/editor/docs/interaction-plan.md` (the UX
   strategy's Concept A; the interaction contract's §25.1, "engine-backed facts, not speculative
-  explanations"); the editor's side is editor ADR 1236.
+  explanations"); the editor's side is editor ADR 1237.
 
 ## Context
 

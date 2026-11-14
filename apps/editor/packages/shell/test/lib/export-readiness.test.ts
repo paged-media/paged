@@ -170,7 +170,7 @@ describe("the preview facts", () => {
       pages: "all 3 pages",
       size: "595.3 × 841.9 pt (210 × 297 mm)",
       bleed: "8.5 pt on every side",
-      color: "PDF 1.7 · no output intent · colour numbers kept",
+      color: "PDF 1.7 · no output intent · color numbers kept",
       fonts: "2 families embedded as subsets · 1 substituted",
       transparency: "Kept live, not flattened",
       images: "Downsampled to 150 ppi where finer",

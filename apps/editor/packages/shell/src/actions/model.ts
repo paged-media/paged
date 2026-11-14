@@ -83,9 +83,25 @@
 import { t } from "@paged-media/strings";
 import { ACTIONS } from "./messages";
 import type { CommandInvocation } from "../registries/command";
+import {
+  applyParams,
+  isObjectAddress,
+  isParamList,
+  objectReferencesIn,
+  selectionTokensIn,
+  tokenizeSelection,
+  type ActionParam,
+  type SelectionAddresses,
+} from "./intent";
 
-/** Bump when the persisted shape changes incompatibly. */
+/** Bump when the persisted shape changes incompatibly. Editor ADR 1240's
+ *  fields (a step's `context`, an action's `params` and `scope`) are
+ *  additive and optional, so the number stays. */
 export const ACTIONS_SCHEMA_VERSION = 1;
+
+/** Editor ADR 1240 — the host command a recorded property write replays
+ *  through: `{ targets, path, value }`, one `host.objects` batch. */
+export const SET_PROPERTY_COMMAND = "paged.object.setProperty";
 
 /**
  * How a step behaves at replay time. Derived from the payload alone —
@@ -131,6 +147,11 @@ export interface ActionStep {
    *  A stop invokes nothing — it is not a command, and a batch run, which
    *  has nobody to read the message, passes it by and logs it. */
   stop?: { message: string };
+  /** Editor ADR 1240 — the edit context the step ran in (its type, e.g.
+   *  `sheet`), or null on the page. A replay outside it is refused, by
+   *  name, rather than run against whatever the page offers. Absent on a
+   *  step an older build recorded: no check. */
+  context?: string | null;
 }
 
 /** The pseudo command an inserted stop carries. Never registered: the
@@ -201,6 +222,11 @@ export interface UncapturedTally {
   directEdits: number;
 }
 
+/** Editor ADR 1240 — where an action is kept: in the editor for this user
+ *  (the browser's settings store, every document), or in the document it
+ *  was saved to (a label on `doc`, which travels with the file). */
+export type ActionScope = "user" | "document";
+
 export interface PagedAction {
   id: string;
   name: string;
@@ -211,6 +237,10 @@ export interface PagedAction {
   /** Opt in to replaying `documentBound` steps. Off by default: those
    *  ids only exist in the document the action was recorded in. */
   includeDocumentBound: boolean;
+  /** Editor ADR 1240 — the values a user may change before a run. */
+  params?: ActionParam[];
+  /** Editor ADR 1240 — absent reads `user`. */
+  scope?: ActionScope;
 }
 
 export interface ActionLibrary {
@@ -241,8 +271,15 @@ export const NON_RECORDABLE_COMMANDS: readonly string[] = [
   "paged.actions.batch",
 ];
 
+/** Editor ADR 1240 — the palette's entry of one saved action is
+ *  `paged.actions.run:<action id>`. */
+export const RUN_ACTION_PREFIX = "paged.actions.run:";
+
 export function isRecordable(commandId: string): boolean {
-  return !NON_RECORDABLE_COMMANDS.includes(commandId);
+  return (
+    !NON_RECORDABLE_COMMANDS.includes(commandId) &&
+    !commandId.startsWith(RUN_ACTION_PREFIX)
+  );
 }
 
 // ─────────────────────────────────────────── payload classification
@@ -326,16 +363,81 @@ export function classifyPayload(payload: unknown): ClassifiedPayload {
   };
 }
 
-/** Build a step from one observed invocation. */
-export function stepFromInvocation(invocation: CommandInvocation): ActionStep {
-  const { verdict, payload } = classifyPayload(invocation.payload);
+/** Build a step from one observed invocation. Editor ADR 1240: where the
+ *  payload names exactly what was selected, it records the selection as an
+ *  intent (a token the replay resolves to its own selection), and the step
+ *  keeps the edit context it ran in. */
+export function stepFromInvocation(
+  invocation: CommandInvocation,
+  at?: { selection?: SelectionAddresses; context?: string | null },
+): ActionStep {
+  const classified = classifyPayload(invocation.payload);
+  let { verdict, payload } = classified;
+  if (at?.selection && payload !== undefined && verdict !== "unserializable") {
+    payload = tokenizeSelection(payload, at.selection);
+    // What is left that names an object of this document is a reference
+    // to it: an address (ADR 131) or an engine self id.
+    verdict =
+      looksLikeDocumentId(payload) ||
+      objectReferencesIn(payload, isObjectAddress).length > 0
+        ? "documentBound"
+        : "portable";
+  }
   const step: ActionStep = {
     command: invocation.id,
     title: invocation.title,
     verdict,
   };
   if (payload !== undefined) step.payload = payload;
+  if (at && at.context !== undefined) step.context = at.context;
   return step;
+}
+
+/** One `set` a panel field committed through `host.objects`. */
+export interface ObservedSet {
+  address: string;
+  path: string;
+  value: unknown;
+}
+
+/**
+ * Editor ADR 1240 — the steps one observed object write records: one
+ * {@link SET_PROPERTY_COMMAND} step per (path, value), its targets the
+ * selection token when they are exactly what was selected. A field's commit
+ * over a multi-selection is one batch of equal sets, so it records as one
+ * step.
+ */
+export function stepsFromObjectWrite(
+  sets: readonly ObservedSet[],
+  title: (path: string, value: unknown) => string,
+  at: { selection: SelectionAddresses; context: string | null },
+): ActionStep[] {
+  const groups = new Map<
+    string,
+    { path: string; value: unknown; targets: string[] }
+  >();
+  for (const s of sets) {
+    let key: string;
+    try {
+      key = `${s.path}\u0000${JSON.stringify(s.value)}`;
+    } catch {
+      key = `${s.path}\u0000${String(s.value)}`;
+    }
+    const g = groups.get(key) ?? { path: s.path, value: s.value, targets: [] };
+    g.targets.push(s.address);
+    groups.set(key, g);
+  }
+  return [...groups.values()].map((g) =>
+    stepFromInvocation(
+      {
+        seq: 0,
+        id: SET_PROPERTY_COMMAND,
+        title: title(g.path, g.value),
+        payload: { targets: g.targets, path: g.path, value: g.value },
+      },
+      at,
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────── replay plan
@@ -460,8 +562,13 @@ export function toDemoScript(action: PagedAction): string {
       lines.push(`// ${index + 1}. stop: ${step.stop?.message ?? ""}`);
       continue;
     }
-    const payload =
-      step.payload === undefined ? "" : `, ${JSON.stringify(step.payload)}`;
+    const value = applyParams(step.payload, index, action.params);
+    const payload = value === undefined ? "" : `, ${JSON.stringify(value)}`;
+    if (selectionTokensIn(value).size > 0) {
+      lines.push(
+        `// ${index + 1}. {"$selection": …} is the selection when the step runs (editor ADR 1240).`,
+      );
+    }
     lines.push(
       `await editor.runCommand(${JSON.stringify(step.command)}${payload}); // ${index + 1}. ${step.title}`,
     );
@@ -498,8 +605,22 @@ function isStep(value: unknown): value is ActionStep {
     typeof s.title === "string" &&
     VERDICTS.includes(s.verdict) &&
     (s.pause === undefined || typeof s.pause === "boolean") &&
-    (s.stop === undefined || (!!s.stop && typeof s.stop.message === "string"))
+    (s.stop === undefined ||
+      (!!s.stop && typeof s.stop.message === "string")) &&
+    (s.context === undefined ||
+      s.context === null ||
+      typeof s.context === "string")
   );
+}
+
+/** Editor ADR 1240's optional fields, kept when well formed and dropped
+ *  (the field, not the action) when not: an older build's action has none. */
+function withOptionalFields(a: PagedAction): PagedAction {
+  const { params, scope, ...rest } = a;
+  const out: PagedAction = { ...rest };
+  if (params !== undefined && isParamList(params)) out.params = params;
+  if (scope === "user" || scope === "document") out.scope = scope;
+  return out;
 }
 
 function isImportRule(value: unknown): value is ImportRule {
@@ -529,17 +650,19 @@ export function parseLibrary(value: unknown): ActionLibrary {
   ) {
     return EMPTY_LIBRARY;
   }
-  const actions = lib.actions.filter(
-    (a): a is PagedAction =>
-      !!a &&
-      typeof a.id === "string" &&
-      typeof a.name === "string" &&
-      typeof a.createdAt === "number" &&
-      Array.isArray(a.steps) &&
-      a.steps.every(isStep) &&
-      isTally(a.uncaptured) &&
-      typeof a.includeDocumentBound === "boolean",
-  );
+  const actions = lib.actions
+    .filter(
+      (a): a is PagedAction =>
+        !!a &&
+        typeof a.id === "string" &&
+        typeof a.name === "string" &&
+        typeof a.createdAt === "number" &&
+        Array.isArray(a.steps) &&
+        a.steps.every(isStep) &&
+        isTally(a.uncaptured) &&
+        typeof a.includeDocumentBound === "boolean",
+    )
+    .map(withOptionalFields);
   const rules = Array.isArray(lib.importRules)
     ? lib.importRules.filter(isImportRule)
     : [];

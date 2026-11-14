@@ -79,6 +79,12 @@ test.describe("Top navigation", () => {
         timeout: 30_000,
       },
     );
+    // The header names a document from the load's first stage (editor ADR
+    // 1208): the engine holds it once the viewport says "ready". A
+    // selection made before that reached no document (NoDocument).
+    await expect(
+      page.locator('[data-paged-viewport][data-loading-stage="ready"]'),
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test("the core menus are fixed; plugin menus follow the selection @feat:editor-shell.menus @level:happy", async ({

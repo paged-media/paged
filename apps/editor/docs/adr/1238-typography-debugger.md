@@ -1,4 +1,4 @@
-# ADR 1237 — The Typography Debugger
+# ADR 1238 — The Typography Debugger
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** `apps/canvas/src/typography-evidence.ts` (new: the target, the words for a line's

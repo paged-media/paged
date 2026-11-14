@@ -108,7 +108,7 @@ async function alignBackAndFront(page: Page): Promise<void> {
 }
 
 test.describe("PX3 — design constraints are validated intent", () => {
-  test("PX3 — a constraint from the selection is one undo step, is checked continuously and never moves anything @feat:editor-shell.panels.publication-health @feat:plugin-platform.document-metadata @level:happy", async ({
+  test("PX3 — a constraint from the selection is one undo step, is checked continuously and never moves anything @feat:editor-shell.panels.publication-health @feat:plugin-platform.document-metadata @level:happy @uxi:UXI-MUT-001 @uxi:UXI-OVR-002", async ({
     page,
   }) => {
     covers(
@@ -150,7 +150,7 @@ test.describe("PX3 — design constraints are validated intent", () => {
     await expect(page.locator("[data-constraint-glyph]")).toHaveCount(1);
   });
 
-  test("PX3 — the fix says what it will do, previews where, and applies as one undo step @feat:editor-shell.panels.publication-health @feat:editor-shell.panels.align @level:happy", async ({
+  test("PX3 — the fix says what it will do, previews where, and applies as one undo step @feat:editor-shell.panels.publication-health @feat:editor-shell.panels.align @level:happy @uxi:UXI-MUT-006", async ({
     page,
   }) => {
     await alignBackAndFront(page);

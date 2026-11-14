@@ -529,7 +529,7 @@ async function applySelectSame(
   const tolerance = strokeWeightToleranceOf(payload);
   if (tolerance > 0 && c !== "strokeWeight") {
     host.log.debug(
-      `${commandId}: a tolerance applies to stroke WEIGHT only — a colour is ` +
+      `${commandId}: a tolerance applies to stroke WEIGHT only — a color is ` +
         "a swatch reference here, and no bundle door reads a swatch's values " +
         "(see commands/select-same.ts) — matching exactly",
     );

@@ -77,8 +77,8 @@ const P = defineMessages("draw.templateField", {
   notPermitted: "not permitted: {permission} on {target}",
   locked: "{node} is locked",
   engineRefused: "the engine refused the write",
-  chooseColour: "choose a colour",
-  notOneColour: `"{value}" is not one of this field's colours`,
+  chooseColour: "choose a color",
+  notOneColour: `"{value}" is not one of this field's colors`,
   chooseStyle: "choose a style",
   notOneStyle: `"{value}" is not one of this field's styles`,
   chooseSymbol: "choose a symbol",
@@ -89,7 +89,7 @@ const P = defineMessages("draw.templateField", {
   oneLine: "text on a path is one line: remove the line breaks",
   noText: "{target} carries no text on its path",
   notInstance: "{id} is not a symbol instance",
-  paintTitle: "Fill or stroke colour",
+  paintTitle: "Fill or stroke color",
   graphicStyleTitle: "Graphic style",
   textOnPathTitle: "Text on a path",
   symbolTitle: "Symbol",
@@ -117,7 +117,7 @@ export const SYMBOL_CHOICE_FIELD = `${DRAW_ID}.symbolChoice`;
 /** The manifest's `contributes.objectModel.templateFields[]`. */
 export const DRAW_TEMPLATE_FIELDS: readonly { kind: string; title: string }[] =
   [
-    { kind: PAINT_FIELD, title: "Fill or stroke colour" },
+    { kind: PAINT_FIELD, title: "Fill or stroke color" },
     { kind: GRAPHIC_STYLE_FIELD, title: "Graphic style" },
     { kind: TEXT_ON_PATH_FIELD, title: "Text on a path" },
     { kind: SYMBOL_CHOICE_FIELD, title: "Symbol" },

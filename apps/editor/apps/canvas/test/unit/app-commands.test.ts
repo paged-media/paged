@@ -170,7 +170,7 @@ test("show issue markers flips its own flag (editor ADR 1223) [editor-shell.pane
   expect(getViewToggle(scope, "issueMarkers")).toBe(false);
 });
 
-test("X-Ray and the Typography debugger flip their own flags (editor ADRs 1236, 1237) [editor-shell.panels.inspector]", async () => {
+test("X-Ray and the Typography debugger flip their own flags (editor ADRs 1237, 1238) [editor-shell.panels.inspector]", async () => {
   covers(
     "command:paged.view.toggleXray",
     "command:paged.view.toggleTypographyDebugger",

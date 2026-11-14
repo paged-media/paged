@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Typography Debugger on the canvas (editor ADR 1237): with View ▸
+// The Typography Debugger on the canvas (editor ADR 1238): with View ▸
 // Typography debugger on, every composed line of the selected story is
 // tinted by how tightly it is set (the engine's evidence, engine ADR
 // 1310), a hyphen or a forced break is marked at the line's end, and the

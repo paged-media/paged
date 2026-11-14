@@ -62,6 +62,7 @@ import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
+import { buildVerbCommands } from "../../../src/verb-commands";
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   SELECT_ABOVE_COMMAND,
@@ -108,7 +109,9 @@ const SITES: Record<string, number> = {
   "packages/shell/src/PagedShell.tsx": 13,
   "packages/shell/src/state/commands/registry-derived.ts": 3,
   "packages/shell/src/chrome/FillStrokeCluster.tsx": 3,
-  "packages/shell/src/actions/actions-context.tsx": 3,
+  // Record, stop, play, and editor ADR 1240's "Run action: <name>" (one per
+  // saved action, ids the user's: not part of the static surface).
+  "packages/shell/src/actions/actions-context.tsx": 4,
   // Editor ADR 1208 / 1209 — the workspace's own commands.
   "packages/shell/src/cockpit/focus-workspace.ts": 1,
   "packages/shell/src/cockpit/workspace-class.ts": 1,
@@ -203,6 +206,7 @@ function tableIds(): string[] {
     ...buildClipboardCommands(noop),
     ...buildSvgCommands(noop),
     ...buildAssetExportCommands(),
+    ...buildVerbCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
     SELECT_ABOVE_COMMAND,
@@ -306,6 +310,7 @@ describe("the host command inventory", () => {
       "clipboardCommands",
       "svgCommands",
       "buildAssetExportCommands()",
+      "buildVerbCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
       "SELECT_ABOVE_COMMAND",

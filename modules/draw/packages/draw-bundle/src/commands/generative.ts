@@ -76,7 +76,7 @@ const M = defineMessages("draw.generative", {
   textToVector:
     "Draw: Text to vector (the Claude agent writes an SVG, or a generated picture is traced)",
   generativeRecolor:
-    "Color: Generative recolor (the Claude agent recolours the selection from a prompt — one undo step)",
+    "Color: Generative recolor (the Claude agent recolors the selection from a prompt — one undo step)",
   textToVectorOptions: "Draw: Text to vector…",
   generativeRecolorOptions: "Color: Generative recolor…",
 });
@@ -430,10 +430,10 @@ export async function applyGenerativeRecolor(
     host.log.warn(`${label}: ${reason}`);
     return { applied: false, changed: 0, reason };
   };
-  if (wish === "") return none("say how to recolour: the prompt is empty");
+  if (wish === "") return none("say how to recolor: the prompt is empty");
   const read = await readArtworkColors(host);
   if (read.colors.length === 0)
-    return none("the selection carries no colour to recolour");
+    return none("the selection carries no color to recolor");
   let reply: string;
   try {
     reply = await askAgent(host, recolorPromptFor(read.colors, wish));
@@ -442,11 +442,11 @@ export async function applyGenerativeRecolor(
   }
   const map = parseColorMap(reply, read.colors);
   if (Object.keys(map).length === 0)
-    return none("the agent's answer holds no usable colour map");
+    return none("the agent's answer holds no usable color map");
   const outcome = await applyRecolorArtwork(host, { mode: "map", map });
   return outcome.applied
     ? { applied: true, changed: outcome.changed }
-    : { applied: false, changed: 0, reason: "the recolour changed nothing" };
+    : { applied: false, changed: 0, reason: "the recolor changed nothing" };
 }
 
 // -------------------------------------------------------------- commands

@@ -64,6 +64,7 @@ import {
   Icon,
   StatusPill,
   groupSpreads,
+  useDeclaredPageNoun,
   useSelection,
   printOutputFacts,
   statusColor,
@@ -110,6 +111,9 @@ import {
 const M = defineMessages("app.cockpitDocumentMapPanel", {
   title: "Document Map",
   searchPages: "Search pages",
+  /** Under the noun the document declares for its pages (extensions ADR
+   *  1111): "Search slides". */
+  searchNamed: "Search {nouns}",
   noDocument: "No document loaded.",
   sections: "Sections",
   noPrefix: "(no prefix)",
@@ -286,10 +290,12 @@ export function DocumentMapPanel(_props: PanelProps) {
   const lens = lenses.includes(lensChoice) ? lensChoice : "pages";
   const selection = useSelection();
 
+  // Extensions ADR 1111 — a deck's pages are slides.
+  const noun = useDeclaredPageNoun();
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const entries = useMemo(
-    () => (handle ? groupSpreads(handle.pageIds, spreads) : []),
-    [handle, spreads],
+    () => (handle ? groupSpreads(handle.pageIds, spreads, noun) : []),
+    [handle, spreads, noun],
   );
   const rects = handle
     ? layoutPages(handle.pageSizesPt, handle.pageOriginsPt)
@@ -432,9 +438,13 @@ export function DocumentMapPanel(_props: PanelProps) {
           <input
             data-document-map-search
             aria-label={strings.t(LENS.search)}
-            placeholder={strings.t(
-              lens === "pages" ? M.searchPages : LENS.search,
-            )}
+            placeholder={
+              lens !== "pages"
+                ? strings.t(LENS.search)
+                : noun
+                  ? strings.t(M.searchNamed, { nouns: noun.other })
+                  : strings.t(M.searchPages)
+            }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{

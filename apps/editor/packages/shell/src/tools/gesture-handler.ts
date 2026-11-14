@@ -111,6 +111,14 @@ export interface GestureHandler extends Api.GestureHandler {
    *  cursor. */
   cursorAt?(e: CanvasPointerEvent): CursorSpec | undefined;
 
+  /** The cursor while this handler's own press holds the pointer, asked on
+   *  the press and on every move of its drag: the session layer of the
+   *  cursor contract (editor ADR 1227), over the hover. For a handler whose
+   *  state changes during the press (the Pen pulls a handle once the drag
+   *  passes the threshold). Absent ⇒ the press keeps the cursor it started
+   *  with. A shell-side member, as `busy` is. */
+  pressCursor?(e: CanvasPointerEvent): CursorSpec | undefined;
+
   /** Draw the in-progress gesture on the overlay (rubber-band, handles). */
   renderOverlay?(ctx: OverlayContext): void;
 }

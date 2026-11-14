@@ -95,7 +95,7 @@ const HOST_MENU = [
   "View/Show heading anchors",
   // Editor ADR 1223.
   "View/Show issue markers",
-  // Editor ADRs 1236, 1237.
+  // Editor ADRs 1237, 1238.
   "View/X-Ray",
   "View/Typography debugger",
   // Editor ADR 287.

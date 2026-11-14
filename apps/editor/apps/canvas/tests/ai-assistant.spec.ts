@@ -18,9 +18,10 @@
  */
 
 // The AI Assistant panel (ADR 221), with the proxy stubbed: a suggestion
-// sends the selection and the diagnosis to Claude, the agent's script
-// changes the document, each step and the summary show, and Undo reverts
-// exactly Claude's change — but not after the user edited since.
+// asks for consent, then sends the selection and the diagnosis to Claude,
+// which proposes a change set (editor ADR 1241); Apply makes it one undo
+// step, and the panel's Undo reverts exactly that step — but not after the
+// user edited since.
 
 import { test, expect, type Page, type Route } from "@playwright/test";
 
@@ -28,11 +29,26 @@ import { loadIdml, openCanvas, openPanel } from "./fidelity/canvas-driver";
 import {
   FIXTURE,
   opacity,
-  SUMMARY_TURN,
   TEXT_FRAME_ID,
-  TOOL_TURN,
   aiServiceIsThere,
+  toolCallTurn,
 } from "./ai-fixtures";
+
+const PROPOSE_TURN = toolCallTurn(
+  "propose_changes",
+  {
+    summary: "Set the frame's opacity to 40%.",
+    changes: [
+      {
+        address: `textFrame:${TEXT_FRAME_ID}`,
+        path: "frameOpacity",
+        value: 40,
+        reason: "lighter, as asked",
+      },
+    ],
+  },
+  "msg_1",
+);
 
 async function selectFrame(page: Page): Promise<void> {
   await page.evaluate((id) => {
@@ -62,7 +78,7 @@ async function stubClaude(
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
-      body: sent.length % 2 === 1 ? TOOL_TURN : SUMMARY_TURN,
+      body: PROPOSE_TURN,
     });
   });
 }
@@ -87,29 +103,37 @@ test.describe("AI Assistant panel", () => {
     const before = await opacity(page);
 
     await card.locator("[data-ai-suggestion]").first().click();
-    await expect(card.locator("[data-ai-summary]")).toHaveText(
+    // Editor ADR 1241: nothing is sent before the consent card's Send.
+    await expect(page.locator("[data-ai-consent=ask]")).toBeVisible();
+    expect(sent).toHaveLength(0);
+    await page.locator("[data-cockpit-action=ai-consent-send]").click();
+    await expect(card.locator("[data-ai-proposal-summary]")).toHaveText(
       "Set the frame's opacity to 40%.",
     );
-    await expect(card.locator("[data-ai-step=ok]")).toHaveCount(1);
+    expect(await opacity(page)).toEqual(before);
+    await card.locator("[data-cockpit-action=ai-proposal-apply]").click();
+    await expect(card.locator("[data-ai-applied]")).toBeVisible();
     expect(await opacity(page)).toBe(40);
 
-    expect(sent[0]!.mode).toBe("assist");
+    expect(sent[0]!.mode).toBe("propose");
     expect(String(sent[0]!.prompt)).toContain(`textFrame:${TEXT_FRAME_ID}`);
     expect(String(sent[0]!.prompt)).toMatch(/Request: /);
 
-    await card.locator("[data-cockpit-action=ai-undo]").click();
-    await expect(card).toHaveAttribute("data-ai-assistant-state", "idle");
+    await card.locator("[data-cockpit-action=ai-proposal-undo]").click();
+    await expect(card.locator("[data-ai-proposal]")).toHaveCount(0);
     expect(await opacity(page)).toEqual(before);
   });
 
-  test("Undo refuses once the document was edited after Claude @feat:editor-shell.ai-assistant @feat:editor-shell.panels.properties @level:edge", async ({
+  test("Undo refuses once the document was edited after the approval @feat:editor-shell.ai-assistant @feat:editor-shell.panels.properties @level:edge", async ({
     page,
   }) => {
     await stubClaude(page, []);
     const card = page.locator("[data-ai-assistant]");
     await card.locator("[data-ai-input]").fill("make it lighter");
     await card.locator("[data-ai-input]").press("Enter");
-    await expect(card.locator("[data-ai-summary]")).toBeVisible();
+    await page.locator("[data-cockpit-action=ai-consent-send]").click();
+    await card.locator("[data-cockpit-action=ai-proposal-apply]").click();
+    await expect(card.locator("[data-ai-applied]")).toBeVisible();
 
     // The user edits after Claude finished.
     await page.evaluate(
@@ -125,9 +149,9 @@ test.describe("AI Assistant panel", () => {
         ),
       TEXT_FRAME_ID,
     );
-    await card.locator("[data-cockpit-action=ai-undo]").click();
-    await expect(card.locator("[data-ai-error]")).toContainText(
-      "changed after Claude's edit",
+    await card.locator("[data-cockpit-action=ai-proposal-undo]").click();
+    await expect(card.locator("[data-ai-proposal-error]")).toContainText(
+      "changed after the approval",
     );
     expect(await opacity(page)).toBe(70);
   });

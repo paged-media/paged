@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Document X-Ray on the canvas (editor ADR 1236; the UX strategy's Concept
+// Document X-Ray on the canvas (editor ADR 1237; the UX strategy's Concept
 // A): with View ▸ X-Ray on, every page item is outlined in the colour of
 // what shapes it — a text frame by its paragraph style, any other item by
 // its object style, one with neither as set on the item — with a label,

@@ -122,6 +122,12 @@ export const PALETTE = defineMessages("shell.palette", {
   goToPage: "Go to page {page}",
   goToPageWords: "go to page, go to, goto, page, p",
   noSuchPage: "No page {page} in this document",
+  /** Under the noun the document declares for its pages (extensions ADR
+   *  1111): "Go to slide 3", and "go to slide, slide" as the query's
+   *  words. */
+  goToNamed: "Go to {noun} {page}",
+  goToNamedWords: "go to {noun}, {noun}",
+  noSuchNamed: "No {noun} {page} in this document",
   help: "Help",
   helpTopic: "Help: {title}",
   helpWords: "help, how do i, how to",
@@ -141,6 +147,15 @@ export const HEADER = defineMessages("shell.header", {
 
 /** The header's save status (editor ADR 1203): a label per state, and the
  *  details its popover gives (where, when, why, Retry). */
+/** The publication's readiness against its contract (editor ADR 1236). */
+export const READINESS = defineMessages("shell.readiness", {
+  label: "Publication contract: {state}",
+  blocked: "Blocked",
+  attention: "Needs attention",
+  ready: "Ready",
+  approved: "Approved",
+});
+
 export const SAVE_STATUS = defineMessages("shell.saveStatus", {
   noChanges: "No changes",
   notSavedYet: "Not saved yet",

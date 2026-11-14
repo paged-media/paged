@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Typography Debugger's words and writes (editor ADR 1237): a line's
+// The Typography Debugger's words and writes (editor ADR 1238): a line's
 // evidence said as sentences, the range a change applies to, the write a
 // preview tries.
 

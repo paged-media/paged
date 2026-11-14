@@ -38,8 +38,12 @@ import {
   useRegistries,
 } from "../../src/state/registries-context";
 
+// The client's undo group (WP4.11): with it a replay is one undo step, so
+// the plan lets the palette's Play run it at once (editor ADR 1240).
 const client = {
   subscribe: () => () => {},
+  beginUndoGroup: () => {},
+  endUndoGroup: async () => ({ steps: 0, writes: 0, lastSeq: null }),
 } as unknown as CanvasClient;
 
 function Providers({ children }: PropsWithChildren) {

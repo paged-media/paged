@@ -209,7 +209,9 @@ export function Btn({
         padding: sm ? "0 11px" : "0 14px",
         borderRadius: sm ? "var(--radius-md)" : "var(--radius-lg)",
         border:
-          primary || tone === "soft" ? "none" : "1px solid var(--pg-border)",
+          primary || tone === "soft"
+            ? "none"
+            : "1px solid var(--pg-control-border)",
         background: primary
           ? "var(--pg-primary)"
           : tone === "soft"

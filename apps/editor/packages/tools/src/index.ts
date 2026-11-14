@@ -75,6 +75,7 @@ export {
 } from "./artboards/model";
 export { createPencilHandler } from "./handlers/pencil-tool";
 export { createPenHandler } from "./handlers/pen-tool";
+export { penCursor, type PenState } from "./handlers/pen-states";
 // Direct path editing — the session the canvas mounts while path-edit
 // mode is on (the shim over paged.draw's Direct Selection machine).
 export {

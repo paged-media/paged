@@ -306,6 +306,27 @@ export interface EditContextContribution {
    */
   editLabel?: string;
   /**
+   * Extensions ADR 1110 — the module's own implementation of the host's
+   * universal object verbs (editor ADR 1242): for each verb it implements,
+   * the id of a command this bundle registered, run with no payload on what
+   * the context edits. While the context is active the host's verb command
+   * (`paged.verb.<verb>`, in the context menu and the palette) runs it; a
+   * verb not named here falls back to the host's own. Absent ⇒ every verb is
+   * the host's.
+   */
+  verbs?: Partial<Record<ObjectVerb, string>>;
+  /**
+   * Extensions ADR 1111 — what the pages of a document this context covers
+   * as a whole are called, in the editor's language as the words read
+   * inside a sentence: `{ one: "slide", other: "slides" }` for a deck. While
+   * this context is the DOCUMENT context (`host.shell.setDocumentContext`,
+   * ADR 348) the host names the document's pages with it — the document
+   * map and its lenses, the captions beside the pages on the canvas, the
+   * palette's Go to — capitalising the first letter where a label starts
+   * ("Slide 3"). Read only for the document context; absent ⇒ pages.
+   */
+  pageNoun?: PageNoun;
+  /**
    * Extensions ADR 1106 (the interaction contract's D-05) — this context
    * edits the pixels of a placed image. A double-click on a frame that
    * holds an image positions the image inside its frame first (the host's
@@ -358,10 +379,33 @@ export interface EditContextContribution {
   metadataKey?: string;
 }
 
+/** Extensions ADR 1110 — the verbs every object answers in every context
+ *  (editor ADR 1242): inspect it, transform it, copy it, bind it to data,
+ *  style it, version it (a checkpoint), validate it, export it. */
+export type ObjectVerb =
+  | "inspect"
+  | "transform"
+  | "copy"
+  | "bindData"
+  | "style"
+  | "version"
+  | "validate"
+  | "export";
+
 /** Extensions ADR 1106 — how the host may leave a dirty edit context
  *  ({@link EditContextContribution.exitPolicy}). */
 export type EditContextExitPolicy =
   "commit-if-safe" | "ask" | "discard-allowed";
+
+/** Extensions ADR 1110 — what a document's pages are called
+ *  ({@link EditContextContribution.pageNoun}), in the editor's language as
+ *  the words read inside a sentence ("slide", "slides"). */
+export interface PageNoun {
+  /** One page: "slide" ("Go to slide 3"; "Slide 3" where a label starts). */
+  one: string;
+  /** Several pages: "slides" ("Search slides"; "Slides 2–3"). */
+  other: string;
+}
 
 /** Editor ADR 285 — an edit context's own history ({@link
  *  EditContextContribution.historySteps}). */

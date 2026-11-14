@@ -37,6 +37,7 @@ import { useDocument } from "../../state/document-context";
 import { useCollection } from "../../catalog/use-collection";
 import type { SpreadSummary } from "@paged-media/client";
 import { groupSpreads } from "../spread-grouping";
+import { useDeclaredPageNoun } from "../../state/page-noun";
 import { usePageNavigation } from "../cockpit-navigation";
 import { IconButton } from "@paged-media/panel-kit";
 import { useNearViewport } from "../../state/live";
@@ -56,7 +57,8 @@ export function ThumbnailRail() {
   const [selected, setSelected] = useState<string | null>(null);
   const { observe: observeNear, has: isNear } = useNearViewport();
 
-  const entries = handle ? groupSpreads(handle.pageIds, spreads) : [];
+  const noun = useDeclaredPageNoun();
+  const entries = handle ? groupSpreads(handle.pageIds, spreads, noun) : [];
 
   const scrollBy = (dir: -1 | 1) => {
     const el = queryEditor<HTMLElement>(root, "[data-thumbnail-strip]");

@@ -80,6 +80,7 @@ import {
   PAGED_OBJECT_UNGROUP,
 } from "./object-commands";
 import { PAGED_EDIT_SELECT_ALL } from "./select-all";
+import { VERB_MENU_ROWS } from "./verb-commands";
 import { PAGED_OBJECT_ADD_CONSTRAINT } from "./constraints/add-constraint";
 import { layoutPages } from "./ui/layout";
 import { defineMessages, t } from "@paged-media/strings";
@@ -104,6 +105,9 @@ export const PAGED_EDIT_CONTEXT_MENU = "paged.edit.contextMenu";
 
 /** The rows, InDesign's object context menu in our command set. */
 export const CANVAS_CONTEXT_MENU: readonly ContextMenuEntry[] = [
+  // Editor ADR 1242 — the verbs every object answers, first, in every
+  // context (a module's frame surface lists them too).
+  ...VERB_MENU_ROWS,
   { command: PAGED_EDIT_CUT, group: "clipboard" },
   { command: PAGED_EDIT_COPY, group: "clipboard" },
   { command: PAGED_EDIT_PASTE, group: "clipboard" },
@@ -413,11 +417,12 @@ export function frameSurfaceRows(paged: PagedEditor): ContextMenuEntry[] {
         isEnabled(m.when as never, () => paged),
     )
     .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
-    .map((m) => ({
+    .map((m): ContextMenuEntry => ({
       command: m.command,
       group: m.group ?? "default",
       label: m.path.split("/").filter(Boolean).at(-1),
-    }));
+    }))
+    .concat(VERB_MENU_ROWS);
 }
 
 /** The right-click door and the menu itself. Render inside PagedShell. */

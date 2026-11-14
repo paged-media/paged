@@ -33,7 +33,7 @@ import { demoPage, section } from "./page";
 const page = demoPage({
   title: "Price list",
   intro:
-    "Fields owned by modules: rows from a sheet, a Word paragraph, a drawing's colour.",
+    "Fields owned by modules: rows from a sheet, a Word paragraph, a drawing's color.",
   aside: true,
 });
 const bytes = new Uint8Array(await (await fetch(listUrl)).arrayBuffer());

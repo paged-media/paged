@@ -198,10 +198,10 @@ export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS =
 export const PAGED_VIEW_TOGGLE_DATA_MARKERS = "paged.view.toggleDataMarkers";
 /** Editor ADR 1223 — View ▸ Show issue markers. */
 export const PAGED_VIEW_TOGGLE_ISSUE_MARKERS = "paged.view.toggleIssueMarkers";
-/** Editor ADR 1236 — View ▸ X-Ray: every item outlined by the style or
+/** Editor ADR 1237 — View ▸ X-Ray: every item outlined by the style or
  *  the source that shapes it, with a legend per page. */
 export const PAGED_VIEW_TOGGLE_XRAY = "paged.view.toggleXray";
-/** Editor ADR 1237 — View ▸ Typography debugger: the selected story's
+/** Editor ADR 1238 — View ▸ Typography debugger: the selected story's
  *  lines coloured by how tightly they are set, with their breaks. */
 export const PAGED_VIEW_TOGGLE_TYPOGRAPHY =
   "paged.view.toggleTypographyDebugger";

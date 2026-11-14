@@ -144,7 +144,7 @@ describe("buildRequest", () => {
       expect(r.thinking).toEqual({ type: "adaptive" });
       expect(r.output_config?.effort).toBe(MODE_SPECS[mode].effort);
       expect(r.max_tokens).toBe(MODE_SPECS[mode].maxTokens);
-      expect(Boolean(r.tools)).toBe(MODE_SPECS[mode].tools);
+      expect(Boolean(r.tools)).toBe(Boolean(MODE_SPECS[mode].tools));
       expect(
         (r.system as Array<{ cache_control?: unknown }>)[0]!.cache_control,
       ).toEqual({ type: "ephemeral" });

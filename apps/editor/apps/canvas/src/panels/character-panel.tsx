@@ -150,7 +150,9 @@ function OpenTypeChips() {
                 className="h-[26px] rounded-[6px] border px-[9px] text-[11px]"
                 style={{
                   fontFamily: "var(--font-mono)",
-                  borderColor: on ? "var(--pg-accent)" : "var(--input)",
+                  borderColor: on
+                    ? "var(--pg-accent)"
+                    : "var(--pg-control-border)",
                   background: on ? "var(--pg-accent)" : "var(--background)",
                   color: on ? "var(--pg-accent-fg)" : "var(--pg-muted-fg)",
                   opacity: disabled ? 0.55 : 1,

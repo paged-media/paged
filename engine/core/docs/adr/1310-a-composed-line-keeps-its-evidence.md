@@ -10,7 +10,7 @@
   `RequestLineEvidence`, `LineEvidence`, `RequestPreview`, `Previewed`), `paged-canvas-wasm` (the
   dispatch arms), the editor's client (`CanvasClient.lineEvidence`, `CanvasClient.preview`). Implements the engine half of task PX2 of
   `apps/editor/docs/interaction-plan.md` (the UX strategy's Concept E, the Typography
-  Debugger); the editor's side is editor ADR 1237.
+  Debugger); the editor's side is editor ADR 1238.
 
 ## Context
 

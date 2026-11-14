@@ -126,7 +126,7 @@ export function severityOfLoss(
 const M = defineMessages("app.compatibilityReport", {
   areaFonts: "Fonts",
   areaEffects: "Effects",
-  areaPaint: "Colour and paint",
+  areaPaint: "Color and paint",
   areaPictures: "Pictures and links",
   areaText: "Text and tables",
   areaStructure: "Pages and objects",

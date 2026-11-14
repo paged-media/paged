@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 976,
+    "command": 984,
     "keybinding": 216,
     "menu": 711,
-    "panel": 156,
+    "panel": 158,
     "tool": 123
   },
   "features": [
@@ -4632,6 +4632,46 @@
     },
     {
       "id": "command:paged.transform.scaleUp",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.bindData",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.copy",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.export",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.inspect",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.style",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.transform",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.validate",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.verb.version",
       "kind": "command",
       "owner": "editor"
     },
@@ -10181,6 +10221,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.publication-contract",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.publication-health",
       "kind": "panel",
       "owner": "editor"
@@ -10317,6 +10362,11 @@
     },
     {
       "id": "panel:paged.typography",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.variants",
       "kind": "panel",
       "owner": "editor"
     },

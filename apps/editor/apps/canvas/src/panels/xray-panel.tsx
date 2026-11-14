@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Document X-Ray, the "Why?" inspector (editor ADR 1236; the UX strategy's
+// Document X-Ray, the "Why?" inspector (editor ADR 1237; the UX strategy's
 // Concept A; task PX1 of the interaction plan). For the selected item, or
 // the text under the caret, it shows what the engine knows about why it
 // looks and behaves as it does (`client.explain`, engine ADR 1309): the
