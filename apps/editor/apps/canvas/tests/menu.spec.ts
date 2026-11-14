@@ -136,9 +136,11 @@ test.describe("Phase 4 — menu via commands", () => {
     page,
   }) => {
     // U11, revised: the Workspace panels stay one click deep, and every
-    // other category is a SUBMENU (Window ▸ Structure ▸ Links), with the
-    // plugins' panels under their names in a Plugins section. A flat menu
-    // of ~110 panels was taller than the screen.
+    // other category is a SUBMENU, with the plugins' panels under their
+    // names in a Plugins section. A flat menu of ~110 panels was taller
+    // than the screen. The categories are InDesign's (editor ADR 1208,
+    // `window-categories.ts`): Links is one click deep, Swatches sits
+    // under Color and Paragraph styles under Styles.
     await page
       .locator('nav[aria-label="Main menu"]')
       .getByRole("menuitem", { name: "Window", exact: true })
@@ -155,16 +157,24 @@ test.describe("Phase 4 — menu via commands", () => {
     await expect
       .poll(() => menu.locator('[role="separator"]').count())
       .toBeGreaterThanOrEqual(1);
-    // Each category is a submenu holding its panels.
-    await page.locator('[data-menu-submenu="Structure"]').hover();
+    // A Workspace panel is a row of the menu itself, not a submenu.
     await expect(
-      page.getByRole("menuitem", { name: "Links", exact: true }),
+      menu.getByRole("menuitem", { name: "Links", exact: true }),
+    ).toBeVisible();
+    await expect(menu.locator('[data-menu-submenu="Links"]')).toHaveCount(0);
+    // Each category is a submenu holding its panels.
+    await page.locator('[data-menu-submenu="Color"]').hover();
+    await expect(
+      page.getByRole("menuitem", { name: "Swatches", exact: true }),
     ).toBeVisible();
     // Moving to the next category swaps the open submenu.
     await page.locator('[data-menu-submenu="Styles"]').click();
     await expect(
-      page.getByRole("menuitem", { name: "Swatches", exact: true }),
+      page.getByRole("menuitem", { name: "Paragraph styles", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Swatches", exact: true }),
+    ).toHaveCount(0);
   });
 });
 
