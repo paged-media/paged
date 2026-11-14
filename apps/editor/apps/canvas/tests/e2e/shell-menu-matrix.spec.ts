@@ -374,12 +374,14 @@ const HOST_TOPS = [
 ] as const;
 
 /** The unit a row is dispatched in: Object ▸ Effects ▸ <group> rows are most
- *  of the bar and one test each, every other row goes with its top menu. */
+ *  of the bar and one test each, the rows of each other Object submenu are a
+ *  test each too, and every other row goes with its top menu. */
 const unitOf = (path: string) => {
   const seg = path.split("/");
-  return seg[0] === "Object" && seg[1] === "Effects" && seg.length >= 4
-    ? seg.slice(0, 3).join("/")
-    : seg[0];
+  if (seg[0] === "Object" && seg[1] === "Effects" && seg.length >= 4)
+    return seg.slice(0, 3).join("/");
+  if (seg[0] === "Object" && seg.length >= 3) return seg.slice(0, 2).join("/");
+  return seg[0];
 };
 
 /** Every unit the registered host rows fall in (the inventory test holds the
@@ -916,13 +918,14 @@ test.describe("the host menu bar", () => {
     }
   });
 
-  // One test per top-level menu, and per Object ▸ Effects group: the whole bar
-  // in one test took 2.1 min of its 3-minute CI budget on 2026-10-30 and passed
-  // it on 2026-11-01 as the Effects, Envelope, Brushes, ML, Mesh and Warps rows
-  // landed (176 s of 180 s locally). The cost grows with the row count, so a
-  // longer timeout would only postpone it, and a top menu alone (Object, 2 min)
-  // was still too close. Each test opens the shell once and clicks only its
-  // own unit's rows (unitOf).
+  // One test per top-level menu, per Object ▸ Effects group and per other
+  // Object submenu: the whole bar in one test took 2.1 min of its 3-minute CI
+  // budget on 2026-10-30 and passed it on 2026-11-01 as the Effects, Envelope,
+  // Brushes, ML, Mesh and Warps rows landed (176 s of 180 s locally). The cost
+  // grows with the row count, so a longer timeout would only postpone it, and
+  // a top menu alone (Object, 2 min) was still too close: with its submenus it
+  // took 2.9 min locally on 2026-11-15 and timed out on the runners. Each test
+  // opens the shell once and clicks only its own unit's rows (unitOf).
   for (const unit of DISPATCH_UNITS) {
     test(`clicking an enabled row runs exactly its command: ${unit}`, async ({
       page,
