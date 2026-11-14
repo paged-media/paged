@@ -214,8 +214,9 @@ async function typingLatency(
     // Every request the editor sends while the keys go in, by kind: what
     // rides along with each insert.
     const counts: Record<string, number> = {};
-    (w as unknown as { __typingRequests: Record<string, number> }).__typingRequests =
-      counts;
+    (
+      w as unknown as { __typingRequests: Record<string, number> }
+    ).__typingRequests = counts;
     const sender = client as unknown as {
       send: (m: { kind?: string }) => Promise<unknown>;
     };
@@ -241,7 +242,8 @@ async function typingLatency(
         const stats = (
           reply as { payload?: { cacheStats?: { rebuildMs?: number } } }
         ).payload?.cacheStats;
-        if (stats?.rebuildMs !== undefined) probe.engineMs.push(stats.rebuildMs);
+        if (stats?.rebuildMs !== undefined)
+          probe.engineMs.push(stats.rebuildMs);
         const n = [...(op.args?.text ?? "")].length;
         requestAnimationFrame(() =>
           setTimeout(() => {
@@ -312,9 +314,7 @@ async function litFraction(page: Page): Promise<number> {
 /** What the worker's caches hold now (the `worker.caches` entry each
  *  journal drain records; engine ADR 1311): the decoded pictures, the CPU
  *  tiles, the GPU page scenes. */
-async function cachesNow(
-  page: Page,
-): Promise<Record<string, number> | null> {
+async function cachesNow(page: Page): Promise<Record<string, number> | null> {
   const drain = await page.evaluate(() =>
     (globalThis as unknown as CanvasGlobal).__canvas.client.drainJournal(
       30_000,

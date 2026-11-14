@@ -58,7 +58,13 @@ function answeringWorker(): Worker {
             appliedSeq: n,
             undoneSeq: n,
             pageIds: [`p${n}`],
-            cacheStats: { hits: 0, misses: 0, len: 0, capacity: 0, rebuildMs: 1 },
+            cacheStats: {
+              hits: 0,
+              misses: 0,
+              len: 0,
+              capacity: 0,
+              rebuildMs: 1,
+            },
           },
         });
       } else {
