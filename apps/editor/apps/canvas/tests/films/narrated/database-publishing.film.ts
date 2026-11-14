@@ -571,7 +571,7 @@ film("database-publishing", async (k) => {
     await expect(mode.locator("option:checked")).toHaveText(
       "Single record per page",
     );
-    const keep = row.getByLabel(/keep template/);
+    const keep = row.getByLabel("Keep template", { exact: true });
     if (await keep.isChecked()) await press(k, keep);
     await expect(keep).not.toBeChecked();
     await expect(row.locator("[data-data-merge-new-doc]")).not.toBeChecked();

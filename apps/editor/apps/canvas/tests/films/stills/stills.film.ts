@@ -692,11 +692,11 @@ test("stills · a catalogue merged from product data", async ({ page }) => {
   const row = page.locator("[data-data-merge]");
   await expect(row).toBeVisible({ timeout: 10_000 });
   await row.locator("[data-data-merge-mode]").selectOption("multiple");
-  const keep = row.getByLabel(/keep template/);
+  const keep = row.getByLabel("Keep template", { exact: true });
   if (await keep.isChecked()) await keep.click();
   await row.locator("[data-data-merge-run]").click();
   const merged = page.locator("[data-data-merge-msg]");
-  await expect(merged).toHaveText("merged 24 record(s) onto 2 page(s)", {
+  await expect(merged).toHaveText("Merged 24 record(s) onto 2 page(s)", {
     timeout: 60_000,
   });
   const texts = (await pageTexts(page)).flat();
