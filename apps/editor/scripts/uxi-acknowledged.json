@@ -24,10 +24,6 @@
     "task": "IC6",
     "reason": "No test claims it yet: Shift adds and the marquee only intersects today; the selection model of ADR 1201 (Shift toggles, a directional scoped marquee, a locked indication) lands with IC6. Claim it in a test title (UXI-T29 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
-  "UXI-T52": {
-    "task": "IC4",
-    "reason": "No test claims it yet: the canvas pointer path is not routed through the coordinator's adapters yet (IC4); ViewportCanvas keeps its own gesture refs beside the gesture spine. Claim it in a test title (UXI-T52 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
   "UXI-T56": {
     "task": "IC7",
     "reason": "No test claims it yet: body hits use the axis-aligned box and resize cursors ignore rotation; IC7 brings oriented hits, zoom-stable tolerances and rotate zones. Claim it in a test title (UXI-T56 — …) when that lands, or sooner where today's code already passes (W0.7)."
@@ -39,10 +35,6 @@
   "UXI-T70": {
     "task": "AP2",
     "reason": "No test claims it yet: keyboard-only creation and transform commands are not complete yet (AP2). Claim it in a test title (UXI-T70 — …) when that lands, or sooner where today's code already passes (W0.7)."
-  },
-  "UXI-T71": {
-    "task": "AP4",
-    "reason": "No test claims it yet: pressure and tilt do not reach the draw tools, and a pinch over a pending selection candidate is not arbitrated yet (AP4). Claim it in a test title (UXI-T71 — …) when that lands, or sooner where today's code already passes (W0.7)."
   },
   "UXI-T72": {
     "task": "AP4",

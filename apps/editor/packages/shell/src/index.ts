@@ -922,6 +922,7 @@ export * from "./focus";
 export {
   ESCAPE_TIERS,
   escapeArbiterOf,
+  escapeKeyEvent,
   isEscapeKey,
   useEscapeArbiter,
   useEscapeHandler,

@@ -25,12 +25,14 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PropsWithChildren,
 } from "react";
 
 import type { HitResult, PageId, SnapLine } from "@paged-media/client";
 import type { HostHandleRouter } from "@paged-media/plugin-api";
 import { useEditorScope } from "./editor-scope";
+import { useInteractionCoordinator } from "../interaction/coordinator";
 import { debugHandlesEnabled, setDebugHandle } from "./debug-handles";
 
 /**
@@ -52,8 +54,13 @@ export interface SelectionState {
  */
 export interface MarqueeRectPageLocal {
   pageId: PageId;
-  /** `[top, left, bottom, right]` in page-local pt. */
+  /** `[top, left, bottom, right]` in page-local pt (it may leave the page:
+   *  a marquee from the pasteboard, or one across pages). */
   rect: [number, number, number, number];
+  /** D-01 (editor ADR 1201, amending 235): drawn left to right it takes
+   *  what it wholly contains, right to left what it touches. Absent: the
+   *  intersecting marquee. */
+  mode?: "contain" | "intersect";
 }
 
 /**
@@ -231,12 +238,54 @@ const Context = createContext<OverlaySignalsValue | null>(null);
  * can subscribe to only the signals it actually needs and skip the
  * render churn for the rest.
  */
+const NO_SNAP_LINES: ReadonlyArray<SnapLine> = [];
+
 export function OverlaySignalsProvider({ children }: PropsWithChildren) {
   const [hitSelection, setHitSelection] = useState<SelectionState | null>(null);
-  const [marqueeRect, setMarqueeRect] = useState<MarqueeRectPageLocal | null>(
-    null,
+  // The OverlayRevisionAdapter (the interaction contract's §24.2, editor
+  // ADR 1210, IC4): a transient overlay (the marquee, the snap lines) is
+  // written under the session that held the pointer then, and is drawn only
+  // while that session is open. A gesture that ended — committed,
+  // cancelled, aborted by a blur or a document switch — leaves no marquee
+  // and no snap line behind, whoever forgot to clear it (`UXI-GST-006`,
+  // `UXI-SNP-006`). A value written with no session open (a tool's preview
+  // between two clicks) is the writer's to clear.
+  const interactions = useInteractionCoordinator();
+  const sessions = useSyncExternalStore(
+    interactions.subscribe,
+    interactions.snapshot,
+    interactions.snapshot,
   );
-  const [snapLines, setSnapLines] = useState<ReadonlyArray<SnapLine>>([]);
+  const liveUnder = (tag: string | null) =>
+    tag === null || sessions.openIds.includes(tag);
+  const [marquee, setMarquee] = useState<{
+    value: MarqueeRectPageLocal | null;
+    tag: string | null;
+  }>({ value: null, tag: null });
+  const [snap, setSnap] = useState<{
+    value: ReadonlyArray<SnapLine>;
+    tag: string | null;
+  }>({ value: [], tag: null });
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setMarqueeRect = useCallback(
+    (value: MarqueeRectPageLocal | null) =>
+      setMarquee({
+        value,
+        tag: value ? (interactions.current()?.id ?? null) : null,
+      }),
+    [interactions],
+  );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setSnapLines = useCallback(
+    (value: ReadonlyArray<SnapLine>) =>
+      setSnap({
+        value,
+        tag: value.length > 0 ? (interactions.current()?.id ?? null) : null,
+      }),
+    [interactions],
+  );
+  const marqueeRect = liveUnder(marquee.tag) ? marquee.value : null;
+  const snapLines = liveUnder(snap.tag) ? snap.value : NO_SNAP_LINES;
   const [toolPreview, setToolPreviewSlot] = useState<ToolPreviewSlot | null>(
     null,
   );
@@ -318,7 +367,9 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
     [
       hitSelection,
       marqueeRect,
+      setMarqueeRect,
       snapLines,
+      setSnapLines,
       toolPreview,
       setToolPreview,
       setToolPreviews,

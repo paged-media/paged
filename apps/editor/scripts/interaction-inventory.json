@@ -2749,7 +2749,7 @@
       "listener": "element",
       "states": ["idle", "pressed", "pending-hit", "settled"],
       "permission": "Selection is not a document change; the worker's hit test picks the target and a locked item stays selectable (ADR 251).",
-      "cancel": "A release under the click threshold settles; the hit-test answer carries no epoch, so a late one can apply (IC3).",
+      "cancel": "A click is the press's session (canvas-select); its hit test carries a token and a late answer is dropped (IC3). A release under the click threshold settles.",
       "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
       "uxi": [
         "UXI-SEL-001",
@@ -2758,7 +2758,7 @@
         "UXI-HIT-002",
         "UXI-OWN-008"
       ],
-      "status": "legacy",
+      "status": "migrated",
       "notes": "Shift adds and Cmd toggles today (ADR 235); ADR 1201 makes Shift toggle (D-01)."
     },
     {
@@ -2772,10 +2772,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "previewing", "settled"],
       "permission": "No document change; the marquee takes what it intersects, page by page (EN2 adds contain/intersect, scope and the pasteboard).",
-      "cancel": "pointercancel and window blur abort it; Escape does not cancel a marquee yet (IC2).",
+      "cancel": "Escape cancels it (the Escape arbiter's gesture tier) and the rest of the drag is inert; pointercancel, a lost capture, blur, a hidden page, a document or tool switch end it (IC2). A spring-loaded Hand taken mid-marquee turns the rest into a pan (IC4).",
       "surfaceIds": ["tool:paged.tool.select"],
       "uxi": ["UXI-SEL-005", "UXI-SEL-008", "UXI-SEL-010", "UXI-HIT-004"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "select.move",
@@ -2796,7 +2796,7 @@
         "settled"
       ],
       "permission": "One engine translate gesture; the engine refuses a locked item.",
-      "cancel": "Escape cancels the engine gesture and the rest of the drag pans; pointercancel and window blur abort; lostpointercapture and unmount do not yet, and an orphaned gesture turns later drags into pans (IC2).",
+      "cancel": "One engine translate gesture in a canvas-transform session: Escape cancels it and the rest of the drag is inert (never a pan); pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a refused begin ends the drag without a mutation (IC2). Alt previews and commits the copy (EN4).",
       "surfaceIds": ["tool:paged.tool.select"],
       "uxi": [
         "UXI-SEL-004",
@@ -2807,7 +2807,7 @@
         "UXI-INV-002",
         "UXI-INV-014"
       ],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "select.handles",
@@ -2827,7 +2827,7 @@
         "settled"
       ],
       "permission": "Bounds resize, matrix scale or rotation as one engine gesture; the engine refuses a locked item.",
-      "cancel": "As the move: Escape cancels and the drag pans on; pointercancel and blur abort (IC2).",
+      "cancel": "A canvas-transform session, ended like a move (IC2); Escape cancels through the arbiter.",
       "surfaceIds": ["tool:paged.tool.select"],
       "uxi": [
         "UXI-HIT-001",
@@ -2837,7 +2837,7 @@
         "UXI-TRN-004",
         "UXI-OVR-010"
       ],
-      "status": "legacy",
+      "status": "migrated",
       "notes": "ViewportCanvas reads the handle under the press (readHandleAttr) and begins the gesture; resize cursors ignore rotation (IC7)."
     },
     {
@@ -2858,10 +2858,10 @@
         "settled"
       ],
       "permission": "The bundle's handle router commits through the engine; it wins over the path session, the resize handles, the move and the marquee (extensions ADR 1103).",
-      "cancel": "Escape calls the router's cancel (ViewportCanvas onEscapeKey).",
+      "cancel": "The press's route (`routePress`) gives the bundle's router the drag; Escape and every terminal event cancel it, writing nothing (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.select"],
       "uxi": ["UXI-HIT-001", "UXI-OWN-004", "UXI-PLG-001"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "direct-select.path-edit",
@@ -2881,10 +2881,10 @@
         "settled"
       ],
       "permission": "Path edits are engine operations over paged.draw's machine.",
-      "cancel": "Escape mid-drag undoes the drag and keeps the mode; Escape idle leaves the mode (usePathEditMode's own listener).",
+      "cancel": "The press's route is the path's; its Escape is the arbiter's transient tier (mid-drag the drag is undone, else the mode ends); terminal events cancel the session's gesture (IC4).",
       "surfaceIds": ["tool:paged.tool.directSelect"],
       "uxi": ["UXI-DRW-005", "UXI-DRW-006", "UXI-SEL-001"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "type.click-caret",
@@ -2897,10 +2897,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "pending-hit", "settled"],
       "permission": "Placing a caret is not a document change.",
-      "cancel": "Settles on release; nothing to roll back.",
+      "cancel": "The Type tool's route keeps the click for the caret; the click's hit test is guarded (IC3).",
       "surfaceIds": ["tool:paged.tool.type"],
       "uxi": ["UXI-TXT-001", "UXI-TXT-002", "UXI-TXT-013"],
-      "status": "legacy",
+      "status": "migrated",
       "notes": "The press arms the Type gesture handler too (ViewportCanvas legacyAlso); the release splits click from drag at CLICK_DRAG_THRESHOLD_PX."
     },
     {
@@ -2921,10 +2921,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "The Type tool's route: a drag on empty canvas pulls out a frame, a drag that starts over text selects text (UXI-TXT-011, IC4); terminal events cancel it.",
       "surfaceIds": ["tool:paged.tool.type"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "dblclick.enter",
@@ -2937,7 +2937,7 @@
       "listener": "element",
       "states": ["idle", "pressed", "pending-hit", "settled"],
       "permission": "Entering a context changes no document state; the context's write scope is its root plus the engine's edit scope of it (client.editScope, EN5, engine ADR 1301; editor ADR 1214)",
-      "cancel": "Nothing to cancel on entry; the hit test that picks the target carries no epoch (IC3).",
+      "cancel": "One double-click path, the shell's (`enterByDoubleClick` in use-edit-context-entry.tsx, the ContentContextAdapter); every step checks the coordinator's token (IC3, IC4).",
       "surfaceIds": ["tool:paged.tool.select", "tool:paged.tool.directSelect"],
       "uxi": [
         "UXI-CTX-002",
@@ -2947,8 +2947,8 @@
         "UXI-SEL-012",
         "UXI-TXT-002"
       ],
-      "status": "legacy",
-      "notes": "A picture frame enters its content level first and Edit image on a second double-click, Enter or the level control (D-05, editor ADR 1215); tryEnterEditContext decides every double-click, picture frames included. Stays legacy until track IC's ContentContextAdapter routes the canvas's double-click through it."
+      "status": "migrated",
+      "notes": "A picture frame enters its content level first and Edit image on a second double-click, Enter or the level control (D-05, editor ADR 1215); tryEnterEditContext decides every double-click, picture frames included."
     },
     {
       "id": "edit-context.content-pointer",
@@ -2968,10 +2968,10 @@
         "settled"
       ],
       "permission": "The module answers in content coordinates and writes through its own engine operations.",
-      "cancel": "The module's own; nothing coordinates it with the canvas Escape listeners (KF1).",
+      "cancel": "The press's route when the active context takes content pointers (frame-content session); pointercancel ends it, the context keeps its state.",
       "surfaceIds": [],
       "uxi": ["UXI-OWN-004", "UXI-CTX-010", "UXI-PLG-002"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "edit-context.click-out",
@@ -2987,8 +2987,8 @@
       "cancel": "An open resolve prompt holds the press (Cancel keeps the context); otherwise the press falls through to select what is under it (D-04).",
       "surfaceIds": [],
       "uxi": ["UXI-HIT-005", "UXI-CTX-006", "UXI-CTX-007"],
-      "status": "legacy",
-      "notes": "The resolver and useContextExit are in the shell; the canvas switches its commit() to leave(\"click-outside\") with track IC (ViewportCanvas.tsx is IC's)."
+      "status": "migrated",
+      "notes": "The canvas leaves through `leave(\"click-outside\")` (track IC); a prompt holds the press."
     },
     {
       "id": "hand.pan",
@@ -3001,13 +3001,13 @@
       "listener": "element",
       "states": ["idle", "pressed", "previewing", "settled"],
       "permission": "Camera only; no document change.",
-      "cancel": "Release ends it; nothing to roll back.",
+      "cancel": "The camera's route (canvas-camera session); its moves take the camera from an animation in flight (IC4).",
       "surfaceIds": [
         "tool:paged.tool.hand",
         "keybinding:h→paged.tool.activate.paged.tool.hand"
       ],
       "uxi": ["UXI-CAM-001", "UXI-CAM-011"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "hand.spring-space",
@@ -3020,10 +3020,10 @@
       "listener": "editor-root",
       "states": ["idle", "settled"],
       "permission": "Tool override only; no document change. Yields to a focused control and to a live text caret.",
-      "cancel": "Key-up pops the override; window blur clears every override.",
+      "cancel": "D-09: held during a document-changing drag the Hand waits until the drag settles (the coordinator's mutating session); held during a press or a marquee it turns the rest of the drag into a pan; a suspended tool resumes with its state (IC4).",
       "surfaceIds": ["tool:paged.tool.hand"],
       "uxi": ["UXI-OWN-010", "UXI-OWN-011"],
-      "status": "legacy",
+      "status": "migrated",
       "notes": "A press during a mutating drag swaps the gesture spine's single handler slot; ADR 1201 defers it until the drag settles (D-09)."
     },
     {
@@ -3037,10 +3037,10 @@
       "listener": "editor-root",
       "states": ["idle", "settled"],
       "permission": "Tool override only; no document change. A tool that reads Cmd as a gesture modifier keeps it (Free Transform).",
-      "cancel": "Key-up pops the override; window blur clears every override.",
+      "cancel": "Waits for a document-changing drag to settle, as the Space spring-load (D-09, IC4).",
       "surfaceIds": ["tool:paged.tool.directSelect"],
       "uxi": ["UXI-OWN-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "zoom.click",
@@ -3053,13 +3053,13 @@
       "listener": "element",
       "states": ["idle", "pressed", "settled"],
       "permission": "Camera only; no document change.",
-      "cancel": "Settles on release.",
+      "cancel": "The camera's route; a click zooms and takes the camera from an animation (IC4).",
       "surfaceIds": [
         "tool:paged.tool.zoom",
         "keybinding:z→paged.tool.activate.paged.tool.zoom"
       ],
       "uxi": ["UXI-CAM-002", "UXI-CAM-007"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "zoom.drag",
@@ -3072,10 +3072,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "previewing", "settled"],
       "permission": "Camera only; no document change.",
-      "cancel": "Release ends it; nothing to roll back.",
+      "cancel": "The camera's route (pans on drag).",
       "surfaceIds": ["tool:paged.tool.zoom"],
       "uxi": ["UXI-CAM-001", "UXI-CAM-011"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "zoom.spring-primary-space",
@@ -3088,10 +3088,10 @@
       "listener": "editor-root",
       "states": ["idle", "settled"],
       "permission": "Tool override only; no document change.",
-      "cancel": "Key-up pops the override; window blur clears every override.",
+      "cancel": "Waits for a document-changing drag to settle (D-09, IC4).",
       "surfaceIds": ["tool:paged.tool.zoom"],
       "uxi": ["UXI-OWN-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "camera.wheel",
@@ -3104,10 +3104,10 @@
       "listener": "element",
       "states": ["idle", "settled"],
       "permission": "Camera only; no document change.",
-      "cancel": "Each event settles; an animation in flight can tug the camera back (WS8).",
+      "cancel": "The wheel takes the camera from an animation in flight: no tug-back (UXI-CAM-004, UXI-T52, IC4).",
       "surfaceIds": [],
       "uxi": ["UXI-CAM-001", "UXI-CAM-002", "UXI-CAM-004", "UXI-CAM-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "camera.middle-drag",
@@ -3120,10 +3120,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "previewing", "settled"],
       "permission": "Camera only; no document change.",
-      "cancel": "Release ends it; nothing to roll back.",
+      "cancel": "The camera's route for the middle button, whatever tool is in hand.",
       "surfaceIds": [],
       "uxi": ["UXI-CAM-011"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "camera.pinch",
@@ -3136,10 +3136,10 @@
       "listener": "element",
       "states": ["idle", "previewing", "settled"],
       "permission": "Camera only; no document change.",
-      "cancel": "Lifting the fingers ends it; a pending one-finger selection is not arbitrated against it yet (AP4).",
+      "cancel": "A second touch preempts the first finger's session (rolled back, its late hit dropped) and pinches (UXI-T71, IC4).",
       "surfaceIds": [],
       "uxi": ["UXI-CAM-012"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.page",
@@ -3159,10 +3159,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.page"],
       "uxi": ["UXI-GST-001", "UXI-GST-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.artboard",
@@ -3182,10 +3182,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.artboard"],
       "uxi": ["UXI-GST-001", "UXI-GST-005", "UXI-SNP-001"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.line",
@@ -3205,10 +3205,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.line"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.pen",
@@ -3228,10 +3228,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape cancels the path in progress through the spine's key path; Enter commits one insertPath.",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.pen"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-003", "UXI-DRW-004"],
-      "status": "legacy",
+      "status": "migrated",
       "notes": "The Pen returns to its idle state after closing a path in a way ADR 1201's tool contract changes (IC11)."
     },
     {
@@ -3252,10 +3252,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.pencil"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GEO-004"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.smooth",
@@ -3268,10 +3268,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "committing", "settled"],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.smooth"],
       "uxi": ["UXI-DRW-005", "UXI-DRW-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.rectangle-frame",
@@ -3291,10 +3291,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.rectangleFrame"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.ellipse-frame",
@@ -3314,10 +3314,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.ellipseFrame"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.polygon-frame",
@@ -3337,10 +3337,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.polygonFrame"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.rectangle",
@@ -3360,10 +3360,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.rectangle"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006", "UXI-GST-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.ellipse",
@@ -3383,10 +3383,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.ellipse"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006", "UXI-GST-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.polygon",
@@ -3406,10 +3406,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.polygon"],
       "uxi": ["UXI-DRW-001", "UXI-DRW-002", "UXI-GST-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.scissors",
@@ -3422,10 +3422,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "committing", "settled"],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.scissors"],
       "uxi": ["UXI-DRW-005", "UXI-DRW-006"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.free-transform",
@@ -3445,10 +3445,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.freeTransform"],
       "uxi": ["UXI-TRN-003", "UXI-TRN-004", "UXI-TRN-005", "UXI-GST-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.rotate",
@@ -3468,10 +3468,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.rotate"],
       "uxi": ["UXI-TRN-004", "UXI-GST-005", "UXI-GST-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.scale",
@@ -3491,10 +3491,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.scale"],
       "uxi": ["UXI-TRN-003", "UXI-GST-005", "UXI-GST-010"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.shear",
@@ -3514,10 +3514,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.shear"],
       "uxi": ["UXI-TRN-005", "UXI-GST-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.gradient-swatch",
@@ -3537,10 +3537,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.gradientSwatch"],
       "uxi": ["UXI-GST-001", "UXI-GST-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.mesh",
@@ -3560,10 +3560,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.mesh"],
       "uxi": ["UXI-GST-001", "UXI-GST-005", "UXI-DRW-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.gradient-feather",
@@ -3583,10 +3583,10 @@
         "settled"
       ],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.gradientFeather"],
       "uxi": ["UXI-GST-001", "UXI-GST-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.eyedropper",
@@ -3599,10 +3599,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "committing", "settled"],
       "permission": "One engine operation on commit; the engine refuses an edit the document's role or a lock forbids.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.eyedropper"],
       "uxi": ["UXI-GST-004", "UXI-MUT-001"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "tool.measure",
@@ -3615,10 +3615,10 @@
       "listener": "element",
       "states": ["idle", "pressed", "previewing", "settled"],
       "permission": "Reads only; no document change.",
-      "cancel": "Escape reaches the handler through the gesture spine's key path (useGestureSpine) unless canvasKeyYields; pointercancel and window blur end the drag; lostpointercapture and unmount do not yet (IC2).",
+      "cancel": "A session of the coordinator (the tool's owner): Escape cancels the drag through the handler (the arbiter's gesture tier), and pointercancel, a lost capture, blur, a hidden page, unmount, a document or tool switch roll it back; a spring-load waits for the drag to settle and a suspended handler resumes with its state (IC2, IC4).",
       "surfaceIds": ["tool:paged.tool.measure"],
       "uxi": ["UXI-GST-006", "UXI-CAM-001"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "guide.drag",
@@ -3638,10 +3638,10 @@
         "settled"
       ],
       "permission": "One guide operation on release; guides on a locked layer refuse.",
-      "cancel": "Escape cancels through the controller's own window capture listener; window pointer listeners own the drag (IC4 makes it a session).",
+      "cancel": "A ruler-guide session of the coordinator: a blur, a hidden page, a document or tool switch and unmount cancel it with nothing written (IC4); Escape is the arbiter's.",
       "surfaceIds": [],
       "uxi": ["UXI-GDE-001", "UXI-GDE-002"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "threading.link",
@@ -3661,10 +3661,10 @@
         "settled"
       ],
       "permission": "One link operation; an invalid target refuses.",
-      "cancel": "Escape and pointercancel unload the cursor through window capture listeners (IC4 makes it a session).",
+      "cancel": "The loaded cursor is a transient session of the coordinator: a document or tool switch and unmount unload it; a blur leaves it (IC4); Escape is the arbiter's.",
       "surfaceIds": [],
       "uxi": ["UXI-TXT-019", "UXI-TXT-020", "UXI-TXT-021"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "placement.pending",
@@ -3684,14 +3684,14 @@
         "settled"
       ],
       "permission": "One place operation at the answered point; cancelling is an ordinary answer with nothing placed.",
-      "cancel": "Escape answers nothing through a window capture listener; a stolen capture still answers with the press (IC4 makes it a session).",
+      "cancel": "An armed placement is a transient session: a document or tool switch and unmount stand it down, placing nothing; a blur leaves it (IC4); Escape is the arbiter's.",
       "surfaceIds": [
         "command:paged.insert.placeImage",
         "keybinding:cmd+d→paged.insert.placeImage",
         "keybinding:ctrl+d→paged.insert.placeImage"
       ],
       "uxi": ["UXI-DND-001", "UXI-FBK-005"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "drop.file",
@@ -3726,10 +3726,10 @@
       "listener": "document",
       "states": ["idle", "pressed", "pending-hit", "settled"],
       "permission": "Opening the menu changes no document state; each item runs its command through applicability.",
-      "cancel": "Escape or a press outside closes the menu; the hit test that resolves its target carries no epoch (IC3).",
+      "cancel": "The menu's select-under-the-pointer carries a token; a late answer after a newer press, document or context is dropped (IC3).",
       "surfaceIds": ["command:paged.edit.contextMenu"],
       "uxi": ["UXI-CMD-007", "UXI-CMD-008", "UXI-OWN-008"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "context-menu.keyboard",
@@ -3823,32 +3823,32 @@
       "title": "Escape cancels the canvas move or handle drag",
       "owner": "canvas-transform",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/pointer-held",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
-      "listener": "document",
+      "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Cancels the engine gesture; the rest of the drag pans (IC2 stops the pan).",
+      "cancel": "The canvas's gesture handler in the Escape arbiter's gesture tier (IC4): a move, a handle drag, a marquee, a press or a tool's drag is cancelled, and nothing else acts on that press.",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-GST-003", "UXI-INV-002"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.tool-handler",
       "title": "Escape reaches the active gesture handler",
       "owner": "canvas-draw",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/tool-busy",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/apps/canvas/src/ui/useGestureSpine.ts",
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Forwarded to the handler unless canvasKeyYields; each handler cancels its own way.",
+      "cancel": "A handler that holds a state between presses (the Pen's path, `busy()`) answers in the arbiter's transient tier; a tool's drag is cancelled by the canvas's gesture handler (IC4).",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-DRW-001", "UXI-DRW-004"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.text",
@@ -3871,16 +3871,16 @@
       "title": "Escape ends a path-edit drag, then the mode",
       "owner": "canvas-path",
       "eventClass": "key:Escape",
-      "scope": "editor",
+      "scope": "editor/path-edit",
       "adapter": "EscapeArbiter",
       "site": "apps/editor/apps/canvas/src/ui/usePathEditMode.ts",
       "listener": "editor-root",
       "states": ["idle", "canceling", "settled"],
       "permission": "Cancels or leaves without a document change of its own.",
-      "cancel": "Mid-drag undoes the drag; idle leaves path-edit mode.",
+      "cancel": "The arbiter's transient tier (IC4).",
       "surfaceIds": [],
       "uxi": ["UXI-ESC-001", "UXI-DRW-004"],
-      "status": "legacy"
+      "status": "migrated"
     },
     {
       "id": "escape.group-climb",
@@ -4034,24 +4034,6 @@
       "status": "migrated"
     }
   ],
-  "exceptions": [
-    {
-      "id": "EXC-001",
-      "contract": ["UXI-ESC-001", "UXI-MIG-002", "UXI-KEY-004"],
-      "scope": "Escape on the canvas while the viewport's drag cancel, the gesture handlers and path editing still listen on their own (they defer to the Escape arbiter, ADR 1207, until track IC registers them)",
-      "interactions": [
-        "escape.viewport",
-        "escape.tool-handler",
-        "escape.path-edit"
-      ],
-      "tests": ["UXI-T07", "UXI-T16"],
-      "why": "Three listeners still answer Escape at the document and the editor root on their own conditions; the arbiter defers to them (a pointer held on the canvas, path editing), so their press is theirs alone, but nothing yet orders the viewport's cancel against the gesture spine's.",
-      "issue": "IC4",
-      "owner": "editor shell",
-      "severity": "major",
-      "expiry": "2027-01-31",
-      "repro": "Begin a move with a drawing tool's handler in hand inside an entered group and press Escape: the handler and the viewport both see the key (the arbiter defers to the pointer held on the canvas)."
-    }
-  ],
+  "exceptions": [],
   "enforcedGates": ["G2"]
 }

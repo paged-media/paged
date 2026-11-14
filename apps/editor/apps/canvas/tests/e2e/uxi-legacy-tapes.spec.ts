@@ -28,7 +28,10 @@
 // the document point left under the pointer.
 //
 // Recording is deliberate: `UXI_TAPES=record` re-runs each script and
-// rewrites the tape. A replay never sleeps on the tape's timestamps.
+// rewrites the tape (`--grep` one tape to record only it). A replay never
+// sleeps on the tape's timestamps. Since IC4 they replay on the
+// interaction coordinator, and in the `uxi-legacy-pointer` project on the
+// old path, to the same outcome (editor ADR 1210).
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -107,6 +110,16 @@ const TAPES: LegacyTape[] = [
     fixture: "C",
     script: (g) =>
       g.tool("paged.tool.type").drag({ from: [100, 300], to: [320, 400] }),
+  },
+  {
+    // Starting over the first frame's text: since IC4 a Type-tool drag
+    // there selects text (UXI-TXT-011) — it used to do nothing, which is
+    // why the tape above pulls out a frame on empty page instead. Added
+    // with IC4 (editor ADR 1210), not a re-recording of a legacy tape.
+    name: "type-drag-text",
+    fixture: "C",
+    script: (g) =>
+      g.tool("paged.tool.type").drag({ from: [84, 80], to: [260, 120] }),
   },
   {
     name: "hand-pan",
