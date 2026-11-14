@@ -6237,8 +6237,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v79() {
-        assert_eq!(PROTOCOL_VERSION.0, 79);
+    fn protocol_version_is_v84() {
+        assert_eq!(PROTOCOL_VERSION.0, 84);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the
