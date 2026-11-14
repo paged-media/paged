@@ -558,7 +558,7 @@ export class WorkerRenderer {
   private notePainted(gpu: boolean): void {
     this.painted = true;
     workerJournal.record({
-      code: "worker.firstPaint",
+      code: "worker.paint.first",
       durMs: performance.now() - this.layoutAt,
       data: { pages: this.pages.length, gpu },
     });
