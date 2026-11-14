@@ -38,6 +38,8 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { covers } from "@paged-media/test-kit";
+
 import { historyDepth, undoDepth } from "./harness/history";
 import { dumpElement, modelSnapshot } from "./harness/model-dump";
 import { clientPointOf } from "./harness/interaction";
@@ -251,6 +253,176 @@ test.describe("UXI module conformance (G2)", () => {
     });
   }
 
+  // Editor ADR 1235 (PX9) — every object answers the same verbs, in every
+  // module's context: the eight host commands are offered there, each runs
+  // the module's own implementation where its context names one
+  // (extensions ADR 1109), and running one changes neither the document
+  // nor its history.
+  const MODULE_VERBS: Record<string, Record<string, string>> = {
+    sheet: {
+      copy: "media.paged.sheet.command.copySelection",
+      export: "media.paged.sheet.command.exportCsv",
+    },
+    rasterImage: {
+      transform: "media.paged.image.command.freeTransform",
+      version: "media.paged.image.command.newSnapshot",
+      export: "media.paged.image.command.exportAs",
+    },
+    dataBinding: { bindData: "media.paged.data.bindProperty" },
+  };
+  const VERBS = [
+    "inspect",
+    "transform",
+    "copy",
+    "bindData",
+    "style",
+    "version",
+    "validate",
+    "export",
+  ];
+
+  for (const ctx of MODULE_CONTEXTS) {
+    test(`a ${ctx.module} context answers the same eight verbs, the module's own where it has one @feat:editor-shell.context-sensitivity @level:edge`, async ({
+      page,
+    }) => {
+      covers("command:paged.verb.inspect");
+      covers("command:paged.verb.transform");
+      covers("command:paged.verb.copy");
+      covers("command:paged.verb.bindData");
+      covers("command:paged.verb.style");
+      covers("command:paged.verb.version");
+      covers("command:paged.verb.validate");
+      covers("command:paged.verb.export");
+      await openUxiFixture(page, "E");
+      const frame = await insertRect(page, 300, 400);
+      await page.evaluate(async (r) => {
+        const c = (globalThis as unknown as CanvasGlobal).__canvas.client;
+        await (
+          c as unknown as {
+            setElementSelection(i: unknown[], m: string): Promise<unknown[]>;
+          }
+        ).setElementSelection([r], "replace");
+      }, frame);
+      await enterByDoor(page, ctx.type, frame);
+      const offered = await page.evaluate(
+        ({ type, verbs }) => {
+          const r = (
+            globalThis as unknown as {
+              __canvas: {
+                registries: {
+                  commands: {
+                    get(id: string): unknown;
+                    applicability(id: string): { state: string };
+                  };
+                  editContexts: {
+                    get(
+                      t: string,
+                    ): { verbs?: Record<string, string> } | undefined;
+                  };
+                };
+              };
+            }
+          ).__canvas.registries;
+          return {
+            here: verbs.map(
+              (v) => r.commands.applicability(`paged.verb.${v}`).state,
+            ),
+            declared: r.editContexts.get(type)?.verbs ?? {},
+            present: Object.values(r.editContexts.get(type)?.verbs ?? {}).map(
+              (id) => r.commands.get(id) !== undefined,
+            ),
+          };
+        },
+        { type: ctx.type, verbs: VERBS },
+      );
+      expect(offered.here, "all eight offered here").toEqual(
+        VERBS.map(() => "here"),
+      );
+      expect(offered.declared).toEqual(MODULE_VERBS[ctx.type] ?? {});
+      expect(offered.present.every(Boolean)).toBe(true);
+
+      // A verb runs the module's command where it names one, the host's
+      // otherwise; Inspect and the module's own verb change nothing.
+      const model = await modelSnapshot(page);
+      const history = await historyDepth(page);
+      const own = Object.entries(MODULE_VERBS[ctx.type] ?? {})[0] ?? null;
+      const ran = await page.evaluate(
+        async ({ verb, command }) => {
+          const r = (
+            globalThis as unknown as {
+              __canvas: {
+                registries: {
+                  commands: {
+                    invoke(id: string): Promise<unknown>;
+                    observe(
+                      o: (e: {
+                        phase: string;
+                        invocation: { id: string };
+                      }) => void,
+                    ): { dispose(): void };
+                  };
+                };
+              };
+            }
+          ).__canvas.registries.commands;
+          const seen: string[] = [];
+          const off = r.observe((e) => {
+            if (e.phase === "started") seen.push(e.invocation.id);
+          });
+          // Whether the module's command applies here (its own `when`).
+          const applies = command
+            ? (
+                r as unknown as {
+                  applicability(id: string): { state: string };
+                }
+              ).applicability(command).state === "here"
+            : false;
+          await r.invoke("paged.verb.inspect");
+          if (verb) await r.invoke(`paged.verb.${verb}`);
+          off.dispose();
+          return { seen, applies };
+        },
+        {
+          verb: own && own[0] !== "export" ? own[0] : null,
+          command: own ? own[1] : null,
+        },
+      );
+      expect(ran.seen[0]).toBe("paged.verb.inspect");
+      // The module's own where it applies; the host's otherwise.
+      if (own && own[0] !== "export" && ran.applies)
+        expect(ran.seen).toContain(own[1]);
+      if (own && own[0] !== "export" && !ran.applies)
+        expect(ran.seen).not.toContain(own[1]);
+      await expect.poll(() => openPanels(page)).toContain("paged.properties");
+      if (ctx.type !== "rasterImage") {
+        expect(await modelSnapshot(page)).toBe(model);
+        expect(await historyDepth(page)).toEqual(history);
+      }
+    });
+  }
+
+  test("the canvas context menu lists the eight verbs first, as the palette names them @feat:editor-shell.context-sensitivity @level:happy", async ({
+    page,
+  }) => {
+    await openUxiFixture(page, "E");
+    const frame = await insertRect(page, 300, 400);
+    await page.evaluate(async (r) => {
+      const c = (globalThis as unknown as CanvasGlobal).__canvas;
+      await (
+        c.client as unknown as {
+          setElementSelection(i: unknown[], m: string): Promise<unknown[]>;
+        }
+      ).setElementSelection([r], "replace");
+      await c.registries.commands.invoke("paged.edit.contextMenu");
+    }, frame);
+    const menu = page.locator('[data-testid="canvas-context-menu"]');
+    await expect(menu).toBeVisible();
+    const rows = await menu
+      .locator("[data-command]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-command")));
+    expect(rows.slice(0, 8)).toEqual(VERBS.map((v) => `paged.verb.${v}`));
+  });
+
   test("UXI-T35 — a double-click in a text frame puts the caret in that story; the bar says text, the frame stays @feat:stories-text.caret-selection @level:edge", async ({
     page,
   }) => {
@@ -387,9 +559,8 @@ test.describe("UXI module conformance (G2)", () => {
     await openUxiFixture(page, "E");
     const { sheet } = await placeModuleFrames(page);
     // The web frame was placed last: a click selects the sheet frame.
-    const { elementScreenCenter } = await import(
-      "../journey/plugins/sheet-kit"
-    );
+    const { elementScreenCenter } =
+      await import("../journey/plugins/sheet-kit");
     const at = await elementScreenCenter(page, sheet);
     await page.mouse.click(at.x, at.y);
     await expect.poll(() => selectedIds(page)).toEqual([sheet.id]);

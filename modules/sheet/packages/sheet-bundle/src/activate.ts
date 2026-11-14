@@ -664,6 +664,12 @@ export function activate(host: BundleHost): BundleHandle {
   host.contribute.editContext({
     type: "sheet",
     entry: "doubleClick",
+    // Extensions ADR 1110 — the sheet's own Copy (the selected range's
+    // values) and Export (the active sheet as CSV), editor ADR 1235.
+    verbs: {
+      copy: "media.paged.sheet.command.copySelection",
+      export: "media.paged.sheet.command.exportCsv",
+    },
     // Extensions ADR 1106 — the breadcrumb's name (F-45). Committed cell
     // edits are the workbook's at once (the session's journal), so leaving
     // keeps them without asking; a cell still being typed is the context's

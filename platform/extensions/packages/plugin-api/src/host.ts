@@ -306,6 +306,16 @@ export interface EditContextContribution {
    */
   editLabel?: string;
   /**
+   * Extensions ADR 1110 — the module's own implementation of the host's
+   * universal object verbs (editor ADR 1235): for each verb it implements,
+   * the id of a command this bundle registered, run with no payload on what
+   * the context edits. While the context is active the host's verb command
+   * (`paged.verb.<verb>`, in the context menu and the palette) runs it; a
+   * verb not named here falls back to the host's own. Absent ⇒ every verb is
+   * the host's.
+   */
+  verbs?: Partial<Record<ObjectVerb, string>>;
+  /**
    * Extensions ADR 1106 (the interaction contract's D-05) — this context
    * edits the pixels of a placed image. A double-click on a frame that
    * holds an image positions the image inside its frame first (the host's
@@ -357,6 +367,19 @@ export interface EditContextContribution {
    *  bundle's manifest at registration; authors leave it undefined. */
   metadataKey?: string;
 }
+
+/** Extensions ADR 1110 — the verbs every object answers in every context
+ *  (editor ADR 1235): inspect it, transform it, copy it, bind it to data,
+ *  style it, version it (a checkpoint), validate it, export it. */
+export type ObjectVerb =
+  | "inspect"
+  | "transform"
+  | "copy"
+  | "bindData"
+  | "style"
+  | "version"
+  | "validate"
+  | "export";
 
 /** Extensions ADR 1106 — how the host may leave a dirty edit context
  *  ({@link EditContextContribution.exitPolicy}). */

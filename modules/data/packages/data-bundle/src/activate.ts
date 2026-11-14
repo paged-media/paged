@@ -314,6 +314,9 @@ export function activate(host: BundleHost): BundleHandle {
   host.contribute.editContext({
     type: "dataBinding",
     entry: "doubleClick",
+    // Extensions ADR 1110 — the binding's own Bind to data (the Bindings
+    // panel), editor ADR 1235.
+    verbs: { bindData: "media.paged.data.bindProperty" },
     // Extensions ADR 1106 — the breadcrumb's name (F-45). A binding is
     // edited through its panel, each change a document edit: leaving has
     // nothing in flight to ask about.

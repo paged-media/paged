@@ -583,6 +583,7 @@ export {
   EditContextBreadcrumb,
 } from "./chrome/EditContextBreadcrumb";
 export {
+  readEnvelope,
   useEditContextEntry,
   type DoubleClickHit,
 } from "./state/use-edit-context-entry";

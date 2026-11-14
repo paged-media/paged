@@ -277,6 +277,7 @@ export type {
   EnteredEditContext,
   EditContextHistory,
   EditContextExitPolicy,
+  ObjectVerb,
   ContentPointerEvent,
   ContentWheelEvent,
   EditContextDescriptor,

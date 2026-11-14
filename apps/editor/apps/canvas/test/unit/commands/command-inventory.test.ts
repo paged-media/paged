@@ -61,6 +61,7 @@ import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
+import { buildVerbCommands } from "../../../src/verb-commands";
 import {
   CANVAS_CONTEXT_MENU_COMMAND,
   SELECT_BELOW_COMMAND,
@@ -195,6 +196,7 @@ function tableIds(): string[] {
     ...buildClipboardCommands(noop),
     ...buildSvgCommands(noop),
     ...buildAssetExportCommands(),
+    ...buildVerbCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     SELECT_BELOW_COMMAND,
     ...buildObjectCommands(noop),
@@ -295,6 +297,7 @@ describe("the host command inventory", () => {
       "clipboardCommands",
       "svgCommands",
       "buildAssetExportCommands()",
+      "buildVerbCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "SELECT_BELOW_COMMAND",
       "objectCommands",

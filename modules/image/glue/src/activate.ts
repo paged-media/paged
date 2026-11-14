@@ -2223,6 +2223,13 @@ export function activate(host: BundleHost): BundleHandle {
     : null;
 
   host.contribute.editContext({
+    // Extensions ADR 1110 — the image's own Transform, Version and Export
+    // (editor ADR 1235's verbs): Free Transform, a snapshot, Export As.
+    verbs: {
+      transform: "media.paged.image.command.freeTransform",
+      version: "media.paged.image.command.newSnapshot",
+      export: "media.paged.image.command.exportAs",
+    },
     // The Edit menu reads "Undo <step>".
     undoLabel: () => session.state().history?.undoLabel ?? null,
     redoLabel: () => session.state().history?.redoLabel ?? null,

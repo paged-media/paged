@@ -359,6 +359,7 @@ import {
   ASSET_EXPORT_MENU_ITEMS,
   buildAssetExportCommands,
 } from "../asset-export/commands";
+import { buildVerbCommands } from "../verb-commands";
 import {
   addPage,
   buildInsertCommands,
@@ -1848,6 +1849,8 @@ function CanvasAppIntegration() {
       ...svgCommands,
       // Editor ADR 288 — Asset Export.
       ...buildAssetExportCommands(),
+      // Editor ADR 1235 — the verbs every object answers.
+      ...buildVerbCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       SELECT_BELOW_COMMAND,
       ...objectCommands,
