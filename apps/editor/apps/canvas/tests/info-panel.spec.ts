@@ -44,14 +44,6 @@ const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text.idml`;
  *  navigator/cockpit-panels idiom). */
 async function loadViaInput(page: Page, fixture: string): Promise<void> {
   await loadViaFileInput(page, fixture);
-  // The open is not over when the new document's id lands: the load's tail
-  // (the other pages composed and pictured, editor ADR 1208) runs after
-  // it, and only then does the import mark the file it opened as saved
-  // (UX audit F-08). An edit before that counts as part of the opened file,
-  // so AC-INFO-2's edit waits for the load to end.
-  await expect(
-    page.locator('[data-paged-viewport][data-loading-stage="ready"]'),
-  ).toBeVisible({ timeout: 30_000 });
 }
 
 test.describe("Info panel", () => {

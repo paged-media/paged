@@ -101,6 +101,31 @@ export interface DocumentLoaderCallbacks {
  *  editor. */
 const LOADS = scoped("documentLoads", () => ({ newest: 0 }));
 
+/** The document the newest file load opened, and whether anything edited it
+ *  while the load's tail ran (editor ADR 1203, amendment 2). */
+const OPENED = scoped("documentOpened", () => ({
+  docId: null as string | null,
+  editedWhileLoading: false,
+}));
+
+/**
+ * Did the user edit the document `docId` while its load was still running?
+ *
+ * The canvas is editable from the load's geometry stage (editor ADR 1208),
+ * while the tail — the other pages composed and pictured — runs on, and an
+ * open is not over until the tail is. An open that marks the file it opened
+ * as saved (an importer's, UX audit F-08) must not mark an edit made in that
+ * time as saved with it: the document is the user's edited copy, not the
+ * file. Answers false for a document this editor's loader did not open.
+ */
+export function editedWhileLoading(
+  scope: EditorScope,
+  docId: string | null,
+): boolean {
+  const opened = scope.get(OPENED);
+  return docId !== null && opened.docId === docId && opened.editedWhileLoading;
+}
+
 /**
  * Drives the load → snapshot → ready sequence for one IDML file.
  *
@@ -204,7 +229,25 @@ export async function loadDocumentFile(
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}; snapshotting…`,
   );
+  const opened = cb.scope.get(OPENED);
+  opened.docId = handle.docId;
+  opened.editedWhileLoading = false;
   await snapshotAllPages(client, handle, cb, load, loading);
+  if (load !== loads.newest) return;
+  // The engine's flag counts the edits since the load (its undo log), and no
+  // save has been marked since it landed, so it says whether the user edited
+  // while the tail ran. A document that cannot say is taken as edited: the
+  // flag errs on the side of asking.
+  opened.editedWhileLoading = await engineReportsEdited(client);
+}
+
+/** The engine's own dirty flag; true when it cannot answer. */
+async function engineReportsEdited(client: CanvasClient): Promise<boolean> {
+  try {
+    return (await client.documentMeta()).dirty;
+  } catch {
+    return true;
+  }
 }
 
 /** v84 (engine ADR 1314) — the loading state's provisional fields of a

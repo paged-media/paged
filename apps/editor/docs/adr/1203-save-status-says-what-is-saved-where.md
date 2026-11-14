@@ -81,3 +81,26 @@ edits" was all the user saw, whether the file was written or not.
 the save's remote step (syncing, then synced with the repository among the destinations, or saved
 locally · not synced with the server's words). The consequence above ("not reported yet") no longer
 holds.
+
+## Amendment 2 (2026-11-14): an edit made while the document loads is not the file
+
+The canvas is editable from a load's geometry stage ([ADR 1208](1208-docks-are-resizable-and-the-workspace-adapts.md),
+progressive loading), while the load's tail (the other pages composed and pictured, engine ADR
+1314) runs on. An importer's open (an IDML file through paged.publish, a Word file through
+paged.doc) resolves only after that tail, and the open then marks what it opened as saved (UX audit
+F-08), so an edit the user made at the first paint or while the other pages were prepared was
+marked saved with it: the document read clean, the save status said nothing was unsaved and
+replacing or closing it asked nothing.
+
+The loader now records, when the tail ends, whether the engine reports the document edited since
+it landed (`editedWhileLoading`, `state/document-loader.ts`; no save point exists then, so the
+engine's flag counts only edits since the load). When it does, the open marks nothing
+(`state/commands/file-commands.ts`) and the document stays edited; when it does not, the open marks
+it saved as before, the importer's own writes after its open (paged.doc's pour) included. Edits
+stay possible throughout the load. A load whose document cannot answer is taken as edited.
+
+Tests: `apps/canvas/test/shell/open-edit-while-loading.dom.test.tsx` (the shell over the real
+engine, an importer opening through the editor's native-document door: an edit at the first paint
+and one while the pages are prepared leave the document edited; no edit, or the importer's own
+write after its open, reads clean) and `apps/canvas/tests/e2e/uxi-documents.spec.ts` (an edit at
+the first paint reads edited after the load, with its undo step).

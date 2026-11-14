@@ -135,3 +135,10 @@ outlines, never as blank pages. The thumbnails of pages 2 onward are taken once 
 is final, then "Preparing pages" counts them as before. A document whose first spread is the
 whole document is never provisional, and loads without `firstPages` (a plugin's, a test's) are
 built whole as before.
+
+## Amendment 2026-11-14: the document is editable before the load ends
+
+The canvas takes edits from the `geometry` stage on, while the first page is painted and the other
+pages are composed and pictured; nothing waits for `ready`. An edit made before `ready` is the
+user's, and an open that marks the file it opened as saved leaves it edited
+([ADR 1203](1203-save-status-says-what-is-saved-where.md), amendment 2).

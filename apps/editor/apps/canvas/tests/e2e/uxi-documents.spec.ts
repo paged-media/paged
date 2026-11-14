@@ -232,6 +232,55 @@ test.describe("the save status says what a save did (editor ADR 1203)", () => {
     await expect(status(page)).toHaveAttribute("data-save-state", "synced");
     await expect(status(page)).toHaveAttribute("aria-label", "Saved");
   });
+
+  // Amendment 2: the canvas is editable from the load's geometry stage (ADR
+  // 1208) while the other pages are composed and pictured, and the open
+  // marks the file it opened as saved only once that tail is over (F-08).
+  // An edit made in between is the user's, not the file's.
+  test("an edit made while the document still loads leaves it edited, not saved @feat:editor-shell.document-title @level:edge", async ({
+    page,
+  }) => {
+    await openCanvas(page);
+    // The edit goes out the moment the canvas reports the first page
+    // painted, while the other pages are still prepared.
+    await page.evaluate(() => {
+      const w = globalThis as unknown as Win & { __editedAt?: string };
+      const observer = new MutationObserver(() => {
+        const stage = document
+          .querySelector("[data-paged-viewport]")
+          ?.getAttribute("data-loading-stage");
+        if (stage !== "firstPaint" || w.__editedAt) return;
+        w.__editedAt = stage;
+        observer.disconnect();
+        void w.__canvas.client.mutate({ op: "insertPage", args: {} });
+      });
+      observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-loading-stage"],
+      });
+    });
+    await page.setInputFiles('input[type="file"]', fixturePath("text"));
+    await expect(
+      page.locator('[data-paged-viewport][data-loading-stage="ready"]'),
+    ).toBeVisible({ timeout: 30_000 });
+    expect(
+      await page.evaluate(
+        () => (globalThis as unknown as { __editedAt?: string }).__editedAt,
+      ),
+    ).toBe("firstPaint");
+    // The edit landed and stays the user's: the document is dirty, the save
+    // status says it is being edited, and Undo takes it back.
+    await expect.poll(() => undoDepth(page)).toBe(1);
+    expect(
+      await page.evaluate(
+        async () =>
+          (await (globalThis as unknown as Win).__canvas.client.documentMeta())
+            .dirty,
+      ),
+    ).toBe(true);
+    await expect.poll(async () => (await saveState(page)).kind).toBe("editing");
+  });
 });
 
 test.describe("the recovery journal offers unsaved work back (editor ADR 1204)", () => {

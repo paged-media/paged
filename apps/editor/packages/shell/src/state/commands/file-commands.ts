@@ -25,7 +25,11 @@ import { t } from "@paged-media/strings";
 import { COMMANDS, DROP, LOAD, REPLACE } from "../messages";
 import type { DropIntent } from "../drop-intent";
 import { getAiAvailability } from "../../ai/availability";
-import { createBlankDocument, loadDocumentFile } from "../document-loader";
+import {
+  createBlankDocument,
+  editedWhileLoading,
+  loadDocumentFile,
+} from "../document-loader";
 import { importReplaceAllowed, setPendingImportSource } from "../import-source";
 import { notifyImported } from "../import-hooks";
 import { pageForPicture, pictureSize } from "../picture-size";
@@ -221,7 +225,15 @@ export async function openFile(
     // document the importer finished building IS the file the user
     // opened: mark it saved here, once the import has settled. The first
     // real edit after this reads dirty again (`CanvasClient.markSaved`).
-    if (outcome === "opened") editor.client.markSaved();
+    // An edit the user made while the load's tail still ran (the canvas is
+    // editable from the first page, ADR 1208) is not the file: then the
+    // open marks nothing, and the document reads edited (ADR 1203,
+    // amendment 2).
+    if (
+      outcome === "opened" &&
+      !editedWhileLoading(editor.scope, editor.client.openDocument)
+    )
+      editor.client.markSaved();
     if (outcome === "opened" || outcome === "added") {
       await notifyImported(editor.scope, {
         name: file.name,
