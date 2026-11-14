@@ -34,6 +34,7 @@ import {
   isEscapeKey,
   resolveCursorCss,
   useCursorController,
+  useEscapeArbiter,
   useEscapeHandler,
   usePaged,
   useRegistryView,
@@ -51,9 +52,11 @@ import {
 // Also routes keyboard events to the active handler (`onKey` — Enter
 // commits a Pen path), skipping DOM editables. Escape is the Escape
 // arbiter's (editor ADR 1207): a tool's drag is cancelled by the canvas's
-// gesture handler (through `onCancel`), and a handler that holds a
-// transient state between presses (a Pen path) answers in the transient
-// tier, §12.1 case 4.
+// gesture handler (through `onCancel`), a handler that holds a transient
+// state between presses (a Pen path) answers in the transient tier, §12.1
+// case 4, and the press a dirty context's sub-edit hands to the tool in
+// hand (the arbiter's `context-dirty` deferral: a bundle's transform box,
+// ADR 1214) reaches the handler here.
 
 export interface ToolGestureDispatch {
   onDown: (e: CanvasPointerEvent) => void;
@@ -111,16 +114,25 @@ export function useGestureSpine(): {
     activate(effectiveTool, lastReason);
   }, [effectiveTool, lastReason]);
 
-  // Keyboard → active handler (Enter commits a Pen path; Escape is the
-  // arbiter's, below).
+  // Keyboard → active handler (Enter commits a Pen path). Escape is the
+  // arbiter's (below), except the press a dirty context defers to the tool
+  // in hand: its sub-edit has no key handler of its own (an open transform
+  // box is the bundle tool's), and this listener, after the arbiter's
+  // capture one, is where that tool hears it.
+  const arbiter = useEscapeArbiter();
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!spine.hasActive()) return;
-      if (isEscapeKey(e) || canvasKeyYields(e)) return;
+      if (isEscapeKey(e)) {
+        const r = arbiter.resolutionOf(e);
+        if (r?.tier === "context-dirty" && r.outcome === "defer") spine.key(e);
+        return;
+      }
+      if (canvasKeyYields(e)) return;
       spine.key(e);
     };
     return keys.listen("keydown", onKeyDown);
-  }, [keys, spine]);
+  }, [keys, spine, arbiter]);
 
   // A transient state between presses (a Pen path under construction):
   // Escape cancels its uncommitted part (§12.1 case 4).
