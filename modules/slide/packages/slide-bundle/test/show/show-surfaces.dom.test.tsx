@@ -292,12 +292,67 @@ const states = async () =>
   ).map((p) => ({ id: p.selfId, state: parseState(p.pluginMetadata) }));
 
 describe("the slide sorter [plugin-slide.slide-sorter]", () => {
-  it("is shown by its command in place of the canvas", async () => {
+  it("is shown by its command in place of the canvas; a deck of several slides opens in it (slide ADR 725)", async () => {
     covers("command:media.paged.slide.command.slideSorter");
-    await d.h.host.objects.invoke(SHOW_CMD.slideSorter, {});
-    expect(d.h.host.shell.activeView()).toBe(SORTER_VIEW);
+    // The deck opened in the sorter; the command toggles it.
+    await waitFor(() => expect(d.h.host.shell.activeView()).toBe(SORTER_VIEW));
     await d.h.host.objects.invoke(SHOW_CMD.slideSorter, {});
     expect(d.h.host.shell.activeView()).toBeNull();
+    await d.h.host.objects.invoke(SHOW_CMD.slideSorter, {});
+    expect(d.h.host.shell.activeView()).toBe(SORTER_VIEW);
+  });
+
+  it("marks the current slide; the keys move through the slides and Enter opens one; Delete removes the selection as one undo step (slide ADR 725)", async () => {
+    const ids = await d.pageIds();
+    d.setActivePage(ids[1]!);
+    const { r, closed } = await sorter();
+    const cell = (id: string) =>
+      r.container.querySelector<HTMLElement>(`[data-sorter-slide="${id}"]`)!;
+    await waitFor(() =>
+      expect(cell(ids[1]!).getAttribute("data-current")).toBe("true"),
+    );
+    const list = r.container.querySelector<HTMLElement>('[role="listbox"]')!;
+    fireEvent.click(cell(ids[0]!));
+    fireEvent.keyDown(list, { key: "ArrowRight" });
+    expect(cell(ids[1]!).getAttribute("aria-selected")).toBe("true");
+    expect(cell(ids[0]!).getAttribute("aria-selected")).toBe("false");
+    fireEvent.keyDown(list, { key: "ArrowRight", shiftKey: true });
+    expect(cell(ids[2]!).getAttribute("aria-selected")).toBe("true");
+    expect(cell(ids[1]!).getAttribute("aria-selected")).toBe("true");
+    // Delete: both selected slides, one undo step.
+    await drive(() => fireEvent.keyDown(list, { key: "Delete" }));
+    expect(await d.pageIds()).toEqual(
+      ids.filter((id) => id !== ids[1] && id !== ids[2]),
+    );
+    await drive(() => d.h.host.document.undo());
+    expect(await d.pageIds()).toEqual(ids);
+    // Enter opens the selected slide in Normal view.
+    await waitFor(() => expect(cell(ids[0]!)).not.toBeNull());
+    fireEvent.click(cell(ids[0]!));
+    d.wentTo.length = 0;
+    fireEvent.keyDown(list, { key: "Enter" });
+    expect(d.wentTo).toEqual([ids[0]]);
+    expect(closed()).toBe(1);
+  });
+
+  it("shows the speaker notes on request, and its switch keeps decks out of it (slide ADR 725)", async () => {
+    const { r } = await sorter();
+    const notes = r.container.querySelector<HTMLInputElement>(
+      '[data-sorter="notes"]',
+    )!;
+    expect(r.container.querySelectorAll("[data-sorter-notes]").length).toBe(0);
+    fireEvent.click(notes);
+    const withNotes = (await states()).filter((s) => s.state.notes).length;
+    expect(r.container.querySelectorAll("[data-sorter-notes]").length).toBe(
+      withNotes,
+    );
+    const toggle = r.container.querySelector<HTMLInputElement>(
+      "[data-sorter-open-on-load]",
+    )!;
+    expect(toggle.checked).toBe(true);
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(false);
+    expect(d.host.storage.get("sorterOnOpen")).toBe(false);
   });
 
   it("selects, hides and sets a transition on the selection, one undo step each", async () => {

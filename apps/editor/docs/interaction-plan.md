@@ -445,6 +445,9 @@ workspace off (its window is 1280 px) unless a spec is about the workspace.
   open tag, path, rendered size, the rules that reach it, its diagnostics), publication notes for
   what a page cannot show and why no script runs, the browser preview and the publication
   rendering named, sample data beside the source.
+  **Slide done** (paged.slide ADR 725; F-47 mostly): a deck of several slides opens in the
+  slide sorter, its navigation (Play, notes, the current slide, keys, Delete as one undo step);
+  the Slides panel's actions on hover and focus. Module page nouns remain open (a host door).
   **Built, part b (2026-11-14):** sheet — **Frame · Edit cells** (extensions ADR 1108), the bar's
   Editing cells and Done, the publication preview of the selection with overflow warnings, T38
   extended (sheet ADR 532; F-42 closed); doc — Story view (a module view writing the engine's

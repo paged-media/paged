@@ -295,7 +295,11 @@ paged.web (ADR 416): the Web source panel inspects the element in focus — pick
 or clicked in the outline — with its source line, open tag, path, rendered size, the stylesheet
 rules that reach it and its diagnostics; it lists what a printed page cannot show and why scripts
 never run, names the sandboxed browser preview and the native publication rendering, and offers
-the placeholders without a value as sample data beside the source.
+the placeholders without a value as sample data beside the source. paged.slide (ADR 725): a deck
+of several slides opens in the slide sorter, its navigation — Play from the selection, speaker
+notes, the slide on the canvas marked, the arrow keys, Enter to open a slide, Delete as one undo
+step — and the Slides panel shows a thumbnail's actions on hover and focus (UX audit F-47; the
+Document Map's page nouns stay the host's).
 
 Track FI (fields, the inspector, commands) has landed. The one numeric
 field is built ([ADR 1216](adr/1216-one-numeric-field.md)): every number in the editor's panels,

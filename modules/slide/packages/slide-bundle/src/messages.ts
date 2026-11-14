@@ -181,6 +181,13 @@ export const SHOW = defineMessages("slide.show", {
   transition: "Transition",
   noTransition: "None",
   sorterEmpty: "No slides. Open a PowerPoint deck with File ▸ Open.",
+  sorterPlay: "Play",
+  sorterPlayTitle:
+    "Play the show from the first selected slide, or from the beginning",
+  sorterNotes: "Notes",
+  sorterOpenOnLoad: "Open decks in the sorter",
+  sorterOpenOnLoadTitle:
+    "Show a deck of several slides in the slide sorter when it opens",
   noWebGpu:
     "Transitions need WebGPU, which this browser does not offer: the show cuts between slides.",
 });

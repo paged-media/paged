@@ -29,3 +29,4 @@ Range 700–749.
 | [722](722-one-drawingml-paint-and-effect-mapper.md) | One DrawingML paint and effect reader (`paged_ooxml::drawingml`), one mapper onto the engine (`dml-native`) | Accepted 2026-10-25, amended 2026-10-28 |
 | [723](723-effects-parity-and-pictures.md) | Effects parity and pictures: bevels as the engine's bevel, patterns as tile pictures from PowerPoint's own cells, WebP/TGA/ICO/QOI written as PNG, the Format Painter | Accepted 2026-10-30 |
 | [724](724-autofit-and-chart-data-reach-audit.md) | Autofit and chart-data editing: the W7 reach audit (autofit built since on the engine's shrink-to-fit, engine ADR 1061; chart data on paged.sheet's grid through the workbook door, extensions ADR 1102) | Accepted 2026-11-08; amended 2026-11-09 (twice) |
+| [725](725-a-deck-opens-in-the-slide-sorter.md) | A deck opens in the slide sorter: the sorter is a deck's navigation | Accepted 2026-11-14 |

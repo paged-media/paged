@@ -83,9 +83,11 @@ import { makeSlidesPanel } from "./panels/slides-panel.js";
 import { SlidesStore } from "./slides-model.js";
 import {
   contributeShow,
+  SHOW_CMD,
   showTypedCommands,
   SORTER_VIEW,
 } from "./show/contribute.js";
+import { openDecksInSorter } from "./show/sorter-on-open.js";
 import { SHOW } from "./messages.js";
 import { makeSlideSorter } from "./views/slide-sorter.js";
 import { makeSlideMaster } from "./views/slide-master.js";
@@ -669,9 +671,26 @@ export function activate(host: BundleHost): BundleHandle {
         host.contribute.view({
           id: SORTER_VIEW,
           title: t(SHOW.slideSorter),
-          render: makeSlideSorter(host, store),
+          render: makeSlideSorter(host, store, {
+            // Slide ADR 725 — Play from the sorter: from the first selected
+            // slide (made current first), else from the beginning.
+            play: (pageId) => {
+              if (!pageId) {
+                void runShow?.(SHOW_CMD.fromBeginning);
+                return;
+              }
+              void Promise.resolve(host.viewport.goToPage(pageId)).then(() =>
+                runShow?.(SHOW_CMD.fromCurrent),
+              );
+            },
+          }),
         }),
     );
+    // Slide ADR 725 — a deck of several slides opens in the sorter.
+    if (host.supports("shell.views@1")) {
+      const sorterOpen = openDecksInSorter(host, store);
+      disposers.push(() => sorterOpen.dispose());
+    }
     runShow = show.run;
     playCustom = show.playCustomShow;
     disposers.push(() => {

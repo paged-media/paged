@@ -1269,6 +1269,13 @@ A 10-slide deck opens as a vertical page stack at 11%. The "page N" labels sit o
 
 **Screenshots:** `F-47-slide-deck-surface.png`
 
+**Mostly fixed (2026-11-14, paged.slide ADR 725).** A deck of several slides opens in the slide
+sorter, which is its navigation: Play from the selection, speaker notes, the current slide
+marked, the arrow keys, Enter to open a slide, Delete as one undo step; the Slides panel's
+per-slide actions show on hover and focus. Play was already in Plugins ▸ Slide Show. The page
+nouns (the Document Map's "Cover" and "Page 2…", the canvas captions) are the host's and remain
+open: a module has no way to name its pages yet.
+
 ### Keyboard and accessibility
 
 <a id="f-49"></a>

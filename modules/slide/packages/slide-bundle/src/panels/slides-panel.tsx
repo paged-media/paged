@@ -193,6 +193,8 @@ export function makeSlidesPanel(
     const { observe: observeNear, has: isNear } = useNearViewport();
     const [dragging, setDragging] = React.useState<string | null>(null);
     const [over, setOver] = React.useState<number | null>(null);
+    // The thumbnail under the pointer or holding focus (its actions show).
+    const [hot, setHot] = React.useState<string | null>(null);
     const slides = live.list();
     const active = live.activePage();
     const order = slides.map((s) => s.pageId);
@@ -218,6 +220,15 @@ export function makeSlidesPanel(
               data-near={slide.pageId}
               data-slide={slide.pageId}
               data-active={slide.pageId === active || undefined}
+              onPointerEnter={() => setHot(slide.pageId)}
+              onPointerLeave={() =>
+                setHot((h) => (h === slide.pageId ? null : h))
+              }
+              onFocus={() => setHot(slide.pageId)}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+                  setHot((h) => (h === slide.pageId ? null : h));
+              }}
               draggable
               onDragStart={(e) => {
                 setDragging(slide.pageId);
@@ -296,7 +307,21 @@ export function makeSlidesPanel(
                 >
                   <Thumb slide={slide} near={isNear(slide.pageId, i)} />
                 </button>
-                <div style={tools}>
+                {/* Slide ADR 725 (F-47): a thumbnail's actions show on
+                    hover and focus (and for the slide being edited), not
+                    under every thumbnail at once. */}
+                <div
+                  style={{
+                    ...tools,
+                    opacity:
+                      hot === slide.pageId || slide.pageId === active ? 1 : 0,
+                  }}
+                  data-slide-actions={
+                    hot === slide.pageId || slide.pageId === active
+                      ? "shown"
+                      : "hidden"
+                  }
+                >
                   <button
                     type="button"
                     style={small}
