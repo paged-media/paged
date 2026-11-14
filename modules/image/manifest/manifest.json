@@ -1299,7 +1299,7 @@
         },
         {
           "id": "media.paged.image.command.filterWatercolor",
-          "title": "Watercolour… (filter)",
+          "title": "Watercolor… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
