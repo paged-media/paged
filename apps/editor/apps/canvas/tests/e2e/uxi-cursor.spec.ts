@@ -91,7 +91,7 @@ test.describe("UXI cursor — one controller, the session's cursor first (IC9)",
     expect(await undoDepth(page)).toBe(depth);
   });
 
-  test("the Hand shows the closed hand while it pans and the open hand again after @feat:editor-tools.nav.hand @level:gesture @uxi:UXI-OVR-010", async ({
+  test("the Hand shows the closed hand while it pans and the open hand again after @feat:editor-tools.nav.pan @level:gesture @uxi:UXI-OVR-010", async ({
     page,
   }) => {
     covers("tool:paged.tool.hand");

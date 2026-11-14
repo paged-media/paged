@@ -48,12 +48,17 @@ const TODAY = "2026-11-13";
 const spec = readSpec();
 const schema = readJson(SCHEMA);
 const real = () => structuredClone(readJson(INVENTORY));
-/** The real inventory with one exception of the ledger's shape: the real
- *  ledger is empty since IC4 retired EXC-001. */
+/** The real inventory with one exception of the ledger's shape added after
+ *  whatever the real ledger holds. The tests address it by its id (`added`),
+ *  never as the ledger's first entry: with a real exception in the ledger,
+ *  `exceptions[0]` was that one, and the expiry test checked EXC-090 on the
+ *  real entry's expiry date. */
+const ADDED = "EXC-090";
+const added = (inv) => inv.exceptions.find((e) => e.id === ADDED);
 const withException = () => {
   const inv = real();
   inv.exceptions.push({
-    id: "EXC-090",
+    id: ADDED,
     contract: ["UXI-ESC-001", "UXI-MIG-002"],
     scope: "a test exception: two Escape listeners in one scope",
     interactions: ["escape.viewport", "escape.tool-handler"],
@@ -324,8 +329,8 @@ describe("the guard", () => {
     inv.tests[0].requirements.push("UXI-SEL-999");
     inv.interactions[0].uxi.push("UXI-NOPE-001");
     inv.interactions[0].states.push("hovering");
-    inv.exceptions[0].tests.push("UXI-T99");
-    inv.exceptions[0].interactions.push("no.such-interaction");
+    added(inv).tests.push("UXI-T99");
+    added(inv).interactions.push("no.such-interaction");
     const errors = check(inv);
     expect(
       matching(errors, /UXI-SEL-999 is not a requirement id/),
@@ -383,8 +388,11 @@ describe("the guard", () => {
 
   it("fails an exception past its expiry", () => {
     const inv = withException();
-    const e = inv.exceptions[0];
-    expect(matching(check(inv, { today: e.expiry }), /EXPIRED/)).toEqual([]);
+    const e = added(inv);
+    // Its own verdict: a real exception of the ledger expires on its own date.
+    expect(
+      matching(check(inv, { today: e.expiry }), new RegExp(`${e.id}: EXPIRED`)),
+    ).toEqual([]);
     const after = new Date(Date.parse(`${e.expiry}T00:00:00Z`) + 86_400_000)
       .toISOString()
       .slice(0, 10);
@@ -456,7 +464,7 @@ describe("the guard", () => {
 
   it("an exception's task is a task of the plan", () => {
     const inv = withException();
-    inv.exceptions[0].issue = "IC99";
+    added(inv).issue = "IC99";
     const plan = planTasks(ROOT);
     expect(check(real(), { plan })).toEqual([]);
     expect(
