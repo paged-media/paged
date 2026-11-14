@@ -251,8 +251,21 @@ test.describe("view commands", () => {
       snapToPoints: true,
       headingAnchors: false,
     });
-    const threads = page.locator("[data-thread-lines]").first();
-    await expect(threads).toHaveAttribute("data-thread-lines", "off");
+    // Text threads is an editing aid (editor ADR 1212): the overlay host
+    // mounts its overlay only while the aid is on, so "off" is the aid's
+    // switch in the bottom bar's control reading off AND no overlay.
+    const threadsAidOn = async () => {
+      await page.locator("[data-editing-aids-control]").click();
+      const item = page.locator('[data-editing-aid="textThreads"]');
+      await expect(item).toBeVisible();
+      const on = (await item.getAttribute("aria-checked")) === "true";
+      await page.keyboard.press("Escape");
+      await expect(item).toHaveCount(0);
+      return on;
+    };
+    const threads = page.locator("[data-thread-lines]");
+    expect(await threadsAidOn()).toBe(false);
+    await expect(threads).toHaveCount(0);
     await invoke(page, "paged.view.toggleTextThreads");
     await invoke(page, "paged.view.toggleSnapToPoints");
     await invoke(page, "paged.view.toggleHeadingAnchors");
@@ -261,8 +274,10 @@ test.describe("view commands", () => {
       snapToPoints: false,
       headingAnchors: true,
     });
-    // The thread-line overlay draws (one unthreaded frame: no hops).
-    await expect(threads).not.toHaveAttribute("data-thread-lines", "off");
+    // The command and the control are one switch, and the thread-line
+    // overlay draws (one unthreaded frame: no hops).
+    expect(await threadsAidOn()).toBe(true);
+    await expect(threads).toHaveAttribute("data-thread-lines", "empty");
     await invoke(page, "paged.view.toggleTextThreads");
     await invoke(page, "paged.view.toggleSnapToPoints");
     await invoke(page, "paged.view.toggleHeadingAnchors");
@@ -271,6 +286,8 @@ test.describe("view commands", () => {
       snapToPoints: true,
       headingAnchors: false,
     });
+    expect(await threadsAidOn()).toBe(false);
+    await expect(threads).toHaveCount(0);
   });
 
   test("Show data markers toggles the view setting", async ({ page }) => {
