@@ -56,6 +56,15 @@ const scope = detachedEditorScope();
 const setViewToggle = (which: "snapToPoints", on: boolean) =>
   setToggle(scope, which, on);
 
+// The snapping bypass is the platform's primary modifier, Cmd on macOS and
+// Ctrl elsewhere (editor ADR 1226); the other key snaps as usual. The tests
+// run on both, so they hold the key of the platform they run on.
+const ON_MAC =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const BYPASS = ON_MAC ? { cmd: true } : { ctrl: true };
+const OTHER_KEY = ON_MAC ? { ctrl: true } : { cmd: true };
+
 const RUNS = { numRuns: 200, seed: 0x9e57 };
 const coord = fc.double({ min: -5000, max: 5000, noNaN: true });
 const pt = fc.tuple(coord, coord);
@@ -306,14 +315,20 @@ describe("the graphic default and the post-insert flow", () => {
 describe("the host snapper (RFI C-68)", () => {
   afterEach(() => setViewToggle("snapToPoints", true));
 
-  const mouse = (cmd = false, shift = false) => ({
+  const mouse = (bypass = false, shift = false) => ({
     ...event([0, 0], null),
-    modifiers: { shift, alt: false, cmd, ctrl: false },
+    modifiers: {
+      shift,
+      alt: false,
+      cmd: bypass && ON_MAC,
+      ctrl: bypass && !ON_MAC,
+    },
   });
 
-  it("snapping is off while Cmd or Shift is held, and when View ▸ Snap to points is off", () => {
+  it("snapping is off while the bypass key (Cmd on macOS, Ctrl elsewhere) or Shift is held, and when View ▸ Snap to points is off", () => {
     expect(snappingOn(scope, {})).toBe(true);
-    expect(snappingOn(scope, { cmd: true })).toBe(false);
+    expect(snappingOn(scope, BYPASS)).toBe(false);
+    expect(snappingOn(scope, OTHER_KEY)).toBe(true);
     expect(snappingOn(scope, { shift: true })).toBe(false);
     setViewToggle("snapToPoints", false);
     expect(snappingOn(scope, {})).toBe(false);

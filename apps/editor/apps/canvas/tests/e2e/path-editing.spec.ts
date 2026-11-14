@@ -1162,13 +1162,15 @@ test.describe("E2E path editing — the Pen on existing paths", () => {
 // SNAPPING (RFI C-68) — the host half of vector-geometry's `snapPoint`. The
 // tolerance is 6 SCREEN px, so every offset below is a fraction of a
 // point at the fitted zoom: inside it, and still a visible miss without
-// snapping. Cmd turns it off for the gesture's samples.
+// snapping. The bypass key turns it off for the gesture's samples: the
+// platform's primary modifier, Cmd on macOS and Ctrl elsewhere (editor ADR
+// 1226), which Playwright's ControlOrMeta names.
 test.describe("E2E path editing — snapping", () => {
   test.beforeEach(async ({ page }) => {
     await loadPathEditFixture(page);
   });
 
-  test("AC-SNAP-1 — a dragged anchor lands on another anchor's alignment line; Cmd lets it miss @feat:editor-tools.path.direct-edit @level:gesture", async ({
+  test("AC-SNAP-1 — a dragged anchor lands on another anchor's alignment line; the bypass key lets it miss @feat:editor-tools.path.direct-edit @level:gesture", async ({
     page,
   }) => {
     const before = await mustTable(page, FX.quad);
@@ -1184,11 +1186,11 @@ test.describe("E2E path editing — snapping", () => {
     expectUntouched(snapped, before, [1, 2, 3]);
     await expectOneUndoRestores(page, FX.quad, before);
 
-    // The same drag with Cmd held from the press: no snap.
+    // The same drag with the bypass key held from the press: no snap.
     await enterPathEdit(page, FX.quad);
-    await page.keyboard.down("Meta");
+    await page.keyboard.down("ControlOrMeta");
     await drag(page, [100, 100], [150, 299.4]);
-    await page.keyboard.up("Meta");
+    await page.keyboard.up("ControlOrMeta");
     await expect
       .poll(async () => (await mustTable(page, FX.quad)).anchors[0].anchor[1])
       .not.toBe(100);
