@@ -89,7 +89,23 @@ export {
   type InteractionSnapshot,
   type SessionSpec,
   type Stale,
+  type CommittedSession,
 } from "./interaction/coordinator";
+// Editor ADR 1240, amendment 1 — what a committed canvas gesture did.
+export {
+  OPPOSITE_ANCHOR,
+  TRANSFORM_ANCHORS,
+  anchorOf,
+  anchorPoint,
+  isTransformAnchor,
+  measureTransformIntent,
+  roundPt,
+  unionBox,
+  type GestureMeasure,
+  type MeasuredGeometry,
+  type TransformAnchor,
+  type TransformIntent,
+} from "./interaction/transform-intent";
 export {
   INTERACTION_OWNERS,
   INTERACTION_PHASES,

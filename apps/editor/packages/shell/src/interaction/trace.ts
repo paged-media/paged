@@ -54,6 +54,9 @@ export interface TraceEntry {
   result?: string;
   /** A fixed diagnostic (`capture-lost`, `stale hit-test discarded`). */
   reason?: string;
+  /** What a committed session did, its kind only (`move`, `resize`,
+   *  `scale`, `rotate`): never its numbers' meaning for a document. */
+  intent?: string;
   /** The document epoch at the entry. */
   doc: number;
   latencyMs?: number;

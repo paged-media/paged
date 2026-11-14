@@ -35,11 +35,16 @@
 // live, including commands registered after the recorder started.
 //
 // It does NOT see direct manipulation. These paths never reach the
-// command registry, and an action therefore CANNOT contain them:
+// command registry, and an action therefore CANNOT contain them — with
+// two exceptions editor ADR 1240 added: a panel field's commit (a
+// `paged.object.setProperty` step) and, since its amendment 1, a committed
+// move, copy, resize, scale or rotate of the selection on the canvas (a
+// `paged.object.transformSelection` step, measured from the document by
+// the interaction coordinator's committed sessions). The rest:
 //
 //   · canvas gestures — the tool spine's beginGesture/updateGesture/
 //     commitGesture over the gesture SAB (`tools/gesture-handler.ts`):
-//     move, resize, rotate, scale, pen/shape drawing, marquee;
+//     pen/shape drawing, path edits, content transforms, marquee;
 //   · typing — `useTextEditing.ts` issues insertText / deleteRange
 //     mutations straight at the client;
 //   · panel FIELD edits — the catalog binding hook
@@ -83,6 +88,10 @@
 import { t } from "@paged-media/strings";
 import { ACTIONS } from "./messages";
 import type { CommandInvocation } from "../registries/command";
+import type {
+  TransformAnchor,
+  TransformIntent,
+} from "../interaction/transform-intent";
 import {
   applyParams,
   isObjectAddress,
@@ -102,6 +111,12 @@ export const ACTIONS_SCHEMA_VERSION = 1;
 /** Editor ADR 1240 — the host command a recorded property write replays
  *  through: `{ targets, path, value }`, one `host.objects` batch. */
 export const SET_PROPERTY_COMMAND = "paged.object.setProperty";
+
+/** Editor ADR 1240, amendment 1 — the typed command a recorded canvas
+ *  gesture replays through: `{ targets, transform, … }` (a move, a copy, a
+ *  resize, a scale or a turn of the selection), one `host.objects` batch.
+ *  The canvas registers it (`apps/canvas/src/transform-selection-plan.ts`). */
+export const TRANSFORM_SELECTION_COMMAND = "paged.object.transformSelection";
 
 /**
  * How a step behaves at replay time. Derived from the payload alone —
@@ -391,6 +406,100 @@ export function stepFromInvocation(
   if (payload !== undefined) step.payload = payload;
   if (at && at.context !== undefined) step.context = at.context;
   return step;
+}
+
+/** The payload of a recorded canvas gesture (editor ADR 1240, amendment
+ *  1): the selection as a token — a canvas gesture always acts on the
+ *  selection — and the intent's numbers as scalar leaves, so each one can
+ *  be made a parameter. */
+export function transformSelectionPayload(
+  intent: TransformIntent,
+): Record<string, unknown> {
+  const targets = { $selection: "elements" };
+  switch (intent.kind) {
+    case "move":
+      return {
+        targets,
+        transform: intent.copy ? "duplicate" : "move",
+        dx: intent.dx,
+        dy: intent.dy,
+      };
+    case "resize":
+    case "scale":
+      return {
+        targets,
+        transform: intent.kind,
+        ...(intent.width !== undefined ? { width: intent.width } : {}),
+        ...(intent.height !== undefined ? { height: intent.height } : {}),
+        anchor: intent.anchor,
+      };
+    case "rotate":
+      return { targets, transform: "rotate", angle: intent.angle };
+  }
+}
+
+/** A length or angle as a step's title shows it: at most two decimals. */
+const figure = (v: number): string => String(Math.round(v * 100) / 100);
+
+const ANCHOR_WORDS: Record<TransformAnchor, string> = {
+  north: ACTIONS.anchorNorth,
+  south: ACTIONS.anchorSouth,
+  east: ACTIONS.anchorEast,
+  west: ACTIONS.anchorWest,
+  northEast: ACTIONS.anchorNorthEast,
+  northWest: ACTIONS.anchorNorthWest,
+  southEast: ACTIONS.anchorSouthEast,
+  southWest: ACTIONS.anchorSouthWest,
+  center: ACTIONS.anchorCenter,
+};
+
+/** A recorded gesture's title: what it does to the selection, in words. */
+export function gestureStepTitle(intent: TransformIntent): string {
+  switch (intent.kind) {
+    case "move":
+      return t(intent.copy ? ACTIONS.gestureDuplicate : ACTIONS.gestureMove, {
+        dx: figure(intent.dx),
+        dy: figure(intent.dy),
+      });
+    case "resize":
+    case "scale": {
+      const size =
+        intent.width !== undefined && intent.height !== undefined
+          ? t(ACTIONS.sizeBoth, {
+              width: figure(intent.width),
+              height: figure(intent.height),
+            })
+          : intent.width !== undefined
+            ? t(ACTIONS.sizeWidth, { width: figure(intent.width) })
+            : t(ACTIONS.sizeHeight, { height: figure(intent.height ?? 0) });
+      return t(
+        intent.kind === "resize" ? ACTIONS.gestureResize : ACTIONS.gestureScale,
+        { size, anchor: t(ANCHOR_WORDS[intent.anchor]) },
+      );
+    }
+    case "rotate":
+      return t(
+        intent.angle >= 0 ? ACTIONS.gestureRotateCw : ACTIONS.gestureRotateCcw,
+        { angle: figure(Math.abs(intent.angle)) },
+      );
+  }
+}
+
+/** The step one committed canvas gesture records. */
+export function stepFromIntent(
+  intent: TransformIntent,
+  at: { selection: SelectionAddresses; context: string | null },
+  title: string = gestureStepTitle(intent),
+): ActionStep {
+  return stepFromInvocation(
+    {
+      seq: 0,
+      id: TRANSFORM_SELECTION_COMMAND,
+      title,
+      payload: transformSelectionPayload(intent),
+    },
+    at,
+  );
 }
 
 /** One `set` a panel field committed through `host.objects`. */

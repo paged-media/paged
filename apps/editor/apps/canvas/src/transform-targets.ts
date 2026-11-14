@@ -63,6 +63,9 @@ export interface SpreadTarget {
   address: string;
   /** Its transformed box, `[top, left, bottom, right]`, spread space. */
   box: Bounds;
+  /** Its own box before its transform (`elementGeometry`'s `bounds`):
+   *  what a frame's resize writes (editor ADR 1240, amendment 1). */
+  inner?: Bounds;
   /** The page it sits on; null on the pasteboard. */
   pageId: string | null;
   /** Its spread. */

@@ -97,7 +97,9 @@ from being automation a designer could trust:
 - An action recorded in one document runs in another on that document's selection; a step that
   names an object of the recorded document is refused there by name, unless the user pins it
   (document-bound steps stay off by default).
-- Canvas gestures and typing are still not recorded; the recorder counts them, as before.
+- Canvas gestures and typing were still not recorded; the recorder counted them. Amendment 1
+  records the committed move, copy, resize, scale and rotate of the selection; typing and the
+  tools' drawing are still counted, not recorded.
 - The registry's silent no-op for an inapplicable command no longer reaches a replay.
 - Tests: `packages/shell/test/actions/intent-plan.test.ts` (tokens, parameters, the plan's
   refusals and undo statement, the player's refusal and rollback, the door's projection, the
@@ -105,3 +107,51 @@ from being automation a designer could trust:
   `tests/e2e/actions-automation.spec.ts` (a recorded align and field edit replayed on another
   selection is one undo step, its preview outlines exactly the targets and changes nothing, a
   missing object is refused with the model and the history unchanged).
+
+## Amendment 1 (2026-11-14): a canvas gesture records what it did to the selection (PX4)
+
+A committed gesture on the canvas is a step now, recorded as its intent relative to the
+selection (`UXI-MUT-013`), not as pointer positions:
+
+- **Sourced from the coordinator's committed sessions** ([ADR 1210](1210-the-interaction-coordinator.md)).
+  `coordinator.end(session, "commit", reason, intent)` stores a `TransformIntent` on the session
+  (`interaction/transform-intent.ts`) and hands it to the observers of `onCommitted`; the trace
+  records its kind only. `observesCommits()` says whether anyone listens: the recorder subscribes
+  only while it records, and the canvas measures only then.
+- **Measured from the document, in points.** For a `canvas-transform` session of a move (a body
+  drag, the press-and-drag of an unselected item, an Alt copy), a handle resize of one frame, a
+  scale (a group, several objects, Cmd on a handle) or a rotation, the canvas reads its targets'
+  geometry once before the first update reaches the engine (moves wait in the pending delta
+  meanwhile, as they do for the begin) and again after the commit. The intent is the selection's
+  displacement `(dx, dy)` pt; a frame's own new size `w × h` (the sides the handle moved) keeping
+  the opposite handle, or the centre with Alt; the selection box's new size about its anchor; or
+  the turn in degrees clockwise on the page about the selection's centre. A snap, a Shift
+  constraint or the zoom never reach the record; a drag that changed nothing records nothing. An
+  Alt copy records a copy offset by `(dx, dy)`, measured on the copies when the canvas's
+  selection names them after the commit.
+- **One typed command replays it**: `paged.object.transformSelection`
+  (`apps/canvas/src/transform-selection-plan.ts`, registered beside Align and Transform Each, so
+  the canvas and the headless editor run the same code), payload `{ targets, transform, dx, dy,
+  width, height, anchor, angle }` (`transform`: move, duplicate, resize, scale, rotate). It reads
+  the targets in spread space and writes one `host.objects` batch — `frameTransform` (a move, a
+  scale, a turn), `core.resizeFrame` (each frame's own box, its anchor kept; a group scales about
+  it), `core.duplicateElements` (a copy at the offset) — one undo step, inside the run's group.
+- **A step like the others.** `targets` is always `{"$selection": "elements"}` (a canvas gesture
+  acts on the selection), so the step is portable; it keeps its edit context; its title says
+  what it does ("Move the selection by 24 pt, 0 pt", "Resize to 150 × 100 pt, keeping the top
+  left corner"); every number is a payload leaf the panel offers as a parameter; the plan, the
+  preview outlines and the refusals are ADR 1240's. A recorded gesture is taken off the
+  uncaptured count its `gestureCommitted` had added.
+- **Nudge** was already a step: the arrow keys run `paged.object.nudge*` through the registry,
+  recorded as contextual steps on the replay's selection.
+
+Content transforms (an image inside its frame), shears, path edits and the tools' drawing remain
+uncaptured and counted.
+
+Tests: `packages/shell/test/interaction/transform-intent.test.ts` (the measure in points and
+degrees for a move, a copy, a resize by handle, a scale and a turn; a commit's intent reaches
+the observers, a cancel's does not; the step is portable, titled, and its numbers are
+parameters); `apps/canvas/test/unit/commands/transform-selection.test.ts` (the plan of each
+transform and its one batch); `tests/e2e/actions-automation.spec.ts` (a drag and a handle resize
+recorded on the canvas replay on another selection as the same move and size, previewed without
+a change, one undo step, one Undo restoring the model).

@@ -540,6 +540,7 @@ describe("the reads", () => {
       {
         address: "rectangle:r",
         box: [-391, -607, -381, -587],
+        inner: [0, 0, 10, 20],
         pageId: "p1",
         spreadId: "s1",
         composed: [1, 0, 0, 1, -607, -391],
@@ -548,6 +549,7 @@ describe("the reads", () => {
       {
         address: "group:g",
         box: [0, 0, 50, 50],
+        inner: [0, 0, 50, 50],
         pageId: "p1",
         spreadId: "s1",
         composed: null,

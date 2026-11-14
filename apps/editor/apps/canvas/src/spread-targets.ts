@@ -121,6 +121,7 @@ export async function readSpreadTargets(
     const target: SpreadTarget = {
       address,
       box: transformBounds(g.bounds as unknown as Bounds, composed),
+      inner: [g.bounds[0]!, g.bounds[1]!, g.bounds[2]!, g.bounds[3]!],
       pageId: g.pageId ?? null,
       spreadId: g.spreadId ?? null,
       composed,

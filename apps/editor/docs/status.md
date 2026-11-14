@@ -413,7 +413,13 @@ runs: the steps with the objects each acts on, outlined on the canvas, and how i
 step, or how many and why). A command, an object, a context, a selection or a value that does not
 hold refuses the run by step and reason, and nothing runs; a step that no longer applies when it
 is reached stops the run and takes it back. Every saved action is a palette entry ("Run action:
-…"), an `actions@1` action and a `paged.*` script.
+…"), an `actions@1` action and a `paged.*` script. A committed move, Alt-drag copy, handle resize,
+scale or rotation on the canvas records as what it did to the selection (amendment 1): measured
+from the document by the interaction coordinator's committed sessions — "Move the selection by
+(dx, dy) pt", "Resize to w × h pt, keeping the top left corner", "Rotate the selection θ°" —
+never in screen pixels, its numbers parameters, and it replays on another selection through
+`paged.object.transformSelection` as one undo step; nudges were already steps. Typing, path
+edits, content transforms and the tools' drawing are still counted as uncaptured.
 The assistant proposes, the user approves ([ADR 1241](adr/1241-the-assistant-proposes-you-approve.md),
 PX6): a request to Claude first shows what will leave the device and is sent only on Send, every
 time; Claude then only reads (a read-only `propose` mode) and answers a change set of ordinary

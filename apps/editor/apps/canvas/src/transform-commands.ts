@@ -18,8 +18,11 @@
  */
 
 // WP4.4 — the typed commands that move objects in spread space: Align
-// (`paged.align.objects`, align-plan.ts) and Transform Each
-// (`paged.object.transformEach`, transform-each-plan.ts). Both read
+// (`paged.align.objects`, align-plan.ts), Transform Each
+// (`paged.object.transformEach`, transform-each-plan.ts) and, for a
+// recorded canvas gesture (editor ADR 1240, amendment 1), Transform the
+// selection (`paged.object.transformSelection`,
+// transform-selection-plan.ts). All read
 // through the invoking editor's canvas client (spread-targets.ts) and
 // commit through `host.objects`: ONE batch, one undo step. The canvas
 // app and the headless editor register them from here, so the two run
@@ -50,10 +53,17 @@ import {
   TRANSFORM_EACH_COMMAND,
   type TransformEachArgs,
 } from "./transform-each-plan";
+import {
+  runTransformSelection,
+  TRANSFORM_SELECTION_ARGS,
+  TRANSFORM_SELECTION_COMMAND,
+  type TransformSelectionArgs,
+} from "./transform-selection-plan";
 
 const M = defineMessages("app.transformCommands", {
   alignObjects: "Align objects",
   transformEach: "Transform each",
+  transformSelection: "Transform the selection",
 });
 
 /** What the commands commit through (`host.objects`' batch). */
@@ -108,6 +118,22 @@ export function buildTransformCommands(
             batch: (ops, opts) => objects.batch(ops, opts),
           },
           payload as TransformEachArgs,
+        ),
+    },
+    {
+      id: TRANSFORM_SELECTION_COMMAND,
+      get title() {
+        return t(M.transformSelection);
+      },
+      category: "Object",
+      args: TRANSFORM_SELECTION_ARGS,
+      handler: (paged: unknown, payload?: unknown) =>
+        runTransformSelection(
+          {
+            targets: targetsOf(paged),
+            batch: (ops, opts) => objects.batch(ops, opts),
+          },
+          payload as TransformSelectionArgs,
         ),
     },
   ];

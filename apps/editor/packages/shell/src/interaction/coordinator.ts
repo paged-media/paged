@@ -54,6 +54,7 @@ import {
   type InteractionPhase,
 } from "./owners";
 import { createTrace, type InteractionTrace, type TraceEntry } from "./trace";
+import type { TransformIntent } from "./transform-intent";
 
 /** What `guard` resolves to for an answer that came too late. */
 export const STALE: unique symbol = Symbol.for("paged.interaction.stale");
@@ -105,6 +106,15 @@ export interface InteractionSession {
   readonly phase: InteractionPhase;
   readonly ended: boolean;
   readonly result: EndResult | null;
+  /** What a committed canvas gesture did to the selection (editor ADR
+   *  1240, amendment 1), when its owner measured it; null otherwise. */
+  readonly intent: TransformIntent | null;
+}
+
+/** A session that committed with an intent, as its observers receive it. */
+export interface CommittedSession {
+  readonly session: InteractionSession;
+  readonly intent: TransformIntent;
 }
 
 /** What a late answer is checked against. */
@@ -144,8 +154,14 @@ export interface InteractionCoordinator {
    *  an illegal one or an ended session. */
   transition(session: InteractionSession, phase: InteractionPhase): boolean;
   /** The owner ends its own session. Idempotent: false when it had
-   *  already ended (`UXI-GST-007`). */
-  end(session: InteractionSession, result: EndResult, reason?: string): boolean;
+   *  already ended (`UXI-GST-007`). A commit may carry what it did to the
+   *  selection (`intent`): the observers of committed sessions get it. */
+  end(
+    session: InteractionSession,
+    result: EndResult,
+    reason?: string,
+    intent?: TransformIntent | null,
+  ): boolean;
   /** End a session from outside: its `onAbort` rolls it back first.
    *  `result` is "cancel" for an explicit reversal (Escape), "abort" for
    *  an interruption (the default). */
@@ -184,6 +200,12 @@ export interface InteractionCoordinator {
   cameraChanged(): void;
   /** Record that a claim was put off (D-09's spring-load). */
   deferred(reason: string, owner?: InteractionOwner): void;
+  /** Does anyone observe committed sessions? An owner measures what its
+   *  commit did (a geometry read) only then. */
+  observesCommits(): boolean;
+  /** Hear every session that commits with an intent (the actions
+   *  recorder, editor ADR 1240); returns the unsubscribe. */
+  onCommitted(listener: (committed: CommittedSession) => void): () => void;
   epochs(): EpochSnapshot;
   /** An immutable view, replaced on every change (useSyncExternalStore). */
   snapshot(): InteractionSnapshot;
@@ -195,6 +217,7 @@ interface MutableSession extends InteractionSession {
   phase: InteractionPhase;
   ended: boolean;
   result: EndResult | null;
+  intent: TransformIntent | null;
   readonly controller: AbortController;
   readonly onAbort:
     ((reason: string, session: InteractionSession) => void) | undefined;
@@ -215,6 +238,7 @@ export function createInteractionCoordinator(
   const trace = createTrace(options.trace ?? false, now);
   const open: MutableSession[] = [];
   const listeners = new Set<() => void>();
+  const commitListeners = new Set<(c: CommittedSession) => void>();
   let idleWaiters: Array<() => void> = [];
   let nextId = 1;
   let view: InteractionSnapshot | null = null;
@@ -286,6 +310,7 @@ export function createInteractionCoordinator(
         phase: spec.phase ?? "pressed",
         ended: false,
         result: null,
+        intent: null,
         onAbort: spec.onAbort,
         startedAt: now(),
       };
@@ -310,23 +335,29 @@ export function createInteractionCoordinator(
       return true;
     },
 
-    end(session, result, reason) {
+    end(session, result, reason, intent) {
       const s = session as MutableSession;
       if (s.ended) return false;
       if (result !== "commit" && s.phase !== "canceling") s.phase = "canceling";
       s.phase = "settled";
       s.ended = true;
       s.result = result;
+      if (result === "commit" && intent) s.intent = intent;
       if (result !== "commit") s.controller.abort(reason ?? result);
       const i = open.indexOf(s);
       if (i >= 0) open.splice(i, 1);
       record("end", s, {
         result,
         ...(reason ? { reason } : {}),
+        ...(s.intent ? { intent: s.intent.kind } : {}),
         latencyMs: Math.round(now() - s.startedAt),
       });
       changed();
       settle();
+      if (s.intent) {
+        const committed: CommittedSession = { session: s, intent: s.intent };
+        for (const l of [...commitListeners]) l(committed);
+      }
       return true;
     },
 
@@ -403,6 +434,15 @@ export function createInteractionCoordinator(
 
     deferred(reason, owner) {
       record("deferred", null, { reason, ...(owner ? { owner } : {}) });
+    },
+
+    observesCommits: () => commitListeners.size > 0,
+
+    onCommitted(listener) {
+      commitListeners.add(listener);
+      return () => {
+        commitListeners.delete(listener);
+      };
     },
 
     epochs: () => epochs.now(),
