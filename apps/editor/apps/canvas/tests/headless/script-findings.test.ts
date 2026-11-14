@@ -17,10 +17,12 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Two Boa `paged.*` findings the scripting layer's own suite (paged-script,
+// Boa `paged.*` findings the scripting layer's own suite (paged-script,
 // Rust) does not pin, asserted through the editor's script door on the
 // real engine. Each expected failure sits next to the passing case that
-// shows the behaviour it should have.
+// shows the behaviour it should have. And `paged.relinkImage` (engine ADR
+// 1308, protocol 81) through the same door: a missing link relinked to a
+// picked file's bytes is one undo step.
 
 import { afterEach, describe, expect, test } from "bun:test";
 
@@ -130,5 +132,74 @@ describe("paged.links and a link that does not resolve", () => {
       ),
     ).toBe(true);
     expect(await status(e, frame)).toBe("missing");
+  });
+});
+
+describe("paged.relinkImage", () => {
+  /** A 1×1 PNG, as the `number[]` of bytes `relinkImage` takes. */
+  const PNG = [
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
+    0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120,
+    218, 99, 100, 96, 248, 95, 15, 0, 2, 135, 1, 128, 235, 71, 186, 146, 0, 0,
+    0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+  ];
+  const link = async (e: Editor, frame: string) =>
+    (
+      (await run(e, "console.log(paged.links())")) as Array<{
+        hostSelfId: string;
+        uri: string;
+        status: string;
+      }>
+    ).find((l) => l.hostSelfId === frame) ?? null;
+
+  test("a missing link relinked to a file's bytes draws, and one undo puts it back", async () => {
+    covers("script:paged.relinkImage", "script:paged.links");
+    const e = (ed = await createHeadlessEditor({ blank: [612, 792] }));
+    const frame = (await run(
+      e,
+      `const pid = JSON.parse(paged.pages())[0].selfId;
+         const f = paged.insertFrame(pid, [72, 72, 200, 200]);
+         console.log(JSON.stringify(f.split(":").pop()));`,
+    )) as string;
+    expect(
+      await run(
+        e,
+        `console.log(paged.placeImage(${JSON.stringify(frame)}, "file:///no/such/image.png"))`,
+      ),
+    ).toBe(true);
+    expect(await link(e, frame)).toMatchObject({ status: "missing" });
+    const before = await e.dumpJson();
+
+    expect(
+      await run(
+        e,
+        `console.log(paged.relinkImage(${JSON.stringify(frame)}, "file:///found.png", ${JSON.stringify(PNG)}))`,
+      ),
+    ).toBe(true);
+    expect(await link(e, frame)).toMatchObject({
+      uri: "file:///found.png",
+      status: "ok",
+    });
+
+    // One undo: the missing link again, the model as it was.
+    await e.invoke("paged.editor.undo");
+    expect(await link(e, frame)).toMatchObject({
+      uri: "file:///no/such/image.png",
+      status: "missing",
+    });
+    expect(await e.dumpJson()).toBe(before);
+  });
+
+  test("a frame that is not there, or no frame at all, is refused and changes nothing", async () => {
+    covers("script:paged.relinkImage");
+    const e = (ed = await createHeadlessEditor({ blank: [612, 792] }));
+    const before = await e.dumpJson();
+    expect(
+      await run(
+        e,
+        `console.log(paged.relinkImage("no-such-frame", "file:///found.png"))`,
+      ),
+    ).toBe(false);
+    expect(await e.dumpJson()).toBe(before);
   });
 });
