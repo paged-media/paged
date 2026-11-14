@@ -134,7 +134,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
     await addAuthoredBinding(page, "table", TABLE_COLUMNS);
     await expect(page.locator("[data-data-bind-msg]")).toContainText(
-      /^table binding /,
+      /^table binding /i,
       {
         timeout: 30_000,
       },

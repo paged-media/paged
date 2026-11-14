@@ -24,6 +24,12 @@
       "replacement": "menu:View/Editing aids/Data bindings",
       "deprecatedIn": "0.80.0",
       "removeIn": "0.82.0"
+    },
+    {
+      "id": "menu:File/Open recent",
+      "replacement": "menu:File/Open recent…",
+      "deprecatedIn": "0.80.0",
+      "removeIn": "0.82.0"
     }
   ]
 }

@@ -74,3 +74,10 @@ edits" was all the user saw, whether the file was written or not.
   `packages/shell/test/chrome/save-status.dom.test.tsx`, and `UXI-T67` in
   `apps/canvas/tests/e2e/uxi-documents.spec.ts` (a write back that fails after the local commit
   reads not synced and never synced; Retry reaches synced).
+
+## Amendment (2026-11-13): the Library panel's push
+
+[ADR 1224](1224-session-continuity.md), decision 4: a push of the open document to paged.server is
+the save's remote step (syncing, then synced with the repository among the destinations, or saved
+locally · not synced with the server's words). The consequence above ("not reported yet") no longer
+holds.

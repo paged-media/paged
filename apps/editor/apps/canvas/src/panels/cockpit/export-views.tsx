@@ -19,7 +19,9 @@
 
 // Cockpit — Export mode's split surfaces (kit: left Outputs nav +
 // right per-target Export inspector; the Export Center table itself
-// is the canvas-area main view, export-center-panel.tsx).
+// is the canvas-area main view, export-center-panel.tsx). Kit controls
+// (KitSelect), and every run says how it ended through the editor's one
+// feedback service (editor ADR 1221).
 //
 // W2.6 (Full-Green) — honest-or-live. Three outputs are LIVE through
 // the published client surface: Print PDF (the ExportPdfDialog),
@@ -33,6 +35,7 @@ import { useState } from "react";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 
 import { ChoiceGroup, ChoiceRow } from "@paged-media/panel-kit";
+import { KitSelect } from "@paged-media/ui";
 
 import {
   CockpitBtn,
@@ -57,7 +60,7 @@ import {
   exportTargetById,
   exportReadiness,
   runImageExport,
-  runPluginExporter,
+  runPluginExport,
   setImageSettings,
   setSelectedExportTarget,
   useImageSettings,
@@ -140,7 +143,10 @@ export function OutputsPanel(_props: PanelProps) {
     const exporter = pluginExporters.find((e) => e.id === id);
     if (!exporter) return;
     setExportPhase({ id, kind: "running" });
-    setExportPhase({ id, kind: await exporterOutcome(exporter) });
+    // Editor ADR 1221 — the run says how it ended through the one
+    // feedback service; the row keeps its mark.
+    const outcome = await runPluginExport(scope, exporter);
+    setExportPhase({ id, kind: outcome === "done" ? "done" : "error" });
   };
 
   return (
@@ -303,19 +309,8 @@ type ImagePhase =
   | { kind: "done"; files: number }
   | { kind: "error"; message: string };
 
-// The two runs settle outside the components: the React Compiler does not
+// The image run settles outside the component: the React Compiler does not
 // compile a component with a conditional inside a `try` (ADR 229).
-
-/** A plugin exporter's run, as the outputs row shows it. */
-async function exporterOutcome(
-  exporter: Parameters<typeof runPluginExporter>[0],
-): Promise<"done" | "error"> {
-  try {
-    return (await runPluginExporter(exporter)) ? "done" : "error";
-  } catch {
-    return "error";
-  }
-}
 
 /** The image export's outcome. */
 async function imageExportPhase(
@@ -374,9 +369,16 @@ export function ExportInspectorPanel(_props: PanelProps) {
   const onRunImage = async () => {
     if (!handle) return;
     setImagePhase({ kind: "running" });
-    setImagePhase(
-      await imageExportPhase(client, handle, image, meta?.documentName),
+    const phase = await imageExportPhase(
+      client,
+      handle,
+      image,
+      meta?.documentName,
     );
+    // The run's controls are here, so its result is said here, inline
+    // (UXI-FBK-001); the Export Center's row has no place of its own and
+    // uses the toast channel.
+    setImagePhase(phase);
   };
 
   return (
@@ -425,7 +427,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
               <SettingRow label={strings.t(M.resolution)}>
-                <select
+                <KitSelect
                   data-export-image-dpi
                   value={String(image.dpi)}
                   disabled={!loaded}
@@ -438,10 +440,10 @@ export function ExportInspectorPanel(_props: PanelProps) {
                   <option value="72">{strings.t(M.dpiScreen)}</option>
                   <option value="150">{strings.t(M.dpiProof)}</option>
                   <option value="300">{strings.t(M.dpiPrint)}</option>
-                </select>
+                </KitSelect>
               </SettingRow>
               <SettingRow label={strings.t(M.format)}>
-                <select
+                <KitSelect
                   data-export-image-format
                   value={image.format}
                   disabled={!loaded}
@@ -453,11 +455,11 @@ export function ExportInspectorPanel(_props: PanelProps) {
                 >
                   <option value="png">{strings.t(M.png)}</option>
                   <option value="jpeg">{strings.t(M.jpeg)}</option>
-                </select>
+                </KitSelect>
               </SettingRow>
               {image.format === "jpeg" ? (
                 <SettingRow label={strings.t(M.quality)}>
-                  <select
+                  <KitSelect
                     data-export-image-quality
                     value={String(image.quality)}
                     disabled={!loaded}
@@ -471,11 +473,11 @@ export function ExportInspectorPanel(_props: PanelProps) {
                     <option value="0.8">80%</option>
                     <option value="0.9">{strings.t(M.q90)}</option>
                     <option value="1">{strings.t(M.q100)}</option>
-                  </select>
+                  </KitSelect>
                 </SettingRow>
               ) : null}
               <SettingRow label={strings.t(M.pages)}>
-                <select
+                <KitSelect
                   data-export-image-scope
                   value={image.scope}
                   disabled={!loaded}
@@ -490,13 +492,14 @@ export function ExportInspectorPanel(_props: PanelProps) {
                   </option>
                   <option value="current">{strings.t(M.currentPage)}</option>
                   <option value="range">{strings.t(M.rangeOption)}</option>
-                </select>
+                </KitSelect>
               </SettingRow>
               {image.scope === "range" ? (
                 <SettingRow label={strings.t(M.range)}>
                   <input
                     data-export-image-range
                     type="text"
+                    className="h-[30px] w-full rounded-[6px] border border-input bg-background px-2.5 text-[12.5px]"
                     placeholder="1-3, 5"
                     value={image.range}
                     disabled={!loaded}

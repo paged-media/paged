@@ -254,13 +254,17 @@ export default defineConfig({
       },
     },
     {
-      // The interaction contract's specs with the interaction coordinator
-      // switched on (`?debug=coordinator`, editor ADR "The interaction
-      // coordinator", UXI-MIG-003): the baseline and the legacy tapes must
-      // come out the same under it. Added to the query by `openCanvas`.
-      name: "uxi-coordinator",
-      testMatch: ["**/e2e/uxi-*.spec.ts"],
-      metadata: { debugFlags: ["coordinator"] },
+      // The interaction contract's parity baseline on the legacy pointer
+      // path (`?debug=legacy-pointer`, editor ADR 1210, UXI-MIG-003): the
+      // UXI-MIG-001 tapes and the baseline come out the same with and
+      // without the interaction coordinator until IC6 removes the legacy
+      // path. Added to the query by `openCanvas`.
+      name: "uxi-legacy-pointer",
+      testMatch: [
+        "**/e2e/uxi-legacy-tapes.spec.ts",
+        "**/e2e/uxi-baseline.spec.ts",
+      ],
+      metadata: { debugFlags: ["legacy-pointer"] },
       use: {
         ...devices["Desktop Chrome"],
         headless: true,

@@ -493,11 +493,7 @@
         "(addEventListener|\\.listen|listenForEditorKeys)\\(\\s*(\\w+\\s*,\\s*)?[\"']keydown[\"']"
       ],
       "extensions": [".ts", ".tsx"],
-      "baseline": [
-        "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx",
-        "apps/editor/apps/canvas/src/ui/useGestureSpine.ts",
-        "apps/editor/apps/canvas/src/ui/usePathEditMode.ts"
-      ]
+      "baseline": []
     },
     {
       "name": "raw-window-key-listener",

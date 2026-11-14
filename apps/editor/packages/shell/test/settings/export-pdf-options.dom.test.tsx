@@ -38,8 +38,10 @@ import { covers } from "@paged-media/test-kit";
 import {
   ExportPdfDialog,
   notifyExportPdfDialog,
+  PDF_EXPORT_FEEDBACK_KEY,
 } from "../../src/chrome/ExportPdfDialog";
 import { detachedEditorScope } from "../../src/state/editor-scope";
+import { operationFeedbackOf } from "../../src/state/operation-feedback";
 import { CanvasClientProvider } from "../../src/state/canvas-client-context";
 import {
   DocumentProvider,
@@ -51,7 +53,7 @@ const DEFAULTS = {
   standard: "pdfx4",
   outputIntentProfile: "",
   colorPolicy: "preserveNumbers",
-  allPages: true,
+  pageScope: "all",
   pageFrom: "1",
   pageTo: "1",
   useDocumentBleed: true,
@@ -84,6 +86,9 @@ function fakeClient(
   const exports: Record<string, unknown>[] = [];
   const client = {
     subscribe: () => () => {},
+    onSaved: () => () => {},
+    collection: async () => [],
+    documentStats: async () => null,
     documentMeta: async () => ({
       documentName: "brochure",
       ...profile,
@@ -91,7 +96,12 @@ function fakeClient(
     }),
     exportPdf: async (options: Record<string, unknown>) => {
       exports.push(options);
-      return { bytes: new Uint8Array([37, 80, 68, 70]), diagnostics: [] };
+      // "%PDF-1.7": the export only reports bytes that are a PDF.
+      return {
+        bytes: new TextEncoder().encode("%PDF-1.7\n"),
+        diagnostics: [],
+        findings: [],
+      };
     },
   } as unknown as CanvasClient;
   return { client, exports };
@@ -348,8 +358,8 @@ describe("Export PDF dialog: the print-output facts", () => {
   });
 });
 
-// ADR 272 — a finished export closes the dialog and a notice names the
-// file; a failed one keeps the dialog open with the error.
+// ADR 272 — a finished export closes the dialog and says what it wrote; a
+// failed one keeps the dialog open with the error.
 describe("Export PDF dialog: after the export", () => {
   const ready = () =>
     waitFor(() => {
@@ -358,7 +368,15 @@ describe("Export PDF dialog: after the export", () => {
       return b;
     });
 
-  test("a finished export closes the dialog and the notice names the file and its pages", async () => {
+  // Editor ADR 1221: the result goes to the editor's one feedback
+  // channel (a prominent success, UXI-FBK-003), naming the file, its pages
+  // and where it went (UXI-FIL-005).
+  const result = () =>
+    operationFeedbackOf(detachedEditorScope())
+      .snapshot()
+      .toasts.find((x) => x.key === PDF_EXPORT_FEEDBACK_KEY);
+
+  test("a finished export closes the dialog and the toast names the file, its pages and where it went", async () => {
     covers("command:paged.file.exportPdf");
     const { client, exports } = fakeClient();
     mount(client);
@@ -367,27 +385,44 @@ describe("Export PDF dialog: after the export", () => {
     await waitFor(() =>
       expect(document.body.querySelector("[data-export-dialog]")).toBeNull(),
     );
-    const notice = field<HTMLElement>("[data-export-notice]");
-    expect(notice.getAttribute("role")).toBe("status");
-    expect(notice.textContent).toContain("Exported brochure.pdf · 2 pages");
-    fireEvent.click(field("[data-export-notice-close]"));
-    expect(document.body.querySelector("[data-export-notice]")).toBeNull();
+    const toast = result();
+    expect(toast?.report.outcome).toBe("success");
+    expect(toast?.text.headline).toBe(
+      "Exported brochure.pdf · 2 pages · in your downloads",
+    );
   });
 
-  test("findings travel in the notice, which stays until it is closed", async () => {
+  test("findings travel with the result, behind Details and to Preflight", async () => {
     covers("command:paged.file.exportPdf");
     const { client } = fakeClient();
     (client as unknown as { exportPdf: () => Promise<unknown> }).exportPdf =
       async () => ({
-        bytes: new Uint8Array([37, 80, 68, 70]),
+        bytes: new TextEncoder().encode("%PDF-1.7\n"),
         diagnostics: ["a font was substituted"],
+        findings: [],
       });
     mount(client);
     fireEvent.click(await ready());
-    const notice = await waitFor(() =>
-      field<HTMLElement>("[data-export-notice]"),
+    await waitFor(() => expect(result()?.text.headline).toContain("1 finding"));
+    expect(result()?.report.detail).toBe("a font was substituted");
+    expect(result()?.report.actions?.[0]?.command).toBe(
+      "paged.panel.show.paged.preflight",
     );
-    expect(notice.textContent).toContain("1 finding: a font was substituted");
+  });
+
+  test("bytes that are no PDF are a failure, never a result (UXI-FIL-005)", async () => {
+    covers("command:paged.file.exportPdf");
+    const { client } = fakeClient();
+    (client as unknown as { exportPdf: () => Promise<unknown> }).exportPdf =
+      async () => ({ bytes: new Uint8Array(), diagnostics: [], findings: [] });
+    mount(client);
+    fireEvent.click(await ready());
+    const error = await waitFor(() =>
+      field<HTMLElement>("[data-export-error]"),
+    );
+    expect(error.textContent).toBe(
+      "Could not export brochure.pdf: the engine answered with something that is not a PDF. Nothing changed.",
+    );
   });
 
   test("a failed export keeps the dialog open with the error, and no notice", async () => {
@@ -402,12 +437,13 @@ describe("Export PDF dialog: after the export", () => {
     const error = await waitFor(() =>
       field<HTMLElement>("[data-export-error]"),
     );
-    expect(error.textContent).toContain("the worker went away");
+    expect(error.textContent).toBe(
+      "Could not export brochure.pdf: the worker went away. Nothing changed.",
+    );
     expect(
       field<HTMLElement>("[data-export-dialog]").getAttribute(
         "data-export-status",
       ),
     ).toBe("error");
-    expect(document.body.querySelector("[data-export-notice]")).toBeNull();
   });
 });

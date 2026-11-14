@@ -108,6 +108,7 @@ import { ReplPanel } from "./repl-panel";
 import { ScriptEditorPanel } from "./script-editor";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
+import { ImportReportPanel } from "./import-report-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
 import { HistoryPanel } from "./history-panel";
@@ -225,6 +226,7 @@ const M = defineMessages("app.builtInPanels", {
   models: "Models",
   generateImage: "Generate image",
   problems: "Problems",
+  importReport: "Compatibility report",
   journal: "Journal",
   data: "Data",
   history: "History",
@@ -1258,6 +1260,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.problems);
     },
     component: ProblemsPanel,
+    defaultDock: "bottom",
+    defaultGroup: "console",
+  },
+  {
+    // Editor ADR 1222 — the compatibility report: what every import and
+    // export could not carry (engine ADR 1097's loss entries), explained,
+    // with where it stood.
+    id: "paged.import-report",
+    get title() {
+      return t(M.importReport);
+    },
+    component: ImportReportPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
   },

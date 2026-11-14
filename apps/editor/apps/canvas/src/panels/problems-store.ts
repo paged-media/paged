@@ -29,6 +29,7 @@
 // outside the React tree) and the panel (inside it) share state without
 // prop drilling, and two editors on a page keep their problems apart.
 
+import type { LossEntry } from "@paged-media/plugin-api";
 import { scoped, useScoped, type EditorScope } from "@paged-media/shell";
 
 export interface ProblemDiagnostic {
@@ -38,6 +39,9 @@ export interface ProblemDiagnostic {
   source?: string;
   line?: number;
   column?: number;
+  /** The loss the row words (extensions ADR 1107): the compatibility
+   *  report reads it (editor ADR 1222). */
+  loss?: LossEntry;
 }
 
 export interface ProblemEntry extends ProblemDiagnostic {

@@ -331,6 +331,15 @@ film("home", async (k) => {
   await k.scene("new", async () => {
     await k.hold(300);
     await menu(k, ["File", "New document…"]);
+    // The New document dialog (editor ADR 1220): Custom, one page.
+    const dialog = page.locator("[data-new-document-dialog]");
+    await expect(dialog).toBeVisible();
+    await press(k, dialog.locator('[data-new-document-category="custom"]'));
+    const pages = dialog.locator('[data-new-document-field="pages"] input');
+    await pages.fill("1");
+    await pages.press("Enter");
+    await k.hold(300);
+    await press(k, dialog.locator("[data-new-document-create]"));
     await expect.poll(async () => (await designer.handle()).pageCount).toBe(1);
     await k.hold(500);
     await menu(k, ["Layout", "Add page"]);
@@ -888,7 +897,7 @@ film("home", async (k) => {
     await menu(k, ["File", "Export PDF…"]);
     const dialog = page.locator("[role=dialog], dialog").first();
     await expect(dialog).toBeVisible();
-    const conformance = dialog.locator("select").first();
+    const conformance = dialog.locator("select[data-export-standard]");
     await hover(k, conformance);
     await conformance.selectOption({ label: "PDF 1.7" });
     await k.hold(300);
@@ -900,12 +909,12 @@ film("home", async (k) => {
     ]);
     if (!file) await k.cut("pdf", async () => void (file = await pdf));
     k.chip(`${file!.suggestedFilename()} saved`, "save");
-    // A finished export closes the dialog; the notice names the file
-    // (editor ADR 272).
+    // A finished export closes the dialog; the result names the file
+    // (editor ADRs 272, 1221).
     await expect(dialog).toBeHidden();
-    await expect(page.locator("[data-export-notice]")).toContainText(
-      file!.suggestedFilename(),
-    );
+    await expect(
+      page.locator('[data-feedback-key="paged.export.pdf"]'),
+    ).toContainText(file!.suggestedFilename());
     await file!.saveAs(join(k.dir, "home.pdf"));
     const bytes = readFileSync(join(k.dir, "home.pdf"));
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");

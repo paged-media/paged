@@ -27,6 +27,7 @@ import { covers } from "@paged-media/test-kit";
 
 import { ProblemsPanel } from "../../src/panels/problems-panel";
 import { problemsOf } from "../../src/panels/problems-store";
+import { operationFeedbackOf } from "@paged-media/shell";
 import { richScene } from "./fixtures";
 import { structureIdml } from "./support/structure";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
@@ -163,5 +164,61 @@ describe("Problems panel", () => {
     ].find((r) => r.textContent?.includes("Missing link"))!;
     await h.click(row);
     expect(h.dock()).toMatchObject({ active: "paged.links" });
+  });
+
+  // Editor ADR 1219 — UX audit F-02: an operation that failed and left an
+  // issue is listed until it is resolved or dismissed.
+  test("F-02: a failed open is listed with what changed; Dismiss takes it out", async () => {
+    covers("panel:paged.problems");
+    const h = await mount();
+    await h.act(() =>
+      operationFeedbackOf(h.scope).report({
+        action: "open broken.idml",
+        outcome: "recoverable-failure",
+        reason: "the file is damaged",
+        document: "unchanged",
+        key: "paged.open|broken.idml",
+        source: "paged.open",
+        channel: "problem",
+      }),
+    );
+    expect(rows(h)[0]).toMatchObject({
+      severity: "warning",
+      bundle: "paged.open",
+      message:
+        "Could not open broken.idml: the file is damaged. Nothing changed.",
+    });
+    await h.click(h.root.querySelector<HTMLElement>("[data-problem-dismiss]")!);
+    expect(rows(h)).toEqual([]);
+  });
+
+  // Editor ADR 1222 — a bundle's loss rows are one row that opens the
+  // compatibility report, where each is explained.
+  test("loss rows are one row: N differences, opening the compatibility report", async () => {
+    covers("panel:paged.problems");
+    const h = await mount();
+    await h.act(() =>
+      problemsOf(h.scope).publish(
+        "media.paged.slide",
+        "media.paged.slide/import",
+        [
+          {
+            severity: "warning",
+            message: "a",
+            loss: { code: "pptx.effect.unsupported", count: 2 },
+          },
+          {
+            severity: "warning",
+            message: "b",
+            loss: { code: "dml.3d.camera", count: 1 },
+          },
+          { severity: "info", message: "opened from a template" },
+        ],
+      ),
+    );
+    expect(rows(h).map((r) => r.message)).toEqual([
+      "3 differences from the source file: see the compatibility report",
+      "opened from a template",
+    ]);
   });
 });

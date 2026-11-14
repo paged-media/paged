@@ -143,15 +143,16 @@ export type BindKind =
   | "rule"
   | "recordFlow";
 
-/** What the panel says once each kind's binding is defined. */
+/** What the panel says once each kind's binding is defined (sentence case
+ *  since data ADR 566, so the match ignores case). */
 const DEFINED: Record<BindKind, RegExp> = {
-  variable: /^variable binding \S+/,
-  image: /^image binding \S+ → the selected rectangle/,
-  barcode: /^barcode binding \S+ → the selected rectangle/,
-  table: /^table binding \S+ \(\d+ column\(s\)\)/,
-  visibility: /^show\/hide binding \S+/,
-  rule: /^style rule \S+/,
-  recordFlow: /^record flow \S+/,
+  variable: /^variable binding \S+/i,
+  image: /^image binding \S+ → the selected rectangle/i,
+  barcode: /^barcode binding \S+ → the selected rectangle/i,
+  table: /^table binding \S+ \(\d+ column\(s\)\)/i,
+  visibility: /^show\/hide binding \S+/i,
+  rule: /^style rule \S+/i,
+  recordFlow: /^record flow \S+/i,
 };
 
 /** Define a binding the way a designer does: in the open Bindings panel pick

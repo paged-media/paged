@@ -53,6 +53,17 @@ export interface HandleRecord {
   handle: IdentifiableFileHandle;
   lastModified: number;
   size: number;
+  /** When the editor last opened or saved it (ms since the epoch): File ▸
+   *  Open recent lists the newest first. Absent in a record kept before. */
+  seenAt?: number;
+}
+
+/** A file the editor opened, for File ▸ Open recent. */
+export interface RecentFile {
+  key: string;
+  name: string;
+  handle: IdentifiableFileHandle;
+  seenAt: number;
 }
 
 /** Where the recognised file handles are kept. */
@@ -71,6 +82,9 @@ export interface DocumentIdentity extends DocumentSourceSink {
   settled(): boolean;
   /** Follow the engine's open document (`docId`, null when none). */
   attach(documentId: () => string | null): () => void;
+  /** The files opened or saved lately, newest first (File ▸ Open recent;
+   *  UX audit F-06). */
+  recentFiles(limit?: number): Promise<RecentFile[]>;
 }
 
 /** The most file handles kept; the oldest beyond it are forgotten. */
@@ -150,6 +164,7 @@ export function createDocumentIdentity(options: {
       handle: source.handle,
       lastModified: source.lastModified,
       size: source.size,
+      seenAt: Date.now(),
     });
     if (records.length >= MAX_HANDLES) {
       const keep = new Set([key]);
@@ -189,6 +204,24 @@ export function createDocumentIdentity(options: {
           return;
       }
     },
+    async recentFiles(limit = 8) {
+      let records: HandleRecord[] = [];
+      try {
+        records = await options.store.list();
+      } catch {
+        return [];
+      }
+      return records
+        .filter((r) => typeof r.handle?.name === "string")
+        .map((r) => ({
+          key: r.key,
+          name: r.handle.name,
+          handle: r.handle,
+          seenAt: r.seenAt ?? 0,
+        }))
+        .sort((a, b) => b.seenAt - a.seenAt)
+        .slice(0, limit);
+    },
     written(handle, file) {
       const docId = documentId();
       const k = docId === null ? null : byDoc.get(docId);
@@ -200,7 +233,12 @@ export function createDocumentIdentity(options: {
           // it reads as it does now. Any other document written over it
           // makes the file a new document — forget the record.
           if (k && r.key === k.key)
-            await options.store.put({ ...r, ...file, handle: r.handle });
+            await options.store.put({
+              ...r,
+              ...file,
+              handle: r.handle,
+              seenAt: Date.now(),
+            });
           else await options.store.remove(r.key);
         }
       }, "recording a save");

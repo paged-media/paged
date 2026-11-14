@@ -156,7 +156,26 @@ decisions are settled in [ADR 1201](adr/1201-interaction-decisions.md); the work
 
 Implemented so far: the save status (DF1, [ADR 1203](adr/1203-save-status-says-what-is-saved-where.md),
 `UXI-T67`), the recovery journal (DF2, [ADR 1204](adr/1204-recovery-journal.md)) and drop
-intent (DF3, [ADR 1205](adr/1205-drop-says-what-it-will-do.md), `UXI-T62` to `UXI-T64`). Track KF (keyboard and focus) is built: Escape is resolved
+intent (DF3, [ADR 1205](adr/1205-drop-says-what-it-will-do.md), `UXI-T62` to `UXI-T64`). Track DF's
+second part has landed: one operation feedback service per editor says how an operation ended —
+the specification's eight outcomes, an error as action, reason, whether the document changed and
+remedy, on one toast channel with no storm or in Problems while it stays, the engine's words behind
+Details, and `host.notify` for extensions (DF8, [ADR 1219](adr/1219-operation-feedback.md),
+extensions ADR 1107; F-02); the compatibility report lists every import's and export's losses
+(the engine's loss report, now also on the IDML load and export) explained, located and with each
+format's round-trip risk, and says an import's summary once (DF4,
+[ADR 1222](adr/1222-compatibility-report.md), `UXI-T66`); File ▸ New document… opens a dialog of
+purpose presets and a custom setup with a live preview (DF5, [ADR 1220](adr/1220-new-document.md);
+F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
+stages and Cancel, a verified result — in kit controls with a page scope and presets, and the
+Layout rows open their panels (DF6, [ADR 1221](adr/1221-guided-export.md), `UXI-T68`; F-12,
+F-15); the publication's issues are on the page as markers, in a page overview and in the Issues
+lens, one click to the item with targeted fixes (DF7,
+[ADR 1223](adr/1223-publication-health-on-the-page.md), `UXI-T55`; F-09); the clipboard's verbs run
+in the order they were given and paste keeps relative geometry, Paste in place its positions
+(DF9, [ADR 231](adr/231-page-item-clipboard.md) amended, `UXI-T65`); and the document open last
+reopens at the next start, with File ▸ Open recent… and File ▸ Close
+([ADR 1224](adr/1224-session-continuity.md); F-06). Track KF (keyboard and focus) is built: Escape is resolved
 once per press by a per-editor arbiter in the specification's order, and at the top level it
 clears the selection ([ADR 1207](adr/1207-one-escape.md)); every key listener hears only its own
 editor's keys; Tab moves focus everywhere, the chrome toggle is `paged.view.toggleChrome`
@@ -165,8 +184,8 @@ editor's keys; Tab moves focus everywhere, the chrome toggle is `paged.view.togg
 commits once and the input follows the rotated view; focus returns to the opener of a dialog,
 the palette or a menu, else the canvas ([ADR 1206](adr/1206-focus-returns-to-the-opener.md);
 issue #32); lists and selects keep their keys, and Alt+arrows set leading and tracking (UX audit
-F-34). The viewport's drag cancel, the gesture spine and path editing still answer Escape on
-their own listeners until track IC moves them onto the arbiter.
+F-34). The viewport's drag cancel, the gesture spine and path editing answer Escape through the
+arbiter too (ADR 1210).
 
 Track WS's first part has landed (WS0–WS7; [ADR 1208](adr/1208-docks-are-resizable-and-the-workspace-adapts.md),
 [ADR 1209](adr/1209-density-presets.md)): the docks are resizable (240–480 px, per mode) and the
@@ -200,16 +219,21 @@ binding) — each jump recorded for Back; zoomed below 15 % the handles and poin
 the selection outline, markers and page names (now beside a page when the gap under it is too
 small) stay, and from 400 % the rulers draw minor ticks (F-57).
 
-Track IC has begun ([ADR 1210](adr/1210-the-interaction-coordinator.md)): each editor has an
-interaction coordinator that holds the session owning the pointer, the epochs a late answer is
-checked against and a development trace (`__interaction`, no user text). It is behind the
-`?debug=coordinator` flag until the adapters land (IC4): with the flag, every pointer sequence on
-the canvas is a session, and a lost pointer capture, a window blur, a hidden page, a document or
-tool switch, a failed worker and unmount end it once, rolled back; a begin the engine refuses and
-Escape never turn the rest of the drag into a pan, Escape also cancels a marquee or a press, and
-a failed worker is said so (`UXI-T10`, `UXI-T61`); a click's, a press's, a double-click's and the
-context menu's hit test that answers after a newer press, document or context is dropped
-(`UXI-T57`, `UXI-T59`). Without the flag the canvas behaves as before.
+Track IC's interaction coordinator is the canvas's default ([ADR 1210](adr/1210-the-interaction-coordinator.md)):
+each editor holds the session owning the pointer, the epochs a late answer is checked against and a
+development trace (`__interaction`, no user text). A press is routed once, at pointerdown, by one
+table (`press-route.ts`), and its session ends exactly once: a lost pointer capture, a window
+blur, a hidden page, a document or tool switch, a failed worker and unmount roll it back; a begin
+the engine refuses and Escape never turn the rest of the drag into a pan, and Escape cancels a
+marquee or a press too, through the Escape arbiter (`UXI-T07`–`T10`, `UXI-T61`). A click's, a
+press's, a double-click's and the context menu's hit test answered after a newer press, document
+or context is dropped (`UXI-T57`, `UXI-T59`). Space (and Cmd, Cmd+Space) held during a
+document-changing drag waits until it settles (D-09), and a suspended Pen resumes its path; a
+wheel takes the camera from an animation (`UXI-T52`); a pinch takes over a pending press
+(`UXI-T71`); an Alt-drag commits the copy it previewed (`UXI-T06`); a Type-tool drag that starts
+over text selects text. A press off the selection is answered in one call (hit, selection and
+move), and a drag that outruns the answer moves from the press point (`UXI-T58`). The guide drag, the loaded thread cursor and an armed placement are
+sessions too. `?debug=legacy-pointer` keeps the old path until IC6 removes it.
 
 Track CM5, part b (2026-11-14): a sheet frame offers **Frame · Edit cells**; inside, the bar says
 Editing cells, has Done, and warns when selected rows or columns do not print in the frame, with a

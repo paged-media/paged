@@ -47,7 +47,9 @@ function photo(): Buffer {
 }
 
 const ready = (page: Page) =>
-  expect(page.getByRole("status")).toContainText("ready", { timeout: 90_000 });
+  expect(page.locator(".demo-status")).toContainText("ready", {
+    timeout: 90_000,
+  });
 
 /** The on-screen box of a field's outline on the canvas. */
 async function outline(page: Page, field: string) {

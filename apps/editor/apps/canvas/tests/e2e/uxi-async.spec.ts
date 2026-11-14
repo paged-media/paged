@@ -30,18 +30,22 @@ import { expect, test, type Page } from "@playwright/test";
 import { covers } from "@paged-media/test-kit";
 
 import { chaosIdle, delayNthReply, delayReply } from "./harness/chaos";
-import { undoDepth } from "./harness/history";
+import { expectUndoSteps, undoDepth } from "./harness/history";
 import {
   activateTool,
   clickOn,
   clientPointOfTarget,
+  dragStartOnObject,
+  elementCentre,
   engineGestureOpen,
+  movePointerBy,
+  releasePointer,
 } from "./harness/interaction";
 import { modelSnapshot, selectionSnapshot } from "./harness/model-dump";
 import { openUxiFixture, UXI_A } from "./harness/uxi-fixtures";
 
 const A = UXI_A;
-const FLAGS = "?debug=coordinator,chaos";
+const FLAGS = "?debug=chaos";
 
 interface TraceEntry {
   event: string;
@@ -85,9 +89,10 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
     covers("tool:paged.tool.select");
     const model = await modelSnapshot(page);
     const depth = await undoDepth(page);
-    // A click asks twice: the press's hit (what a drag would move) and the
-    // click's. Hold A's click hit (the second hitTest) until B is done.
-    await delayNthReply(page, "hitTest", 1, 1_500);
+    // The press is answered in one call (beginGestureAt, IC5); the click
+    // asks for its hit on release. Hold A's click hit (the first hitTest)
+    // until B is done.
+    await delayNthReply(page, "hitTest", 0, 1_500);
     await clickOn(page, A.back.id);
     await clickOn(page, A.free.id);
     await expect
@@ -101,6 +106,49 @@ test.describe("UXI async — a late answer never overwrites a newer state (IC3)"
     expect(await staleDiscards(page, "hit-test")).toBeGreaterThanOrEqual(1);
     expect(await modelSnapshot(page)).toBe(model);
     expect(await undoDepth(page)).toBe(depth);
+  });
+
+  test("UXI-T58 — a drag that outruns its press's answer moves from the press point: no jump, one undo step @feat:editor-tools.move.translate @level:edge", async ({
+    page,
+  }) => {
+    covers("tool:paged.tool.select");
+    const model = await modelSnapshot(page);
+    const before = await elementCentre(page, A.free.id);
+    const scale = await page.evaluate(
+      () =>
+        (
+          globalThis as unknown as {
+            __canvas: { client: { camera: { read(): { scale: number } } } };
+          }
+        ).__canvas.client.camera.read().scale,
+    );
+    // The press is answered in one call (engine ADR 1303), held here until
+    // the drag is long under way.
+    await delayReply(page, "beginGestureAt", 1_200);
+    await expectUndoSteps(page, 1, async () => {
+      await dragStartOnObject(page, A.free.id);
+      await movePointerBy(page, 30, 20, 4);
+      await movePointerBy(page, 30, 20, 4);
+      await releasePointer(page);
+      await chaosIdle(page);
+    });
+    const after = await elementCentre(page, A.free.id);
+    const slack = 10 / scale;
+    expect(Math.abs(after.at[0] - before.at[0] - 60 / scale)).toBeLessThan(
+      slack,
+    );
+    expect(Math.abs(after.at[1] - before.at[1] - 40 / scale)).toBeLessThan(
+      slack,
+    );
+    expect((await selectionSnapshot(page)).elements).toEqual([A.free.id]);
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: { client: { undo(): Promise<unknown> } };
+        }
+      ).__canvas.client.undo(),
+    );
+    expect(await modelSnapshot(page)).toBe(model);
   });
 
   test("UXI-T59 — a document replaced while a click's hit test is out: the old answer selects nothing in the new one @feat:editor-tools.select.click-marquee @level:edge", async ({

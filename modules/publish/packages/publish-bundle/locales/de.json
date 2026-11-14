@@ -15,5 +15,7 @@
   "publish.commands.pdfx4Profile": "PDF/X-4 braucht ein Ausgabe-Intent-Profil (den Namen eines registrierten Profils)",
   "publish.commands.preflight": "Preflight",
   "publish.commands.savePaged": "Als .paged speichern",
-  "publish.io.idmlPackage": "IDML-Paket"
+  "publish.io.idmlPackage": "IDML-Paket",
+  "publish.io.openAction": "Öffnen von {name}",
+  "publish.io.openFailed": "die Datei ist beschädigt oder verwendet etwas, das Paged nicht lesen kann; das geöffnete Dokument bleibt unverändert"
 }

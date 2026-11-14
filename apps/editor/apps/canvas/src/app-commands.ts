@@ -18,6 +18,7 @@
  */
 
 import {
+  closeDocument,
   commandNeeds,
   getViewToggle,
   GO_TO_PAGE_COMMAND,
@@ -25,7 +26,9 @@ import {
   scopeOf,
   toggleViewToggle,
   whenNeeds,
+  type PagedEditor,
 } from "@paged-media/shell";
+import { openRecentDialog } from "./panels/open-recent-dialog";
 
 // SDK Phase 4 — canvas-app-specific commands.
 //
@@ -58,6 +61,8 @@ const M = defineMessages("app.appCommands", {
   openPdf: "Open PDF…",
   saveAsIdml: "Save As IDML…",
   savePaged: "Save (.paged)",
+  openRecent: "Open recent…",
+  close: "Close",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   zoom100: "Zoom to 100%",
@@ -78,6 +83,7 @@ const M = defineMessages("app.appCommands", {
   snapToPoints: "Snap to points",
   showHeadingAnchors: "Show heading anchors",
   showDataMarkers: "Show data markers",
+  showIssueMarkers: "Show issue markers",
   docs: "Documentation",
   idmlReference: "IDML format reference",
   reportIssue: "Report an issue…",
@@ -146,6 +152,9 @@ export const PAGED_EDITOR_REDO = "paged.editor.redo";
 export const PAGED_FILE_OPEN_PDF = "paged.file.openPdf";
 export const PAGED_FILE_SAVE_AS_IDML = "paged.file.saveAsIdml";
 export const PAGED_FILE_SAVE_PAGED = "paged.file.savePaged";
+/** UX audit F-06 — File ▸ Open recent… and File ▸ Close. */
+export const PAGED_FILE_OPEN_RECENT = "paged.file.openRecent";
+export const PAGED_FILE_CLOSE = "paged.file.close";
 export const PAGED_VIEW_ZOOM_IN = "paged.view.zoomIn";
 export const PAGED_VIEW_ZOOM_OUT = "paged.view.zoomOut";
 export const PAGED_VIEW_ZOOM_100 = "paged.view.zoom100";
@@ -183,6 +192,8 @@ export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS =
 /** View ▸ Show data markers — the frames the document's data is placed in,
  *  bracketed in their binding's sync state (editor ADR 291). */
 export const PAGED_VIEW_TOGGLE_DATA_MARKERS = "paged.view.toggleDataMarkers";
+/** Editor ADR 1223 — View ▸ Show issue markers. */
+export const PAGED_VIEW_TOGGLE_ISSUE_MARKERS = "paged.view.toggleIssueMarkers";
 
 /** Help — the places the app sends you to learn it. */
 const HELP_LINKS = [
@@ -372,6 +383,23 @@ export function buildAppCommands(
       category: "File",
       handler: () => handlers.savePaged(),
     },
+    // UX audit F-06 — the library's and the recent files, and Close.
+    {
+      id: PAGED_FILE_OPEN_RECENT,
+      title: t(M.openRecent),
+      category: "File",
+      handler: (paged) => openRecentDialog(scopeOf(paged)),
+    },
+    {
+      id: PAGED_FILE_CLOSE,
+      title: t(M.close),
+      category: "File",
+      when: whenNeeds("document"),
+      applicability: commandNeeds("document"),
+      handler: async (paged) => {
+        await closeDocument(paged as PagedEditor);
+      },
+    },
     {
       id: PAGED_VIEW_ZOOM_IN,
       title: t(M.zoomIn),
@@ -536,6 +564,14 @@ export function buildAppCommands(
         toggleViewToggle(scopeOf(paged), "dataMarkers");
       },
     },
+    {
+      id: PAGED_VIEW_TOGGLE_ISSUE_MARKERS,
+      title: t(M.showIssueMarkers),
+      category: "View",
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "issueMarkers");
+      },
+    },
     ...HELP_LINKS.map((l) => ({
       id: l.id,
       title: t(l.label),
@@ -597,6 +633,18 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
   // engine's protocol-51 export door got a caller; the MenuRegistry
   // dedupes by path and would throw on a collision, so the seam is
   // gone rather than shadowed.
+  {
+    path: "File/Open recent…",
+    command: PAGED_FILE_OPEN_RECENT,
+    order: 12,
+    group: "open",
+  },
+  {
+    path: "File/Close",
+    command: PAGED_FILE_CLOSE,
+    order: 30,
+    group: "save",
+  },
   {
     path: "File/Save (.paged)",
     command: PAGED_FILE_SAVE_PAGED,
@@ -763,6 +811,13 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
   },
   // View ▸ Show data markers moved into View ▸ Editing aids ▸ Data
   // bindings (view-commands.ts; data ADR 566), the same command and toggle.
+  {
+    path: "View/Show issue markers",
+    command: PAGED_VIEW_TOGGLE_ISSUE_MARKERS,
+    checked: (paged) => getViewToggle(scopeOf(paged), "issueMarkers"),
+    order: 67,
+    group: "extras",
+  },
 ];
 
 /** Keybindings that route through the command registry. Cmd-Z /

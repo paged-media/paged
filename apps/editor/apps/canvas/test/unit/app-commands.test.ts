@@ -34,6 +34,7 @@ import {
   buildAppCommands,
   type AppCommandHandlers,
 } from "../../src/app-commands";
+import { isOpenRecentDialogOpen } from "../../src/panels/open-recent-dialog";
 
 type HandlerName = keyof AppCommandHandlers;
 
@@ -156,6 +157,36 @@ test("show data markers flips its own flag [editor-shell.data-panel]", async () 
   expect(getViewToggle(scope, "textThreads")).toBe(false);
   await registry.invoke("paged.view.toggleDataMarkers");
   expect(getViewToggle(scope, "dataMarkers")).toBe(false);
+});
+
+test("show issue markers flips its own flag (editor ADR 1223) [editor-shell.panels.publication-health]", async () => {
+  covers("command:paged.view.toggleIssueMarkers");
+  const { registry, scope } = harness();
+  expect(getViewToggle(scope, "issueMarkers")).toBe(false);
+  await registry.invoke("paged.view.toggleIssueMarkers");
+  expect(getViewToggle(scope, "issueMarkers")).toBe(true);
+  expect(getViewToggle(scope, "dataMarkers")).toBe(false);
+  await registry.invoke("paged.view.toggleIssueMarkers");
+  expect(getViewToggle(scope, "issueMarkers")).toBe(false);
+});
+
+test("Open recent… opens its dialog; Close needs an open document (UX audit F-06) [editor-shell.file-intake]", async () => {
+  covers("command:paged.file.openRecent", "command:paged.file.close");
+  const { registry, scope } = harness();
+  expect(isOpenRecentDialogOpen(scope)).toBe(false);
+  await registry.invoke("paged.file.openRecent");
+  expect(isOpenRecentDialogOpen(scope)).toBe(true);
+  // With no document, Close does not apply (the registry refuses it).
+  const close = registry.get("paged.file.close")!;
+  expect(typeof close.when).toBe("function");
+  expect(
+    (close.when as (s: unknown) => boolean)({ document: { handle: null } }),
+  ).toBe(false);
+  expect(
+    (close.when as (s: unknown) => boolean)({
+      document: { handle: { pageCount: 2 } },
+    }),
+  ).toBe(true);
 });
 
 describe("Help opens the documentation in a new, unlinked tab", () => {

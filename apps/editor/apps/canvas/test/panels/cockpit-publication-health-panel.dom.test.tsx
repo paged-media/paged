@@ -219,13 +219,22 @@ describe("Publication health: states", () => {
       document: linksDocument(),
     });
     expect(h.mutations()).toEqual([]);
-    // Its only buttons are the section toggles and the risk rows that
-    // open where their findings are listed (PN-301); none writes.
+    // Its only buttons are the section toggles, the page overview's pages
+    // (editor ADR 1223: each goes to its page's first issue) and the risk
+    // rows that open where their findings are listed (PN-301); none
+    // writes. A page with no issue is no way anywhere: disabled.
     expect(
-      [...h.root.querySelectorAll("button:not([data-risk-row])")].map(
+      [
+        ...h.root.querySelectorAll(
+          "button:not([data-risk-row]):not([data-issue-page])",
+        ),
+      ].map((b) => b.textContent),
+    ).toEqual(["Document", "Issues", "Risks"]);
+    expect(
+      [...h.root.querySelectorAll("button[data-issue-page]")].map(
         (b) => b.textContent,
       ),
-    ).toEqual(["Document", "Risks"]);
+    ).toEqual(["1", "2"]);
     for (const b of h.root.querySelectorAll<HTMLElement>(
       "button[data-risk-row]",
     ))

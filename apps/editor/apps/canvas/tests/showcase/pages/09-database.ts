@@ -327,7 +327,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       await page.locator("[data-data-bind-field]").fill(TABLE_COLUMNS);
       await page.locator("[data-data-bind-add]").click();
       await expect(page.locator("[data-data-bind-msg]")).toContainText(
-        /^table binding /,
+        /^table binding /i,
         {
           timeout: 10_000,
         },
