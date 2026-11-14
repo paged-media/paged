@@ -600,6 +600,11 @@ test.describe("E2E paged.object — the structural command layer", () => {
         // WP4.4's Transform each (its own spec covers it).
         "paged.object.transformEach",
         "paged.object.transformEachDialog",
+        // A recorded canvas gesture's replay (editor ADR 1240, amendment
+        // 1) and Object ▸ Add constraint… (editor ADR 1233); their own
+        // specs cover them.
+        "paged.object.transformSelection",
+        "paged.object.addConstraint",
       ].sort(),
     );
     // ONE category, and it is the editor's — not a plugin namespace.
@@ -628,6 +633,7 @@ test.describe("E2E paged.object — the structural command layer", () => {
         "Object/Hide",
         "Object/Show all on spread",
         "Object/Transform/Transform each…",
+        "Object/Add constraint…",
       ].sort(),
     );
     // Both platform variants, plus the shifted-glyph alternates the

@@ -1161,10 +1161,12 @@ test.describe("paged.object — the keyboard guards", () => {
       expect(targetOwnsKey(key("Backspace", inside)), role).toBe(true);
       // Letters are NOT claimed there — tool shortcuts keep working
       // with focus on a tab or a tree row, as they always have — except
-      // in an open menu (typeahead) or a dialog, which own every key but
-      // a chord (R9, ADR 234).
+      // in an open menu or a dialog, which own every key but a chord (R9,
+      // ADR 234), and in a listbox, whose typeahead letters are its own
+      // (ADR 234's amendment, UXI-T76: a long list types ahead, and the
+      // letter is not also the Selection tool).
       expect(targetOwnsKey(key("v", inside)), role).toBe(
-        role === "menu" || role === "dialog",
+        role === "menu" || role === "dialog" || role === "listbox",
       );
     }
     expect(targetOwnsKey(key("ArrowDown", el("SELECT")))).toBe(true);
