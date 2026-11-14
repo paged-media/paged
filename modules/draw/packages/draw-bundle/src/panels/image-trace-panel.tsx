@@ -62,13 +62,13 @@ const M = defineMessages("draw.imageTracePanel", {
   preset: "Preset",
   custom: "Custom",
   mode: "Mode",
-  modeColor: "Colour",
+  modeColor: "Color",
   modeBw: "Black and white",
   modeCenterline: "Centreline (strokes)",
   paths: "Paths",
   pathsSpline: "Curves",
   pathsPolygon: "Corners",
-  maxColors: "Colours (0 = automatic)",
+  maxColors: "Colors (0 = automatic)",
   grayscale: "Greys only",
   threshold: "Threshold",
   speckle: "Ignore areas smaller than (px)",
@@ -81,7 +81,7 @@ const M = defineMessages("draw.imageTracePanel", {
     "Trace the selected traced image again with these options and replace its previous result",
   traced: "Selected trace: {preset}",
   notTraced: "The selection is not a traced image.",
-  note: "A trace is ordinary artwork: its regions can be edited, but a Re-trace replaces them. Centreline presets trace the middle of the ink as open strokes at the ink's average width. Colour counts snap the image to that many colours first. A live trace is traced again inside the edit that changes the image's link, so one Undo takes both back.",
+  note: "A trace is ordinary artwork: its regions can be edited, but a Re-trace replaces them. Centreline presets trace the middle of the ink as open strokes at the ink's average width. Color counts snap the image to that many colors first. A live trace is traced again inside the edit that changes the image's link, so one Undo takes both back.",
 });
 
 export const IMAGE_TRACE_PANEL_NOTE = M.note;

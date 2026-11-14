@@ -310,7 +310,7 @@ export const PATTERN_SWATCH_NOTE =
   "overlap into a pattern swatch in the document (the engine's pattern " +
   "paint, engine ADR 1041), which the Swatches panel applies as a fill or " +
   "a stroke to any object; Done saves it and removes the copies. IDML has " +
-  "no pattern swatch: an IDML export shows a stand-in colour in InDesign, " +
+  "no pattern swatch: an IDML export shows a stand-in color in InDesign, " +
   "keeps the pattern in the frame's label so paged reopens it, and reports " +
   "the loss. Save as .paged to keep it everywhere.";
 
@@ -1991,7 +1991,7 @@ export async function applySavePatternSwatch(
   const spec = patternSwatchSpecFor(plan);
   if (!spec) {
     host.log.warn(
-      `${label}: no source has a colour fill or stroke a tile can carry ` +
+      `${label}: no source has a color fill or stroke a tile can carry ` +
         "(a gradient or None paints nothing in a pattern) — no swatch written",
     );
     return null;

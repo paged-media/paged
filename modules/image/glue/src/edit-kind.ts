@@ -51,7 +51,7 @@ export const EDIT_KIND = defineMessages("image.editKind", {
     "Non-destructive: the source is kept; scaling and smart filters can be undone any time.",
   fill: "Fill",
   fillHint:
-    "Non-destructive: a colour, gradient or pattern you can edit any time.",
+    "Non-destructive: a color, gradient or pattern you can edit any time.",
   type: "Type",
   typeHint: "Non-destructive: live text, rendered to pixels when it changes.",
   mask: "Mask",

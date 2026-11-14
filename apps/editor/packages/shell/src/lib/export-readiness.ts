@@ -145,10 +145,10 @@ const M = defineMessages("shell.exportReadiness", {
   bleedNone: "None",
   bleedEven: "{pt} pt on every side",
   bleedSides: "{top} / {left} / {bottom} / {right} pt",
-  color: "Colour",
+  color: "Color",
   colorX4: "{standard} · output intent {profile} · {policy}",
   colorPdf17: "{standard} · no output intent · {policy}",
-  preserve: "colour numbers kept",
+  preserve: "color numbers kept",
   convert: "converted to the output intent",
   fonts: "Fonts",
   fontsEmbedded:

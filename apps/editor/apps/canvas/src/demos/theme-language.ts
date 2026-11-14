@@ -27,7 +27,7 @@ import { businessCard } from "./templates";
 const page = demoPage({
   title: "Theme and language",
   intro:
-    "The host's colours and language: light or dark, a brand accent, English or German.",
+    "The host's colors and language: light or dark, a brand accent, English or German.",
   aside: true,
 });
 

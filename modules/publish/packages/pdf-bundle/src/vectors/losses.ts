@@ -34,9 +34,9 @@ const M = defineMessages("publish.pdfVectorLosses", {
   shadingMeshTooLarge:
     "{count, plural, one {# mesh shading with too many patches was} other {# mesh shadings with too many patches were}} sampled to an image",
   shadingMeshFunction:
-    "{count, plural, one {# mesh shading maps} other {# mesh shadings map}} its colours through a curve; the native mesh blends the corner colours",
+    "{count, plural, one {# mesh shading maps} other {# mesh shadings map}} its colors through a curve; the native mesh blends the corner colors",
   shadingMeshBackground:
-    "{count, plural, one {# mesh shading has} other {# mesh shadings have}} a background colour the native mesh does not paint",
+    "{count, plural, one {# mesh shading has} other {# mesh shadings have}} a background color the native mesh does not paint",
   shadingMeshPatches:
     "{count, plural, one {# mesh arrives} other {# meshes arrive}} as separate patches, not as one editable grid",
   shadingFocalSampled:
@@ -46,19 +46,19 @@ const M = defineMessages("publish.pdfVectorLosses", {
   shadingDegenerate:
     "{count, plural, one {# gradient without a length was} other {# gradients without a length were}} sampled to an image",
   shadingNoExtend:
-    "{count, plural, one {# gradient stops} other {# gradients stop}} at its ends in the PDF; the native gradient continues its end colours",
+    "{count, plural, one {# gradient stops} other {# gradients stop}} at its ends in the PDF; the native gradient continues its end colors",
   patternTilingExpanded:
     "{count, plural, one {# pattern fill was} other {# pattern fills were}} expanded into copies of its tile",
   patternTilingFlattened:
-    "{count, plural, one {# pattern fill with too many tiles was} other {# pattern fills with too many tiles were}} filled with the tile's colour",
+    "{count, plural, one {# pattern fill with too many tiles was} other {# pattern fills with too many tiles were}} filled with the tile's color",
   patternTooDeep:
     "{count, plural, one {# nested pattern was} other {# nested patterns were}} left out",
   strokeNonuniform:
     "{count, plural, one {# stroke was} other {# strokes were}} drawn under an uneven scale; the width is an average",
   strokePattern:
-    "{count, plural, one {# patterned stroke was} other {# patterned strokes were}} given a solid colour",
+    "{count, plural, one {# patterned stroke was} other {# patterned strokes were}} given a solid color",
   strokeGradient:
-    "{count, plural, one {# gradient stroke was} other {# gradient strokes were}} given its first colour",
+    "{count, plural, one {# gradient stroke was} other {# gradient strokes were}} given its first color",
   strokeHairline:
     "{count, plural, one {# hairline was} other {# hairlines were}} given a width of 0.25 pt",
   strokeDashPhase:
@@ -86,7 +86,7 @@ const M = defineMessages("publish.pdfVectorLosses", {
   maskTooDeep:
     "{count, plural, one {# nested soft mask was} other {# nested soft masks were}} left out",
   maskBackdrop:
-    "{count, plural, one {# soft mask's backdrop colour was} other {# soft masks' backdrop colours were}} not carried",
+    "{count, plural, one {# soft mask's backdrop color was} other {# soft masks' backdrop colors were}} not carried",
   maskTransfer:
     "{count, plural, one {# soft mask's transfer function was} other {# soft masks' transfer functions were}} not carried",
   maskComplexDropped:
@@ -103,7 +103,7 @@ const M = defineMessages("publish.pdfVectorLosses", {
     "{count, plural, one {# image could not be decoded and was} other {# images could not be decoded and were}} left out",
   unknown: "{code}: {count, plural, one {# object} other {# objects}}",
   colours:
-    "Colours arrive as RGB: CMYK, spot and Lab colours of the file were converted",
+    "Colors arrive as RGB: CMYK, spot and Lab colors of the file were converted",
   aiPrivate:
     "Illustrator's own data is not read: live effects, symbols, appearance and editable type on a path arrive as the file's PDF part draws them",
   outlinedFonts: "Not in the document, so drawn as outlines: {fonts}",

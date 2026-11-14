@@ -76,16 +76,16 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("draw.blendPanel", {
   summary:
-    "Fill the space between two selected objects with intermediate shapes that change step by step in shape and colour.",
-  note: "A blend makes real intermediate shapes and remembers how it built them. While Update automatically is on, editing a key object rebuilds the intermediates in the same undo step; with it off, they change only when you choose Update. The step count shown under Spacing is worked out from the settings; the artwork is only rebuilt when you build or update. The intermediates follow a straight line between the two objects unless you replace it with a path of your own (Spine): that path keeps its own colour and stays outside the blend's group, so you can still edit it. Reverse spine swaps which end each shape travels to; reverse front to back only changes which shapes paint on top. Building, updating, reversing, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
+    "Fill the space between two selected objects with intermediate shapes that change step by step in shape and color.",
+  note: "A blend makes real intermediate shapes and remembers how it built them. While Update automatically is on, editing a key object rebuilds the intermediates in the same undo step; with it off, they change only when you choose Update. The step count shown under Spacing is worked out from the settings; the artwork is only rebuilt when you build or update. The intermediates follow a straight line between the two objects unless you replace it with a path of your own (Spine): that path keeps its own color and stays outside the blend's group, so you can still edit it. Reverse spine swaps which end each shape travels to; reverse front to back only changes which shapes paint on top. Building, updating, reversing, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
   selectTwo: "Select two objects to blend",
   selectExactlyTwo: "Select exactly two objects to blend ({count} selected)",
-  smoothColor: "Smooth colour",
+  smoothColor: "Smooth color",
   specifiedSteps: "Specified steps",
   specifiedDistance: "Specified distance",
   rowSteps: "{count} steps",
   rowEvery: "every {distance} pt",
-  rowSmooth: "smooth colour",
+  rowSmooth: "smooth color",
   rowReplacedSpine: " · replaced spine",
   rowAligned: " · aligned",
   rowReversedSpine: " · reversed spine",
@@ -105,7 +105,7 @@ const M = defineMessages("draw.blendPanel", {
   measuredAlongSpine:
     "The step count is measured along the spine when you build.",
   fromColour:
-    "The step count comes from the colour difference between the two objects when you build.",
+    "The step count comes from the color difference between the two objects when you build.",
   orientation: "Orientation",
   alignTo: "Align to",
   page: "Page",
@@ -113,9 +113,9 @@ const M = defineMessages("draw.blendPanel", {
   easing: "Easing",
   shape: "Shape",
   strength: "Strength (0 = none)",
-  independentColour: "Independent colour acceleration",
-  colour: "Colour",
-  colourStrength: "Colour strength",
+  independentColour: "Independent color acceleration",
+  colour: "Color",
+  colourStrength: "Color strength",
   spine: "Spine",
   reverseSpineCheck: "Reverse spine (the shapes swap ends)",
   reverseOrderCheck: "Reverse front to back (paint order only)",

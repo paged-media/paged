@@ -163,7 +163,7 @@ export const DRAW_PANEL_ITEM_ROWS: Readonly<
 const M = defineMessages("draw.properties", {
   across: "Across",
   down: "Down",
-  smoothColor: "Smooth colour",
+  smoothColor: "Smooth color",
   specifiedSteps: "Specified steps",
   specifiedDistance: "Specified distance",
   countEvenly: "Count (evenly)",

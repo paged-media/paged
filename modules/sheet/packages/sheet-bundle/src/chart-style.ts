@@ -113,7 +113,7 @@ export async function chartStyleChoices(
       members: [...(g.members ?? [])],
     }));
   } catch (err) {
-    host.log.debug("chartStyleChoices: colour groups", err);
+    host.log.debug("chartStyleChoices: color groups", err);
   }
   return out;
 }
@@ -268,7 +268,7 @@ export function paletteFromId(
   const p = refs.groups.get(String(group));
   if (!p)
     throw new Error(
-      `no colour group "${String(group)}" with swatches in the document`,
+      `no color group "${String(group)}" with swatches in the document`,
     );
   return p;
 }

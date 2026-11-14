@@ -90,7 +90,7 @@ const M = defineMessages("draw.brushesPanel", {
   seed: "Seed",
   flipAlong: "Flip along",
   flipAcross: "Flip across",
-  note: "A brush's artwork is painted with the stroke's colour. IDML has no brushes: an export writes the artwork as a path, keeps the brush in a label a paged reader restores, and lists it as a loss.",
+  note: "A brush's artwork is painted with the stroke's color. IDML has no brushes: an export writes the artwork as a path, keeps the brush in a label a paged reader restores, and lists it as a loss.",
 });
 
 export const BRUSHES_PANEL_NOTE = M.note;
