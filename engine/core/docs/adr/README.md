@@ -213,6 +213,8 @@ is not written yet.
 | [1306](1306-the-screen-reports-its-invisibles-and-draws-a-proof.md) | The screen reports its invisibles (`RequestHiddenCharacters`) and the frames' own baseline grids, hides nonprinting items and draws a proof as build options of the live pages, and both lanes draw a page to one screen extent | Accepted 2026-11-14 |
 | [1307](1307-a-new-document-can-be-laid-out-in-facing-spreads.md) | A new document can be laid out in facing spreads: `NewBlankDocument` takes `pages` and `facingPages` (page 1 a right-hand page, then pairs; `FacingPages="true"`) | Accepted 2026-11-14 |
 | [1308](1308-relinking-a-picture-keeps-its-frame-and-its-size.md) | Relinking a picture keeps its frame and its size: `relinkImage { elementId, uri, bytes? }`, one undo step | Accepted 2026-11-14 |
+| [1311](1311-facing-pages-on-an-existing-document.md) | Facing pages on an existing document: `setFacingPages` lays every page out again with its items, and a facing document's inserted or removed page keeps the pairs; undo through `RestoreSpreads` | Accepted 2026-11-14 |
+| [1312](1312-an-anchored-picture-has-an-embedded-lane.md) | An anchored picture has an embedded lane (drawn, saved as `<Contents>`, relinked by bytes), and an embedded picture is a link (`LinkSummary.embedded`, `inline:<id>`) | Accepted 2026-11-14 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

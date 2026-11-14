@@ -497,6 +497,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.importSwatchLibrary", "(bytes, groupName?)", "bool", "author", "Import an .ase swatch library (bytes = number[]) as one undoable op."),
         f!("paged.setInkSetting", "(spotId, {convertToProcess?,aliasTo?})", "bool", "write", "Replace one ink's output-time settings."),
         f!("paged.setUseStandardLabForSpots", "(enabled)", "bool", "write", "Prefer spots' Lab primary over their CMYK alternate in previews."),
+        f!("paged.setFacingPages", "(facing)", "bool", "write", "Lay the pages out as facing spreads (page 1 on the right) or single pages; one undo step."),
         // --- plugin metadata & batch ---
         f!("paged.setPluginMetadata", "(elemId, key, value?, caller?)", "bool", "write", "Write one Label key/value pair on a leaf page item (value null deletes)."),
         f!("paged.setDocumentMetadata", "(key, value?, caller?)", "bool", "write", "Write one document-scoped Label key/value pair (value null deletes); undoable."),

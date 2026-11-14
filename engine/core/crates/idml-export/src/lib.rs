@@ -551,7 +551,15 @@ pub(crate) fn write_package(
     };
 
     for (i, spread) in doc.spreads.iter().enumerate() {
-        if let Some(orig) = entry_bytes(&mut src, &spread.src)? {
+        let orig = entry_bytes(&mut src, &spread.src)?;
+        // Engine ADR 1311 — a source spread whose pages the model changed
+        // (facing pages laid out again, a page that joined or left it) is
+        // written whole from the model: the rewrite patches the pages the
+        // source holds and has no lane for a page it lacks.
+        let restructured = orig
+            .as_deref()
+            .is_some_and(|o| source_page_ids(o) != model_page_ids(&spread.spread));
+        if let Some(orig) = orig.filter(|_| !restructured) {
             // Auto-sizing prefs and guides first (their own passes), then
             // the page-item rewrite over the patched bytes.
             let with_prefs = text_frame_prefs::rewrite_text_frame_prefs(&orig, &spread.spread)
@@ -635,6 +643,10 @@ pub(crate) fn write_package(
                         source,
                     }
                 })?;
+            if restructured {
+                patched.insert(spread.src.clone(), body);
+                continue;
+            }
             let anchor = doc.spreads[..i]
                 .iter()
                 .rev()
@@ -1375,6 +1387,37 @@ fn story_entry_src(story: &ParsedStory) -> String {
 /// Read one entry's decompressed bytes out of the source archive.
 /// `None` when the manifest names a path the package doesn't actually
 /// carry (tolerated: that resource simply isn't patched).
+/// The `Self` ids of a spread part's `<Page>` elements, in order.
+fn source_page_ids(xml: &[u8]) -> Vec<String> {
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(e)) | Ok(quick_xml::events::Event::Empty(e))
+                if e.name().as_ref() == b"Page" =>
+            {
+                if let Some(id) = rewrite::attr_value(&e, b"Self") {
+                    out.push(id);
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// The `Self` ids of the model's pages of a spread, in order.
+fn model_page_ids(spread: &idml_import::Spread) -> Vec<String> {
+    spread
+        .pages
+        .iter()
+        .filter_map(|p| p.self_id.clone())
+        .collect()
+}
+
 fn entry_bytes<R: Read + std::io::Seek>(
     src: &mut zip::ZipArchive<R>,
     path: &str,

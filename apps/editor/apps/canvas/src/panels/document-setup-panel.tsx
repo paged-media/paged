@@ -20,7 +20,8 @@
 // ADR 323 — Document Setup and Margins and Columns as schema-driven
 // forms over the object model's document and page addresses:
 //
-//   · Document Setup edits `doc`: bleed and slug (core `setProperty`),
+//   · Document Setup edits `doc`: facing pages (`setFacingPages`, engine
+//     ADR 1311), bleed and slug (core `setProperty`),
 //     the document defaults (`setDocumentDefaults`), colour management
 //     (`setColorSettings` / `setProofSetup` / `setUseStandardLabForSpots`)
 //     and the active condition set. Each is a virtual path core's `Set`
@@ -90,11 +91,19 @@ const M = defineMessages("app.documentSetupPanel", {
   pages: "Pages",
   pageN: "Page {index}",
   allPages: "All pages",
+  layout: "Layout",
+  facingPages: "Facing pages",
 });
 
 // Section titles and field labels are message keys (`sectionsIn`).
 
 const DOCUMENT_SECTIONS: readonly SectionSpec[] = [
+  // Engine ADR 1311 — Facing pages lays every page out again (page 1 on
+  // the right, then left/right pairs) as one undo step.
+  {
+    title: M.layout,
+    fields: [{ path: "facingPages", label: M.facingPages }],
+  },
   {
     title: M.bleed,
     fields: [

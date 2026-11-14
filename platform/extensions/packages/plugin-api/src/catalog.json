@@ -988,6 +988,13 @@
       "summary": "Prefer spots' Lab primary over their CMYK alternate in previews."
     },
     {
+      "name": "paged.setFacingPages",
+      "params": "(facing)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Lay the pages out as facing spreads (page 1 on the right) or single pages; one undo step."
+    },
+    {
       "name": "paged.setPluginMetadata",
       "params": "(elemId, key, value?, caller?)",
       "returns": "bool",
@@ -2132,6 +2139,7 @@
     "unlinkFrames",
     "insertPage",
     "deletePage",
+    "setFacingPages",
     "resizePage",
     "insertFrame",
     "insertTextFrame",
@@ -14730,6 +14738,29 @@
     },
     {
       "addressKind": "doc",
+      "path": "facingPages",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setFacingPages",
+        "field": "facing"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "DocumentPreference",
+          "attribute": "FacingPages",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "doc",
       "path": "useStandardLabForSpots",
       "type": {
         "kind": "bool"
@@ -17676,6 +17707,29 @@
         },
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "doc",
+        "path": "facingPages",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setFacingPages",
+          "field": "facing"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "DocumentPreference",
+            "attribute": "FacingPages",
+            "kind": "attr"
+          }
+        ]
       },
       {
         "addressKind": "doc",

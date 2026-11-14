@@ -102,6 +102,7 @@ const STEPS = defineMessages("app.historySteps", {
   insertOval: "Insert oval",
   insertPage: "Insert page",
   deletePage: "Delete page",
+  facingPages: "Facing pages",
   group: "Group",
   ungroup: "Ungroup",
   paste: "Paste",
@@ -143,6 +144,7 @@ const BY_KEY: Readonly<Record<string, string>> = {
   insertOval: STEPS.insertOval,
   insertPage: STEPS.insertPage,
   deletePage: STEPS.deletePage,
+  setFacingPages: STEPS.facingPages,
   createGroup: STEPS.group,
   dissolveGroup: STEPS.ungroup,
   duplicateElements: STEPS.duplicate,
@@ -167,6 +169,7 @@ const BY_PROPERTY: Readonly<Record<string, string>> = {
   strokeWeight: STEPS.changeStrokeWeight,
   opacity: STEPS.changeOpacity,
   name: STEPS.rename,
+  facingPages: STEPS.facingPages,
 };
 
 /** The words a step shows: its translated default, else its label. */

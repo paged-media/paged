@@ -125,6 +125,41 @@ describe("Links panel: states", () => {
   });
 });
 
+/** A 2 × 2 RGBA PNG (solid green). */
+const PNG_2X2 = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x72, 0xb6, 0x0d, 0x24, 0x00, 0x00, 0x00, 0x11, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0xda, 0x63, 0x50, 0x3a, 0x1a, 0xf7, 0x1f, 0x84, 0x19, 0x60,
+  0x0c, 0x00, 0x4d, 0x42, 0x09, 0x11, 0x4f, 0x30, 0xb7, 0xb3, 0x00, 0x00, 0x00,
+  0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+]);
+
+// UX audit F-43, engine ADR 1312 — a picture placed from bytes, with no
+// file behind it, is a link too: counted, named, "embedded".
+describe("Links panel: an embedded picture", () => {
+  test("a frame given a picture's bytes is listed as an embedded picture", async () => {
+    covers("panel:paged.links");
+    const h = await mount();
+    const placed = await h.mutate({
+      op: "insertFrame",
+      args: { pageId: STRUCTURE.page2, bounds: [72, 72, 200, 200] },
+    } as never);
+    const frame = (placed as { payload: { createdId: { id: string } } }).payload
+      .createdId;
+    await h.mutate({
+      op: "replaceImageBytes",
+      args: { elementId: frame.id, bytes: Array.from(PNG_2X2) },
+    } as never);
+    expect(
+      rows(h.root).map((r) => ({ primary: r.primary, badge: r.badge })),
+    ).toEqual([
+      { primary: "photo.jpg", badge: "missing" },
+      { primary: "Embedded picture", badge: "embedded" },
+    ]);
+  });
+});
+
 describe("Links panel: controls", () => {
   test("the three toolbar buttons are disabled and send nothing", async () => {
     covers("panel:paged.links");

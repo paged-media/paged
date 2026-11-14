@@ -46,3 +46,10 @@ refuses a page of a multi-page spread, as for any opened facing document.
   the saved IDML), `paged-canvas-wasm` `it::dispatch` (`newBlankDocument` over the wire), the
   shell's `new-document-presets` and `new-document-dialog` tests, and
   `apps/canvas/tests/e2e/new-document-dialog.spec.ts`.
+
+## Amendment (2026-11-14): an existing document
+
+What this record left out is decided in [ADR 1311](1311-facing-pages-on-an-existing-document.md):
+`setFacingPages` turns facing pages on or off in an existing document (every page laid out again
+with its items, one undo step), and in a facing document `InsertPage` and `RemovePage` keep page 1
+on the right and the pairs after it.

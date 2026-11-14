@@ -1841,6 +1841,11 @@ mod tests {
                 page_id: "Page/u1".to_string(),
                 after_page_id: None,
             },
+            Operation::SetFacingPages { facing: true },
+            Operation::RestoreSpreads {
+                first: 1,
+                capture_json: "{}".to_string(),
+            },
             Operation::CreateMaster {
                 master_id: "uM".to_string(),
                 name: Some("Title".to_string()),

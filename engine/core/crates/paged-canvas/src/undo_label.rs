@@ -138,6 +138,7 @@ fn mutation_text(name: &str) -> Option<&'static str> {
         "PlaceImage" => "Place",
         "ReplaceImageBytes" => "Edit image",
         "RelinkImage" => "Relink",
+        "SetFacingPages" => "Facing pages",
         "SetPluginMetadata" => "Change plugin data",
         "PathPointInsert" => "Add anchor point",
         "PathPointRemove" => "Delete anchor point",
@@ -233,6 +234,8 @@ fn operation_name(op: &Operation) -> &'static str {
         Operation::RestoreParagraphs { .. } => "RestoreParagraphs",
         Operation::InsertPage { .. } => "InsertPage",
         Operation::RemovePage { .. } => "RemovePage",
+        Operation::SetFacingPages { .. } => "SetFacingPages",
+        Operation::RestoreSpreads { .. } => "RestoreSpreads",
         Operation::MoveLayer { .. } => "MoveLayer",
         Operation::InsertLayer { .. } => "InsertLayer",
         Operation::RemoveLayer { .. } => "RemoveLayer",
@@ -421,6 +424,8 @@ fn operation_text(name: &str) -> Option<&'static str> {
         "PlaceImage" => "Place",
         "ReplaceImageBytes" => "Edit image",
         "RelinkImage" => "Relink",
+        "SetFacingPages" => "Facing pages",
+        "RestoreSpreads" => "Pages",
         _ => return None,
     })
 }

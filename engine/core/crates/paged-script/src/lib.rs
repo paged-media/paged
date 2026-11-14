@@ -1203,6 +1203,11 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("setUseStandardLabForSpots"),
             1,
         )
+        .function(
+            guarded(paged_set_facing_pages),
+            js_string!("setFacingPages"),
+            1,
+        )
         // plugin metadata & batch
         .function(
             guarded(paged_set_plugin_metadata),
@@ -5921,6 +5926,17 @@ fn paged_set_use_standard_lab_for_spots(
 ) -> JsResult<JsValue> {
     let enabled = args.get_or_undefined(0).to_boolean();
     Ok(apply_bool(&Mutation::SetUseStandardLabForSpots { enabled }))
+}
+
+/// `paged.setFacingPages(facing)` — lay the pages out as facing spreads or
+/// single pages (`Mutation::SetFacingPages`, engine ADR 1311).
+fn paged_set_facing_pages(
+    _this: &JsValue,
+    args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let facing = args.get_or_undefined(0).to_boolean();
+    Ok(apply_bool(&Mutation::SetFacingPages { facing }))
 }
 
 // The nine colour-resource CRUD ops. Each `spec` argument is the wire

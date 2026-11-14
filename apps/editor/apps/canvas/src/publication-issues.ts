@@ -96,6 +96,21 @@ function fileName(uri: string): string {
   }
 }
 
+/** The "Placed links" count Publication health and the document map show:
+ *  every placed picture, an embedded one included (engine ADR 1312; UX
+ *  audit F-43), with how many of them are embedded when any are. "—" while
+ *  the links have not arrived. */
+export function placedLinksValue(
+  links: ReadonlyArray<LinkSummary> | null,
+  withEmbedded: (count: number, embedded: number) => string,
+): string {
+  if (!links) return "—";
+  const embedded = links.filter((l) => l.embedded).length;
+  return embedded > 0
+    ? withEmbedded(links.length, embedded)
+    : String(links.length);
+}
+
 /** A link's host frame as an element id (`LinkSummary.hostKind` is the
  *  parse-side kind: "Rectangle", "Oval", "Polygon", "GraphicLine"). */
 export function hostElement(link: LinkSummary): ElementId | null {

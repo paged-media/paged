@@ -48,6 +48,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "unlinkFrames": { args: {"kind":"struct","fields":{"frame":{"kind":"ref","to":"frame"}}}, nullFill: [] },
   "insertPage": { args: {"kind":"struct","fields":{"afterPageId":{"kind":"ref","to":"page","optional":true},"masterId":{"kind":"ref","to":"master","optional":true}}}, nullFill: ["afterPageId","masterId"] },
   "deletePage": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"}}}, nullFill: [] },
+  "setFacingPages": { args: {"kind":"struct","fields":{"facing":{"kind":"bool"}}}, nullFill: [] },
   "resizePage": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"bounds":{"kind":"bounds"}}}, nullFill: [] },
   "insertFrame": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"bounds":{"kind":"bounds"}}}, nullFill: [] },
   "insertTextFrame": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"bounds":{"kind":"bounds"}}}, nullFill: [] },

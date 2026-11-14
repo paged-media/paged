@@ -75,26 +75,20 @@ pub(super) fn apply_relink_image(
         }
         None => None,
     };
-    // A picture anchored in the text (ADR 208) keeps its link and its
-    // transform on the story, and has no embedded-bytes lane.
+    // A picture anchored in the text (ADR 208) keeps its link, its bytes
+    // and its transform on the story; its embedded-bytes lane is the
+    // anchored frame's own (engine ADR 1312).
     if matches!(frame, NodeId::Rectangle(_)) && find_rectangle_mut(doc, &id).is_none() {
         if let Some(af) = super::helpers::find_anchored_frame_mut(doc, &id) {
-            if bytes.is_some() {
-                return Err(OperationError::InvalidValue {
-                    node: frame.clone(),
-                    path: PropertyPath::FrameFittingType,
-                    reason: "a picture anchored in the text is relinked to a source the engine \
-                             can read (a URI without bytes): it has no embedded-bytes lane"
-                        .to_string(),
-                });
-            }
+            let next_bytes = bytes.map(<[u8]>::to_vec);
             let prior_link = std::mem::replace(&mut af.image_link, image_uri.map(str::to_string));
+            let prior_bytes = std::mem::replace(&mut af.image_bytes, next_bytes.clone());
             let prior_transform = std::mem::replace(&mut af.image_item_transform, image_transform);
             return Ok(AppliedOperation {
                 op: Operation::RelinkImage {
                     frame: frame.clone(),
                     image_uri: image_uri.map(str::to_string),
-                    bytes: None,
+                    bytes: next_bytes,
                     image_transform,
                     metadata_json: None,
                     has_image_element: None,
@@ -102,7 +96,7 @@ pub(super) fn apply_relink_image(
                 inverse: Operation::RelinkImage {
                     frame: frame.clone(),
                     image_uri: prior_link,
-                    bytes: None,
+                    bytes: prior_bytes,
                     image_transform: prior_transform,
                     metadata_json: None,
                     has_image_element: None,

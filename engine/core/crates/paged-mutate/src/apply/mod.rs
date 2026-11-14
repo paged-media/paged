@@ -222,6 +222,11 @@ pub(crate) fn apply_inner(
             restore_spread_json.as_deref(),
         ),
         Operation::RemovePage { page_id } => apply_remove_page(doc, page_id),
+        Operation::SetFacingPages { facing } => page_layout::apply_set_facing_pages(doc, *facing),
+        Operation::RestoreSpreads {
+            first,
+            capture_json,
+        } => page_layout::apply_restore_spreads(doc, *first, capture_json),
         Operation::MoveLayer {
             layer_id,
             new_index,
@@ -1541,6 +1546,7 @@ pub use master::{override_copy, OverrideCopy};
 mod move_node;
 mod nested;
 mod opacity_mask;
+mod page_layout;
 mod paragraph;
 pub use paragraph::caret_paragraphs;
 pub(crate) use paragraph::COMPOSER_EXPECTED;

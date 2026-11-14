@@ -377,6 +377,7 @@ import {
   insertTextFrame,
   placeImage,
   pageTargetFor,
+  setFacingPages,
   type InsertReport,
   deleteCurrentPage,
 } from "../insert-commands";
@@ -1721,6 +1722,10 @@ function CanvasAppIntegration() {
         })(p, payload);
       },
       newPage: freshInsert((p) => addPage(p, insertReport)),
+      facingPages: (p, facing) => {
+        problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE);
+        return setFacingPages(p, insertReport, facing);
+      },
     });
     // ADR 323 — Align / Distribute and Transform Each as TYPED commands
     // (transform-commands.ts): declared args, one batch = one undo.

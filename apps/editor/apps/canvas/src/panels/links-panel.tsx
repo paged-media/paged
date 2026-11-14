@@ -65,6 +65,7 @@ const M = defineMessages("app.linksPanel", {
   notDrawn: "not drawn",
   lowRes: "lo-res",
   embedded: "embedded",
+  embeddedPicture: "Embedded picture",
   relinkProvided: "Relink…",
   relink: "Relink…",
   updateProvided: "Update from file…",
@@ -168,8 +169,14 @@ export function LinksPanel() {
             rows={links
               .map((link): ListRowSpec => {
                 // The displayed name strips path prefixes for
-                // legibility — full URI lives in searchText.
-                const filename = link.uri.split("/").pop() ?? link.uri;
+                // legibility — full URI lives in searchText. A picture
+                // whose bytes live in the document with no source of its
+                // own (`inline:<frame>`, engine ADR 1312; UX audit F-43)
+                // is named as InDesign names it.
+                const inline = link.embedded && link.uri.startsWith("inline:");
+                const filename = inline
+                  ? strings.t(M.embeddedPicture)
+                  : (link.uri.split("/").pop() ?? link.uri);
                 const missing = link.status === "missing";
                 // The file is there but this engine has no decoder for it
                 // (an EPS): not missing, and not drawn either (engine ADR 207).
@@ -196,14 +203,16 @@ export function LinksPanel() {
                 const secondary =
                   meta.length > 0 ? meta.join(" · ") : `${link.hostKind}`;
                 // A single trailing badge — missing wins over not drawn,
-                // which wins over lo-res.
+                // which wins over lo-res, which wins over embedded.
                 const badge: ListRowBadge | undefined = missing
                   ? { label: strings.t(M.missing), tone: "error" }
                   : undecoded
                     ? { label: strings.t(M.notDrawn), tone: "warn" }
                     : lowRes
                       ? { label: strings.t(M.lowRes), tone: "warn" }
-                      : undefined;
+                      : link.embedded
+                        ? { label: strings.t(M.embedded), tone: "info" }
+                        : undefined;
                 return {
                   key: link.hostSelfId,
                   dot,
@@ -213,7 +222,7 @@ export function LinksPanel() {
                   badge,
                   selected: link.hostSelfId === selected,
                   onClick: () => setSelected(link.hostSelfId),
-                  searchText: `${filename} ${link.uri} ${link.colorspace ?? ""}`,
+                  searchText: `${filename} ${link.uri} ${link.colorspace ?? ""}${link.embedded ? ` ${strings.t(M.embedded)}` : ""}`,
                 };
               })
               .concat(

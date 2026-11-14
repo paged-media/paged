@@ -117,6 +117,7 @@ const M = defineMessages("app.insertCommands", {
   placeImage: "Place image…",
   generateImage: "Generate image",
   addPage: "Add page",
+  facingPages: "Facing pages",
   placeImageVerb: "Place image",
   needsDocument: "{verb} needs an open document. Open or create one first.",
   editContextBlocked:
@@ -168,6 +169,9 @@ export const PAGED_INSERT_PLACE_IMAGE = "paged.insert.placeImage";
 export const PAGED_INSERT_GENERATE_IMAGE = "paged.insert.generateImage";
 export const PAGED_INSERT_NEW_PAGE = "paged.insert.newPage";
 export const PAGED_INSERT_DELETE_PAGE = "paged.insert.deletePage";
+/** Engine ADR 1311 — Document Setup's Facing pages, as a command:
+ *  `{ facing }` sets it, no payload toggles it. */
+export const PAGED_INSERT_FACING_PAGES = "paged.insert.facingPages";
 
 /** Attribution the insert layer publishes diagnostics under. */
 export const INSERT_DIAGNOSTIC_SOURCE = "paged.insert";
@@ -428,6 +432,7 @@ const VERB_KEYS: Readonly<Record<string, string>> = {
   "Place image": M.placeImageVerb,
   "Generate image": M.generateImage,
   "Add page": M.addPage,
+  "Facing pages": M.facingPages,
 };
 
 /** "<verb> refused: <reason>", in the editor's words. */
@@ -1092,6 +1097,37 @@ export async function addPage(
   return outcomeOf(reply);
 }
 
+/** Engine ADR 1311 — lay the pages out as facing spreads (page 1 on the
+ *  right, then left/right pairs) or as single pages: one undo step that
+ *  keeps every item on its page. `facing` absent toggles what the document
+ *  says now. */
+export async function setFacingPages(
+  paged: PagedEditor,
+  report: InsertReport,
+  facing?: boolean,
+): Promise<InsertOutcome> {
+  if (blockedFor(paged, report, "Facing pages")) return REFUSED;
+  const next =
+    facing ?? !((await paged.client.documentMeta()).facingPages ?? false);
+  const reply = await paged.client.mutate({
+    op: "setFacingPages",
+    args: { facing: next },
+  });
+  const refusal = refusalOf(reply);
+  if (refusal) {
+    report("error", refused("Facing pages", refusal));
+    return REFUSED;
+  }
+  return outcomeOf(reply);
+}
+
+/** The `{ facing }` payload of `paged.insert.facingPages`, or undefined. */
+export function facingOf(payload: unknown): boolean | undefined {
+  if (typeof payload !== "object" || payload === null) return undefined;
+  const v = (payload as { facing?: unknown }).facing;
+  return typeof v === "boolean" ? v : undefined;
+}
+
 // ------------------------------------------------------------ commands
 
 /** The seven closures a host binds to the seven commands. Each
@@ -1116,6 +1152,12 @@ export interface InsertCommandHandlers {
   ) => unknown | Promise<unknown>;
   newPage: (paged: PagedEditor) => unknown | Promise<unknown>;
   deletePage: (paged: PagedEditor) => unknown | Promise<unknown>;
+  /** `facing` absent: toggle (engine ADR 1311). Optional so hosts and tests
+   *  that bind the page verbs only keep their shape. */
+  facingPages?: (
+    paged: PagedEditor,
+    facing?: boolean,
+  ) => unknown | Promise<unknown>;
 }
 
 /** Build the insert command set. Same shape as `buildObjectCommands`
@@ -1160,6 +1202,20 @@ export function buildInsertCommands(
         handlers.generateImage(paged as PagedEditor, payload),
     },
     cmd(PAGED_INSERT_NEW_PAGE, t(M.addPage), handlers.newPage),
+    ...(handlers.facingPages
+      ? [
+          {
+            ...cmd(
+              PAGED_INSERT_FACING_PAGES,
+              t(M.facingPages),
+              handlers.facingPages,
+            ),
+            category: "Layout",
+            handler: (paged: unknown, payload?: unknown) =>
+              handlers.facingPages?.(paged as PagedEditor, facingOf(payload)),
+          },
+        ]
+      : []),
   ];
 }
 

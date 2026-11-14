@@ -43,6 +43,7 @@ import {
 import {
   addPage,
   buildInsertCommands,
+  setFacingPages,
   deleteCurrentPage,
   insertEllipse,
   insertLine,
@@ -162,6 +163,7 @@ function inserts(
     // Generate Image has its own suite (panels/generate-image-panel).
     generateImage: () => undefined,
     newPage: (p) => addPage(p, report),
+    facingPages: (p, facing) => setFacingPages(p, report, facing),
   }))
     registry.register(c);
   return {
@@ -720,6 +722,46 @@ describe("pages: Add page, Delete page", () => {
     await del.invoke("paged.insert.deletePage");
     expect(del.reports).toEqual([
       ["error", "Delete page refused: page is locked"],
+    ]);
+  });
+});
+
+// Engine ADR 1311 — Document Setup's Facing pages as a command.
+describe("pages: Facing pages", () => {
+  test("{ facing } sets it: one setFacingPages", async () => {
+    covers("command:paged.insert.facingPages");
+    const h = inserts({ pages: 3 });
+    await h.invoke("paged.insert.facingPages", { facing: true });
+    expect(h.fake.mutations()).toEqual([
+      { op: "setFacingPages", args: { facing: true } },
+    ]);
+    expectOneCommit(h.fake);
+  });
+
+  test("no payload toggles what the document says", async () => {
+    covers("command:paged.insert.facingPages");
+    const meta = (facingPages: boolean | null) => (m: { kind: string }) =>
+      m.kind === "requestDocumentMeta"
+        ? { kind: "documentMetaReply", payload: { meta: { facingPages } } }
+        : undefined;
+    const on = inserts({ pages: 3, reply: meta(false) });
+    await on.invoke("paged.insert.facingPages");
+    expect(on.fake.mutations()).toEqual([
+      { op: "setFacingPages", args: { facing: true } },
+    ]);
+    const off = inserts({ pages: 3, reply: meta(true) });
+    await off.invoke("paged.insert.facingPages");
+    expect(off.fake.mutations()).toEqual([
+      { op: "setFacingPages", args: { facing: false } },
+    ]);
+  });
+
+  test("the engine's refusal is reported in words", async () => {
+    covers("command:paged.insert.facingPages");
+    const h = inserts({ pages: 2, mutate: () => refused("pages are locked") });
+    await h.invoke("paged.insert.facingPages", { facing: true });
+    expect(h.reports).toEqual([
+      ["error", "Facing pages refused: pages are locked"],
     ]);
   });
 });

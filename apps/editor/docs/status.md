@@ -111,7 +111,7 @@ editor does not load the slide bundle yet.
 | Paragraph / Character / Object Styles                     | the applied style (`ref`), built in each family's panel; "Style Options…"                                                                                                                                    | new / delete style (collection ops)                                                                                 |
 | Cell / Table Styles                                       | "Options…" per style                                                                                                                                                                                         | apply (from the Table panel)                                                                                        |
 | Style Options (new)                                       | the paragraph, character, object, cell and table style definitions on `style:<family>/<id>`: every catalog row of the family, in InDesign's sections; next style and region / bullet / number styles as refs | based on (shown, not edited)                                                                                        |
-| Document Setup (new)                                      | bleed, slug, defaults, colour management, proof setup, active condition set on `doc`                                                                                                                         | —                                                                                                                   |
+| Document Setup (new)                                      | facing pages, bleed, slug, defaults, color management, proof setup, active condition set on `doc`                                                                                                            | —                                                                                                                   |
 | Margins and Columns (new)                                 | page bounds, margins, columns, master on `page:<id>`; "All pages" = one batch                                                                                                                                | —                                                                                                                   |
 | Swatch Options (new)                                      | the colour as one write of `swatch.color`; name, type, tint, alpha, alternate, ink settings                                                                                                                  | —                                                                                                                   |
 | Text Variables, Numbering & Section Options, Guides (new) | every row of `textVariable:` / `section:` / `guide:`                                                                                                                                                         | create / delete (ops)                                                                                               |
@@ -166,12 +166,15 @@ extensions ADR 1107; F-02); the compatibility report lists every import's and ex
 format's round-trip risk, and says an import's summary once (DF4,
 [ADR 1222](adr/1222-compatibility-report.md), `UXI-T66`); File ▸ New document… opens a dialog of
 purpose presets and a custom setup with a live preview, facing pages included since engine ADR
-1307 (DF5, [ADR 1220](adr/1220-new-document.md); F-04); the PDF export is guided — readiness before anything starts, what the file will be, named
+1307 (DF5, [ADR 1220](adr/1220-new-document.md); F-04), and Document Setup turns facing pages on or
+off in an existing document while an inserted or deleted page keeps the pairs (engine ADR 1311); the PDF export is guided — readiness before anything starts, what the file will be, named
 stages and Cancel, a verified result — in kit controls with a page scope and presets, and the
 Layout rows open their panels (DF6, [ADR 1221](adr/1221-guided-export.md), `UXI-T68`; F-12,
 F-15); the publication's issues are on the page as markers, in a page overview and in the Issues
 lens, one click to the item with targeted fixes, Relink… among them since engine ADR 1308 (DF7,
-[ADR 1223](adr/1223-publication-health-on-the-page.md), `UXI-T55`; F-09); the clipboard's verbs run
+[ADR 1223](adr/1223-publication-health-on-the-page.md), `UXI-T55`; F-09), a picture anchored in the
+text relinked by a picked file's bytes too, and a picture whose bytes live in the document counted
+under Placed links and listed in Links as embedded (engine ADR 1312; F-43); the clipboard's verbs run
 in the order they were given and paste keeps relative geometry, Paste in place its positions
 (DF9, [ADR 231](adr/231-page-item-clipboard.md) amended, `UXI-T65`); and the document open last
 reopens at the next start, with File ▸ Open recent… and File ▸ Close
@@ -302,7 +305,8 @@ holding Control with a tool that places or drags anchors shows a precision magni
 four times the view, read from an engine snapshot, no document change); with anchors selected the
 Properties panel edits the points, not the frame; one selected path offers Shape suggestions; the
 Pathfinder says that it applies on click and outlines what a button takes.
-paged.image (ADR 487 in its range; UX audit F-43's two tool sets): inside any module's context the
+paged.image (ADR 487 in its range; UX audit F-43's two tool sets; F-43 is closed since embedded
+pictures are counted, engine ADR 1312, and the UI spells "color"): inside any module's context the
 tools are the rail's, and the context toolbar names the tool in hand and carries its options
 instead of repeating every tool as an icon; the layer rows and the toolbar say what an edit
 changes — pixels, a non-destructive adjustment, smart, fill or type layer, the mask, or (on a

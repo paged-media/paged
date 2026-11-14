@@ -50,3 +50,9 @@ worker without a `number[]`; scripts call `paged.relinkImage(frameId, uri, bytes
 - Tests: `paged-canvas` `it::relink_and_facing` (a missing link relinked and undone, the size
   kept), `paged-mutate` serialization, `paged-script` `script_surface`, the Links panel DOM test,
   and the editor's `issue-fixes` behaviour through the publication health tests.
+
+## Amendment (2026-11-14): an anchored picture relinks by bytes
+
+[ADR 1312](1312-an-anchored-picture-has-an-embedded-lane.md) gives a picture anchored in the text an
+embedded-bytes lane of its own, so its relink with bytes is no longer refused: the link, the bytes
+and the transform are set together and undone together, as for a free frame.

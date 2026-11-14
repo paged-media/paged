@@ -403,6 +403,9 @@ impl CanvasModel {
                     intent,
                 })
             }
+            (VirtualTarget::Doc, "setFacingPages") => m(Mutation::SetFacingPages {
+                facing: bool_of(v).ok_or_else(bad)?,
+            }),
             (VirtualTarget::Doc, "setUseStandardLabForSpots") => {
                 m(Mutation::SetUseStandardLabForSpots {
                     enabled: bool_of(v).ok_or_else(bad)?,
@@ -1403,6 +1406,9 @@ impl CanvasModel {
                     }
                     "proofIntent" => text(&pr.map(|p| p.intent.name().to_string())),
                     "useStandardLabForSpots" => Value::Bool(self.use_standard_lab_for_spots),
+                    "facingPages" => {
+                        Value::Bool(scene.designmap.document_preference.facing_pages == Some(true))
+                    }
                     "activeConditionSet" => text(&self.active_condition_set()),
                     _ => return Err(unknown()),
                 })

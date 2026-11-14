@@ -86,3 +86,12 @@ single-spread rules of engine ADR 1307. Tests: `new-document-presets.test.ts` (t
 preview's spread, the writes per side), `new-document-dialog.dom.test.tsx` (the switch and the
 preview), `apps/canvas/tests/e2e/new-document-dialog.spec.ts` (four pages: sides, spreads,
 margins, one undo step).
+
+## Amendment (2026-11-14): facing pages after the document is made
+
+Engine ADR 1311 replaces the last sentence of the facing-pages amendment: inserting a page into a
+facing document or removing one keeps page 1 on the right and the pairs after it, and an existing
+document turns facing pages on or off. Document Setup has a Facing pages row (`doc.facingPages`, a
+switch; one undo step, every item stays on its page), and `paged.insert.facingPages` sets it from
+the palette or a script (`{ facing }`, or a toggle without a payload). Tests: the engine's
+`it::facing_pages`, `test/panels/document-setup-panel.dom.test.tsx`.

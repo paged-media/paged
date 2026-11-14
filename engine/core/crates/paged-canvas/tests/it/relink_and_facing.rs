@@ -230,15 +230,6 @@ fn a_picture_anchored_in_the_text_is_relinked_by_its_uri() {
             .map(|l| l.uri)
     };
     assert_eq!(uri(&m).as_deref(), Some("file:old.png"));
-    // It has no embedded lane: bytes are refused, and nothing changes.
-    assert!(m
-        .apply_mutation(&Mutation::RelinkImage {
-            element_id: "anc".into(),
-            uri: "file:///new.png".into(),
-            bytes: Some(ByteBuf(png(4, 4))),
-        })
-        .is_err());
-    assert_eq!(uri(&m).as_deref(), Some("file:old.png"));
     // By its URI it is relinked, as one step.
     m.apply_mutation(&Mutation::RelinkImage {
         element_id: "anc".into(),
@@ -249,4 +240,83 @@ fn a_picture_anchored_in_the_text_is_relinked_by_its_uri() {
     assert_eq!(uri(&m).as_deref(), Some("https://example.com/new.png"));
     m.undo().expect("undo");
     assert_eq!(uri(&m).as_deref(), Some("file:old.png"));
+}
+
+/// Engine ADR 1312 — an anchored picture has an embedded lane of its own:
+/// relinked to a picked file's bytes it draws them, says "Embedded", saves
+/// them as `<Contents>` and undoes exactly.
+#[test]
+fn a_picture_anchored_in_the_text_is_relinked_by_its_bytes() {
+    let mut m = CanvasModel::load("anchored", &anchored_link_idml(), CanvasOptions::default())
+        .expect("load");
+    let hash = m.scene().canonical_hash();
+    let entry = |m: &CanvasModel| {
+        m.links()
+            .into_iter()
+            .find(|l| l.host_self_id == "anc")
+            .map(|l| (l.uri, l.status, l.embedded))
+            .expect("the anchored picture's link")
+    };
+    let (uri, _, embedded) = entry(&m);
+    assert_eq!((uri.as_str(), embedded), ("file:old.png", false));
+    let steps = m.applied_log_len();
+    m.apply_mutation(&Mutation::RelinkImage {
+        element_id: "anc".into(),
+        uri: "file:///new.png".into(),
+        bytes: Some(ByteBuf(png(4, 4))),
+    })
+    .expect("relinked by bytes");
+    assert_eq!(m.applied_log_len(), steps + 1, "one step");
+    assert_eq!(
+        entry(&m),
+        ("file:///new.png".to_string(), "ok".to_string(), true),
+        "it draws the bytes and is embedded"
+    );
+    // The IDML it saves carries the bytes, and they read back.
+    let idml = m.export_idml().expect("export");
+    let doc = idml_import::import_idml(&idml).expect("reopen").0;
+    let af = doc
+        .stories
+        .iter()
+        .find_map(|s| paged_model::anchored_frame_in(&s.story.paragraphs, "anc"))
+        .expect("the anchored frame");
+    assert_eq!(af.image_bytes.as_deref(), Some(png(4, 4).as_slice()));
+    assert_eq!(af.image_link.as_deref(), Some("file:///new.png"));
+
+    m.undo().expect("undo");
+    assert_eq!(
+        m.scene().canonical_hash(),
+        hash,
+        "undo restores the picture"
+    );
+    assert_eq!(entry(&m).0, "file:old.png");
+}
+
+/// UX audit F-43 — a picture placed from bytes, with no link source, is a
+/// placed link too: "Embedded", named `inline:<frame>`.
+#[test]
+fn a_picture_placed_from_bytes_is_listed_as_embedded() {
+    let mut m =
+        CanvasModel::new_blank_layout("bytes", 400.0, 400.0, 1, false, CanvasOptions::default())
+            .expect("a blank loads");
+    let page = paged_wire::PageId(m.pages()[0].self_id.clone());
+    let id = m
+        .apply_mutation(&Mutation::InsertFrame {
+            page_id: page,
+            bounds: (10.0, 10.0, 110.0, 110.0),
+        })
+        .expect("insert")
+        .created_id
+        .expect("created");
+    assert!(m.links().is_empty());
+    m.apply_mutation(&Mutation::ReplaceImageBytes {
+        element_id: id.raw_id().to_string(),
+        bytes: Some(ByteBuf(png(8, 8))),
+    })
+    .expect("place bytes");
+    let links = m.links();
+    assert_eq!(links.len(), 1, "counted");
+    assert_eq!(links[0].uri, format!("inline:{}", id.raw_id()));
+    assert!(links[0].embedded);
+    assert_eq!(links[0].status, "ok");
 }

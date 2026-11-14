@@ -4666,6 +4666,7 @@
             "unlinkFrames",
             "insertPage",
             "deletePage",
+            "setFacingPages",
             "resizePage",
             "insertFrame",
             "insertTextFrame",
@@ -7064,5 +7065,5 @@
       ]
     }
   ],
-  "protocol": 81
+  "protocol": 82
 }

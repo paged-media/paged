@@ -51,6 +51,8 @@ import { severityCounts, usePreflightFindings } from "./preflight-findings";
 import { IssuesSection } from "./issues-section";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
+import { placedLinksValue } from "../../publication-issues";
+
 const M = defineMessages("app.cockpitPublicationHealthPanel", {
   oversetStories: "Overset stories",
   showOversetStories: "Show the overset stories",
@@ -69,6 +71,7 @@ const M = defineMessages("app.cockpitPublicationHealthPanel", {
   frames: "Frames",
   glyphs: "Glyphs",
   placedLinks: "Placed links",
+  placedLinksEmbedded: "{count} · {embedded} embedded",
   colorMode: "Color mode",
   risks: "Risks",
   risksNote:
@@ -208,7 +211,9 @@ export function PublicationHealthPanel() {
           />
           <MetricTile
             label={strings.t(M.placedLinks)}
-            value={links ? String(links.length) : "—"}
+            value={placedLinksValue(links, (count, embedded) =>
+              strings.t(M.placedLinksEmbedded, { count, embedded }),
+            )}
           />
           <MetricTile
             label={strings.t(M.colorMode)}

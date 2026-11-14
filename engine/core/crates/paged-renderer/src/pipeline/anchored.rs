@@ -1334,7 +1334,7 @@ pub(super) fn emit_one_anchored_frame(
             // `emit_rectangle_image`. Anchored TextFrames don't carry
             // an `image_link` (the parser only sets it for Rectangles
             // / Groups), but the guard is symmetric for safety.
-            if af.image_link.is_some() && frame_w > 0.0 && frame_h > 0.0 {
+            if has_picture(af) && frame_w > 0.0 && frame_h > 0.0 {
                 em.anchored_image_queue.push(AnchoredImageEmit {
                     target_page,
                     place_x,
@@ -1570,12 +1570,18 @@ pub(super) struct AnchoredLook<'a> {
     pub color_ctx: ColorCtx<'a>,
 }
 
+/// Whether an anchored frame places a picture: a link, or its own
+/// embedded bytes (engine ADR 1312).
+pub(super) fn has_picture(af: &paged_model::AnchoredFrame) -> bool {
+    af.image_link.is_some() || af.image_bytes.is_some()
+}
+
 /// Whether an anchored frame paints its body in the picture pass: it
 /// places a picture and carries a look the picture must be inside of
 /// (engine ADR 1045). A frame without a look keeps the two passes, and
 /// so its display list, exactly as before.
 pub(super) fn paints_with_picture(af: &paged_model::AnchoredFrame) -> bool {
-    af.image_link.is_some()
+    has_picture(af)
         && matches!(af.frame_kind, paged_model::AnchoredFrameKind::Rectangle)
         && af.has_transparency()
 }
@@ -1629,7 +1635,7 @@ fn synthetic_rectangle(
         fill_drop_shadow: af.fill_drop_shadow.clone(),
         content_drop_shadow: af.content_drop_shadow.clone(),
         image_link: af.image_link.clone().filter(|_| with_image),
-        has_image_element: with_image && af.image_link.is_some(),
+        has_image_element: with_image && has_picture(af),
         has_inline_pdf: false,
         has_inline_eps: false,
         placed_pdf: None,
@@ -1649,7 +1655,9 @@ fn synthetic_rectangle(
                 ]
             },
         ),
-        image_bytes: None,
+        // The embedded lane (engine ADR 1312): bytes win over the link,
+        // as on a free frame (Q-03).
+        image_bytes: af.image_bytes.clone().filter(|_| with_image),
         image_clip: None,
         applied_object_style: af.applied_object_style.clone(),
         text_wrap: None,

@@ -148,6 +148,11 @@ fn looks(frames: &[AnchoredFrame]) -> Vec<String> {
                     f.fill_drop_shadow,
                     f.stroke_drop_shadow,
                     f.content_drop_shadow,
+                    // The picture: a relink (engine ADRs 1308, 1312) is a
+                    // reason to write the part fresh too.
+                    f.image_link,
+                    f.image_item_transform,
+                    f.image_bytes.as_deref().map(fingerprint),
                 ])
                 .to_string(),
             );
@@ -157,6 +162,14 @@ fn looks(frames: &[AnchoredFrame]) -> Vec<String> {
     let mut out = Vec::new();
     walk(frames, &mut out);
     out
+}
+
+/// A picture's bytes as a short value: their length and an FNV-1a hash.
+fn fingerprint(bytes: &[u8]) -> (usize, u64) {
+    let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
+    });
+    (bytes.len(), hash)
 }
 
 /// What stands at a character of the paragraph.
@@ -431,7 +444,7 @@ pub(crate) fn write_anchored_frame(
             attrs.push(("ParentStory", sanitize_id(story)));
         }
         attrs.push(("ContentType", "TextType".to_string()));
-    } else if f.image_link.is_some() {
+    } else if f.image_link.is_some() || f.image_bytes.is_some() {
         attrs.push(("ContentType", "GraphicType".to_string()));
     }
     if let Some(s) = &f.applied_object_style {
@@ -487,7 +500,19 @@ pub(crate) fn write_anchored_frame(
     if let Some(s) = &f.setting {
         write_anchored_object_setting(writer, s)?;
     }
-    if let (Some(uri), AnchoredFrameKind::Rectangle) = (&f.image_link, f.frame_kind) {
+    // A picture: a link, its embedded bytes (engine ADR 1312), or both.
+    // Bytes without a link are named from the frame's id, as the free
+    // frames' writer names them (`images.rs`), so InDesign binds a link.
+    let picture_uri = match (&f.image_link, &f.image_bytes) {
+        (Some(uri), _) => Some(uri.clone()),
+        (None, Some(bytes)) => Some(format!(
+            "file:{}.{}",
+            f.self_id.as_deref().unwrap_or("anchored"),
+            crate::images::sniff_image_extension(bytes).unwrap_or("bin")
+        )),
+        (None, None) => None,
+    };
+    if let (Some(uri), AnchoredFrameKind::Rectangle) = (&picture_uri, f.frame_kind) {
         let id = f.self_id.as_deref().unwrap_or("anchored");
         let mut image: Vec<(&str, String)> = vec![("Self", format!("{id}Image"))];
         if let Some(t) = f.image_item_transform {
@@ -504,13 +529,26 @@ pub(crate) fn write_anchored_frame(
                 drop_shadow: f.content_drop_shadow.as_ref(),
             },
         )?;
+        if let Some(bytes) = &f.image_bytes {
+            writer.write_event(Event::Start(BytesStart::new("Properties")))?;
+            crate::images::write_contents(writer, bytes)?;
+            writer.write_event(Event::End(BytesEnd::new("Properties")))?;
+        }
         emit_empty_with_attrs(
             writer,
             "Link",
             &[
                 ("Self", format!("{id}Link")),
                 ("LinkResourceURI", uri.clone()),
-                ("StoredState", "Normal".to_string()),
+                (
+                    "StoredState",
+                    if f.image_bytes.is_some() {
+                        "Embedded"
+                    } else {
+                        "Normal"
+                    }
+                    .to_string(),
+                ),
             ],
         )?;
         writer.write_event(Event::End(BytesEnd::new("Image")))?;
