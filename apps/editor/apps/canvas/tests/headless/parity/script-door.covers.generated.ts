@@ -361,6 +361,9 @@ export function coversDoor(
         case "releaseOpacityMask":
           covers("script:paged.releaseOpacityMask");
           return;
+        case "relinkImage":
+          covers("script:paged.relinkImage");
+          return;
         case "removeFooterRow":
           covers("script:paged.removeFooterRow");
           return;
@@ -414,6 +417,9 @@ export function coversDoor(
           return;
         case "setDocumentMetadata":
           covers("script:paged.setDocumentMetadata");
+          return;
+        case "setFacingPages":
+          covers("script:paged.setFacingPages");
           return;
         case "setFieldValue":
           covers("script:paged.setFieldValue");
@@ -584,6 +590,9 @@ export function coversDoor(
           return;
         case "paged.insert.ellipse":
           covers("command:paged.insert.ellipse");
+          return;
+        case "paged.insert.facingPages":
+          covers("command:paged.insert.facingPages");
           return;
         case "paged.insert.newPage":
           covers("command:paged.insert.newPage");

@@ -58,6 +58,7 @@ function shown(h: PanelHarness<unknown>, path: string): string | null {
 }
 
 const DOC_FIELDS = [
+  "facingPages",
   "documentBleedTop",
   "documentBleedBottom",
   "documentBleedInsideOrLeft",
@@ -93,6 +94,7 @@ describe("Document Setup: states", () => {
         s.getAttribute("data-options-section"),
       ),
     ).toEqual([
+      "Layout",
       "Bleed",
       "Slug",
       "Defaults",
@@ -100,11 +102,13 @@ describe("Document Setup: states", () => {
       "Proof Setup",
       "Conditions",
     ]);
-    for (const path of DOC_FIELDS.slice(0, 8)) {
+    for (const path of DOC_FIELDS.slice(1, 9)) {
       expect(shown(h, path)).toBe("0 pt");
     }
     expect(shown(h, "renderingIntent")).toBe("RelativeColorimetric");
     expect(shown(h, "blackPointCompensation")).toBe("true");
+    // A blank document is single-sided (engine ADR 1307).
+    expect(shown(h, "facingPages")).toBe("false");
     // Rows the doc schema adds that no section lays out: under More.
     expect(h.view.getByRole("button", { name: "More" })).toBeTruthy();
   });
@@ -187,6 +191,8 @@ describe("Document Setup: every control writes the document", () => {
   for (const [path, before] of [
     ["blackPointCompensation", true],
     ["useStandardLabForSpots", false],
+    // Engine ADR 1312: the pages laid out again as spreads, one step.
+    ["facingPages", false],
   ] as const) {
     test(`${path}: the switch turns it ${before ? "off" : "on"}`, async () => {
       covers("panel:paged.document-setup");

@@ -1438,6 +1438,31 @@
           ]
         },
         {
+          "description": "Engine ADR 1312 — Document Setup's Facing Pages: every page laid\nout again as facing spreads (page 1 alone on the right of the\nspine, then left/right pairs) or one page per spread, each page's\nitems moving with it, and `FacingPages` recorded. One undo step. In\na facing document an inserted or deleted page re-pairs the pages\nafter it.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setFacingPages"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "facing": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "facing"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "Editor-ops (Page tool) — resize the page's GeometricBounds\n(page-inner coords, `(top, left, bottom, right)`). Items keep\ntheir coordinates; spread origins re-derive on rebuild.",
           "type": "object",
           "properties": {

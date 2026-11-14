@@ -2914,7 +2914,7 @@ fn parse_insets(s: &str) -> Option<[f32; 4]> {
 /// strip those before decoding. Returns `None` on malformed input
 /// rather than panicking — the caller falls back to "no inline
 /// bytes" and the renderer's missing-image path takes over.
-fn decode_image_contents_base64(raw: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn decode_image_contents_base64(raw: &[u8]) -> Option<Vec<u8>> {
     use base64::Engine;
     // Strip whitespace in place into a scratch buffer. The XML
     // serializer pretty-prints the base64 payload across many lines

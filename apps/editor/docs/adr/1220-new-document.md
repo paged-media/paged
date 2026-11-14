@@ -96,3 +96,12 @@ pages.") was never shown, the setup stayed on its preset, and Create did not wai
 no longer carry bounds; the range is the dialog's validation alone (decision 3), so an
 out-of-range count makes the setup custom, says why under the field and holds Create back
 (`new-document-dialog.dom.test.tsx`).
+
+## Amendment (2026-11-14): facing pages after the document is made
+
+Engine ADR 1312 replaces the last sentence of the facing-pages amendment: inserting a page into a
+facing document or removing one keeps page 1 on the right and the pairs after it, and an existing
+document turns facing pages on or off. Document Setup has a Facing pages row (`doc.facingPages`, a
+switch; one undo step, every item stays on its page), and `paged.insert.facingPages` sets it from
+the palette or a script (`{ facing }`, or a toggle without a payload). Tests: the engine's
+`it::facing_pages`, `test/panels/document-setup-panel.dom.test.tsx`.

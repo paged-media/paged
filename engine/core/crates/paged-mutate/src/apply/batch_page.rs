@@ -190,6 +190,17 @@ pub(super) fn apply_insert_page(
         }
     };
 
+    // Engine ADR 1312 — in a facing document the pages after the new one
+    // pair up again: captured from the first spread that changes, for an
+    // exact undo.
+    let facing = super::page_layout::is_facing(doc);
+    let repair = if facing {
+        let start = super::page_layout::repair_start(doc, host_idx);
+        Some((start, super::page_layout::capture(doc, start, false)?))
+    } else {
+        None
+    };
+
     // Stack the new spread below everything on the pasteboard so the
     // spread-origin consumers (hit-test, marquee, snap) never see
     // overlapping spread AABBs. Pure-translate transforms are the
@@ -279,6 +290,30 @@ pub(super) fn apply_insert_page(
             spread,
         },
     );
+    if let Some((start, prior)) = repair {
+        let after = after_page_id.map(str::to_string);
+        super::page_layout::relayout(
+            doc,
+            start,
+            true,
+            |_| true,
+            after.as_deref().map(|a| (pid.as_str(), a)),
+        );
+        return Ok(AppliedOperation {
+            op: Operation::InsertPage {
+                after_page_id: after_page_id.map(str::to_string),
+                master_id: master_id.map(str::to_string),
+                spread_self_id: Some(sid),
+                page_self_id: Some(pid),
+                restore_spread_json: None,
+            },
+            inverse: Operation::RestoreSpreads {
+                first: start,
+                capture_json: prior,
+            },
+            invalidation,
+        });
+    }
 
     Ok(AppliedOperation {
         op: Operation::InsertPage {
@@ -307,6 +342,34 @@ pub(super) fn apply_remove_page(
     }) else {
         return Err(OperationError::NodeNotFound(node));
     };
+    // Engine ADR 1312 — in a facing document the page leaves its spread
+    // with what sits on it, and the pages after it pair up again.
+    if super::page_layout::is_facing(doc) {
+        let total: usize = doc.spreads.iter().map(|p| p.spread.pages.len()).sum();
+        if total <= 1 {
+            return Err(OperationError::InvalidValue {
+                node,
+                path: PropertyPath::PageBounds,
+                reason: "cannot delete the document's only page".to_string(),
+            });
+        }
+        let start = super::page_layout::repair_start(doc, idx);
+        let prior = super::page_layout::capture(doc, start, false)?;
+        super::page_layout::relayout(doc, start, true, |id| id != page_id, None);
+        return Ok(AppliedOperation {
+            op: Operation::RemovePage {
+                page_id: page_id.to_string(),
+            },
+            inverse: Operation::RestoreSpreads {
+                first: start,
+                capture_json: prior,
+            },
+            invalidation: InvalidationHint {
+                structural: true,
+                ..Default::default()
+            },
+        });
+    }
     let page_count = doc.spreads[idx].spread.pages.len();
     if page_count > 1 {
         return Err(OperationError::InvalidValue {
@@ -356,7 +419,7 @@ pub(super) fn apply_remove_page(
 
 /// The vertical extent of a spread on the pasteboard: (top, height) in
 /// spread-transform space.
-fn spread_extent(spread: &Spread) -> (f32, f32) {
+pub(super) fn spread_extent(spread: &Spread) -> (f32, f32) {
     let ty = spread.item_transform.map(|m| m[5]).unwrap_or(0.0);
     let mut top = f32::MAX;
     let mut bottom = f32::MIN;

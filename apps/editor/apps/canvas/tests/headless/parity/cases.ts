@@ -480,6 +480,13 @@ export const PARITY_CASES: readonly ParityCase[] = [
     args: { elementId: P.apart, uri: "file:///parity/missing.png" },
     boa: (a) => `paged.placeImage(${q(a.elementId)}, ${q(a.uri)})`,
   },
+  // Engine ADR 1308 — a picture's source replaced in one step (by URI here;
+  // a picked file's bytes ride the binary lane).
+  {
+    op: "relinkImage",
+    args: { elementId: P.apart, uri: "file:///parity/relinked.png" },
+    boa: (a) => `paged.relinkImage(${q(a.elementId)}, ${q(a.uri)})`,
+  },
   {
     op: "duplicateElements",
     args: { elementIds: [E("rectangle", P.frame)], offset: [10, 10] },
@@ -730,6 +737,14 @@ export const PARITY_CASES: readonly ParityCase[] = [
     op: "deletePage",
     args: { pageId: P.page2 },
     boa: (a) => `paged.deletePage(${q(a.pageId)})`,
+  },
+  // Engine ADR 1312 — the pages laid out again as facing spreads; the
+  // command without a payload turns them on (the fixture is single-sided).
+  {
+    op: "setFacingPages",
+    args: { facing: true },
+    boa: (a) => `paged.setFacingPages(${String(a.facing)})`,
+    command: { id: "paged.insert.facingPages", select: [] },
   },
   {
     op: "duplicatePage",

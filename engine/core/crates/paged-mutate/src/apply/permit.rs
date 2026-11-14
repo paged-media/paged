@@ -476,6 +476,8 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::OnMaster { .. }
         | O::MovePage { .. }
         | O::SetSpreadOrder { .. }
+        | O::SetFacingPages { .. }
+        | O::RestoreSpreads { .. }
         | O::RemovePageClone { .. }
         | O::InsertSection { .. }
         | O::EditSection { .. }

@@ -448,16 +448,40 @@ fn created_element_ids(
 /// is its children's inverses, newest first. The forward op cannot say:
 /// a fresh `InsertPage` carries the ids the caller gave (none), and a
 /// batch echoes its children as they were sent.
-fn created_page_ids(inverse: &paged_mutate::Operation, out: &mut Vec<PageId>) {
+fn created_page_ids(
+    op: &paged_mutate::Operation,
+    inverse: &paged_mutate::Operation,
+    out: &mut Vec<PageId>,
+) {
     use paged_mutate::Operation;
-    match inverse {
-        Operation::Batch { ops } => {
-            for op in ops.iter().rev() {
-                created_page_ids(op, out);
+    match (op, inverse) {
+        (Operation::Batch { ops: forward }, Operation::Batch { ops })
+            if forward.len() == ops.len() =>
+        {
+            for (f, i) in forward.iter().zip(ops.iter().rev()) {
+                created_page_ids(f, i, out);
             }
         }
-        Operation::RemovePage { page_id } => out.push(PageId(page_id.clone())),
-        Operation::RemovePageClone { cloned_page, .. } => out.push(PageId(cloned_page.clone())),
+        (_, Operation::Batch { ops }) => {
+            for i in ops.iter().rev() {
+                created_page_ids(&Operation::Batch { ops: Vec::new() }, i, out);
+            }
+        }
+        (_, Operation::RemovePage { page_id }) => out.push(PageId(page_id.clone())),
+        (_, Operation::RemovePageClone { cloned_page, .. }) => {
+            out.push(PageId(cloned_page.clone()))
+        }
+        // Engine ADR 1312 — a page inserted into a facing document is
+        // undone by putting the spreads back, which names no page: the
+        // forward op's echo carries the id it minted.
+        (
+            Operation::InsertPage {
+                page_self_id: Some(page),
+                restore_spread_json: None,
+                ..
+            },
+            Operation::RestoreSpreads { .. },
+        ) => out.push(PageId(page.clone())),
         _ => {}
     }
 }
@@ -526,6 +550,8 @@ fn changes_page_list(mutation: &Mutation) -> bool {
     match mutation {
         Mutation::InsertPage { .. }
         | Mutation::DeletePage { .. }
+        // Engine ADR 1312 — every page may change its spread and side.
+        | Mutation::SetFacingPages { .. }
         | Mutation::ResizePage { .. }
         // Engine ADR 1011 — the grid's geometry: where each page sits.
         | Mutation::PlacePage { .. }
@@ -3789,7 +3815,11 @@ impl CanvasModel {
             // The pages it created, which no `created_id` / `minted` can
             // name (pages are not elements).
             let mut created_pages = Vec::new();
-            created_page_ids(&outcome.applied.inverse, &mut created_pages);
+            created_page_ids(
+                &outcome.applied.op,
+                &outcome.applied.inverse,
+                &mut created_pages,
+            );
             self.keep_existing_pages(&mut created_pages);
             // Page-list mutations (M7 extends this set with ResizePage)
             // require the editor to rebuild its page grid — a batch that
@@ -4672,6 +4702,9 @@ impl CanvasModel {
             Mutation::DeletePage { page_id } => Some(Operation::RemovePage {
                 page_id: page_id.0.clone(),
             }),
+            Mutation::SetFacingPages { facing } => {
+                Some(Operation::SetFacingPages { facing: *facing })
+            }
             Mutation::ResizePage { page_id, bounds } => Some(Operation::SetProperty {
                 node: NodeId::Page(page_id.0.clone()),
                 path: PropertyPath::PageBounds,
@@ -8617,7 +8650,7 @@ impl CanvasModel {
         ];
         // Engine ADR 1045 (amendment 2026-11-02) — a picture frame lists
         // its image placement, the path a crop is set through.
-        if frame.image_link.is_some() {
+        if frame.image_link.is_some() || frame.image_bytes.is_some() {
             entries.push(PropertyEntry {
                 path: PropertyPath::ImageContentTransform,
                 value: Some(Value::Transform(frame.image_item_transform)),
@@ -12989,6 +13022,7 @@ impl CanvasModel {
         let summary = |self_id: String,
                        host_kind: &str,
                        uri: String,
+                       embedded: bool,
                        meta: Option<&paged_model::ImageMetadata>,
                        image_transform: Option<[f32; 6]>| {
             LinkSummary {
@@ -13006,36 +13040,62 @@ impl CanvasModel {
                 host_kind: host_kind.to_string(),
                 uri,
                 image_transform,
+                embedded,
             }
+        };
+        // Engine ADR 1313 (UX audit F-43) — a picture whose bytes live in
+        // the document is a placed link too, "Embedded": its link source
+        // when it keeps one, else `inline:<host id>`.
+        let source = |self_id: &str, link: &Option<String>, bytes: &Option<Vec<u8>>| match link {
+            Some(uri) => Some((uri.clone(), bytes.is_some())),
+            None => bytes.as_ref().map(|_| (format!("inline:{self_id}"), true)),
         };
         let mut out = Vec::new();
         for parsed in &self.scene.spreads {
             let meta_map = &parsed.spread.image_metadata;
             for r in &parsed.spread.rectangles {
-                if let (Some(self_id), Some(uri)) = (r.self_id.clone(), r.image_link.clone()) {
+                let Some(self_id) = r.self_id.clone() else {
+                    continue;
+                };
+                if let Some((uri, embedded)) = source(&self_id, &r.image_link, &r.image_bytes) {
                     let meta = meta_map.get(&self_id);
                     out.push(summary(
                         self_id,
                         "Rectangle",
                         uri,
+                        embedded,
                         meta,
                         r.image_item_transform,
                     ));
                 }
             }
             for o in &parsed.spread.ovals {
-                if let (Some(self_id), Some(uri)) = (o.self_id.clone(), o.image_link.clone()) {
+                let Some(self_id) = o.self_id.clone() else {
+                    continue;
+                };
+                if let Some((uri, embedded)) = source(&self_id, &o.image_link, &o.image_bytes) {
                     let meta = meta_map.get(&self_id);
-                    out.push(summary(self_id, "Oval", uri, meta, o.image_item_transform));
+                    out.push(summary(
+                        self_id,
+                        "Oval",
+                        uri,
+                        embedded,
+                        meta,
+                        o.image_item_transform,
+                    ));
                 }
             }
             for p in &parsed.spread.polygons {
-                if let (Some(self_id), Some(uri)) = (p.self_id.clone(), p.image_link.clone()) {
+                let Some(self_id) = p.self_id.clone() else {
+                    continue;
+                };
+                if let Some((uri, embedded)) = source(&self_id, &p.image_link, &p.image_bytes) {
                     let meta = meta_map.get(&self_id);
                     out.push(summary(
                         self_id,
                         "Polygon",
                         uri,
+                        embedded,
                         meta,
                         p.image_item_transform,
                     ));
@@ -13048,18 +13108,23 @@ impl CanvasModel {
         // it under the frame's own id, so it is listed with the same
         // status. Left out, a placeholder painted in the text never
         // reached the Links or Publication health panels.
-        fn anchored_links(
-            frames: &[paged_model::AnchoredFrame],
-            out: &mut Vec<(String, String, Option<[f32; 6]>)>,
-        ) {
+        type Anchored = (String, String, bool, Option<[f32; 6]>);
+        fn anchored_links(frames: &[paged_model::AnchoredFrame], out: &mut Vec<Anchored>) {
             for af in frames {
-                if let (Some(id), Some(uri)) = (af.self_id.clone(), af.image_link.clone()) {
-                    out.push((id, uri, af.image_item_transform));
+                if let Some(id) = af.self_id.clone() {
+                    let found = match (&af.image_link, &af.image_bytes) {
+                        (Some(uri), bytes) => Some((uri.clone(), bytes.is_some())),
+                        (None, Some(_)) => Some((format!("inline:{id}"), true)),
+                        (None, None) => None,
+                    };
+                    if let Some((uri, embedded)) = found {
+                        out.push((id, uri, embedded, af.image_item_transform));
+                    }
                 }
                 anchored_links(&af.children, out);
             }
         }
-        fn walk(para: &paged_model::Paragraph, out: &mut Vec<(String, String, Option<[f32; 6]>)>) {
+        fn walk(para: &paged_model::Paragraph, out: &mut Vec<Anchored>) {
             anchored_links(&para.anchored_frames, out);
             for cell in para.table.iter().flat_map(|t| t.cells.iter()) {
                 for inner in &cell.paragraphs {
@@ -13073,8 +13138,8 @@ impl CanvasModel {
                 walk(para, &mut anchored);
             }
         }
-        for (id, uri, transform) in anchored {
-            out.push(summary(id, "Rectangle", uri, None, transform));
+        for (id, uri, embedded, transform) in anchored {
+            out.push(summary(id, "Rectangle", uri, embedded, None, transform));
         }
         out
     }
@@ -13711,6 +13776,7 @@ impl CanvasModel {
             proof_profile_name: self.proof_state.as_ref().map(|p| p.name.clone()),
             proof_simulate_paper_white: self.proof_state.as_ref().map(|p| p.simulate_paper_white),
             use_standard_lab_for_spots: Some(self.use_standard_lab_for_spots),
+            facing_pages: self.scene.designmap.document_preference.facing_pages,
             // W2.5 — read-only baseline-grid settings from
             // `<GridPreference>`. All `None` when the document carried no
             // such element (the editor then shows InDesign's defaults).

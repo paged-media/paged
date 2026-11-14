@@ -405,6 +405,10 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // paragraph (see `anchor_here`), taken when it opens.
     let mut anchored_at: u32 = 0;
     let mut anchored_stack: Vec<AnchoredFrame> = Vec::new();
+    // Engine ADR 1313 — the base64 of an anchored picture's `<Image>`
+    // `<Contents>` while it is open (the anchored twin of the spread
+    // parser's Q-03 lane).
+    let mut anchored_contents: Option<Vec<u8>> = None;
     // Engine ADR 1045 — the open anchored frames' effect blocks.
     let mut anchored_fx = crate::anchored_fx::AnchoredFx::default();
     // Suppressed-subtree depth. IDML uses `<HiddenText>` (authored
@@ -642,6 +646,8 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                         anchored_capture_image_attrs(&e, &mut anchored_stack);
                     } else if name == b"PathPointType" {
                         anchored_extend_path_bounds(&e, &mut anchored_stack, &mut bounds_from_path);
+                    } else if name == b"Contents" {
+                        anchored_contents = Some(Vec::new());
                     }
                     anchored_fx.element(&e, false, &mut anchored_stack);
                     // Always bump depth on Start so we stay
@@ -1418,6 +1424,15 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                 // (Group child) or the host paragraph (outermost).
                 if anchored_depth > 0 {
                     anchored_depth -= 1;
+                    if name == b"Contents" {
+                        if let (Some(raw), Some(top)) =
+                            (anchored_contents.take(), anchored_stack.last_mut())
+                        {
+                            if top.image_bytes.is_none() {
+                                top.image_bytes = crate::spread::decode_image_contents_base64(&raw);
+                            }
+                        }
+                    }
                     anchored_fx.end(name, anchored_stack.len());
                     if anchored_kind_from_name(name).is_some() {
                         anchored_fx.finish(&mut anchored_stack);
@@ -2168,6 +2183,16 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                     }
                     _ => {}
                 } // close inner `match name { ... }`
+            }
+            Event::Text(t) if anchored_contents.is_some() => {
+                if let Some(raw) = anchored_contents.as_mut() {
+                    raw.extend_from_slice(t.as_ref());
+                }
+            }
+            Event::CData(t) if anchored_contents.is_some() => {
+                if let Some(raw) = anchored_contents.as_mut() {
+                    raw.extend_from_slice(t.as_ref());
+                }
             }
             Event::Text(t) => {
                 if note_content {

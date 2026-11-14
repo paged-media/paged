@@ -131,6 +131,35 @@ fn insert_frame() {
     );
 }
 
+/// Engine ADR 1308 — a picture's source replaced in one step: by URI, and
+/// with a picked file's bytes (engine ADR 1313 embeds them).
+#[test]
+fn relink_image() {
+    covers!("script:paged.relinkImage");
+    let mut m = blank();
+    let pid = page_id(&mut m);
+    let f = ok(
+        &mut m,
+        &format!("paged.insertFrame({pid:?}, [72, 72, 200, 200])"),
+    );
+    refuses(
+        &mut m,
+        "paged.relinkImage('rectangle:no-such-frame', 'file:///a.png')",
+        "false",
+    );
+    writes(
+        &mut m,
+        &format!("paged.relinkImage({f:?}, 'file:///relinked.png')"),
+        "true",
+    );
+    assert!(snapshot(&m).to_string().contains("file:///relinked.png"));
+    writes(
+        &mut m,
+        &format!("paged.relinkImage({f:?}, 'file:///picked.png', {PNG})"),
+        "true",
+    );
+}
+
 #[test]
 fn place_image() {
     covers!("script:paged.placeImage");

@@ -943,7 +943,18 @@ export type WorkerToMain = WorkerToMainKind & {
 //     what it creates and removes, the geometry and outlines it leaves and
 //     the line evidence; the document untouched.
 //   New message kinds an older worker cannot answer, hence the bump.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(82);
+// v83 — facing pages on an existing document and embedded pictures:
+//   - Facing pages (engine ADR 1312): the mutation `setFacingPages { facing
+//     }` lays every page out again as facing spreads or single pages, each
+//     page's items with it, in one undo step (`doc.facingPages` is its
+//     virtual path); in a facing document `insertPage` and `deletePage`
+//     keep page 1 on the right and the pairs after it. `DocumentMeta`
+//     gains `facingPages`.
+//   - Embedded pictures (engine ADR 1313): `LinkSummary` gains `embedded`,
+//     and a picture whose bytes live in the document with no link source is
+//     listed as `inline:<host id>`; an anchored picture relinks by bytes.
+//   A mutation an older worker cannot apply, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(83);
 
 /// The code of an IDML export loss an older worker sent as a sentence.
 pub const IDML_LEGACY_LOSS: &str = "idml.legacy";
@@ -3924,6 +3935,11 @@ pub struct DocumentMeta {
     /// for Spots" toggle.
     #[serde(default)]
     pub use_standard_lab_for_spots: Option<bool>,
+    /// Engine ADR 1312 — whether the pages are laid out in facing spreads
+    /// (`FacingPages`; `None` when the document never said). Document
+    /// Setup's Facing Pages writes it through `setFacingPages`.
+    #[serde(default)]
+    pub facing_pages: Option<bool>,
     /// W2.5 — document baseline-grid settings (read-only), parsed from
     /// `<GridPreference>`. `None` when the document carried no
     /// `<GridPreference>` element. The editor's baseline-grid panel
@@ -4997,6 +5013,12 @@ pub struct LinkSummary {
     /// frame bounds; a consumer seeing `None` may assume that fill.
     #[serde(default)]
     pub image_transform: Option<[f32; 6]>,
+    /// The picture's bytes live in the document (InDesign's "Embedded"):
+    /// placed from bytes, pixel-edited, or relinked to a picked file. With
+    /// no link source of its own the entry's `uri` is `inline:<host id>`
+    /// (engine ADR 1313; UX audit F-43).
+    #[serde(default)]
+    pub embedded: bool,
 }
 
 /// SDK Phase 5 (v1 sweep) — one object style's summary. Backs

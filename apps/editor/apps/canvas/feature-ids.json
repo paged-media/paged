@@ -4131,6 +4131,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.facingPages",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.footnote",
       "kind": "command",
       "owner": "editor"

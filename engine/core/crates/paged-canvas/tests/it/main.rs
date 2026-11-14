@@ -52,6 +52,7 @@ mod endnote_ops;
 mod export_bookmarks;
 mod export_idml;
 mod export_pdf;
+mod facing_pages;
 mod field_boundary_typing;
 mod fill_rule;
 mod font_registry_scan;

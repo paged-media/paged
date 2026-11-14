@@ -631,7 +631,7 @@ fn link_resource_format(uri: &str) -> &'static str {
 /// `<Contents>BASE64</Contents>` — InDesign's spelling of an embedded
 /// picture's bytes, a typed child of the `<Image>`'s `<Properties>`
 /// (the importer's Q-03 lane reads it back).
-fn write_contents(
+pub(crate) fn write_contents(
     writer: &mut Writer<Cursor<Vec<u8>>>,
     bytes: &[u8],
 ) -> Result<(), quick_xml::Error> {

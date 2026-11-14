@@ -92,6 +92,7 @@ import type {
 } from "@paged-media/client";
 
 import { layoutPages, fitCamera } from "../../ui/layout";
+import { placedLinksValue } from "../../publication-issues";
 import { exportReadiness, exportTargetById } from "./export-targets";
 import { useAnimatedCamera } from "../../ui/useAnimatedCamera";
 import {
@@ -141,6 +142,7 @@ const M = defineMessages("app.cockpitDocumentMapPanel", {
   stories: "Stories",
   frames: "Frames",
   placedLinks: "Placed links",
+  placedLinksEmbedded: "{count} · {embedded} embedded",
   oversetStories: "Overset stories",
   missingLinksRisk: "Missing links",
   missingFonts: "Missing fonts",
@@ -853,7 +855,12 @@ function HealthFooter() {
         [String(meta.pageCount), strings.t(M.pages)],
         [stats ? String(stats.stories) : "—", strings.t(M.stories)],
         [stats ? String(stats.frames) : "—", strings.t(M.frames)],
-        [links ? String(links.length) : "—", strings.t(M.placedLinks)],
+        [
+          placedLinksValue(links, (count, embedded) =>
+            strings.t(M.placedLinksEmbedded, { count, embedded }),
+          ),
+          strings.t(M.placedLinks),
+        ],
       ]
     : [];
 

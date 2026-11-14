@@ -1168,6 +1168,17 @@ context toolbar no longer repeats the context's tools as icon pills; it names th
 carries its options and says what the next edit changes ("Editing: Pixels", "Editing: Mask ·
 non-destructive"). The uncounted embedded image and the "Colour" spelling remain open.
 
+**Fixed (2026-11-14, engine ADR 1313).** A picture whose bytes live in the document is a placed
+link: the engine lists it (`LinkSummary.embedded`; `inline:<frame>` when it has no file of its
+own), Publication health and the document map count it under Placed links ("3 · 1 embedded"), and
+the Links panel names a file-less one "Embedded picture" with an "embedded" badge, InDesign's word;
+a picture anchored in the text keeps its own embedded bytes, so it relinks to a picked file too.
+The UI says "color" everywhere (F-17's naming, US English): the remaining "Colour" and "colour" in
+the host's and the modules' visible strings (the compatibility report, export readiness, the proof
+badge, paged.draw's Recolor, Blend, Trace and template fields, paged.sheet, paged.doc, paged.slide,
+paged.image, the PDF importer's notes) now read "Color"; German keeps its own words through the
+locale catalogues, whose keys did not change. Product names (the HLC Colour Atlas) keep theirs.
+
 <a id="f-44"></a>
 
 #### F-44 · Doc: the imported heading overlaps the next paragraph; health counts go stale

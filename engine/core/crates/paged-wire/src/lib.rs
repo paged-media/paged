@@ -1592,6 +1592,15 @@ pub enum Mutation {
     DeletePage {
         page_id: PageId,
     },
+    /// Engine ADR 1312 — Document Setup's Facing Pages: every page laid
+    /// out again as facing spreads (page 1 alone on the right of the
+    /// spine, then left/right pairs) or one page per spread, each page's
+    /// items moving with it, and `FacingPages` recorded. One undo step. In
+    /// a facing document an inserted or deleted page re-pairs the pages
+    /// after it.
+    SetFacingPages {
+        facing: bool,
+    },
     /// Editor-ops (Page tool) — resize the page's GeometricBounds
     /// (page-inner coords, `(top, left, bottom, right)`). Items keep
     /// their coordinates; spread origins re-derive on rebuild.
@@ -3271,6 +3280,7 @@ mutation_vocabulary! {
     UnlinkFrames,
     InsertPage,
     DeletePage,
+    SetFacingPages,
     ResizePage,
     InsertFrame,
     InsertTextFrame,
