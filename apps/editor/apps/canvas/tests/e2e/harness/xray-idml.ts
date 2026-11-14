@@ -54,11 +54,11 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <CharacterStyle Self="CharacterStyle/Emph" Name="Emph" FillColor="Color/Blue"/>
 </RootCharacterStyleGroup>
 <RootParagraphStyleGroup Self="rp">
-<ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]"/>
-<ParagraphStyle Self="ParagraphStyle/Base" Name="Base" PointSize="10" Leading="12" FillColor="Color/Black" SpaceAfter="6"/>
+<ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]"><Properties><AppliedFont type="string">Inter</AppliedFont></Properties></ParagraphStyle>
+<ParagraphStyle Self="ParagraphStyle/Base" Name="Base" PointSize="10" Leading="12" FillColor="Color/Black" SpaceAfter="6"><Properties><AppliedFont type="string">Inter</AppliedFont></Properties></ParagraphStyle>
 <ParagraphStyle Self="ParagraphStyle/Body" Name="Body" FillColor="Color/Red"><Properties><BasedOn type="object">ParagraphStyle/Base</BasedOn></Properties></ParagraphStyle>
 <ParagraphStyle Self="ParagraphStyle/Head" Name="Head" PointSize="18"><Properties><BasedOn type="object">ParagraphStyle/Body</BasedOn></Properties></ParagraphStyle>
-<ParagraphStyle Self="ParagraphStyle/Just" Name="Just" PointSize="10" Leading="12" Justification="LeftJustified" Hyphenation="true"/>
+<ParagraphStyle Self="ParagraphStyle/Just" Name="Just" PointSize="10" Leading="12" Justification="LeftJustified" Hyphenation="true"><Properties><AppliedFont type="string">Inter</AppliedFont></Properties></ParagraphStyle>
 </RootParagraphStyleGroup>
 <RootObjectStyleGroup Self="ro">
 <ObjectStyle Self="ObjectStyle/$ID/[None]" Name="$ID/[None]"/>

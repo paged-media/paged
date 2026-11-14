@@ -22,6 +22,9 @@
 // ADR 1310). Both are reads; a preview leaves the document, its history
 // and its revision as they were.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
@@ -34,10 +37,22 @@ afterEach(async () => {
   ed = null;
 });
 
+/** The fixture with Inter registered, so its text lays out. */
+async function open(): Promise<HeadlessEditor> {
+  const e = await createHeadlessEditor({ idml: xrayFixture() });
+  await e.client.registerFont(
+    "Inter",
+    new Uint8Array(
+      readFileSync(join(import.meta.dir, "../../public/fonts/Inter.ttf")),
+    ),
+  );
+  return e;
+}
+
 describe("protocol 82 through the client", () => {
   test("explain answers the style cascade, the lock and the overset from the model @feat:styles.cascade @level:happy", async () => {
     covers("command:paged.view.toggleXray");
-    ed = await createHeadlessEditor({ idml: xrayFixture() });
+    ed = await open();
     const depth = (await ed.client.undoLog()).undoLen;
     const text = await ed.client.explain(
       {
@@ -71,7 +86,7 @@ describe("protocol 82 through the client", () => {
 
   test("line evidence and a preview that changes nothing; the write is one step @feat:typography.knuth-plass @level:happy", async () => {
     covers("command:paged.view.toggleTypographyDebugger");
-    ed = await createHeadlessEditor({ idml: xrayFixture() });
+    ed = await open();
     const story = XRAY.justified.story;
     const before = await ed.client.lineEvidence({ story });
     expect(before.lines.length).toBeGreaterThan(3);

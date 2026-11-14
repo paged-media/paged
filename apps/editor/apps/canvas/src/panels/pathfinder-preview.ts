@@ -158,7 +158,7 @@ export function resultPreview(
       shapes.push({
         pageId: o.pageId,
         anchors,
-        close: !(o.subpathOpen[k] ?? false),
+        close: !(o.subpathOpen?.[k] ?? false),
         dashed: false,
       });
       if (!named) {

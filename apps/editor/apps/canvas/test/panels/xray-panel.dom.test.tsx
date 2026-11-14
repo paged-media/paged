@@ -23,6 +23,9 @@
 // the lock with its reason and Unlock, the picture, the flow, what a style
 // edit changes. Explaining sends reads only.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
@@ -32,8 +35,20 @@ import { XRAY, xrayFixture } from "../../tests/e2e/harness/xray-idml";
 
 afterEach(unmountAll);
 
-const mount = () =>
-  mountPanel(XRayPanel, { id: "paged.xray", document: xrayFixture() });
+const inter = () =>
+  new Uint8Array(
+    readFileSync(join(import.meta.dir, "../../public/fonts/Inter.ttf")),
+  );
+
+/** The fixture, its text set in Inter (registered, so it lays out). */
+const mount = async () => {
+  const h = await mountPanel(XRayPanel, {
+    id: "paged.xray",
+    document: xrayFixture(),
+  });
+  await h.act(() => h.client.registerFont("Inter", inter()));
+  return h;
+};
 
 const attr = (root: Element, sel: string, name: string) =>
   root.querySelector(sel)?.getAttribute(name) ?? null;

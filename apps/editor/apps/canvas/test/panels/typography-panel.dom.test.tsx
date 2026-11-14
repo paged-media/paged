@@ -21,6 +21,9 @@
 // engine reports them, why the chosen one broke, and a preview that writes
 // nothing until Apply, which is one write.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
@@ -29,6 +32,11 @@ import { mountPanel, unmountAll } from "./harness";
 import { XRAY, xrayFixture } from "../../tests/e2e/harness/xray-idml";
 
 afterEach(unmountAll);
+
+const inter = () =>
+  new Uint8Array(
+    readFileSync(join(import.meta.dir, "../../public/fonts/Inter.ttf")),
+  );
 
 describe("Typography debugger", () => {
   test("empty: asks for text", async () => {
@@ -43,6 +51,7 @@ describe("Typography debugger", () => {
       id: "paged.typography",
       document: xrayFixture(),
     });
+    await h.act(() => h.client.registerFont("Inter", inter()));
     await h.caret(XRAY.justified.story, 2);
     await h.settle();
     const engine = await h.client.lineEvidence({
