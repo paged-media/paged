@@ -77,11 +77,11 @@ fn pairs(m: &CanvasModel) -> Vec<usize> {
         .collect()
 }
 
+/// Where a frame sits: its page, its box and its transform on that page.
+type Place = (Option<String>, [f32; 4], Option<[f32; 6]>);
+
 /// Where each frame sits: on which page, at which place on it.
-fn places(
-    m: &CanvasModel,
-    frames: &[ElementId],
-) -> Vec<(Option<String>, [f32; 4], Option<[f32; 6]>)> {
+fn places(m: &CanvasModel, frames: &[ElementId]) -> Vec<Place> {
     m.element_geometry(frames)
         .into_iter()
         // An identity transform and none place the item alike.

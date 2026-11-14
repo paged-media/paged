@@ -5,7 +5,7 @@
   "counts": {
     "clientMembers": 118,
     "wireKinds": 76,
-    "exports": 98
+    "exports": 100
   },
   "wireKinds": [
     "amendMutation",
@@ -185,7 +185,7 @@
         {
           "name": "CanvasClient.mutate",
           "kind": "method",
-          "signature": "async mutate(mutation: Mutation, options: { coalesce?: string; label?: string }",
+          "signature": "async mutate(mutation: Mutation, options: { coalesce?: string; label?: string; /** Editor ADR 1232 amendment (F-56) — a typed insert: its reply * resolves this call at once, but its broadcast to subscribers is * held while keys keep coming and goes as one change when they * stop ({@link TYPING_SETTLE_MS}), so the panels that re-read the * document on every change read it once per burst, not once per * key. */ typing?: boolean }",
           "summary": "Apply one mutation to the document — THE write door."
         },
         {
@@ -822,6 +822,18 @@
           "name": "gestureInProgressOf",
           "kind": "value",
           "signature": "gestureInProgressOf",
+          "summary": null
+        },
+        {
+          "name": "TYPING_HOLD_MAX_MS",
+          "kind": "value",
+          "signature": "TYPING_HOLD_MAX_MS",
+          "summary": null
+        },
+        {
+          "name": "TYPING_SETTLE_MS",
+          "kind": "value",
+          "signature": "TYPING_SETTLE_MS",
           "summary": null
         },
         {

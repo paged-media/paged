@@ -57,6 +57,7 @@ import {
   buildExportPdfCommand,
   buildImportAseCommand,
   buildNewDocumentCommand,
+  buildNewDocumentDialogCommand,
   buildNewFromBriefCommand,
   createShellRegistries,
   runDemoScript,
@@ -173,6 +174,7 @@ import {
   addPage,
   buildInsertCommands,
   deleteCurrentPage,
+  setFacingPages,
   insertEllipse,
   insertLine,
   insertRectangle,
@@ -1091,6 +1093,10 @@ export async function createHeadlessEditor(
         report: insertReport,
       })(p, payload),
     newPage: freshInsert((p) => addPage(p, insertReport)),
+    facingPages: (p, facing) => {
+      problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE);
+      return setFacingPages(p, insertReport, facing);
+    },
   });
   const starCommands = buildStarCommands(insertReport, () =>
     problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
@@ -1136,6 +1142,11 @@ export async function createHeadlessEditor(
   const warn = (w: string) => opened.push({ kind: "warning", detail: w });
   const shellCommands = [
     buildNewDocumentCommand({ setStatus: status, pushWarning: warn }),
+    // Editor ADR 1220 — File ▸ New document… opens the dialog; headless,
+    // the opening is recorded.
+    buildNewDocumentDialogCommand(() => {
+      opened.push({ kind: "dialog", detail: "newDocument" });
+    }),
     buildImportAseCommand({
       pickFile: async () => {
         opened.push({ kind: "filePicker", detail: "ase" });

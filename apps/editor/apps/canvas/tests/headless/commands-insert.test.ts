@@ -168,6 +168,23 @@ describe("pages", () => {
     await expectOneUndoStep(ed, before);
   });
 
+  test("Facing pages lays the pages out as spreads, page 1 alone; one undo step puts them back (engine ADR 1312)", async () => {
+    covers("command:paged.insert.facingPages");
+    const e = await blank();
+    await run(e, "paged.insert.newPage");
+    await run(e, "paged.insert.newPage");
+    const { before, after } = await run(e, "paged.insert.facingPages");
+    const spreads = (d: typeof after) =>
+      (d.collections.pages as Array<{ spreadId: string | null }>).map(
+        (p) => p.spreadId,
+      );
+    const [first, second, third] = spreads(after);
+    expect(first).not.toBe(second);
+    expect(second).toBe(third);
+    expect(new Set(spreads(before)).size).toBe(3);
+    await expectOneUndoStep(e, before);
+  });
+
   test("the only page is refused, in words", async () => {
     covers("command:paged.insert.deletePage");
     const e = await blank();

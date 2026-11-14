@@ -78,11 +78,6 @@ const SEAMS = [
     reason:
       "the Pathfinder panel's per-op hints: a MESSAGE with a {hint} parameter, so the seam text is per-row and the op it waits on differs by row. The individual ops are covered by the capability matrix through pathfinder-panel's own spec rather than by a string match here",
   },
-  {
-    text: "awaiting the engine",
-    reason:
-      "matches the Properties panel's overset chip, which was FIXED on 2026-08-22 — the string now survives only inside the comment explaining what it used to say. Registered so the substring match does not read that comment as a live seam",
-  },
 ];
 
 const walk = (dir, out = []) => {

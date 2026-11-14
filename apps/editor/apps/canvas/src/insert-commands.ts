@@ -1152,9 +1152,8 @@ export interface InsertCommandHandlers {
   ) => unknown | Promise<unknown>;
   newPage: (paged: PagedEditor) => unknown | Promise<unknown>;
   deletePage: (paged: PagedEditor) => unknown | Promise<unknown>;
-  /** `facing` absent: toggle (engine ADR 1312). Optional so hosts and tests
-   *  that bind the page verbs only keep their shape. */
-  facingPages?: (
+  /** `facing` absent: toggle (engine ADR 1312). */
+  facingPages: (
     paged: PagedEditor,
     facing?: boolean,
   ) => unknown | Promise<unknown>;
@@ -1202,20 +1201,12 @@ export function buildInsertCommands(
         handlers.generateImage(paged as PagedEditor, payload),
     },
     cmd(PAGED_INSERT_NEW_PAGE, t(M.addPage), handlers.newPage),
-    ...(handlers.facingPages
-      ? [
-          {
-            ...cmd(
-              PAGED_INSERT_FACING_PAGES,
-              t(M.facingPages),
-              handlers.facingPages,
-            ),
-            category: "Layout",
-            handler: (paged: unknown, payload?: unknown) =>
-              handlers.facingPages?.(paged as PagedEditor, facingOf(payload)),
-          },
-        ]
-      : []),
+    {
+      ...cmd(PAGED_INSERT_FACING_PAGES, t(M.facingPages), handlers.facingPages),
+      category: "Layout",
+      handler: (paged, payload) =>
+        handlers.facingPages(paged as PagedEditor, facingOf(payload)),
+    },
   ];
 }
 
