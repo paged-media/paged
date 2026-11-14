@@ -298,6 +298,14 @@ export interface EditContextContribution {
    */
   label?: string;
   /**
+   * Extensions ADR 1108 — what entering the context does, as a verb in the
+   * editor's language: "Edit cells", "Edit source". The host names the
+   * frame's Edit level with it in the Frame / Content / Edit control (a
+   * sheet frame reads "Frame · Edit cells"), while the breadcrumb keeps
+   * `label`, the context's name. Absent ⇒ the label.
+   */
+  editLabel?: string;
+  /**
    * Extensions ADR 1106 (the interaction contract's D-05) — this context
    * edits the pixels of a placed image. A double-click on a frame that
    * holds an image positions the image inside its frame first (the host's

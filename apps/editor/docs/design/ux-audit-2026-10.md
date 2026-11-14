@@ -1100,6 +1100,13 @@ Insert ▸ Spreadsheet… imports the file but places nothing: "Place on page" i
 
 **Screenshots:** `F-42-sheet-session.png`, `F-42-sheet-typed-nowhere.png`
 
+**Fixed (2026-11-14, sheet ADR 532, extensions ADR 1108).** The entered frame is the grid (the
+frame surface of sheet ADR 510): a cell cursor on the canvas, typing edits the active cell, Tab and
+Enter commit and move, the arrows never nudge the frame. A selected sheet frame offers **Frame ·
+Edit cells**; inside, the bar reads **Editing cells** and has **Done**; it says whether the
+selected cells print in the frame and warns when rows or columns overflow it, with a print preview
+of the selection (`UXI-T38`).
+
 <a id="f-43"></a>
 
 #### F-43 · Image: two tool sets at once, and placed images are uncounted

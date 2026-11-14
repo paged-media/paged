@@ -77,7 +77,7 @@ export interface FrameContentFacts {
   imageEditor: Pick<EditContextContribution, "type" | "label"> | null;
   /** The module context that owns the frame's content (an object type's
    *  claim), when it is not the image editor. */
-  owner: Pick<EditContextContribution, "type" | "label"> | null;
+  owner: Pick<EditContextContribution, "type" | "label" | "editLabel"> | null;
 }
 
 /** The registered context that edits placed images (D-05), if any. */
@@ -94,9 +94,12 @@ export function frameLevels(facts: FrameContentFacts): FrameLevel[] {
     { id: "frame", label: t(FRAME_CONTENT.frame), contextType: null },
   ];
   if (facts.owner) {
+    // What entering does ("Edit cells"), else the context's name
+    // (extensions ADR 1108).
+    const action = facts.owner.editLabel?.trim();
     levels.push({
       id: "edit",
-      label: contextLabel(facts.owner),
+      label: action ? action : contextLabel(facts.owner),
       contextType: facts.owner.type,
     });
     return levels;

@@ -341,9 +341,6 @@
         "modules/image/glue/src/panels/sections/workspace-section.tsx",
         "modules/image/glue/test/layer-parity.dom.test.tsx",
         "modules/publish/packages/pdf-bundle/src/vectors/import-panel.tsx",
-        "modules/sheet/packages/sheet-bundle/src/panels/format-section.tsx",
-        "modules/sheet/packages/sheet-bundle/src/panels/workbook-panel.tsx",
-        "modules/sheet/packages/sheet-bundle/src/surface/data-cards.tsx",
         "modules/slide/packages/slide-bundle/src/anim/pane.tsx",
         "modules/slide/packages/slide-bundle/src/output/export-view.tsx",
         "modules/slide/packages/slide-bundle/src/views/slide-master.tsx"
