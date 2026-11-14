@@ -242,7 +242,7 @@ fn a_picture_anchored_in_the_text_is_relinked_by_its_uri() {
     assert_eq!(uri(&m).as_deref(), Some("file:old.png"));
 }
 
-/// Engine ADR 1312 — an anchored picture has an embedded lane of its own:
+/// Engine ADR 1313 — an anchored picture has an embedded lane of its own:
 /// relinked to a picked file's bytes it draws them, says "Embedded", saves
 /// them as `<Contents>` and undoes exactly.
 #[test]

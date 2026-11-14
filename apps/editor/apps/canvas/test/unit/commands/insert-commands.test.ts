@@ -726,7 +726,7 @@ describe("pages: Add page, Delete page", () => {
   });
 });
 
-// Engine ADR 1311 — Document Setup's Facing pages as a command.
+// Engine ADR 1312 — Document Setup's Facing pages as a command.
 describe("pages: Facing pages", () => {
   test("{ facing } sets it: one setFacingPages", async () => {
     covers("command:paged.insert.facingPages");

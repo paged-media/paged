@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1311 — facing pages on an existing document: Document
+//! Engine ADR 1312 — facing pages on an existing document: Document
 //! Setup's Facing Pages lays every page out again, each page's items with
 //! it, as one undo step; a page inserted into or removed from a facing
 //! document keeps page 1 on the right and the pairs after it.

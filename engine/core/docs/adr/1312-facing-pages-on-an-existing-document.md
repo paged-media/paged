@@ -1,4 +1,4 @@
-# ADR 1311 — Facing pages on an existing document
+# ADR 1312 — Facing pages on an existing document
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** protocol v83. `paged-wire` (`Mutation::SetFacingPages`), `idml-export` (a re-laid-out

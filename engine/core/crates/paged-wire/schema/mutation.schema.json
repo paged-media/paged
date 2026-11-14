@@ -1438,7 +1438,7 @@
           ]
         },
         {
-          "description": "Engine ADR 1311 — Document Setup's Facing Pages: every page laid\nout again as facing spreads (page 1 alone on the right of the\nspine, then left/right pairs) or one page per spread, each page's\nitems moving with it, and `FacingPages` recorded. One undo step. In\na facing document an inserted or deleted page re-pairs the pages\nafter it.",
+          "description": "Engine ADR 1312 — Document Setup's Facing Pages: every page laid\nout again as facing spreads (page 1 alone on the right of the\nspine, then left/right pairs) or one page per spread, each page's\nitems moving with it, and `FacingPages` recorded. One undo step. In\na facing document an inserted or deleted page re-pairs the pages\nafter it.",
           "type": "object",
           "properties": {
             "op": {

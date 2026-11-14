@@ -5929,7 +5929,7 @@ fn paged_set_use_standard_lab_for_spots(
 }
 
 /// `paged.setFacingPages(facing)` — lay the pages out as facing spreads or
-/// single pages (`Mutation::SetFacingPages`, engine ADR 1311).
+/// single pages (`Mutation::SetFacingPages`, engine ADR 1312).
 fn paged_set_facing_pages(
     _this: &JsValue,
     args: &[JsValue],

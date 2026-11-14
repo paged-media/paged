@@ -99,7 +99,7 @@ out-of-range count makes the setup custom, says why under the field and holds Cr
 
 ## Amendment (2026-11-14): facing pages after the document is made
 
-Engine ADR 1311 replaces the last sentence of the facing-pages amendment: inserting a page into a
+Engine ADR 1312 replaces the last sentence of the facing-pages amendment: inserting a page into a
 facing document or removing one keeps page 1 on the right and the pairs after it, and an existing
 document turns facing pages on or off. Document Setup has a Facing pages row (`doc.facingPages`, a
 switch; one undo step, every item stays on its page), and `paged.insert.facingPages` sets it from

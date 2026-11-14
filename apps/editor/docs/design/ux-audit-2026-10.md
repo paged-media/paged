@@ -1168,7 +1168,7 @@ context toolbar no longer repeats the context's tools as icon pills; it names th
 carries its options and says what the next edit changes ("Editing: Pixels", "Editing: Mask ·
 non-destructive"). The uncounted embedded image and the "Colour" spelling remain open.
 
-**Fixed (2026-11-14, engine ADR 1312).** A picture whose bytes live in the document is a placed
+**Fixed (2026-11-14, engine ADR 1313).** A picture whose bytes live in the document is a placed
 link: the engine lists it (`LinkSummary.embedded`; `inline:<frame>` when it has no file of its
 own), Publication health and the document map count it under Placed links ("3 · 1 embedded"), and
 the Links panel names a file-less one "Embedded picture" with an "embedded" badge, InDesign's word;

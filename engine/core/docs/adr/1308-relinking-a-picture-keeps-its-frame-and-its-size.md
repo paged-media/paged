@@ -53,6 +53,6 @@ worker without a `number[]`; scripts call `paged.relinkImage(frameId, uri, bytes
 
 ## Amendment (2026-11-14): an anchored picture relinks by bytes
 
-[ADR 1312](1312-an-anchored-picture-has-an-embedded-lane.md) gives a picture anchored in the text an
+[ADR 1313](1313-an-anchored-picture-has-an-embedded-lane.md) gives a picture anchored in the text an
 embedded-bytes lane of its own, so its relink with bytes is no longer refused: the link, the bytes
 and the transform are set together and undone together, as for a free frame.

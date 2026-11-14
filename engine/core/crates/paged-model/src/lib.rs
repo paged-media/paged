@@ -8474,7 +8474,7 @@ pub struct AnchoredFrame {
     /// The picture's own bytes when it is embedded (an `<Image>`'s
     /// `<Contents>`), the anchored twin of [`Rectangle::image_bytes`]:
     /// drawn in place of the link, written back as `<Contents>`. A relink
-    /// with the bytes of a picked file lands here (engine ADR 1312).
+    /// with the bytes of a picked file lands here (engine ADR 1313).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_bytes: Option<Vec<u8>>,
     /// Children of an anchored Group, in z-order. Empty for non-Group

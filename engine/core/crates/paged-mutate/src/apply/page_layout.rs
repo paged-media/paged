@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1311 — the document's pages laid out again as facing spreads
+//! Engine ADR 1312 — the document's pages laid out again as facing spreads
 //! or single pages: Document Setup's Facing Pages on an existing document,
 //! and the pairs a page inserted into or removed from a facing document
 //! keeps.

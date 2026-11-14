@@ -5280,7 +5280,7 @@ pub enum Operation {
     RemovePage {
         page_id: String,
     },
-    /// Engine ADR 1311 — lay every page out again as facing spreads (page
+    /// Engine ADR 1312 — lay every page out again as facing spreads (page
     /// 1 alone on the right of the spine, then left/right pairs; mirrored
     /// for a right-to-left binding) or as one page per spread, each page's
     /// items moving with it, and record `FacingPages`. Inverse:
@@ -5288,7 +5288,7 @@ pub enum Operation {
     SetFacingPages {
         facing: bool,
     },
-    /// Inverse-only (engine ADR 1311) — put back the spreads from index
+    /// Inverse-only (engine ADR 1312) — put back the spreads from index
     /// `first` on, captured whole (`capture_json`: the spreads and, when a
     /// facing change set it, the document's facing flag). The undo of
     /// `SetFacingPages` and of a page inserted into or removed from a

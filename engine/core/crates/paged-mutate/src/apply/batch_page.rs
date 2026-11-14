@@ -190,7 +190,7 @@ pub(super) fn apply_insert_page(
         }
     };
 
-    // Engine ADR 1311 — in a facing document the pages after the new one
+    // Engine ADR 1312 — in a facing document the pages after the new one
     // pair up again: captured from the first spread that changes, for an
     // exact undo.
     let facing = super::page_layout::is_facing(doc);
@@ -342,7 +342,7 @@ pub(super) fn apply_remove_page(
     }) else {
         return Err(OperationError::NodeNotFound(node));
     };
-    // Engine ADR 1311 — in a facing document the page leaves its spread
+    // Engine ADR 1312 — in a facing document the page leaves its spread
     // with what sits on it, and the pages after it pair up again.
     if super::page_layout::is_facing(doc) {
         let total: usize = doc.spreads.iter().map(|p| p.spread.pages.len()).sum();

@@ -135,7 +135,7 @@ const PNG_2X2 = new Uint8Array([
   0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ]);
 
-// UX audit F-43, engine ADR 1312 — a picture placed from bytes, with no
+// UX audit F-43, engine ADR 1313 — a picture placed from bytes, with no
 // file behind it, is a link too: counted, named, "embedded".
 describe("Links panel: an embedded picture", () => {
   test("a frame given a picture's bytes is listed as an embedded picture", async () => {
@@ -211,7 +211,7 @@ describe("Links panel: relink", () => {
         key: STRUCTURE.imageFrame.id,
         primary: "photo-v2.png",
         secondary: "Rectangle",
-        // The picked file's bytes live in the document now (engine ADR 1312).
+        // The picked file's bytes live in the document now (engine ADR 1313).
         badge: "embedded",
         selected: true,
       },

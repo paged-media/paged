@@ -738,7 +738,7 @@ export const PARITY_CASES: readonly ParityCase[] = [
     args: { pageId: P.page2 },
     boa: (a) => `paged.deletePage(${q(a.pageId)})`,
   },
-  // Engine ADR 1311 — the pages laid out again as facing spreads; the
+  // Engine ADR 1312 — the pages laid out again as facing spreads; the
   // command without a payload turns them on (the fixture is single-sided).
   {
     op: "setFacingPages",

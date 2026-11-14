@@ -405,7 +405,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // paragraph (see `anchor_here`), taken when it opens.
     let mut anchored_at: u32 = 0;
     let mut anchored_stack: Vec<AnchoredFrame> = Vec::new();
-    // Engine ADR 1312 — the base64 of an anchored picture's `<Image>`
+    // Engine ADR 1313 — the base64 of an anchored picture's `<Image>`
     // `<Contents>` while it is open (the anchored twin of the spread
     // parser's Q-03 lane).
     let mut anchored_contents: Option<Vec<u8>> = None;

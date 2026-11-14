@@ -171,7 +171,7 @@ export function LinksPanel() {
                 // The displayed name strips path prefixes for
                 // legibility — full URI lives in searchText. A picture
                 // whose bytes live in the document with no source of its
-                // own (`inline:<frame>`, engine ADR 1312; UX audit F-43)
+                // own (`inline:<frame>`, engine ADR 1313; UX audit F-43)
                 // is named as InDesign names it.
                 const inline = link.embedded && link.uri.startsWith("inline:");
                 const filename = inline

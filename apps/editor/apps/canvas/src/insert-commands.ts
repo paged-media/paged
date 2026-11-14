@@ -169,7 +169,7 @@ export const PAGED_INSERT_PLACE_IMAGE = "paged.insert.placeImage";
 export const PAGED_INSERT_GENERATE_IMAGE = "paged.insert.generateImage";
 export const PAGED_INSERT_NEW_PAGE = "paged.insert.newPage";
 export const PAGED_INSERT_DELETE_PAGE = "paged.insert.deletePage";
-/** Engine ADR 1311 — Document Setup's Facing pages, as a command:
+/** Engine ADR 1312 — Document Setup's Facing pages, as a command:
  *  `{ facing }` sets it, no payload toggles it. */
 export const PAGED_INSERT_FACING_PAGES = "paged.insert.facingPages";
 
@@ -1097,7 +1097,7 @@ export async function addPage(
   return outcomeOf(reply);
 }
 
-/** Engine ADR 1311 — lay the pages out as facing spreads (page 1 on the
+/** Engine ADR 1312 — lay the pages out as facing spreads (page 1 on the
  *  right, then left/right pairs) or as single pages: one undo step that
  *  keeps every item on its page. `facing` absent toggles what the document
  *  says now. */
@@ -1152,7 +1152,7 @@ export interface InsertCommandHandlers {
   ) => unknown | Promise<unknown>;
   newPage: (paged: PagedEditor) => unknown | Promise<unknown>;
   deletePage: (paged: PagedEditor) => unknown | Promise<unknown>;
-  /** `facing` absent: toggle (engine ADR 1311). Optional so hosts and tests
+  /** `facing` absent: toggle (engine ADR 1312). Optional so hosts and tests
    *  that bind the page verbs only keep their shape. */
   facingPages?: (
     paged: PagedEditor,

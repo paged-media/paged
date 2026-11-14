@@ -85,7 +85,7 @@ fn delete_page() {
     assert_eq!(page_ids(&mut m), vec![first]);
 }
 
-/// Engine ADR 1311 — facing pages on an existing document: three single
+/// Engine ADR 1312 — facing pages on an existing document: three single
 /// pages become page 1 alone and a pair, one undo step.
 #[test]
 fn set_facing_pages() {

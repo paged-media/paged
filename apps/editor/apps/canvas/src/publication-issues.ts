@@ -97,7 +97,7 @@ function fileName(uri: string): string {
 }
 
 /** The "Placed links" count Publication health and the document map show:
- *  every placed picture, an embedded one included (engine ADR 1312; UX
+ *  every placed picture, an embedded one included (engine ADR 1313; UX
  *  audit F-43), with how many of them are embedded when any are. "—" while
  *  the links have not arrived. */
 export function placedLinksValue(

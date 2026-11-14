@@ -1571,7 +1571,7 @@ pub(super) struct AnchoredLook<'a> {
 }
 
 /// Whether an anchored frame places a picture: a link, or its own
-/// embedded bytes (engine ADR 1312).
+/// embedded bytes (engine ADR 1313).
 pub(super) fn has_picture(af: &paged_model::AnchoredFrame) -> bool {
     af.image_link.is_some() || af.image_bytes.is_some()
 }
@@ -1655,7 +1655,7 @@ fn synthetic_rectangle(
                 ]
             },
         ),
-        // The embedded lane (engine ADR 1312): bytes win over the link,
+        // The embedded lane (engine ADR 1313): bytes win over the link,
         // as on a free frame (Q-03).
         image_bytes: af.image_bytes.clone().filter(|_| with_image),
         image_clip: None,

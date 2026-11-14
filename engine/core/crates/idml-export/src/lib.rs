@@ -552,7 +552,7 @@ pub(crate) fn write_package(
 
     for (i, spread) in doc.spreads.iter().enumerate() {
         let orig = entry_bytes(&mut src, &spread.src)?;
-        // Engine ADR 1311 — a source spread whose pages the model changed
+        // Engine ADR 1312 — a source spread whose pages the model changed
         // (facing pages laid out again, a page that joined or left it) is
         // written whole from the model: the rewrite patches the pages the
         // source holds and has no lane for a page it lacks.

@@ -471,7 +471,7 @@ fn created_page_ids(
         (_, Operation::RemovePageClone { cloned_page, .. }) => {
             out.push(PageId(cloned_page.clone()))
         }
-        // Engine ADR 1311 — a page inserted into a facing document is
+        // Engine ADR 1312 — a page inserted into a facing document is
         // undone by putting the spreads back, which names no page: the
         // forward op's echo carries the id it minted.
         (
@@ -550,7 +550,7 @@ fn changes_page_list(mutation: &Mutation) -> bool {
     match mutation {
         Mutation::InsertPage { .. }
         | Mutation::DeletePage { .. }
-        // Engine ADR 1311 — every page may change its spread and side.
+        // Engine ADR 1312 — every page may change its spread and side.
         | Mutation::SetFacingPages { .. }
         | Mutation::ResizePage { .. }
         // Engine ADR 1011 — the grid's geometry: where each page sits.
@@ -13043,7 +13043,7 @@ impl CanvasModel {
                 embedded,
             }
         };
-        // Engine ADR 1312 (UX audit F-43) — a picture whose bytes live in
+        // Engine ADR 1313 (UX audit F-43) — a picture whose bytes live in
         // the document is a placed link too, "Embedded": its link source
         // when it keeps one, else `inline:<host id>`.
         let source = |self_id: &str, link: &Option<String>, bytes: &Option<Vec<u8>>| match link {

@@ -172,7 +172,7 @@ pub const VIRTUAL_PATHS: &[VirtualPath] = &[
         "setProofSetup",
         "intent",
     ),
-    // Engine ADR 1311 — Document Setup's Facing Pages: the pages laid out
+    // Engine ADR 1312 — Document Setup's Facing Pages: the pages laid out
     // again as spreads or single pages (one undo step).
     v(
         "doc",

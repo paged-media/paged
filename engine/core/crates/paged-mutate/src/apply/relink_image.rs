@@ -77,7 +77,7 @@ pub(super) fn apply_relink_image(
     };
     // A picture anchored in the text (ADR 208) keeps its link, its bytes
     // and its transform on the story; its embedded-bytes lane is the
-    // anchored frame's own (engine ADR 1312).
+    // anchored frame's own (engine ADR 1313).
     if matches!(frame, NodeId::Rectangle(_)) && find_rectangle_mut(doc, &id).is_none() {
         if let Some(af) = super::helpers::find_anchored_frame_mut(doc, &id) {
             let next_bytes = bytes.map(<[u8]>::to_vec);

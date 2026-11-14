@@ -191,7 +191,7 @@ describe("Document Setup: every control writes the document", () => {
   for (const [path, before] of [
     ["blackPointCompensation", true],
     ["useStandardLabForSpots", false],
-    // Engine ADR 1311: the pages laid out again as spreads, one step.
+    // Engine ADR 1312: the pages laid out again as spreads, one step.
     ["facingPages", false],
   ] as const) {
     test(`${path}: the switch turns it ${before ? "off" : "on"}`, async () => {

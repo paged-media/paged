@@ -1,4 +1,4 @@
-# ADR 1312 — An anchored picture has an embedded lane, and an embedded picture is a link
+# ADR 1313 — An anchored picture has an embedded lane, and an embedded picture is a link
 
 - **Status:** Accepted 2026-11-14.
 - **Scope:** protocol v83. `paged-model` (`AnchoredFrame.image_bytes`), `idml-import` (an anchored

@@ -186,7 +186,7 @@ fn the_script_surface_reaches_198_of_199() {
     // setThemeColor and setThemeFonts (engine ADR 1056);
     // createThemeFromSwatches and setStyleThemeFont (engine ADR 1057);
     // v81 relinkImage (engine ADR 1308); v82 setFacingPages (engine ADR
-    // 1311).
+    // 1312).
     assert_eq!(ops_the_bridge_names().len(), 198);
     assert_eq!(paged_wire::MUTATION_NAMES.len(), 199);
 }

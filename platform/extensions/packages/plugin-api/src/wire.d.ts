@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // AGPL-3.0-only OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.82.0-dev
+// Synced from @paged-media/canvas-wasm@0.83.0-dev
 /* tslint:disable */
 /* eslint-disable */
 
@@ -3741,7 +3741,7 @@ export interface DocumentMeta {
      */
     useStandardLabForSpots?: boolean | null;
     /**
-     * Engine ADR 1311 — whether the pages are laid out in facing spreads
+     * Engine ADR 1312 — whether the pages are laid out in facing spreads
      * (`FacingPages`; `None` when the document never said). Document
      * Setup\'s Facing Pages writes it through `setFacingPages`.
      */
@@ -4200,7 +4200,7 @@ export interface LinkSummary {
      * The picture\'s bytes live in the document (InDesign\'s \"Embedded\"):
      * placed from bytes, pixel-edited, or relinked to a picked file. With
      * no link source of its own the entry\'s `uri` is `inline:<host id>`
-     * (engine ADR 1312; UX audit F-43).
+     * (engine ADR 1313; UX audit F-43).
      */
     embedded?: boolean;
 }

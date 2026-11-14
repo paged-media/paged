@@ -148,7 +148,7 @@ fn looks(frames: &[AnchoredFrame]) -> Vec<String> {
                     f.fill_drop_shadow,
                     f.stroke_drop_shadow,
                     f.content_drop_shadow,
-                    // The picture: a relink (engine ADRs 1308, 1312) is a
+                    // The picture: a relink (engine ADRs 1308, 1313) is a
                     // reason to write the part fresh too.
                     f.image_link,
                     f.image_item_transform,
@@ -500,7 +500,7 @@ pub(crate) fn write_anchored_frame(
     if let Some(s) = &f.setting {
         write_anchored_object_setting(writer, s)?;
     }
-    // A picture: a link, its embedded bytes (engine ADR 1312), or both.
+    // A picture: a link, its embedded bytes (engine ADR 1313), or both.
     // Bytes without a link are named from the frame's id, as the free
     // frames' writer names them (`images.rs`), so InDesign binds a link.
     let picture_uri = match (&f.image_link, &f.image_bytes) {

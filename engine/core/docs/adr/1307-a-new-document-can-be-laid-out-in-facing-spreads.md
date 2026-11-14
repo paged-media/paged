@@ -49,7 +49,7 @@ refuses a page of a multi-page spread, as for any opened facing document.
 
 ## Amendment (2026-11-14): an existing document
 
-What this record left out is decided in [ADR 1311](1311-facing-pages-on-an-existing-document.md):
+What this record left out is decided in [ADR 1312](1312-facing-pages-on-an-existing-document.md):
 `setFacingPages` turns facing pages on or off in an existing document (every page laid out again
 with its items, one undo step), and in a facing document `InsertPage` and `RemovePage` keep page 1
 on the right and the pairs after it.

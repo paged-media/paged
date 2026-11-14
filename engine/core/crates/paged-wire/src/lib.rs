@@ -1592,7 +1592,7 @@ pub enum Mutation {
     DeletePage {
         page_id: PageId,
     },
-    /// Engine ADR 1311 — Document Setup's Facing Pages: every page laid
+    /// Engine ADR 1312 — Document Setup's Facing Pages: every page laid
     /// out again as facing spreads (page 1 alone on the right of the
     /// spine, then left/right pairs) or one page per spread, each page's
     /// items moving with it, and `FacingPages` recorded. One undo step. In

@@ -944,13 +944,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //     the line evidence; the document untouched.
 //   New message kinds an older worker cannot answer, hence the bump.
 // v83 — facing pages on an existing document and embedded pictures:
-//   - Facing pages (engine ADR 1311): the mutation `setFacingPages { facing
+//   - Facing pages (engine ADR 1312): the mutation `setFacingPages { facing
 //     }` lays every page out again as facing spreads or single pages, each
 //     page's items with it, in one undo step (`doc.facingPages` is its
 //     virtual path); in a facing document `insertPage` and `deletePage`
 //     keep page 1 on the right and the pairs after it. `DocumentMeta`
 //     gains `facingPages`.
-//   - Embedded pictures (engine ADR 1312): `LinkSummary` gains `embedded`,
+//   - Embedded pictures (engine ADR 1313): `LinkSummary` gains `embedded`,
 //     and a picture whose bytes live in the document with no link source is
 //     listed as `inline:<host id>`; an anchored picture relinks by bytes.
 //   A mutation an older worker cannot apply, hence the bump.
@@ -3935,7 +3935,7 @@ pub struct DocumentMeta {
     /// for Spots" toggle.
     #[serde(default)]
     pub use_standard_lab_for_spots: Option<bool>,
-    /// Engine ADR 1311 — whether the pages are laid out in facing spreads
+    /// Engine ADR 1312 — whether the pages are laid out in facing spreads
     /// (`FacingPages`; `None` when the document never said). Document
     /// Setup's Facing Pages writes it through `setFacingPages`.
     #[serde(default)]
@@ -5016,7 +5016,7 @@ pub struct LinkSummary {
     /// The picture's bytes live in the document (InDesign's "Embedded"):
     /// placed from bytes, pixel-edited, or relinked to a picked file. With
     /// no link source of its own the entry's `uri` is `inline:<host id>`
-    /// (engine ADR 1312; UX audit F-43).
+    /// (engine ADR 1313; UX audit F-43).
     #[serde(default)]
     pub embedded: bool,
 }
