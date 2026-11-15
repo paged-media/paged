@@ -130,6 +130,45 @@ export function cameraForPage(
   };
 }
 
+/**
+ * The viewport's size once its layout holds still, for a fit computed
+ * after an await. Chrome that comes back (a slide show ending, a dock
+ * opening) lays the canvas out again, and the canvas's ResizeObserver
+ * reports the new size in the frame after that layout. A page fitted to
+ * a size read before then is fitted to the old viewport, or to a strip of
+ * the new one. Waits two frames, then answers the size that two
+ * consecutive frames agree on, or the last one read once `maxMs` has
+ * passed. A hidden tab runs no frames, so a timer stands in for each.
+ */
+export async function settledViewportSize(
+  peek: () => readonly [number, number],
+  maxMs = 300,
+): Promise<readonly [number, number]> {
+  const t0 = Date.now();
+  await nextFrame();
+  await nextFrame();
+  let last = peek();
+  for (;;) {
+    await nextFrame();
+    const now = peek();
+    const still = now[0] === last[0] && now[1] === last[1];
+    if ((still && now[0] > 0 && now[1] > 0) || Date.now() - t0 >= maxMs)
+      return now;
+    last = now;
+  }
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 50);
+    if (typeof requestAnimationFrame === "function")
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+  });
+}
+
 // `host.viewport.revealText` (plugin-sdk `TextRevealBackend`): the same
 // hand-off. The canvas registers how it takes the user to a range of text
 // (camera onto the range, optionally select it); the backend calls it.

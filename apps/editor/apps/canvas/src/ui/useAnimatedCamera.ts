@@ -44,7 +44,9 @@
 //   frame checks the camera context's write count against the count after
 //   its own last write; a wheel step, a pan or another command in between
 //   took the camera, and the tween stops where that write left it instead
-//   of tugging the view back.
+//   of tugging the view back. A resize is not one of them (UXI-CAM-003):
+//   its anchor moves the view by a translation, and the tween moves its
+//   whole path by the same shift and carries on (`anchorShift`).
 // - UXI-CAM-016: `record: true` makes the jump an explicit navigation:
 //   the place it leaves (where the camera is heading, so two quick jumps
 //   record the first one's target) becomes the editor's Back entry.
@@ -93,10 +95,11 @@ export function useCameraTween(
   _current: Camera,
   setCamera: (cam: Camera) => void,
 ) {
-  const { peekCamera, cameraRevision, navigation } = useCamera();
+  const { peekCamera, cameraRevision, anchorShift, navigation } = useCamera();
   const rafRef = useRef<number | null>(null);
-  // The in-flight tween's target; null when none runs.
-  const goalRef = useRef<Camera | null>(null);
+  // The in-flight tween's target and the resize anchors' shift when it
+  // began; null when none runs.
+  const goalRef = useRef<Goal | null>(null);
   // Track the latest `setCamera` + the context's readers via refs so the
   // animation callback always reads fresh values without
   // re-subscribing. Written after each commit (a layout effect, so before
@@ -106,11 +109,13 @@ export function useCameraTween(
   const setCameraRef = useRef(setCamera);
   const peekRef = useRef(peekCamera);
   const revisionRef = useRef(cameraRevision);
+  const shiftRef = useRef(anchorShift);
   const navigationRef = useRef(navigation);
   useLayoutEffect(() => {
     setCameraRef.current = setCamera;
     peekRef.current = peekCamera;
     revisionRef.current = cameraRevision;
+    shiftRef.current = anchorShift;
     navigationRef.current = navigation;
   });
 
@@ -134,7 +139,7 @@ export function useCameraTween(
     // leaves (a jump pressed during the last one's tween leaves its target).
     if (opts.record)
       navigationRef.current.record(
-        goalRef.current ?? peekRef.current(),
+        goalOf(goalRef.current, shiftRef.current()) ?? peekRef.current(),
         target,
       );
     if (rafRef.current !== null) {
@@ -159,7 +164,10 @@ export function useCameraTween(
       setCameraRef.current(target);
       return;
     }
-    goalRef.current = target;
+    // The resize anchors before the tween began; one since then moved the
+    // view, and the path moves with it.
+    const [sx0, sy0] = shiftRef.current();
+    goalRef.current = { target, shift: [sx0, sy0] };
     const t0 = performance.now();
     // The write count after this tween's own last write: anything else
     // means someone else took the camera (UXI-CAM-004).
@@ -170,12 +178,15 @@ export function useCameraTween(
         goalRef.current = null;
         return;
       }
+      const [sx, sy] = shiftRef.current();
+      const dx = sx - sx0;
+      const dy = sy - sy0;
       const t = Math.min(1, (now - t0) / duration);
       const eased = easeOutCubic(t);
       setCameraRef.current({
         scale: lerp(start.scale, target.scale, eased),
-        tx: lerp(start.tx, target.tx, eased),
-        ty: lerp(start.ty, target.ty, eased),
+        tx: lerp(start.tx, target.tx, eased) + dx,
+        ty: lerp(start.ty, target.ty, eased) + dy,
         // v77 — Rotate View turns with the tween; a target without a
         // rotation keeps the view's.
         rotation: lerp(
@@ -196,11 +207,31 @@ export function useCameraTween(
   }, []);
   // eslint-disable-next-line no-restricted-syntax -- a hook's result, which callers may compare (ADR 229)
   const destination = useCallback(
-    (): Camera => goalRef.current ?? peekRef.current(),
+    (): Camera =>
+      goalOf(goalRef.current, shiftRef.current()) ?? peekRef.current(),
     [],
   );
 
   return { animateTo, destination };
+}
+
+interface Goal {
+  target: Camera;
+  shift: readonly [number, number];
+}
+
+/** Where a tween is going now: its target moved by the resize anchors
+ *  since it began. */
+function goalOf(
+  goal: Goal | null,
+  [sx, sy]: readonly [number, number],
+): Camera | null {
+  if (!goal) return null;
+  const dx = sx - goal.shift[0];
+  const dy = sy - goal.shift[1];
+  return dx === 0 && dy === 0
+    ? goal.target
+    : { ...goal.target, tx: goal.target.tx + dx, ty: goal.target.ty + dy };
 }
 
 function easeOutCubic(t: number): number {

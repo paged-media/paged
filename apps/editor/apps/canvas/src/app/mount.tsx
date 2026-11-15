@@ -155,7 +155,11 @@ import {
 import { createGuardedLoader } from "../plugin-load-guard";
 import { answerScriptData } from "../script-data";
 import { buildTransformCommands } from "../transform-commands";
-import { cameraCentredOn, cameraForPage } from "../plugin-pages";
+import {
+  cameraCentredOn,
+  cameraForPage,
+  settledViewportSize,
+} from "../plugin-pages";
 import { applyProfile } from "../profiles/apply";
 import { profileFromSearch } from "../profiles/from-url";
 // ADR 222 — the bundles are NOT imported here: each is a dynamic import()
@@ -957,7 +961,8 @@ function reportFileFailure(
 function CanvasAppIntegration() {
   const instance = useEditorInstance();
   const client = useCanvasClient();
-  const { camera, setCamera, viewportSize, navigation } = useCamera();
+  const { camera, setCamera, viewportSize, peekViewportSize, navigation } =
+    useCamera();
   const { handle, sourceName } = useDocument();
   const { contentSelection, setContentSelection } = useContentSelection();
   const registries = useRegistries();
@@ -1263,7 +1268,13 @@ function CanvasAppIntegration() {
         h = settled();
       }
       if (!h) return false;
-      const [vw, vh] = viewportSize;
+      // Fitted to the viewport as it is once its layout holds still, not
+      // to the size this closure was made with: paged.slide calls this as
+      // its show ends, while the chrome comes back and the canvas shrinks
+      // from the whole window (a slide show's Esc left the editor at 5 %,
+      // on the wrong slide).
+      const [vw, vh] = await settledViewportSize(peekViewportSize);
+      h = settled() ?? h;
       const cam = cameraForPage(
         h.pageSizesPt,
         h.pageOriginsPt,
@@ -1277,7 +1288,7 @@ function CanvasAppIntegration() {
       return true;
     });
     return () => pages.setPageGoTo(null);
-  }, [navigateCamera, client, pages, viewportSize]);
+  }, [navigateCamera, client, pages, peekViewportSize]);
 
   // Cockpit — the thumbnail filmstrip / document map navigate by
   // page indices; the camera-fit math (page layout convention) is

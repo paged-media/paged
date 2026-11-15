@@ -1,6 +1,6 @@
 # ADR 1211 — Navigation history and one current page
 
-- **Status:** Accepted 2026-11-13.
+- **Status:** Accepted 2026-11-13; amended 2026-11-15 (a resize does not stop a tween).
 - **Scope:** `packages/shell/src/state/current-page.ts` and `use-current-page.ts` (the one current
   page), `navigation-history.ts` and `camera-context.tsx` (Back and Forward, `peekCamera`,
   `cameraRevision`), `zoom-range.ts` (Actual size, the calibrated scale, the zoom field's text),
@@ -148,5 +148,33 @@ from the camera last written (`peekCamera`), not from the last rendered one.
 - [ADR 246](246-one-zoom-range.md), [ADR 257](257-indesigns-fits-and-page-keys.md) — amended.
 - [ADR 287](287-view-modes.md) — the camera's rotation the rule and the fits honour.
 - [ADR 1208](1208-docks-are-resizable-and-the-workspace-adapts.md) — the resize anchor, a
-  camera write that stops a tween like any other.
+  camera write that moves a tween's path and does not stop it (amendment 2026-11-15).
 - [ADR 247](247-stored-settings-are-shape-checked.md) — the calibration's shape check.
+
+## Amendment 2026-11-15 — a resize moves a tween, it does not stop it
+
+The decision above counted the resize anchor (ADR 1208, UXI-CAM-003) among the writes that take
+the camera from a tween. The chrome comes back while a jump is still running, and the jump
+stopped half way. paged.slide's slide show (slide ADR 716) asks for the slide it ended on as Esc
+ends it, which is the moment the menus, rulers and docks return and the canvas shrinks from the
+whole window. In CI the editor was left at 59 % on slide 2, or at 5 % on slide 10, instead of on
+slide 4.
+
+A resize moves the view, it does not take it. `anchorViewportResize` writes the camera without
+counting the write (`cameraRevision` counts the writes of someone who takes the camera), and adds
+its translation to `anchorShift`, the sum of every anchor's shift so far. A tween reads the sum
+when it starts and on every frame, and moves its whole path, start and target, by the shift since
+it started. It arrives at its target, moved as the view was. `destination()` is that moved target,
+so a page key pressed during the tween steps from where the tween is now going. A wheel step, a
+pan or another command still takes the camera, and the tween stops where that write left it.
+
+The page a plugin asks for (`host.viewport.goToPage`) is fitted to the viewport once its layout
+holds still, not to the size the door's closure was created with. `settledViewportSize` in
+`apps/canvas/src/plugin-pages.ts` waits two frames, then returns the size that two consecutive
+frames agree on, or the last size read after 300 ms. It reads the size through the camera
+context's `peekViewportSize`.
+
+Tests: `apps/canvas/test/shell/camera-tween-resize.dom.test.tsx` (a resize during a jump moves the
+jump, and the jump arrives; a pan during a jump still takes the camera; the size reads at once),
+`apps/canvas/test/unit/ui/settled-viewport.test.ts`, and the slide show journey
+(`tests/journey/plugins/slide-show.journey.spec.ts`, Esc ends on the right slide).

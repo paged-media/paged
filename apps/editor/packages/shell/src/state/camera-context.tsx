@@ -55,11 +55,23 @@ interface CameraContextValue {
    *  step that React has not rendered yet included. What a navigation
    *  records as the place it left, and where a tween starts from. */
   peekCamera: () => Camera;
-  /** Counts the camera's writes. A tween compares it with the count after
-   *  its own last frame: a write in between was someone else's (a wheel,
-   *  a pan, another command), who now owns the camera, and the tween stops
-   *  rather than tug the view back (UXI-CAM-004). */
+  /** The viewport's size as last measured, at once: a resize React has
+   *  not rendered yet included. What a fit computed after an await reads,
+   *  rather than the size a closure held when it was made. */
+  peekViewportSize: () => ViewportSize;
+  /** Counts the camera's writes by someone who takes it. A tween compares
+   *  it with the count after its own last frame: a write in between was
+   *  someone else's (a wheel, a pan, another command), who now owns the
+   *  camera, and the tween stops rather than tug the view back
+   *  (UXI-CAM-004). A resize anchor does not count: see `anchorShift`. */
   cameraRevision: () => number;
+  /** The resize anchors' translations so far, summed. A resize moves the
+   *  view, it does not take the camera: a tween in flight moves its whole
+   *  path (where it started and where it is going) by the shift since it
+   *  began, and carries on (UXI-CAM-003 with UXI-CAM-004). A page jump
+   *  that met the chrome coming back used to stop half way, where the
+   *  anchor's write found it. */
+  anchorShift: () => readonly [number, number];
   /** This editor's Back / Forward places (`navigation-history.ts`). */
   navigation: NavigationHistory;
 }
@@ -116,18 +128,25 @@ export function CameraProvider({ children }: PropsWithChildren) {
   // writer, so it is current without a render.
   const cameraRef = useRef<Camera>(IDENTITY_CAMERA);
   const revisionRef = useRef(0);
-  const setCamera = useCallback(
-    (requested: Camera) => {
+  const shiftRef = useRef<readonly [number, number]>([0, 0]);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const writeCamera = useCallback(
+    (requested: Camera, takesCamera: boolean) => {
       const rotation = requested.rotation ?? rotationRef.current;
       rotationRef.current = rotation;
       const cam = { ...clampCamera(requested, sizeRef.current), rotation };
       cameraRef.current = cam;
-      revisionRef.current += 1;
+      if (takesCamera) revisionRef.current += 1;
       setCameraState(cam);
       client.setCamera(cam);
       interactions.cameraChanged();
     },
     [client, interactions],
+  );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setCamera = useCallback(
+    (requested: Camera) => writeCamera(requested, true),
+    [writeCamera],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
@@ -135,15 +154,22 @@ export function CameraProvider({ children }: PropsWithChildren) {
     (from: ViewportSize, to: ViewportSize) => {
       const cam = cameraRef.current;
       const next = cameraKeepingCentre(cam, from, to);
-      if (next !== cam) setCamera(next);
+      if (next === cam) return;
+      const [sx, sy] = shiftRef.current;
+      shiftRef.current = [sx + next.tx - cam.tx, sy + next.ty - cam.ty];
+      writeCamera(next, false);
     },
-    [setCamera],
+    [writeCamera],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const peekCamera = useCallback(() => cameraRef.current, []);
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const peekViewportSize = useCallback(() => sizeRef.current, []);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const cameraRevision = useCallback(() => revisionRef.current, []);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const anchorShift = useCallback(() => shiftRef.current, []);
   // One history per editor, for the provider's lifetime.
   const [navigation] = useState(createNavigationHistory);
 
@@ -156,7 +182,9 @@ export function CameraProvider({ children }: PropsWithChildren) {
       setViewportSize,
       anchorViewportResize,
       peekCamera,
+      peekViewportSize,
       cameraRevision,
+      anchorShift,
       navigation,
     }),
     [
@@ -166,7 +194,9 @@ export function CameraProvider({ children }: PropsWithChildren) {
       setViewportSize,
       anchorViewportResize,
       peekCamera,
+      peekViewportSize,
       cameraRevision,
+      anchorShift,
       navigation,
     ],
   );
