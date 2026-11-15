@@ -30,6 +30,7 @@ import type {
   GestureHandler,
 } from "@paged-media/plugin-api";
 
+import { snapBypassHeld } from "@paged-media/helpers";
 import {
   CurvatureMachine,
   createSnapper,
@@ -96,8 +97,8 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
 
   // C-68 — points snap through the engine (engine ADR 125: every visible
   // element, guides, the page, this run's own placed points), with the
-  // snapper the host's Pen uses too (vector-tools' `createSnapper`). Cmd
-  // held bypasses. The engine answer is asynchronous, so pointer and key
+  // snapper the host's Pen uses too (vector-tools' `createSnapper`). The
+  // platform's primary modifier held bypasses (editor ADR 1226). The engine answer is asynchronous, so pointer and key
   // events run IN ORDER on one chain — a machine must never see an up
   // before the down it follows.
   const snapper = createSnapper((query) => host.document.snapPoint(query));
@@ -112,7 +113,7 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
       // CSS px per pt at the current zoom.
       cameraScale: 1 / host.viewport.pxToPt(1),
       extra: placed,
-      bypass: e.modifiers.cmd,
+      bypass: snapBypassHeld(e.modifiers),
     });
     return [p[0], p[1]];
   };

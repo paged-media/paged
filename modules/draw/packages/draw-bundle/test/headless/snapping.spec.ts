@@ -34,10 +34,17 @@ import { openHost } from "./host";
 const PAGE = F4_OVERLAP.pageId; // 612 × 792 pt
 const CENTRE: [number, number] = [306, 396];
 
+// The snapping bypass is the platform's primary modifier, Cmd on macOS and
+// Ctrl elsewhere (editor ADR 1226): the spec holds the key of the platform
+// it runs on.
+const ON_MAC =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
 async function curve(
   h: HeadlessHost,
   points: [number, number][],
-  opts: { cmd?: boolean } = {},
+  opts: { bypass?: boolean } = {},
 ): Promise<number[][]> {
   const before = new Set(
     (await h.host.document.tree()).flatMap(function walk(n: any): string[] {
@@ -49,7 +56,10 @@ async function curve(
   handler.onActivate(undefined as never);
   for (const p of points) {
     const e = pointerAt(PAGE, p);
-    if (opts.cmd) (e.modifiers as { cmd: boolean }).cmd = true;
+    if (opts.bypass)
+      (e.modifiers as { cmd: boolean; ctrl: boolean })[
+        ON_MAC ? "cmd" : "ctrl"
+      ] = true;
     handler.onPointerDown(e);
     await settle();
     handler.onPointerUp(e);
@@ -116,7 +126,7 @@ describe("draw conformance — snapping for point-placing tools (C-68)", () => {
     expect(anchors[1]![1]).toBeCloseTo(520, 3);
   });
 
-  it("with Cmd held the point stays where the pointer was", async () => {
+  it("with the snapping bypass held the point stays where the pointer was", async () => {
     const anchors = await curve(
       h,
       [
@@ -124,7 +134,7 @@ describe("draw conformance — snapping for point-placing tools (C-68)", () => {
         [CENTRE[0] + 3, CENTRE[1] - 2],
         [560, 60],
       ],
-      { cmd: true },
+      { bypass: true },
     );
     expect(anchors[1]![0]).toBeCloseTo(CENTRE[0] + 3, 3);
     expect(anchors[1]![1]).toBeCloseTo(CENTRE[1] - 2, 3);

@@ -204,3 +204,5 @@ export {
   type ReferenceDoor,
   type ReferenceInsert,
 } from "./text-references.ts";
+
+export { snapBypassHeld } from "./snap-bypass.ts";
