@@ -299,8 +299,9 @@ export class DirectSelectSession implements PathEditSession {
    *  lands on a snap target: the anchor follows the pointer by the drag
    *  delta, that position is snapped against the path's other anchors
    *  (points, then their x / y alignment lines), and the pointer is
-   *  shifted by the same correction. Cmd, Shift (constrain) and View ▸
-   *  Snap to points off all bypass it. */
+   *  shifted by the same correction. The snapping bypass (the
+   *  platform's primary modifier, editor ADR 1226), Shift (constrain) and
+   *  View ▸ Snap to points off all bypass it. */
   private snapped(pointer: PathEditPointer): readonly [number, number] {
     const g = this.grab;
     if (

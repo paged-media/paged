@@ -96,6 +96,7 @@ import {
   type PageRect,
 } from "./layout";
 import { pinchCamera, startPinch, type Pinch } from "./pinch";
+import { pointerModifiersOf } from "./pointer-modifiers";
 import { routePress, type PressRouteKind } from "./press-route";
 import {
   measureCommitted,
@@ -474,12 +475,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       pageId: containing ? containing[0] : null,
       pagePoint,
       docPoint: [docX, docY],
-      modifiers: {
-        shift: e.shiftKey,
-        alt: e.altKey,
-        cmd: e.metaKey,
-        ctrl: e.ctrlKey,
-      },
+      modifiers: pointerModifiersOf(e),
       maxDelta,
       button: e.button,
       target: e.target,
@@ -517,11 +513,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     const scale = props.camera.scale;
     return {
       point: [docX - pageRect.x, docY - pageRect.y],
-      modifiers: {
-        shift: e.shiftKey,
-        alt: e.altKey,
-        cmd: e.metaKey || e.ctrlKey,
-      },
+      // Meta and Control apart: the snapping bypass is the platform's
+      // primary modifier (editor ADR 1226), Ctrl off the Mac.
+      modifiers: pointerModifiersOf(e),
       ptPerPx: 1 / (scale > 0 ? scale : 1),
       timeStamp: e.timeStamp,
     };
@@ -580,12 +574,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     const ev: ContentPointerEvent = {
       contentPoint: at.content,
       elementId: at.elementId,
-      modifiers: {
-        shift: e.shiftKey,
-        alt: e.altKey,
-        cmd: e.metaKey,
-        ctrl: e.ctrlKey,
-      },
+      modifiers: pointerModifiersOf(e),
       button: e.button,
     };
     if (phase === "down") contribution.onContentPointerDown?.(ev);
