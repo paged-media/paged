@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type { EscapeHandler } from "../interaction/escape-arbiter";
 import type { FeatureStore } from "../state/features";
 import type * as Api from "@paged-media/plugin-api";
 
@@ -586,6 +587,45 @@ export function createKeybindingRegistry(
       const had = bindings.length > 0;
       bindings.length = 0;
       if (had) changed();
+    },
+  };
+}
+
+/**
+ * The keybindings' Escape (editor ADR 1207, amendment 2026-11-15). The
+ * arbiter is the one listener that answers Escape, in the capture phase:
+ * when one of its handlers resolves a press, the registry's window listener
+ * never hears it. A module's binding on Escape ran only while no tier had
+ * anything to do, so with a shape selected Escape cleared the selection and
+ * left the Format Painter's brush loaded.
+ *
+ * A GUARDED binding on Escape (a `when` that holds now, or a binding scoped
+ * to the active context) is a module's transient mode, §12.1 case 4: it
+ * answers in the `transient` tier, after the open layers, a gesture and the
+ * focused control, before a held pointer, a context, the text, a group and
+ * the selection. Its command runs once, from here, and the press is handled.
+ * An unguarded binding on Escape stays behind the arbiter, as before.
+ */
+export function keybindingEscapeHandler(
+  keybindings: Pick<KeybindingRegistry, "resolve" | "claims">,
+  commands: Pick<CommandRegistry, "invoke">,
+): EscapeHandler {
+  const guarded = (event: KeyboardEvent): KeybindingContribution | null => {
+    // The registry's own rule: the focused widget's key is the widget's.
+    if (targetOwnsKey(event) && !keybindings.claims(event)) return null;
+    const winner = keybindings.resolve(event);
+    if (!winner) return null;
+    return winner.when !== undefined || winner.scope !== undefined
+      ? winner
+      : null;
+  };
+  return {
+    id: "paged.keybinding",
+    tier: "transient",
+    isActive: (event) => guarded(event) !== null,
+    resolve: (event) => {
+      const winner = guarded(event);
+      if (winner) void commands.invoke(winner.command);
     },
   };
 }

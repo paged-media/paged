@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { escapeArbiterOf } from "../interaction/escape-arbiter";
 import { createFeatureStore, type FeatureStore } from "./features";
 import { editorRootOf, ownsEvent } from "./editor-root";
 import { useEditorScope } from "./editor-scope";
@@ -43,6 +44,7 @@ import {
   createMarginBandRegistry,
   createImporterRegistry,
   createKeybindingRegistry,
+  keybindingEscapeHandler,
   createMenuRegistry,
   createObjectTypeRegistry,
   createOverlayRegistry,
@@ -217,6 +219,18 @@ export function RegistriesProvider({
       keybindings?.detach();
     };
   }, []);
+
+  // A guarded binding on Escape (a module's transient mode: the Format
+  // Painter's loaded brush) answers through this editor's Escape arbiter,
+  // in its tier, rather than after it (editor ADR 1207, amendment
+  // 2026-11-15).
+  useEffect(() => {
+    const r = ref.current;
+    if (!r) return;
+    return escapeArbiterOf(scope).register(
+      keybindingEscapeHandler(r.keybindings, r.commands),
+    );
+  }, [scope]);
 
   // Wrap in useMemo so consumers see a stable object reference.
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)

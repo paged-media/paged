@@ -104,3 +104,19 @@ the opposite: the first applicable case wins, and no press does two things.
 [ADR 1214](1214-one-way-out-of-a-context.md): the `context` tier leaves through the one exit
 resolver (`leave("escape")`): a clean context cancels, or commits when its module declares
 `commit-if-safe`. The `context-dirty` tier is unchanged: a sub-edit resolves first.
+
+## Amendment 2026-11-15 — a module's guarded binding on Escape is a transient mode
+
+The arbiter resolves a press in the capture phase, before the keybinding registry's window
+listener hears it, so a module's keybinding on Escape ran only while no tier had anything to do.
+With a shape selected, Escape cleared the selection and left paged.slide's Format Painter
+loaded: the next shape clicked still took the format (the slide effects journey, "twice quickly
+it keeps painting until Esc"). A loaded brush is §12.1 case 4, a transient mode.
+
+A guarded binding on Escape — a `when` that holds now, or a binding scoped to the active
+context (ADR 299) — answers in the `transient` tier (`keybindingEscapeHandler` in
+`registries/keybinding.ts`, registered by `RegistriesProvider`): after the open layers, a
+gesture and the focused control, before a held pointer, a context, the text, a group and the
+selection. Its command runs once and the press is handled. An unguarded binding on Escape stays
+behind the arbiter, as every other key does. Tests: `packages/shell/test/interaction/
+escape-keybindings.dom.test.ts`.

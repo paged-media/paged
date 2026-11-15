@@ -47,6 +47,7 @@ export {
 
 export {
   createKeybindingRegistry,
+  keybindingEscapeHandler,
   type KeybindingContribution,
   type KeybindingRegistry,
 } from "./keybinding";
