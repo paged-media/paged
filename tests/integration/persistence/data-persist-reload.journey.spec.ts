@@ -26,8 +26,8 @@
 // This journey drives that through the real editor:
 //
 //   · IMPORT + BIND — import a CSV in the Sources panel (the engine boots), define
-//     a variable binding on the `name` column in the Bindings panel, Lower:
-//     a tagged field with the first record's value lands in the document.
+//     a variable binding on the `name` column in the Bindings panel, Place on
+//     page: a tagged field with the first record's value lands in the document.
 //   · SAVE — Save (.paged) through the real command; the will-save hook
 //     writes the session part first, and the downloaded file carries it.
 //   · REOPEN — File ▸ New (nothing of the document stays), then File ▸ Open
@@ -35,8 +35,8 @@
 //     Sources panel lists the source, with no re-import.
 //   · REFRESH — stepping the preview to record 2 re-runs the query in the store
 //     (the restored CSV is loaded into the store on first use) and writes the
-//     SAME field in place; Lower again re-resolves it without placing a
-//     second field.
+//     SAME field in place; Place on page again re-resolves it without placing
+//     a second field.
 //   · UNDO — Edit ▸ Undo puts the previous field value back; the session part
 //     is container state and does not change with an undo that changes no
 //     session.
@@ -155,10 +155,13 @@ test.describe("journey · paged.data persistence", () => {
     });
     await page.locator("[data-data-bind-field]").fill("name");
     await page.locator("[data-data-bind-add]").click();
+    // The panel's words are sentence case since data ADR 566 (F-46): the
+    // binding kinds are capitalised, and "Lower to document" is "Place on
+    // page".
     await expect(page.locator("[data-data-bind-msg]")).toContainText(
-      "variable binding",
+      "Variable binding",
     );
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    await page.getByRole("button", { name: /^place on page$/i }).click();
     await expect
       .poll(async () => (await dataFields(page)).map((f) => f.value), {
         timeout: 20_000,
@@ -193,10 +196,11 @@ test.describe("journey · paged.data persistence", () => {
       "the new document has no data field",
     ).toEqual([]);
     await openPanel(page, BINDINGS_PANEL);
-    // The header carries a "sync states" button between the label and the
-    // list since the bundle's sync-state view; "none" is the empty list.
+    // The header carries a "Sync states" button between the label and the
+    // list since the bundle's sync-state view; "None" is the empty list
+    // (sentence case since data ADR 566).
     await expect(page.locator("[data-data-bindings]")).toContainText(
-      /bindings:[\s\S]*none/,
+      /Bindings[\s\S]*None/,
     );
     const chooser = page.waitForEvent("filechooser", { timeout: 30_000 });
     const opening = designer.runCommand(CMD.open);
@@ -236,13 +240,17 @@ test.describe("journey · paged.data persistence", () => {
     await expect(page.getByText(/Data refreshed from sources/)).toBeVisible({
       timeout: 30_000,
     });
-    await page
+    // The record scrubber's record number (data ADR 566) is the host's
+    // numeric field: Enter commits it.
+    const record = page
       .getByTestId("preview-stepper")
-      .locator('input[type="number"]')
-      .fill("2");
-    await expect(page.getByTestId("preview-position")).toHaveText("2 / 3", {
-      timeout: 20_000,
-    });
+      .locator("[data-data-record-field] input");
+    await record.fill("2");
+    await record.press("Enter");
+    await expect(page.getByTestId("preview-position")).toHaveText(
+      "Record 2 of 3",
+      { timeout: 20_000 },
+    );
     await expect
       .poll(async () => (await dataFields(page)).map((f) => f.value), {
         timeout: 30_000,
@@ -252,8 +260,9 @@ test.describe("journey · paged.data persistence", () => {
       // numbers them): Ada, Grace, Alan. Before it, records were numbered in
       // a stabilized sort (Ada, Alan, Grace) and record 2 read Alan Turing.
       .toEqual(["Grace Hopper"]);
-    // Lower re-resolves the same field (record 1); it does not place a second.
-    await page.getByRole("button", { name: /lower to document/i }).click();
+    // Place on page re-resolves the same field (record 1); it does not place
+    // a second.
+    await page.getByRole("button", { name: /^place on page$/i }).click();
     await expect
       .poll(async () => (await dataFields(page)).map((f) => f.value), {
         timeout: 20_000,
