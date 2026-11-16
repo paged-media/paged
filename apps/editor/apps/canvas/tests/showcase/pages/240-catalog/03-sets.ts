@@ -124,18 +124,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     };
 
     // ── the preview stepper ─────────────────────────────────────────
+    // The record scrubber (data ADR 566): its record number is the host's
+    // numeric field, and Enter commits it.
     await openPanel(page, BINDINGS_PANEL);
     const jump = page
       .locator('[data-testid="preview-stepper"]')
-      .locator('input[type="number"]');
+      .locator("[data-data-record-field] input");
+    const goTo = async (record: number): Promise<void> => {
+      await jump.fill(String(record), { timeout: 30_000 });
+      await jump.press("Enter", { timeout: 30_000 });
+    };
     const position = page.locator('[data-testid="preview-position"]');
     try {
       await expect(jump, "the record-preview stepper mounted").toBeVisible({
         timeout: 120_000,
       });
-      await jump.fill("3");
+      await goTo(3);
       await expect(position, "the stepper reports its of-N bound").toHaveText(
-        /3 \/ 48/,
+        /Record 3 of 48/,
         { timeout: 30_000 },
       );
       const atThree = await stablePair();
@@ -166,8 +172,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       }
 
       // Back to record 1 before capturing the baseline set.
-      await jump.fill("1");
-      await expect(position).toHaveText(/1 \/ 48/, { timeout: 30_000 });
+      await goTo(1);
+      await expect(position).toHaveText(/Record 1 of 48/, { timeout: 30_000 });
     } catch (err) {
       stepperLine =
         "The preview stepper did not settle on this lane — the data-set " +
@@ -208,7 +214,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     // refresh must not clobber it. Measured, then printed as measured.
     await doc.runCommand(`${DATA_CMD}.resolveBindings`);
     await openPanel(page, BINDINGS_PANEL);
-    await page.getByRole("button", { name: /^refresh fields$/i }).click();
+    await page
+      .getByRole("button", { name: /^refresh fields$/i })
+      .click({ timeout: 30_000 });
     await page.waitForTimeout(1_500);
     const afterRefresh = await readPair();
     ledger.push(
@@ -247,15 +255,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         throw new Error("the dataset panel's locale picker never mounted");
       }
       const before = price ? await fieldValue(page, price) : null;
-      await localePick.selectOption("de");
+      await localePick.selectOption("de", { timeout: 30_000 });
       await openPanel(page, BINDINGS_PANEL);
-      await jump.fill("1");
+      await goTo(1);
       await page.waitForTimeout(1_200);
       const inGerman = price ? await fieldValue(page, price) : null;
       await openPanel(page, DATASET_PANEL);
-      await localePick.selectOption("en");
+      await localePick.selectOption("en", { timeout: 30_000 });
       await openPanel(page, BINDINGS_PANEL);
-      await jump.fill("1");
+      await goTo(1);
       await page.waitForTimeout(1_200);
       if (inGerman !== null && before !== null && inGerman !== before) {
         localeLine =

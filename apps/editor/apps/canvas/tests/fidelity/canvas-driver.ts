@@ -232,6 +232,11 @@ export async function openCanvas(
     // eslint-disable-next-line no-console
     console.log(`[browser:pageerror] ${err.message}`);
   });
+  // A cold dev server boots the editor while Vite's dependency optimizer
+  // and its first transform of every module bundle are still running; on
+  // a macOS runner that crossed thirty seconds on some nights, and a
+  // chaptered build lost every chapter to its first boot.
+  const BOOT_MS = 120_000;
   await page.waitForFunction(
     () =>
       Boolean(
@@ -239,7 +244,7 @@ export async function openCanvas(
           ?.client,
       ),
     null,
-    { timeout: 30_000 },
+    { timeout: BOOT_MS },
   );
   // ADR 222 — plugin bundles are dynamic imports activated after the shell
   // mounts. Specs probe their contributions (importers, panels, commands)
@@ -253,7 +258,7 @@ export async function openCanvas(
       return !b || b.settled;
     },
     null,
-    { timeout: 30_000 },
+    { timeout: BOOT_MS },
   );
   if ((process.env.BACKEND ?? "").toLowerCase() === "gpu") {
     // The Vello readback path lives on the worker's SurfacePresenter,

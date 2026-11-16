@@ -354,6 +354,11 @@ export default defineConfig({
         channel: "chrome",
         deviceScaleFactor: 1,
         headless: false,
+        // A chapter runs for up to forty minutes. Without a bound, one
+        // click or fill on a control that is no longer there waited out
+        // the whole chapter, and every later chapter failed for want of
+        // its checkpoint.
+        actionTimeout: 120_000,
         launchOptions: {
           args: [
             "--headless=new",
