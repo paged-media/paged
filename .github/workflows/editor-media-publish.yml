@@ -1,6 +1,7 @@
 name: editor / media-publish
 
-# Puts the paged.media films and loops on the module host (editor ADR 224):
+# Puts the paged.media films and loops (editor ADR 224), and the PDF and IDML
+# of publications the site shows, on the module host:
 # modules.paged.media/media/<dir>/<name>, R2 bucket `paged-modules`, the same
 # host the wasm modules live on (ADR 220). The takes are recorded and encoded
 # on a workstation; their encoded files travel here as the assets of a DRAFT
@@ -59,7 +60,9 @@ jobs:
             case "$key" in
               *.mp4) type=video/mp4 ;;
               *.webm) type=video/webm ;;
-              *) echo "::error::$name is not a video"; exit 1 ;;
+              *.pdf) type=application/pdf ;;
+              *.idml) type=application/vnd.adobe.indesign-idml-package ;;
+              *) echo "::error::$name is not a video, PDF or IDML package"; exit 1 ;;
             esac
             # Asked with a query of its own: the host's cache keeps a 404,
             # and a bare URL asked before the upload would answer readers
