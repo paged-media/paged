@@ -1,7 +1,7 @@
 # ADR 212 — One automation surface for tests, demos and the playground
 
-- **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `28dc764`.
-- **Scope:** `packages/shell/src/PagedShell.tsx`, `packages/shell/src/demo/`, `apps/canvas/src/playground/`, `apps/canvas/public/`, `.github/workflows/playground.yml`; consumed by `apps/canvas/tests`
+- **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `28dc764`. Amended 2026-11-17 (amendment 1: a seed and `fitSelection` in the embedding API).
+- **Scope:** `packages/shell/src/PagedShell.tsx`, `packages/shell/src/demo/`, `apps/canvas/src/playground/`, `apps/canvas/src/embed/`, `apps/canvas/public/`, `.github/workflows/playground.yml`; consumed by `apps/canvas/tests`
 
 ## Context
 
@@ -84,6 +84,34 @@ Three comments are out of date. `canvas-driver.ts:25` says the handle is set in
 `CanvasApp.tsx`, which does not exist. `apps/canvas/tests/demo/README.md:46-50` says the
 capture project and the release upload are not wired yet; both exist. `main.tsx:1856` says
 "only in the `demo` build"; the condition also admits every non-production build.
+
+## Amendment 1 (2026-11-17) — a seeded document and a fitted view through the embedding API
+
+The documentation's scripting lab moves from the `paged:run` bridge to the embedding API
+(`src/embed/`, `connectEditor` over `embed.html`): a canvas-only editor (`profile: "viewer"`),
+a starter document, a script run, and a view fitted to what the script made. Two things the
+`?embed=script&seed=<name>` bridge did had no equivalent there, so the embedding API gains them:
+
+- **`EditorConfig.seed`** (and so `FrameConfig.seed` over the frame): a seed document by name,
+  from the same registry the URL flag reads (`src/playground/seeds.ts`). The editor makes a
+  blank US Letter page and runs the seed's `paged.*` prelude through `client.executeScript`,
+  as the bridge does. The seed is the host's setup, like a document it loads: a role that may
+  change nothing (`viewer`, `filler`) is lifted to `editor` while the prelude runs and put
+  back after. `document` wins over `seed`. An unknown name refuses before anything is mounted,
+  with an `EditorError` of the new code `unknownSeed` whose message lists the seeds; a prelude
+  that fails rejects `createEditor` and unmounts the editor.
+- **`EditorHandle.fitSelection()`**, bridged (`BRIDGED_METHODS`): View ▸ Fit selection in
+  window (`paged.view.fitSelection`), the command the menu and Option+Cmd+= run. With nothing
+  selected the view stays.
+
+A host that runs scripts on a viewer passes `role: "editor"` with the profile: the viewer role
+changes nothing, scripts included. Reset is `save()` once the editor is ready and `load()` of
+those bytes later; the seed is not re-run per script, as the old bridge did. `runScript` stays
+a dev and demo build method. The public contract follows (`packages/editor/src/types.ts`,
+held to the sources by `test/conformance.ts`). Tests: `test/embed/seed.dom.test.ts`,
+`test/embed/bridge.dom.test.ts` (the bridge takes a `create` factory for them) and
+`test/unit/settings/playground-url.dom.test.tsx`. The `paged:run` bridge stays until the docs
+lab ships on the embedding API.
 
 ## Related
 

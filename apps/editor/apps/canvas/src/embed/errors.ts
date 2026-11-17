@@ -24,7 +24,10 @@
 // loads, and an editor in a frame, each make their own.
 
 /** Why `createEditor` (or `connectEditor`) refused. */
-export type EditorErrorCode = "notCrossOriginIsolated";
+export type EditorErrorCode =
+  | "notCrossOriginIsolated"
+  /** `config.seed` names no seed document (editor ADR 212, amendment 1). */
+  | "unknownSeed";
 
 /** An error the embedding API refuses with. */
 export interface EditorError extends Error {
@@ -34,6 +37,7 @@ export interface EditorError extends Error {
 
 const CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   "notCrossOriginIsolated",
+  "unknownSeed",
 ]);
 
 /** An `EditorError` with this code and message. */
@@ -100,4 +104,16 @@ export function assertEmbeddable(
     framed = true;
   }
   throw notCrossOriginIsolated(framed ? "frame" : "page");
+}
+
+/** The refusal of a seed name the editor does not know; the message lists
+ *  the names it does. */
+export function unknownSeed(
+  name: string,
+  known: readonly string[],
+): EditorError {
+  return editorError(
+    "unknownSeed",
+    `No seed document is named "${name}". The seeds: ${known.join(", ")}.`,
+  );
 }
