@@ -205,26 +205,45 @@ pub fn reconstruct(
             for l in &page.losses {
                 *report.losses.entry(l.code.to_string()).or_default() += l.count as u32;
             }
-            let mut glyphs = Vec::new();
-            let mut order = 0u32;
-            collect_glyphs(&page.items, dx, &mut fonts, &mut glyphs, &mut order, false);
-            let lines = text::lines(glyphs);
-            for line in &lines {
-                hyphenated_words.extend(mid_line_compounds(&line.text()));
+            let mut page = page;
+            if std::env::var("PAGED_PDF_DEBUG_ITEMS").ok() == Some((pdf + 1).to_string()) {
+                dump_items(&page.items, 0);
             }
-            for b in text::blocks(lines)
-                .into_iter()
-                .flat_map(text::split_display)
-                .flat_map(text::split_measures)
-            {
-                let block = text::build_block(b);
-                let cx = 0.5 * (block.frame[0] + block.frame[2]);
-                let pi = sp
-                    .pages
-                    .iter()
-                    .position(|p| cx >= p.x && cx < p.x + p.w)
-                    .unwrap_or(if cx < 0.0 { 0 } else { sp.pages.len() - 1 });
-                blocks_here.push((pi, block));
+            if !recipe.outline_fonts.is_empty() {
+                mark_outlined(&mut page.items, &fonts.faces, &recipe.outline_fonts);
+            }
+            bake_image_masks(&mut page.items);
+            // Glyphs by reading direction (tenths of a degree; 0 upright),
+            // each turned direction read in its own axes.
+            let mut by_turn: BTreeMap<i32, Vec<Glyph>> = BTreeMap::new();
+            let mut order = 0u32;
+            collect_glyphs(&page.items, dx, &mut fonts, &mut by_turn, &mut order, false);
+            for (turn_key, glyphs) in by_turn {
+                let turn = turn_key as f32 / 1800.0 * std::f32::consts::PI;
+                let lines = text::lines(glyphs);
+                for line in &lines {
+                    hyphenated_words.extend(mid_line_compounds(&line.text()));
+                }
+                for b in text::blocks(lines)
+                    .into_iter()
+                    .flat_map(text::split_display)
+                    .flat_map(text::split_measures)
+                {
+                    let mut block = text::build_block(b);
+                    block.turn = turn;
+                    // The frame's centre on the spread (its axes turned back).
+                    let (lx, ly) = (
+                        0.5 * (block.frame[0] + block.frame[2]),
+                        0.5 * (block.frame[1] + block.frame[3]),
+                    );
+                    let cx = lx * turn.cos() - ly * turn.sin();
+                    let pi = sp
+                        .pages
+                        .iter()
+                        .position(|p| cx >= p.x && cx < p.x + p.w)
+                        .unwrap_or(if cx < 0.0 { 0 } else { sp.pages.len() - 1 });
+                    blocks_here.push((pi, block));
+                }
             }
             read.insert(pdf, page);
         }
@@ -250,6 +269,9 @@ pub fn reconstruct(
     for (si, blocks) in spread_blocks.iter_mut().enumerate() {
         for (pi, b) in blocks.iter_mut() {
             let p = &plan[si].pages[*pi];
+            if b.turn != 0.0 {
+                continue;
+            }
             text::place_single_line(b, p.x, p.w, p.left_side);
         }
     }
@@ -282,6 +304,9 @@ pub fn reconstruct(
         let mut taken: BTreeSet<(usize, usize)> = BTreeSet::new();
         for (k, &a) in flat.iter().enumerate() {
             let ba = &spread_blocks[a.0][a.1].1;
+            if ba.turn != 0.0 {
+                continue;
+            }
             let Some(last) = ba.paras.last() else {
                 continue;
             };
@@ -297,6 +322,9 @@ pub fn reconstruct(
                     continue;
                 }
                 let bb = &spread_blocks[b.0][b.1].1;
+                if bb.turn != 0.0 {
+                    continue;
+                }
                 let first = &bb.paras[0];
                 let kb = ParaKey::of(first);
                 let same = ka.font == kb.font && ka.size == kb.size && ka.color == kb.color;
@@ -599,7 +627,11 @@ pub fn reconstruct(
 
     // Styles into the style sheet.
     let mut sheet = paged_model::StyleSheet::default();
-    for (k, s) in &styles.paragraph {
+    // Each style from its own key (one with a measured leading), not from
+    // a one-line paragraph's key folded into it.
+    let mut keyed: Vec<(&ParaKey, &styles::ParaStyle)> = styles.paragraph.iter().collect();
+    keyed.sort_by_key(|(k, _)| k.leading == 0);
+    for (k, s) in keyed {
         let id = format!("ParagraphStyle/{}", s.name);
         if sheet.paragraph_styles.contains_key(&id) {
             continue;
@@ -846,8 +878,15 @@ fn text_frame(id: &str, story: &str, b: &Block, threaded_on: bool) -> TextFrame 
     } else {
         last.baseline + lead + 0.3 * last.size
     };
+    let (c, s) = (b.turn.cos(), b.turn.sin());
     TextFrame {
-        item_transform: Some(IDENTITY),
+        // A turned frame: its bounds in its own axes, turned onto the
+        // spread.
+        item_transform: Some(if b.turn == 0.0 {
+            IDENTITY
+        } else {
+            [c, s, -s, c, 0.0, 0.0]
+        }),
         first_baseline_offset: Some(FirstBaselineOffset::FixedHeight),
         minimum_first_baseline_offset: Some(b.first_baseline),
         inset_spacing: Some([0.0; 4]),
@@ -1256,7 +1295,7 @@ fn collect_glyphs(
     items: &[Item],
     dx: f32,
     fonts: &mut FontTable,
-    out: &mut Vec<Glyph>,
+    out: &mut BTreeMap<i32, Vec<Glyph>>,
     order: &mut u32,
     in_mask: bool,
 ) {
@@ -1265,7 +1304,15 @@ fn collect_glyphs(
             Item::Group(g) => {
                 collect_glyphs(&g.items, dx, fonts, out, order, in_mask);
             }
-            Item::Text(t) if !in_mask && !t.rotated => {
+            Item::Text(t) if !in_mask && (!t.rotated || t.turn.is_some()) && !t.outline => {
+                let turn = if t.rotated {
+                    t.turn.unwrap_or(0.0)
+                } else {
+                    0.0
+                };
+                let turn_key = (turn / std::f32::consts::PI * 1800.0).round() as i32;
+                let turn = turn_key as f32 / 1800.0 * std::f32::consts::PI;
+                let (cos, sin) = (turn.cos(), turn.sin());
                 *order += 1;
                 let face = t
                     .font_key
@@ -1285,6 +1332,19 @@ fn collect_glyphs(
                 };
                 for g in &t.glyphs {
                     fonts.counts[font as usize] += 1;
+                    // A "space" with ink is a symbol its font maps to a
+                    // space (InDesign's separators): a small dot on the
+                    // x-height's middle is a middle dot, a larger one a bullet.
+                    let mut g = g.clone();
+                    if !g.text.is_empty() && g.text.trim().is_empty() {
+                        if let (Some(top), Some(bottom)) = (g.ink_top, g.ink_bottom) {
+                            let h = top - bottom;
+                            let mid = 0.5 * (top + bottom);
+                            if h > 0.02 && (0.1..0.7).contains(&mid) {
+                                g.text = if h < 0.3 { "·" } else { "•" }.to_string();
+                            }
+                        }
+                    }
                     // x-height letters only: their ink says capital or not.
                     let caps = match (g.text.chars().next(), g.ink_top) {
                         (Some(c), Some(top))
@@ -1297,10 +1357,13 @@ fn collect_glyphs(
                     for ch in g.text.chars() {
                         fonts.chars[font as usize].insert(ch);
                     }
-                    out.push(Glyph {
+                    // Into the run's own axes: along its reading direction
+                    // and down its lines.
+                    let (px, py) = (g.x + dx, g.y);
+                    out.entry(turn_key).or_default().push(Glyph {
                         text: g.text.clone(),
-                        x: g.x + dx,
-                        y: g.y,
+                        x: px * cos + py * sin,
+                        y: -px * sin + py * cos,
                         adv: g.advance.unwrap_or(0.5 * g.size),
                         has_adv: g.advance.is_some(),
                         size: g.size,
@@ -1475,7 +1538,7 @@ impl MasterPlan {
 /// A block's place-and-content signature: side, position, text with its
 /// digits as `#`, face and size.
 fn signature(page: &PagePlan, b: &Block) -> Option<String> {
-    if b.lines.len() > 2 || b.paras.len() > 2 {
+    if b.lines.len() > 2 || b.paras.len() > 2 || b.turn != 0.0 {
         return None;
     }
     let t: String = b
@@ -1907,5 +1970,146 @@ impl MetricsCache {
         let sub: f32 = chars.chars().map(|c| m.advance(c).unwrap_or(0.5)).sum();
         let base = (p.tracking / 5.0).round() * 5.0;
         Some((base + (p.adv_em - sub) / p.adv_n as f32 * 1000.0).clamp(-150.0, 250.0))
+    }
+}
+
+/// Mark the runs set in a font the recipe draws as outlines.
+fn mark_outlined(
+    items: &mut [Item],
+    faces: &HashMap<u128, vectors::ir::FontFace>,
+    outline: &[String],
+) {
+    for it in items.iter_mut() {
+        match it {
+            Item::Group(g) => mark_outlined(&mut g.items, faces, outline),
+            Item::Text(t) => {
+                let name = t
+                    .font_key
+                    .and_then(|k| faces.get(&k).map(|f| f.postscript_name.clone()))
+                    .or_else(|| t.face.as_ref().map(|f| f.postscript_name.clone()))
+                    .or_else(|| t.font_name.clone().map(|n| vectors::strip_subset(&n)));
+                if name.is_some_and(|n| outline.contains(&n)) {
+                    t.outline = true;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Debug: the page's item tree, one line per item.
+fn dump_items(items: &[Item], depth: usize) {
+    for it in items {
+        let pad = "  ".repeat(depth);
+        match it {
+            Item::Group(g) => {
+                eprintln!(
+                    "{pad}group clip={} opacity={} blend={:?} mask={} items={}",
+                    g.clip.is_some(),
+                    g.opacity,
+                    g.blend,
+                    g.mask.as_ref().map_or("none".to_string(), |m| format!(
+                        "{} ({} items)",
+                        m.mask_type,
+                        m.items.len()
+                    )),
+                    g.items.len()
+                );
+                if let Some(m) = &g.mask {
+                    eprintln!("{pad}  [mask]");
+                    dump_items(&m.items, depth + 2);
+                }
+                dump_items(&g.items, depth + 1);
+            }
+            Item::Path(p) => eprintln!(
+                "{pad}path fill={:?} opacity={} blend={:?}",
+                p.fill.as_ref().map(|f| match f {
+                    Paint::Solid { rgb, opacity } => format!("solid {rgb:?} a{opacity}"),
+                    Paint::Linear { .. } => "linear".into(),
+                    Paint::Radial { .. } => "radial".into(),
+                    Paint::Mesh { .. } => "mesh".into(),
+                }),
+                p.opacity,
+                p.blend
+            ),
+            Item::Image(i) => eprintln!(
+                "{pad}image {}x{} opacity={} {:?}",
+                i.width_px, i.height_px, i.opacity, i.transform
+            ),
+            Item::Text(t) => eprintln!(
+                "{pad}text {:?}",
+                t.text.chars().take(30).collect::<String>()
+            ),
+        }
+    }
+}
+
+/// A solid rectangle seen through an image's luminosity (a soft glow or
+/// fade behind a caption, as InDesign exports a feathered frame) as one
+/// image: the rectangle's colour, the mask's luminance as its alpha,
+/// clipped to the rectangle. Exact, and it renders wherever an image does.
+fn bake_image_masks(items: &mut [Item]) {
+    use crate::vectors::ir::{ClipIr, GroupItem, ImageItem};
+    use base64::Engine as _;
+    for it in items.iter_mut() {
+        let Item::Group(g) = it else { continue };
+        bake_image_masks(&mut g.items);
+        let Some(mask) = &g.mask else { continue };
+        if mask.mask_type != "luminosity" || mask.backdrop_rgb.is_some() || g.clip.is_some() {
+            continue;
+        }
+        let ([Item::Image(mi)], [Item::Path(p)]) = (mask.items.as_slice(), g.items.as_slice())
+        else {
+            continue;
+        };
+        let Some(Paint::Solid { rgb, opacity: fo }) = &p.fill else {
+            continue;
+        };
+        if p.stroke.is_some() || crate::lower::axis_rect(&p.contours).is_none() {
+            continue;
+        }
+        let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(mi.data_b64.as_bytes())
+        else {
+            continue;
+        };
+        let Ok(img) = image::load_from_memory(&bytes) else {
+            continue;
+        };
+        let lum = img.to_luma8();
+        let alpha_scale = fo * p.opacity * g.opacity;
+        let [r, gg, b] = rgb.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+        let mut rgba = image::RgbaImage::new(lum.width(), lum.height());
+        for (x, y, px) in lum.enumerate_pixels() {
+            let a = (px[0] as f32 * alpha_scale).round().clamp(0.0, 255.0) as u8;
+            rgba.put_pixel(x, y, image::Rgba([r, gg, b, a]));
+        }
+        let mut png = Vec::new();
+        if image::DynamicImage::ImageRgba8(rgba)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .is_err()
+        {
+            continue;
+        }
+        let baked = Item::Image(ImageItem {
+            transform: mi.transform,
+            width_px: lum.width(),
+            height_px: lum.height(),
+            data_b64: base64::engine::general_purpose::STANDARD.encode(&png),
+            mime: "image/png",
+            opacity: 1.0,
+            blend: p.blend.or(g.blend),
+        });
+        *it = Item::Group(GroupItem {
+            items: vec![baked],
+            clip: Some(ClipIr {
+                contours: p.contours.clone(),
+                fill_rule: "nonzero",
+            }),
+            opacity: 1.0,
+            blend: None,
+            isolated: false,
+            knockout: false,
+            mask: None,
+        });
     }
 }

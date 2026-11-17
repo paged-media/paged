@@ -715,6 +715,7 @@ impl<'a> Device<'a> for Collector {
         let mut glyphs = Vec::new();
         let mut face: Option<FontFace> = None;
         let mut font_key: Option<u128> = None;
+        let mut turn: Option<f32> = None;
         for g in run.glyphs() {
             let m = props.transform * g.transform();
             let [a, b, c, d, e, f] = m.as_coeffs();
@@ -722,6 +723,14 @@ impl<'a> Device<'a> for Collector {
                 size = ((a * d - b * c).abs().sqrt() * 1000.0) as f32;
                 // Upright in a y-down page: x right, the glyph's y up.
                 rotated = b.abs() > 1e-6 || c.abs() > 1e-6 || a <= 0.0 || d >= 0.0;
+                // A turn without shear or mirror (the glyph's axes stay
+                // square and the y-down page keeps its flip) is a reading
+                // direction a frame can be turned to.
+                let square = (a * c + b * d).abs() <= 1e-3 * (a * a + b * b).max(1e-12);
+                let same = ((a.hypot(b)) - (c.hypot(d))).abs() <= 1e-3 * a.hypot(b).max(1e-12);
+                if rotated && square && same && a * d - b * c < 0.0 {
+                    turn = Some(b.atan2(a) as f32);
+                }
             }
             origins.push(Point::new(e, f));
             let mut glyph_text = String::new();
@@ -738,6 +747,7 @@ impl<'a> Device<'a> for Collector {
             let sy = (c.hypot(d) * 1000.0) as f32;
             let mut advance = None;
             let mut ink_top: Option<f32> = None;
+            let mut ink_bottom: Option<f32> = None;
             match &**g {
                 Glyph::Outline(o) => {
                     if font_name.is_none() {
@@ -763,6 +773,7 @@ impl<'a> Device<'a> for Collector {
                     let bb = glyph_path.bounding_box();
                     if bb.height() > 0.0 && sy > 0.0 {
                         ink_top = Some(((f - bb.y0) as f32 / sy).max(0.0));
+                        ink_bottom = Some((f - bb.y1) as f32 / sy);
                     }
                     outlines.extend(contours_of(&glyph_path));
                 }
@@ -781,6 +792,7 @@ impl<'a> Device<'a> for Collector {
                 size: sy,
                 hscale: if sy > 0.0 { sx / sy } else { 1.0 },
                 ink_top,
+                ink_bottom,
             });
         }
         if origins.is_empty() {
@@ -823,6 +835,8 @@ impl<'a> Device<'a> for Collector {
             glyphs,
             face,
             font_key,
+            outline: false,
+            turn,
         });
         self.emit(item, props.soft_mask.as_ref(), props.blend_mode);
     }

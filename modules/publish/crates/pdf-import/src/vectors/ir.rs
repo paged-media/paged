@@ -288,6 +288,14 @@ pub struct TextItem {
     /// The interpreter's key for the run's font ([`super::Reader::font_faces`]).
     #[serde(skip)]
     pub font_key: Option<u128>,
+    /// Draw this run as its outlines even where text is otherwise placed
+    /// as frames (a symbol font: pictograms, not words).
+    #[serde(skip)]
+    pub outline: bool,
+    /// A turned run's reading direction, radians from the page's x axis
+    /// (y down); `None` for an upright run or one sheared or mirrored.
+    #[serde(skip)]
+    pub turn: Option<f32>,
 }
 
 /// One glyph as the page sets it, in page points (y down).
@@ -309,6 +317,9 @@ pub struct GlyphPos {
     /// How far the glyph's ink rises above the baseline, in ems (`None`
     /// for a glyph with no ink).
     pub ink_top: Option<f32>,
+    /// Where the ink ends below that, in ems above the baseline (negative
+    /// below it).
+    pub ink_bottom: Option<f32>,
 }
 
 /// A font as the page names it.

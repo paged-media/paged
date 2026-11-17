@@ -219,14 +219,13 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
             }
         }
         if is_space {
-            // A run of spaces as one space (justified lines repeat none,
-            // but some writers pad).
-            if !prev_space {
-                out.push(Token {
-                    text: " ".into(),
-                    glyph: i,
-                });
-            }
+            // Every space the page sets is a space of the text (a layout
+            // program writes the spaces its text has; three between words
+            // are three).
+            out.push(Token {
+                text: " ".into(),
+                glyph: i,
+            });
             prev_space = true;
         } else {
             out.push(Token {
@@ -386,6 +385,9 @@ pub struct Block {
     pub first_baseline: f32,
     /// Its lines hang punctuation into the margin (optical margin alignment).
     pub optical: bool,
+    /// The reading direction it is turned to, radians (0 upright); its
+    /// geometry is in its own axes.
+    pub turn: f32,
 }
 
 /// Group the page's lines into blocks (frames), in paint order.
@@ -400,7 +402,12 @@ pub fn blocks(lines: Vec<Line>) -> Vec<Vec<Line>> {
             let overlap = line.x1.min(x1) - line.x0.max(x0);
             let size = line.size.max(last.size);
             // Down the page, within a few lines, sharing the column.
-            let lead = typical_lead(b).unwrap_or(1.25 * size);
+            // The block's own leading, but never more than a generous
+            // leading for its type: labels set far apart do not make a
+            // leading that pulls the next far line in too.
+            let lead = typical_lead(b)
+                .unwrap_or(1.25 * size)
+                .min(1.6 * size.max(last.size));
             dy > 0.4 * size
                 && dy < (3.2 * lead).max(4.5 * size.min(last.size))
                 && overlap > 0.25 * line.width().min(x1 - x0)
@@ -649,6 +656,8 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
     let has_body = lines.iter().any(body);
     let measured = |l: &Line| !has_body || body(l);
     let widest_display = lines.iter().map(|l| l.x1).fold(f32::MIN, f32::max) - left;
+    let lefts_aligned =
+        lines.iter().filter(|l| (l.x0 - left).abs() < 0.6).count() * 2 > lines.len();
     let widest = lines
         .iter()
         .filter(|l| measured(l))
@@ -666,7 +675,14 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
                 continue;
             }
             let space = 0.25 * p.size;
-            let need = (p.x1 - left) + space + l.first_word_width();
+            // A line set from the left fills from the frame's edge; a
+            // centred or right-set one only its own width.
+            let filled = if lefts_aligned {
+                p.x1 - left
+            } else {
+                p.width()
+            };
+            let need = filled + space + l.first_word_width();
             if need > widest + 0.25 {
                 upper = upper.min(need);
             }
@@ -689,6 +705,30 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
     for (gi, g) in groups.iter().enumerate() {
         let ls: Vec<&Line> = g.iter().map(|&i| &lines[i]).collect();
         paras.push(build_para(&ls, left, right, width, gi, &groups, &lines));
+    }
+    // One-line paragraphs say nothing of their alignment, but a block of
+    // them does: lines that share a right edge and not a left one are set
+    // right, lines that share only a centre are centred.
+    if lines.len() >= 2 && groups.iter().all(|g| g.len() == 1) {
+        let same = |f: &dyn Fn(&Line) -> f32| {
+            let v0 = f(&lines[0]);
+            lines.iter().all(|l| (f(l) - v0).abs() < 0.6)
+        };
+        let (l_eq, r_eq, c_eq) = (same(&|l| l.x0), same(&|l| l.x1), same(&|l| l.center()));
+        let set = if r_eq && !l_eq {
+            Some(Align::Right)
+        } else if c_eq && !l_eq {
+            Some(Align::Center)
+        } else {
+            None
+        };
+        if let Some(a) = set {
+            for p in paras.iter_mut() {
+                p.align = a;
+                p.first_indent = 0.0;
+                p.left_indent = 0.0;
+            }
+        }
     }
     // A one-line paragraph on the axis of the block's centred paragraphs
     // is centred too (one line says nothing of its alignment).
@@ -722,6 +762,7 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
         frame,
         first_baseline,
         optical,
+        turn: 0.0,
     }
 }
 
@@ -858,7 +899,11 @@ fn build_para(
                 // A break the frame's width does not explain is a forced
                 // line break.
                 let space = 0.25 * l.size;
-                let fits = (l.x1 - left) + space + ls[li + 1].first_word_width() < width - 0.25;
+                let filled = match align {
+                    Align::Left | Align::Justify => l.x1 - left,
+                    _ => l.width(),
+                };
+                let fits = filled + space + ls[li + 1].first_word_width() < width - 0.25;
                 // Display type (a heading of a few lines) breaks where its
                 // designer broke it: those breaks are kept as breaks, so a
                 // face of other widths cannot move them.

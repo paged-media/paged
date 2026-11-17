@@ -41,6 +41,9 @@ pub struct Recipe {
     pub pages: Option<[usize; 2]>,
     /// PostScript name (without subset prefix) → the face to set it in.
     pub fonts: BTreeMap<String, FontChoice>,
+    /// Fonts whose text is drawn as outlines, not set as text (symbol
+    /// fonts: pictograms), by PostScript name.
+    pub outline_fonts: Vec<String>,
     /// Inferred style name → the name to give it.
     pub style_names: BTreeMap<String, String>,
     /// Inferred swatch name → the name to give it.

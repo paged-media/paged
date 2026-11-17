@@ -631,6 +631,26 @@ impl<'a> Lowering<'a> {
         {
             return members.pop();
         }
+        // A transparency group around one leaf item is that item's own
+        // opacity and blend (the reader folds the same for a path): carry
+        // them on the item, where every renderer reads them (the engine
+        // does not read a group's transparency under a clip group; ADR 660).
+        if !clip && members.len() == 1 && !g.knockout && self.text.mode == TextMode::Skip {
+            let folded = match members[0] {
+                FrameRef::Polygon(i) => {
+                    let p = &mut self.spread.polygons[i];
+                    fold(&mut p.opacity, &mut p.blend_mode, g.opacity, g.blend)
+                }
+                FrameRef::Rectangle(i) => {
+                    let r = &mut self.spread.rectangles[i];
+                    fold(&mut r.opacity, &mut r.blend_mode, g.opacity, g.blend)
+                }
+                _ => false,
+            };
+            if folded {
+                return members.pop();
+            }
+        }
         let mut group = Group {
             self_id: Some(self.ids.id("pdfg")),
             members,
@@ -854,7 +874,11 @@ impl<'a> Lowering<'a> {
     }
 
     fn text_item(&mut self, t: &TextItem, in_mask: bool) -> Option<FrameRef> {
-        if self.text.mode == TextMode::Skip && !in_mask && !t.rotated {
+        if self.text.mode == TextMode::Skip
+            && !in_mask
+            && (!t.rotated || t.turn.is_some())
+            && !t.outline
+        {
             return None;
         }
         let [x, y, w, h] = t.bbox.map(|v| v as f64);
@@ -991,6 +1015,27 @@ fn mean_color(patches: &[crate::vectors::ir::MeshPatchIr]) -> [f32; 3] {
 }
 
 /// An item's own opacity (0..=100, `None` = opaque) and blend mode.
+/// Fold a group's opacity and blend into its one member: the opacities
+/// multiply; the blend is the group's when the member has none (a member
+/// with a blend of its own keeps the group).
+fn fold(
+    opacity: &mut Option<f32>,
+    blend: &mut Option<String>,
+    o: f32,
+    b: Option<&'static str>,
+) -> bool {
+    if b.is_some() && blend.is_some() {
+        return false;
+    }
+    let own = opacity.unwrap_or(100.0) / 100.0;
+    let combined = own * o;
+    *opacity = (combined < 0.9999).then_some(combined * 100.0);
+    if let Some(b) = b {
+        *blend = Some(b.to_string());
+    }
+    true
+}
+
 fn set_object(
     opacity: &mut Option<f32>,
     blend: &mut Option<String>,
@@ -1102,7 +1147,7 @@ pub(crate) fn bounds_of_refs(spread: &Spread, refs: &[FrameRef]) -> Option<[f32;
 
 /// The axis-aligned rectangle a clip outlines, when it is one: a single
 /// closed contour of straight segments whose corners sit on a rectangle.
-fn axis_rect(contours: &[Contour]) -> Option<kurbo::Rect> {
+pub(crate) fn axis_rect(contours: &[Contour]) -> Option<kurbo::Rect> {
     let [c] = contours else { return None };
     let pts: Vec<[f32; 2]> = c.anchors.iter().map(|a| a.anchor).collect();
     if !(4..=5).contains(&pts.len()) {

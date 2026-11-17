@@ -168,6 +168,9 @@ pub fn infer(paras: &[&Para], font_style: &dyn Fn(u32) -> String) -> Styles {
                     && o.size == k.size
                     && o.color == k.color
                     && o.caps == k.caps
+                    && o.align == k.align
+                    && o.first_indent == k.first_indent
+                    && o.left_indent == k.left_indent
                     && (o.tracking - k.tracking).abs() <= 10
             })
             .max_by_key(|o| acc[o].0);
