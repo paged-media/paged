@@ -4,6 +4,7 @@ $ paged inspect doc.paged --json
 {
   "cmykProfile": null,
   "file": "doc.paged",
+  "oversetStoryIds": [],
   "pageCount": 1,
   "pageDigests": [
     "<DIGEST>"
@@ -26,7 +27,8 @@ $ paged inspect doc.paged --json
     "paragraphs": 1,
     "runs": 1,
     "stories": 1
-  }
+  },
+  "storyLines": null
 }
 --- stderr
 (empty)

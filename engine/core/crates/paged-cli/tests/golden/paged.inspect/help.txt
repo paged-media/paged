@@ -13,6 +13,9 @@ Options:
       --json
           Emit JSON instead of a table
 
+      --story-lines
+          With `--json`: every story's composed lines per paragraph (`storyLines`), to hold a document's line breaks to a reference
+
       --fonts <DIR|FILE>
           Font file or directory to make available, repeatable.
           
