@@ -1324,3 +1324,93 @@ pub fn place_single_line(b: &mut Block, page_x: f32, page_w: f32, left_side: boo
         b.frame[2] = l.x1 + slack;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EM: f32 = 10.0;
+
+    /// `s` set from `x` on baseline `y`, half an em per character.
+    fn set(s: &str, x: f32, y: f32, order: u32) -> Vec<Glyph> {
+        s.chars()
+            .enumerate()
+            .map(|(i, c)| Glyph {
+                text: c.to_string(),
+                x: x + i as f32 * 0.5 * EM,
+                y,
+                adv: 0.5 * EM,
+                has_adv: true,
+                size: EM,
+                hscale: 1.0,
+                font: 0,
+                color: [0, 0, 0],
+                order,
+                caps: None,
+            })
+            .collect()
+    }
+
+    /// `s` set to end at `right`.
+    fn set_right(s: &str, right: f32, y: f32, order: u32) -> Vec<Glyph> {
+        set(s, right - s.chars().count() as f32 * 0.5 * EM, y, order)
+    }
+
+    fn texts(block: &Block) -> Vec<String> {
+        block
+            .paras
+            .iter()
+            .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn a_table_reads_as_tabbed_rows() {
+        let mut g = Vec::new();
+        g.extend(set("United Kingdom", 0.0, 100.0, 0));
+        g.extend(set_right("61.1", 150.0, 100.0, 0));
+        g.extend(set_right("1,559.4", 250.0, 100.0, 0));
+        g.extend(set("The Americas", 0.0, 112.0, 0));
+        g.extend(set_right("7.4", 150.0, 112.0, 0));
+        g.extend(set_right("8.1", 250.0, 112.0, 0));
+        // The total row has no label, and its second figure is painted in
+        // a later pass (a bold column).
+        g.extend(set_right("76.0", 150.0, 124.0, 1));
+        g.extend(set_right("1,817.7", 250.0, 124.0, 2));
+        let ls = lines(g, &[]);
+        assert_eq!(ls.len(), 3, "one line per row");
+        let block = build_block(ls);
+        let cols: Vec<(f32, bool)> = block.tabs.iter().map(|t| (t.x, t.right)).collect();
+        assert_eq!(cols.len(), 2, "two figure columns: {cols:?}");
+        assert!(cols.iter().all(|c| c.1), "figures align right: {cols:?}");
+        assert!((cols[0].0 - 150.0).abs() < 1.0 && (cols[1].0 - 250.0).abs() < 1.0);
+        assert_eq!(
+            texts(&block),
+            [
+                "United Kingdom\t61.1\t1,559.4",
+                "The Americas\t7.4\t8.1",
+                "\t76.0\t1,817.7"
+            ]
+        );
+        assert!(block.paras.iter().all(|p| p.first_indent == 0.0));
+    }
+
+    #[test]
+    fn hung_bullets_are_list_items() {
+        let mut g = Vec::new();
+        g.extend(set("• annual review of the", 0.0, 100.0, 0));
+        g.extend(set("policy;", 10.0, 112.0, 0));
+        g.extend(set("• twice yearly review", 0.0, 124.0, 0));
+        g.extend(set("of every risk.", 10.0, 136.0, 0));
+        let block = build_block(lines(g, &[]));
+        assert_eq!(block.paras.len(), 2, "{:?}", texts(&block));
+        for p in &block.paras {
+            assert!(
+                (p.first_indent + 10.0).abs() < 0.5 && (p.left_indent - 10.0).abs() < 0.5,
+                "a hanging indent: first {} left {}",
+                p.first_indent,
+                p.left_indent
+            );
+        }
+    }
+}
