@@ -27,15 +27,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type { Role, SessionPolicy } from "@paged-media/client";
+import { resolveProfile } from "@paged-media/shell";
 
 import { PAGED_VIEW_FIT_SELECTION } from "../../src/app-commands";
 import {
   createEditor,
   FIT_SELECTION,
+  profileOf,
   seedDocument,
 } from "../../src/embed/create-editor";
 import { editorError, isEditorError } from "../../src/embed/errors";
 import { SEEDS } from "../../src/playground/seeds";
+import { PRESETS } from "../../src/profiles/presets";
 
 const g = globalThis as { crossOriginIsolated?: unknown };
 const before = Object.getOwnPropertyDescriptor(
@@ -144,5 +147,44 @@ describe("config.seed", () => {
 describe("handle.fitSelection", () => {
   test("runs View ▸ Fit selection in window", () => {
     expect(FIT_SELECTION).toBe(PAGED_VIEW_FIT_SELECTION);
+  });
+});
+
+describe("the docs lab's editor: the viewer profile with an editing role", () => {
+  test("the viewer's canvas-only chrome, with the role a script needs to write", () => {
+    // The viewer role changes nothing, scripts included (engine ADR 1000),
+    // so the lab sends role editor with the profile; the config's role wins.
+    const { profile, problems } = resolveProfile(
+      profileOf({ profile: "viewer", role: "editor" }),
+      PRESETS,
+    );
+    expect(problems).toEqual([]);
+    expect(profile.role).toBe("editor");
+    for (const region of [
+      "header",
+      "menubar",
+      "context-toolbar",
+      "left",
+      "right",
+      "panel-rail",
+      "mode-bar",
+      "palette",
+    ] as const)
+      expect({ region, spec: profile.regions[region] }).toEqual({
+        region,
+        spec: null,
+      });
+    expect(profile.regions["tool-rail"]).toMatchObject({
+      items: ["paged.tool.hand", "paged.tool.zoom"],
+    });
+    expect(profile.canvas).toMatchObject({ rulers: false, titleBar: false });
+  });
+
+  test("without a role the viewer stays a viewer", () => {
+    const { profile } = resolveProfile(
+      profileOf({ profile: "viewer" }),
+      PRESETS,
+    );
+    expect(profile.role).toBe("viewer");
   });
 });

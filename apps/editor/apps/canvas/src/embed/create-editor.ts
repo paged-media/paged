@@ -228,6 +228,19 @@ export function aliasedFeatures(
   };
 }
 
+/** The profile a config asks for: its preset or profile, with the config's
+ *  role over the profile's (a viewer's chrome with an editing role is the
+ *  docs' scripting lab, editor ADR 212, amendment 1). */
+export function profileOf(
+  config: Pick<EditorConfig, "profile" | "role">,
+): EditorProfile {
+  const preset = config.profile ?? "full";
+  const role = config.role ? { role: config.role } : {};
+  return typeof preset === "string"
+    ? { extends: preset, ...role }
+    : { ...preset, ...role };
+}
+
 /**
  * Mount an editor into `element` and resolve to its handle. On a page that
  * is not cross-origin isolated it mounts nothing and rejects with an
@@ -241,11 +254,7 @@ export async function createEditor(
   assertEmbeddable();
   if (config.seed !== undefined && !isSeedId(config.seed))
     throw unknownSeed(config.seed, Object.keys(SEEDS));
-  const preset = config.profile ?? "full";
-  const profile: EditorProfile =
-    typeof preset === "string"
-      ? { extends: preset, ...(config.role ? { role: config.role } : {}) }
-      : { ...preset, ...(config.role ? { role: config.role } : {}) };
+  const profile = profileOf(config);
   const { strings, problem } = await loadLocale(config.locale ?? "en", {
     ...(config.messages ? { messages: config.messages } : {}),
     ...(config.assetBase ? { assetBase: config.assetBase } : {}),
