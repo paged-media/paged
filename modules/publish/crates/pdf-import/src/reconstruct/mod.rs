@@ -1523,6 +1523,27 @@ fn collect_glyphs(
                     if let Some(t) = from_name {
                         g.text = t;
                     }
+                    // A ligature the PDF names by its presentation form (ﬀ,
+                    // ﬁ, ﬂ …) is its letters: the composer forms ligatures
+                    // from the face, and a substitute may not carry the form.
+                    if g.text
+                        .chars()
+                        .any(|c| ('\u{FB00}'..='\u{FB06}').contains(&c))
+                    {
+                        g.text = g
+                            .text
+                            .chars()
+                            .map(|c| match c {
+                                '\u{FB00}' => "ff".to_string(),
+                                '\u{FB01}' => "fi".to_string(),
+                                '\u{FB02}' => "fl".to_string(),
+                                '\u{FB03}' => "ffi".to_string(),
+                                '\u{FB04}' => "ffl".to_string(),
+                                '\u{FB05}' | '\u{FB06}' => "st".to_string(),
+                                c => c.to_string(),
+                            })
+                            .collect();
+                    }
                     if !g.text.is_empty() && g.text.trim().is_empty() {
                         if let (Some(top), Some(bottom)) = (g.ink_top, g.ink_bottom) {
                             let h = top - bottom;
