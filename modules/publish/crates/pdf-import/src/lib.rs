@@ -40,6 +40,7 @@
 pub mod build;
 pub mod ir;
 mod lower;
+pub mod reconstruct;
 pub mod snippet;
 pub mod vectors;
 
@@ -89,6 +90,34 @@ pub fn pdf_to_paged(bytes: &[u8], ir_json: &str) -> Result<Vec<u8>, Error> {
         .map(|p| (p.width_pt, p.height_pt))
         .unwrap_or((612.0, 792.0));
     paged_store::package::wrap_document(&doc, FALLBACK_NAME, w, h).map_err(Error::Pgm)
+}
+
+/// A PDF read back into the document it was set from (publish ADR 660):
+/// `.paged` bytes and the reader's report as JSON. `recipe_json` may be
+/// `"{}"`; `fonts` are the font files the document will be set in.
+pub fn pdf_reconstruct(
+    bytes: &[u8],
+    recipe_json: &str,
+    fonts: Vec<Vec<u8>>,
+) -> Result<(Vec<u8>, String), Error> {
+    let recipe: reconstruct::Recipe = serde_json::from_str(recipe_json)?;
+    let book = reconstruct::FontBook::from_bytes(fonts);
+    let r = reconstruct::reconstruct(bytes, &recipe, &book)?;
+    let (w, h) = r
+        .document
+        .designmap
+        .document_preference
+        .page_width
+        .zip(r.document.designmap.document_preference.page_height)
+        .unwrap_or((612.0, 792.0));
+    let name = recipe
+        .name
+        .clone()
+        .unwrap_or_else(|| FALLBACK_NAME.to_string());
+    let bytes =
+        paged_store::package::wrap_document(&r.document, &name, w, h).map_err(Error::Pgm)?;
+    let report = serde_json::to_string_pretty(&r.report)?;
+    Ok((bytes, report))
 }
 
 /// What a file is ([`vectors::inspect`]) as JSON, or `"<code>: <why>"`.

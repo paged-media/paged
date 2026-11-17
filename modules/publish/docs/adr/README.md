@@ -25,6 +25,7 @@ earlier; their status says so.
 | [657](657-one-bundle-per-format.md) | One repo for foreign formats, one bundle per format | Accepted, recorded retroactively 2026-10-02 |
 | [658](658-a-pdf-page-places-as-native-vectors.md) | A PDF or Illustrator page places into the open document as native vectors | Accepted 2026-10-27 (amended by 659) |
 | [659](659-pdf-mesh-shadings-import-as-native-meshes.md) | PDF mesh shadings (types 4–7) import as the engine's native gradient mesh | Accepted 2026-11-01 |
+| [660](660-a-pdf-reads-back-into-its-document.md) | A PDF reads back into the document it was set from: stories, threads, styles, masters | Accepted 2026-11-17 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

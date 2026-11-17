@@ -70,6 +70,8 @@ pub fn run(doc: &Path, opts: &DocumentOptions, as_json: bool) -> Result<()> {
                     "lines": handle.stats.lines,
                     "oversetStories": handle.stats.overset_stories,
                 },
+                // Which stories overflow their last frame, by id.
+                "oversetStoryIds": model.built().diagnostics.overset_story_ids(),
             }))?
         );
         return Ok(());

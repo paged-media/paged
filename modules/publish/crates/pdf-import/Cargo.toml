@@ -33,11 +33,21 @@ thiserror = { workspace = true }
 hayro-interpret = { workspace = true }
 kurbo = { workspace = true }
 png = { workspace = true }
+# The structure reader's metric fit: a substitute face's advance widths.
+skrifa = { workspace = true }
+# The structure reader stores opaque photographs as JPEG, not PNG.
+image = { workspace = true }
 
 # The wasm-bindgen surface is target-gated so the pure IR→Document→pgm mapper
 # stays native-testable and the binding only compiles for wasm32.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
+
+# The structure reader on the command line: a PDF, a recipe and fonts in,
+# a `.paged` and its report out (publish ADR 660).
+[[bin]]
+name = "paged-pdf-import"
+path = "src/bin/paged-pdf-import.rs"
 
 [dev-dependencies]
 zip = { workspace = true }
@@ -46,3 +56,6 @@ flate2 = { workspace = true }
 # `idml_import::open_source_archive` and falls back to `import_idml_archive`;
 # the round-trip test drives exactly those calls (paged-canvas is not a dep).
 idml-import = { workspace = true }
+# The structure reader's tests read InDesign's PDFs of the engine's
+# generated samples back and hold them to the samples themselves.
+paged-gen = { path = "../../../../engine/core/crates/paged-gen" }

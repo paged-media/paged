@@ -39,6 +39,7 @@ pub mod ir;
 
 mod ai;
 mod device;
+pub(crate) use device::strip_subset;
 mod encode;
 mod paint;
 mod tidy;
@@ -187,43 +188,158 @@ pub fn read_page(
     page_index: usize,
     opts: &ReadOptions,
 ) -> Result<VectorPage, ReadError> {
-    let format = ai::sniff(bytes);
-    let pdf = open(bytes)?;
-    let pages = pdf.pages();
-    let page = pages.get(page_index).ok_or(ReadError::NoSuchPage {
-        page: page_index,
-        count: pages.len(),
-    })?;
-    let (initial, w, h, boxed) = geometry(page, opts.page_box);
-    let page_rect = kurbo::Rect::new(0.0, 0.0, w as f64, h as f64);
-    let cache = InterpreterCache::new();
-    let mut ctx = Context::new(
-        initial,
-        page_rect,
-        &cache,
-        pdf.xref(),
-        InterpreterSettings::default(),
-    );
-    let mut collector = device::Collector::new(page_rect, *opts);
-    if boxed {
-        // A box other than the crop box crops: what lies outside it does
-        // not show (engine ADR 1003's rule for a placed PDF).
-        collector.push_box_clip(page_rect);
+    Reader::open(bytes)?.page(page_index, opts)
+}
+
+/// A PDF opened once, its pages read one after another — the structure
+/// reader reads every page of a long document, and opening the file per
+/// page copies it per page.
+pub struct Reader {
+    pdf: Pdf,
+    format: ai::Format,
+}
+
+impl Reader {
+    pub fn open(bytes: &[u8]) -> Result<Reader, ReadError> {
+        let format = ai::sniff(bytes);
+        let pdf = open(bytes)?;
+        Ok(Reader { pdf, format })
     }
-    interpret_page(page, &mut ctx, &mut collector);
-    let (items, mut losses) = collector.finish();
-    let items = tidy::tidy(items, page_rect);
-    if format.ai && format.has_private_data && ai::is_stand_in(page, &items) {
-        return Err(ReadError::AiWithoutPdf(ai::STAND_IN));
+
+    pub fn page_count(&self) -> usize {
+        self.pdf.pages().len()
     }
-    losses.sort_by(|a, b| a.code.cmp(&b.code));
-    Ok(VectorPage {
-        page_index,
-        width_pt: w,
-        height_pt: h,
-        items,
-        losses,
-    })
+
+    /// Page `page_index` (0-based) as vector items.
+    pub fn page(&self, page_index: usize, opts: &ReadOptions) -> Result<VectorPage, ReadError> {
+        let format = self.format;
+        let pdf = &self.pdf;
+        let pages = pdf.pages();
+        let page = pages.get(page_index).ok_or(ReadError::NoSuchPage {
+            page: page_index,
+            count: pages.len(),
+        })?;
+        let (initial, w, h, boxed) = geometry(page, opts.page_box);
+        let page_rect = kurbo::Rect::new(0.0, 0.0, w as f64, h as f64);
+        let cache = InterpreterCache::new();
+        let mut ctx = Context::new(
+            initial,
+            page_rect,
+            &cache,
+            pdf.xref(),
+            InterpreterSettings::default(),
+        );
+        let mut collector = device::Collector::new(page_rect, *opts);
+        if boxed {
+            // A box other than the crop box crops: what lies outside it does
+            // not show (engine ADR 1003's rule for a placed PDF).
+            collector.push_box_clip(page_rect);
+        }
+        interpret_page(page, &mut ctx, &mut collector);
+        let (items, mut losses) = collector.finish();
+        let items = tidy::tidy(items, page_rect);
+        if format.ai && format.has_private_data && ai::is_stand_in(page, &items) {
+            return Err(ReadError::AiWithoutPdf(ai::STAND_IN));
+        }
+        losses.sort_by(|a, b| a.code.cmp(&b.code));
+        Ok(VectorPage {
+            page_index,
+            width_pt: w,
+            height_pt: h,
+            items,
+            losses,
+        })
+    }
+
+    /// Every embedded font program, for analysis (the structure reader's
+    /// font matching compares a substitute's glyphs with these): its
+    /// PostScript name, a file extension (`ttf`, `otf`, `cff`, `pfb`) and
+    /// the program's bytes. Nothing the reader writes carries them.
+    pub fn font_programs(&self) -> Vec<(String, &'static str, Vec<u8>)> {
+        use hayro_interpret::hayro_syntax::object::dict::keys::{
+            FONT_FILE, FONT_FILE2, FONT_FILE3, FONT_NAME, SUBTYPE,
+        };
+        use hayro_interpret::hayro_syntax::object::{Name, Object, Stream};
+        let mut out = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for obj in self.pdf.objects() {
+            let Object::Dict(d) = obj else { continue };
+            let Some(name) = d.get::<Name<'_>>(FONT_NAME) else {
+                continue;
+            };
+            let ps = strip_subset(name.as_str());
+            let (stream, ext) = if let Some(s) = d.get::<Stream<'_>>(FONT_FILE2) {
+                (s, "ttf")
+            } else if let Some(s) = d.get::<Stream<'_>>(FONT_FILE3) {
+                let sub = s
+                    .dict()
+                    .get::<Name<'_>>(SUBTYPE)
+                    .map(|n| n.as_str().to_string())
+                    .unwrap_or_default();
+                (s, if sub == "OpenType" { "otf" } else { "cff" })
+            } else if let Some(s) = d.get::<Stream<'_>>(FONT_FILE) {
+                (s, "pfb")
+            } else {
+                continue;
+            };
+            let Ok(bytes) = stream.decoded() else {
+                continue;
+            };
+            if seen.insert((ps.clone(), bytes.len())) {
+                out.push((ps, ext, bytes.into_owned()));
+            }
+        }
+        out
+    }
+
+    /// Every font the file defines, keyed as the interpreter keys it (the
+    /// font dictionary's cache key, which a glyph's `font_cache_key`
+    /// returns): its PostScript name and what its descriptor says. A Type 1
+    /// font's program does not name itself to the interpreter; its
+    /// dictionary does.
+    pub fn font_faces(&self) -> std::collections::HashMap<u128, ir::FontFace> {
+        use hayro_interpret::hayro_syntax::object::dict::keys::{
+            BASE_FONT, DESCENDANT_FONTS, FLAGS, FONT_DESC, FONT_WEIGHT, ITALIC_ANGLE,
+        };
+        use hayro_interpret::hayro_syntax::object::{Array, Dict, Name, Object};
+        use hayro_interpret::CacheKey;
+        let mut out = std::collections::HashMap::new();
+        for obj in self.pdf.objects() {
+            let Object::Dict(d) = obj else { continue };
+            let Some(base) = d.get::<Name<'_>>(BASE_FONT) else {
+                continue;
+            };
+            let ps = strip_subset(base.as_str());
+            let desc = d.get::<Dict<'_>>(FONT_DESC).or_else(|| {
+                d.get::<Array<'_>>(DESCENDANT_FONTS)
+                    .and_then(|a| a.iter::<Dict<'_>>().next())
+                    .and_then(|df| df.get::<Dict<'_>>(FONT_DESC))
+            });
+            let weight = desc
+                .as_ref()
+                .and_then(|d| d.get::<f32>(FONT_WEIGHT))
+                .map(|w| w as u32);
+            let italic_angle = desc
+                .as_ref()
+                .and_then(|d| d.get::<f32>(ITALIC_ANGLE))
+                .unwrap_or(0.0);
+            let flags = desc.as_ref().and_then(|d| d.get::<i32>(FLAGS)).unwrap_or(0);
+            let lower = ps.to_ascii_lowercase();
+            out.insert(
+                d.cache_key(),
+                ir::FontFace {
+                    postscript_name: ps,
+                    weight,
+                    italic: italic_angle.abs() > 0.1
+                        || flags & (1 << 6) != 0
+                        || lower.contains("italic")
+                        || lower.contains("oblique"),
+                    serif: flags & (1 << 1) != 0,
+                },
+            );
+        }
+        out
+    }
 }
 
 /// The transform from the page's PDF space to the chosen box's top-left

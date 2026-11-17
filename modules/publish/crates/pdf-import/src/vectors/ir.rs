@@ -277,6 +277,49 @@ pub struct TextItem {
     pub opacity: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blend: Option<&'static str>,
+    /// Every glyph where the page sets it, for the structure reader
+    /// ([`crate::reconstruct`], publish ADR 660). Not part of the JSON
+    /// contract: the bundle's TypeScript twin never sees it.
+    #[serde(skip)]
+    pub glyphs: Vec<GlyphPos>,
+    /// What the run's font says about itself.
+    #[serde(skip)]
+    pub face: Option<FontFace>,
+    /// The interpreter's key for the run's font ([`super::Reader::font_faces`]).
+    #[serde(skip)]
+    pub font_key: Option<u128>,
+}
+
+/// One glyph as the page sets it, in page points (y down).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlyphPos {
+    /// The glyph's text, from the font's `ToUnicode` (empty when unknown).
+    pub text: String,
+    /// The glyph origin's x.
+    pub x: f32,
+    /// The baseline's y.
+    pub y: f32,
+    /// The glyph's advance in points, from the font's widths (`None` when
+    /// the font gives none).
+    pub advance: Option<f32>,
+    /// The em size in points (the text matrix's vertical scale).
+    pub size: f32,
+    /// Horizontal scale, the text matrix's x over its y scale (1 = 100%).
+    pub hscale: f32,
+    /// How far the glyph's ink rises above the baseline, in ems (`None`
+    /// for a glyph with no ink).
+    pub ink_top: Option<f32>,
+}
+
+/// A font as the page names it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FontFace {
+    /// The PostScript name without a subset prefix (`ABCDEF+`).
+    pub postscript_name: String,
+    /// 100–900 when the font says.
+    pub weight: Option<u32>,
+    pub italic: bool,
+    pub serif: bool,
 }
 
 /// One kind of loss, with how often it happened on the page: the shared

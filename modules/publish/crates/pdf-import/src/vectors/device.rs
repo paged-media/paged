@@ -39,8 +39,8 @@ use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 
 use super::encode;
 use super::ir::{
-    Anchor, ClipIr, Contour, GroupItem, ImageItem, Item, Loss, MaskIr, Paint, PathItem, StrokeIr,
-    TextItem,
+    Anchor, ClipIr, Contour, FontFace, GlyphPos, GroupItem, ImageItem, Item, Loss, MaskIr, Paint,
+    PathItem, StrokeIr, TextItem,
 };
 use super::paint::{self, Shaded};
 use super::ReadOptions;
@@ -712,6 +712,9 @@ impl<'a> Device<'a> for Collector {
         let mut size = 0.0f32;
         let mut rotated = false;
         let mut origins = Vec::new();
+        let mut glyphs = Vec::new();
+        let mut face: Option<FontFace> = None;
+        let mut font_key: Option<u128> = None;
         for g in run.glyphs() {
             let m = props.transform * g.transform();
             let [a, b, c, d, e, f] = m.as_coeffs();
@@ -721,18 +724,47 @@ impl<'a> Device<'a> for Collector {
                 rotated = b.abs() > 1e-6 || c.abs() > 1e-6 || a <= 0.0 || d >= 0.0;
             }
             origins.push(Point::new(e, f));
+            let mut glyph_text = String::new();
             if let Some(u) = g.as_unicode() {
                 match u {
-                    hayro_interpret::hayro_cmap::BfString::Char(ch) => text.push(ch),
-                    hayro_interpret::hayro_cmap::BfString::String(s) => text.push_str(&s),
+                    hayro_interpret::hayro_cmap::BfString::Char(ch) => glyph_text.push(ch),
+                    hayro_interpret::hayro_cmap::BfString::String(s) => glyph_text.push_str(&s),
                 }
             }
+            text.push_str(&glyph_text);
+            // The glyph's x and y scales in points per em: its matrix
+            // maps the font's 1000-unit em onto the page.
+            let sx = (a.hypot(b) * 1000.0) as f32;
+            let sy = (c.hypot(d) * 1000.0) as f32;
+            let mut advance = None;
+            let mut ink_top: Option<f32> = None;
             match &**g {
                 Glyph::Outline(o) => {
                     if font_name.is_none() {
                         font_name = o.font_data().and_then(|d| d.postscript_name);
                     }
-                    outlines.extend(contours_of(&(m * o.outline())));
+                    if face.is_none() {
+                        face = o.font_data().map(|d| FontFace {
+                            postscript_name: strip_subset(
+                                d.postscript_name.as_deref().unwrap_or(""),
+                            ),
+                            weight: d.weight,
+                            italic: d.is_italic,
+                            serif: d.is_serif,
+                        });
+                    }
+                    advance = o.advance_width().map(|w| w * sx / 1000.0);
+                    if font_key.is_none() {
+                        font_key = Some(o.font_cache_key());
+                    }
+                    let glyph_path = m * o.outline();
+                    // The ink's height above the baseline, in ems: a
+                    // lowercase letter drawn at cap height is All Caps.
+                    let bb = glyph_path.bounding_box();
+                    if bb.height() > 0.0 && sy > 0.0 {
+                        ink_top = Some(((f - bb.y0) as f32 / sy).max(0.0));
+                    }
+                    outlines.extend(contours_of(&glyph_path));
                 }
                 Glyph::Type3(t3) => {
                     // A Type 3 glyph is drawing operations: they arrive
@@ -741,6 +773,15 @@ impl<'a> Device<'a> for Collector {
                     t3.interpret(self, props.transform, g.transform(), &props.paint);
                 }
             }
+            glyphs.push(GlyphPos {
+                text: glyph_text,
+                x: e as f32,
+                y: f as f32,
+                advance,
+                size: sy,
+                hscale: if sy > 0.0 { sx / sy } else { 1.0 },
+                ink_top,
+            });
         }
         if origins.is_empty() {
             return;
@@ -779,6 +820,9 @@ impl<'a> Device<'a> for Collector {
             rotated,
             opacity: 1.0,
             blend: None,
+            glyphs,
+            face,
+            font_key,
         });
         self.emit(item, props.soft_mask.as_ref(), props.blend_mode);
     }
@@ -868,4 +912,14 @@ pub(super) fn bounds_of_contours(contours: &[Contour]) -> Option<Rect> {
         }
     }
     r
+}
+
+/// A PostScript name without its subset prefix: `ABCDEF+Name` → `Name`.
+pub(crate) fn strip_subset(name: &str) -> String {
+    match name.split_once('+') {
+        Some((tag, rest)) if tag.len() == 6 && tag.chars().all(|c| c.is_ascii_uppercase()) => {
+            rest.to_string()
+        }
+        _ => name.to_string(),
+    }
 }

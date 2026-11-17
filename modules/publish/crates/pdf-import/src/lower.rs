@@ -177,6 +177,10 @@ pub enum TextMode {
     Frames,
     /// Every run as its glyph outlines.
     Outlines,
+    /// No run: the structure reader ([`crate::reconstruct`]) places the
+    /// page's text itself. Text inside a soft mask is still drawn as its
+    /// outlines (it is the mask's shape, not text).
+    Skip,
 }
 
 /// The text frames the bundle's text reader recovered for the page, and
@@ -577,6 +581,13 @@ impl<'a> Lowering<'a> {
     }
 
     fn group(&mut self, g: &GroupItem, in_mask: bool) -> Option<FrameRef> {
+        // The structure reader's frames (ADR 660); place-as-vectors keeps
+        // the clip group it has always drawn.
+        if !in_mask && self.text.mode == TextMode::Skip {
+            if let Some(r) = self.crop_frame(g) {
+                return Some(self.push_rectangle(r));
+            }
+        }
         let mut members: Vec<FrameRef> = g
             .items
             .iter()
@@ -635,6 +646,85 @@ impl<'a> Lowering<'a> {
         group.transparency.knockout_group = g.knockout;
         self.spread.groups.push(group);
         Some(FrameRef::Group(self.spread.groups.len() - 1))
+    }
+
+    /// A clip group around one image — InDesign's picture frame, as its
+    /// PDF writes it: the clip a rectangle (nested clips intersected), the
+    /// image inside it — as one native image frame: the clip its bounds,
+    /// the image placed by its own transform (`image_item_transform`), so
+    /// the crop and the placement survive and the picture can be moved
+    /// inside its frame.
+    fn crop_frame(&mut self, g: &GroupItem) -> Option<Rectangle> {
+        if !self.similar {
+            return None;
+        }
+        let mut clip: Option<kurbo::Rect> = None;
+        let mut cur = g;
+        let image = loop {
+            if cur.mask.is_some() || cur.blend.is_some() || cur.knockout {
+                return None;
+            }
+            if (cur.opacity - 1.0).abs() >= 1e-4 {
+                return None;
+            }
+            if let Some(c) = &cur.clip {
+                let r = axis_rect(&c.contours)?;
+                clip = Some(match clip {
+                    Some(prev) => prev.intersect(r),
+                    None => r,
+                });
+            }
+            match cur.items.as_slice() {
+                [Item::Image(i)] => break i,
+                [Item::Group(inner)] => cur = inner,
+                _ => return None,
+            }
+        };
+        let clip = clip?;
+        if clip.width() <= 0.0
+            || clip.height() <= 0.0
+            || image.width_px == 0
+            || image.height_px == 0
+        {
+            return None;
+        }
+        use base64::Engine as _;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(image.data_b64.as_bytes())
+            .ok()?;
+        let a = self.place.as_coeffs();
+        let (sx, ox, sy, oy) = (a[0], a[4], a[3], a[5]);
+        // The placement is a similarity here; frames carry an identity
+        // transform, so the clip maps straight into spread space.
+        if a[1].abs() > 1e-9 || a[2].abs() > 1e-9 || sx <= 0.0 || sy <= 0.0 {
+            return None;
+        }
+        let bounds = Bounds {
+            top: (clip.y0 * sy + oy) as f32,
+            left: (clip.x0 * sx + ox) as f32,
+            bottom: (clip.y1 * sy + oy) as f32,
+            right: (clip.x1 * sx + ox) as f32,
+        };
+        let [ia, ib, ic, id, ie, if_] = image.transform.map(|v| v as f64);
+        let t = self.place
+            * Affine::new([ia, ib, ic, id, ie, if_])
+            * Affine::scale_non_uniform(1.0 / image.width_px as f64, 1.0 / image.height_px as f64);
+        let id = self.ids.id("pdfi");
+        let mut r = Rectangle {
+            item_transform: Some(IDENTITY),
+            image_item_transform: Some(t.as_coeffs().map(|v| v as f32)),
+            image_bytes: Some(bytes),
+            has_image_element: true,
+            stroke_weight: Some(0.0),
+            ..Rectangle::new(id, bounds)
+        };
+        set_object(
+            &mut r.opacity,
+            &mut r.blend_mode,
+            image.opacity,
+            image.blend,
+        );
+        Some(r)
     }
 
     /// The `Self` id of `r`.
@@ -764,6 +854,9 @@ impl<'a> Lowering<'a> {
     }
 
     fn text_item(&mut self, t: &TextItem, in_mask: bool) -> Option<FrameRef> {
+        if self.text.mode == TextMode::Skip && !in_mask && !t.rotated {
+            return None;
+        }
         let [x, y, w, h] = t.bbox.map(|v| v as f64);
         let bbox = kurbo::Rect::new(x, y, x + w, y + h);
         let frame = self.frame_for(bbox);
@@ -1005,4 +1098,36 @@ pub(crate) fn bounds_of_refs(spread: &Spread, refs: &[FrameRef]) -> Option<[f32;
         walk(spread, *r, &mut add);
     }
     acc
+}
+
+/// The axis-aligned rectangle a clip outlines, when it is one: a single
+/// closed contour of straight segments whose corners sit on a rectangle.
+fn axis_rect(contours: &[Contour]) -> Option<kurbo::Rect> {
+    let [c] = contours else { return None };
+    let pts: Vec<[f32; 2]> = c.anchors.iter().map(|a| a.anchor).collect();
+    if !(4..=5).contains(&pts.len()) {
+        return None;
+    }
+    if c.anchors
+        .iter()
+        .any(|a| a.left != a.anchor || a.right != a.anchor)
+    {
+        return None;
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for p in &pts {
+        x0 = x0.min(p[0]);
+        y0 = y0.min(p[1]);
+        x1 = x1.max(p[0]);
+        y1 = y1.max(p[1]);
+    }
+    let on_edge = |v: f32, a: f32, b: f32| (v - a).abs() < 0.01 || (v - b).abs() < 0.01;
+    if pts
+        .iter()
+        .all(|p| on_edge(p[0], x0, x1) && on_edge(p[1], y0, y1))
+    {
+        Some(kurbo::Rect::new(x0 as f64, y0 as f64, x1 as f64, y1 as f64))
+    } else {
+        None
+    }
 }
