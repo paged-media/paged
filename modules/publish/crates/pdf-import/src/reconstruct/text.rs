@@ -209,6 +209,11 @@ pub fn cells(line: &Line) -> Vec<(usize, f32, f32)> {
 /// left-aligned ones. A cell that lines up with nothing makes its own
 /// left column.
 pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
+    // A table has rows: one line with a gap (a caption and its mark) is
+    // not one, and its gap is a space.
+    if lines.iter().filter(|l| cells(l).len() >= 2).count() < 2 {
+        return Vec::new();
+    }
     let mut starts: Vec<f32> = Vec::new();
     let mut ends: Vec<f32> = Vec::new();
     for l in lines {
@@ -328,6 +333,12 @@ fn cell_columns(line: &Line, cols: &[TabCol], left: f32) -> Vec<(usize, usize)> 
 pub fn line_tokens_cols(line: &Line, cols: &[TabCol], left: f32) -> Vec<Token> {
     let mut tokens = line_tokens(line);
     if cols.is_empty() {
+        // No columns to tab to: a gap is a space.
+        for t in tokens.iter_mut() {
+            if t.text == "\t" {
+                t.text = " ".into();
+            }
+        }
         return tokens;
     }
     let mapping = cell_columns(line, cols, left);
@@ -420,6 +431,62 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
     out
 }
 
+/// A line with a gap that no line near it repeats is not a row of a
+/// table: its cells are separate items on one baseline (a label and the
+/// next label, a caption and its mark), each set where the page sets it.
+/// A row has a neighbour a few lines away whose cells line up with its
+/// own: by their left edges, right edges or centres.
+fn split_lone_rows(lines: Vec<Line>) -> Vec<Line> {
+    let rows: Vec<Vec<(usize, f32, f32)>> = lines.iter().map(cells).collect();
+    let is_row = |i: usize| -> bool {
+        let li = &lines[i];
+        (0..lines.len()).any(|j| {
+            let dy = (lines[j].baseline - li.baseline).abs();
+            j != i
+                && rows[j].len() >= 2
+                && dy > 0.5
+                && dy < 4.0 * li.size.max(lines[j].size)
+                && rows[j].iter().skip(1).any(|c| {
+                    rows[i].iter().skip(1).any(|d| {
+                        // Left-set text, right-set figures, centred heads.
+                        (c.1 - d.1).abs() < 1.5
+                            || (c.2 - d.2).abs() < 1.5
+                            || ((c.1 + c.2) - (d.1 + d.2)).abs() < 3.0
+                    })
+                })
+        })
+    };
+    let lone: Vec<bool> = (0..lines.len())
+        .map(|i| rows[i].len() >= 2 && !is_row(i))
+        .collect();
+    let mut out = Vec::with_capacity(lines.len());
+    for (i, l) in lines.into_iter().enumerate() {
+        if !lone[i] {
+            out.push(l);
+            continue;
+        }
+        let starts: Vec<usize> = rows[i].iter().map(|c| c.0).collect();
+        let mut part: Option<Line> = None;
+        for (gi, g) in l.glyphs.into_iter().enumerate() {
+            if starts.contains(&gi) && gi != starts[0] {
+                if let Some(p) = part.take() {
+                    out.push(p);
+                }
+            }
+            match part.as_mut() {
+                Some(p) => p.push(g),
+                None => part = Some(Line::new(g)),
+            }
+        }
+        if let Some(p) = part {
+            out.push(p);
+        }
+    }
+    // A part that is only the spaces before a cell is no line.
+    out.retain(|l| l.glyphs.iter().any(|g| !g.text.trim().is_empty()));
+    out
+}
+
 /// The page's glyphs (paint order) as lines.
 pub fn lines(glyphs: Vec<Glyph>, cuts: &[f32]) -> Vec<Line> {
     let mut out: Vec<Line> = Vec::new();
@@ -483,7 +550,7 @@ pub fn lines(glyphs: Vec<Glyph>, cuts: &[f32]) -> Vec<Line> {
         }
         merged.push(l);
     }
-    let mut out = merged;
+    let mut out = split_lone_rows(merged);
     if let Some(pat) = std::env::var_os("PAGED_PDF_DEBUG_GLYPHS") {
         let pat = pat.to_string_lossy().to_string();
         for l in &out {
@@ -1431,6 +1498,20 @@ mod tests {
             ]
         );
         assert!(block.paras.iter().all(|p| p.first_indent == 0.0));
+    }
+
+    #[test]
+    fn two_labels_on_one_baseline_are_two_items() {
+        let mut g = Vec::new();
+        g.extend(set("UNIT", 20.0, 100.0, 0));
+        g.extend(set("Subunits", 120.0, 100.0, 0));
+        g.extend(set("Vertical position denotes pitch", 0.0, 140.0, 1));
+        let ls = lines(g, &[]);
+        let texts: Vec<String> = ls.iter().map(Line::text).collect();
+        assert_eq!(
+            texts,
+            ["UNIT", "Subunits", "Vertical position denotes pitch"]
+        );
     }
 
     #[test]
