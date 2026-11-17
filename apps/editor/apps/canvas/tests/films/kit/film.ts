@@ -170,6 +170,12 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
     const mark = (m: Mark) =>
       appendFileSync(marksFile, `${JSON.stringify(m)}\n`);
 
+    // A step that cannot happen fails in half a minute, not at the take's
+    // 15-minute timeout (actions wait forever by default); a step that is
+    // slow on purpose says how long it may take.
+    page.setDefaultTimeout(30_000);
+    // A cold dev server takes longer than that to serve the editor.
+    page.setDefaultNavigationTimeout(180_000);
     await dressStage(page);
     const designer = new Designer(page);
     // A question the editor asks ("Save changes first?", ADR 230) is

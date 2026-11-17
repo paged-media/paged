@@ -496,7 +496,9 @@ film("data", async (k) => {
     await press(k, page.getByRole("button", { name: "Open Data query" }));
     await k.hold(600);
     await press(k, page.getByRole("button", { name: "Read columns" }));
-    const cols = page.getByText(/5 column\(s\): name VARCHAR/);
+    // The column types are the data engine's own (TEXT since Turso, data
+    // ADR 561; VARCHAR under DuckDB before it).
+    const cols = page.getByText(/5 column\(s\): name \w+/);
     await expect(cols).toBeVisible({ timeout: 10_000 });
     await focusOn(k, cols, 18, 1.8);
     await k.hold(1800);
@@ -524,7 +526,7 @@ film("data", async (k) => {
     await press(k, row.locator("[data-data-merge-run]"));
     // Nothing overset: every record's text fits its frame.
     await expect(page.locator("[data-data-merge-msg]")).toHaveText(
-      `merged ${RECORDS} record(s) onto 2 page(s)`,
+      `Merged ${RECORDS} record(s) onto 2 page(s)`,
       { timeout: 60_000 },
     );
     k.unfocus();

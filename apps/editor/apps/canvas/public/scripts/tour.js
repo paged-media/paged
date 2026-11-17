@@ -10,7 +10,7 @@ await demo.showInfo(
   {
     cta: "Next",
     index: 1,
-    total: 4,
+    total: 5,
   },
 );
 
@@ -20,7 +20,7 @@ await demo.showInfo(
   "editor.openPanel('paged.layers') opened the Layers panel — any registered panel by id.",
   {
     index: 2,
-    total: 4,
+    total: 5,
   },
 );
 

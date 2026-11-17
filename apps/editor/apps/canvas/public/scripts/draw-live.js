@@ -86,7 +86,7 @@ await editor.select([cardId], "replace");
 await editor.runCommand("paged.corners.rounded");
 await demo.showInfo(
   "Live corners",
-  "Draw ▸ Corners ▸ Rounded: the corners stay live, and save as IDML corner options.",
+  "Object ▸ Corners ▸ Rounded: the corners stay live, and save as IDML corner options.",
   { autoMs: 3600, index: 3, total: 5 },
 );
 
@@ -106,7 +106,7 @@ await demo.wait(900);
 await editor.runCommand("paged.pathfinder.unite");
 await demo.showInfo(
   "Pathfinder",
-  "Two overlapping shapes, united into one path by Draw ▸ Pathfinder ▸ Unite.",
+  "Two overlapping shapes, united into one path by Object ▸ Pathfinder ▸ Unite.",
   { autoMs: 3600, index: 4, total: 5 },
 );
 

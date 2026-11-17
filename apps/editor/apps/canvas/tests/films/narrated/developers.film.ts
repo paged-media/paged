@@ -20,24 +20,19 @@
 // For developers, the developers page's film (ADR 224): the website's
 // `films/developers.yaml`. The editor is programmable, and every way in goes
 // through the same engine: the playground stepping a live script, paged.*
-// queries and one-step batches in the Script panel, Claude writing a script
-// (a real reply, recorded once with `AI_TAPE=record` and replayed), a
-// plugin's manifest and its panel, and the paged command line in a terminal
-// (the two terminal scenes are real recorded sessions the stage plays).
+// queries and one-step batches in the Script panel, a plugin's manifest and
+// its panel, and the paged command line in a terminal (the two terminal
+// scenes are real recorded sessions the stage plays).
 
 import { expect, type Locator, type Page } from "@playwright/test";
 import { film, type Kit } from "../kit/film";
-import { aiTape } from "../kit/ai-tape";
 import { typeHuman } from "../kit/pointer";
 import { hover, menu, press, screenPoint } from "../kit/ui";
-
-const ROOT = process.env.PAGED_MEDIA_ROOT ?? "";
 
 const SWATCHES = `for (const [selfId, name, rgb] of [
   ["Color/Rose", "Rose", [244, 127, 192]],
   ["Color/Mint", "Mint", [111, 220, 155]],
   ["Color/Violet", "Violet", [169, 139, 245]],
-  ["Color/Night", "Night", [42, 33, 64]],
 ]) paged.createSwatch({ selfId, name, space: "RGB", value: rgb, model: "Process" });
 const page = JSON.parse(paged.pages())[0].selfId;
 [[90, 80, 250, 290, "Color/Rose"], [90, 322, 250, 532, "Color/Mint"], [290, 80, 450, 290, "Color/Mint"], [290, 322, 450, 532, "Color/Rose"]]
@@ -51,8 +46,6 @@ paged.batch(frames.flatMap((f) => [
   { op: "set", address: f, path: "frameFillColor", value: "Color/Violet" },
   { op: "set", address: f, path: "frameRotationAngle", value: -6 },
 ]));`;
-
-const ASK = "Give every frame on this page a 4 pt stroke in the Night swatch.";
 
 async function run(page: Page, source: string): Promise<string[]> {
   const r = await page.evaluate(
@@ -74,16 +67,14 @@ async function run(page: Page, source: string): Promise<string[]> {
   return r.output;
 }
 
-/** Each frame on page 1: its fill, rotation, stroke weight and stroke colour. */
+/** Each frame on page 1: its fill and rotation. */
 async function frames(
   page: Page,
-): Promise<
-  Array<{ fill: unknown; angle: unknown; weight: unknown; stroke: unknown }>
-> {
+): Promise<Array<{ fill: unknown; angle: unknown }>> {
   const out = await run(
     page,
     `const v = (f, p) => JSON.parse(paged.get(f, p)).value;
-console.log(JSON.stringify(JSON.parse(paged.query("page:#1 > frame")).map((f) => ({ fill: v(f, "frameFillColor"), angle: v(f, "frameRotationAngle"), weight: v(f, "frameStrokeWeight"), stroke: v(f, "frameStrokeColor") }))));`,
+console.log(JSON.stringify(JSON.parse(paged.query("page:#1 > frame")).map((f) => ({ fill: v(f, "frameFillColor"), angle: v(f, "frameRotationAngle") }))));`,
   );
   return JSON.parse(out[0].replace(/^\[log\] /, ""));
 }
@@ -125,7 +116,6 @@ film("developers", async (k) => {
   const log = panel.locator("[data-script-log]");
 
   await k.setup(async () => {
-    await aiTape(page, ROOT, "developers");
     await designer.open({ search: "?script=draw-live" });
     // A document first: the canvas runs on WebGPU once one is open.
     await designer.newDocument();
@@ -202,7 +192,7 @@ film("developers", async (k) => {
 
   // ── The Script panel: one query, every frame's address. ──
   await k.scene("console", async () => {
-    await menu(k, ["Window", "Developer", "Script"]);
+    await menu(k, ["Window", "Utilities", "Script"]);
     await expect(panel).toBeVisible();
     k.focus(
       await aimView(
@@ -250,44 +240,6 @@ film("developers", async (k) => {
         "Color/Mint/0",
         "Color/Rose/0",
       ]);
-  });
-
-  // ── Ask Claude, in plain words; wait for its script to land. ──
-  await k.scene("ask", async () => {
-    const input = panel.locator("[data-script-ask-input]");
-    k.focus(
-      await aimView(
-        k,
-        await scriptArea([panel.locator("[data-script-ask]"), source]),
-      ),
-    );
-    await press(k, input);
-    await typeHuman(page, ASK, 13);
-    await press(k, panel.locator("[data-action=ask]"));
-    // The consent card says what leaves the device; Send sends it
-    // (editor ADR 1241, amendment 1).
-    await press(k, panel.locator('[data-cockpit-action="ai-consent-send"]'));
-    await expect(source).not.toHaveValue(BATCH, { timeout: 90_000 });
-  });
-
-  // ── Claude's script runs through the same door; it reads the result. ──
-  await k.scene("claude", async () => {
-    await expect(panel.locator("[data-script-note]").last()).toContainText(
-      "Claude:",
-      { timeout: 90_000 },
-    );
-    await expect
-      .poll(
-        async () =>
-          (await frames(page)).every(
-            (f) => f.weight === 4 && f.stroke === "Color/Night",
-          ),
-        { timeout: 15_000 },
-      )
-      .toBe(true);
-    await k.hold(900);
-    k.unfocus();
-    await k.hold(1200);
   });
 
   // ── A plugin is a manifest: the terminal shows paged.draw's. ──
