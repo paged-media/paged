@@ -151,6 +151,11 @@ impl Line {
             if g.text.trim().is_empty() {
                 break;
             }
+            // Chinese and Japanese break between any two characters: the
+            // first "word" of such a line is its first character.
+            if prev_end.is_some() && g.text.chars().next().is_some_and(is_cjk) {
+                break;
+            }
             if let Some(pe) = prev_end {
                 if g.x - pe > 0.2 * g.size {
                     break;
@@ -161,6 +166,13 @@ impl Line {
         }
         end - self.x0
     }
+}
+
+/// A character of a script that breaks lines between characters (Han,
+/// kana, the full-width forms and CJK punctuation).
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x3000..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF)
 }
 
 impl Line {
