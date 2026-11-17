@@ -94,6 +94,35 @@ impl Line {
                 self.glyphs[0].color,
             ))
     }
+    /// The (font, size, colour) most of the line's first or last few
+    /// letters are set in: where the line takes its paragraph over from the
+    /// line above, or hands it on (a run-in head starts a line whose end is
+    /// the body's; a superscript at the end is outvoted).
+    fn edge_style(&self, last: bool) -> (u32, f32, [u8; 3]) {
+        let ink: Vec<&Glyph> = self
+            .glyphs
+            .iter()
+            .filter(|g| !g.text.trim().is_empty())
+            .collect();
+        let take = 6.min(ink.len());
+        let part: Vec<&Glyph> = if last {
+            ink[ink.len() - take..].to_vec()
+        } else {
+            ink[..take].to_vec()
+        };
+        let mut best: Tally = Vec::new();
+        for g in part {
+            let k = (g.font, (g.size * 10.0).round() as i32, g.color);
+            match best.iter_mut().find(|(kk, _)| *kk == k) {
+                Some((_, n)) => *n += 1,
+                None => best.push((k, 1)),
+            }
+        }
+        best.sort_by_key(|b| std::cmp::Reverse(b.1));
+        best.first()
+            .map(|((f, s, c), _)| (*f, *s as f32 / 10.0, *c))
+            .unwrap_or_else(|| self.dominant())
+    }
     /// The visible text of the line, spaces recovered from gaps, tabs from
     /// wide gaps.
     pub fn text(&self) -> String {
@@ -900,8 +929,13 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
             let lead = lead_all
                 .unwrap_or(1.2 * l.size)
                 .max(0.95 * l.size.min(p.size));
-            let (pf, ps, pc) = p.dominant();
-            let (lf, ls, lc) = l.dominant();
+            // Face from the whole line; size and colour where the lines
+            // meet (a run-in head in a smaller face starts a line whose
+            // end is the body's).
+            let (pf, _, _) = p.dominant();
+            let (lf, _, _) = l.dominant();
+            let (_, ps, pc) = p.edge_style(true);
+            let (_, ls, lc) = l.edge_style(false);
             // A change of size or colour is a new paragraph. A change of
             // face alone (a bold lead-in, a quote set bold inside its
             // paragraph) is one only where the earlier line ends one: it
@@ -1136,14 +1170,19 @@ fn build_para(
             .iter()
             .any(|l| (l.x0 - left).abs() > 1.0 || (l.x1 - right).abs() > 1.0)
         && (centers[0] - mid).abs() < 1.5;
-    let righted = n >= 2 && ls.iter().all(|l| (l.x1 - right).abs() < tol) && !lefts_eq;
+    // Lines after an indented first one starting at the frame's edge are
+    // body text with a first-line indent, never right-set.
+    let indented_body =
+        n >= 2 && rest_lefts_eq && (rest_left - left).abs() < tol && ls[0].x0 > rest_left + tol;
+    let righted =
+        n >= 2 && ls.iter().all(|l| (l.x1 - right).abs() < tol) && !lefts_eq && !indented_body;
     // Two lines ending together could be a ragged paragraph whose first
     // line is the block's widest: justified lines stretch their spaces.
     let stretched = ls[..n.saturating_sub(1)]
         .iter()
         .filter_map(|l| l.space_ratio())
         .any(|r| (r - 1.0).abs() > 0.06);
-    let align = if rights_eq_but_last && rest_lefts_eq && (n >= 3 || stretched) {
+    let align = if rights_eq_but_last && rest_lefts_eq && (n >= 3 || stretched || indented_body) {
         Align::Justify
     } else if centered && n >= 2 {
         Align::Center
@@ -1498,6 +1537,29 @@ mod tests {
             ]
         );
         assert!(block.paras.iter().all(|p| p.first_indent == 0.0));
+    }
+
+    #[test]
+    fn a_run_in_head_stays_in_its_paragraph() {
+        // A small bold head, then the body, which runs on to the next line.
+        // The head has more letters than the body on its line.
+        let mut g: Vec<Glyph> = set("THIS LEAVES US WITH A DILEMMA.", 0.0, 100.0, 0)
+            .into_iter()
+            .map(|mut g| {
+                g.font = 1;
+                g.size = 7.0;
+                g
+            })
+            .collect();
+        g.extend(set(" Conservation is", 151.0, 100.0, 0));
+        g.extend(set(
+            "underfunded—the U.S. Fish and Wildlife Service and others.",
+            0.0,
+            112.0,
+            0,
+        ));
+        let block = build_block(lines(g, &[]));
+        assert_eq!(block.paras.len(), 1, "{:?}", texts(&block));
     }
 
     #[test]

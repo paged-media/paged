@@ -149,9 +149,12 @@ jobs:
           # Any resolution error fails here, so the check below can only
           # fail for the one reason it is about.
           cargo tree -p pdf-import --locked --target all > /dev/null
+          # What links: normal and build edges. The structure tests read the
+          # engine's generated samples back (paged-gen, a dev-dependency),
+          # which never reaches the bundle.
           # `cargo tree -i` exits non-zero when the package is not in the
           # graph at all, which is the passing case.
-          if out=$(cargo tree -p pdf-import --locked --target all -i flo_curves 2>/dev/null) && [ -n "$out" ]; then
+          if out=$(cargo tree -p pdf-import --locked --target all -e normal,build -i flo_curves 2>/dev/null) && [ -n "$out" ]; then
             echo "::error title=flo_curves in the publish graph::pdf-import must not link a boolean-path engine; drop the dependency path below"
             echo "$out"
             exit 1

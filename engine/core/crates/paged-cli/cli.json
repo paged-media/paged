@@ -185,6 +185,20 @@
         },
         {
           "defaults": [],
+          "help": "With `--json`: every story's composed lines per paragraph (`storyLines`), to hold a document's line breaks to a reference",
+          "long": "story-lines",
+          "name": "story_lines",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "STORY_LINES"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Font file or directory to make available, repeatable",
           "long": "fonts",
           "name": "fonts",
