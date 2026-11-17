@@ -408,6 +408,25 @@ pub fn line_tokens_cols(line: &Line, cols: &[TabCol], left: f32) -> Vec<Token> {
 /// glyph, and a tab where a gap is wider than one and a half ems.
 pub fn line_tokens(line: &Line) -> Vec<Token> {
     let mut out: Vec<Token> = Vec::new();
+    // A word space is a gap well past the line's own letter spacing: text
+    // set tight (word spaces of a sixth of an em) or tracked open alike.
+    // The letter spacing is the median gap between neighbouring letters;
+    // estimated advances (a font without widths) keep the fixed share.
+    let letter_gap = {
+        let ink: Vec<&Glyph> = line
+            .glyphs
+            .iter()
+            .filter(|g| !g.text.trim().is_empty())
+            .collect();
+        let mut gaps: Vec<f32> = ink
+            .windows(2)
+            .filter(|w| w[0].has_adv && w[1].has_adv)
+            .map(|w| (w[1].x - (w[0].x + w[0].adv)) / w[1].size.max(0.1))
+            .filter(|g| g.abs() < 0.5)
+            .collect();
+        gaps.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        (gaps.len() >= 6).then(|| gaps[gaps.len() / 2])
+    };
     // Gaps are measured from the last inked glyph: a layout program sets
     // a tab as a space glyph and then a jump, and the jump is the tab.
     let mut last_ink_end: Option<f32> = None;
@@ -443,7 +462,12 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
                         glyph: si,
                     });
                 }
-            } else if gap > 0.18 * g.size {
+            } else if gap
+                > match letter_gap {
+                    Some(m) => (m + 0.1).max(0.1) * g.size,
+                    None => 0.18 * g.size,
+                }
+            {
                 out.push(Token {
                     text: " ".into(),
                     glyph: i,
@@ -957,8 +981,7 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
                 let t = t.trim_start();
                 let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
                 t.starts_with(|c: char| "•·–—-▪■●◦".contains(c))
-                    || ((1..=2).contains(&digits)
-                        && t[digits..].starts_with(|c: char| c == '.' || c == ')'))
+                    || ((1..=2).contains(&digits) && t[digits..].starts_with(['.', ')']))
             };
             let item_start = groups.last().is_some_and(|g| g[0] == i - 1);
             let hung = item_start
@@ -1207,7 +1230,7 @@ fn build_para(
     let first_indent = if align == Align::Left || align == Align::Justify {
         if n >= 2 {
             first_indent
-        } else if !tabs.is_empty() && leads_with_tab(&ls[0], left) {
+        } else if !tabs.is_empty() && leads_with_tab(ls[0], left) {
             // A row reached by tabs is not indented.
             0.0
         } else {

@@ -39,7 +39,7 @@ pub mod ir;
 
 mod ai;
 mod device;
-pub(crate) use device::strip_subset;
+pub(crate) use device::{glyph_name_text, strip_subset};
 mod encode;
 mod paint;
 mod tidy;
@@ -287,6 +287,40 @@ impl Reader {
             };
             if seen.insert((ps.clone(), bytes.len())) {
                 out.push((ps, ext, bytes.into_owned()));
+            }
+        }
+        out
+    }
+
+    /// Every embedded font program, keyed as the interpreter keys its font
+    /// (the font dictionary's cache key): what a glyph's name is read from
+    /// when the PDF maps it to no text.
+    pub fn font_programs_by_key(&self) -> std::collections::HashMap<u128, Vec<u8>> {
+        use hayro_interpret::hayro_syntax::object::dict::keys::{
+            BASE_FONT, DESCENDANT_FONTS, FONT_DESC, FONT_FILE2, FONT_FILE3,
+        };
+        use hayro_interpret::hayro_syntax::object::{Array, Dict, Name, Object, Stream};
+        use hayro_interpret::CacheKey;
+        let mut out = std::collections::HashMap::new();
+        for obj in self.pdf.objects() {
+            let Object::Dict(d) = obj else { continue };
+            if d.get::<Name<'_>>(BASE_FONT).is_none() {
+                continue;
+            }
+            let desc = d.get::<Dict<'_>>(FONT_DESC).or_else(|| {
+                d.get::<Array<'_>>(DESCENDANT_FONTS)
+                    .and_then(|a| a.iter::<Dict<'_>>().next())
+                    .and_then(|df| df.get::<Dict<'_>>(FONT_DESC))
+            });
+            let Some(desc) = desc else { continue };
+            let Some(stream) = desc
+                .get::<Stream<'_>>(FONT_FILE3)
+                .or_else(|| desc.get::<Stream<'_>>(FONT_FILE2))
+            else {
+                continue;
+            };
+            if let Ok(bytes) = stream.decoded() {
+                out.insert(d.cache_key(), bytes.into_owned());
             }
         }
         out

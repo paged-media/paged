@@ -740,6 +740,13 @@ impl<'a> Device<'a> for Collector {
                     hayro_interpret::hayro_cmap::BfString::String(s) => glyph_text.push_str(&s),
                 }
             }
+            // A glyph the PDF maps to no text (a small capital or an
+            // alternate outside its ToUnicode): its id, for the program's
+            // name for it (the structure reader looks it up).
+            let gid = match &**g {
+                Glyph::Outline(o) if glyph_text.is_empty() => Some(o.glyph_id().to_u32()),
+                _ => None,
+            };
             text.push_str(&glyph_text);
             // The glyph's x and y scales in points per em: its matrix
             // maps the font's 1000-unit em onto the page.
@@ -793,6 +800,7 @@ impl<'a> Device<'a> for Collector {
                 hscale: if sy > 0.0 { sx / sy } else { 1.0 },
                 ink_top,
                 ink_bottom,
+                gid,
             });
         }
         if origins.is_empty() {
@@ -935,5 +943,154 @@ pub(crate) fn strip_subset(name: &str) -> String {
             rest.to_string()
         }
         _ => name.to_string(),
+    }
+}
+
+/// The text a glyph's name in its font program spells, read the Adobe
+/// Glyph List's way: a suffix after the first period is dropped, ligature
+/// parts join with `_`, `uniXXXX` and `uXXXX` name code points. A small
+/// capital (`s.sc`, `s.smcp`, an expert set's `Ssmall`) is drawn as a
+/// capital and reads as one, like the capitals a layout program maps
+/// beside it. `None` when the font names nothing (a synthesized `gid12`)
+/// or the name is not one of these.
+pub(crate) fn glyph_name_text(font: &[u8], gid: u32) -> Option<String> {
+    use skrifa::{raw::FontRef, GlyphId, GlyphNames};
+    // A bare CFF program (a PDF's FontFile3) is wrapped as an OpenType
+    // font with one table so the name reader can open it.
+    let wrapped;
+    let bytes: &[u8] = if matches!(
+        font.get(..4),
+        Some(b"OTTO" | b"true" | b"ttcf" | [0, 1, 0, 0])
+    ) {
+        font
+    } else {
+        let mut w = Vec::with_capacity(font.len() + 28);
+        w.extend_from_slice(b"OTTO");
+        w.extend_from_slice(&[0, 1, 0, 16, 0, 0, 0, 0]);
+        w.extend_from_slice(b"CFF ");
+        w.extend_from_slice(&[0, 0, 0, 0]);
+        w.extend_from_slice(&28u32.to_be_bytes());
+        w.extend_from_slice(&(font.len() as u32).to_be_bytes());
+        w.extend_from_slice(font);
+        wrapped = w;
+        &wrapped
+    };
+    let face = FontRef::new(bytes).ok()?;
+    let name = GlyphNames::new(&face).get(GlyphId::new(gid))?;
+    name_text(name.as_str())
+}
+
+fn name_text(name: &str) -> Option<String> {
+    let mut parts = name.split('.');
+    let base = parts.next()?;
+    if base.is_empty() {
+        return None;
+    }
+    let small_cap = parts.any(|s| s == "sc" || s == "smcp" || s == "c2sc");
+    let mut out = String::new();
+    for part in base.split('_') {
+        if let Some(letter) = part.strip_suffix("small") {
+            if letter.len() == 1 && letter.chars().all(|c| c.is_ascii_alphabetic()) {
+                out.push_str(&letter.to_ascii_uppercase());
+                continue;
+            }
+        }
+        out.push_str(&part_text(part)?);
+    }
+    Some(if small_cap { out.to_uppercase() } else { out })
+}
+
+fn part_text(part: &str) -> Option<String> {
+    let hex = |h: &str| u32::from_str_radix(h, 16).ok().and_then(char::from_u32);
+    if let Some(h) = part.strip_prefix("uni") {
+        if h.len() >= 4 && h.len() % 4 == 0 && h.chars().all(|c| c.is_ascii_hexdigit()) {
+            return (0..h.len() / 4)
+                .map(|i| hex(&h[4 * i..4 * i + 4]))
+                .collect();
+        }
+    }
+    if let Some(h) = part.strip_prefix('u') {
+        if (4..=6).contains(&h.len()) && h.chars().all(|c| c.is_ascii_hexdigit()) {
+            return hex(h).map(String::from);
+        }
+    }
+    if part.len() == 1 && part.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Some(part.to_string());
+    }
+    const NAMES: &[(&str, &str)] = &[
+        ("zero", "0"),
+        ("one", "1"),
+        ("two", "2"),
+        ("three", "3"),
+        ("four", "4"),
+        ("five", "5"),
+        ("six", "6"),
+        ("seven", "7"),
+        ("eight", "8"),
+        ("nine", "9"),
+        ("space", " "),
+        ("period", "."),
+        ("comma", ","),
+        ("colon", ":"),
+        ("semicolon", ";"),
+        ("hyphen", "-"),
+        ("endash", "\u{2013}"),
+        ("emdash", "\u{2014}"),
+        ("quoteleft", "\u{2018}"),
+        ("quoteright", "\u{2019}"),
+        ("quotedblleft", "\u{201C}"),
+        ("quotedblright", "\u{201D}"),
+        ("quotesingle", "'"),
+        ("quotedbl", "\""),
+        ("exclam", "!"),
+        ("question", "?"),
+        ("parenleft", "("),
+        ("parenright", ")"),
+        ("bracketleft", "["),
+        ("bracketright", "]"),
+        ("ampersand", "&"),
+        ("slash", "/"),
+        ("at", "@"),
+        ("numbersign", "#"),
+        ("dollar", "$"),
+        ("percent", "%"),
+        ("asterisk", "*"),
+        ("plus", "+"),
+        ("equal", "="),
+        ("bullet", "\u{2022}"),
+        ("ellipsis", "\u{2026}"),
+        ("copyright", "\u{00A9}"),
+        ("registered", "\u{00AE}"),
+        ("trademark", "\u{2122}"),
+        ("degree", "\u{00B0}"),
+        ("sterling", "\u{00A3}"),
+        ("Euro", "\u{20AC}"),
+        ("fi", "fi"),
+        ("fl", "fl"),
+        ("ff", "ff"),
+        ("ffi", "ffi"),
+        ("ffl", "ffl"),
+    ];
+    NAMES
+        .iter()
+        .find(|(n, _)| *n == part)
+        .map(|(_, t)| t.to_string())
+}
+
+#[cfg(test)]
+mod glyph_name_tests {
+    use super::name_text;
+
+    #[test]
+    fn names_read_the_glyph_list_way() {
+        assert_eq!(name_text("s.sc").as_deref(), Some("S"));
+        assert_eq!(name_text("a.alt").as_deref(), Some("a"));
+        assert_eq!(name_text("S").as_deref(), Some("S"));
+        assert_eq!(name_text("Ssmall").as_deref(), Some("S"));
+        assert_eq!(name_text("f_f_i").as_deref(), Some("ffi"));
+        assert_eq!(name_text("uni00E9").as_deref(), Some("\u{e9}"));
+        assert_eq!(name_text("u1F600").as_deref(), Some("\u{1F600}"));
+        assert_eq!(name_text("three.onum").as_deref(), Some("3"));
+        assert_eq!(name_text("gid12"), None);
     }
 }

@@ -187,6 +187,7 @@ pub fn reconstruct(
     let mut hyphenated_words: BTreeSet<String> = BTreeSet::new();
     let mut fonts = FontTable {
         faces: reader.font_faces(),
+        programs: reader.font_programs_by_key(),
         ..FontTable::default()
     };
     let mut read: HashMap<usize, VectorPage> = HashMap::new();
@@ -462,7 +463,7 @@ pub fn reconstruct(
                 book,
                 &metrics,
                 &mut palette,
-                m.folios.contains(&bi),
+                m.folios.get(&bi).map(Vec::as_slice),
             );
             let sid = ids.id("pdfs");
             let fid = ids.id("pdft");
@@ -584,7 +585,7 @@ pub fn reconstruct(
                     book,
                     &metrics,
                     &mut palette,
-                    false,
+                    None,
                 );
                 let lines_by_para = para_lines(&blocks, &styles);
                 report.paragraphs += story.paragraphs.len();
@@ -948,7 +949,7 @@ fn story_from(
     book: &FontBook,
     metrics: &MetricsCache,
     palette: &mut Palette,
-    master: bool,
+    folio: Option<&[usize]>,
 ) -> Story {
     let mut story = Story::default();
     // Optical margin alignment where the page hangs its punctuation, sized
@@ -963,11 +964,13 @@ fn story_from(
             let key = ParaKey::of(p);
             let style = styles.paragraph.get(&key);
             let mut runs: Vec<CharacterRun> = Vec::new();
+            // Runs of digits counted across the paragraph's runs.
+            let mut digit_k = 0usize;
             for r in &p.runs {
                 let ck = CharKey::of(r, &key);
                 let mut text = r.text.clone();
-                if master {
-                    text = folio_text(&text);
+                if let Some(page_runs) = folio {
+                    text = folio_text(&text, page_runs, &mut digit_k);
                 }
                 runs.push(CharacterRun {
                     character_style: ck
@@ -1105,15 +1108,41 @@ fn story_from(
     story
 }
 
-/// A folio's number as the page-number marker.
-fn folio_text(t: &str) -> String {
+/// The runs of digits in `t`, in order.
+fn digit_runs(t: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut in_num = false;
+    for ch in t.chars() {
+        if ch.is_ascii_digit() {
+            if !in_num {
+                out.push(String::new());
+                in_num = true;
+            }
+            out.last_mut().unwrap().push(ch);
+        } else {
+            in_num = false;
+        }
+    }
+    out
+}
+
+/// A folio with its page number (the runs of digits `runs` names) as the
+/// page-number marker; its other numbers stay.
+/// `k` counts the runs of digits before `t` in its paragraph.
+fn folio_text(t: &str, runs: &[usize], k: &mut usize) -> String {
     let mut out = String::new();
     let mut in_num = false;
     for ch in t.chars() {
         if ch.is_ascii_digit() {
             if !in_num {
-                out.push(AUTO_PAGE_NUMBER_MARKER);
                 in_num = true;
+                if runs.contains(k) {
+                    out.push(AUTO_PAGE_NUMBER_MARKER);
+                }
+                *k += 1;
+            }
+            if !runs.contains(&(*k - 1)) {
+                out.push(ch);
             }
         } else {
             in_num = false;
@@ -1323,6 +1352,10 @@ fn name_swatches(palette: &mut Palette, recipe: &Recipe) {
 struct FontTable {
     /// The file's fonts by the interpreter's key.
     faces: HashMap<u128, vectors::ir::FontFace>,
+    /// Embedded font programs by the same key, and the text their glyph
+    /// names give (for glyphs the PDF maps to none), read once each.
+    programs: HashMap<u128, Vec<u8>>,
+    named: HashMap<(u128, u32), Option<String>>,
     names: Vec<String>,
     index: HashMap<String, u32>,
     counts: Vec<usize>,
@@ -1440,10 +1473,30 @@ fn collect_glyphs(
                 };
                 for g in &t.glyphs {
                     fonts.counts[font as usize] += 1;
+                    // No text from the PDF: the font program's name for the
+                    // glyph (`s.sc` is an s).
+                    let from_name = match (g.text.is_empty(), g.gid, t.font_key) {
+                        (true, Some(gid), Some(key)) => {
+                            let programs = &fonts.programs;
+                            fonts
+                                .named
+                                .entry((key, gid))
+                                .or_insert_with(|| {
+                                    programs
+                                        .get(&key)
+                                        .and_then(|p| vectors::glyph_name_text(p, gid))
+                                })
+                                .clone()
+                        }
+                        _ => None,
+                    };
                     // A "space" with ink is a symbol its font maps to a
                     // space (InDesign's separators): a small dot on the
                     // x-height's middle is a middle dot, a larger one a bullet.
                     let mut g = g.clone();
+                    if let Some(t) = from_name {
+                        g.text = t;
+                    }
                     if !g.text.is_empty() && g.text.trim().is_empty() {
                         if let (Some(top), Some(bottom)) = (g.ink_top, g.ink_bottom) {
                             let h = top - bottom;
@@ -1632,9 +1685,10 @@ struct MasterDef {
     /// The spread whose blocks the master copies.
     spread: usize,
     blocks: Vec<usize>,
-    /// Those of them whose number is the page number (it changes from page
-    /// to page); a number every page repeats (a year) stays text.
-    folios: BTreeSet<usize>,
+    /// Those of them that carry the page number, with which of their runs
+    /// of digits it is (the run that changes from page to page); a number
+    /// every page repeats (an issue, a year) stays text.
+    folios: BTreeMap<usize, Vec<usize>>,
 }
 
 impl MasterPlan {
@@ -1767,22 +1821,28 @@ fn find_masters(plan: &[SpreadPlan], spread_blocks: &[Vec<(usize, Block)>]) -> M
             .collect();
         // A repeated item's number is a page number when it differs from
         // spread to spread.
-        let numbers_of = |s: usize, sig: &str| -> Option<String> {
+        let numbers_of = |s: usize, sig: &str| -> Option<Vec<String>> {
             sigs[s].iter().find(|(_, x)| x == sig).and_then(|(bi, _)| {
-                let t = spread_blocks[s][*bi].1.lines[0].text();
-                let digits: String = t.chars().filter(|c| c.is_ascii_digit()).collect();
-                (!digits.is_empty()).then_some(digits)
+                let runs = digit_runs(&spread_blocks[s][*bi].1.lines[0].text());
+                (!runs.is_empty()).then_some(runs)
             })
         };
-        let folios: BTreeSet<usize> = sigs[model]
+        let folios: BTreeMap<usize, Vec<usize>> = sigs[model]
             .iter()
             .filter(|(_, sig)| set.contains(sig))
-            .filter(|(_, sig)| {
-                let values: BTreeSet<String> =
+            .filter_map(|(bi, sig)| {
+                let all: Vec<Vec<String>> =
                     spreads.iter().filter_map(|&s| numbers_of(s, sig)).collect();
-                values.len() >= 2
+                let n = all.first()?.len();
+                let varying: Vec<usize> = (0..n)
+                    .filter(|&k| {
+                        let values: BTreeSet<&String> =
+                            all.iter().filter_map(|runs| runs.get(k)).collect();
+                        values.len() >= 2
+                    })
+                    .collect();
+                (!varying.is_empty()).then_some((*bi, varying))
             })
-            .map(|(bi, _)| *bi)
             .collect();
         let mi = plan_out.masters.len();
         plan_out.masters.push(MasterDef {
