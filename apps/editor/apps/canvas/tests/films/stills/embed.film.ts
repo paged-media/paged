@@ -289,6 +289,10 @@ for (const theme of LAB_THEMES) {
           seed,
         });
         const r = await lab.runScript(source);
+        // A new document's own fit to its page can land after the first call
+        // (the docs lab fits twice for the same reason).
+        await lab.fitSelection();
+        await new Promise((res) => setTimeout(res, 300));
         await lab.fitSelection();
         // The poster shows the result, not the selection's handles.
         await lab.runScript("paged.clearSelection()");
