@@ -4,7 +4,8 @@
 - **Scope:** `apps/canvas/src/samples/catalog.ts` (the catalog, its parser, `openSample`),
   `samples/SampleLink.tsx` (the `?sample=<id>` link), `panels/empty-canvas.tsx` (the Sample
   documents list), `app/mount.tsx` (mounting the link), `locales/de.json`;
-  `test/unit/samples-catalog.test.ts`. Rests on the module host of
+  `test/unit/samples-catalog.test.ts`; `.github/workflows/editor-samples-publish.yml`. Rests on
+  the module host of
   [ADR 220](220-wasm-modules-are-hosted.md) and on the one open path of the shell (`openDocumentFile`).
 
 ## Context
@@ -34,6 +35,11 @@ not carry them; the host registers them.
 4. **Offered where a catalog is expected:** the demo and development builds, or any build given
    `VITE_SAMPLES_URL`. An unreachable or malformed catalog is no samples, not an error; the
    empty canvas stays as it was.
+
+5. **Published like the films** ([ADR 224](224-films-are-recorded-by-the-editor.md)): the files travel as
+   the assets of a draft release and `editor / samples-publish` puts them under `samples/` on the
+   host. Every name but the catalog's carries its content hash and is never overwritten; the
+   catalog goes last, so it names only files already there, and is cached for minutes.
 
 ## Consequences
 

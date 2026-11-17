@@ -1,0 +1,90 @@
+name: editor / samples-publish
+
+# Puts the editor's sample documents on the module host (editor ADR 1243):
+# modules.paged.media/samples/<path>, R2 bucket `paged-modules`, next to the
+# wasm modules (ADR 220) and the films (ADR 224). A sample is a `.paged`, the
+# font files it is set in and a cover picture; `catalog.json` lists them. The
+# files are prepared on a workstation and travel here as the assets of a
+# DRAFT release of this repository (drafts are not public and create no tag).
+# Each asset is named after its path with `__` for `/`, e.g.
+# `lookbook__fonts__display.0123456789.ttf` goes to
+# `samples/lookbook/fonts/display.0123456789.ttf`.
+#
+# Every name but `catalog.json` carries its content hash, so an object already
+# on the host is the same file: it is skipped and never overwritten. The
+# catalog is replaced on every run (it is what changes) and is cached for
+# minutes, not a year.
+#
+# Run: gh workflow run editor-samples-publish.yml -f release=<draft release id>
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Id of the draft release whose assets are the sample files"
+        required: true
+
+permissions:
+  # Reading a draft release's assets needs write access to the repository.
+  contents: write
+
+concurrency:
+  group: samples-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: upload what the host does not have, then the catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          host=https://modules.paged.media/samples
+          mkdir -p samples
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE/assets" \
+            --jq '.[] | "\(.id) \(.name)"' > assets.txt
+          test -s assets.txt || { echo "::error::release $RELEASE has no assets"; exit 1; }
+          grep -q ' catalog.json$' assets.txt || { echo "::error::release $RELEASE has no catalog.json"; exit 1; }
+          up=0; there=0
+          # The catalog goes last: it names only files already on the host.
+          { grep -v ' catalog.json$' assets.txt || true; grep ' catalog.json$' assets.txt; } > order.txt
+          while read -r id name; do
+            key="${name//__//}"
+            case "$key" in
+              *..*|/*) echo "::error::$name is not a plain path"; exit 1 ;;
+            esac
+            case "$key" in
+              *.paged) type=application/zip ;;
+              *.ttf) type=font/ttf ;;
+              *.otf) type=font/otf ;;
+              *.woff2) type=font/woff2 ;;
+              *.jpg) type=image/jpeg ;;
+              *.webp) type=image/webp ;;
+              catalog.json) type=application/json ;;
+              *) echo "::error::$name is not a sample file"; exit 1 ;;
+            esac
+            if [ "$key" = catalog.json ]; then
+              cache="public, max-age=300"
+            else
+              cache="public, max-age=31536000, immutable"
+              # Asked with a query of its own: the host's cache keeps a 404.
+              code=$(curl -s -o /dev/null -w '%{http_code}' -I "$host/$key?probe=$GITHUB_RUN_ID")
+              if [ "$code" = 200 ]; then
+                echo "= $key"; there=$((there + 1)); continue
+              fi
+            fi
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "samples/$name"
+            npx -y wrangler@4 r2 object put "paged-modules/samples/$key" --remote \
+              --file "samples/$name" --content-type "$type" --cache-control "$cache"
+            echo "+ $key"; up=$((up + 1))
+          done < order.txt
+          echo "$up uploaded, $there already there" | tee -a "$GITHUB_STEP_SUMMARY"
