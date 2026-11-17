@@ -232,6 +232,8 @@ pub fn infer(paras: &[&Para], font_style: &dyn Fn(u32) -> String) -> Styles {
         }
         if k.first_indent > 0 {
             name.push_str(" Indent");
+        } else if k.first_indent < 0 {
+            name.push_str(" Hanging");
         }
         if k.left_indent > 0 {
             name.push_str(" Inset");

@@ -176,75 +176,244 @@ pub struct Token {
     pub glyph: usize,
 }
 
+/// A tab column of a block: the x its cells start at (left) or end at
+/// (right, figures).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TabCol {
+    pub x: f32,
+    pub right: bool,
+}
+
+/// The cells of a line: runs of ink set apart by more than a tab's gap
+/// (one and a half ems), each as its first glyph's index, start and end.
+pub fn cells(line: &Line) -> Vec<(usize, f32, f32)> {
+    let mut out: Vec<(usize, f32, f32)> = Vec::new();
+    let mut prev_end: Option<f32> = None;
+    for (i, g) in line.glyphs.iter().enumerate() {
+        if g.text.trim().is_empty() {
+            continue;
+        }
+        let starts = prev_end.is_none_or(|pe| g.x - pe > 1.5 * g.size);
+        if starts {
+            out.push((i, g.x, g.x + g.adv));
+        } else if let Some(c) = out.last_mut() {
+            c.2 = g.x + g.adv;
+        }
+        prev_end = Some(g.x + g.adv);
+    }
+    out
+}
+
+/// A block's tab columns, from where its cells line up: ends that agree
+/// across rows are right-aligned columns (figures), starts that agree are
+/// left-aligned ones. A cell that lines up with nothing makes its own
+/// left column.
+pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
+    let mut starts: Vec<f32> = Vec::new();
+    let mut ends: Vec<f32> = Vec::new();
+    for l in lines {
+        for (_, a, b) in cells(l).into_iter().skip(1) {
+            starts.push(a);
+            ends.push(b);
+        }
+    }
+    if starts.is_empty() {
+        return Vec::new();
+    }
+    let clusters = |v: &mut Vec<f32>| -> Vec<(f32, usize)> {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut out: Vec<(f32, usize, f32)> = Vec::new();
+        for x in v.iter() {
+            match out.last_mut() {
+                Some((_, n, last)) if (x - *last).abs() <= 1.5 => {
+                    *n += 1;
+                    *last = *x;
+                }
+                _ => out.push((*x, 1, *x)),
+            }
+        }
+        out.into_iter()
+            .map(|(first, n, last)| (0.5 * (first + last), n))
+            .collect()
+    };
+    let right: Vec<(f32, usize)> = clusters(&mut ends.clone())
+        .into_iter()
+        .filter(|c| c.1 >= 2)
+        .collect();
+    let left: Vec<(f32, usize)> = clusters(&mut starts.clone())
+        .into_iter()
+        .filter(|c| c.1 >= 2)
+        .collect();
+    let mut cols: Vec<TabCol> = Vec::new();
+    for l in lines {
+        for (_, a, b) in cells(l).into_iter().skip(1) {
+            let r = right
+                .iter()
+                .filter(|c| (c.0 - b).abs() <= 1.5)
+                .max_by_key(|c| c.1);
+            let lf = left
+                .iter()
+                .filter(|c| (c.0 - a).abs() <= 1.5)
+                .max_by_key(|c| c.1);
+            let col = match (r, lf) {
+                (Some(r), Some(lf)) if r.1 > lf.1 => TabCol {
+                    x: r.0,
+                    right: true,
+                },
+                (_, Some(lf)) => TabCol {
+                    x: lf.0,
+                    right: false,
+                },
+                (Some(r), None) => TabCol {
+                    x: r.0,
+                    right: true,
+                },
+                (None, None) => TabCol { x: a, right: false },
+            };
+            if !cols
+                .iter()
+                .any(|c| c.right == col.right && (c.x - col.x).abs() <= 1.5)
+            {
+                cols.push(col);
+            }
+        }
+    }
+    // In order along the line: a right column by where its cells start.
+    cols.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+    cols
+}
+
+/// Which column each cell of `line` sits in: every cell after the first,
+/// and the first too when it does not start at the frame's left (a row
+/// whose label cell is empty, a total).
+fn cell_columns(line: &Line, cols: &[TabCol], left: f32) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let all = cells(line);
+    let skip = usize::from(all.first().is_none_or(|c| c.1 <= left + line.size));
+    for (gi, a, b) in all.into_iter().skip(skip) {
+        let best = cols
+            .iter()
+            .enumerate()
+            .min_by(|(_, x), (_, y)| {
+                let dx = if x.right {
+                    (x.x - b).abs()
+                } else {
+                    (x.x - a).abs()
+                };
+                let dy = if y.right {
+                    (y.x - b).abs()
+                } else {
+                    (y.x - a).abs()
+                };
+                dx.partial_cmp(&dy).unwrap()
+            })
+            .map(|(i, _)| i);
+        if let Some(i) = best {
+            out.push((gi, i));
+        }
+    }
+    out
+}
+
+/// [`line_tokens`] with a block's tab columns: a cell is reached by as
+/// many tabs as columns it skips (an empty cell is a tab of its own).
+pub fn line_tokens_cols(line: &Line, cols: &[TabCol], left: f32) -> Vec<Token> {
+    let mut tokens = line_tokens(line);
+    if cols.is_empty() {
+        return tokens;
+    }
+    let mapping = cell_columns(line, cols, left);
+    let mut prev: isize = -1;
+    for (gi, col) in mapping {
+        let want = (col as isize - prev).max(1) as usize;
+        prev = col as isize;
+        // A first cell set in from the left is reached by its tabs too.
+        if gi == tokens.first().map_or(usize::MAX, |t| t.glyph) {
+            for _ in 0..want {
+                tokens.insert(
+                    0,
+                    Token {
+                        text: "\t".into(),
+                        glyph: gi,
+                    },
+                );
+            }
+            continue;
+        }
+        if let Some(pos) = tokens.iter().position(|t| t.glyph == gi && t.text == "\t") {
+            for _ in 1..want {
+                tokens.insert(
+                    pos,
+                    Token {
+                        text: "\t".into(),
+                        glyph: gi,
+                    },
+                );
+            }
+        }
+    }
+    tokens
+}
+
 /// The line's glyphs as text tokens, inserting a space where a gap is
 /// wider than a word space's share of the em and the page drew no space
 /// glyph, and a tab where a gap is wider than one and a half ems.
 pub fn line_tokens(line: &Line) -> Vec<Token> {
     let mut out: Vec<Token> = Vec::new();
-    let mut prev_end: Option<f32> = None;
-    let mut prev_space = true;
+    // Gaps are measured from the last inked glyph: a layout program sets
+    // a tab as a space glyph and then a jump, and the jump is the tab.
+    let mut last_ink_end: Option<f32> = None;
+    let mut spaces: Vec<usize> = Vec::new();
     for (i, g) in line.glyphs.iter().enumerate() {
         let is_space = !g.text.is_empty() && g.text.trim().is_empty();
-        // A "space" the next glyph starts on top of advances nothing: an
-        // invisible discretionary hyphen InDesign maps to a space.
         if is_space {
+            // A "space" the next glyph starts on top of advances nothing:
+            // an invisible discretionary hyphen InDesign maps to a space.
             if let Some(n) = line.glyphs.get(i + 1) {
                 if n.x - g.x < 0.3 * g.adv.max(0.1 * g.size) && !n.text.trim().is_empty() {
                     continue;
                 }
             }
+            spaces.push(i);
+            continue;
         }
-        if let Some(pe) = prev_end {
-            let gap = g.x - pe;
-            if !is_space && !prev_space {
-                if gap > 1.5 * g.size {
-                    out.push(Token {
-                        text: "\t".into(),
-                        glyph: i,
-                    });
-                } else if gap > 0.18 * g.size {
-                    out.push(Token {
-                        text: " ".into(),
-                        glyph: i,
-                    });
-                }
-            } else if is_space && gap > 1.5 * g.size && !prev_space {
+        if g.text.is_empty() {
+            continue;
+        }
+        if let Some(end) = last_ink_end {
+            let gap = g.x - end;
+            if gap > 1.5 * g.size {
                 out.push(Token {
                     text: "\t".into(),
                     glyph: i,
                 });
-                prev_end = Some(g.x + g.adv);
-                prev_space = true;
-                continue;
+            } else if !spaces.is_empty() {
+                // Every space the page sets is a space of the text.
+                for &si in &spaces {
+                    out.push(Token {
+                        text: " ".into(),
+                        glyph: si,
+                    });
+                }
+            } else if gap > 0.18 * g.size {
+                out.push(Token {
+                    text: " ".into(),
+                    glyph: i,
+                });
             }
         }
-        if is_space {
-            // Every space the page sets is a space of the text (a layout
-            // program writes the spaces its text has; three between words
-            // are three).
-            out.push(Token {
-                text: " ".into(),
-                glyph: i,
-            });
-            prev_space = true;
-        } else {
-            out.push(Token {
-                text: g.text.clone(),
-                glyph: i,
-            });
-            prev_space = false;
-        }
-        prev_end = Some(g.x + g.adv);
-    }
-    // No trailing space at the line's end.
-    while out.last().is_some_and(|t| t.text == " ") {
-        out.pop();
+        spaces.clear();
+        out.push(Token {
+            text: g.text.clone(),
+            glyph: i,
+        });
+        last_ink_end = Some(g.x + g.adv);
     }
     out
 }
 
 /// The page's glyphs (paint order) as lines.
-pub fn lines(glyphs: Vec<Glyph>) -> Vec<Line> {
+pub fn lines(glyphs: Vec<Glyph>, cuts: &[f32]) -> Vec<Line> {
     let mut out: Vec<Line> = Vec::new();
     for g in glyphs {
         if g.text.is_empty() && g.adv <= 0.0 {
@@ -258,7 +427,11 @@ pub fn lines(glyphs: Vec<Glyph>) -> Vec<Line> {
                 || (g.size < 0.8 * l.size && (g.y - l.baseline).abs() <= 0.5 * l.size);
             let end = l.glyphs.last().map_or(l.x1, |p| p.x + p.adv);
             let gap = g.x - end;
-            same_baseline && gap > -0.6 * g.size && gap < 3.2 * l.size.max(g.size)
+            // The cells of a table row, painted one after another on one
+            // baseline, are one line however far apart (tabbed text); a
+            // page edge between them is not.
+            let across_page = cuts.iter().any(|c| *c > end + 0.5 && *c < g.x - 0.5);
+            same_baseline && gap > -0.6 * g.size && gap < 30.0 * l.size.max(g.size) && !across_page
         });
         if joins {
             out.last_mut().unwrap().push(g);
@@ -268,6 +441,41 @@ pub fn lines(glyphs: Vec<Glyph>) -> Vec<Line> {
     }
     // A line whose glyphs are all spaces is no line.
     out.retain(|l| l.glyphs.iter().any(|g| !g.text.trim().is_empty()));
+    // A table's cells painted in passes (a shaded or bold column after the
+    // rest) are still its row: a short or numeric line on another line's
+    // baseline, beside it, joins it. Body text in columns shares baselines
+    // too, but its lines are long words, not figures.
+    let cellish = |l: &Line| {
+        let t = l.text();
+        let t = t.trim();
+        t.chars().count() <= 6
+            || t.chars()
+                .all(|c| c.is_ascii_digit() || " .,()%–-—£$€*\t".contains(c))
+    };
+    let mut merged: Vec<Line> = Vec::new();
+    'next: for l in out {
+        if cellish(&l) {
+            for m in merged.iter_mut().rev().take(40) {
+                let same = (m.baseline - l.baseline).abs() < 0.5 && (m.size - l.size).abs() < 0.6;
+                let apart = l.x0 > m.x1 + 0.5 || l.x1 < m.x0 - 0.5;
+                let (a, b) = if l.x0 > m.x1 {
+                    (m.x1, l.x0)
+                } else {
+                    (l.x1, m.x0)
+                };
+                let across = cuts.iter().any(|c| *c > a + 0.5 && *c < b - 0.5);
+                if same && apart && !across && b - a < 30.0 * l.size && cellish(m) {
+                    for g in l.glyphs {
+                        m.push(g);
+                    }
+                    m.glyphs.sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap());
+                    continue 'next;
+                }
+            }
+        }
+        merged.push(l);
+    }
+    let mut out = merged;
     if let Some(pat) = std::env::var_os("PAGED_PDF_DEBUG_GLYPHS") {
         let pat = pat.to_string_lossy().to_string();
         for l in &out {
@@ -390,6 +598,8 @@ pub struct Block {
     /// The reading direction it is turned to, radians (0 upright); its
     /// geometry is in its own axes.
     pub turn: f32,
+    /// Its tab columns (tabbed rows: a table set with tabs).
+    pub tabs: Vec<TabCol>,
 }
 
 /// Group the page's lines into blocks (frames), in paint order.
@@ -573,6 +783,9 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
     }
     let left = lines.iter().map(|l| l.x0).fold(f32::MAX, f32::min);
     let right = lines.iter().map(|l| l.x1).fold(f32::MIN, f32::max);
+    // Tabbed rows (a table set with tabs): the block's columns.
+    let tabs = tab_columns(&lines);
+    let tabbed = |l: &Line| !tabs.is_empty() && cells(l).len() > 1;
 
     // Justified: most lines run to the right edge (a ragged column's
     // longest lines meet it only by chance).
@@ -626,8 +839,19 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
             let style_change =
                 (ps - ls).abs() > 0.15 || pc != lc || (face_only && ends && !goes_on && !spaced);
             let gap = dy > lead * 1.18 + 0.5;
+            // A line indented under one at the frame's edge starts a new
+            // paragraph (a first-line indent) — unless it continues a hung
+            // one: the line above opens with a bullet or a number, or the
+            // line below keeps the indent.
+            let hung = p
+                .first_char()
+                .is_some_and(|c| "•·–—-*▪■●◦".contains(c) || c.is_ascii_digit())
+                || lines
+                    .get(i + 1)
+                    .is_some_and(|n2| (n2.x0 - l.x0).abs() < 0.6);
             let indent = l.x0 > left + 0.6 * l.size
                 && (p.x0 - left).abs() < 0.3 * p.size
+                && !hung
                 // A centred or right-set block moves every line.
                 && lines.iter().filter(|q| (q.x0 - left).abs() < 0.3 * q.size).count() * 2
                     > lines.len();
@@ -640,7 +864,13 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
                     l.text().chars().take(40).collect::<String>()
                 );
             }
-            style_change || gap || indent || short
+            // A tabbed row is a paragraph of its own (a row of a table).
+            let row = tabbed(p) || tabbed(l);
+            // A list item starts with its bullet, or back out at the edge a
+            // hung paragraph's lines were indented from.
+            let item = l.first_char().is_some_and(|c| "•·–—*▪■●◦".contains(c))
+                || l.x0 < p.x0 - 0.6 * l.size;
+            style_change || gap || indent || short || row || item
         };
         if new_para {
             groups.push(vec![i]);
@@ -711,12 +941,14 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
     let mut paras = Vec::new();
     for (gi, g) in groups.iter().enumerate() {
         let ls: Vec<&Line> = g.iter().map(|&i| &lines[i]).collect();
-        paras.push(build_para(&ls, left, right, width, gi, &groups, &lines));
+        paras.push(build_para(
+            &ls, left, right, width, gi, &groups, &lines, &tabs,
+        ));
     }
     // One-line paragraphs say nothing of their alignment, but a block of
     // them does: lines that share a right edge and not a left one are set
     // right, lines that share only a centre are centred.
-    if lines.len() >= 2 && groups.iter().all(|g| g.len() == 1) {
+    if lines.len() >= 2 && tabs.is_empty() && groups.iter().all(|g| g.len() == 1) {
         let same = |f: &dyn Fn(&Line) -> f32| {
             let v0 = f(&lines[0]);
             lines.iter().all(|l| (f(l) - v0).abs() < 0.6)
@@ -770,6 +1002,7 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
         first_baseline,
         optical,
         turn: 0.0,
+        tabs,
     }
 }
 
@@ -785,6 +1018,7 @@ fn frame_left(paras: &[Para], left: f32, right: f32, width: f32) -> f32 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_para(
     ls: &[&Line],
     left: f32,
@@ -793,12 +1027,16 @@ fn build_para(
     gi: usize,
     groups: &[Vec<usize>],
     all: &[Line],
+    tabs: &[TabCol],
 ) -> Para {
     // Alignment.
     let n = ls.len();
     let tol = 0.6f32;
     let lefts_eq = ls.iter().all(|l| (l.x0 - left).abs() < tol);
-    let rest_lefts_eq = ls.iter().skip(1).all(|l| (l.x0 - left).abs() < tol);
+    // The lines after the first share a left edge (the paragraph's own,
+    // which a hanging indent moves in from the frame's).
+    let rest_left = if n >= 2 { ls[1].x0 } else { left };
+    let rest_lefts_eq = ls.iter().skip(1).all(|l| (l.x0 - rest_left).abs() < tol);
     let rights_eq_but_last = n >= 2 && ls[..n - 1].iter().all(|l| (l.x1 - right).abs() < tol);
     let centers: Vec<f32> = ls.iter().map(|l| l.center()).collect();
     let mid = 0.5 * (left + right);
@@ -827,11 +1065,9 @@ fn build_para(
     };
 
     // Indents.
-    let first_indent = if n >= 2 {
-        (ls[0].x0 - ls[1].x0).max(0.0)
-    } else {
-        0.0
-    };
+    // A first line left of the rest is a hanging indent (a bullet or a
+    // number hung in the margin): negative.
+    let first_indent = if n >= 2 { ls[0].x0 - ls[1].x0 } else { 0.0 };
     let base_left = if n >= 2 { ls[1].x0 } else { ls[0].x0 };
     let left_indent = if align == Align::Left || align == Align::Justify {
         (base_left - left).max(0.0)
@@ -841,6 +1077,9 @@ fn build_para(
     let first_indent = if align == Align::Left || align == Align::Justify {
         if n >= 2 {
             first_indent
+        } else if !tabs.is_empty() && ls[0].x0 > left + ls[0].size {
+            // A row reached by tabs is not indented.
+            0.0
         } else {
             (ls[0].x0 - left).max(0.0)
         }
@@ -878,7 +1117,7 @@ fn build_para(
     let mut hyphenated = false;
     let mut fit_lines: Vec<FitLine> = Vec::new();
     for (li, l) in ls.iter().enumerate() {
-        let tokens = line_tokens(l);
+        let tokens = line_tokens_cols(l, tabs, left);
         let last_line = li + 1 == n;
         let line_text: String = tokens.iter().map(|t| t.text.as_str()).collect();
         let mut tokens = tokens;

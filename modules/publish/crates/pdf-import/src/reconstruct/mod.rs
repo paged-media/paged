@@ -223,7 +223,13 @@ pub fn reconstruct(
             collect_glyphs(&page.items, dx, &mut fonts, &mut by_turn, &mut order, false);
             for (turn_key, glyphs) in by_turn {
                 let turn = turn_key as f32 / 1800.0 * std::f32::consts::PI;
-                let lines = text::lines(glyphs);
+                // Page edges: a line does not run across one (the spine).
+                let cuts: Vec<f32> = if turn_key == 0 {
+                    sp.pages.iter().flat_map(|p| [p.x, p.x + p.w]).collect()
+                } else {
+                    Vec::new()
+                };
+                let lines = text::lines(glyphs, &cuts);
                 for line in &lines {
                     hyphenated_words.extend(mid_line_compounds(&line.text()));
                 }
@@ -456,7 +462,7 @@ pub fn reconstruct(
                 book,
                 &metrics,
                 &mut palette,
-                true,
+                m.folios.contains(&bi),
             );
             let sid = ids.id("pdfs");
             let fid = ids.id("pdft");
@@ -996,6 +1002,23 @@ fn story_from(
                 runs,
                 ..Default::default()
             };
+            // A tabbed row takes its block's tab stops, measured from the
+            // frame's left edge.
+            if !b.tabs.is_empty() && para.runs.iter().any(|r| r.text.contains('\t')) {
+                let fl = b.frame[0];
+                para.tab_list = b
+                    .tabs
+                    .iter()
+                    .map(|t| paged_model::TabStop {
+                        position: (t.x - fl).max(0.0),
+                        alignment: Some(
+                            if t.right { "RightAlign" } else { "LeftAlign" }.to_string(),
+                        ),
+                        alignment_character: None,
+                        leader: None,
+                    })
+                    .collect();
+            }
             if let Some(s) = style {
                 let mut sb = if pi == 0 { 0.0 } else { p.space_before };
                 // A one-line paragraph closer to the one above than its
@@ -1609,6 +1632,9 @@ struct MasterDef {
     /// The spread whose blocks the master copies.
     spread: usize,
     blocks: Vec<usize>,
+    /// Those of them whose number is the page number (it changes from page
+    /// to page); a number every page repeats (a year) stays text.
+    folios: BTreeSet<usize>,
 }
 
 impl MasterPlan {
@@ -1658,8 +1684,8 @@ fn signature(page: &PagePlan, b: &Block) -> Option<String> {
     Some(format!(
         "{}|{:.0}|{:.0}|{}|{}|{:.1}|{:?}",
         page.left_side as u8,
-        (x / 3.0).round(),
-        (b.lines[0].baseline / 3.0).round(),
+        (x / 8.0).round(),
+        (b.lines[0].baseline / 8.0).round(),
         squashed,
         font,
         size,
@@ -1739,10 +1765,30 @@ fn find_masters(plan: &[SpreadPlan], spread_blocks: &[Vec<(usize, Block)>]) -> M
             .filter(|(_, s)| set.contains(s))
             .map(|(bi, _)| *bi)
             .collect();
+        // A repeated item's number is a page number when it differs from
+        // spread to spread.
+        let numbers_of = |s: usize, sig: &str| -> Option<String> {
+            sigs[s].iter().find(|(_, x)| x == sig).and_then(|(bi, _)| {
+                let t = spread_blocks[s][*bi].1.lines[0].text();
+                let digits: String = t.chars().filter(|c| c.is_ascii_digit()).collect();
+                (!digits.is_empty()).then_some(digits)
+            })
+        };
+        let folios: BTreeSet<usize> = sigs[model]
+            .iter()
+            .filter(|(_, sig)| set.contains(sig))
+            .filter(|(_, sig)| {
+                let values: BTreeSet<String> =
+                    spreads.iter().filter_map(|&s| numbers_of(s, sig)).collect();
+                values.len() >= 2
+            })
+            .map(|(bi, _)| *bi)
+            .collect();
         let mi = plan_out.masters.len();
         plan_out.masters.push(MasterDef {
             spread: model,
             blocks,
+            folios,
         });
         for &s in &spreads {
             plan_out.spread_master.insert(s, mi);

@@ -17739,9 +17739,20 @@ fn font_identity(bytes: &[u8]) -> Option<(String, Option<String>)> {
         .or_else(|| name(ttf_parser::name_id::FAMILY))?
         .trim()
         .to_string();
-    let italic = name(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY)
+    let sub = name(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY)
         .or_else(|| name(ttf_parser::name_id::SUBFAMILY))
-        .is_some_and(|s| s.to_ascii_lowercase().contains("italic"));
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    let lower = sub.to_ascii_lowercase();
+    let italic = lower.contains("italic") || lower.contains("oblique");
+    // A static face (no `fvar`) is one weight: it answers for its own
+    // style, so a family of static files (Regular, Bold, Light …) keeps
+    // every weight instead of the first file claiming the bare family. A
+    // variable face answers for every weight through its instances.
+    let variable = face.is_variable();
+    if !variable && !matches!(lower.as_str(), "" | "regular" | "roman" | "book" | "normal") {
+        return Some((family, Some(sub)));
+    }
     Some((family, italic.then(|| "Italic".to_string())))
 }
 
