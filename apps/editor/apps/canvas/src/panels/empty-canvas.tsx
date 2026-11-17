@@ -117,7 +117,8 @@ export function EmptyCanvas() {
 
   return (
     <div style={emptyStyle} data-empty-canvas>
-      <div style={{ maxWidth: 440, textAlign: "center" }}>
+      {/* Centred while it fits; from the top, scrolling, when it does not. */}
+      <div style={{ maxWidth: 440, textAlign: "center", margin: "auto" }}>
         <p style={titleStyle}>{strings.t(M.title)}</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
           <button
@@ -223,9 +224,8 @@ const emptyStyle: React.CSSProperties = {
   width: "100%",
   height: "100%",
   display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
   padding: 16,
+  overflow: "auto",
   background: "var(--canvas-surround)",
 };
 
@@ -269,13 +269,15 @@ const listStyle: React.CSSProperties = {
   padding: 0,
 };
 
+// One row of covers that scrolls sideways: the empty canvas stays as tall
+// as it was however many samples the catalog lists.
 const samplesStyle: React.CSSProperties = {
   listStyle: "none",
   margin: 0,
-  padding: 0,
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+  padding: "0 0 6px",
+  display: "flex",
   gap: 12,
+  overflowX: "auto",
 };
 
 const sampleStyle: React.CSSProperties = {
@@ -286,7 +288,8 @@ const sampleStyle: React.CSSProperties = {
   fontSize: 12,
   textAlign: "left",
   cursor: "pointer",
-  width: "100%",
+  width: 96,
+  flex: "none",
 };
 
 const thumbStyle: React.CSSProperties = {
