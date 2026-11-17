@@ -35,13 +35,22 @@ repeats.
    `vectors::Reader` opens a file once for all its pages and names every font the file defines
    by that key (a Type 1 font's program does not name itself to the interpreter; its dictionary
    does). PDFium remains the raster fallback; the editable open path no longer needs its text.
+   A glyph the PDF maps to no text (a small capital or an alternate outside its `ToUnicode`) is
+   read by the name its embedded program gives it, the Adobe Glyph List's way (`s.sc` is an S);
+   a ligature's presentation form (ﬁ, ﬀ …) reads as its letters, for the composer forms
+   ligatures from the face it sets.
 2. **Glyphs → lines → frames → paragraphs** (`text.rs`). Glyphs join a line along a baseline
-   in paint order. Lines join a frame while they run down the same column within a few lines;
+   in paint order. A word space is a gap past the line's own letter spacing (its median gap
+   and a tenth of an em), so text set tight and text tracked open both keep their words. A
+   line with a gap no line near it repeats is not a row of a table but items on one baseline (a
+   label beside the next, a caption and its mark), each set where the page sets it. Lines join a frame while they run down the same column within a few lines;
    a frame splits where display type (14 pt and up) meets body text, and where its lines change
    measure (frames threaded one under the other). A frame's width is bounded by its own
    breaks: a soft break happens because the next word would not fit, so each bounds the width
    from above, the widest line from below, and the frame takes the middle — a face a little
-   wider or narrower than the original still breaks where the page breaks. A break that bound
+   wider or narrower than the original still breaks where the page breaks. In Chinese and
+   Japanese, which break between any two characters, the next line's first word is its first
+   character. A break that bound
    does not explain is a forced line break; display type keeps every break as a forced one.
    Paragraphs end at extra space, a change of size or colour, a first-line indent, a short line
    in a justified frame, or a change of face where a sentence ends. A first line hung left of
@@ -69,7 +78,8 @@ repeats.
    in reading order (to its right, below it, or on the next spread) by a frame that starts in
    the same face, size and colour, continues the story; the paragraph cut by the frame break is
    joined back into one. A frame the story runs on from ends just under its last line, so the
-   next line goes on; the last frame keeps a line's room.
+   next line goes on; the last frame keeps a line's room, and up to three where its column is
+   free of other text down to the page's foot.
 6. **Styles** (`styles.rs`). Paragraphs that share face, size, colour, leading, alignment,
    indents and All Caps share a paragraph style; a run that differs from its paragraph's style
    takes a character style. Names say what a style is (`Medium 11/12`, `Black 50/42 Caps White
@@ -89,7 +99,8 @@ repeats.
    a fifth of the spreads or more is a master item; spreads that carry the same set share a
    master (A, B, …); a folio becomes the page-number marker, and the folios' numbering starts
    the document's section. A repeated item's number is a folio only where it changes from page
-   to page; a number every page repeats (a footer's year) stays text. A PDF exported as spreads (pages twice the width of the first) reads
+   to page, and only the run of digits that changes becomes the marker: an issue number or a
+   year beside it stays text. A PDF exported as spreads (pages twice the width of the first) reads
    as facing spreads; single pages can be paired by the recipe.
 9. **Pictures in frames.** A clip around one image — a picture frame as its PDF writes it —
    lowers to one native image frame: the clip its bounds, the image placed by its own transform,
