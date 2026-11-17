@@ -38,6 +38,13 @@ import {
   useRegistryView,
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
+import {
+  loadCatalog,
+  openSample,
+  resolve,
+  samplesEnabled,
+  type Sample,
+} from "../samples/catalog";
 
 const M = defineMessages("app.emptyCanvas", {
   title: "No document is open",
@@ -48,6 +55,9 @@ const M = defineMessages("app.emptyCanvas", {
   formats:
     "Paged opens Paged and InDesign (IDML) documents and pictures. Drop a file here, or choose one.",
   moreFormats: "Through its modules it also opens {list}.",
+  samples: "Sample documents",
+  samplePages: "{count} pages",
+  sampleFailed: "{name} did not open: {reason}",
 });
 
 /** Recent library documents listed. */
@@ -65,6 +75,16 @@ export function EmptyCanvas() {
     () => libraryVersion(scope),
   );
   const [recent, setRecent] = useState<DocumentEntry[]>([]);
+  // Editor ADR 1243 — finished publications to open, from the module host.
+  const [samples, setSamples] = useState<Sample[]>([]);
+  useEffect(() => {
+    if (!samplesEnabled()) return;
+    let live = true;
+    void loadCatalog().then((s) => live && setSamples(s));
+    return () => {
+      live = false;
+    };
+  }, []);
   useEffect(() => {
     const library = getLibrary(scope);
     if (!library) return;
@@ -144,6 +164,51 @@ export function EmptyCanvas() {
             </ul>
           </div>
         )}
+        {samples.length > 0 && paged && (
+          <div style={{ marginTop: 18, textAlign: "left" }}>
+            <p style={headingStyle}>{strings.t(M.samples)}</p>
+            <ul style={samplesStyle} data-empty-samples>
+              {samples.map((s) => (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    data-empty-sample={s.id}
+                    style={sampleStyle}
+                    title={s.summary ?? s.title}
+                    onClick={() =>
+                      void openSample(paged, s, {
+                        setStatus: () => undefined,
+                        pushWarning: () => undefined,
+                      }).catch((e) =>
+                        console.warn(
+                          strings.t(M.sampleFailed, {
+                            name: s.title,
+                            reason: String(e),
+                          }),
+                        ),
+                      )
+                    }
+                  >
+                    {s.thumbnail && (
+                      <img
+                        src={resolve(s.thumbnail)}
+                        alt=""
+                        crossOrigin="anonymous"
+                        style={thumbStyle}
+                      />
+                    )}
+                    <span style={{ display: "block" }}>{s.title}</span>
+                    {s.pages !== undefined && (
+                      <span style={sampleMetaStyle}>
+                        {strings.t(M.samplePages, { count: s.pages })}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p style={formatsStyle} data-empty-formats>
           {strings.t(M.formats)}
           {extensions.length > 0 &&
@@ -202,6 +267,42 @@ const listStyle: React.CSSProperties = {
   listStyle: "none",
   margin: 0,
   padding: 0,
+};
+
+const samplesStyle: React.CSSProperties = {
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+  gap: 12,
+};
+
+const sampleStyle: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  color: "var(--pg-fg)",
+  fontSize: 12,
+  textAlign: "left",
+  cursor: "pointer",
+  width: "100%",
+};
+
+const thumbStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  aspectRatio: "3 / 4",
+  objectFit: "cover",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--pg-border)",
+  marginBottom: 4,
+};
+
+const sampleMetaStyle: React.CSSProperties = {
+  display: "block",
+  color: "var(--pg-muted-fg)",
+  fontSize: 11,
 };
 
 const linkStyle: React.CSSProperties = {

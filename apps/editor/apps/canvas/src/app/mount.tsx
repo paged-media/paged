@@ -424,6 +424,7 @@ import { BUILT_IN_PANELS } from "../panels/built-in-panels";
 import { withWindowCategories } from "../panels/window-categories";
 import { applyHistoryDepthPreference } from "../panels/history-panel";
 import { PlaygroundController } from "../playground/PlaygroundController";
+import { SampleLink } from "../samples/SampleLink";
 import { debugFlag } from "../debug-flags";
 import { IframeScriptBridge } from "../playground/IframeScriptBridge";
 import { useCameraTween } from "../ui/useAnimatedCamera";
@@ -2239,6 +2240,8 @@ function CanvasAppRoot() {
         (import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
           <IframeScriptBridge />
         )}
+      {/* Editor ADR 1243 — `?sample=<id>` opens a sample document. */}
+      {instance.devTools && <SampleLink />}
     </PagedShell>
   );
 }
