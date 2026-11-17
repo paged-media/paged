@@ -357,6 +357,8 @@ pub struct Para {
     pub hyphenated: bool,
     /// Its lines as the metric fit needs them.
     pub fit_lines: Vec<FitLine>,
+    /// How many lines the page sets it in.
+    pub n_lines: usize,
 }
 
 /// One line of a paragraph for the metric fit: its text, where it starts
@@ -525,7 +527,12 @@ fn is_hyphen(t: &str) -> bool {
 /// mid-line.
 pub const HYPHEN_JOIN: char = '\u{001F}';
 
-const CLOSERS: &[char] = &['.', '!', '?', ':', '”', '"', '’', ')', '…', '»', '«', ';'];
+/// What ends a paragraph's last line for good: sentence punctuation, and
+/// the end marks magazines set after an article's last word.
+const CLOSERS: &[char] = &[
+    '.', '!', '?', ':', '”', '"', '’', ')', '…', '»', '«', ';', '■', '□', '▪', '◼', '◾', '◆', '♦',
+    '●', '·', '•', '★', '✦', '◊',
+];
 
 /// Build a block's paragraphs and its frame from its lines.
 /// Punctuation a layout program hangs into the margin (optical margin
@@ -1044,6 +1051,7 @@ fn build_para(
         first_in_frame: gi == 0,
         hyphenated,
         fit_lines,
+        n_lines: n,
     }
 }
 

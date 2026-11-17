@@ -33,7 +33,7 @@ use serde_json::json;
 use crate::engine::Session;
 use crate::options::DocumentOptions;
 
-pub fn run(doc: &Path, opts: &DocumentOptions, as_json: bool) -> Result<()> {
+pub fn run(doc: &Path, opts: &DocumentOptions, as_json: bool, story_lines: bool) -> Result<()> {
     let mut session = Session::new();
     let handle = opts.open(&mut session, doc)?;
     let model = session.model()?;
@@ -72,6 +72,25 @@ pub fn run(doc: &Path, opts: &DocumentOptions, as_json: bool) -> Result<()> {
                 },
                 // Which stories overflow their last frame, by id.
                 "oversetStoryIds": model.built().diagnostics.overset_story_ids(),
+                // Story id → composed lines per paragraph (body text, not
+                // table cells), when asked.
+                "storyLines": story_lines.then(|| {
+                    let mut out: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
+                    for page in &model.built().pages {
+                        for line in &page.story_layout {
+                            if line.cell.is_some() {
+                                continue;
+                            }
+                            let counts = out.entry(line.story_id.clone()).or_default();
+                            let i = line.paragraph_idx as usize;
+                            if counts.len() <= i {
+                                counts.resize(i + 1, 0);
+                            }
+                            counts[i] += 1;
+                        }
+                    }
+                    out
+                }),
             }))?
         );
         return Ok(());

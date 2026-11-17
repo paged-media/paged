@@ -59,7 +59,12 @@ fn main() -> Result<()> {
             out,
             assets,
         } => paged_cli::render::run(&doc, &assets, page, all, dpi, &out),
-        Command::Inspect { doc, json, assets } => paged_cli::inspect::run(&doc, &assets, json),
+        Command::Inspect {
+            doc,
+            json,
+            story_lines,
+            assets,
+        } => paged_cli::inspect::run(&doc, &assets, json, story_lines),
         Command::Export {
             doc,
             format,

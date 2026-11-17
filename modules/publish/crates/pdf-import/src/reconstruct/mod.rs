@@ -108,6 +108,9 @@ pub struct Report {
     /// Each document page's source: `[pdf page (1-based), x offset into
     /// it, width]` in points — what a comparison crops the PDF to.
     pub page_map: Vec<[f32; 3]>,
+    /// Story id → per paragraph: the lines the PDF sets it in and its
+    /// style's inferred name — what the engine's line breaks are held to.
+    pub story_lines: BTreeMap<String, Vec<(u32, String, String)>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -327,7 +330,10 @@ pub fn reconstruct(
                 }
                 let first = &bb.paras[0];
                 let kb = ParaKey::of(first);
-                let same = ka.font == kb.font && ka.size == kb.size && ka.color == kb.color;
+                let same = ka.font == kb.font
+                    && ka.size == kb.size
+                    && ka.color == kb.color
+                    && (ka.leading == 0 || kb.leading == 0 || ka.leading == kb.leading);
                 if !same {
                     continue;
                 }
@@ -338,7 +344,9 @@ pub fn reconstruct(
                 if !(later_page || right_of || below) {
                     continue;
                 }
-                if last.open_end || first.open_start {
+                // A paragraph that runs on shows it over two lines at least;
+                // a one-line list item that ends unpunctuated does not.
+                if last.open_end && last.n_lines >= 2 || first.open_start {
                     next.insert(a, b);
                     taken.insert(b);
                 }
@@ -410,7 +418,7 @@ pub fn reconstruct(
         .collect();
     for (k, t) in tracked {
         if let Some(s) = styles.paragraph.get_mut(&k) {
-            s.tracking = t;
+            s.tracking = recipe.tracking.get(&s.name).copied().unwrap_or(t);
         }
     }
     let metrics = MetricsCache::default();
@@ -492,10 +500,19 @@ pub fn reconstruct(
         for (k, p) in sp.pages.iter().enumerate() {
             doc_page += 1;
             // The PDF page under this page: the one whose span covers it.
+            // The PDF page this page starts in: of those it starts at or
+            // after, the nearest (a facing spread of two single PDF pages
+            // takes the right page from the second, not an offset into the
+            // first).
             if let Some(&(pdf, dx)) = sp
                 .pdf
                 .iter()
-                .find(|(_, dx)| p.x - dx >= -0.5 && p.x - dx < p.w * 1.5)
+                .filter(|(_, dx)| p.x - dx >= -0.5 && p.x - dx < p.w * 1.5)
+                .min_by(|a, b| {
+                    (p.x - a.1)
+                        .partial_cmp(&(p.x - b.1))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             {
                 report.page_map.push([(pdf + 1) as f32, p.x - dx, p.w]);
             }
@@ -563,6 +580,7 @@ pub fn reconstruct(
                     &mut palette,
                     false,
                 );
+                let lines_by_para = para_lines(&blocks, &styles);
                 report.paragraphs += story.paragraphs.len();
                 report.paragraph_overrides += story
                     .paragraphs
@@ -574,6 +592,7 @@ pub fn reconstruct(
                     })
                     .count();
                 let st = ids.id("pdfs");
+                report.story_lines.insert(st.clone(), lines_by_para);
                 stories.push(ParsedStory {
                     src: format!("Stories/Story_{st}.xml"),
                     self_id: st,
@@ -708,6 +727,10 @@ pub fn reconstruct(
                 space_before: Some(s.space_before),
                 space_after: Some(s.space_after),
                 hyphenation: Some(hyphenate),
+                horizontal_scale: {
+                    let sc = fonts.scale(k.font, recipe);
+                    (sc != 1.0).then_some(sc * 100.0)
+                },
                 capitalization: k.caps.then(|| "AllCaps".to_string()),
                 ..Default::default()
             },
@@ -727,7 +750,12 @@ pub fn reconstruct(
                 point_size: k.size.map(|s| s as f32 / 10.0),
                 fill_color: k.color.map(|c| palette.color_id(rgb01(c))),
                 baseline_shift: k.shift.map(|s| s as f32 / 10.0),
-                horizontal_scale: k.hscale.map(|h| h as f32),
+                horizontal_scale: k.hscale.map(|h| h as f32).or_else(|| {
+                    k.font
+                        .map(|f| fonts.scale(f, recipe))
+                        .filter(|s| *s != 1.0)
+                        .map(|s| s * 100.0)
+                }),
                 capitalization: k
                     .caps
                     .map(|c| if c { "AllCaps" } else { "Normal" }.to_string()),
@@ -951,6 +979,14 @@ fn story_from(
                             lr.text.push(' ');
                         }
                     }
+                    // The paragraph's own tracking runs on with it.
+                    let t = prev.runs.first().and_then(|r| r.tracking);
+                    let mut runs = runs;
+                    for r in runs.iter_mut() {
+                        if r.tracking.is_none() {
+                            r.tracking = t;
+                        }
+                    }
                     prev.runs.extend(runs);
                     continue;
                 }
@@ -1000,11 +1036,26 @@ fn story_from(
                         para.space_before = Some((sb - after_prev).max(0.0));
                     }
                 }
+                // A paragraph the recipe tracks on its own.
+                let opening: String = para
+                    .runs
+                    .iter()
+                    .map(|r| r.text.as_str())
+                    .collect::<String>()
+                    .chars()
+                    .take(48)
+                    .collect();
+                let own = recipe.paragraph_tracking.get(&opening).copied();
+                if let Some(t) = own {
+                    for r in para.runs.iter_mut() {
+                        r.tracking = Some(t);
+                    }
+                }
                 // Display type tracked as its own line wants: a heading's
                 // letters differ from the style's other headings', and one
                 // style tracking cannot fit both (body text is held by the
                 // line fit instead).
-                if p.dominant.1 >= 14.0 && recipe.metric_fit() {
+                if own.is_none() && p.dominant.1 >= 14.0 && recipe.metric_fit() {
                     if let Some(t) = metrics.para_fit(p, &key, fonts, recipe, book) {
                         if (t - s.tracking).abs() > 12.0 {
                             for r in para.runs.iter_mut() {
@@ -1119,7 +1170,12 @@ fn style_tracking(
     ) else {
         return base;
     };
-    let sub: f32 = chars.chars().map(|c| m.advance(c).unwrap_or(0.5)).sum();
+    let scale = fonts.scale(k.font, recipe);
+    let sub: f32 = chars
+        .chars()
+        .map(|c| m.advance(c).unwrap_or(0.5))
+        .sum::<f32>()
+        * scale;
     let fit = base + (orig - sub) / n as f32 * 1000.0;
     // The other faces the style's lines mix in (a character style's), each
     // measured over the lines' text.
@@ -1147,25 +1203,35 @@ fn style_tracking(
             } else {
                 others.get(f).and_then(|o| o.as_ref())
             };
+            let sc = fonts.scale(*f, recipe);
             for c in caps(seg).chars() {
                 w += mm
                     .and_then(|mm| mm.advance(c))
                     .or_else(|| m.advance(c))
-                    .unwrap_or(0.5);
+                    .unwrap_or(0.5)
+                    * sc;
                 n += 1;
             }
         }
         if let Some(e) = extra {
             for c in caps(e).chars() {
-                w += m.advance(c).unwrap_or(0.5);
+                w += m.advance(c).unwrap_or(0.5) * scale;
                 n += 1;
             }
         }
         (w, n)
     };
-    let mut hi = f32::MAX;
-    let mut lo = f32::MIN;
+    // Justified lines are set by the composer's spacing, not by their
+    // natural width (a justified line squeezes its word spaces): they take
+    // the mean fit alone. Ragged lines bound it — robustly, by the 3rd and
+    // 97th percentile of what the lines allow, so one odd line (a frame
+    // read too narrow) does not set a whole style's tracking.
+    let mut his: Vec<f32> = Vec::new();
+    let mut los: Vec<f32> = Vec::new();
     for (p, b) in &mine {
+        if p.align == text::Align::Justify {
+            continue;
+        }
         let [fl, _, fr, _] = b.frame;
         for l in &p.fit_lines {
             let avail = match p.align {
@@ -1178,14 +1244,24 @@ fn style_tracking(
                 continue;
             }
             let per = cnt as f32 * l.size / 1000.0;
-            hi = hi.min((avail - 0.75 - w * l.size) / per);
+            his.push((avail - 0.75 - w * l.size) / per);
             if let Some(nw) = &l.next_word {
                 let (w2, cnt2) = width_em(l, Some(&format!(" {nw}")));
                 let per2 = cnt2 as f32 * l.size / 1000.0;
-                lo = lo.max((avail + 0.75 - w2 * l.size) / per2);
+                los.push((avail + 0.75 - w2 * l.size) / per2);
             }
         }
     }
+    let pct = |v: &mut Vec<f32>, q: f32| -> Option<f32> {
+        if v.is_empty() {
+            return None;
+        }
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let i = ((v.len() - 1) as f32 * q).round() as usize;
+        Some(v[i])
+    };
+    let hi = pct(&mut his, 0.03).unwrap_or(f32::MAX);
+    let lo = pct(&mut los, 0.97).unwrap_or(f32::MIN);
     if std::env::var_os("PAGED_PDF_DEBUG_FIT").is_some() {
         eprintln!(
             "fit {:?} {family} {style} {}: base {base} fit {fit:.1} lo {lo:.1} hi {hi:.1}",
@@ -1256,6 +1332,15 @@ impl FontTable {
         let fam = fam.trim_end_matches("MT").trim_end_matches("PS");
         (split_camel(fam), split_camel(&sty))
     }
+    /// The horizontal scale the recipe sets this font at (1 = 100 %).
+    fn scale(&self, f: u32, recipe: &Recipe) -> f32 {
+        recipe
+            .fonts
+            .get(&self.names[f as usize])
+            .and_then(|c| c.scale)
+            .map_or(1.0, |s| s / 100.0)
+    }
+
     fn report(&self, recipe: &Recipe, book: &FontBook) -> Vec<FontReport> {
         let mut out = Vec::new();
         for (i, ps) in self.names.iter().enumerate() {
@@ -1967,7 +2052,11 @@ impl MetricsCache {
         } else {
             p.chars.clone()
         };
-        let sub: f32 = chars.chars().map(|c| m.advance(c).unwrap_or(0.5)).sum();
+        let sub: f32 = chars
+            .chars()
+            .map(|c| m.advance(c).unwrap_or(0.5))
+            .sum::<f32>()
+            * fonts.scale(k.font, recipe);
         let base = (p.tracking / 5.0).round() * 5.0;
         Some((base + (p.adv_em - sub) / p.adv_n as f32 * 1000.0).clamp(-150.0, 250.0))
     }
@@ -2112,4 +2201,38 @@ fn bake_image_masks(items: &mut [Item]) {
             mask: None,
         });
     }
+}
+
+/// A chain's paragraphs as the story holds them (a paragraph a frame break
+/// cut is one), each with the lines the PDF sets it in and its style's
+/// inferred name.
+fn para_lines(blocks: &[&Block], styles: &Styles) -> Vec<(u32, String, String)> {
+    let mut out: Vec<(u32, String, String)> = Vec::new();
+    let mut join_next = false;
+    for b in blocks {
+        for (pi, p) in b.paras.iter().enumerate() {
+            let name = styles
+                .paragraph
+                .get(&ParaKey::of(p))
+                .map(|s| s.name.clone())
+                .unwrap_or_default();
+            if join_next && pi == 0 {
+                if let Some(last) = out.last_mut() {
+                    last.0 += p.n_lines as u32;
+                    continue;
+                }
+            }
+            let opening: String = p
+                .runs
+                .iter()
+                .map(|r| r.text.as_str())
+                .collect::<String>()
+                .chars()
+                .take(48)
+                .collect();
+            out.push((p.n_lines as u32, name, opening));
+        }
+        join_next = b.paras.last().is_some_and(|p| p.open_end);
+    }
+    out
 }

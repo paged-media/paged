@@ -44,6 +44,14 @@ pub struct Recipe {
     /// Fonts whose text is drawn as outlines, not set as text (symbol
     /// fonts: pictograms), by PostScript name.
     pub outline_fonts: Vec<String>,
+    /// Inferred style name → its tracking (per mille of the em), fixing
+    /// what the metric fit would compute (`fit.py` writes these after
+    /// holding the engine's line breaks to the PDF's).
+    pub tracking: BTreeMap<String, f32>,
+    /// A paragraph's opening text (its first 48 characters) → its own
+    /// tracking: a paragraph whose lines the style's tracking cannot hold
+    /// to the PDF's (`fit.py` writes these).
+    pub paragraph_tracking: BTreeMap<String, f32>,
     /// Inferred style name → the name to give it.
     pub style_names: BTreeMap<String, String>,
     /// Inferred swatch name → the name to give it.
@@ -97,6 +105,10 @@ pub struct FontChoice {
     pub family: String,
     #[serde(default = "regular")]
     pub style: String,
+    /// Horizontal scale, percent, for a face no substitute is as narrow
+    /// (or wide) as: the styles set in it scale their glyphs by this.
+    #[serde(default)]
+    pub scale: Option<f32>,
 }
 
 fn regular() -> String {

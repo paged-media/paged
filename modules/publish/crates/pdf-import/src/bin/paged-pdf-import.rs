@@ -24,9 +24,18 @@
 //!                  [--report REPORT.json] [--pages A-B]
 //! ```
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+/// The crate also builds for the bundle's wasm, where there is no command
+/// line and no file system: there the binary does nothing.
+#[cfg(target_arch = "wasm32")]
+fn main() -> ExitCode {
+    ExitCode::SUCCESS
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let mut input: Option<PathBuf> = None;

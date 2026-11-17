@@ -17572,6 +17572,19 @@ pub fn font_face_lookup<'a>(
             .iter()
             .find(|e| e.family == family && e.style.as_deref() == Some(s))
             .or_else(|| {
+                // A weighted italic ("Medium Italic") is the family's
+                // italic face: a variable italic serves every weight.
+                let l = s.to_ascii_lowercase();
+                (l.contains("italic") || l.contains("oblique"))
+                    .then(|| {
+                        registry.iter().find(|e| {
+                            e.family == family
+                                && matches!(e.style.as_deref(), Some("Italic") | Some("Oblique"))
+                        })
+                    })
+                    .flatten()
+            })
+            .or_else(|| {
                 registry.iter().find(|e| {
                     e.family == family
                         && matches!(e.style.as_deref(), None | Some("") | Some("Regular"))

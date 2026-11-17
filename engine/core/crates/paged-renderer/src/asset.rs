@@ -134,11 +134,30 @@ impl BytesResolver {
     }
 }
 
+impl BytesResolver {
+    /// The family's italic face for a style that asks for one by weight
+    /// ("Medium Italic", "Bold Oblique"): a variable italic registered as
+    /// the family's `Italic` serves every weight (the weight comes from
+    /// the style name), so a weighted italic must not fall through to the
+    /// upright face.
+    fn italic_face(&self, family: &str, style: Option<&str>) -> Option<&Bytes> {
+        let s = style?.to_ascii_lowercase();
+        if !(s.contains("italic") || s.contains("oblique")) {
+            return None;
+        }
+        ["Italic", "Oblique"]
+            .iter()
+            .find_map(|st| self.fonts.get(&font_key(family, Some(st))))
+    }
+}
+
 impl AssetResolver for BytesResolver {
     fn resolve_font(&self, family: &str, style: Option<&str>) -> Option<Bytes> {
         self.fonts
             .get(&font_key(family, style))
             .cloned()
+            // A weighted italic: the family's italic face.
+            .or_else(|| self.italic_face(family, style).cloned())
             // Fall through to the bare-family entry when the styled
             // variant isn't registered.
             .or_else(|| self.fonts.get(family).cloned())
@@ -153,6 +172,7 @@ impl AssetResolver for BytesResolver {
         if let Some(b) = self
             .fonts
             .get(&font_key(family, style))
+            .or_else(|| self.italic_face(family, style))
             .or_else(|| self.fonts.get(family))
         {
             return Some(ResolvedFont {
@@ -543,5 +563,36 @@ mod tests {
         let rf = Plain.resolve_font_traced("Known", None).unwrap();
         assert!(!rf.substituted);
         assert!(Plain.resolve_font_traced("Unknown", None).is_none());
+    }
+}
+
+#[cfg(test)]
+mod weighted_italic {
+    use super::*;
+
+    /// A variable italic registered as the family's `Italic` serves a
+    /// weighted italic ("Medium Italic"); an upright weight stays upright.
+    #[test]
+    fn a_weighted_italic_resolves_to_the_italic_face() {
+        let mut r = BytesResolver::new();
+        r.add_font("Serif", None, Bytes::from_static(b"upright"));
+        r.add_font("Serif", Some("Italic"), Bytes::from_static(b"italic"));
+        assert_eq!(
+            &r.resolve_font("Serif", Some("Medium Italic")).unwrap()[..],
+            b"italic"
+        );
+        assert_eq!(
+            &r.resolve_font("Serif", Some("Bold Oblique")).unwrap()[..],
+            b"italic"
+        );
+        assert_eq!(
+            &r.resolve_font("Serif", Some("Medium")).unwrap()[..],
+            b"upright"
+        );
+        let traced = r
+            .resolve_font_traced("Serif", Some("ExtraBold Italic"))
+            .unwrap();
+        assert_eq!(&traced.bytes[..], b"italic");
+        assert!(!traced.substituted);
     }
 }

@@ -78,6 +78,10 @@ pub enum Command {
         /// Emit JSON instead of a table.
         #[arg(long)]
         json: bool,
+        /// With `--json`: every story's composed lines per paragraph
+        /// (`storyLines`), to hold a document's line breaks to a reference.
+        #[arg(long)]
+        story_lines: bool,
         #[command(flatten)]
         assets: DocumentOptions,
     },
