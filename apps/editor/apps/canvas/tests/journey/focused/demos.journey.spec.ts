@@ -142,6 +142,68 @@ test.describe("journey · embedding demos", () => {
     await expect(messages).toContainText("pages: 1");
   });
 
+  test("docs lab: a viewer frame with an editing role, on a seed, writes by script and fits the view @feat:scripting.docs-playground-seeds @level:happy", async ({
+    page,
+  }) => {
+    // The docs' scripting lab drives embed.html through connectEditor
+    // (editor ADR 212, amendment 1): the viewer's chrome, role editor (the
+    // viewer role changes nothing, scripts included), a seed document.
+    await page.route("**/__lab/host.html", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        headers: {
+          "Cross-Origin-Opener-Policy": "same-origin",
+          "Cross-Origin-Embedder-Policy": "credentialless",
+        },
+        body: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>lab</title></head><body style="margin:0"></body></html>',
+      }),
+    );
+    await page.goto("/__lab/host.html");
+    const lab = await page.evaluate(async () => {
+      // A variable, so the spec's own compiler does not resolve the module
+      // the dev server answers.
+      const url = "/src/embed/connect.ts";
+      const { connectEditor } = await import(/* @vite-ignore */ url);
+      const open = (config: Record<string, unknown>) => {
+        const frame = document.createElement("iframe");
+        frame.src = "/embed.html";
+        frame.style.cssText = "width:1000px;height:640px;border:0";
+        document.body.append(frame);
+        return connectEditor(frame, config);
+      };
+      const editor = await open({
+        profile: "viewer",
+        role: "editor",
+        seed: "one-text-frame-selected",
+      });
+      const fill =
+        'const [el] = JSON.parse(paged.selection()); console.log(JSON.parse(paged.get(el.kind + ":" + el.id, "frameFillColor")).value);';
+      const before = (await editor.runScript(fill)).output.join(" ");
+      const wrote = await editor.runScript(
+        'const [el] = JSON.parse(paged.selection()); paged.set(el.kind + ":" + el.id, "frameFillColor", "Color/Red");',
+      );
+      const after = (await editor.runScript(fill)).output.join(" ");
+      await editor.fitSelection();
+      // An unknown seed refuses with its code, before anything mounts.
+      const refused = await open({
+        profile: "viewer",
+        seed: "no-such-seed",
+      }).then(
+        () => null,
+        (e: { code?: string }) => e.code ?? String(e),
+      );
+      return { before, error: wrote.error, after, refused };
+    });
+    expect(lab.before).not.toContain("Color/Red");
+    expect(lab.error).toBeNull();
+    expect(lab.after).toContain("Color/Red");
+    expect(lab.refused).toBe("unknownSeed");
+    const frame = page.frameLocator("iframe").first();
+    await expect(frame.locator("[data-paged-viewport]").first()).toBeVisible();
+    await expect(frame.locator('[role="menubar"]')).toHaveCount(0);
+  });
+
   test("two editors on one page: each fills, submits and answers its own keys @feat:editor-shell.solo-mode @level:happy", async ({
     page,
   }) => {

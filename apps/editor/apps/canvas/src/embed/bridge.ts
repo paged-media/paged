@@ -22,7 +22,7 @@
 // host's calls. Only a parent on an allowed origin is heard; the first
 // init fixes the origin every later message must come from.
 
-import type { EditorHandle } from "./create-editor";
+import type { EditorConfig, EditorHandle } from "./create-editor";
 import { isEditorError, notCrossOriginIsolated } from "./errors";
 import {
   BRIDGED_METHODS,
@@ -41,6 +41,12 @@ export interface BridgeOptions {
   peer: Window;
   /** The frame's own window (where messages arrive). */
   self?: Window;
+  /** Makes the editor; `createEditor`, loaded on the first init, unless a
+   *  test gives its own. */
+  create?: (
+    element: HTMLElement,
+    config: EditorConfig,
+  ) => Promise<EditorHandle>;
 }
 
 /** Serves the embedding API to the parent; resolves to the handle once the
@@ -111,9 +117,15 @@ export function serveBridge(
         );
         // Loaded when a host initialises: the editor's code is not needed
         // to turn a stranger away.
-        import("./create-editor")
-          .then(({ createEditor }) =>
-            createEditor(options.element, { ...config, actions: hostActions }),
+        const create =
+          options.create ??
+          ((element: HTMLElement, c: EditorConfig) =>
+            import("./create-editor").then(({ createEditor }) =>
+              createEditor(element, c),
+            ));
+        Promise.resolve()
+          .then(() =>
+            create(options.element, { ...config, actions: hostActions }),
           )
           .then(
             (h) => {

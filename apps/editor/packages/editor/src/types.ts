@@ -220,6 +220,16 @@ export interface EditorConfig {
   role?: Role;
   /** The document to open: a `.paged`, `.idml` or template. */
   document?: { bytes: Uint8Array; name?: string };
+  /**
+   * A seed document to start from, by name: a blank US Letter page built by
+   * the seed's `paged.*` prelude, whatever the session's role. The seeds:
+   * `blank`, `one-text-frame-selected`, `two-frames`, `styled-story`,
+   * `swatches-and-styles`, `image-frame`, `a-table`, `flyer`,
+   * `article-spread`, `report-page`, `catalog`, `starter-page`. Ignored when
+   * `document` is given; an unknown name refuses with an `EditorError` of
+   * code `unknownSeed`.
+   */
+  seed?: string;
   /** What the host decides: save, submit, close, back. */
   actions?: HostActions;
   /** Field values to set once the document is open. */
@@ -290,7 +300,9 @@ export type EditorErrorCode =
   /** The page (or the frame's host page) is not cross-origin isolated.
    *  There is no degraded mode: serve the page with COOP and COEP, or embed
    *  through `@paged-media/editor/iframe`; the message says how. */
-  "notCrossOriginIsolated";
+  | "notCrossOriginIsolated"
+  /** `EditorConfig.seed` names no seed document; the message lists them. */
+  | "unknownSeed";
 
 /** An error the editor refuses with; `isEditorError` tells it apart. */
 export interface EditorError extends Error {
@@ -310,6 +322,9 @@ export interface EditorHandle {
   exportPdf(options?: ExportPdfWireOptions): Promise<Uint8Array>;
   /** The template's fields, in form order, with their values. */
   fields(): Promise<readonly TemplateFieldSummary[]>;
+  /** Zoom the view to the selection, as View ▸ Fit selection in window
+   *  does; with nothing selected the view stays. */
+  fitSelection(): Promise<void>;
   /**
    * The editor's look: its dark or light theme, and design tokens
    * (`--paged-*`, `--chrome-*`, … from `@paged-media/editor/theme-tokens.json`)
@@ -376,6 +391,7 @@ export type BridgedMethod =
   | "save"
   | "exportPdf"
   | "fields"
+  | "fitSelection"
   | "getFieldValues"
   | "setFieldValues"
   | "setRole"

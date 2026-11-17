@@ -22,14 +22,14 @@
 // set in Calibri like most real decks) opens through File ▸ Open…; the
 // Slides panel reorders and hides, the Type tool edits a title, the Notes
 // panel keeps speaker notes, and the export centre writes the deck back.
-// Every step is asserted, and so is the export's limit the voice states:
-// order, hidden slides and notes go back to PowerPoint, edited text not yet.
+// Every step is asserted, and so is what the export keeps: the order, the
+// hidden slide, the notes and the edited text go back to PowerPoint.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { film, type Kit } from "../kit/film";
-import { menu, press } from "../kit/ui";
+import { hover, menu, press } from "../kit/ui";
 import { cameraScale } from "../../e2e/harness/viewport";
 import { typeHuman } from "../kit/pointer";
 
@@ -240,10 +240,15 @@ film("slide", async (k) => {
 
   // ── Hide the fifth slide from the slideshow. ──
   await k.scene("hide", async () => {
-    const hide = thumbs(page)
-      .nth(4)
-      .getByRole("button", { name: "Hide", exact: true });
-    await pressIn(k, hide);
+    // A row shows its Duplicate, Delete and Hide buttons while the pointer
+    // is over it (or it is the active or focused slide).
+    const row = thumbs(page).nth(4);
+    await row.scrollIntoViewIfNeeded();
+    await k.hold(250);
+    await hover(k, row.locator("img").first());
+    const hide = row.getByRole("button", { name: "Hide", exact: true });
+    await expect(hide).toBeVisible();
+    await press(k, hide);
     await expect(
       thumbs(page).nth(4).locator("button[aria-pressed]"),
     ).toHaveAttribute("aria-pressed", "true");
@@ -319,7 +324,9 @@ film("slide", async (k) => {
     expect(deck[1].text, "the moved slide is second").toContain(
       "What readers asked for",
     );
-    expect(deck[1].text, "edited text is not written back yet").not.toContain(
+    // Edited text goes back to PowerPoint too now (it did not when the
+    // film was first made).
+    expect(deck[1].text, "the edited title went with it").toContain(
       "this year",
     );
     expect(deck[1].notes, "the new notes went with it").toContain(NOTE);
@@ -352,7 +359,7 @@ film("slide", async (k) => {
     await k.hold(600);
   });
 
-  // ── What it kept: the order, the hidden slide, the notes; not the edit. ──
+  // ── What it kept: the order, the hidden slide, the notes, the edit. ──
   await k.scene("limits", async () => {
     const rail = page.locator(
       '[data-panel-rail-item="media.paged.slide.panel.slides"]',

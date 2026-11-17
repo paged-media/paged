@@ -19,7 +19,7 @@
 
 // The home film (ADR 224): the website's `films/home.yaml`. One document,
 // made from nothing on camera, and every kind of content in a frame of its
-// own. File ▸ New, Layout ▸ Add page and the Margins and Columns panel; a
+// own. File ▸ New, Layout ▸ Add page and the Margins and columns panel; a
 // headline typed with the Type tool; the copy placed from a Word document
 // (paged.doc), set in its own styles, in two columns, with a drop cap and
 // justified; the story threaded onto page two and reflowed; then a frame
@@ -69,8 +69,10 @@ type Rect = [number, number, number, number]; // x0, y0, x1, y1 (pt) for focus()
 /** The pieces of the layout, in page-1 points (page 2 is P2 lower). */
 const HEAD_BOX = { x0: 48, y0: 48, x1: 430, y1: 132 };
 const BODY_TOP = 300;
-const BODY_TOP_AFTER = 412;
-const PHOTO = { x0: 48, y0: 140, x1: 564, y1: 400 };
+/** Where the copy's top edge comes to rest: the page's centre, which the
+ *  edge snaps to on the way down (editor ADR 1226). */
+const BODY_TOP_AFTER = 396;
+const PHOTO = { x0: 48, y0: 140, x1: 564, y1: 384 };
 const MARK = [
   [452, 124],
   [492, 62],
@@ -255,16 +257,22 @@ async function retype(k: Kit, field: Locator, value: string): Promise<void> {
   await k.hold(200);
 }
 
+/** A panel field's input by the property it edits: schema rows and
+ *  composition controls both carry their path (`data-control`). */
+const field = (page: Page, path: string): Locator =>
+  page.locator(`[data-control="${path}"] input:visible`).first();
+
 /** Fill fields that follow each other with Tab, the way a person does:
- *  click the first, then type each value and Tab on; Enter after the last. */
+ *  click the first, then type each value and Tab on; Enter after the last.
+ *  Each Tab must land in the next field named. */
 async function tabChain(
   k: Kit,
-  first: Locator,
+  fields: readonly Locator[],
   values: readonly string[],
 ): Promise<void> {
-  await press(k, first);
-  await expect(first).toBeFocused();
+  await press(k, fields[0]);
   for (const [i, v] of values.entries()) {
+    await expect(fields[i]).toBeFocused();
     await k.page.keyboard.press("ControlOrMeta+a");
     await typeHuman(k.page, v, 17 + i);
     await k.hold(80);
@@ -335,6 +343,9 @@ film("home", async (k) => {
     const dialog = page.locator("[data-new-document-dialog]");
     await expect(dialog).toBeVisible();
     await press(k, dialog.locator('[data-new-document-category="custom"]'));
+    // In points: the margins, gutter and frames below are measured in them
+    // (the Custom setup starts in inches).
+    await choose(k, dialog.locator("[data-new-document-units]"), "pt");
     const pages = dialog.locator('[data-new-document-field="pages"] input');
     await pages.fill("1");
     await pages.press("Enter");
@@ -349,16 +360,28 @@ film("home", async (k) => {
 
   // ── Margins and two columns on every page. ──
   await k.scene("margins", async () => {
-    await menu(k, ["Window", "Structure", "Margins and Columns"]);
-    const panel = page
-      .locator('[role="tabpanel"]:visible')
-      .filter({ has: page.locator("[data-page-select]") })
-      .first();
+    await menu(k, ["Window", "Object & Layout", "Margins and columns"]);
+    const panel = page.locator("[data-margins-columns-panel]:visible").first();
+    await expect(panel).toHaveAttribute("data-margins-columns-panel", "ready");
     await choose(k, panel.locator("[data-page-select]"), "All pages");
-    const fields = panel.locator('input[type="text"]');
-    // Bounds (4), then Top, Bottom, Inside, Outside, column Number, Gutter.
-    await tabChain(k, fields.nth(4), ["48", "48", "48", "48"]);
-    await tabChain(k, fields.nth(8), ["2", "18"]);
+    await expect(panel).toHaveAttribute("data-page-targets", "2");
+    const at = (path: string) =>
+      panel.locator(`[data-control="${path}"] input`).first();
+    await tabChain(
+      k,
+      [
+        "pageMarginTop",
+        "pageMarginBottom",
+        "pageMarginLeft",
+        "pageMarginRight",
+      ].map(at),
+      ["48", "48", "48", "48"],
+    );
+    await tabChain(
+      k,
+      [at("pageColumnCount"), at("pageColumnGutter")],
+      ["2", "18"],
+    );
     await expect
       .poll(async () =>
         page.evaluate(async () => {
@@ -464,13 +487,9 @@ film("home", async (k) => {
       .poll(async () => (await selection(page)).map((s) => s.id))
       .toEqual([bodyFrame]);
     await openPanel(page, "paged.text-frame-options");
-    const count = page
-      .locator('input[aria-label="Text frame column count"]:visible')
-      .first();
-    const gutter = page
-      .locator('input[aria-label="Text frame column gutter"]:visible')
-      .first();
-    await tabChain(k, count, ["2", "18"]);
+    const count = field(page, "textFrameColumnCount");
+    const gutter = field(page, "textFrameColumnGutter");
+    await tabChain(k, [count, gutter], ["2", "18"]);
     // The panel reads the frame back: two columns, an 18 pt gutter.
     await expect(count).toHaveValue("2");
     await expect(gutter).toHaveValue(/^18/);
@@ -487,20 +506,8 @@ film("home", async (k) => {
       .poll(async () => (await caret(page))?.storyId ?? "")
       .toBe(bodyStory);
     await openPanel(page, "paged.paragraph");
-    await retype(
-      k,
-      page
-        .locator('input[aria-label="Paragraph drop cap lines"]:visible')
-        .first(),
-      "3",
-    );
-    await retype(
-      k,
-      page
-        .locator('input[aria-label="Paragraph drop cap characters"]:visible')
-        .first(),
-      "1",
-    );
+    await retype(k, field(page, "paragraphDropCapLines"), "3");
+    await retype(k, field(page, "paragraphDropCapCharacters"), "1");
     k.focus(LOWER1);
     await k.hold(1200);
   });
@@ -957,13 +964,16 @@ film("home", async (k) => {
     expect(chartParts).toBeGreaterThan(5);
     expect(p2Frame).not.toBe("");
     // The finished pages, as they print: back in the Design workspace, the
-    // whole document, and Preview hides the guides and frame edges.
+    // whole document, and Proof view hides the guides and frame edges.
     await press(
       k,
       page.getByRole("button", { name: "Design", exact: true }).last(),
     );
     await k.key("Alt+Shift+Meta+0", "Fit document", "⌥⇧⌘0");
-    await press(k, page.getByRole("button", { name: "Proof" }).first());
+    await expect(page.locator("[data-margin-guides]")).toHaveCount(2);
+    await menu(k, ["View", "Proof view"]);
+    await expect(page.locator("[data-proof-surface]").first()).toBeAttached();
+    await expect(page.locator("[data-margin-guides]")).toHaveCount(0);
     await k.hold(300);
     await k.recamera();
     k.focus(SPREAD, 1.3);

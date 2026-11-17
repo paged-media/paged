@@ -19,7 +19,7 @@
 
 // paged.draw, the plugin film (ADR 224): the website's `films/draw.yaml`.
 // Everything the voice describes happens through the editor's own controls:
-// the tool rail, shortcuts (shown as keycaps), the Draw menu, the Swatches
+// the tool rail, shortcuts (shown as keycaps), the Object menu, the Swatches
 // panel, File ▸ Open… and the export centre. Each step is asserted, so a
 // take that looks right but did nothing fails.
 
@@ -220,7 +220,7 @@ film("draw", async (k) => {
     k.focus(DOME);
   });
 
-  // ── A rectangle, rounded live from the Draw menu. ──
+  // ── A rectangle, rounded live from the Object menu. ──
   await k.scene("corners", async () => {
     k.unfocus();
     await k.key("m", "Rectangle tool");
@@ -232,7 +232,7 @@ film("draw", async (k) => {
       .poll(async () => (await ids(page, "rectangle")).length)
       .toBe(rects + 1);
     const card = (await ids(page, "rectangle")).at(-1)!;
-    await menu(k, ["Draw", "Corners", "Rounded"]);
+    await menu(k, ["Object", "Corners", "Rounded"]);
     await expect
       .poll(() =>
         page.evaluate(async (rid) => {

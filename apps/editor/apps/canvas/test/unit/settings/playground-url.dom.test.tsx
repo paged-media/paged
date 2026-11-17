@@ -42,7 +42,7 @@ import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import { IframeScriptBridge } from "../../../src/playground/IframeScriptBridge";
 import { PlaygroundController } from "../../../src/playground/PlaygroundController";
-import { seedPrelude } from "../../../src/playground/seeds";
+import { isSeedId, seedPrelude, SEEDS } from "../../../src/playground/seeds";
 
 const DOCS = "https://docs.paged.media";
 
@@ -271,6 +271,20 @@ describe("setting url.embed", () => {
       ]);
     } finally {
       parent.restore();
+    }
+  });
+
+  test("&seed= and the embedding API's config.seed read one registry; an unknown name seeds nothing", () => {
+    covers("setting:url.embed");
+    // createEditor({ seed }) refuses a name isSeedId does not know (editor
+    // ADR 212, amendment 1); the URL flag seeds nothing for it.
+    for (const name of Object.keys(SEEDS)) {
+      expect(isSeedId(name)).toBe(true);
+      expect(seedPrelude(name)).toBe(SEEDS[name as keyof typeof SEEDS].prelude);
+    }
+    for (const name of ["", "nope", "toString", "__proto__"]) {
+      expect(isSeedId(name)).toBe(false);
+      expect(seedPrelude(name)).toBe("");
     }
   });
 

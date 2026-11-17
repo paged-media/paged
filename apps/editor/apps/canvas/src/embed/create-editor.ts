@@ -49,7 +49,8 @@ import {
 import { loadLocale } from "@paged-media/strings";
 
 import type { HostActions, ShellAccess } from "../app/instance";
-import { assertEmbeddable } from "./errors";
+import { isSeedId, SEED_PAGE_PT, SEEDS } from "../playground/seeds";
+import { assertEmbeddable, unknownSeed } from "./errors";
 
 /** A field's value, as the handle takes and gives it. */
 export type FieldValue = TemplateFieldValue["value"];
@@ -61,6 +62,16 @@ export interface EditorConfig {
   role?: Role;
   /** The document to open: a `.paged`, `.idml` or template. */
   document?: { bytes: Uint8Array; name?: string };
+  /**
+   * A seed document to start from, by name (`flyer`, `one-text-frame-selected`,
+   * … : `playground/seeds.ts`): a blank US Letter page, then the seed's
+   * `paged.*` prelude, as `?embed=script&seed=<name>` builds it. The seed
+   * is the host's setup, so it runs whatever the session's role. Ignored
+   * when `document` is given; an unknown name refuses with an
+   * `EditorError` of code `unknownSeed`, before anything is mounted
+   * (editor ADR 212, amendment 1).
+   */
+  seed?: string;
   /** What the host decides: save, submit, close, back. */
   actions?: HostActions;
   /** Field values to set once the document is open. */
@@ -117,6 +128,10 @@ export interface EditorHandle {
   exportPdf(options?: ExportPdfWireOptions): Promise<Uint8Array>;
   /** The template's fields, in form order, with their values. */
   fields(): Promise<readonly TemplateFieldSummary[]>;
+  /** Zoom the view to the selection, as View ▸ Fit selection in window
+   *  does; with nothing selected the view stays (editor ADR 212,
+   *  amendment 1). */
+  fitSelection(): Promise<void>;
   /**
    * The editor's look: its dark or light theme, and design tokens
    * (`--paged-*`, `--chrome-*`, … from apps/editor/docs/theme-tokens.json)
@@ -213,6 +228,19 @@ export function aliasedFeatures(
   };
 }
 
+/** The profile a config asks for: its preset or profile, with the config's
+ *  role over the profile's (a viewer's chrome with an editing role is the
+ *  docs' scripting lab, editor ADR 212, amendment 1). */
+export function profileOf(
+  config: Pick<EditorConfig, "profile" | "role">,
+): EditorProfile {
+  const preset = config.profile ?? "full";
+  const role = config.role ? { role: config.role } : {};
+  return typeof preset === "string"
+    ? { extends: preset, ...role }
+    : { ...preset, ...role };
+}
+
 /**
  * Mount an editor into `element` and resolve to its handle. On a page that
  * is not cross-origin isolated it mounts nothing and rejects with an
@@ -224,11 +252,9 @@ export async function createEditor(
   config: EditorConfig = {},
 ): Promise<EditorHandle> {
   assertEmbeddable();
-  const preset = config.profile ?? "full";
-  const profile: EditorProfile =
-    typeof preset === "string"
-      ? { extends: preset, ...(config.role ? { role: config.role } : {}) }
-      : { ...preset, ...(config.role ? { role: config.role } : {}) };
+  if (config.seed !== undefined && !isSeedId(config.seed))
+    throw unknownSeed(config.seed, Object.keys(SEEDS));
+  const profile = profileOf(config);
   const { strings, problem } = await loadLocale(config.locale ?? "en", {
     ...(config.messages ? { messages: config.messages } : {}),
     ...(config.assetBase ? { assetBase: config.assetBase } : {}),
@@ -295,6 +321,9 @@ export async function createEditor(
       return r.bytes;
     },
     fields: () => client.templateFields(),
+    async fitSelection() {
+      await registries.commands.invoke(FIT_SELECTION);
+    },
     async getFieldValues() {
       const out: Record<string, FieldValue> = {};
       for (const row of await client.templateFields()) {
@@ -362,8 +391,52 @@ export async function createEditor(
     },
   };
 
-  if (config.document) await handle.load(config.document);
-  if (config.values) await handle.setFieldValues(config.values);
+  try {
+    if (config.document) await handle.load(config.document);
+    else if (config.seed !== undefined && isSeedId(config.seed))
+      await seedDocument(
+        handle,
+        client,
+        SEEDS[config.seed].prelude,
+        mounted.instance.role.get(),
+      );
+    if (config.values) await handle.setFieldValues(config.values);
+  } catch (error) {
+    // Nothing is left mounted behind a refusal.
+    handle.dispose();
+    throw error;
+  }
   emit({ type: "ready" });
   return handle;
+}
+
+/** View ▸ Fit selection in window (app-commands.ts,
+ *  `PAGED_VIEW_FIT_SELECTION`; named here so the embedding entry does not
+ *  load the app's command module). */
+export const FIT_SELECTION = "paged.view.fitSelection";
+
+/**
+ * A seed document: a blank US Letter page, then the seed's prelude through
+ * `executeScript`, the door the docs playground's bridge uses
+ * (`playground/IframeScriptBridge.tsx`). A role that may change nothing (a
+ * filler, a viewer) is lifted to `editor` while the prelude runs and put
+ * back after: the seed is the host's setup, as a loaded document is.
+ */
+export async function seedDocument(
+  handle: Pick<EditorHandle, "newDocument">,
+  client: Pick<CanvasClient, "setSessionPolicy" | "executeScript">,
+  prelude: string,
+  role: Role,
+): Promise<void> {
+  await handle.newDocument(SEED_PAGE_PT[0], SEED_PAGE_PT[1]);
+  if (!prelude) return;
+  const lift = role === "filler" || role === "viewer";
+  if (lift) await client.setSessionPolicy({ role: "editor", overrides: [] });
+  let failure: string | null = null;
+  try {
+    failure = (await client.executeScript(prelude)).error;
+  } finally {
+    if (lift) await client.setSessionPolicy({ role, overrides: [] });
+  }
+  if (failure) throw new Error(`createEditor: the seed failed: ${failure}`);
 }

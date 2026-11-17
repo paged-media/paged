@@ -581,7 +581,7 @@ film("database-publishing", async (k) => {
   await k.scene("merge", async () => {
     await press(k, row.locator("[data-data-merge-run]"));
     await expect(page.locator("[data-data-merge-msg]")).toHaveText(
-      `merged ${RECORDS} record(s) onto ${RECORDS} page(s)`,
+      `Merged ${RECORDS} record(s) onto ${RECORDS} page(s)`,
       { timeout: 60_000 },
     );
     k.unfocus();
@@ -617,7 +617,7 @@ film("database-publishing", async (k) => {
   // ── A script: a numbered footer on every page. ──
   await k.scene("script", async () => {
     k.unfocus();
-    await menu(k, ["Window", "Developer", "Script"]);
+    await menu(k, ["Window", "Utilities", "Script"]);
     const source = page.locator("[data-script-source]");
     await expect(source).toBeVisible({ timeout: 10_000 });
     // The code area, not the whole tall panel, so the typing reads.

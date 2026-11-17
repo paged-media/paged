@@ -61,12 +61,16 @@ What the editor ships and what it does not, read from the code at commit `6d098e
 - **Playground build.** `build:demo` keeps the automation handle, a script playground and
   an iframe bridge for running `paged.*` source from an embedding page. Live scripts
   (`*-live.js`) run hands-free with `?autoplay&embed`, checked end to end by
-  `tests/live-scripts.spec.ts`.
+  `tests/live-scripts.spec.ts`. The embedding API starts an editor on a named seed document
+  (`seed`) and fits the view to the selection (`fitSelection`), over the frame too
+  ([ADR 212](adr/212-one-automation-surface.md), amendment 1).
 - **Templates.** The Template panel makes fields, sets what a filler may do and previews the
   template as a filler; the form fills every kind of field, text in the styles and with the
   breaks the author allows and alternates by a picker (ADR 276; engine ADRs 1000–1002, 1017).
 - **Films.** The paged.media films are recorded by a Playwright project (`films`, local only,
   [ADR 224](adr/224-films-are-recorded-by-the-editor.md)); the paged.draw film is the first.
+  The same project captures the site's and the docs' stills (`tests/films/stills/`), each
+  recorded in `stills.json` with its commit.
 
 ## Object model in the panels (ADR 323, in progress on a branch)
 

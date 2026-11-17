@@ -60,10 +60,39 @@ export async function startCapture(
   const index = join(opts.dir, "frames.jsonl");
   writeFileSync(index, "");
   let count = 0;
+  // The screencast drops a frame the page paints while the previous one
+  // still waits for its ack, and sends nothing more until the page paints
+  // again: the end of a fade (a menu closing) could then never reach the
+  // take, which would hold the half-faded menu. Once a burst of frames
+  // stops, the page repaints one invisible pixel, once, and the screencast
+  // sends the state the page settled in.
+  let settle: ReturnType<typeof setTimeout> | null = null;
+  let nudged = false;
+  let stopped = false;
+  const nudge = () => {
+    if (stopped) return;
+    nudged = true;
+    void page
+      .evaluate(() => {
+        let px = document.getElementById("film-settle");
+        if (!px) {
+          px = document.createElement("div");
+          px.id = "film-settle";
+          px.style.cssText =
+            "position:fixed;right:0;bottom:0;width:1px;height:1px;pointer-events:none;z-index:2147483647;background:#000;opacity:0.01";
+          document.body.appendChild(px);
+        }
+        px.style.opacity = px.style.opacity === "0.01" ? "0.02" : "0.01";
+      })
+      .catch(() => {});
+  };
   // CDP directly, not `page.screencast`: Playwright 1.63 does not pass an
   // `onFrame` client's `size` through and falls back to 800 px wide.
   const cdp = await page.context().newCDPSession(page);
   cdp.on("Page.screencastFrame", (ev) => {
+    if (settle) clearTimeout(settle);
+    if (nudged) nudged = false;
+    else settle = setTimeout(nudge, 300);
     const wall = Date.now();
     const file = `f${String(count).padStart(6, "0")}.jpg`;
     count += 1;
@@ -87,6 +116,8 @@ export async function startCapture(
       return count;
     },
     async stop() {
+      stopped = true;
+      if (settle) clearTimeout(settle);
       await cdp.send("Page.stopScreencast").catch(() => {});
       await cdp.detach().catch(() => {});
     },

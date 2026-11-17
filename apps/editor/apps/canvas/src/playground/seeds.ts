@@ -276,9 +276,16 @@ paged.set(foot, "frameFillTint", 8);
   },
 };
 
+/** The page every seed is built on: US Letter, in points. */
+export const SEED_PAGE_PT: readonly [number, number] = [612, 792];
+
+/** Whether `name` names a seed. */
+export function isSeedId(name: string): name is SeedId {
+  return Object.hasOwn(SEEDS, name);
+}
+
 /** Resolve a seed name from the URL to its prelude source (empty if unknown). */
 export function seedPrelude(name: string | null | undefined): string {
   if (!name) return "";
-  const seed = (SEEDS as Record<string, Seed>)[name];
-  return seed ? seed.prelude : "";
+  return isSeedId(name) ? SEEDS[name].prelude : "";
 }

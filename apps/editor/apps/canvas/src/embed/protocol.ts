@@ -35,6 +35,7 @@ export const BRIDGED_METHODS = [
   "save",
   "exportPdf",
   "fields",
+  "fitSelection",
   "getFieldValues",
   "setFieldValues",
   "setRole",

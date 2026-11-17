@@ -516,9 +516,15 @@ jobs:
 
       # PAGED_MODULES_HOSTED: the module door (ADR 223) answers the module
       # host, because the next step hosts every module the build lists.
+      # VITE_EMBED_ORIGINS: the pages that may frame embed.html and drive it
+      # (embedding plan E6; editor ADR 212, amendment 1): the docs' scripting
+      # lab on docs.paged.media and idml.paged.media, through connectEditor.
+      # The build writes them into embed.html's frame-ancestors and the
+      # bridge hears only them and play.paged.media itself.
       - name: build the demo
         env:
           PAGED_MODULES_HOSTED: "1"
+          VITE_EMBED_ORIGINS: "https://docs.paged.media,https://idml.paged.media"
         run: bun run --filter paged-canvas build:demo
 
       # The module upload. Wasm modules are hosted, not deployed (ADR 220):

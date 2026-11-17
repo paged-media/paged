@@ -24,7 +24,9 @@
 import { describe, expect, test } from "bun:test";
 
 import { serveBridge } from "../../src/embed/bridge";
-import { embedOrigins } from "../../src/embed/protocol";
+import type { EditorConfig, EditorHandle } from "../../src/embed/create-editor";
+import { unknownSeed } from "../../src/embed/errors";
+import { BRIDGED_METHODS, embedOrigins } from "../../src/embed/protocol";
 
 function rig() {
   const self = new EventTarget() as unknown as Window;
@@ -65,6 +67,70 @@ describe("iframe bridge", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(r.posted.map((p) => p.msg.type)).toEqual(["paged:loaded"]);
+  });
+
+  test("init hands the seed to the editor; fitSelection reaches the handle (ADR 212, amendment 1)", async () => {
+    const r = rig();
+    const made: EditorConfig[] = [];
+    let fits = 0;
+    const handle = {
+      on: () => () => {},
+      fitSelection: async () => void (fits += 1),
+    } as unknown as EditorHandle;
+    const ready = serveBridge({
+      element: document.createElement("div"),
+      peer: r.peer,
+      self: r.self,
+      origins: ["https://host.example"],
+      create: async (_element, config) => {
+        made.push(config);
+        return handle;
+      },
+    });
+    r.send(
+      {
+        type: "paged:init",
+        config: { profile: "viewer", seed: "flyer" },
+      },
+      "https://host.example",
+    );
+    expect(await ready).toBe(handle);
+    expect(made.map((c) => [c.profile, c.seed])).toEqual([["viewer", "flyer"]]);
+    expect(BRIDGED_METHODS).toContain("fitSelection");
+    r.send(
+      { type: "paged:call", id: 4, method: "fitSelection", args: [] },
+      "https://host.example",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fits).toBe(1);
+    expect(r.posted.map((p) => p.msg)).toContainEqual({
+      type: "paged:reply",
+      id: 4,
+      ok: true,
+    });
+  });
+
+  test("an unknown seed fails the init with its code", async () => {
+    const r = rig();
+    const ready = serveBridge({
+      element: document.createElement("div"),
+      peer: r.peer,
+      self: r.self,
+      origins: ["https://host.example"],
+      create: async (_element, config) => {
+        throw unknownSeed(String(config.seed), ["blank", "flyer"]);
+      },
+    });
+    r.send(
+      { type: "paged:init", config: { seed: "nope" } },
+      "https://host.example",
+    );
+    expect(await ready).toBeNull();
+    expect(r.posted.at(-1)?.msg).toEqual({
+      type: "paged:failed",
+      code: "unknownSeed",
+      error: 'No seed document is named "nope". The seeds: blank, flyer.',
+    });
   });
 
   test("the allowed origins are the deploy's list and the editor's own", () => {

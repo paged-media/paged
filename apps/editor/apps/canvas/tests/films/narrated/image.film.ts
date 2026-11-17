@@ -317,6 +317,16 @@ film("image", async (k) => {
       .poll(() => status(page), { timeout: 20_000 })
       .toContain("Committed revision");
     await k.hold(600);
+    // The pixel selection is let go: its task bar (Generative fill, Remove)
+    // otherwise stays on the page after the raster context closes, over
+    // the place the next frame is drawn.
+    await press(
+      k,
+      page.getByRole("button", { name: "Deselect", exact: true }).first(),
+    );
+    await expect(page.getByPlaceholder("Describe what to fill in")).toHaveCount(
+      0,
+    );
   });
 
   // ── A layered PSD, opened into a frame of its own. ──

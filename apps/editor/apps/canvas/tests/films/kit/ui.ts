@@ -25,10 +25,40 @@
 import { expect, type Locator } from "@playwright/test";
 import type { Kit } from "./film";
 
+/** Whether a click at the control's centre lands on it: inside the window,
+ *  not past the edge of the panel that scrolls it, not under the bottom
+ *  bar. */
+const hittable = (l: Locator): Promise<boolean> =>
+  l.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
+    const hit = document.elementFromPoint(x, y);
+    return !!hit && (hit === el || el.contains(hit));
+  });
+
+/** Bring a control where the hand can reach it: a panel or a long menu
+ *  taller than the window scrolls, smoothly, the way a wheel scrolls it. */
+async function reveal(l: Locator): Promise<void> {
+  await l.waitFor({ state: "visible", timeout: 10_000 });
+  if (await hittable(l)) return;
+  await l.evaluate((el) =>
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+  );
+  // Something may still sit over it by design (a tooltip, the cursor's
+  // own hint); the click then goes where it always went.
+  await expect
+    .poll(() => hittable(l), { timeout: 3000 })
+    .toBe(true)
+    .catch(() => {});
+  await new Promise((r) => setTimeout(r, 250));
+}
+
 async function centre(
   l: Locator,
 ): Promise<{ x: number; y: number; w: number }> {
-  await l.waitFor({ state: "visible", timeout: 10_000 });
+  await reveal(l);
   const b = await l.boundingBox();
   if (!b) throw new Error(`no box for ${l}`);
   return {
@@ -51,9 +81,14 @@ export async function hover(k: Kit, l: Locator): Promise<void> {
 }
 
 /** A menu item by the start of its accessible name, so "Place…" finds
- *  "Place… ⌘D" (the name carries the shortcut). */
+ *  "Place… ⌘D" (the name carries the shortcut). Case does not matter: the
+ *  menus speak sentence case (editor ADR 1208), and a film keeps working
+ *  when a title's capitals change. */
 const menuItem = (k: Kit, label: string) => {
-  const name = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  const name = new RegExp(
+    `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+    "i",
+  );
   // A toggle is a menuitemcheckbox (editor ADR 255).
   return k.page
     .getByRole("menuitem", { name })
@@ -89,6 +124,7 @@ export async function menu(k: Kit, path: string[]): Promise<void> {
     // Into a submenu's column first, then along it: a diagonal crosses the
     // parent menu's other rows, and a slow one leaves the submenu's grace
     // area and closes it.
+    await reveal(menuItem(k, label));
     if (i > 0) await intoColumn(k, menuItem(k, label));
     if (i === rest.length - 1) {
       // A menu fades in: an item clicked mid-animation can miss, so the
