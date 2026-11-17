@@ -283,13 +283,21 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
     cols
 }
 
+/// Whether `line` is a row whose first cell is empty: two cells or more,
+/// the first set in from the frame's left (a total under its column).
+fn leads_with_tab(line: &Line, left: f32) -> bool {
+    let all = cells(line);
+    all.len() >= 2 && all[0].1 > left + line.size
+}
+
 /// Which column each cell of `line` sits in: every cell after the first,
-/// and the first too when it does not start at the frame's left (a row
-/// whose label cell is empty, a total).
+/// and the first too in a row whose label cell is empty. A lone line set
+/// in from the left (an entry's second line beside a column of numbers)
+/// is indented, not tabbed.
 fn cell_columns(line: &Line, cols: &[TabCol], left: f32) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let all = cells(line);
-    let skip = usize::from(all.first().is_none_or(|c| c.1 <= left + line.size));
+    let skip = usize::from(!leads_with_tab(line, left));
     for (gi, a, b) in all.into_iter().skip(skip) {
         let best = cols
             .iter()
@@ -841,14 +849,22 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
             let gap = dy > lead * 1.18 + 0.5;
             // A line indented under one at the frame's edge starts a new
             // paragraph (a first-line indent) — unless it continues a hung
-            // one: the line above opens with a bullet or a number, or the
-            // line below keeps the indent.
-            let hung = p
-                .first_char()
-                .is_some_and(|c| "•·–—-*▪■●◦".contains(c) || c.is_ascii_digit())
-                || lines
-                    .get(i + 1)
-                    .is_some_and(|n2| (n2.x0 - l.x0).abs() < 0.6);
+            // one: the line above is its item's first, opening with a
+            // bullet or a list number ("1.", "2)"), or the line below keeps
+            // the indent.
+            let marker = |t: &str| {
+                let t = t.trim_start();
+                let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
+                t.starts_with(|c: char| "•·–—-▪■●◦".contains(c))
+                    || ((1..=2).contains(&digits)
+                        && t[digits..].starts_with(|c: char| c == '.' || c == ')'))
+            };
+            let item_start = groups.last().is_some_and(|g| g[0] == i - 1);
+            let hung = item_start
+                && (marker(&p.text())
+                    || lines
+                        .get(i + 1)
+                        .is_some_and(|n2| (n2.x0 - l.x0).abs() < 0.6));
             let indent = l.x0 > left + 0.6 * l.size
                 && (p.x0 - left).abs() < 0.3 * p.size
                 && !hung
@@ -867,9 +883,15 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
             // A tabbed row is a paragraph of its own (a row of a table).
             let row = tabbed(p) || tabbed(l);
             // A list item starts with its bullet, or back out at the edge a
-            // hung paragraph's lines were indented from.
-            let item = l.first_char().is_some_and(|c| "•·–—*▪■●◦".contains(c))
-                || l.x0 < p.x0 - 0.6 * l.size;
+            // hung paragraph's lines were indented from: the paragraph's
+            // first line sits left of its others, and this line is back at
+            // the first line's edge. (A first-line indent steps left on
+            // the paragraph's second line; that is the same paragraph.)
+            let first = groups.last().map_or(i - 1, |g| g[0]);
+            let hung_back = first < i - 1
+                && lines[first].x0 < p.x0 - 0.6 * l.size
+                && (l.x0 - lines[first].x0).abs() < 0.3 * l.size;
+            let item = l.first_char().is_some_and(|c| "•·▪■●◦".contains(c)) || hung_back;
             style_change || gap || indent || short || row || item
         };
         if new_para {
@@ -1069,7 +1091,9 @@ fn build_para(
     // number hung in the margin): negative.
     let first_indent = if n >= 2 { ls[0].x0 - ls[1].x0 } else { 0.0 };
     let base_left = if n >= 2 { ls[1].x0 } else { ls[0].x0 };
-    let left_indent = if align == Align::Left || align == Align::Justify {
+    // A one-line paragraph's offset from the frame's edge is its first
+    // line's indent (below), counted once; a row reached by tabs has none.
+    let left_indent = if (align == Align::Left || align == Align::Justify) && n >= 2 {
         (base_left - left).max(0.0)
     } else {
         0.0
@@ -1077,7 +1101,7 @@ fn build_para(
     let first_indent = if align == Align::Left || align == Align::Justify {
         if n >= 2 {
             first_indent
-        } else if !tabs.is_empty() && ls[0].x0 > left + ls[0].size {
+        } else if !tabs.is_empty() && leads_with_tab(&ls[0], left) {
             // A row reached by tabs is not indented.
             0.0
         } else {
@@ -1116,6 +1140,20 @@ fn build_para(
     let mut chars = String::new();
     let mut hyphenated = false;
     let mut fit_lines: Vec<FitLine> = Vec::new();
+    // A list set as one paragraph (names, one to a line): every line opens
+    // with a capital and the lines fall well short of the measure. Its
+    // breaks are the list's, not the measure's.
+    let list_like = align == Align::Left
+        && n >= 4
+        && ls
+            .iter()
+            .all(|l| l.first_char().is_some_and(char::is_uppercase))
+        && ls[..n - 1]
+            .iter()
+            .map(|l| (l.x1 - left) / width.max(1.0))
+            .sum::<f32>()
+            / ((n - 1) as f32)
+            < 0.8;
     for (li, l) in ls.iter().enumerate() {
         let tokens = line_tokens_cols(l, tabs, left);
         let last_line = li + 1 == n;
@@ -1154,7 +1192,7 @@ fn build_para(
                 // designer broke it: those breaks are kept as breaks, so a
                 // face of other widths cannot move them.
                 let display = n <= 4 && l.size >= 14.0;
-                let fits = fits || display;
+                let fits = fits || display || list_like;
                 let gl = tokens.last().map_or(0, |t| t.glyph);
                 let text = if fits && align != Align::Justify {
                     "\u{2028}"
