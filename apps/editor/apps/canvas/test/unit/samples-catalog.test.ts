@@ -96,6 +96,10 @@ test("resolve reads a path against the catalog", () => {
   expect(resolve("lookbook/lookbook.paged", BASE)).toBe(
     "https://host.example/samples/lookbook/lookbook.paged",
   );
+  // A catalog named by its path is read against the page.
+  expect(resolve("a/b.paged", "/samples/catalog.json")).toMatch(
+    /^https?:\/\/[^/]+\/samples\/a\/b\.paged$/,
+  );
 });
 
 describe("openSample", () => {

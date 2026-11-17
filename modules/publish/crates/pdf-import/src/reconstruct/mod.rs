@@ -467,7 +467,7 @@ pub fn reconstruct(
             );
             let sid = ids.id("pdfs");
             let fid = ids.id("pdft");
-            let tf = text_frame(&fid, &sid, block, false);
+            let tf = text_frame(&fid, &sid, block, false, 0.0);
             spread.text_frames.push(tf);
             spread
                 .frames_in_order
@@ -614,7 +614,9 @@ pub fn reconstruct(
             let ix = story_ix.or_else(|| story_of.get(&(si, bi)).copied());
             let Some(ix) = ix else { continue };
             let story_id = stories[ix].self_id.clone();
-            let tf = text_frame(&fid, &story_id, block, threaded_on);
+            let page_h = plan[si].pages.first().map_or(0.0, |p| p.h);
+            let room = room_below(&spread_blocks[si], bi, page_h);
+            let tf = text_frame(&fid, &story_id, block, threaded_on, room);
             frame_ids.insert((si, bi), fid);
             spread.text_frames.push(tf);
             spread
@@ -896,8 +898,30 @@ fn page_of(ids: &mut IdGen, p: &PagePlan, _k: usize, master: Option<String>) -> 
     }
 }
 
+/// How far below a block's last baseline its column is free of other text,
+/// down to the page's foot: the room a story's last frame may take. Other
+/// pictures do not count (a frame's text over a picture is how the page
+/// sets a caption).
+fn room_below(blocks: &[(usize, Block)], bi: usize, page_h: f32) -> f32 {
+    let b = &blocks[bi].1;
+    if b.turn != 0.0 {
+        return 0.0;
+    }
+    let base = b.lines.last().map_or(0.0, |l| l.baseline);
+    let [l, _, r, _] = b.frame;
+    let mut room = page_h - base;
+    for (j, (_, o)) in blocks.iter().enumerate() {
+        let [ol, ot, or, _] = o.frame;
+        if j == bi || o.turn != 0.0 || or <= l || ol >= r || ot < base - 0.1 {
+            continue;
+        }
+        room = room.min(ot - base);
+    }
+    room.max(0.0)
+}
+
 /// A block's frame: its box, its first baseline fixed where the PDF has it.
-fn text_frame(id: &str, story: &str, b: &Block, threaded_on: bool) -> TextFrame {
+fn text_frame(id: &str, story: &str, b: &Block, threaded_on: bool, room: f32) -> TextFrame {
     let [l, t, r, _] = b.frame;
     let last = b.lines.last().unwrap();
     let lead = b
@@ -907,11 +931,13 @@ fn text_frame(id: &str, story: &str, b: &Block, threaded_on: bool) -> TextFrame 
         .unwrap_or(1.2 * last.size);
     // A frame the story runs on from ends just under its last line, so
     // the next line goes on; a frame that ends its story keeps a line's
-    // room, so a face a little wider than the original does not overset.
+    // room, so a face a little wider than the original does not overset,
+    // and up to three where the column below is free of other text.
     let bottom = if threaded_on {
         last.baseline + (0.5 * lead).max(0.3 * last.size)
     } else {
-        last.baseline + lead + 0.3 * last.size
+        let free = (room - 0.3 * last.size).min(3.0 * lead);
+        last.baseline + (lead + 0.3 * last.size).max(free)
     };
     let (c, s) = (b.turn.cos(), b.turn.sin());
     TextFrame {

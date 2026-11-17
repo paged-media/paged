@@ -118,9 +118,11 @@ export function resetCatalog(): void {
   cached = null;
 }
 
-/** `rel` against the catalog's URL. */
+/** `rel` against the catalog's URL (itself read against the page, so a
+ *  build may name a catalog by its path). */
 export function resolve(rel: string, base = catalogUrl()): string {
-  return new URL(rel, base).toString();
+  const page = globalThis.location?.href ?? "https://modules.paged.media/";
+  return new URL(rel, new URL(base, page)).toString();
 }
 
 /** Open `sample`: register its faces, then open its document through the
