@@ -2525,7 +2525,7 @@ fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
                         if g.text.chars().any(|c| CODE_SYMBOLS.contains(c)) {
                             e.symbols += 1;
                         }
-                        for c in g.text.chars().filter(|c| c.is_alphabetic()) {
+                        for c in g.text.chars().filter(|c| latin_letter(*c)) {
                             e.letters += 1;
                             if "aeiouyAEIOUYäöüéèàáíóúâêîôûåæøÄÖÜÉÈÀÁÍÓÚÂÊÎÔÛÅÆØ".contains(c)
                             {
@@ -2607,6 +2607,12 @@ fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
     }
 }
 
+/// A letter of the Latin alphabet (with its accents): the scripts the vowel
+/// tests know. Japanese and Chinese have letters without them.
+fn latin_letter(c: char) -> bool {
+    c.is_ascii_alphabetic() || (('\u{C0}'..='\u{24F}').contains(&c) && c.is_alphabetic())
+}
+
 /// The text a glyph's code gives if the code is its glyph id in TrueType's
 /// standard order: the character 29 above it (3 is the space).
 fn standard_order(g: &vectors::ir::GlyphPos) -> Option<char> {
@@ -2663,7 +2669,7 @@ fn reads_shifted(items: &[Item], key: u128) -> bool {
     // Text as it stands, mostly letters: a font of figures moves back into
     // letters too, and stays figures.
     let ink: Vec<char> = plain.chars().filter(|c| !c.is_whitespace()).collect();
-    let letters: Vec<char> = ink.iter().copied().filter(|c| c.is_alphabetic()).collect();
+    let letters: Vec<char> = ink.iter().copied().filter(|c| latin_letter(*c)).collect();
     let lettered = letters.len() * 5 >= ink.len() * 2;
     // As it stands, letters at random: under three in ten vowels (words run
     // near two in five, and a heading in a font of its own still reads).
@@ -2987,6 +2993,17 @@ mod tests {
         mark_unreadable(&mut items, &mut fonts);
         let Item::Text(t) = &items[0] else { panic!() };
         assert_eq!(t.text, "40,744 39,128 (12.3) 92.05 1,559.4");
+    }
+
+    #[test]
+    fn japanese_text_is_text() {
+        let mut items = vec![run(
+            "日本語の文章はここにあります。共同編集者と翻訳と印刷のページ",
+            1,
+        )];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        assert_eq!(outlined(&items), vec![false]);
     }
 
     #[test]
