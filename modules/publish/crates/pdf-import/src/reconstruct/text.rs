@@ -1046,7 +1046,7 @@ const CLOSERS: &[char] = &[
 const HANGERS: &[char] = &['“', '"', '‘', '\'', '„', '«', '»', '-', '–', '—', '(', '['];
 
 pub fn build_block(lines: Vec<Line>) -> Block {
-    build_block_among(lines, &[])
+    build_block_among(lines, &[], &[])
 }
 
 /// A line's box: its ink's extent across its em, `[left, top, right, bottom]`.
@@ -1059,9 +1059,11 @@ pub fn line_box(l: &Line) -> [f32; 4] {
     ]
 }
 
-/// [`build_block`] among the page's other lines (`others`, their boxes):
-/// what this block's lines wrap round stands where no other text does.
-pub fn build_block_among(mut lines: Vec<Line>, others: &[[f32; 4]]) -> Block {
+/// [`build_block`] among the page's other lines (`others`, their boxes)
+/// and its painted areas (`painted`: pictures and filled shapes): what
+/// this block's lines wrap round stands where no other text does, on
+/// something painted.
+pub fn build_block_among(mut lines: Vec<Line>, others: &[[f32; 4]], painted: &[[f32; 4]]) -> Block {
     // Hanging punctuation: a line opening with a quote mark sits left of
     // the column by about the mark's width. Its column edge is where its
     // first letter would sit without the hang: the block's common left.
@@ -1115,7 +1117,7 @@ pub fn build_block_among(mut lines: Vec<Line>, others: &[[f32; 4]]) -> Block {
             * 3
             >= body_lines.len() * 2;
     let wraps = if tabs.is_empty() {
-        find_wraps(&mut lines, left, right, justified_block, others)
+        find_wraps(&mut lines, left, right, justified_block, others, painted)
     } else {
         Vec::new()
     };
@@ -1390,7 +1392,31 @@ fn find_wraps(
     right: f32,
     justified: bool,
     others: &[[f32; 4]],
+    painted: &[[f32; 4]],
 ) -> Vec<Vec<[f32; 4]>> {
+    // What text wraps round is painted: a picture, a shape. Blank paper
+    // beside short lines is the end of a list's items or a ragged edge.
+    let on_paint = |boxes: &[[f32; 4]]| {
+        let area = |b: &[f32; 4]| (b[2] - b[0]).max(0.0) * (b[3] - b[1]).max(0.0);
+        let total: f32 = boxes.iter().map(area).sum();
+        let covered: f32 = boxes
+            .iter()
+            .map(|b| {
+                painted
+                    .iter()
+                    .map(|p| {
+                        area(&[
+                            b[0].max(p[0]),
+                            b[1].max(p[1]),
+                            b[2].min(p[2]),
+                            b[3].min(p[3]),
+                        ])
+                    })
+                    .fold(0.0f32, f32::max)
+            })
+            .sum();
+        total > 0.0 && covered * 2.0 >= total
+    };
     // An obstacle's room holds no other text: the space beside a column
     // that another column's lines fill is that column, not a picture.
     let free = |boxes: &[[f32; 4]]| {
@@ -1456,7 +1482,7 @@ fn find_wraps(
                     [left - 1.0, t, lines[i].x0 - 0.25, bt]
                 })
                 .collect();
-            if !free(&boxes) {
+            if !free(&boxes) || !on_paint(&boxes) {
                 continue;
             }
             for l in lines[a..=b].iter_mut() {
@@ -1533,7 +1559,11 @@ fn find_wraps(
                         .is_some_and(|c| matches!(c, ',' | '-' | '–' | '\u{AD}' | '\u{2010}'))
             })
             .count();
-        if !free(&boxes) || !one_edge(&edges, lines[a].size) || flowing * 5 < breaks.len() * 2 {
+        if !free(&boxes)
+            || !one_edge(&edges, lines[a].size)
+            || (!justified && !on_paint(&boxes))
+            || flowing * 5 < breaks.len() * 2
+        {
             continue;
         }
         for l in lines[a..=b].iter_mut() {
@@ -2045,7 +2075,8 @@ mod tests {
         }
         g.extend(set(&words(58), 0.0, 148.0, 0));
         g.extend(set("the end.", 0.0, 160.0, 0));
-        let block = build_block(lines(g, &[]));
+        // A picture stands to the lines' right.
+        let block = build_block_among(lines(g, &[]), &[], &[[140.0, 90.0, 300.0, 140.0]]);
         assert_eq!(block.paras.len(), 1, "{:?}", texts(&block));
         assert!(
             !texts(&block)[0].contains('\u{2028}'),
@@ -2076,7 +2107,8 @@ mod tests {
         }
         g.extend(set(&words(58), 0.0, 148.0, 0));
         g.extend(set("the end.", 0.0, 160.0, 0));
-        let block = build_block(lines(g, &[]));
+        // A picture stands to the lines' left.
+        let block = build_block_among(lines(g, &[]), &[], &[[-5.0, 100.0, 85.0, 140.0]]);
         assert_eq!(
             block.paras.len(),
             1,
@@ -2105,7 +2137,7 @@ mod tests {
         }
         g.extend(set(&words(58), 0.0, 148.0, 0));
         let others = [[200.0, 110.0, 280.0, 126.0]];
-        let block = build_block_among(lines(g, &[]), &others);
+        let block = build_block_among(lines(g, &[]), &others, &[[140.0, 90.0, 300.0, 140.0]]);
         assert!(block.wraps.is_empty());
     }
 
@@ -2118,6 +2150,18 @@ mod tests {
             g.extend(set(&format!("Item{k} {}", words(28 - 2 * k)), 0.0, y, 0));
         }
         g.extend(set(&words(58), 0.0, 160.0, 0));
+        let block = build_block(lines(g, &[]));
+        assert!(block.wraps.is_empty());
+    }
+
+    #[test]
+    fn short_lines_beside_blank_paper_are_not_a_wrap() {
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        for (k, y) in [112.0, 124.0, 136.0].into_iter().enumerate() {
+            g.extend(set(&words(29 - k), 0.0, y, 0));
+        }
+        g.extend(set(&words(58), 0.0, 148.0, 0));
         let block = build_block(lines(g, &[]));
         assert!(block.wraps.is_empty());
     }

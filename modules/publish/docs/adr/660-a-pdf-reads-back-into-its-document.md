@@ -71,7 +71,9 @@ repeats.
    or end well short of its right (justified: short of the measure; ragged: breaking where the
    next word would still have fit), step round something the text wraps round — a picture, a
    round portrait. A clear step starts the run and smaller ones beside it carry it on. The room
-   beside the run holds no other frame's text, and the edge the lines stop at follows one
+   beside the run is painted (a picture or a filled shape covers half of it at least: blank
+   paper beside short lines is a ragged edge), holds no other frame's text, and the edge the
+   lines stop at follows one
    shape (monotone, or in and back out once, within an em); text cut short on the right runs
    on past the cut (in two of five breaks, the next line goes on in lowercase or the line
    stops at a comma or a hyphen). An even indent of a few ems (a passage, a hung list), a

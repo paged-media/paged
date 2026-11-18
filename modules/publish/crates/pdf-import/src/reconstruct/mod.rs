@@ -225,6 +225,8 @@ pub fn reconstruct(
             let mut by_turn: BTreeMap<i32, Vec<Glyph>> = BTreeMap::new();
             let mut order = 0u32;
             collect_glyphs(&page.items, dx, &mut fonts, &mut by_turn, &mut order, false);
+            let mut paint = Vec::new();
+            painted(&page.items, dx, &mut paint);
             for (turn_key, glyphs) in by_turn {
                 let turn = turn_key as f32 / 1800.0 * std::f32::consts::PI;
                 // Page edges: a line does not run across one (the spine).
@@ -253,7 +255,7 @@ pub fn reconstruct(
                         .filter(|(j, _)| *j != gi)
                         .flat_map(|(_, v)| v.iter().copied())
                         .collect();
-                    let mut block = text::build_block_among(b, &others);
+                    let mut block = text::build_block_among(b, &others, &paint);
                     block.turn = turn;
                     // The frame's centre on the spread (its axes turned back).
                     let (lx, ly) = (
@@ -2369,6 +2371,49 @@ impl Legibility {
     /// Its program names its glyphs well enough to read them all by name.
     fn named(&self) -> bool {
         self.named * 10 >= self.inked * 9
+    }
+}
+
+/// The page's painted areas, pictures and filled shapes, as boxes in spread
+/// coordinates (`[left, top, right, bottom]`): what text can wrap round.
+fn painted(items: &[Item], dx: f32, out: &mut Vec<[f32; 4]>) {
+    for it in items {
+        match it {
+            Item::Group(g) => painted(&g.items, dx, out),
+            Item::Image(i) => {
+                let [a, b, c, d, e, f] = i.transform;
+                let pts = [
+                    (e, f),
+                    (a + e, b + f),
+                    (c + e, d + f),
+                    (a + c + e, b + d + f),
+                ];
+                let (x0, x1) = pts
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(l, r), p| (l.min(p.0), r.max(p.0)));
+                let (y0, y1) = pts
+                    .iter()
+                    .fold((f32::MAX, f32::MIN), |(t, bt), p| (t.min(p.1), bt.max(p.1)));
+                out.push([x0 + dx, y0, x1 + dx, y1]);
+            }
+            Item::Path(p) if p.fill.is_some() => {
+                let mut bx = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+                for c in &p.contours {
+                    for an in &c.anchors {
+                        bx = [
+                            bx[0].min(an.anchor[0]),
+                            bx[1].min(an.anchor[1]),
+                            bx[2].max(an.anchor[0]),
+                            bx[3].max(an.anchor[1]),
+                        ];
+                    }
+                }
+                if bx[0] < bx[2] && bx[1] < bx[3] {
+                    out.push([bx[0] + dx, bx[1], bx[2] + dx, bx[3]]);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
