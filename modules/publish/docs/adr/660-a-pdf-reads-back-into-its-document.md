@@ -68,7 +68,8 @@ repeats.
    cells line up — right edges for figures, left edges for text — and become the block's tab
    stops; each row is a paragraph of its own, with as many tabs as columns a cell skips (a total
    with an empty label cell starts with them). Rows of different blocks never join across a
-   page edge.
+   page edge. A row is set No Break: a substitute face a little wider than its columns' gaps
+   runs it past the frame's edge rather than onto a second line.
 4. **Hyphens resolved against the document.** A line-end hyphen inside a word is hyphenation
    (dropped, the paragraph set to hyphenate) unless the document spells that word with a
    hyphen mid-line or the word is already hyphenated elsewhere ("state-of-the-art"). InDesign

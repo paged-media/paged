@@ -998,11 +998,16 @@ fn story_from(
                 if let Some(page_runs) = folio {
                     text = folio_text(&text, page_runs, &mut digit_k);
                 }
+                // A row of a table (one line, reached by tabs) never wraps:
+                // a substitute face a little wider than the columns' gaps
+                // runs past the frame's edge instead of breaking the row.
+                let row = p.n_lines == 1 && !b.tabs.is_empty() && r.text.contains('\t');
                 runs.push(CharacterRun {
                     character_style: ck
                         .and_then(|k| styles.character.get(&k))
                         .map(|n| format!("CharacterStyle/{n}")),
                     text,
+                    no_break: row.then_some(true),
                     ..Default::default()
                 });
             }
