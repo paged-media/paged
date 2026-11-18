@@ -40,7 +40,7 @@ repeats.
    a ligature's presentation form (ﬁ, ﬀ …) reads as its letters, for the composer forms
    ligatures from the face it sets. A font whose text is not text — a `ToUnicode` that maps
    every code to itself, as flattened advertisements carry: control codes, a page's worth of
-   `+ = ; ? $`, or glyph names that contradict it — is read by its program's glyph names where
+   `+ = ; ? $`, letters with hardly a vowel, or glyph names that contradict it — is read by its program's glyph names where
    they name every glyph, and otherwise keeps its look as outlines. A glyph's control code is
    never its text. Text a page draws twice exactly over itself is read once, and text past the
    page's own edges (an exporter that writes each page with its whole spread) is not the

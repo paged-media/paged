@@ -2367,6 +2367,10 @@ struct Legibility {
     contradicted: u32,
     /// And those whose name agrees.
     confirmed: u32,
+    /// Letters, and of them vowels: words have vowels, codes passed through
+    /// for letters rarely do.
+    letters: u32,
+    vowels: u32,
 }
 
 impl Legibility {
@@ -2374,7 +2378,8 @@ impl Legibility {
     /// contradicted by the program's own names for its glyphs.
     fn illegible(&self) -> bool {
         self.unread * 2 > self.inked
-            || (self.inked >= 12 && self.symbols * 5 > self.inked)
+            || (self.inked >= 12 && self.symbols * 8 > self.inked)
+            || (self.letters >= 20 && self.vowels * 7 < self.letters)
             || (self.contradicted >= 5 && self.contradicted > 2 * self.confirmed)
     }
     /// Its program names its glyphs well enough to read them all by name.
@@ -2519,6 +2524,13 @@ fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
                         }
                         if g.text.chars().any(|c| CODE_SYMBOLS.contains(c)) {
                             e.symbols += 1;
+                        }
+                        for c in g.text.chars().filter(|c| c.is_alphabetic()) {
+                            e.letters += 1;
+                            if "aeiouyAEIOUYäöüéèàáíóúâêîôûåæøÄÖÜÉÈÀÁÍÓÚÂÊÎÔÛÅÆØ".contains(c)
+                            {
+                                e.vowels += 1;
+                            }
                         }
                         if let Some(n) = &name {
                             e.named += 1;
@@ -2821,6 +2833,17 @@ mod tests {
         }
         drop_off_page_text(&mut items, 100.0, 200.0);
         assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn a_font_of_consonants_keeps_its_look() {
+        let mut items = vec![
+            run("XSWR RII GGHBHRBHENTRS KLMNPQRST BCDFG", 1),
+            run("Made-to-measure blinds, curtains and shutters", 2),
+        ];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        assert_eq!(outlined(&items), vec![true, false]);
     }
 
     #[test]
