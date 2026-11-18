@@ -838,7 +838,7 @@
       "params": "(collection, styleId, path, value)",
       "returns": "bool",
       "kind": "write",
-      "summary": "Set one property on a style definition (collection = paragraph|character|object|cell|table; path = a settablePaths name)."
+      "summary": "Set one property on a style definition (collection = paragraph|character|object|cell|table; path = a settablePaths name, or one of the family's own style paths such as objectStyleCornerOption). A value the path does not take answers false with a [warn] naming the values it takes."
     },
     {
       "name": "paged.createNumberingList",
@@ -2096,6 +2096,7 @@
     "Scripts run in Boa (pure ECMAScript), NOT Node: no require/import, fetch, fs, setTimeout, or network. Use only paged.* and console.*.",
     "Reads return JSON STRINGS, not live values: JSON.parse(paged.selection()/tree()/stories()/pages()/…) before you index. Parsed elements are { kind, id } objects — address one as the string `${kind}:${id}` (e.g. textFrame:u3) for paged.set / inspect / get.",
     "Property writes (paged.set) return a boolean: true = applied, false = rejected (unknown id/path, bad value, or a failed precondition). The structural insert fns are the exception — see below. Always check the result and adapt.",
+    "A value a path does not take (a token outside its enum's members, a number outside its range) is refused, never stored as something else: paged.set answers false and prints a [warn] line naming the values the path takes; paged.batch's result carries the same reason (code invalidValue). An enum's members are in propertySchemas; only rows marked open take other strings, kept as given.",
     "Writes go through the editor's Operation channel, so paged.undo()/paged.redo() work exactly as in the UI.",
     "Runtime budgets: ~10M loop iterations, recursion depth 512, and a ~2s wall-clock checked at every host call. Runaway scripts are aborted (non-catchable).",
     "insertFrame/insertTextFrame return the new element's kind:id address (and auto-select it); insertPage returns the new page's selfId. Pass the returned id straight to paged.set / placeImage / insertText (use paged.pages() for a page id, paged.stories() for the minted story).",
@@ -3540,8 +3541,7 @@
           "Contour",
           "JumpObjectTextWrap",
           "NextColumnTextWrap"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -3581,8 +3581,7 @@
           "GraphicFrame",
           "SameAsClipping",
           "UserModifiedPath"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -3638,9 +3637,9 @@
           "FillProportionally",
           "ContentToFrame",
           "CenterContent",
-          "FrameToContent"
-        ],
-        "open": true
+          "FrameToContent",
+          "ContentAwareFit"
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -3675,8 +3674,7 @@
         "members": [
           "None",
           "Drop"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4211,8 +4209,7 @@
           "BottomLeftAnchor",
           "BottomCenterAnchor",
           "BottomRightAnchor"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4578,8 +4575,7 @@
           "MiterEndJoin",
           "RoundEndJoin",
           "BevelEndJoin"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4646,8 +4642,7 @@
           "CenterAlignment",
           "InsideAlignment",
           "OutsideAlignment"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4812,8 +4807,7 @@
           "InsetCorner",
           "BeveledCorner",
           "FancyCorner"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4865,8 +4859,7 @@
           "InsetCorner",
           "BeveledCorner",
           "FancyCorner"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4918,8 +4911,7 @@
           "InsetCorner",
           "BeveledCorner",
           "FancyCorner"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -4971,8 +4963,7 @@
           "InsetCorner",
           "BeveledCorner",
           "FancyCorner"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -5394,8 +5385,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -5616,8 +5606,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -5793,8 +5782,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -5969,8 +5957,7 @@
           "InnerBevel",
           "Emboss",
           "PillowEmboss"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -5993,8 +5980,7 @@
           "SmoothContour",
           "ChiselHard",
           "ChiselSoft"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6039,8 +6025,7 @@
         "members": [
           "Up",
           "Down"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6280,8 +6265,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6466,8 +6450,7 @@
           "Sharp",
           "Rounded",
           "Diffusion"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6736,8 +6719,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6809,8 +6791,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6882,8 +6863,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -6955,8 +6935,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -7104,8 +7083,7 @@
           "Saturation",
           "Color",
           "Luminosity"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -7778,8 +7756,7 @@
           "InlinePosition",
           "AboveLine",
           "Anchored"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -7809,8 +7786,7 @@
           "BottomLeftAnchor",
           "BottomCenterAnchor",
           "BottomRightAnchor"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -8134,8 +8110,7 @@
           "AllCaps",
           "SmallCaps",
           "CapToSmallCap"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -8163,8 +8138,7 @@
           "OTSubscript",
           "OTNumerator",
           "OTDenominator"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -8418,8 +8392,7 @@
           "dotDotDash",
           "wave",
           "doubleWave"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -9459,10 +9432,12 @@
         "members": [
           "HL Composer",
           "HL Single",
-          "Adobe Paragraph Composer",
-          "Adobe Single-line Composer"
-        ],
-        "open": true
+          "HL Composer Optyca",
+          "HL Single Optyca",
+          "HL Composer J",
+          "HL Single J",
+          "Word First-fit"
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -11354,10 +11329,12 @@
         "members": [
           "HL Composer",
           "HL Single",
-          "Adobe Paragraph Composer",
-          "Adobe Single-line Composer"
-        ],
-        "open": true
+          "HL Composer Optyca",
+          "HL Single Optyca",
+          "HL Composer J",
+          "HL Single J",
+          "Word First-fit"
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -11964,8 +11941,7 @@
           "AllCaps",
           "SmallCaps",
           "CapToSmallCap"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -12000,8 +11976,7 @@
           "OTSubscript",
           "OTNumerator",
           "OTDenominator"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -12323,8 +12298,7 @@
           "dotDotDash",
           "wave",
           "doubleWave"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -12947,8 +12921,7 @@
           "AllCaps",
           "SmallCaps",
           "CapToSmallCap"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -12983,8 +12956,7 @@
           "OTSubscript",
           "OTNumerator",
           "OTDenominator"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -13224,8 +13196,7 @@
           "dotDotDash",
           "wave",
           "doubleWave"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -13652,8 +13623,7 @@
           "InsetCorner",
           "BeveledCorner",
           "FancyCorner"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -15535,8 +15505,7 @@
           "SingleLeadingZeros",
           "DoubleLeadingZeros",
           "TripleLeadingZeros"
-        ],
-        "open": true
+        ]
       },
       "wire": "text",
       "nullable": true,
@@ -18376,7 +18345,8 @@
             "FillProportionally",
             "ContentToFrame",
             "CenterContent",
-            "FrameToContent"
+            "FrameToContent",
+            "ContentAwareFit"
           ]
         },
         "nullable": true,
@@ -25003,8 +24973,11 @@
           "members": [
             "HL Composer",
             "HL Single",
-            "Adobe Paragraph Composer",
-            "Adobe Single-line Composer"
+            "HL Composer Optyca",
+            "HL Single Optyca",
+            "HL Composer J",
+            "HL Single J",
+            "Word First-fit"
           ]
         },
         "nullable": true,
@@ -25868,8 +25841,11 @@
           "members": [
             "HL Composer",
             "HL Single",
-            "Adobe Paragraph Composer",
-            "Adobe Single-line Composer"
+            "HL Composer Optyca",
+            "HL Single Optyca",
+            "HL Composer J",
+            "HL Single J",
+            "Word First-fit"
           ]
         },
         "nullable": true,

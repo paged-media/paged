@@ -1417,3 +1417,217 @@ fn content_reads_writes_and_undoes_as_one_step() {
     set(&mut m, &story, Value::Length(None));
     assert_eq!(m.get_property(&story, "content"), text("\n"));
 }
+
+/// Engine ADR 1315 — a value outside an enum is refused, or, on an open
+/// vocabulary, kept as given: never taken and lost. `paged.set(frame,
+/// "frameCornerOptionTopLeft", "Rounded")` answered true and stored no
+/// corner at all, because the model's corner option has no "Rounded".
+///
+/// Every enum row of the catalog (element, style and virtual), on every
+/// probe target it applies to: each member lands through `Set` and reads
+/// back, and a stranger is refused by a closed enum and read back as given
+/// by an open one. An element or style row is also written with the raw
+/// `SetElementProperty` / `SetStyleProperty` a wire client may send without
+/// the schema: there the stranger is refused or kept, never lost.
+#[test]
+fn every_enum_row_refuses_a_stranger_and_keeps_its_members() {
+    const STRANGER: &str = "NotAMember";
+    let rows: Vec<SchemaRow> = property_schemas()
+        .into_iter()
+        .filter(|r| r.access == "readWrite" && r.value_type.kind == ValueType::Enum)
+        .collect();
+    assert!(rows.len() >= 60, "only {} enum rows", rows.len());
+    let (mut m, t) = build();
+    // An anchored frame, for the anchored-object rows: in the empty text
+    // frame's story, so the probe story's ranges stay as they were.
+    let host_story = m
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|s| &s.spread.text_frames)
+        .find(|f| f.self_id.as_deref() == Some(t.empty_text_frame.as_str()))
+        .and_then(|f| f.parent_story.clone())
+        .expect("the empty frame's story");
+    apply(
+        &mut m,
+        Mutation::InsertText {
+            story_id: host_story.clone(),
+            offset: 0,
+            text: "Host".into(),
+            cell: None,
+        },
+    );
+    let anchored = m
+        .apply_mutation(&Mutation::InsertAnchoredFrame {
+            story_id: host_story,
+            offset: 2,
+            width: 40.0,
+            height: 20.0,
+            image_uri: None,
+            paragraph: None,
+            kind: None,
+            layout: None,
+            cell: None,
+        })
+        .expect("anchored frame")
+        .created_id
+        .expect("its id");
+    let element = |e: ElementId| VirtualTarget::Element { element_id: e };
+    let targets = |row: &SchemaRow| -> Vec<VirtualTarget> {
+        match row.address_kind {
+            // The anchored-object rows live on the anchored frame alone (and
+            // its other rows do not read back on it).
+            "frame" if row.path.starts_with("anchor") => vec![element(anchored.clone())],
+            "frame" => vec![
+                element(t.frame.clone()),
+                element(ElementId::TextFrame(t.text_frame.clone())),
+                element(t.path_item.clone()),
+                element(t.group.clone()),
+            ],
+            "storyRange" => vec![element(ElementId::StoryRange {
+                story_id: t.story.clone(),
+                start: 0,
+                end: 3,
+                cell: None,
+                paragraph: None,
+            })],
+            _ => targets_for(row, &t),
+        }
+    };
+    let text = |s: &str| Value::Text(s.to_string());
+    let mut failures = Vec::new();
+    let mut unprobed = Vec::new();
+    for row in &rows {
+        let path = concrete(row.path);
+        let mut probed = false;
+        for target in targets(row) {
+            let label = format!("{} {path} on {target:?}", row.address_kind);
+            // Editor ADR 309 — a mask's options need a mask to edit.
+            let masked = path.starts_with("opacityMask")
+                && path != "opacityMask"
+                && m.apply_mutation(&Mutation::Set {
+                    address: target.clone().into(),
+                    path: "opacityMask".into(),
+                    value: Value::Ref(t.mask_item.clone()),
+                })
+                .is_ok();
+            let set = |m: &mut CanvasModel, value: Value| {
+                m.apply_mutation(&Mutation::Set {
+                    address: target.clone().into(),
+                    path: path.clone(),
+                    value,
+                })
+            };
+            // Each member lands and reads back as given (the default may
+            // read back as the cleared "", which stands for it).
+            let default = match row.default {
+                Some(DefaultValue::Text(d)) => Some(d),
+                _ => None,
+            };
+            let mut landed = Vec::new();
+            let mut refused = Vec::new();
+            for member in row.value_type.members {
+                match set(&mut m, Value::Enum((*member).to_string())) {
+                    Ok(_) => {
+                        let read = m.get_property(&target, &path);
+                        let as_given = read.as_ref().is_ok_and(|r| {
+                            same(&text(member), r) || (default == Some(*member) && *r == text(""))
+                        });
+                        if !as_given {
+                            failures.push(format!("{label}: member {member:?} read back {read:?}"));
+                        }
+                        m.undo();
+                        landed.push(*member);
+                    }
+                    Err(e) => refused.push(format!("{member:?} ({e:?})")),
+                }
+            }
+            if landed.is_empty() {
+                // The row does not live on this target.
+                if masked {
+                    m.undo();
+                }
+                continue;
+            }
+            probed = true;
+            if !refused.is_empty() {
+                failures.push(format!("{label}: members refused: {}", refused.join(", ")));
+            }
+            // A stranger: refused by a closed enum, kept by an open one.
+            let before = m.get_property(&target, &path);
+            match set(&mut m, Value::Enum(STRANGER.into())) {
+                Err(_) if !row.value_type.open => {}
+                Err(e) => failures.push(format!("{label}: an open enum refused a stranger: {e:?}")),
+                Ok(_) => {
+                    let read = m.get_property(&target, &path);
+                    if row.value_type.open {
+                        if read != Ok(text(STRANGER)) {
+                            failures.push(format!("{label}: took {STRANGER:?} and read {read:?}"));
+                        }
+                    } else {
+                        failures.push(format!("{label}: a closed enum took {STRANGER:?}"));
+                    }
+                    m.undo();
+                }
+            }
+            if m.get_property(&target, &path) != before {
+                failures.push(format!("{label}: the stranger left a change behind"));
+            }
+            // The raw op a wire client may send, past the schema.
+            let raw = match (&target, paged_introspect::lookup_path(row.path)) {
+                (VirtualTarget::Element { element_id }, Some(p)) => {
+                    Some(Mutation::SetElementProperty {
+                        element_id: element_id.clone(),
+                        path: p,
+                        value: text(STRANGER),
+                    })
+                }
+                (VirtualTarget::Style { family, style_id }, Some(p)) => {
+                    Some(Mutation::SetStyleProperty {
+                        collection: match family {
+                            StyleFamily::Paragraph => paged_mutate::StyleCollection::Paragraph,
+                            StyleFamily::Character => paged_mutate::StyleCollection::Character,
+                            StyleFamily::Object => paged_mutate::StyleCollection::Object,
+                            StyleFamily::Cell => paged_mutate::StyleCollection::Cell,
+                            StyleFamily::Table => paged_mutate::StyleCollection::Table,
+                        },
+                        style_id: style_id.clone(),
+                        path: p,
+                        value: text(STRANGER),
+                    })
+                }
+                _ => None,
+            };
+            if let Some(raw) = raw {
+                if m.apply_mutation(&raw).is_ok() {
+                    let read = m.get_property(&target, &path);
+                    if read != Ok(text(STRANGER)) {
+                        failures.push(format!(
+                            "{label}: the raw op took {STRANGER:?} and read {read:?}"
+                        ));
+                    }
+                    m.undo();
+                }
+                if m.get_property(&target, &path) != before {
+                    failures.push(format!("{label}: the raw op left a change behind"));
+                }
+            }
+            if masked {
+                m.undo();
+            }
+        }
+        if !probed {
+            unprobed.push(format!("{} {path}", row.address_kind));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} enum probes failed:\n  {}",
+        failures.len(),
+        failures.join("\n  ")
+    );
+    assert!(
+        unprobed.is_empty(),
+        "enum rows no probe target takes: {unprobed:?}"
+    );
+}

@@ -21,7 +21,7 @@
         "name": "docx-engine",
         "path": "bin/docx_js_bg.wasm",
         "purpose": "compute",
-        "maxBytes": 9437184
+        "maxBytes": 10485760
       }
     ]
   },
