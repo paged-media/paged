@@ -421,7 +421,14 @@ fn init_gpu() -> Result<GpuState, String> {
 fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
     let scale = options.dpi / 72.0;
     let page_to_px = kurbo::Affine::scale(scale as f64);
-    build_scene_with_transform_filtered(list, page_to_px, false, Some(options.dpi), Some(1.0))
+    build_scene_with_transform_filtered(
+        list,
+        page_to_px,
+        /*device_grid=*/ true,
+        false,
+        Some(options.dpi),
+        Some(1.0),
+    )
 }
 
 /// Engine ADR 1306 — a page as the GPU lane draws it on screen, in page
@@ -434,6 +441,12 @@ fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
 ///
 /// `image_px_per_pt` is the device scale the placed pictures are decoded
 /// for (engine ADR 1311; `None`: at their recorded size).
+///
+/// The presenter places the scene under the camera's scale and pan,
+/// which it does not know when it builds it, so the artwork's paths are
+/// drawn as they are: no stroke adjustment, which needs the device pixel
+/// grid, and no flattening ahead of Vello's own (`vello_map`; engine ADR
+/// 189, amendment of 2026-11-18).
 pub fn screen_page_scene(
     list: &DisplayList,
     width_pt: f32,
@@ -462,6 +475,7 @@ pub fn screen_page_scene(
     let content = build_scene_with_transform_filtered(
         list,
         kurbo::Affine::IDENTITY,
+        /*device_grid=*/ false,
         false,
         None,
         image_px_per_pt.map(f64::from),
@@ -553,9 +567,28 @@ pub(crate) fn build_page_space_scene(list: &DisplayList, image_px_per_pt: Option
     build_scene_with_transform_filtered(
         list,
         kurbo::Affine::IDENTITY,
+        /*device_grid=*/ false,
         false,
         None,
         image_px_per_pt.map(f64::from),
+    )
+}
+
+/// A page's artwork in device pixels at `dpi`, from the page's top-left
+/// corner: a GPU snapshot's, which knows its pixel grid, so its rectangles
+/// and axis strokes are stroke-adjusted and its curves flattened there as
+/// the CPU snapshot's are (engine ADR 189, amendment of 2026-11-18), and
+/// its pictures are decoded and its Photoshop-mode groups baked at that
+/// resolution.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn build_device_scene(list: &DisplayList, dpi: f32) -> Scene {
+    build_scene_with_transform_filtered(
+        list,
+        kurbo::Affine::scale((dpi / 72.0) as f64),
+        /*device_grid=*/ true,
+        false,
+        Some(dpi),
+        Some(1.0),
     )
 }
 
@@ -564,6 +597,7 @@ pub(crate) fn build_scene_with_transform(list: &DisplayList, page_to_px: kurbo::
     build_scene_with_transform_filtered(
         list,
         page_to_px,
+        /*device_grid=*/ true,
         /*skip_overprints=*/ false,
         None,
         Some(1.0),
@@ -878,6 +912,12 @@ fn draw_photoshop_bake(
     scene.draw_image(&brush, place);
 }
 
+/// `device_grid` says `page_to_px` lands on the device pixel grid the
+/// scene is drawn on, so the fills and strokes are stroke-adjusted and
+/// flattened at it (`vello_map`); `false` for a scene in page space that
+/// the presenter places later under a scale and pan it does not know yet,
+/// whose paths are drawn as they are.
+///
 /// `bake_dpi` is the device resolution a scene drawn in device pixels
 /// is rendered at (its Photoshop-mode bakes then land pixel for pixel);
 /// `None` for a scene the presenter scales later.
@@ -889,6 +929,7 @@ fn draw_photoshop_bake(
 fn build_scene_with_transform_filtered(
     list: &DisplayList,
     page_to_px: kurbo::Affine,
+    device_grid: bool,
     skip_overprints: bool,
     bake_dpi: Option<f32>,
     image_scale: Option<f64>,
@@ -953,9 +994,11 @@ fn build_scene_with_transform_filtered(
     let feather_runs = paged_compose::mask::feather_run_starts(list);
     let mut feather_layer_open = false;
     // Glyph fills, which stroke adjustment leaves alone, and the fills'
-    // flattened curves (`vello_map`).
+    // flattened curves (`vello_map`), both at the device grid when the
+    // scene is drawn on one.
     let glyphs = glyph_fills(list);
     let mut fills = Fills::default();
+    let grid = device_grid.then_some(page_to_px);
     // Pixels per point, for sizing the mask rasters.
     let px_per_pt = {
         let c = page_to_px.as_coeffs();
@@ -1242,7 +1285,7 @@ fn build_scene_with_transform_filtered(
             } => {
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
                 let glyph = glyphs.contains(&cmd_idx);
-                let Some(path) = fills.path(list, *path_id, transform, page_to_px, glyph) else {
+                let Some(path) = fills.path(list, *path_id, transform, grid, glyph) else {
                     continue;
                 };
                 let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
@@ -1270,7 +1313,7 @@ fn build_scene_with_transform_filtered(
                 // composite still reads the page contents below.
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
                 let glyph = glyphs.contains(&cmd_idx);
-                let Some(path) = fills.path(list, *path_id, transform, page_to_px, glyph) else {
+                let Some(path) = fills.path(list, *path_id, transform, grid, glyph) else {
                     continue;
                 };
                 let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
@@ -1315,7 +1358,7 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
-                match stroke_geometry(path, kurbo_stroke(stroke), page_to_px) {
+                match stroke_geometry(path, kurbo_stroke(stroke), grid) {
                     StrokeGeometry::Outline(outline) => {
                         scene.fill(
                             Fill::NonZero,
@@ -1351,7 +1394,7 @@ fn build_scene_with_transform_filtered(
                 // passes `skip_overprints = true` and re-encodes each
                 // overprint batch into a scratch texture.
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
-                let Some(path) = fills.path(list, *path_id, transform, page_to_px, false) else {
+                let Some(path) = fills.path(list, *path_id, transform, grid, false) else {
                     continue;
                 };
                 let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
@@ -1383,7 +1426,7 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
-                match stroke_geometry(path, kurbo_stroke(stroke), page_to_px) {
+                match stroke_geometry(path, kurbo_stroke(stroke), grid) {
                     StrokeGeometry::Outline(outline) => {
                         scene.fill(
                             Fill::NonZero,
@@ -2291,6 +2334,7 @@ fn gpu_compute_overprint_path(
     let scene = build_scene_with_transform_filtered(
         list,
         kurbo::Affine::scale(scale as f64),
+        /*device_grid=*/ true,
         /*skip_overprints=*/ true,
         Some(options.dpi),
         Some(1.0),
@@ -3012,7 +3056,7 @@ fn build_overprint_batch_scene(
             Some(stroke) => match stroke_geometry(
                 path_to_bez(path_data, &path.transform),
                 kurbo_stroke(stroke),
-                page_to_px,
+                Some(page_to_px),
             ) {
                 StrokeGeometry::Outline(outline) => {
                     scene.fill(Fill::NonZero, page_to_px, white, None, &outline);
@@ -3022,7 +3066,8 @@ fn build_overprint_batch_scene(
                 }
             },
             None => {
-                let Some(bez) = fills.path(list, path.path_id, &path.transform, page_to_px, false)
+                let Some(bez) =
+                    fills.path(list, path.path_id, &path.transform, Some(page_to_px), false)
                 else {
                     continue;
                 };

@@ -1073,7 +1073,8 @@ impl Raster<'_> {
                     let transform = snap(idx, transform);
                     let xform = self.active().xform;
                     let glyph = glyph_fills.contains(&idx);
-                    let Some(path) = fills.path(list, *path_id, &transform, xform, glyph) else {
+                    let Some(path) = fills.path(list, *path_id, &transform, Some(xform), glyph)
+                    else {
                         continue;
                     };
                     let Some(brush) = vello_map::resolve_paint(paint, list, &transform, xform)
@@ -1116,7 +1117,7 @@ impl Raster<'_> {
                     let (path, ks) = match vello_map::stroke_geometry(
                         path,
                         vello_map::kurbo_stroke(stroke),
-                        xform,
+                        Some(xform),
                     ) {
                         StrokeGeometry::Outline(outline) => {
                             let (surface, res, _) = self.split();
@@ -1163,7 +1164,8 @@ impl Raster<'_> {
                     transform,
                 } => {
                     let xform = self.active().xform;
-                    let Some(path) = fills.path(list, *path_id, transform, xform, false) else {
+                    let Some(path) = fills.path(list, *path_id, transform, Some(xform), false)
+                    else {
                         continue;
                     };
                     let rule = vello_map::path_fill(list, *path_id);
@@ -1180,7 +1182,7 @@ impl Raster<'_> {
                     };
                     let path = vello_map::path_to_bez(data, transform);
                     let ks = vello_map::kurbo_stroke(stroke);
-                    match vello_map::stroke_geometry(path, ks, self.active().xform) {
+                    match vello_map::stroke_geometry(path, ks, Some(self.active().xform)) {
                         StrokeGeometry::Outline(outline) => {
                             self.overprint(paint, transform, &outline, Fill::NonZero, None)
                         }
