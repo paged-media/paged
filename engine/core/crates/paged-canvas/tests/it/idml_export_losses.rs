@@ -349,6 +349,7 @@ fn an_orphan_story_reaches_no_part_and_one_loud_ledger_line() {
     model
         .apply_mutation(&Mutation::DeleteFrame {
             frame_id: frame.clone(),
+            with_story: false,
         })
         .expect("delete frame");
     assert!(

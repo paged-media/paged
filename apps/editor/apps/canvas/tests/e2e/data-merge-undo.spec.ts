@@ -176,7 +176,10 @@ async function mergeTwice(page: Page): Promise<void> {
   const before = await layout(page);
   const clear = [
     ...before.flatMap((p) =>
-      p.frames.map((f) => ({ op: "deleteFrame", args: { frameId: f } })),
+      p.frames.map((f) => ({
+        op: "deleteFrame",
+        args: { frameId: f, withStory: true },
+      })),
     ),
     ...before
       .slice(1)

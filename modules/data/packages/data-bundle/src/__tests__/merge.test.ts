@@ -88,7 +88,9 @@ describe("Data Merge writer, pure [data.lower.merge-writer]", () => {
     ).toBe("a\nb\n");
   });
 
-  it("pages: consume duplicates the emptied template page; keep inserts after it; one page needs none", () => {
+  // Engine ADR 200, amended 2026-11-18: the template's frames go with their
+  // stories, so the merged document keeps none of the template's text.
+  it("pages: consume duplicates the template page emptied of its frames and their stories; keep inserts after it; one page needs none", () => {
     expect(
       pageMutations({ pageCount: 1 }, TEMPLATE, { template: "consume" }),
     ).toBeNull();
@@ -98,8 +100,8 @@ describe("Data Merge writer, pure [data.lower.merge-writer]", () => {
       op: "batch",
       args: {
         ops: [
-          { op: "deleteFrame", args: { frameId: "tf" } },
-          { op: "deleteFrame", args: { frameId: "img" } },
+          { op: "deleteFrame", args: { frameId: "tf", withStory: true } },
+          { op: "deleteFrame", args: { frameId: "img", withStory: true } },
           { op: "duplicatePage", args: { page: "p1" } },
           { op: "duplicatePage", args: { page: "p1" } },
         ],
@@ -277,15 +279,15 @@ describe("Data Merge writer, pure [data.lower.merge-writer]", () => {
     ).toBe(false);
   });
 
-  it("content: consuming a one-page merge removes the template frames in the same batch", () => {
+  it("content: consuming a one-page merge removes the template frames and their stories in the same batch", () => {
     const one = { pageCount: 1, records: [PLAN.records[0]] };
     const m = contentMutation(one, TEMPLATE, ["p1"] as never, {
       template: "consume",
       mergeId: "mg",
     }) as { args: { ops: any[] } };
-    expect(m.args.ops.slice(0, 2).map((o) => o.op)).toEqual([
-      "deleteFrame",
-      "deleteFrame",
+    expect(m.args.ops.slice(0, 2)).toEqual([
+      { op: "deleteFrame", args: { frameId: "tf", withStory: true } },
+      { op: "deleteFrame", args: { frameId: "img", withStory: true } },
     ]);
   });
 

@@ -405,20 +405,47 @@ impl PathData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PathId(pub u32);
 
+/// What a path is interned under in a [`PathBuffer`]: a caller's key for
+/// a shape, or a glyph outline's [`GlyphCacheKey`]. The two are separate
+/// namespaces, so a shape's key never finds a glyph's outline, and the
+/// kind travels with the key wherever a cached emission replays it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PathKey {
+    /// A shape's key; the caller makes it unique for its domain.
+    Shape(u64),
+    /// A glyph outline, by font and glyph ([`GlyphCacheKey::to_u64`]).
+    /// Its fills are text: the rasterizers' stroke adjustment, which
+    /// lands a rectangle's sides on pixel boundaries, leaves them alone
+    /// (`paged-gpu`'s `vello_map`), whether or not the list carries a
+    /// glyph-run table.
+    Glyph(u64),
+}
+
+impl PathKey {
+    /// What the key contributes to the buffer's fingerprint.
+    fn print(self) -> u64 {
+        match self {
+            PathKey::Shape(k) => k,
+            PathKey::Glyph(k) => k ^ PATH_PRINT_GLYPH,
+        }
+    }
+}
+
 /// Owns all path-segment data and hands out `PathId`s. Uses a caller-
 /// supplied cache key for interning, so (glyph_id, font_id, size)
 /// combinations share outlines across the command stream.
 #[derive(Debug, Default, Clone)]
 pub struct PathBuffer {
     paths: Vec<PathData>,
-    /// Cache key → PathId. Callers are responsible for making the key
-    /// unique for their domain (glyph caches use `GlyphCacheKey`).
-    cache: std::collections::HashMap<u64, PathId>,
+    /// Cache key → PathId. Callers are responsible for making a shape's
+    /// key unique for their domain; glyph outlines intern under
+    /// [`PathKey::Glyph`] ([`Self::intern_glyph`]).
+    cache: std::collections::HashMap<PathKey, PathId>,
     /// The intern key each path was stored under (`None` for an
     /// anonymous push), parallel to `paths`. A cached emission records
     /// these so its replay re-registers the keys, exactly as the emit it
     /// stands in for would have (ADR 027).
-    keys: Vec<Option<u64>>,
+    keys: Vec<Option<PathKey>>,
     /// Running fingerprint of `keys` after each path, parallel to
     /// `paths`. Two buffers with equal fingerprints hand out the same
     /// ids for the same keys, which is what a cached emission's path
@@ -430,17 +457,31 @@ pub struct PathBuffer {
 const PATH_PRINT_SEED: u64 = paged_pixel::FNV1A_64_OFFSET;
 /// What an anonymous path contributes to the fingerprint.
 const PATH_PRINT_ANON: u64 = 0x9e37_79b9_7f4a_7c15;
+/// Mixed into a glyph's key in the fingerprint, so a glyph and a shape
+/// interned under the same value do not print alike.
+const PATH_PRINT_GLYPH: u64 = 0x6c79_7068_5f6b_6579;
 
 impl PathBuffer {
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Intern `path` under `key`. Returns the existing id if `key` has
-    /// been seen before; otherwise stores `path` and returns a fresh
-    /// id. The second return value is true when the path was freshly
-    /// stored.
+    /// Intern `path` under the shape key `key`. Returns the existing id
+    /// if `key` has been seen before; otherwise stores `path` and
+    /// returns a fresh id. The second return value is true when the path
+    /// was freshly stored.
     pub fn intern(&mut self, key: u64, path: PathData) -> (PathId, bool) {
+        self.intern_key(PathKey::Shape(key), path)
+    }
+
+    /// Intern a glyph's outline (font units) under `key`, as
+    /// [`Self::intern`] does a shape's: the path is a glyph
+    /// ([`Self::is_glyph`]) for as long as the buffer holds it.
+    pub fn intern_glyph(&mut self, key: GlyphCacheKey, path: PathData) -> (PathId, bool) {
+        self.intern_key(PathKey::Glyph(key.to_u64()), path)
+    }
+
+    fn intern_key(&mut self, key: PathKey, path: PathData) -> (PathId, bool) {
         if let Some(id) = self.cache.get(&key) {
             return (*id, false);
         }
@@ -450,9 +491,10 @@ impl PathBuffer {
         (id, true)
     }
 
-    fn store(&mut self, key: Option<u64>, path: PathData) {
+    fn store(&mut self, key: Option<PathKey>, path: PathData) {
         let prev = self.fingerprint();
-        let mixed = (prev ^ key.unwrap_or(PATH_PRINT_ANON)).wrapping_mul(0x0000_0100_0000_01b3);
+        let print = key.map_or(PATH_PRINT_ANON, PathKey::print);
+        let mixed = (prev ^ print).wrapping_mul(0x0000_0100_0000_01b3);
         self.paths.push(path);
         self.keys.push(key);
         self.prints.push(mixed.rotate_left(17));
@@ -464,17 +506,18 @@ impl PathBuffer {
     }
 
     /// The intern keys of paths `[start, end)` (`None` = anonymous).
-    pub fn keys(&self, start: usize, end: usize) -> &[Option<u64>] {
+    pub fn keys(&self, start: usize, end: usize) -> &[Option<PathKey>] {
         &self.keys[start.min(self.keys.len())..end.min(self.keys.len())]
     }
 
     /// Replay one path of a cached emission: intern it under `key` when
     /// it had one, else push it anonymously. On a buffer whose
     /// fingerprint equals the one the emission started from, this hands
-    /// out the id the emission's own `intern` / `push_anon` did.
-    pub fn replay(&mut self, key: Option<u64>, path: PathData) -> PathId {
+    /// out the id the emission's own `intern` / `push_anon` did, and a
+    /// glyph's outline stays a glyph.
+    pub fn replay(&mut self, key: Option<PathKey>, path: PathData) -> PathId {
         match key {
-            Some(k) => self.intern(k, path).0,
+            Some(k) => self.intern_key(k, path).0,
             None => self.push_anon(path),
         }
     }
@@ -483,7 +526,18 @@ impl PathBuffer {
     /// when producing the `PathData` is expensive and should be
     /// skipped on a cache hit.
     pub fn find_by_key(&self, key: u64) -> Option<PathId> {
-        self.cache.get(&key).copied()
+        self.cache.get(&PathKey::Shape(key)).copied()
+    }
+
+    /// [`Self::find_by_key`] for a glyph's outline ([`Self::intern_glyph`]).
+    pub fn find_glyph(&self, key: GlyphCacheKey) -> Option<PathId> {
+        self.cache.get(&PathKey::Glyph(key.to_u64())).copied()
+    }
+
+    /// Is path `id` a glyph's outline ([`Self::intern_glyph`])? A fill of
+    /// it is text, which the rasterizers draw as the font has it.
+    pub fn is_glyph(&self, id: PathId) -> bool {
+        matches!(self.keys.get(id.0 as usize), Some(Some(PathKey::Glyph(_))))
     }
 
     /// Store `path` without interning. Useful for one-off shapes.
@@ -2163,6 +2217,54 @@ mod tests {
         assert!(!fresh2, "second intern under same key should not store");
         assert_eq!(id1, id2);
         assert_eq!(pb.len(), 1);
+    }
+
+    /// A glyph's outline is interned in its own namespace and stays a
+    /// glyph through a cached emission's replay; a shape never is one.
+    #[test]
+    fn a_glyph_outline_is_a_glyph_through_replay() {
+        let rect = || {
+            PathData::new(vec![
+                PathSegment::MoveTo { x: 180.0, y: 0.0 },
+                PathSegment::LineTo { x: 370.0, y: 0.0 },
+                PathSegment::LineTo {
+                    x: 370.0,
+                    y: 1490.0,
+                },
+                PathSegment::LineTo {
+                    x: 180.0,
+                    y: 1490.0,
+                },
+                PathSegment::Close,
+            ])
+        };
+        let key = GlyphCacheKey {
+            font_id: 3,
+            glyph_id: 197,
+        };
+        let mut pb = PathBuffer::new();
+        let shape = pb.intern(7, rect()).0;
+        let (glyph, fresh) = pb.intern_glyph(key, rect());
+        assert!(fresh);
+        assert_eq!(pb.intern_glyph(key, rect()), (glyph, false));
+        let anon = pb.push_anon(rect());
+        assert!(pb.is_glyph(glyph));
+        assert!(!pb.is_glyph(shape) && !pb.is_glyph(anon));
+        assert!(!pb.is_glyph(PathId(99)));
+        // The namespaces are apart: the glyph's key as a shape's finds
+        // nothing, and the other way round.
+        assert_eq!(pb.find_glyph(key), Some(glyph));
+        assert_eq!(pb.find_by_key(key.to_u64()), None);
+        assert_eq!(pb.find_by_key(7), Some(shape));
+
+        let mut replayed = PathBuffer::new();
+        for (i, k) in pb.keys(0, pb.len()).iter().enumerate() {
+            let path = pb.get(PathId(i as u32)).cloned().unwrap_or_default();
+            assert_eq!(replayed.replay(*k, path), PathId(i as u32));
+        }
+        assert_eq!(replayed.fingerprint(), pb.fingerprint());
+        assert!(replayed.is_glyph(glyph));
+        assert!(!replayed.is_glyph(shape) && !replayed.is_glyph(anon));
     }
 
     /// Engine ADR 1006 — a non-zero path prints, and so digests, as it

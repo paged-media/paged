@@ -193,7 +193,7 @@ async function merge(page: Page): Promise<void> {
   await row.getByLabel("Keep template", { exact: true }).uncheck();
   await row.locator("[data-data-merge-run]").click();
   await expect(page.locator("[data-data-merge-msg]")).toContainText(
-    "Merged 57 record(s) onto 3 page(s)",
+    "Merged 57 records onto 3 pages",
     { timeout: 60_000 },
   );
 }

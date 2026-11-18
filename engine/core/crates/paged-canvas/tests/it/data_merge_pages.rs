@@ -539,3 +539,87 @@ fn undo_after_a_re_merge_walks_back_to_the_template() {
     assert_eq!(text(&m, TEMPLATE_STORY), template_text);
     assert!(m.undo().is_none(), "nothing older");
 }
+
+/// Engine ADR 200, amended 2026-11-18 — a merge that consumes its template
+/// (Keep template off) deletes the template's frame `withStory`: its story,
+/// and the placeholders' hyperlinks in it, go with it. So does every merged
+/// story a re-merge clears. Nothing is left for the IDML export to leave
+/// out, and undo walks back to the template exactly.
+#[test]
+fn a_merge_that_consumes_its_template_leaves_no_story_without_a_frame() {
+    let mut m = template();
+    let start = m.current_state_hash();
+    let (template_frame, _) = frames_on(&m, TEMPLATE_PAGE)[0].clone();
+    let placeholders = sources(&m, TEMPLATE_STORY).len();
+    assert_eq!(placeholders, 3);
+    let hyperlinks = m.scene().designmap.hyperlinks.len();
+    let unplaced = |m: &CanvasModel| -> Vec<String> {
+        m.idml_export_losses()
+            .into_iter()
+            .filter(|l| l.code.starts_with("idml.story.") || l.code.starts_with("idml.hyperlink."))
+            .map(|l| l.message)
+            .collect()
+    };
+    let stories = |m: &CanvasModel| -> Vec<String> {
+        m.scene()
+            .stories
+            .iter()
+            .map(|s| s.self_id.clone())
+            .collect()
+    };
+    let content = |pages: &[String], run: u32| {
+        let mut ops = Vec::new();
+        for (p, page) in pages.iter().enumerate() {
+            let h = format!("m{run}p{p}");
+            ops.push(json!({ "op": "insertTextFrame", "args": {
+                "pageId": page, "bounds": [40.0, 40.0, 140.0, 300.0] } }));
+            ops.push(json!({ "op": "bindCreated", "args": { "handle": h } }));
+            ops.push(json!({ "op": "insertText", "args": {
+                "storyId": format!("$h:{h}"), "offset": 0, "text": format!("record {p}") } }));
+        }
+        batch(serde_json::Value::Array(ops))
+    };
+
+    // The merge: the template's frame out, two copies of its page, then a
+    // record on each page.
+    m.apply_mutation(&batch(json!([
+        { "op": "deleteFrame", "args": { "frameId": template_frame, "withStory": true } },
+        { "op": "duplicatePage", "args": { "page": TEMPLATE_PAGE } },
+        { "op": "duplicatePage", "args": { "page": TEMPLATE_PAGE } },
+    ])))
+    .expect("merge pages");
+    assert!(
+        !stories(&m).contains(&TEMPLATE_STORY.to_string()),
+        "the template's story went with its frame"
+    );
+    assert_eq!(
+        m.scene().designmap.hyperlinks.len(),
+        hyperlinks - placeholders,
+        "and so did its placeholders' hyperlinks"
+    );
+    let pages = page_ids(&m);
+    m.apply_mutation(&content(&pages, 1))
+        .expect("merge content");
+    assert_eq!(stories(&m).len(), 3, "one story per merged frame");
+    assert_eq!(unplaced(&m), Vec::<String>::new());
+
+    // Merging again clears the first run's frames: their stories go too.
+    let clear: Vec<serde_json::Value> = pages
+        .iter()
+        .flat_map(|p| frames_on(&m, p))
+        .map(|(f, _)| json!({ "op": "deleteFrame", "args": { "frameId": f, "withStory": true } }))
+        .collect();
+    m.apply_mutation(&batch(serde_json::Value::Array(clear)))
+        .expect("clear");
+    m.apply_mutation(&content(&pages, 2))
+        .expect("re-merge content");
+    assert_eq!(stories(&m).len(), 3, "the first run's stories are gone");
+    assert_eq!(unplaced(&m), Vec::<String>::new());
+
+    for _ in 0..4 {
+        m.undo().expect("undo");
+    }
+    assert_eq!(m.current_state_hash(), start, "back to the template");
+    assert_eq!(sources(&m, TEMPLATE_STORY).len(), placeholders);
+    assert_eq!(m.scene().designmap.hyperlinks.len(), hyperlinks);
+}

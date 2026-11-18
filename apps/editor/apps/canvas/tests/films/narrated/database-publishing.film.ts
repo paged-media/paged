@@ -581,7 +581,7 @@ film("database-publishing", async (k) => {
   await k.scene("merge", async () => {
     await press(k, row.locator("[data-data-merge-run]"));
     await expect(page.locator("[data-data-merge-msg]")).toHaveText(
-      `Merged ${RECORDS} record(s) onto ${RECORDS} page(s)`,
+      `Merged ${RECORDS} records onto ${RECORDS} pages`,
       { timeout: 60_000 },
     );
     k.unfocus();
@@ -688,5 +688,9 @@ film("database-publishing", async (k) => {
       "with a designmap",
     ).toBe(true);
     await k.hold(1500);
+    // The merge consumed the template with its stories (data ADR 566,
+    // amendment of 2026-11-18): the export leaves nothing out, so the
+    // editor has no "items left out" to report.
+    await expect(page.getByText(/\bleft out\b/)).toHaveCount(0);
   });
 });

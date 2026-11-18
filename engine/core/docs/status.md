@@ -33,9 +33,11 @@ template fields | fill | check` run the same messages headlessly.
   editor snapshots without WebGPU) or with Vello on WebGPU (`presentFrame` and editor snapshots
   in the editor wasm, `ViewerSession` in the viewer; [ADR 188](adr/188-snapshots-draw-on-the-worker-gpu.md)),
   from one mapping ([ADR 189](adr/189-one-rendering-model.md)). The mapping applies stroke
-  adjustment as Acrobat and poppler do (edges along the axes on pixel boundaries) and flattens
-  filled curves to 0.1 device px, the same for both lanes; all 101 InDesign fidelity fixtures
-  pass on it.
+  adjustment as Acrobat and poppler do (edges along the axes on pixel boundaries; glyphs left
+  alone) and flattens filled curves to 0.1 device px, the same for both lanes wherever the
+  device pixel grid is known; all 101 InDesign fidelity fixtures pass on it. The editor's
+  screen scene on WebGPU is built in page space and placed under the camera, so it draws its
+  paths unadjusted and lets Vello flatten them (ADR 189, amendment of 2026-11-18).
 - **Placed SVGs with their filters.** `usvg` parses a placed SVG and the engine draws it on
   `vello_cpu` when the document is built, all seventeen filter primitives included, so both
   lanes and the PDF export draw the same pixels. Eighteen fixtures hold it to the `resvg`
@@ -285,9 +287,7 @@ template fields | fill | check` run the same messages headlessly.
   GPU surface or after a device loss; `recoverGpu` asks for a new device, and the editor
   falls back to the CPU when none is granted (ADR 188).
 - **The CPU rasterizer is single-threaded**, natively too (ADR 189: `vello_cpu`'s threads
-  cost more than they save on effect-heavy and sparse pages). Without the glyph-run table (the
-  live canvas does not collect it) a glyph that is exactly a rectangle is stroke-adjusted like
-  a shape.
+  cost more than they save on effect-heavy and sparse pages).
 - **A placed SVG is a raster at one pixel per user unit**, decoded once, so it is scaled up at
   higher zoom and print resolutions rather than drawn as vectors, and its text is not drawn
   (`usvg` is built without fonts). Raster images inside an SVG are not decoded (ADR 190).

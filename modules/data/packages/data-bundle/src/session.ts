@@ -4586,7 +4586,7 @@ export function createSession(
           if (plan.reuse && !inPlace && plan.reuse.id !== into?.frame.id)
             clear.push({
               op: "deleteFrame",
-              args: { frameId: plan.reuse.id as string },
+              args: { frameId: plan.reuse.id as string, withStory: true },
             });
           const frameId = await commitLoweredTable(
             host,

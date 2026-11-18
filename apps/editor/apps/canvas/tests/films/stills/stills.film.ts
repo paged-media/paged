@@ -522,7 +522,7 @@ test("stills · a catalogue merged from product data", async ({ page }) => {
   if (await keep.isChecked()) await keep.click();
   await row.locator("[data-data-merge-run]").click();
   const merged = page.locator("[data-data-merge-msg]");
-  await expect(merged).toHaveText("Merged 24 record(s) onto 2 page(s)", {
+  await expect(merged).toHaveText("Merged 24 records onto 2 pages", {
     timeout: 60_000,
   });
   const texts = (await pageTexts(page)).flat();

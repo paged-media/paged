@@ -173,9 +173,11 @@ export function planRelower(
     if (!old.some((o) => sameElement(o, m))) old.push(m);
   }
   const removed = old.filter(deletable);
+  // Each with its story (engine ADR 200, amended 2026-11-18): what paged.data
+  // wrote goes whole, so an update leaves no story that no frame holds.
   const remove: Mutation[] = removed.map((e) => ({
     op: "deleteFrame",
-    args: { frameId: e.id as string },
+    args: { frameId: e.id as string, withStory: true },
   }));
 
   // Pages the previous lowering added — remembered, or read off the labels

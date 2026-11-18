@@ -483,7 +483,12 @@ pub(crate) fn linear_to_peniko(c: ComposeColor) -> PenikoColor {
 //    whose sides run along the axes: a rectangle, snapped the same way.
 //    Glyph outlines are not fills in this sense — a PDF draws them as
 //    text, and Splash renders text through its font engine, so a glyph
-//    known as one (the display list's glyph-run table) is left alone.
+//    is left alone: a path interned as a glyph's outline
+//    (`PathBuffer::is_glyph`), or a fill the display list's glyph-run
+//    table names. Without that, a glyph whose outline is a rectangle —
+//    Inter's I and l, a hyphen, a bar — had its stem rounded to whole
+//    pixels while its neighbours kept their exact weight, so one I came
+//    out a pixel heavier than the next.
 //
 // Splash snaps a hinted coordinate within 0.01 px of an edge, and moves
 // the far edge 0.01 px back so its scan converter's inclusive spans stop
@@ -494,6 +499,15 @@ pub(crate) fn linear_to_peniko(c: ComposeColor) -> PenikoColor {
 // The adjustment happens here, on the path, so both lanes rasterize the
 // same adjusted geometry: an adjusted stroke is drawn as a fill of its
 // outline in both.
+//
+// It needs the device pixel grid. A scene built in page space, which the
+// editor's presenter caches and places under the camera's scale and pan
+// each frame (`screen_page_scene`), has none when it is built: the grid
+// is `None` there, and its paths are drawn as they are, flattened by
+// Vello in device space at render time. Adjusting such a scene at its
+// page-space transform rounded every rectangle and axis stroke to whole
+// POINTS, which the presenter then magnified — a 1.1 pt stem drawn 1 or
+// 2 pt wide by where it fell, a hairline drawn 1 pt.
 
 /// Splash's window: a coordinate this close to a hinted edge snaps.
 const SA_WINDOW: f64 = 0.01;
@@ -838,18 +852,24 @@ pub(crate) struct Fills {
 
 impl Fills {
     /// The path the fill of `path_id` under `transform` draws at `to_px`
-    /// (page → device pixels), in page space. `glyph` leaves stroke
-    /// adjustment out (see above). `None` for a missing path.
+    /// (page → device pixels; `None` for a page-space scene, whose paths
+    /// are drawn as they are, see above), in page space. A glyph — `glyph`
+    /// (the glyph-run table names the fill) or a path interned as a
+    /// glyph's outline — is left out of stroke adjustment (see above).
+    /// `None` for a missing path.
     pub(crate) fn path(
         &mut self,
         list: &DisplayList,
         path_id: PathId,
         transform: &Transform,
-        to_px: Affine,
+        to_px: Option<Affine>,
         glyph: bool,
     ) -> Option<BezPath> {
         let data = list.paths.get(path_id)?;
-        if !glyph {
+        let Some(to_px) = to_px else {
+            return Some(path_to_bez(data, transform));
+        };
+        if !glyph && !list.paths.is_glyph(path_id) {
             let path = path_to_bez(data, transform);
             if let Some(adjusted) = adjusted_rect_fill(&path, to_px) {
                 return Some(adjusted);
@@ -906,12 +926,14 @@ pub(crate) enum StrokeGeometry {
     Stroke(BezPath, kurbo::Stroke),
 }
 
+/// `to_px` is the page → device pixel transform, `None` for a page-space
+/// scene, whose strokes are drawn as they are (see above).
 pub(crate) fn stroke_geometry(
     path: BezPath,
     stroke: kurbo::Stroke,
-    to_px: Affine,
+    to_px: Option<Affine>,
 ) -> StrokeGeometry {
-    match adjusted_stroke_outline(&path, &stroke, to_px) {
+    match to_px.and_then(|to_px| adjusted_stroke_outline(&path, &stroke, to_px)) {
         Some(outline) => StrokeGeometry::Outline(outline),
         None => StrokeGeometry::Stroke(path, stroke),
     }
@@ -921,9 +943,10 @@ pub(crate) fn stroke_geometry(
 /// are expanded to.
 const STROKE_TOLERANCE_PX: f64 = 0.05;
 
-/// The display-list indices of glyph FILLS, which stroke adjustment
-/// leaves alone (see above). Known only from the glyph-run table;
-/// without one, every fill that is a rectangle is adjusted.
+/// The display-list indices of glyph FILLS the glyph-run table names,
+/// which stroke adjustment leaves alone (see above). A list without the
+/// table still has its glyphs known by their paths
+/// (`PathBuffer::is_glyph`), which [`Fills::path`] reads itself.
 pub(crate) fn glyph_fills(list: &DisplayList) -> std::collections::HashSet<usize> {
     list.glyph_runs
         .as_ref()
@@ -1148,15 +1171,125 @@ mod tests {
         let glyph = Transform([0.01, 0.0, 0.0, 0.01, 10.13, 20.07]);
         let to_px = Affine::scale(2.0);
         let mut fills = Fills::default();
-        let as_glyph = fills.path(&list, id, &glyph, to_px, true).expect("path");
+        let as_glyph = fills
+            .path(&list, id, &glyph, Some(to_px), true)
+            .expect("path");
         assert_eq!(
             as_glyph,
             path_to_bez(list.paths.get(id).expect("path"), &glyph)
         );
-        let as_shape = fills.path(&list, id, &glyph, to_px, false).expect("path");
+        let as_shape = fills
+            .path(&list, id, &glyph, Some(to_px), false)
+            .expect("path");
         assert!(device_points(&as_shape, to_px)
             .iter()
             .all(|p| on_grid(p.x, 1.0) && on_grid(p.y, 1.0)));
+    }
+
+    /// Inter's I in font units (2048 per em): one rectangle, x 180 .. 370,
+    /// y 0 .. 1490.
+    fn inter_i() -> PathData {
+        PathData::new(vec![
+            MoveTo { x: 180.0, y: 0.0 },
+            LineTo { x: 370.0, y: 0.0 },
+            LineTo {
+                x: 370.0,
+                y: 1490.0,
+            },
+            LineTo {
+                x: 180.0,
+                y: 1490.0,
+            },
+            Close,
+        ])
+    }
+
+    /// The I at 12 pt with its origin at `x` on the baseline at `y`, as the
+    /// text emitter places a glyph (font units y-up, so `d` flips).
+    fn twelve_pt_at(x: f32, y: f32) -> Transform {
+        let s = 12.0 / 2048.0;
+        Transform([s, 0.0, 0.0, -s, x, y])
+    }
+
+    #[test]
+    fn a_glyph_outline_is_left_alone_without_a_glyph_run_table() {
+        // The editor's lists carry no glyph-run table: the path itself says
+        // it is a glyph's outline.
+        let mut list = DisplayList::new();
+        let key = paged_compose::GlyphCacheKey {
+            font_id: 1,
+            glyph_id: 197,
+        };
+        let (id, _) = list.paths.intern_glyph(key, inter_i());
+        assert!(list.paths.is_glyph(id));
+        let to_px = Affine::scale(2.0);
+        let mut fills = Fills::default();
+        for x in [101.37_f32, 153.81] {
+            let t = twelve_pt_at(x, 23.6);
+            let drawn = fills.path(&list, id, &t, Some(to_px), false).expect("path");
+            assert_eq!(drawn, path_to_bez(&inter_i(), &t), "the I at {x}");
+        }
+        // The same rectangle as a shape lands on pixel boundaries.
+        let shape = list.paths.push_anon(inter_i());
+        assert!(!list.paths.is_glyph(shape));
+        let snapped = fills
+            .path(
+                &list,
+                shape,
+                &twelve_pt_at(101.37, 23.6),
+                Some(to_px),
+                false,
+            )
+            .expect("path");
+        assert!(device_points(&snapped, to_px)
+            .iter()
+            .all(|p| on_grid(p.x, 1.0) && on_grid(p.y, 1.0)));
+    }
+
+    #[test]
+    fn a_page_space_scene_draws_its_paths_as_they_are() {
+        // No device grid: a rectangle keeps its edges (the presenter
+        // magnified whole-point snapping into a 2 pt stem), a curve keeps
+        // its curves for Vello to flatten in device space, and a hairline
+        // rule stays a stroke of its own width.
+        let (list, id) = list_with(inter_i().segments);
+        let t = twelve_pt_at(101.37, 23.6);
+        let mut fills = Fills::default();
+        assert_eq!(
+            fills.path(&list, id, &t, None, false).expect("path"),
+            path_to_bez(&inter_i(), &t)
+        );
+        let k = paged_geom::KAPPA_F32 * 500.0;
+        let (curved, cid) = list_with(vec![
+            MoveTo { x: 500.0, y: 0.0 },
+            CubicTo {
+                cx1: 500.0,
+                cy1: k,
+                cx2: k,
+                cy2: 500.0,
+                x: 0.0,
+                y: 500.0,
+            },
+            LineTo { x: 0.0, y: 0.0 },
+            Close,
+        ]);
+        let drawn = fills.path(&curved, cid, &t, None, false).expect("path");
+        assert!(drawn
+            .elements()
+            .iter()
+            .any(|e| matches!(e, PathEl::CurveTo(..))));
+        let mut rule = BezPath::new();
+        rule.move_to((10.3, 20.1));
+        rule.line_to((60.6, 20.1));
+        let hairline = kurbo::Stroke::new(0.25).with_caps(kurbo::Cap::Butt);
+        assert!(matches!(
+            stroke_geometry(rule.clone(), hairline.clone(), None),
+            StrokeGeometry::Stroke(ref p, ref ks) if *p == rule && ks.width == 0.25
+        ));
+        assert!(matches!(
+            stroke_geometry(rule, hairline, Some(Affine::scale(2.0))),
+            StrokeGeometry::Outline(_)
+        ));
     }
 
     #[test]
@@ -1181,7 +1314,7 @@ mod tests {
         let mut fills = Fills::default();
         for tx in [10.0_f32, 37.25] {
             let t = Transform([0.02, 0.0, 0.0, 0.02, tx, 5.0]);
-            let path = fills.path(&list, id, &t, to_px, true).expect("path");
+            let path = fills.path(&list, id, &t, Some(to_px), true).expect("path");
             assert!(path
                 .elements()
                 .iter()

@@ -97,6 +97,7 @@ fn moving_resizing_or_deleting_a_locked_frame_is_refused_and_says_why() {
             "deleteFrame",
             Mutation::DeleteFrame {
                 frame_id: raw.clone(),
+                with_story: false,
             },
         ),
     ] {

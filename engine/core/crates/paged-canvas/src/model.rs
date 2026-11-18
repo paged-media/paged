@@ -926,7 +926,7 @@ fn missing_frame_target(mutation: &Mutation) -> Option<&str> {
     match mutation {
         Mutation::ResizeFrame { frame_id, .. }
         | Mutation::MoveFrame { frame_id, .. }
-        | Mutation::DeleteFrame { frame_id } => Some(frame_id),
+        | Mutation::DeleteFrame { frame_id, .. } => Some(frame_id),
         Mutation::PlaceImage { element_id, .. }
         | Mutation::ReplaceImageBytes { element_id, .. }
         | Mutation::RelinkImage { element_id, .. } => Some(element_id),
@@ -3901,7 +3901,10 @@ impl CanvasModel {
             // children BEFORE apply (the ids are already in their specs,
             // and that is the scene translation itself resolved them in).
             let bindings = translated_handle_bindings(&self.scene, mutation, &op);
-            let outcome = self.apply_operation(op)?;
+            // Engine ADR 200, amended 2026-11-18 — the stories its
+            // `deleteFrame { withStory }` children name, read before they go.
+            let with_story = crate::unheld_stories::stories_deleted_with(&self.scene, mutation);
+            let outcome = self.apply_operation_with(op, &with_story)?;
             let created_id = created_element_id(&self.scene, &outcome.applied.op);
             // Perf-Batch — a batch that translates whole still mints one
             // id per creating child, and `created_id` names only the
@@ -4834,7 +4837,8 @@ impl CanvasModel {
                 path: PropertyPath::PageBounds,
                 value: Value::Bounds([bounds.0, bounds.1, bounds.2, bounds.3]),
             }),
-            Mutation::DeleteFrame { frame_id } => {
+            // `with_story` rides beside the op: `apply_operation_with`.
+            Mutation::DeleteFrame { frame_id, .. } => {
                 let node = self.resolve_frame_node_id(frame_id)?;
                 Some(Operation::RemoveNode { node })
             }
@@ -7228,6 +7232,17 @@ impl CanvasModel {
         &mut self,
         op: paged_mutate::Operation,
     ) -> Result<FrameMutationOutcome, crate::channel::WorkerError> {
+        self.apply_operation_with(op, &[])
+    }
+
+    /// [`Self::apply_operation`], then — engine ADR 200, amended
+    /// 2026-11-18 — each of `stories` (what a `deleteFrame { withStory }`
+    /// named) the op left held by nothing is removed in the same undo step.
+    fn apply_operation_with(
+        &mut self,
+        op: paged_mutate::Operation,
+        stories: &[String],
+    ) -> Result<FrameMutationOutcome, crate::channel::WorkerError> {
         // A gesture's own commit applies after it has let go of the
         // document (`commit_gesture` takes the session first).
         self.refuse_during_gesture()?;
@@ -7244,8 +7259,16 @@ impl CanvasModel {
         // Engine ADR 1000 — every user edit that becomes an `Operation`
         // reaches here and is checked against the session's policy; undo and
         // redo apply their inverses elsewhere, unchecked.
+        let placed_before =
+            (!stories.is_empty()).then(|| crate::unheld_stories::placed(&self.scene));
         let applied = paged_mutate::apply_checked(&mut self.scene, &op, &self.session_policy)
             .map_err(frame_mutation_error)?;
+        let applied = match placed_before {
+            Some(before) => {
+                crate::unheld_stories::drop_unheld(&mut self.scene, &before, stories, applied)
+            }
+            None => applied,
+        };
         self.stage_op_apply_ms(phase_elapsed_ms(t_op));
         // Perf-MasterText + Perf-BodyStory — committed mutations
         // can shift the per-page pool state (Alt-duplicate inserts
@@ -19875,6 +19898,7 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
             c79_frame(&model, 50.0),
             Mutation::DeleteFrame {
                 frame_id: "c79-no-such-frame".to_string(),
+                with_story: false,
             },
         ];
         assert!(model.apply_mutation(&Mutation::Batch { ops }).is_err());
