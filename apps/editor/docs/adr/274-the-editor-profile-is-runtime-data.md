@@ -1,6 +1,7 @@
 # ADR 274 — The editor profile is runtime data
 
-- **Status:** Accepted 2026-10-22.
+- **Status:** Accepted 2026-10-22. Amended 2026-11-18 (the rail decides the start tool, the
+  modifier hints and the fill and stroke wells).
 - **Scope:** `packages/shell/src/profile/` (the profile, its resolution, region edits, the shape
   check, the region filter), `packages/shell/src/state/chrome-regions.tsx`, the regions in
   `PagedShell.tsx`, `chrome/Header.tsx`, `chrome/MenuBar.tsx`, `chrome/ToolRail.tsx`,
@@ -96,3 +97,54 @@ solo preset need not know the menus and tools of its bundle.
 - [ADR 203](203-shell-is-a-registry-host.md) — the registries the region lists draw on
 - [ADR 227](227-surface-conformance.md) — the surface inventory the guard checks against
 - [ADR 247](247-stored-settings-are-shape-checked.md) — the shape check a profile follows
+
+## Amendment — 2026-11-18: the rail decides the start tool, the hints and the wells
+
+The viewer preset ([ADR 276](276-filling-a-template.md): "a hand and zoom rail, nothing else")
+showed more than its rail. The tool provider started every editor on Selection, and the rail never
+hides the tool in hand, so a viewer showed Selection, active, above Hand and Zoom. The modifier
+hints followed the tool in hand, so its first-use strip (Shift, Alt, Cmd, Space) covered the
+bottom of the stage. The rail's foot drew the fill and stroke wells in every editor that had a
+rail. The docs' scripting lab mounts the viewer with `role: "editor"` so its scripts can write
+([ADR 212](212-one-automation-surface.md), amendment 1), and it showed all three.
+
+**What the rail offers is one question.** `ChromeRegions.offersTool(id)` answers it from the
+profile's `tool-rail` region (`railOffersTool`: a list's ids and globs, `@bundles` for a tool the
+host did not register, nothing when the region is removed). `PagedShell` passes the host's tools
+to `chromeRegionsOf` for `@bundles`. The rail draws what it offers and the features allow, as
+before. Three things now follow the same answer:
+
+- **The start tool.** `ToolProvider` starts on the first of Selection, Hand and Zoom the rail
+  offers (`startToolOf`): Selection in the full editor, the solo presets and `template-fill`, as
+  before; the Hand in `viewer`. An editor whose rail offers none of them, or that has no rail
+  (`form`), starts on the Hand: panning is the one thing every canvas does, and each of the
+  three is registered in every editor (`ALWAYS_IN_PALETTE`).
+- **The modifier hints.** The strip shows only for a tool the rail offers, and only such a tool
+  counts a use. A tool the profile does not show is not one the user is learning: Selection
+  reached by a shortcut in a viewer, Direct Selection spring-loaded on a rail that leaves it out,
+  any tool in an editor without a rail. This rule was chosen over "no hints without a context
+  toolbar or menu bar", which would be a proxy: the hints describe the tool in hand, and the rail
+  is where the profile says which tools the user has. In the full editor every tool is offered, so
+  nothing changes there.
+- **The fill and stroke wells.** They colour what the rail's tools select and make (the
+  selection, or the defaults of what is drawn next), so they follow the profile's rail, not the
+  session's role: the foot draws them only while the rail offers a tool other than the ones you
+  look with (`VIEW_TOOL_IDS`, Hand and Zoom). The role says what the engine permits; the regions
+  say what the chrome shows. A viewer with an editing role (the lab) still has nothing on its rail
+  to colour with. Soft proof and the screen mode stay at the foot: they are ways of looking. The
+  wells came with the tool rail itself and no record chose them for a look-only rail.
+
+The viewer preset keeps its page thumbnails (`canvas.thumbnails: true`). A host that wants the
+canvas alone turns them off in the profile it passes:
+`{ profile: { extends: "viewer", canvas: { thumbnails: false } }, role: "editor" }` (or
+`features: { "chrome:thumbnails": false }` in the same profile object).
+
+Evidence: `apps/canvas/test/embed/viewer-quiet.dom.test.tsx` mounts the app's canvas over the
+engine as the lab does and finds Hand and Zoom on the rail with the Hand in hand, no hint strip
+and no wells, with role `viewer` and with role `editor`, the thumbnails gone with
+`canvas.thumbnails: false`, and the full editor unchanged; `packages/shell/test/stores/tool-state.dom.test.tsx`
+(the start tool), `packages/shell/test/overlays/modifier-hints.dom.test.tsx` (the hints),
+`packages/shell/test/profile/profile.test.ts` (`railOffersTool`); the journeys
+`tests/journey/focused/demos.journey.spec.ts` (the lab's frame) and
+`tests/journey/focused/template-fill.journey.spec.ts` (`?profile=viewer`).
+

@@ -162,5 +162,13 @@ test.describe("journey · template fill", () => {
     await expect(page.locator("header")).toHaveCount(0);
     await expect(page.locator('[aria-label="Panels"]')).toHaveCount(0);
     await expect(page.locator("[data-paged-viewport]")).toBeVisible();
+    // A hand and zoom rail with the Hand in hand, nothing else (editor ADR
+    // 274, amendment of 2026-11-18): no modifier hints, no wells.
+    await expect(page.locator("[data-tool-slot]")).toHaveCount(2);
+    await expect(
+      page.locator('[data-tool-slot][data-tool="paged.tool.hand"]'),
+    ).toHaveAttribute("data-active", "true");
+    await expect(page.locator("[data-modifier-hints]")).toHaveCount(0);
+    await expect(page.locator("[data-fill-stroke-cluster]")).toHaveCount(0);
   });
 });

@@ -30,6 +30,7 @@ import {
 
 import { useInteractionCoordinator } from "../interaction/coordinator";
 import type { ToolId } from "../registries/tool";
+import { useChromeRegions } from "./chrome-regions";
 
 /** Ids of the two built-in tools the legacy scalar `ActiveTool` union
  *  maps onto. Kept here (not selection-context) so the mapping helpers
@@ -46,6 +47,25 @@ export const ZOOM_TOOL_ID: ToolId = "paged.tool.zoom";
 /** The tools you LOOK with. Picking one inside an edit context is not
  *  reaching for another editing tool, so it never leaves the context. */
 export const VIEW_TOOL_IDS: readonly ToolId[] = [HAND_TOOL_ID, ZOOM_TOOL_ID];
+
+/** The tools an editor may start on, best first: Selection, the editor as
+ *  it always was, then the tools you look with. Each is registered in every
+ *  editor (`ALWAYS_IN_PALETTE`), so the start tool always exists. */
+const START_TOOL_IDS: readonly ToolId[] = [
+  SELECT_TOOL_ID,
+  HAND_TOOL_ID,
+  ZOOM_TOOL_ID,
+];
+
+/** The tool an editor starts on: the first of Selection, Hand and Zoom its
+ *  rail offers. A viewer's rail offers Hand and Zoom, so a viewer starts on
+ *  the Hand, never on a tool its rail does not show (editor ADR 274,
+ *  amendment of 2026-11-18). An editor whose rail offers none of them (no
+ *  rail at all) starts on the Hand too: panning is the one thing every
+ *  canvas does. */
+export function startToolOf(offers: (toolId: string) => boolean): ToolId {
+  return START_TOOL_IDS.find((id) => offers(id)) ?? HAND_TOOL_ID;
+}
 
 /** Editor ADR 311 (plan WP10.7) — host tools that work on the page the
  *  edit context sits on, in every context: Free Transform moves, scales,
@@ -150,8 +170,10 @@ function deriveEffective(s: ActiveToolState): ToolId {
 const Context = createContext<ToolContextValue | null>(null);
 
 export function ToolProvider({ children }: PropsWithChildren) {
+  // The profile's rail decides the tool the editor starts on.
+  const chrome = useChromeRegions();
   const [internal, setInternal] = useState<InternalState>(() => ({
-    active: { base: SELECT_TOOL_ID, overrides: [] },
+    active: { base: startToolOf(chrome.offersTool), overrides: [] },
     reason: "switch",
   }));
 

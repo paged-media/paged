@@ -51,8 +51,10 @@ import {
   usePaged,
   useRegistries,
   useSelection,
+  type EditorScope,
   type ModeContribution,
   type PagedEditor,
+  type ResolvedProfile,
   type ShellRegistries,
 } from "@paged-media/shell";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
@@ -150,6 +152,8 @@ function stubDom(): void {
 export interface MountedCanvas {
   /** The gesture DSL over the DOM backend. */
   g: GestureDsl;
+  /** The shell's root element. */
+  root(): HTMLElement;
   client: CanvasClient;
   worker: EngineWorker;
   /** The shell's live state. */
@@ -164,7 +168,20 @@ export interface MountedCanvas {
   dispose(): void;
 }
 
-export async function mountCanvas(idml: Uint8Array): Promise<MountedCanvas> {
+/** What a mount may set beyond the full editor's defaults. */
+export interface MountCanvasOptions {
+  /** A resolved editor profile: its regions, canvas furniture, features
+   *  and role, as the app hands them to the shell. */
+  profile?: ResolvedProfile;
+  /** The editor's own stores (its settings storage, say). */
+  scope?: EditorScope;
+}
+
+export async function mountCanvas(
+  idml: Uint8Array,
+  options: MountCanvasOptions = {},
+): Promise<MountedCanvas> {
+  const { profile, scope } = options;
   stubDom();
   const engines = await headlessEngineModule();
   const worker = createEngineWorker(engines.create(), {
@@ -186,6 +203,16 @@ export async function mountCanvas(idml: Uint8Array): Promise<MountedCanvas> {
         modes={MODES}
         initialMode="design"
         canvasComponent={CanvasPanel}
+        {...(profile
+          ? {
+              regions: profile.regions,
+              canvasFurniture: profile.canvas,
+              compactLayout: profile.compact,
+              features: profile.features,
+              sessionPolicy: { role: profile.role, overrides: [] },
+            }
+          : {})}
+        {...(scope ? { scope } : {})}
       >
         <Integration handle={handle} onBridge={(b) => (bridge = b)} />
       </PagedShell>,
@@ -349,6 +376,7 @@ export async function mountCanvas(idml: Uint8Array): Promise<MountedCanvas> {
 
   return {
     g: createGestureDsl(backend),
+    root: () => view.container,
     client,
     worker,
     get state() {

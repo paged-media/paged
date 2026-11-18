@@ -284,7 +284,9 @@ with the tool in hand — the host's words for the Selection tools and the shape
 own through the contract's new `GestureHandler.modifierHints` (the Pen names its own) — and
 lights the key held. It shows for a tool's first five uses and then recedes; Edit ▸ Settings ▸
 Keep modifier hints visible keeps it (`paged.modifierHints.always`; the uses are
-`paged.modifierHints.uses`).
+`paged.modifierHints.uses`). It hints only for a tool the profile's rail offers; a viewer starts
+on the Hand and shows neither hints nor the fill and stroke wells, whatever its role (ADR 274,
+amendment of 2026-11-18).
 
 The Pen stays the Pen after it closes a path and the next clicks start another one, each path one
 undo step; deleting two selected points of a path removes only them, in one undo step (IC11,

@@ -36,6 +36,12 @@ import {
   modifierHintsAlways,
   setModifierHintsAlways,
 } from "../../src/overlays/modifier-hints";
+import { baseProfile } from "../../src/profile/resolve";
+import {
+  ChromeRegionsProvider,
+  chromeRegionsOf,
+  type ChromeRegions,
+} from "../../src/state/chrome-regions";
 import {
   createEditorScope,
   EditorScopeProvider,
@@ -57,11 +63,22 @@ function memoryStorage(seed: Record<string, string> = {}): StorageAdapter & {
   } as StorageAdapter & { data: Map<string, string> };
 }
 
-function mount(scope: EditorScope, props: Parameters<typeof ModifierHints>[0]) {
-  return render(
+function mount(
+  scope: EditorScope,
+  props: Parameters<typeof ModifierHints>[0],
+  chrome?: ChromeRegions,
+) {
+  const hints = (
     <EditorScopeProvider scope={scope}>
       <ModifierHints {...props} />
-    </EditorScopeProvider>,
+    </EditorScopeProvider>
+  );
+  return render(
+    chrome ? (
+      <ChromeRegionsProvider value={chrome}>{hints}</ChromeRegionsProvider>
+    ) : (
+      hints
+    ),
   );
 }
 
@@ -131,5 +148,43 @@ describe("modifier hints", () => {
     await act(async () => setModifierHintsAlways(scope, false));
     expect(storage.data.has(MODIFIER_HINTS_ALWAYS_KEY)).toBe(false);
     expect(view.container.querySelector("[data-modifier-hints]")).toBeNull();
+  });
+
+  it("hints only for a tool the rail offers: none for Selection on a viewer's rail", () => {
+    const scope = createEditorScope();
+    const storage = memoryStorage();
+    setEditorStorage(scope, storage);
+    // The viewer preset's rail: Hand and Zoom.
+    const viewer = chromeRegionsOf(
+      {
+        ...baseProfile().regions,
+        "tool-rail": {
+          kind: "list",
+          items: ["paged.tool.hand", "paged.tool.zoom"],
+        },
+      },
+      undefined,
+    );
+    const view = mount(scope, { toolId: "paged.tool.select" }, viewer);
+    expect(view.container.querySelector("[data-modifier-hints]")).toBeNull();
+    // A tool the user cannot take up is not counted as used.
+    expect(storage.data.has(MODIFIER_HINTS_USES_KEY)).toBe(false);
+    cleanup();
+    // Without a rail no tool is offered, so nothing is hinted.
+    const railless = chromeRegionsOf(
+      { ...baseProfile().regions, "tool-rail": null },
+      undefined,
+    );
+    const none = mount(scope, { toolId: "paged.tool.select" }, railless);
+    expect(none.container.querySelector("[data-modifier-hints]")).toBeNull();
+    cleanup();
+    // The full editor's rail offers Selection: its hints show.
+    const full = chromeRegionsOf(baseProfile().regions, undefined);
+    const shown = mount(scope, { toolId: "paged.tool.select" }, full);
+    expect(
+      shown.container.querySelector(
+        '[data-modifier-hints="paged.tool.select"]',
+      ),
+    ).not.toBeNull();
   });
 });

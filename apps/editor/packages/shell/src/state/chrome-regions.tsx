@@ -34,6 +34,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { railOffersTool } from "../profile/region-filter";
 import type {
   CanvasFurniture,
   CompactLayout,
@@ -46,6 +47,11 @@ export interface ChromeRegions {
   has(id: RegionId): boolean;
   /** The region's resolved contents; null when it does not exist. */
   region(id: RegionId): ResolvedRegion | null;
+  /** Whether the tool rail offers a tool. The rail draws what it offers;
+   *  the editor starts on one of them, hints only for them, and shows the
+   *  fill and stroke wells only beside a tool that makes or changes
+   *  something (editor ADR 274, amendment of 2026-11-18). */
+  offersTool(toolId: string): boolean;
   readonly canvas: Required<CanvasFurniture>;
   /** The layout below the compact breakpoint; null for a desktop editor
    *  (editor ADR 294). `useCompactLayout` says whether it applies now. */
@@ -60,22 +66,30 @@ const TEMPLATE_ONLY: ReadonlySet<RegionId> = new Set(["form", "actions-bar"]);
 const DEFAULT_REGIONS: ChromeRegions = {
   has: (id) => !TEMPLATE_ONLY.has(id),
   region: (id) => (TEMPLATE_ONLY.has(id) ? null : EVERYTHING),
+  offersTool: () => true,
   canvas: { titleBar: true, rulers: true, thumbnails: true, preview: false },
   compact: null,
 };
 
 const ChromeRegionsContext = createContext<ChromeRegions>(DEFAULT_REGIONS);
 
-/** Builds the context value from a resolved profile's regions. */
+/** Builds the context value from a resolved profile's regions.
+ *  `hostToolIds`, the tools the host registered, tells the rail's
+ *  `@bundles` entry which tools came from a bundle. */
 export function chromeRegionsOf(
   regions: Readonly<Record<RegionId, ResolvedRegion | null>> | undefined,
   canvas: Partial<CanvasFurniture> | undefined,
   compact: CompactLayout | null = null,
+  hostToolIds?: ReadonlySet<string>,
 ): ChromeRegions {
   if (!regions && !canvas && !compact) return DEFAULT_REGIONS;
+  const region = (id: RegionId) =>
+    regions ? regions[id] : DEFAULT_REGIONS.region(id);
   return {
     has: (id) => (regions ? regions[id] !== null : DEFAULT_REGIONS.has(id)),
-    region: (id) => (regions ? regions[id] : DEFAULT_REGIONS.region(id)),
+    region,
+    offersTool: (toolId) =>
+      railOffersTool(region("tool-rail"), toolId, hostToolIds),
     canvas: { ...DEFAULT_REGIONS.canvas, ...canvas },
     compact,
   };
@@ -101,6 +115,7 @@ function withOverride(base: ChromeRegions, o: ChromeOverride): ChromeRegions {
   return {
     has: (id) => kept.has(id) && base.has(id),
     region: (id) => (kept.has(id) ? base.region(id) : null),
+    offersTool: (toolId) => kept.has("tool-rail") && base.offersTool(toolId),
     canvas: {
       titleBar: (o.canvas.titleBar ?? true) && base.canvas.titleBar,
       rulers: (o.canvas.rulers ?? true) && base.canvas.rulers,

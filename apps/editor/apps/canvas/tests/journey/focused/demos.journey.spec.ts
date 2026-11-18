@@ -202,6 +202,19 @@ test.describe("journey · embedding demos", () => {
     const frame = page.frameLocator("iframe").first();
     await expect(frame.locator("[data-paged-viewport]").first()).toBeVisible();
     await expect(frame.locator('[role="menubar"]')).toHaveCount(0);
+    // Canvas-only and quiet with the editing role too (editor ADR 274,
+    // amendment of 2026-11-18): the rail offers Hand and Zoom and the Hand
+    // is in hand; no modifier hints, no fill and stroke wells.
+    const slots = frame.locator("[data-tool-slot]");
+    await expect(slots).toHaveCount(2);
+    await expect(
+      frame.locator('[data-tool-slot][data-tool="paged.tool.hand"]'),
+    ).toHaveAttribute("data-active", "true");
+    await expect(
+      frame.locator('[data-tool-slot][data-tool="paged.tool.zoom"]'),
+    ).toHaveCount(1);
+    await expect(frame.locator("[data-modifier-hints]")).toHaveCount(0);
+    await expect(frame.locator("[data-fill-stroke-cluster]")).toHaveCount(0);
   });
 
   test("two editors on one page: each fills, submits and answers its own keys @feat:editor-shell.solo-mode @level:happy", async ({

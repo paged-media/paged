@@ -24,7 +24,10 @@
 // `modifierHints` (the contract, extensions ADR 1109), else the host's for
 // its built-in tools — and lights the
 // ones held. It shows for a tool's first uses and then recedes; a
-// preference keeps it showing.
+// preference keeps it showing. It hints only for a tool the editor's rail
+// offers: a tool the profile does not show (Selection in a viewer, a
+// spring-loaded tool the rail leaves out) is not one the user is learning
+// (editor ADR 274, amendment of 2026-11-18).
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useStrings } from "@paged-media/strings";
@@ -32,6 +35,7 @@ import { useStrings } from "@paged-media/strings";
 import type { ModifierHint } from "@paged-media/plugin-api";
 
 import { MODIFIER_HINTS } from "../chrome/messages";
+import { useChromeRegions } from "../state/chrome-regions";
 import {
   useModifierState,
   type ModifierState,
@@ -192,11 +196,12 @@ export interface ModifierHintsProps {
   hints?: readonly ModifierHint[] | null;
 }
 
-/** The strip; renders nothing when the tool names no hints or they have
- *  receded. */
+/** The strip; renders nothing when the tool names no hints, the rail does
+ *  not offer it, or its hints have receded. */
 export function ModifierHints({ toolId, hints }: ModifierHintsProps) {
   const strings = useStrings();
   const scope = useEditorScope();
+  const offered = useChromeRegions().offersTool(toolId);
   const alwaysStore = useScoped(ALWAYS);
   const always = useSyncExternalStore(
     alwaysStore.subscribe,
@@ -210,16 +215,17 @@ export function ModifierHints({ toolId, hints }: ModifierHintsProps) {
     usesStore.get,
   );
   const mods = useModifierState();
-  // Taking a tool up counts one use of it.
+  // Taking a tool up counts one use of it; a tool the rail does not offer
+  // is not taken up.
   useEffect(() => {
-    if (toolId) noteUse(scope, toolId);
-  }, [scope, toolId]);
+    if (toolId && offered) noteUse(scope, toolId);
+  }, [scope, toolId, offered]);
   const list =
     hints && hints.length > 0
       ? hints
       : builtInHints(toolId, (m) => strings.t(m));
   const early = (uses[toolId] ?? 0) <= MODIFIER_HINT_USES;
-  if (list.length === 0 || (!always && !early)) return null;
+  if (!offered || list.length === 0 || (!always && !early)) return null;
   return (
     <div
       data-modifier-hints={toolId}
