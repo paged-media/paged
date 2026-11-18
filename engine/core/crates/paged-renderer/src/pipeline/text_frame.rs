@@ -334,16 +334,11 @@ pub(super) fn build_perline_wrap_widths(
     let chain_shapes: Vec<Option<paged_text::FrameShape>> =
         em.chain.iter().map(|f| frame_shape_spread(f)).collect();
     let any_polygon_clip = chain_polygons.iter().any(|p| p.is_some());
-    if em.frame_idx != 0 && !any_polygon_clip {
-        // After the head frame fills, the existing emit loop
-        // advances to chain[1+] using a fixed first-baseline
-        // reset; per-line wrap inside overflow frames is layered
-        // on by the chain walk below — handled when the head
-        // frame's paragraph composes. We still need to engage when
-        // a downstream frame is polygon-clipped so paragraphs that
-        // start *inside* the polygon get the per-line carve.
-        return empty;
-    }
+    // A paragraph that starts in a later frame of the chain is carved
+    // from that frame on (the walk below skips the frames before it): a
+    // wrap beside the second or third frame of a story narrows the lines
+    // of the paragraphs that open there as well as those that run on
+    // into it, as InDesign sets them.
     let any_chain_overlap = em
         .chain_spread_bounds
         .iter()
