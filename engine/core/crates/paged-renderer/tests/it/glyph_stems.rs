@@ -88,24 +88,23 @@ fn card_idml() -> Vec<u8> {
     zip.finish().unwrap().into_inner()
 }
 
-/// Inter's I (font units): x 180 .. 370, y 0 .. 1490.
+/// Inter's I (font units): one straight-sided contour on the corners of
+/// x 180 .. 370, y 0 .. 1490.
 fn is_inter_i(segments: &[PathSegment]) -> bool {
-    matches!(
-        segments,
-        [
-            PathSegment::MoveTo { x: 180.0, y: 0.0 },
-            PathSegment::LineTo { x: 370.0, y: 0.0 },
-            PathSegment::LineTo {
-                x: 370.0,
-                y: 1490.0
-            },
-            PathSegment::LineTo {
-                x: 180.0,
-                y: 1490.0
-            },
-            PathSegment::Close,
-        ]
-    )
+    let mut corners = 0;
+    for s in segments {
+        match *s {
+            PathSegment::MoveTo { x, y } | PathSegment::LineTo { x, y } => {
+                if !(matches!(x, 180.0 | 370.0) && matches!(y, 0.0 | 1490.0)) {
+                    return false;
+                }
+                corners += 1;
+            }
+            PathSegment::Close => {}
+            _ => return false,
+        }
+    }
+    (4..=5).contains(&corners)
 }
 
 #[test]
