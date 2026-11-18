@@ -2663,8 +2663,13 @@ fn reads_shifted(items: &[Item], key: u128) -> bool {
     // Text as it stands, mostly letters: a font of figures moves back into
     // letters too, and stays figures.
     let ink: Vec<char> = plain.chars().filter(|c| !c.is_whitespace()).collect();
-    let lettered = ink.iter().filter(|c| c.is_alphabetic()).count() * 5 >= ink.len() * 2;
-    lettered && mn >= 2 && m >= 0.8 && m - p >= 0.3
+    let letters: Vec<char> = ink.iter().copied().filter(|c| c.is_alphabetic()).collect();
+    let lettered = letters.len() * 5 >= ink.len() * 2;
+    // As it stands, letters at random: under three in ten vowels (words run
+    // near two in five, and a heading in a font of its own still reads).
+    let vowels = |cs: &[char]| cs.iter().filter(|c| "aeiouyAEIOUY".contains(**c)).count();
+    let random = letters.len() >= 6 && vowels(&letters) * 10 < letters.len() * 3;
+    lettered && random && mn >= 2 && m >= 0.8 && m - p >= 0.3
 }
 
 fn font_keys(items: &[Item], out: &mut HashSet<u128>) {
