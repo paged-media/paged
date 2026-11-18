@@ -1342,6 +1342,16 @@ pub fn build_block_among(mut lines: Vec<Line>, others: &[[f32; 4]]) -> Block {
     }
 }
 
+/// Whether `v` follows one obstacle's edge: monotone, or in and back out
+/// once (a valley: smallest at the obstacle's widest), each step against
+/// that shape by no more than `tol`. A list's short lines zigzag.
+fn one_edge(v: &[f32], tol: f32) -> bool {
+    let Some(k) = (0..v.len()).min_by(|&a, &b| v[a].partial_cmp(&v[b]).unwrap()) else {
+        return true;
+    };
+    v[..=k].windows(2).all(|w| w[1] <= w[0] + tol) && v[k..].windows(2).all(|w| w[1] >= w[0] - tol)
+}
+
 /// Runs of at least `min` consecutive lines that `extend` holds for and
 /// that `seed` holds for somewhere: a clear case starts a run, weaker ones
 /// beside it carry it on (a round picture cuts into its first and last
@@ -1428,6 +1438,11 @@ fn find_wraps(
             if gaps.iter().all(|g| (g - gaps[0]).abs() < 0.6) && gaps[0] < 3.0 * em {
                 continue;
             }
+            // The edge the lines start at bulges out once (or runs one way).
+            let starts: Vec<f32> = (a..=b).map(|i| -lines[i].x0).collect();
+            if !one_edge(&starts, em) {
+                continue;
+            }
             // A centred passage moves both ends alike.
             let centred = (a..=b)
                 .filter(|&i| ((lines[i].x0 - left) - (right - lines[i].x1)).abs() < 0.8 * em)
@@ -1504,7 +1519,8 @@ fn find_wraps(
             let (t, bt) = band(lines, i);
             boxes.push([e.min(right), t, right + 1.0, bt]);
         }
-        if !free(&boxes) {
+        let edges: Vec<f32> = boxes.iter().map(|b| b[0]).collect();
+        if !free(&boxes) || !one_edge(&edges, lines[a].size) {
             continue;
         }
         for l in lines[a..=b].iter_mut() {
@@ -2077,6 +2093,19 @@ mod tests {
         g.extend(set(&words(58), 0.0, 148.0, 0));
         let others = [[200.0, 110.0, 280.0, 126.0]];
         let block = build_block_among(lines(g, &[]), &others);
+        assert!(block.wraps.is_empty());
+    }
+
+    #[test]
+    fn a_list_of_short_lines_is_not_a_wrap() {
+        // Label, value, label, value: the ends zigzag, no obstacle's edge.
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        for (k, y) in [112.0, 124.0, 136.0, 148.0].into_iter().enumerate() {
+            g.extend(set(&words(if k % 2 == 0 { 20 } else { 34 }), 0.0, y, 0));
+        }
+        g.extend(set(&words(58), 0.0, 160.0, 0));
+        let block = build_block(lines(g, &[]));
         assert!(block.wraps.is_empty());
     }
 
