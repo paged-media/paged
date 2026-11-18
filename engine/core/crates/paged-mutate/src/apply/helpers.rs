@@ -237,6 +237,34 @@ pub(super) fn first_baseline_as_idml(v: paged_model::FirstBaselineOffset) -> &'s
     }
 }
 
+/// Engine ADR 1315 — a token for a field the model holds as a closed type:
+/// `""` clears (`None`), a token `parse` knows is `Some`, any other is
+/// refused with the tokens the field takes. Stored, a stranger read as
+/// nothing (or as another value) while the write reported success.
+pub(super) fn closed_token<T>(
+    node: &NodeId,
+    path: PropertyPath,
+    token: &str,
+    parse: impl Fn(&str) -> Option<T>,
+    takes: &str,
+) -> Result<Option<T>, OperationError> {
+    if token.is_empty() {
+        return Ok(None);
+    }
+    parse(token)
+        .map(Some)
+        .ok_or_else(|| OperationError::InvalidValue {
+            node: node.clone(),
+            path,
+            reason: format!("{token:?} is not one of {takes}"),
+        })
+}
+
+/// The corner tokens a write takes, for a refusal's reason (engine ADR
+/// 1315): `corner_option_as_idml`'s six.
+pub(crate) const CORNER_OPTION_NAMES: &str =
+    "None | RoundedCorner | InverseRoundedCorner | InsetCorner | BeveledCorner | FancyCorner";
+
 pub(super) fn corner_option_as_idml(v: paged_model::CornerOption) -> &'static str {
     use paged_model::CornerOption as C;
     match v {

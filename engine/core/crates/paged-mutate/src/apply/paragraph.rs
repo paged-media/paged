@@ -745,8 +745,7 @@ pub(super) fn set_para_composer_field(
 }
 
 /// The values an authoring surface may send for `paragraphComposer`.
-pub(crate) const COMPOSER_EXPECTED: &str =
-    "Text: \"\" | \"HL Composer\" | \"HL Single\" | \"HL Composer Optyca\" | \"HL Single Optyca\"";
+pub(crate) const COMPOSER_EXPECTED: &str = "Text: \"\" | \"HL Composer\" | \"HL Single\" | \"HL Composer Optyca\" | \"HL Single Optyca\" | \"HL Composer J\" | \"HL Single J\" | \"Word First-fit\"";
 
 /// Set an `Option<T>` closed IDML enum from a `Value::Text`, the same
 /// contract as [`set_para_start_paragraph_field`]: `""` clears, an

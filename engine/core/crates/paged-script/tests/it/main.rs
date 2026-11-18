@@ -15,6 +15,7 @@ mod advertised_values_construct;
 mod anchored_frames_query;
 mod data;
 mod dtp_examples;
+mod enum_values;
 mod host_bridge;
 mod host_functions;
 mod object_model_query;
