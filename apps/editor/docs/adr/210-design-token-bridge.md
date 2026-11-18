@@ -91,6 +91,19 @@ re-pointed by `[data-paged-editor][data-density="comfortable" | "compact"]`; the
 instead of numbers. `docs/theme-tokens.json` lists each one's value per preset
 ([ADR 1209](1209-density-presets.md)).
 
+## Amendment 2026-11-18
+
+Document content that a panel shows with its own colours sits on paper, as it does on the
+page. Such content mixes the document's literal colours with what has no colour of its own,
+and on the dark chrome a stored dark ink could not be read: paged.sheet's Grid panel drew a
+workbook's body cells (Excel's default font is "Text 1", stored black) near-black on
+`--pg-bg`. The token file now carries `--paper`, `--paper-fg`, `--paper-rule`,
+`--paper-selection` and `--paper-selection-wash`: the same in every theme (`.dark` does not
+redefine them), with a darker ink and rule in high contrast. The panel kit exposes them as
+`paper`. The content's own colours stay literal; its unstyled text, rules and selection take
+these. `test/styles/theme-contrast.test.ts` holds the ink and the selection to the text
+ratios on `--paper`, and the rule to 4.5:1 in high contrast.
+
 ## Related
 
 - [ADR 002](002-cockpit-over-dockview.md) — the layout substrate that replaced dockview

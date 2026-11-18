@@ -25,6 +25,7 @@ export {
   chrome,
   color,
   font,
+  paper,
   radius,
   space,
   status,
