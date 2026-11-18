@@ -219,6 +219,7 @@ is not written yet.
 | [1312](1312-facing-pages-on-an-existing-document.md) | Facing pages on an existing document: `setFacingPages` lays every page out again with its items, and a facing document's inserted, removed, moved or duplicated page keeps the pairs; undo through `RestoreSpreads`; a one-page master stays one page | Accepted 2026-11-14 (amended 2026-11-14) |
 | [1313](1313-an-anchored-picture-has-an-embedded-lane.md) | An anchored picture has an embedded lane (drawn, saved as `<Contents>`, relinked by bytes), and an embedded picture is a link (`LinkSummary.embedded`, `inline:<id>`) | Accepted 2026-11-14 |
 | [1314](1314-the-first-page-is-composed-first.md) | The first page is composed first: `LoadDocument.firstPages` answers a provisional document, `ComposeNext` composes the pages in view and then the whole document, which replaces every provisional page; the handle and every step say whether it is final | Accepted 2026-11-14 |
+| [1316](1316-an-object-styles-stroke-weight-reaches-its-items.md) | An object style's stroke weight reaches the items that apply it, as its stroke colour does; the item's own weight wins | Accepted 2026-11-18 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
