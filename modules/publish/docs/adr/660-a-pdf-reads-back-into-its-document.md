@@ -72,9 +72,11 @@ repeats.
    next word would still have fit), step round something the text wraps round — a picture, a
    round portrait. A clear step starts the run and smaller ones beside it carry it on. The room
    beside the run holds no other frame's text, and the edge the lines stop at follows one
-   shape (monotone, or in and back out once, within an em): an even indent of a few ems (a
-   passage, a hung list), a centred passage and a list's zigzag of short lines are not one,
-   and a line that ends a sentence never starts a run. The obstacle becomes an unpainted shape whose
+   shape (monotone, or in and back out once, within an em); text cut short on the right runs
+   on past the cut (in two of five breaks, the next line goes on in lowercase or the line
+   stops at a comma or a hyphen). An even indent of a few ems (a passage, a hung list), a
+   centred passage and a list's short items are not one, and a line that ends a sentence never
+   starts a run. The obstacle becomes an unpainted shape whose
    contour wraps text: per line, a box over the band the engine measures a wrap across (the
    line above's baseline down to its own) from the frame's edge to where the line starts, or to
    midway between its end and the end of the next word. The lines are read as if nothing stood

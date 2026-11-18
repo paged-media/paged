@@ -1520,7 +1520,20 @@ fn find_wraps(
             boxes.push([e.min(right), t, right + 1.0, bt]);
         }
         let edges: Vec<f32> = boxes.iter().map(|b| b[0]).collect();
-        if !free(&boxes) || !one_edge(&edges, lines[a].size) {
+        // Text cut short by an obstacle runs on past the cut (the next line
+        // goes on in lowercase, or the line stops at a comma or a hyphen);
+        // a list's short items each end, and the next one starts afresh.
+        let breaks: Vec<usize> = (a..=b).filter(|&i| i + 1 < n).collect();
+        let flowing = breaks
+            .iter()
+            .filter(|&&i| {
+                lines[i + 1].first_char().is_some_and(|c| c.is_lowercase())
+                    || lines[i]
+                        .last_char()
+                        .is_some_and(|c| matches!(c, ',' | '-' | '–' | '\u{AD}' | '\u{2010}'))
+            })
+            .count();
+        if !free(&boxes) || !one_edge(&edges, lines[a].size) || flowing * 5 < breaks.len() * 2 {
             continue;
         }
         for l in lines[a..=b].iter_mut() {
@@ -2093,6 +2106,19 @@ mod tests {
         g.extend(set(&words(58), 0.0, 148.0, 0));
         let others = [[200.0, 110.0, 280.0, 126.0]];
         let block = build_block_among(lines(g, &[]), &others);
+        assert!(block.wraps.is_empty());
+    }
+
+    #[test]
+    fn short_items_each_starting_afresh_are_not_a_wrap() {
+        // Product lines: short, getting shorter, each a new item.
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        for (k, y) in [112.0, 124.0, 136.0, 148.0].into_iter().enumerate() {
+            g.extend(set(&format!("Item{k} {}", words(28 - 2 * k)), 0.0, y, 0));
+        }
+        g.extend(set(&words(58), 0.0, 160.0, 0));
+        let block = build_block(lines(g, &[]));
         assert!(block.wraps.is_empty());
     }
 
