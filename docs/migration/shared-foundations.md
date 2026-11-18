@@ -399,16 +399,18 @@ Every workspace that reads or writes a package is on zip 9:
   (the canvas wasm, paged-cli, a workspace test run) deflates with zlib-rs; only a build
   without it (`-p idml-export` alone) uses miniz_oxide. hayro arrived on 2026-10-14, before
   the zip 9 change, so zip 9 changed no byte, as recorded; the workspace comment now says so.
-- **zip 8 remains** in doc, through ooxmlsdk 0.12: its `parts` feature, which `mce` needs,
+- **zip 8 remained** in doc, through ooxmlsdk 0.12: its `parts` feature, which `mce` needs,
   depends on zip 8 with `deflate-flate2-zlib-rs`. That is why doc's packages are deflated by
   zlib-rs whatever its own zip line says (slide had the same until C1 took ooxmlsdk out of
-  its graph).
+  its graph). Since 2026-11-18 doc is on ooxmlsdk 0.14, the first release on zip 9, and zip
+  8 is gone from every lockfile (rust-majors.md): 0.14 asks zip 9 for the same
+  `deflate-flate2-zlib-rs`, so doc's packages are still deflated by zlib-rs.
 - **doc and slide moved to `deflate-flate2`** after C1 and C4, on their own zip line and on
   the shared OOXML crate's feature, whose `deflate-flate2` now carries flate2's
   `rust_backend` itself (a crate that depends on it builds on its own; flate2 has no default
   backend under zip). zopfli serves only compression levels above 9, which nothing asks for.
-  - **doc** keeps ooxmlsdk 0.12 (the `dom` feature) and with it zip 8's zlib-rs: its packages
-    are deflated as before, byte for byte.
+  - **doc** keeps ooxmlsdk (the `dom` feature) and with it zlib-rs, through zip 8 under
+    0.12 and through zip 9 since 0.14: its packages are deflated as before, byte for byte.
   - **slide** no longer compiles ooxmlsdk (C1), so nothing turns zlib-rs on: its packages are
     deflated by miniz_oxide, as engine/core declares. The parts inside are the same bytes; the
     deflated streams are not. No test pins deflate payloads (the container tests read zip
@@ -439,7 +441,7 @@ all three are the documented holds of [rust-majors.md](rust-majors.md):
 | kurbo | 0.11 (core), 0.13 (web-render; core's hayro as `kurbo13`) | 0.12+ rewrote the stroker and offsetter (draw's Illustrator oracle) |
 | skrifa | 0.48 (image, slide), 0.42 (web-render) | the version parley 0.10 builds (Blitz) |
 
-moxcms (0.8, held) and ooxmlsdk (0.12, held) are on one version wherever they are direct.
+moxcms (0.8, held) and ooxmlsdk (0.14) are on one version wherever they are direct.
 The transitive duplicates are third-party crates' own requirements, none of them ours to
 move: in the engine, skrifa 0.42 (subsetter), 0.44 (vello) and 0.46 (hayro), and
 miniz_oxide 0.8 beside 0.9 (png 0.18, also in image's dev graph).
