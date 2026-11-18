@@ -1045,6 +1045,7 @@ const CLOSERS: &[char] = &[
 /// alignment): a line that starts with one starts left of its column.
 const HANGERS: &[char] = &['“', '"', '‘', '\'', '„', '«', '»', '-', '–', '—', '(', '['];
 
+#[cfg(test)]
 pub fn build_block(lines: Vec<Line>) -> Block {
     build_block_among(lines, &[], &[])
 }
