@@ -44,6 +44,7 @@ import { screenPoint } from "../../e2e/harness/viewport";
 import { startCapture, type Capture } from "./capture";
 import { Pointer } from "./pointer";
 import { dressStage } from "./stage";
+import { startWatchdog, type Watchdog } from "./watchdog";
 
 const ROOT = process.env.PAGED_MEDIA_ROOT;
 
@@ -154,6 +155,66 @@ function editorCommit(): { commit: string; dirty: boolean } {
   };
 }
 
+/** How long a mouse action waits for the browser to acknowledge it, ms.
+ *  Chrome loses the acknowledgement of a mouse event routed to an
+ *  out-of-process iframe that navigates before handling it (the web source
+ *  panel's sandboxed preview, refreshed under the passing pointer), and
+ *  `mouse.move` then waits for it forever, though the browser takes the
+ *  next event at once: the web film's freeze. Past this, the take carries
+ *  on without it; a merely slow acknowledgement (a busy machine) changes
+ *  nothing, the event is still delivered in order. */
+const MOUSE_ACK_MS = 3_000;
+
+/** Route the page's input through the watchdog, so an action that waits on
+ *  a page that stopped answering is reported with where the pointer was,
+ *  and give up on a mouse acknowledgement that never comes. */
+function steadyInput(page: Page, watchdog: Watchdog, slug: string): void {
+  let at = { x: 0, y: 0 };
+  const acked = (label: string, action: Promise<void>): Promise<void> => {
+    const where = { ...at };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const lost = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        console.log(
+          `[film] ${slug}: ${label} at (${Math.round(where.x)}, ${Math.round(where.y)}) unacknowledged after ${MOUSE_ACK_MS} ms; the take carries on`,
+        );
+        resolve();
+      }, MOUSE_ACK_MS);
+    });
+    return watchdog.guard(
+      label,
+      Promise.race([action, lost]).finally(() => clearTimeout(timer)),
+      where,
+    );
+  };
+  const mouse = page.mouse;
+  const move = mouse.move.bind(mouse);
+  mouse.move = (x, y, o) => {
+    at = { x, y };
+    return acked("mouse.move", move(x, y, o));
+  };
+  const click = mouse.click.bind(mouse);
+  mouse.click = (x, y, o) => {
+    at = { x, y };
+    return acked("mouse.click", click(x, y, o));
+  };
+  const down = mouse.down.bind(mouse);
+  mouse.down = (o) => acked("mouse.down", down(o));
+  const up = mouse.up.bind(mouse);
+  mouse.up = (o) => acked("mouse.up", up(o));
+  const wheel = mouse.wheel.bind(mouse);
+  mouse.wheel = (dx, dy) => acked("mouse.wheel", wheel(dx, dy));
+  const keyboard = page.keyboard;
+  for (const name of ["press", "type", "down", "up"] as const) {
+    const fn = keyboard[name].bind(keyboard) as (
+      ...a: unknown[]
+    ) => Promise<void>;
+    (keyboard as unknown as Record<string, unknown>)[name] = (
+      ...args: unknown[]
+    ) => watchdog.guard(`keyboard.${name}`, fn(...args));
+  }
+}
+
 /** Declare a film. The body sets up off camera, rolls, and plays the plan's
  *  scenes in order; the take is written when the body returns. */
 export function film(slug: string, body: (k: Kit) => Promise<void>): void {
@@ -177,6 +238,11 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
     // A cold dev server takes longer than that to serve the editor.
     page.setDefaultNavigationTimeout(180_000);
     await dressStage(page);
+    // A page that stops answering writes what its main thread was doing
+    // into the take's directory (stall-<n>.json) instead of leaving an
+    // action waiting, silently, until the take's timeout.
+    const watchdog = await startWatchdog(page, { dir });
+    steadyInput(page, watchdog, slug);
     const designer = new Designer(page);
     // A question the editor asks ("Save changes first?", ADR 230) is
     // answered on camera by the film, never by the test harness's silent
@@ -325,7 +391,19 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
       recamera: logCamera,
     };
 
-    await body(k);
+    try {
+      await body(k);
+    } catch (err) {
+      const file = await watchdog.report(
+        `the take failed: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
+      );
+      if (file) console.log(`[film] ${slug}: page state written to ${file}`);
+      throw err;
+    } finally {
+      await watchdog.stop();
+      for (const file of watchdog.reports)
+        console.log(`[film] ${slug}: stall report ${file}`);
+    }
 
     if (!capture) throw new Error("the film never rolled");
     if (next !== plan.scenes.length) {
