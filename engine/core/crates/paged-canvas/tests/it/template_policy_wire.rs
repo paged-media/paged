@@ -206,6 +206,7 @@ fn a_locked_items_refusal_is_typed() {
     .expect("lock");
     match m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: f.raw_id().to_string(),
+        with_story: false,
     }) {
         Err(WorkerError::Locked { action, .. }) => assert_eq!(action, "delete it"),
         other => panic!("expected Locked, got {other:?}"),

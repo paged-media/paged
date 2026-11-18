@@ -526,7 +526,7 @@ film("data", async (k) => {
     await press(k, row.locator("[data-data-merge-run]"));
     // Nothing overset: every record's text fits its frame.
     await expect(page.locator("[data-data-merge-msg]")).toHaveText(
-      `Merged ${RECORDS} record(s) onto 2 page(s)`,
+      `Merged ${RECORDS} records onto 2 pages`,
       { timeout: 60_000 },
     );
     k.unfocus();

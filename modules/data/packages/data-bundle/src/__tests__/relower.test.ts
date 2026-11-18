@@ -99,7 +99,7 @@ describe("re-lower updates in place [data.lower.relower-in-place]", () => {
     );
     expect(plan.reuse).toEqual({ kind: "textFrame", id: "t1" });
     expect(plan.remove).toEqual([
-      { op: "deleteFrame", args: { frameId: "t0" } },
+      { op: "deleteFrame", args: { frameId: "t0", withStory: true } },
     ]);
   });
 
@@ -171,20 +171,22 @@ describe("re-lower updates in place [data.lower.relower-in-place]", () => {
     expect(plan.remove).toEqual(
       ["m1", "m2", "m3"].map((frameId) => ({
         op: "deleteFrame",
-        args: { frameId },
+        args: { frameId, withStory: true },
       })),
     );
   });
 
-  it("a merge removes its frames and the pages it added once they are empty", () => {
+  // Engine ADR 200, amended 2026-11-18: what paged.data clears goes with its
+  // story, so a re-merge leaves no story behind that no frame holds.
+  it("a merge removes its frames with their stories and the pages it added once they are empty", () => {
     const plan = planRelower(
       documentElements(TREE),
       { kind: "merge", merge: "mg" },
       { pages: PAGES, createdPages: ["p2"] as never },
     );
     expect(plan.remove).toEqual([
-      { op: "deleteFrame", args: { frameId: "r0" } },
-      { op: "deleteFrame", args: { frameId: "r1" } },
+      { op: "deleteFrame", args: { frameId: "r0", withStory: true } },
+      { op: "deleteFrame", args: { frameId: "r1", withStory: true } },
       { op: "deletePage", args: { pageId: "p2" } },
     ]);
   });
