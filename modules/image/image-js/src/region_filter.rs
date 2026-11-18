@@ -308,7 +308,58 @@ pub fn mask_coverage(
 
 /// The f16 store between stages.
 fn q(p: Px) -> Px {
-    Px(p.0.map(|c| f16::from_f32(c).to_f32()))
+    Px(p.0.map(store_f16))
+}
+
+/// The value an `rgba16float` texel keeps of `v`, as the CPU paths store
+/// it (the stages here; every intermediate of the CPU layer fold):
+/// rounded to the nearest f16, ties to even, IEEE 754's default. A
+/// device's texture store may round otherwise: Metal's rounds toward zero
+/// (measured, and lavapipe's agrees), and Vulkan leaves the rounding of a
+/// format conversion undefined. So a device and these paths can keep a
+/// value one f16 step apart at every store, the device's the smaller in
+/// magnitude (image ADR 480). The parity tests mirror the device's
+/// rounding through `with_f16_store`, so they compare the arithmetic.
+pub(crate) fn store_f16(v: f32) -> f32 {
+    let h = f16::from_f32(v);
+    #[cfg(any(test, feature = "reference-fold"))]
+    if F16_STORE.get() == F16Store::TowardZero && h.to_f32().abs() > v.abs() {
+        // Rounded away from zero: the next f16 toward it instead.
+        return f16::from_bits(h.to_bits() - 1).to_f32();
+    }
+    h.to_f32()
+}
+
+/// How the CPU paths round an f16 store ([`store_f16`]). TEST-ONLY
+/// (feature `reference-fold`): the parity tests set it to the device's.
+#[cfg(any(test, feature = "reference-fold"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum F16Store {
+    /// To the nearest f16, ties to even: what the CPU paths ship.
+    Nearest,
+    /// Toward zero: Metal's texture store (and lavapipe's).
+    TowardZero,
+}
+
+#[cfg(any(test, feature = "reference-fold"))]
+thread_local! {
+    static F16_STORE: std::cell::Cell<F16Store> = const { std::cell::Cell::new(F16Store::Nearest) };
+}
+
+/// Run `f` with this thread's CPU paths rounding their f16 stores as
+/// `mode` says, then restore the mode it had. TEST-ONLY (feature
+/// `reference-fold`). The CPU layer fold and the region filter run on the
+/// calling thread, so a composite awaited inside `f` folds under `mode`.
+#[cfg(any(test, feature = "reference-fold"))]
+pub fn with_f16_store<R>(mode: F16Store, f: impl FnOnce() -> R) -> R {
+    struct Restore(F16Store);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            F16_STORE.set(self.0);
+        }
+    }
+    let _restore = Restore(F16_STORE.replace(mode));
+    f()
 }
 
 /// A coverage byte as the GPU reads it: `c / 255` in an r16float texel.
@@ -678,4 +729,32 @@ pub async fn filter_masked_gpu(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{store_f16, with_f16_store, F16Store};
+
+    /// The store rounds to the nearest f16; toward zero (a device's
+    /// rounding, mirrored by the parity tests) it keeps the next f16
+    /// toward zero wherever the nearest lies farther out, the largest
+    /// finite value instead of infinity, and the mode is restored after.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_toward_zero_store_keeps_the_next_f16_toward_zero__feat__image_io_depth_color_modes() {
+        let cases: [(f32, f32, f32); 6] = [
+            (1.0 - 2f32.powi(-13), 1.0, 1.0 - 2f32.powi(-11)),
+            (1.0 + 3.0 * 2f32.powi(-12), 1.0 + 2f32.powi(-10), 1.0),
+            (-(1.0 - 2f32.powi(-13)), -1.0, -(1.0 - 2f32.powi(-11))),
+            (0.5, 0.5, 0.5),
+            (70000.0, f32::INFINITY, 65504.0),
+            (4e-8, 2f32.powi(-24), 0.0),
+        ];
+        for (v, nearest, toward_zero) in cases {
+            assert_eq!(store_f16(v), nearest, "{v} to nearest");
+            let got = with_f16_store(F16Store::TowardZero, || store_f16(v));
+            assert_eq!(got, toward_zero, "{v} toward zero");
+        }
+        assert_eq!(store_f16(1.0 - 2f32.powi(-13)), 1.0, "the mode is restored");
+    }
 }

@@ -26,10 +26,11 @@
 //! parity tests and the PSD flatten oracle use), the `kernel_family!`
 //! twins of `cast.*`, `band.*` and `math.*`, and the adjustment chain's
 //! twins (ADR 465). Every intermediate is stored as f16, as the device's
-//! rgba16float textures store it, and every mask is read as the r16float
-//! texel the device reads, so the CPU fold agrees with the GPU fold to
-//! within the kernels' tolerances (`image-conformance`'s
-//! `prop_cpu_fold.rs`).
+//! rgba16float textures store it (rounded to nearest; a device may round
+//! its stores toward zero, `crate::region_filter::store_f16`), and every
+//! mask is read as the r16float texel the device reads, so the CPU fold
+//! agrees with the GPU fold to within the kernels' tolerances
+//! (`image-conformance`'s `prop_tiled_fold.rs`).
 //!
 //! It covers pixel layers (every blend mode, opacity, fill opacity, Blend
 //! If, knockout, the text layers' gamma), bounded layers, masks, isolated
@@ -72,8 +73,9 @@ type Tex = Vec<Px>;
 /// A mask: the `.r` of an r16float texel.
 type Mask = Vec<f32>;
 
+/// The f16 store: one rounding for the fold and the chain it runs.
 fn q(v: f32) -> f32 {
-    f16::from_f32(v).to_f32()
+    crate::region_filter::store_f16(v)
 }
 
 fn q4(p: Px) -> Px {
