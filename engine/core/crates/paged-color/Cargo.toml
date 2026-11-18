@@ -27,9 +27,13 @@ tracing = { workspace = true }
 qcms = { version = "0.3", default-features = false, features = ["cmyk", "iccv4-enabled"] }
 moxcms = { version = "0.8.1", optional = true }
 
-# lcms2 is native-only here (C lib via lcms2-sys).
+# lcms2 is native-only here (C lib via lcms2-sys), and always the copy
+# lcms2-sys vendors (`static`, engine ADR 003): without it lcms2-sys links
+# whatever lcms2 pkg-config finds on the build machine (Homebrew's, a
+# distribution's), so the native CMS, and every byte it converts, would
+# follow the host instead of Cargo.lock.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-lcms2 = "6"
+lcms2 = { version = "6", features = ["static"] }
 
 [dev-dependencies]
 paged-test-resources.workspace = true
