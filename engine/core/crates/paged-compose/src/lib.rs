@@ -46,9 +46,9 @@ pub use display_list::{
     Feather, FeatherCornerType, FillRule, GlyphCacheKey, GlyphRunEntry, GlyphRunTable,
     GradientFeather, GradientFeatherKind, GradientFeatherStop, GradientId, GradientStop, ImageId,
     InnerGlow, InnerShadow, LayerEffect, LineCap, LineJoin, LinearGradient, LinkRegion,
-    LinkRegionTable, LinkTarget, OuterGlow, Paint, PathBuffer, PathData, PathId, PathSegment,
-    RadialGradient, Rect, Satin, SoftMaskType, SpotInk, SpotInkId, Stroke, StrokeMarks, StructKey,
-    SweepGradient, SymbolForm, Transform,
+    LinkRegionTable, LinkTarget, OuterGlow, Paint, PathBuffer, PathData, PathId, PathKey,
+    PathSegment, RadialGradient, Rect, Satin, SoftMaskType, SpotInk, SpotInkId, Stroke,
+    StrokeMarks, StructKey, SweepGradient, SymbolForm, Transform,
 };
 pub use extent::{
     fit_transparency_group_bounds, lift_photoshop_fill_blends, transparency_group_overflow,

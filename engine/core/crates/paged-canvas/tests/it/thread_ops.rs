@@ -509,6 +509,7 @@ fn deleting_the_item_a_thread_is_on_orphans_it_and_undo_brings_it_back__feat__co
 
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: frame.clone(),
+        with_story: false,
     })
     .unwrap();
     // The thread is kept, with its anchor, and reads as orphaned.

@@ -250,6 +250,7 @@ fn translate_group_dispatches_a_single_undo_entry() {
     let group_id = ElementId::Group("g1".to_string());
     let _ = Mutation::DeleteFrame {
         frame_id: "ignored".to_string(),
+        with_story: false,
     }; // touch the enum so the import stays.
 
     let handle = model

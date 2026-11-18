@@ -187,7 +187,7 @@ async function mergeToNewDocument(page: Page): Promise<void> {
   await row.locator("[data-data-merge-new-doc]").check();
   await row.locator("[data-data-merge-run]").click();
   await expect(page.locator("[data-data-merge-msg]")).toContainText(
-    "Merged 57 record(s) onto 3 page(s)",
+    "Merged 57 records onto 3 pages",
     { timeout: 60_000 },
   );
 }

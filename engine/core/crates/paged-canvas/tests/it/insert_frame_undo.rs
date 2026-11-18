@@ -153,7 +153,10 @@ fn deleting_a_frame_with_text_keeps_its_story() {
         .expect("type");
     let hash_typed = model.current_state_hash();
     model
-        .apply_mutation(&Mutation::DeleteFrame { frame_id: frame })
+        .apply_mutation(&Mutation::DeleteFrame {
+            frame_id: frame,
+            with_story: false,
+        })
         .expect("delete");
     assert!(story_ids(&model).contains(&story), "the story stays");
     model.undo().expect("undo delete");

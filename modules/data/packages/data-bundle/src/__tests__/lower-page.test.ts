@@ -242,7 +242,7 @@ describe("lowerAll lands every binding on its frame's page [data.barcode.symbolo
     )!;
     expect(ops).toContainEqual({
       op: "deleteFrame",
-      args: { frameId: "table-p2" },
+      args: { frameId: "table-p2", withStory: true },
     });
     expect(ops.find((o) => o.op === "insertTextFrame")!.args).toEqual({
       pageId: "p2",

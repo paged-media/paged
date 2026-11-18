@@ -31,7 +31,7 @@ import {
   setActiveStrings,
 } from "@paged-media/strings";
 
-import { CATEGORY, MENU } from "../src/messages";
+import { BINDINGS, CATEGORY, MENU, STATUS } from "../src/messages";
 import { contributeMenu } from "../src/menu";
 import { dataObjectsPanel } from "../src/panels/objects-panel";
 import { queryOptions } from "../src/panels/bindings-panel";
@@ -89,5 +89,28 @@ describe("paged.data in German [strings]", () => {
     const de = createStrings("de", BUILT_IN_LOCALES.de);
     expect(de.t(MENU["Data query…"])).toBe("Datenabfrage…");
     expect(de.t(CATEGORY.Data)).toBe("Daten");
+  });
+
+  it("the merge counts its records and pages in words, one and many [data.lower.merge-writer]", () => {
+    const en = createStrings("en");
+    expect(en.t(BINDINGS.merged, { records: 24, pages: 2 })).toBe(
+      "Merged 24 records onto 2 pages",
+    );
+    expect(en.t(BINDINGS.merged, { records: 1, pages: 1 })).toBe(
+      "Merged 1 record onto 1 page",
+    );
+    expect(en.t(STATUS.merged, { records: 1, pages: 1 })).toBe(
+      "Merged 1 record onto 1 page.",
+    );
+    expect(
+      en.t(STATUS.mergedOverset, { records: 3, pages: 1, overset: 2 }),
+    ).toBe("Merged 3 records onto 1 page, 2 overset.");
+    const de = createStrings("de", BUILT_IN_LOCALES.de);
+    expect(de.t(BINDINGS.merged, { records: 24, pages: 2 })).toBe(
+      "24 Datensätze auf 2 Seiten zusammengeführt",
+    );
+    expect(de.t(STATUS.merged, { records: 1, pages: 1 })).toBe(
+      "1 Datensatz auf 1 Seite zusammengeführt.",
+    );
   });
 });

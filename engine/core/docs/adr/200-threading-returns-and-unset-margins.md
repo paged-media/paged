@@ -1,6 +1,6 @@
 # ADR 200 — Threading drops the target's empty story; "\r" is a paragraph return; an unset margin reads as laid out
 
-- **Status:** Accepted 2026-10-20.
+- **Status:** Accepted 2026-10-20; amended 2026-11-18 (`deleteFrame { withStory }` takes the story the frame alone held).
 - **Scope:** `paged-mutate` (`apply_link_frames`), `paged-canvas` (`apply_insert_text`, the page
   arm of `virtual_set.rs`), `paged-introspect` (`schema.rs` text coercion), `paged-cli`
   (`main.rs`, `render.rs`, `package.rs`, `engine_serve.rs`).
@@ -41,3 +41,32 @@ something other than what it lays out or what InDesign does:
   above.
 - A frame threaded into a chain no longer has a story of its own to return to after a user
   `unlinkFrames` (the chain's story keeps flowing to where the chain now ends), as in InDesign.
+
+## Amendment 2026-11-18 — `deleteFrame { withStory: true }` takes the story the frame alone held
+
+`deleteFrame` keeps the story of a text frame it deletes: a story no frame or text path places any
+more. That is deliberate: such a story is free to be put on a path (draw's Type on a Path flows an
+existing story, and a story still in a frame is refused), and undoing the delete re-attaches it.
+The IDML export leaves a story nothing places out, as InDesign discards it, and says so in a loss
+line. But a caller that deletes frames it made, or a template it consumes, has no use for their
+stories: a Data Merge with Keep template off left the template's stories in the merged document
+("4 items left out" on export), and a re-merge one more per frame it cleared (data ADR 566,
+amendment of 2026-11-18). No wire op could remove a story.
+
+- `deleteFrame` takes an optional `withStory` (default false: unchanged). With it, the story the
+  delete leaves held by nothing goes in the same step: the text frame's own story, or a text path's
+  on a shape or line, with the stories anchored in it and the hyperlinks whose source text they
+  hold. "Held by nothing" is the export's own test (`idml_export::placed_story_ids`: a frame or text
+  path on a spread or master, or an anchored frame in a placed story), placed before the op and not
+  after it, so a story still threaded on to a frame that stays is kept, and one that two deleted
+  frames shared goes once, after both.
+- The stories are read before the op applies (a frame named by a handle minted in the same batch
+  has none yet) and removed after it (`paged-canvas`'s `unheld_stories.rs`, from
+  `CanvasModel::apply_operation_with`). The removal is folded into the op's undo step: undo puts
+  the stories and hyperlinks back before the frames return to them, so the document is restored
+  exactly, and redo removes them again.
+- An additive wire field: an older engine ignores it and keeps the story, as before. No protocol
+  bump.
+- The editor's Delete and `deletePage` are unchanged; whether they should take stories too is left
+  to the Type on a Path workflow, which needs a free story.
+- `delete_unheld_stories.rs` and `data_merge_pages.rs` assert the rule.

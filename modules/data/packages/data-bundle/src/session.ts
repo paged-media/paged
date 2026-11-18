@@ -4591,7 +4591,7 @@ export function createSession(
           if (replaced)
             clear.push({
               op: "deleteFrame",
-              args: { frameId: replaced.id as string },
+              args: { frameId: replaced.id as string, withStory: true },
             });
           // The table it replaces stays where it stood: the fresh frame goes
           // on that frame's page and corner, not on the active page.

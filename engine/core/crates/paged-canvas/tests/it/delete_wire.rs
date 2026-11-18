@@ -114,6 +114,7 @@ fn deleting_an_earlier_frame_does_not_reseat_a_group() {
 
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: raw(&u[0]),
+        with_story: false,
     })
     .expect("delete u1");
     assert_eq!(
@@ -157,6 +158,7 @@ fn deleting_a_member_and_undoing_puts_it_back_in_its_group() {
 
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: raw(&u[0]),
+        with_story: false,
     })
     .expect("delete a member");
     assert_eq!(
@@ -385,8 +387,11 @@ fn delete_then_undo_restores_every_settable_property_of_every_kind() {
         let before_rows = m.element_properties(&id).expect("props").entries;
         let tree_before = tree(&m, &[&id]);
 
-        m.apply_mutation(&Mutation::DeleteFrame { frame_id: raw(&id) })
-            .unwrap_or_else(|e| panic!("{kind}: delete: {e:?}"));
+        m.apply_mutation(&Mutation::DeleteFrame {
+            frame_id: raw(&id),
+            with_story: false,
+        })
+        .unwrap_or_else(|e| panic!("{kind}: delete: {e:?}"));
         assert!(m.element_properties(&id).is_none(), "{kind}: deleted");
         assert!(m.undo().is_some(), "{kind}: undo");
 
@@ -464,6 +469,7 @@ fn deleting_a_container_takes_its_pasted_in_child_and_undo_renests_it() {
 
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: raw(&host),
+        with_story: false,
     })
     .expect("delete the container");
     assert!(m.element_properties(&host).is_none());
@@ -522,8 +528,14 @@ fn deleting_a_groups_members_then_dissolving_it_is_refused_and_the_delete_alone_
 
     let refused = m.apply_mutation(&Mutation::Batch {
         ops: vec![
-            Mutation::DeleteFrame { frame_id: raw(&a) },
-            Mutation::DeleteFrame { frame_id: raw(&b) },
+            Mutation::DeleteFrame {
+                frame_id: raw(&a),
+                with_story: false,
+            },
+            Mutation::DeleteFrame {
+                frame_id: raw(&b),
+                with_story: false,
+            },
             Mutation::DissolveGroup { group_id: raw(&g) },
         ],
     });
@@ -532,8 +544,14 @@ fn deleting_a_groups_members_then_dissolving_it_is_refused_and_the_delete_alone_
 
     m.apply_mutation(&Mutation::Batch {
         ops: vec![
-            Mutation::DeleteFrame { frame_id: raw(&a) },
-            Mutation::DeleteFrame { frame_id: raw(&b) },
+            Mutation::DeleteFrame {
+                frame_id: raw(&a),
+                with_story: false,
+            },
+            Mutation::DeleteFrame {
+                frame_id: raw(&b),
+                with_story: false,
+            },
         ],
     })
     .expect("delete both members");

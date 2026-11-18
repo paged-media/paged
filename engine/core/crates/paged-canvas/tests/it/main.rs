@@ -37,6 +37,7 @@ mod created_pages;
 mod data_merge_pages;
 mod data_relower_one_batch;
 mod default_face_fonts;
+mod delete_unheld_stories;
 mod delete_wire;
 mod determinism;
 mod digest_gate;

@@ -455,6 +455,12 @@ query, expr }` (an expression property binding, which `apply` writes with the se
     style, fill, stroke, inset, text frame options, corners, effects: every frame property
     the template sets except its place, threading, layer and lock); formatting that varies
     inside the template story is not.
+  - Consuming the template deletes its frames with their stories (`deleteFrame { withStory }`,
+    engine ADR 200, amended 2026-11-18), the placeholders' hyperlinks with them; an update
+    (a re-merge, a record flow, a table) deletes what it wrote the same way. The merged
+    document's IDML export leaves nothing of the template out, and one undo brings the
+    template back ([ADR 566](adr/566-the-variable-data-workflow-is-legible.md), amendment of
+    2026-11-18).
   - Scripts start it with the typed command `media.paged.data.merge` (flat options: `query`,
     `mode`, `arrange`, spacings, `template`, `destination`, …), the same path as Data ▸
     Merge records into the document (`src/merge-command.ts`).

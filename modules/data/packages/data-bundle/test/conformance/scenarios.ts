@@ -299,7 +299,7 @@ export async function merge(env: DataEnv): Promise<void> {
   };
   expect(out.ok, out.message).toBe(true);
   expect(out.records).toBe(3);
-  expect(out.message).toMatch(/^Merged 3 record\(s\) onto \d+ page\(s\)/);
+  expect(out.message).toMatch(/^Merged 3 records onto \d+ pages?\b/);
   // `keep` (the default): the template page stays, the records follow it.
   expect(await pages()).toBe(1 + out.pages);
   await env.undo();

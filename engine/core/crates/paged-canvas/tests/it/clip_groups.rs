@@ -353,6 +353,7 @@ fn a_group_pastes_into_a_frame_and_the_tree_lists_it__feat__frames_paths_clip_gr
     let nested = m.scene().canonical_hash();
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: "clip".into(),
+        with_story: false,
     })
     .expect("delete the frame");
     assert!(outline(&m).is_empty(), "{:?}", outline(&m));

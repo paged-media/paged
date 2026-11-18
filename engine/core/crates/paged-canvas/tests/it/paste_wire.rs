@@ -189,6 +189,7 @@ fn paste_in_place_after_a_cut_lands_where_the_item_was() {
     let snippet = copy(&m, std::slice::from_ref(&rect));
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: rect.raw_id().to_string(),
+        with_story: false,
     })
     .expect("cut");
     let page_id = page(&m, 0);

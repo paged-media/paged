@@ -1146,22 +1146,17 @@ mod wasm {
             let presenter = presenter.as_mut()?;
             let model = self.core.model.as_ref()?;
             // ADR 205 — the page as the exports draw it: the fidelity
-            // suite compares this against InDesign's PDF.
+            // suite compares this against InDesign's PDF. Drawn as a
+            // snapshot is, at its own pixel grid (ADR 189, amendment of
+            // 2026-11-18), not as the screen's page scene magnified.
             let (page, _) =
                 paged_canvas::snapshot_page(model, pid, 0, Some(dpi), &[], &[], false).ok()?;
-            let page_scene = paged_gpu::SurfacePresenter::build_page_scene(
+            let (scene, width_px, height_px) = paged_gpu::SurfacePresenter::build_snapshot_scene(
                 &page.list,
                 page.width_pt,
                 page.height_pt,
+                dpi,
             );
-            let scale = (dpi / 72.0) as f64;
-            let mut scene = paged_gpu::VelloScene::new();
-            scene.append(
-                &page_scene,
-                Some(paged_gpu::vello_kurbo::Affine::scale(scale)),
-            );
-            let width_px = ((page.width_pt * dpi / 72.0).ceil() as u32).max(1);
-            let height_px = ((page.height_pt * dpi / 72.0).ceil() as u32).max(1);
             presenter.submit_readback(&scene, width_px, height_px).ok()
         }
     }

@@ -52,7 +52,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "resizePage": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"bounds":{"kind":"bounds"}}}, nullFill: [] },
   "insertFrame": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"bounds":{"kind":"bounds"}}}, nullFill: [] },
   "insertTextFrame": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"bounds":{"kind":"bounds"}}}, nullFill: [] },
-  "deleteFrame": { args: {"kind":"struct","fields":{"frameId":{"kind":"ref","to":"frame"}}}, nullFill: [] },
+  "deleteFrame": { args: {"kind":"struct","fields":{"frameId":{"kind":"ref","to":"frame"},"withStory":{"kind":"bool","optional":true}}}, nullFill: [] },
   "insertLine": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"start":{"kind":"point"},"end":{"kind":"point"}}}, nullFill: [] },
   "insertPath": { args: {"kind":"struct","fields":{"pageId":{"kind":"ref","to":"page"},"anchors":{"kind":"list","of":{"kind":"struct","fields":{"anchor":{"kind":"point"},"left":{"kind":"point"},"right":{"kind":"point"}},"shape":"PathAnchorSpec","open":true}},"open":{"kind":"bool"},"smooth":{"kind":"bool","optional":true}}}, nullFill: [] },
   "setDocumentDefaults": { args: {"kind":"struct","fields":{"fillColor":{"kind":"text","optional":true},"strokeColor":{"kind":"text","optional":true},"strokeWeight":{"kind":"number","optional":true}}}, nullFill: ["fillColor","strokeColor","strokeWeight"] },

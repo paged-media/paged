@@ -1619,8 +1619,19 @@ pub enum Mutation {
         page_id: PageId,
         bounds: (f32, f32, f32, f32),
     },
+    /// Delete a page item. A text frame's story stays in the document
+    /// unless `with_story` asks for it to go: then the story this delete
+    /// leaves held by nothing (a text frame's own, a text path's on a
+    /// shape), the stories anchored in it and the hyperlinks whose source
+    /// text they hold go in the same step (engine ADR 200, amended
+    /// 2026-11-18). A story still threaded on to a frame that stays is
+    /// kept. A plain delete leaves the story free for a path; the IDML
+    /// export leaves such a story out and says so.
     DeleteFrame {
         frame_id: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        with_story: bool,
     },
     /// Editor-ops — the Line tool. `start`/`end` are page-local pt;
     /// the model converts to spread coordinates, mints a self id, and

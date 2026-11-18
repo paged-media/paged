@@ -54,3 +54,15 @@ and the parity test, not a prior written decision:
 The paint path described here is unchanged. Beside it, `paged_color::cms` drives lcms2, qcms
 and moxcms through one API with explicit intents and black-point compensation; placed CMYK
 rasters on wasm32 now convert through moxcms with BPC rather than through qcms.
+
+## Note — 2026-11-18: one lcms2, the vendored one
+
+`lcms2-sys` links the lcms2 that `pkg-config` finds on the build machine and builds its own
+vendored copy only when it finds none. A macOS CI image that gained Homebrew's lcms2 2.20 (a
+dependency of its preinstalled Java) therefore built the engine against 2.20 instead of the
+vendored 2.19 that Linux and the earlier images used, and its 8-bit CMYK conversion wrote
+different samples: the image module's Photoshop readback (`psd_write_photoshop.rs`,
+`converted-cmyk-8.psd`) no longer matched the file Photoshop had opened. `paged-color` now
+turns on lcms2's `static` feature, so every native build compiles the lcms2 that `Cargo.lock`
+pins and no host library takes part. Moving to a newer lcms2 is a `lcms2-sys` update, and an
+update that changes converted samples asks for that readback to be recorded again.
