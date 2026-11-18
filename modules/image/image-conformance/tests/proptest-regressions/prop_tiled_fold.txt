@@ -5,3 +5,5 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc ff7dbd4fdbd1638c7c0390093720fbb68175b7e7f480795fa9b0b8a6597b1622 # shrinks to side = 16, gens = [Bounded { seed: 0, x: 0, y: 9 }], edits = [Dabs(2, 0, 1), Paint(6, 3045, 1)]
+cc 5c6f6d3f0ec77d65cf838e96cf23f611afb1aa672830f9295a0d82a84b99ce99 # shrinks to gens = [Pixel { seed: 22339595, alpha: 0 }, Adjust { exposure: 0.22128445, blur: true, sharpen: false }, Gradient { kind: 2, angle: 0.0 }], edits = [BlendIf(3, 0), Base(Opacity(1, 0.60182935)), AnyBlend(5, 17)]
+cc 4fdbbc40198e6ada0b91a06b7322254bda7d3cf6504e9faf32e9a9e22c7c4ac9 # shrinks to gens = [Bounded { seed: 0, x: 0, y: 0 }, Adjust { exposure: 0.83431983, blur: true, sharpen: false }, Adjust { exposure: 0.25364798, blur: false, sharpen: false }, Pixel { seed: 518572478, alpha: 0 }], edits = [AnyBlend(4, 12)]

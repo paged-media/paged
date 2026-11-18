@@ -28,11 +28,17 @@
 //!
 //! And a canvas WIDER than this device's texture limit, which only the
 //! tiled fold can composite, against the blend's arithmetic.
+//!
+//! The properties run a FIXED seed ([`config`]): a failure reproduces and
+//! a pass means these cases passed. The failures proptest has persisted
+//! (`tests/proptest-regressions/prop_tiled_fold.txt`) run first;
+//! `PROPTEST_RNG_SEED=<u64>` explores other cases.
 
 #![allow(non_snake_case)]
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use half::f16;
 use image_core::Region;
 use image_gpu::coverage::SelectionCoverage;
 use image_gpu::GpuContext;
@@ -40,14 +46,32 @@ use image_js::fill::GradientKind;
 use image_js::ingest::AdjustParams;
 use image_js::layers::{ColorStop, FillSource, GradientFill, LayerStack, PatternFill};
 use image_js::pixels::Pixels;
+use image_js::region_filter::{with_f16_store, F16Store};
+use image_kernels::families::arithmetic::{MathMulConstParams, MATH_MUL_CONST};
 use image_psd::effects::{
     Bevel, BlendMode, ColorFill, Glow, GlowTechnique, GradientOverlay, LayerStyle,
     PatternFill as StylePattern, PatternOverlay, Satin, Shadow, Stroke, StrokeFill, StrokePosition,
 };
 use proptest::prelude::*;
+use proptest::test_runner::RngSeed;
 
 fn device() -> Option<&'static GpuContext> {
     image_gpu::test_support::device_or_skip("prop_tiled_fold")
+}
+
+/// Both properties' configuration: 40 cases from a fixed seed, unless
+/// `PROPTEST_RNG_SEED` asks for another.
+fn config() -> ProptestConfig {
+    let base = ProptestConfig::default();
+    ProptestConfig {
+        cases: 40,
+        max_shrink_iters: 1024,
+        rng_seed: match base.rng_seed {
+            RngSeed::Random => RngSeed::Fixed(480),
+            chosen => chosen,
+        },
+        ..base
+    }
 }
 
 const BLENDS: &[&str] = &[
@@ -414,11 +438,7 @@ fn check(
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 40,
-        max_shrink_iters: 1024,
-        ..ProptestConfig::default()
-    })]
+    #![proptest_config(config())]
 
     #[test]
     fn the_tiled_fold_equals_the_whole_fold_after_every_edit__feat__image_io_depth_color_modes(
@@ -666,12 +686,70 @@ fn diffs(a: &[u8], b: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// How this device rounds a value into an `rgba16float` texel, read off
+/// `math.mul_const` stores of `1 · k`, each `k` between two f16 values and
+/// nearer the one farther from zero: round to nearest keeps that one,
+/// round toward zero the other. Metal and lavapipe round toward zero; the
+/// CPU fold ships round to nearest. A device that does neither (a mix, or
+/// toward negative infinity) fails here, by name, instead of being
+/// compared across two roundings.
+fn device_f16_store(ctx: &GpuContext) -> F16Store {
+    static STORE: OnceLock<F16Store> = OnceLock::new();
+    *STORE.get_or_init(|| {
+        let one: Vec<u8> = [1.0f32; 4]
+            .iter()
+            .flat_map(|&v| f16::from_f32(v).to_le_bytes())
+            .collect();
+        let stored: Vec<(f32, f32)> = [
+            1.0 - 2f32.powi(-13),
+            1.0 + 3.0 * 2f32.powi(-12),
+            -(1.0 - 2f32.powi(-13)),
+            0.3,
+        ]
+        .into_iter()
+        .map(|k| {
+            let out = image_gpu::execute_tile_once(
+                ctx,
+                &MATH_MUL_CONST,
+                &[image_gpu::TileInput { f16_bytes: &one }],
+                MathMulConstParams::new(k).as_bytes(),
+                None,
+                1,
+                1,
+            )
+            .expect("a math.mul_const store");
+            (k, f16::from_le_bytes([out[0], out[1]]).to_f32())
+        })
+        .collect();
+        let nearest = |k: f32| f16::from_f32(k).to_f32();
+        let toward_zero = |k: f32| {
+            let h = f16::from_f32(k);
+            if h.to_f32().abs() > k.abs() {
+                f16::from_bits(h.to_bits() - 1).to_f32()
+            } else {
+                h.to_f32()
+            }
+        };
+        if stored.iter().all(|&(k, g)| g == nearest(k)) {
+            F16Store::Nearest
+        } else if stored.iter().all(|&(k, g)| g == toward_zero(k)) {
+            F16Store::TowardZero
+        } else {
+            panic!("this device's f16 store rounds neither to nearest nor toward zero: {stored:?}")
+        }
+    })
+}
+
 fn cpu_check(ctx: &GpuContext, s: &mut LayerStack, step: &str) -> Result<(), TestCaseError> {
     // The fill layers' renders are the device's (gen.*); the fold is what
     // is compared.
     let _ = pollster::block_on(s.refresh_fills(Some(ctx)));
     let gpu = pollster::block_on(s.composite(Some(ctx), None));
-    let cpu = pollster::block_on(s.composite(None, None));
+    // The CPU fold rounds its f16 stores as this device does: what is
+    // compared is the arithmetic, not the device's rounding (ADR 480).
+    let cpu = with_f16_store(device_f16_store(ctx), || {
+        pollster::block_on(s.composite(None, None))
+    });
     match (cpu, gpu) {
         (Ok(c), Ok(g)) => {
             prop_assert_eq!(c.len(), g.len());
@@ -709,22 +787,40 @@ fn cpu_check(ctx: &GpuContext, s: &mut LayerStack, step: &str) -> Result<(), Tes
     Ok(())
 }
 
-/// The bound the CPU fold keeps to the GPU fold, in premultiplied 8-bit
-/// levels: each kernel's twin is within its `gpu_tolerance` (a few f16
-/// ulps), and a stack chains a handful of them — two levels at 99 % of
-/// the texels (an isolated group over a blur: 88 texels of 3150 at two),
-/// and four at most, where a dividing blend (Divide, the dodges and
-/// burns, Vivid Light) or a sharpen magnifies an ulp (measured: 3 levels,
-/// Divide over a faded plate).
+/// The bound the CPU fold keeps to the GPU fold, per channel in
+/// premultiplied 8-bit levels. With the device's store rounding mirrored
+/// ([`device_f16_store`]) what is left is arithmetic: each kernel's twin
+/// is within its `gpu_tolerance` (a few f16 ulps of a transcendental or a
+/// division), and a stack chains a handful of them — two levels at 99 %
+/// of the texels, and four at most, where a dividing blend (Divide, the
+/// dodges and burns, Vivid Light), a sharpen or a Blend If ramp magnifies
+/// an ulp (measured: 3 levels, Divide over a faded plate).
+///
+/// Not mirrored, the rounding alone broke this bound: a round-toward-zero
+/// store keeps every intermediate up to an f16 step nearer zero than the
+/// CPU's, half a step on average, so a stack's dozen stores leave the
+/// device's fold up to a level under the CPU's across the canvas (1,367
+/// texels of 3,150 a level apart on the first found case's stack before
+/// its edits), and a Blend If ramp or Hue over it multiplies that (the two
+/// found cases below). Over 1,000 random cases on Metal, mirrored, no
+/// texel of any fold was more than two levels off (ADR 480, amendment).
 const CPU_LEVELS: u8 = 2;
 const CPU_WORST: u8 = 4;
 
+/// One CPU-fold case: the stack, then every edit, each checked.
+fn cpu_case(ctx: &GpuContext, gens: &[LayerGen], edits: &[CpuEdit]) -> Result<(), TestCaseError> {
+    let (w, h) = (70u32, 45u32);
+    let mut s = build(w, h, gens);
+    cpu_check(ctx, &mut s, "built")?;
+    for (n, e) in edits.iter().enumerate() {
+        cpu_apply(&mut s, e, w, h);
+        cpu_check(ctx, &mut s, &format!("edit {n} {e:?}"))?;
+    }
+    Ok(())
+}
+
 proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 40,
-        max_shrink_iters: 1024,
-        ..ProptestConfig::default()
-    })]
+    #![proptest_config(config())]
 
     #[test]
     fn the_cpu_fold_agrees_with_the_gpu_fold__feat__image_io_depth_color_modes(
@@ -732,14 +828,84 @@ proptest! {
         edits in prop::collection::vec(cpu_edit_gen(), 1..8),
     ) {
         let Some(ctx) = device() else { return Ok(()) };
-        let (w, h) = (70u32, 45u32);
-        let mut s = build(w, h, &gens);
-        cpu_check(ctx, &mut s, "built")?;
-        for (n, e) in edits.iter().enumerate() {
-            cpu_apply(&mut s, e, w, h);
-            cpu_check(ctx, &mut s, &format!("edit {n} {e:?}"))?;
-        }
+        cpu_case(ctx, &gens, &edits)?;
     }
+}
+
+/// A found case (lavapipe; the same on Metal): a Linear Dodge layer at
+/// 60 % under an exposure-and-blur adjustment, and a gradient fill above
+/// whose Blend If ramp falls over the backdrop's grey from 200 to 250.
+/// Folded with round-to-nearest stores on a device that rounds toward
+/// zero, 39 texels of 3,150 came out 3 levels apart: the backdrop's green,
+/// above 1 after the exposure, sat a fraction of a level lower on the
+/// device, and the 50-level ramp times the fill's 60 % multiplied it.
+/// With the device's rounding mirrored, no texel is more than a level off
+/// (measured on Metal).
+#[test]
+fn a_blend_if_ramp_over_an_exposed_blur_folds_as_on_the_device__feat__image_io_depth_color_modes() {
+    let Some(ctx) = device() else { return };
+    cpu_case(
+        ctx,
+        &[
+            LayerGen::Pixel {
+                seed: 22339595,
+                alpha: 0,
+            },
+            LayerGen::Adjust {
+                exposure: 0.22128445,
+                blur: true,
+                sharpen: false,
+            },
+            LayerGen::Gradient {
+                kind: 2,
+                angle: 0.0,
+            },
+        ],
+        &[
+            CpuEdit::BlendIf(3, 0),
+            CpuEdit::Base(Edit::Opacity(1, 0.60182935)),
+            CpuEdit::AnyBlend(5, 17),
+        ],
+    )
+    .unwrap();
+}
+
+/// A found case (Metal): a Hue layer over two exposures, one with a blur.
+/// Hue clips its colour into the gamut by dividing by the distance from
+/// the backdrop's luminosity, which the exposures pushed past 1; with
+/// round-to-nearest stores on a round-toward-zero device 137 texels of
+/// 3,150 were more than 2 levels apart (8 at worst), with the device's
+/// rounding mirrored 27 (4 at worst), inside the 99 % a dividing blend
+/// keeps.
+#[test]
+fn a_hue_layer_over_two_exposures_folds_as_on_the_device__feat__image_io_depth_color_modes() {
+    let Some(ctx) = device() else { return };
+    cpu_case(
+        ctx,
+        &[
+            LayerGen::Bounded {
+                seed: 0,
+                x: 0,
+                y: 0,
+            },
+            LayerGen::Adjust {
+                exposure: 0.83431983,
+                blur: true,
+                sharpen: false,
+            },
+            LayerGen::Adjust {
+                exposure: 0.25364798,
+                blur: false,
+                sharpen: false,
+            },
+            LayerGen::Pixel {
+                seed: 518572478,
+                alpha: 0,
+            },
+        ],
+        &[CpuEdit::AnyBlend(4, 12)],
+    )
+    .unwrap();
 }
 
 /// Without a device a plain stack and a styled one fold (the CPU fold is

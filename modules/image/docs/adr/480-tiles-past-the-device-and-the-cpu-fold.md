@@ -2,7 +2,8 @@
 
 - **Status:** Accepted, 2026-10-29 (WP5.13, second part; amends 450, 454 and 465). Amended 2026-11-12 by engine ADR 1099: the CPU fold draws
   LAYER STYLES too, through the engine's layer-style evaluator on its CPU device (the kernels' shipped
-  twins), held to the same Photoshop table as the GPU fold.
+  twins), held to the same Photoshop table as the GPU fold. Amended 2026-11-18: the CPU-fold parity
+  test mirrors the device's rounding of an f16 store, and the properties run a fixed seed (below).
 - **Scope:** `image-js/src/layers/fold/tiled.rs` (the tiled fold, its halo, the damage
   between composites), `layers/fold/cpu.rs` (the CPU fold), `layers/fold.rs` (`Frame`,
   `run_steps` at a frame), `layers/styles.rs` (effects drawn in canvas coordinates),
@@ -129,3 +130,41 @@ or left to the compose parity tests.
 - [ADR 464](464-layers-at-their-own-bounds.md) — bounded plates, which a window cuts
 - [ADR 472](472-layer-styles.md) — the effects drawn in canvas coordinates
 - [ADR 479](479-depth-and-colour-modes.md) — the first part of WP5.13
+
+## Amendment — 2026-11-18: the rounding of an f16 store
+
+The CPU-fold property (`prop_tiled_fold.rs`) failed at random on the lavapipe lane: a Linear
+Dodge layer at 60 % under an exposure-and-blur adjustment, and a gradient fill with Blend If
+above, folded 39 texels of 3,150 three levels apart (the bound is two levels at 99 %). On Metal
+the case gives the same counts, and a second case found there (a Hue layer over two exposures)
+had 137 texels more than two levels apart, eight at worst. Neither fold computes wrongly: they
+round a store differently.
+
+- **The device's store rounds toward zero.** A device writes an f32 into an `rgba16float` texel
+  with a rounding of its own. Metal's keeps `1 − 2⁻¹³` as `1 − 2⁻¹¹` and `1 + 3·2⁻¹²` as `1`
+  (measured), lavapipe's agrees (the found case's counts are the same on both), and Vulkan
+  leaves the rounding of a format conversion undefined. The CPU fold rounds to nearest, ties to
+  even. So at every store the device keeps a value up to an f16 step nearer zero than the CPU,
+  half a step on average, and a stack's dozen stores (each blend, each stage of the chain, the
+  blur's two passes) leave the device's fold a fraction of a level under the CPU's across the
+  canvas: the found stack before its edits (a layer, an exposure with a blur, a gradient fill)
+  had 1,367 texels of 3,150 a level apart. A steep step above multiplies that. A Blend If ramp does so by 255 over its width in levels, times the colour it
+  fades towards and the layer's opacity (about three in the found case: a 50-level ramp, a 60 %
+  fill, a green past 1). The non-separable blends' gamut clip does so by the inverse of a
+  colour's distance from the backdrop's luminosity.
+- **The CPU fold keeps round to nearest.** It is the accurate rounding, and a headless render
+  has no device whose rounding it could copy.
+- **The parity test mirrors the device.** It reads the device's rounding off four
+  `math.mul_const` stores and folds on the CPU with the same rounding
+  (`region_filter::with_f16_store`, test-only behind the feature `reference-fold`; the
+  layer-style evaluator keeps its own rounding, and the property's stacks have no style). A
+  device that rounds neither way fails the test by name. The comparison is then of arithmetic
+  alone. Over 1,000 random cases on Metal (5,030 folds), round to nearest left 3 levels on a
+  plain stack (0.29 % of the texels past two) and 13 under a dividing blend (0.41 %); mirrored,
+  no texel of any fold is more than two levels off. The bound stays as it was (two levels at
+  99 % of the texels, four at most, a dividing blend held to the 99 % only), now with that
+  margin.
+- **The properties run a fixed seed.** Both properties in `prop_tiled_fold.rs` run 40 cases from
+  seed 480 (`PROPTEST_RNG_SEED` explores others), after the failures proptest has persisted in
+  `tests/proptest-regressions/prop_tiled_fold.txt`, which now holds the two found cases. Each
+  found case is also a test of its own.
