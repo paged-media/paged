@@ -150,7 +150,7 @@ import {
 import { buildNewDocumentDialogCommand } from "./state/commands/new-document";
 import { ToolRail } from "./chrome/ToolRail";
 import { ScreenModeSelector } from "./chrome/ScreenModeSelector";
-import { FillStrokeCluster } from "./chrome/FillStrokeCluster";
+import { RailFillStroke } from "./chrome/FillStrokeCluster";
 import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
 import { useDensityCommands } from "./state/density";
@@ -381,6 +381,9 @@ export function PagedShell({
     regions,
     canvasFurniture,
     compactLayout ?? null,
+    // The host's own tools: every other one came from a bundle, which is
+    // what the rail's `@bundles` entry offers.
+    new Set((tools ?? []).map((t) => t.id)),
   );
   const [ownScope] = useState(createEditorScope);
   return (
@@ -1610,7 +1613,7 @@ function ShellChrome({
             hostToolIds={hostToolIds}
             foot={
               <>
-                <FillStrokeCluster />
+                <RailFillStroke />
                 <SoftProofToggle />
                 <ScreenModeSelector />
               </>

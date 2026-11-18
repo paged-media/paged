@@ -57,3 +57,24 @@ export function filterByRegion<T>(
   }
   return out;
 }
+
+/**
+ * Whether the tool rail's region offers a tool: what `filterByRegion`
+ * keeps of it alone. A tool the host did not register counts as a
+ * bundle's for `@bundles`; without the host's set, none does (as the rail
+ * reads it).
+ */
+export function railOffersTool(
+  region: ResolvedRegion | null,
+  toolId: string,
+  hostToolIds?: ReadonlySet<string>,
+): boolean {
+  return (
+    filterByRegion(
+      region,
+      [toolId],
+      (id) => id,
+      (id) => hostToolIds !== undefined && !hostToolIds.has(id),
+    ).length > 0
+  );
+}

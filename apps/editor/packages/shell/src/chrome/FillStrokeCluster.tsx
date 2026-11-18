@@ -38,6 +38,9 @@ import { useCanvasClient } from "../state/canvas-client-context";
 import { rampCss, type RampStop } from "../color/GradientRamp";
 import { sendAsOne, useBindings } from "../catalog/binding-hook";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
+import { useChromeRegions } from "../state/chrome-regions";
+import { VIEW_TOOL_IDS } from "../state/tool-context";
 import {
   useFormattingAffects,
   type FillStrokeWell,
@@ -79,6 +82,31 @@ function colorRef(id: string | null): Value {
 function unwrapColorRef(v: Value | null): string | null {
   if (!v || v.type !== "colorRef") return null;
   return (v.value as string | null) ?? null;
+}
+
+/**
+ * The wells at the foot of the tool rail. They colour what the rail's
+ * tools select and make (the selection, or the defaults of what is drawn
+ * next), so they follow the profile's rail, not the session's role: a rail
+ * that offers only the tools you look with (a viewer's Hand and Zoom) has
+ * nothing for them to colour, even when a host lets the session write (the
+ * docs' scripting lab), and they are not drawn (editor ADR 274, amendment
+ * of 2026-11-18).
+ */
+export function RailFillStroke() {
+  const registries = useRegistries();
+  const tools = useRegistryView(registries.tools);
+  const features = useRegistryView(registries.features);
+  const chrome = useChromeRegions();
+  const makes = tools
+    .list()
+    .some(
+      (t) =>
+        !VIEW_TOOL_IDS.includes(t.id) &&
+        chrome.offersTool(t.id) &&
+        features.allows("tool", t.id),
+    );
+  return makes ? <FillStrokeCluster /> : null;
 }
 
 export function FillStrokeCluster() {

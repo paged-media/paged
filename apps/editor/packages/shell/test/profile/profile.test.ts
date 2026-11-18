@@ -36,6 +36,7 @@ import {
   baseProfile,
   globMatches,
   matchIndices,
+  railOffersTool,
   resolveProfile,
   validateProfile,
   type EditorProfile,
@@ -448,5 +449,35 @@ describe("the compact layout and a preview canvas in a profile", () => {
       "compact",
     ]);
     expect(validateProfile({ compact: null }).profile.compact).toBeNull();
+  });
+});
+
+describe("what the tool rail offers", () => {
+  const HOST = new Set(["paged.tool.select", "paged.tool.hand"]);
+
+  test("a rail that keeps everything offers every tool but the excluded", () => {
+    const all: ResolvedRegion = {
+      kind: "all",
+      exclude: ["paged.tool.pen"],
+      append: [],
+    };
+    expect(railOffersTool(all, "paged.tool.select")).toBe(true);
+    expect(railOffersTool(all, "paged.tool.pen")).toBe(false);
+  });
+
+  test("a list offers what it names, by id or glob, and no rail offers nothing", () => {
+    const rail = list("paged.tool.hand", "paged.tool.z*");
+    expect(railOffersTool(rail, "paged.tool.hand")).toBe(true);
+    expect(railOffersTool(rail, "paged.tool.zoom")).toBe(true);
+    expect(railOffersTool(rail, "paged.tool.select")).toBe(false);
+    expect(railOffersTool(null, "paged.tool.hand")).toBe(false);
+  });
+
+  test("@bundles offers a bundle's tools, never a host tool the list leaves out", () => {
+    const rail = list("paged.tool.hand", "@bundles");
+    expect(railOffersTool(rail, "paged.draw.brush", HOST)).toBe(true);
+    expect(railOffersTool(rail, "paged.tool.select", HOST)).toBe(false);
+    // Without the host's tools no tool counts as a bundle's.
+    expect(railOffersTool(rail, "paged.draw.brush")).toBe(false);
   });
 });

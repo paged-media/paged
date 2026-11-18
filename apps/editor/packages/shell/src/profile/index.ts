@@ -37,4 +37,4 @@ export {
   type IdAliases,
   type IdDeprecation,
 } from "./deprecations";
-export { BUNDLES_ENTRY, filterByRegion } from "./region-filter";
+export { BUNDLES_ENTRY, filterByRegion, railOffersTool } from "./region-filter";

@@ -30,11 +30,19 @@
 
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
+import type { ReactNode } from "react";
 
+import { baseProfile } from "../../src/profile/resolve";
+import type { RegionId, ResolvedRegion } from "../../src/profile/types";
+import {
+  ChromeRegionsProvider,
+  chromeRegionsOf,
+} from "../../src/state/chrome-regions";
 import {
   DIRECT_SELECT_TOOL_ID,
   HAND_TOOL_ID,
   SELECT_TOOL_ID,
+  startToolOf,
   ToolProvider,
   useOptionalTool,
   useTool,
@@ -202,5 +210,67 @@ describe("tool settings", () => {
     act(() => first.result.current.set("paged.tool.polygon", "sides", 12));
     first.unmount();
     expect(mount().result.current.get("paged.tool.polygon")).toEqual({});
+  });
+});
+
+describe("the tool an editor starts on (editor ADR 274, amendment of 2026-11-18)", () => {
+  /** The chrome of a profile whose tool rail is `rail`. */
+  const withRail = (rail: ResolvedRegion | null) => {
+    const regions: Record<RegionId, ResolvedRegion | null> = {
+      ...baseProfile().regions,
+      "tool-rail": rail,
+    };
+    return chromeRegionsOf(regions, undefined);
+  };
+  const list = (...items: string[]): ResolvedRegion => ({
+    kind: "list",
+    items,
+  });
+
+  test("Selection while the rail offers it: the full editor and the fill rail", () => {
+    expect(
+      startToolOf(withRail(baseProfile().regions["tool-rail"]).offersTool),
+    ).toBe(SELECT_TOOL_ID);
+    expect(
+      startToolOf(
+        withRail(
+          list(SELECT_TOOL_ID, "paged.tool.type", HAND_TOOL_ID, ZOOM_TOOL_ID),
+        ).offersTool,
+      ),
+    ).toBe(SELECT_TOOL_ID);
+  });
+
+  test("the Hand on a viewer's rail, whatever order it lists its tools in", () => {
+    expect(
+      startToolOf(withRail(list(HAND_TOOL_ID, ZOOM_TOOL_ID)).offersTool),
+    ).toBe(HAND_TOOL_ID);
+    expect(
+      startToolOf(withRail(list(ZOOM_TOOL_ID, HAND_TOOL_ID)).offersTool),
+    ).toBe(HAND_TOOL_ID);
+  });
+
+  test("Zoom on a rail of Zoom alone; the Hand without a rail", () => {
+    expect(startToolOf(withRail(list(ZOOM_TOOL_ID)).offersTool)).toBe(
+      ZOOM_TOOL_ID,
+    );
+    expect(startToolOf(withRail(null).offersTool)).toBe(HAND_TOOL_ID);
+  });
+
+  test("the provider starts on the rail's tool; without a profile on Selection", () => {
+    const viewer = withRail(list(HAND_TOOL_ID, ZOOM_TOOL_ID));
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <ChromeRegionsProvider value={viewer}>
+        <ToolProvider>{children}</ToolProvider>
+      </ChromeRegionsProvider>
+    );
+    const { result } = renderHook(() => useTool(), { wrapper });
+    expect(result.current.toolState).toEqual({
+      base: HAND_TOOL_ID,
+      overrides: [],
+    });
+    expect(result.current.effectiveTool).toBe(HAND_TOOL_ID);
+    cleanup();
+    const plain = renderHook(() => useTool(), { wrapper: ToolProvider });
+    expect(plain.result.current.effectiveTool).toBe(SELECT_TOOL_ID);
   });
 });

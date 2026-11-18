@@ -54,7 +54,6 @@ import {
 } from "../registries/tool";
 import type { EditContextContribution } from "../registries/edit-context";
 import { font, IconButton } from "@paged-media/panel-kit";
-import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
 import { TOOL_RAIL } from "./messages";
 import { useEditorRoot, usePortalContainer } from "../state/editor-root";
@@ -442,16 +441,13 @@ export function ToolRail({
   }, [hostToolIds, contextRegistry]);
 
   // The editor profile's tool rail (docs/composable-editor.md §5.2): the
-  // tools it keeps. A slot stays while one of its members is kept.
-  const railRegion = chrome.region("tool-rail");
+  // tools it offers. A slot stays while one of its members is kept.
   const features = useRegistryView(registries.features);
   const keptTools = new Set(
-    filterByRegion(
-      railRegion,
-      tools.list().map((t) => t.id as string),
-      (id) => id,
-      (id) => hostToolIds !== undefined && !hostToolIds.has(id),
-    ).filter((id) => features.allows("tool", id)),
+    tools
+      .list()
+      .map((t) => t.id as string)
+      .filter((id) => chrome.offersTool(id) && features.allows("tool", id)),
   );
   const slotVisible = (slot: SlotModel): boolean => {
     if (slot.members.some((m) => m.id === effectiveTool)) return true;
