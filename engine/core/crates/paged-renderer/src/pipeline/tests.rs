@@ -3558,6 +3558,90 @@ fn a_wrap_beside_a_later_frame_narrows_the_paragraphs_that_open_there() {
 }
 
 #[test]
+fn a_wrap_low_in_a_chain_leaves_its_frames_their_own_measure() {
+    // The same chain, the second frame wide (260 pt) after a narrow head
+    // (180 pt); the wrapped rectangle stands at the second frame's foot,
+    // far below the paragraph. Its lines keep the second frame's measure
+    // (a wrap anywhere in the chain once set every frame without one at
+    // the head frame's width); the frame breaks by minimum raggedness, as
+    // a frame a wrap carves does.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    let build = |wrap: bool| -> Vec<String> {
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("mimetype", stored).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("designmap.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s.xml"/>
+</Document>"#,
+        )
+        .unwrap();
+        let mode = if wrap { "BoundingBoxTextWrap" } else { "None" };
+        let spread = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 600"/>
+    <TextFrame Self="f1" ParentStory="s" NextTextFrame="f2" GeometricBounds="20 20 34 200"/>
+    <TextFrame Self="f2" ParentStory="s" PreviousTextFrame="f1" GeometricBounds="20 300 600 560"/>
+    <Rectangle Self="obstacle" GeometricBounds="560 300 600 420">
+      <TextWrapPreference Inverse="false" TextWrapMode="{mode}">
+        <Properties>
+          <TextWrapOffset Top="0" Left="0" Bottom="0" Right="0"/>
+        </Properties>
+      </TextWrapPreference>
+    </Rectangle>
+  </Spread>
+</idPkg:Spread>"#
+        );
+        zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+        zip.write_all(spread.as_bytes()).unwrap();
+        let story = r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s">
+    <ParagraphStyleRange Justification="LeftAlign">
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>One line.</Content><Br/></CharacterStyleRange>
+    </ParagraphStyleRange>
+    <ParagraphStyleRange Justification="LeftAlign">
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega</Content></CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#;
+        zip.start_file("Stories/Story_s.xml", deflated).unwrap();
+        zip.write_all(story.as_bytes()).unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            collect_breaks: true,
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        built
+            .breaks
+            .iter()
+            .filter(|r| r.story_id == "s")
+            .map(|r| r.source_text.trim().to_string())
+            .collect()
+    };
+    let far = build(true);
+    // Inter at 10 pt sets about 33 characters in 180 pt, 48 in 260 pt.
+    assert!(
+        far.iter().skip(1).any(|l| l.chars().count() >= 45),
+        "a wrap below the paragraph leaves its lines at the frame's measure: {far:?}"
+    );
+}
+
+#[test]
 fn autosize_phase_b_reference_point_anchors_box_growth() {
     // W1.7 Phase B reference-point anchoring. The same growing
     // headline frame is auto-sized under three AutoSizingReferencePoint

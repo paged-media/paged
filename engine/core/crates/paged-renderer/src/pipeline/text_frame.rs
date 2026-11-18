@@ -373,6 +373,8 @@ pub(super) fn build_perline_wrap_widths(
 
     let mut widths_64: Vec<i32> = Vec::new();
     let mut shifts_64: Vec<i32> = Vec::new();
+    // Each line's frame's own measure, beside its width.
+    let mut owns_64: Vec<i32> = Vec::new();
     let mut twin_after: Vec<bool> = Vec::new();
     let mut no_room: Vec<bool> = Vec::new();
     // Composer lines up to here sit inside the frame (chain); past it
@@ -473,8 +475,16 @@ pub(super) fn build_perline_wrap_widths(
             let baseline_pt = ((frame_first_baseline_exact + i as f64 * leading_exact)
                 / paged_text::shape::ADVANCE_PRECISION as f64) as f32;
             last_row_fits = baseline_pt <= frame_height_pt - insets[2] + 0.01;
+            // The frame's own measure: a chain of frames of different widths
+            // sets each at its own (ADR 179), whether a wrap carves it or not.
+            let own_64 = em
+                .region_measure_pt(frame_idx)
+                .map_or(scalar_width_64, |w| {
+                    (w * paged_text::shape::ADVANCE_PRECISION).round() as i32
+                });
             if frame_legacy {
-                widths_64.push(scalar_width_64);
+                widths_64.push(own_64);
+                owns_64.push(own_64);
                 shifts_64.push(0);
                 twin_after.push(false);
                 no_room.push(false);
@@ -636,13 +646,15 @@ pub(super) fn build_perline_wrap_widths(
                             .max(1);
                         let shift_pt = (a - frame_inner_left).max(0.0);
                         widths_64.push(w64);
+                        owns_64.push(own_64);
                         shifts_64
                             .push((shift_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32);
                         twin_after.push(false);
                         no_room.push(false);
                     }
                     _ => {
-                        widths_64.push(scalar_width_64);
+                        widths_64.push(own_64);
+                        owns_64.push(own_64);
                         shifts_64.push(0);
                         twin_after.push(false);
                         // A shaped frame with no chord at this height
@@ -666,6 +678,7 @@ pub(super) fn build_perline_wrap_widths(
                 let w64 = ((b - a) * paged_text::shape::ADVANCE_PRECISION).round() as i32;
                 let shift_pt = (a - frame_inner_left).max(0.0);
                 widths_64.push(w64);
+                owns_64.push(own_64);
                 shifts_64.push((shift_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32);
                 // Mark every segment after the first as a twin so
                 // the emit pass collapses it onto the first
@@ -705,7 +718,11 @@ pub(super) fn build_perline_wrap_widths(
             first_baseline_push_pt: 0.0,
         };
     }
-    let widths_vary = widths_64.iter().any(|w| *w != scalar_width_64);
+    // Lines a wrap or a shape carves: narrower than their frame's measure,
+    // or moved in from its edge.
+    let widths_vary = widths_64.iter().zip(&owns_64).any(|(w, o)| w != o)
+        || shifts_64.iter().any(|s| *s != 0)
+        || twin_after.iter().any(|t| *t);
     lopts.compose.column_widths = Some(widths_64);
     // Ragged lines of different measures — a shaped frame's, or a frame's
     // that text wraps inside — break the way InDesign breaks them there:
