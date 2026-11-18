@@ -250,3 +250,46 @@ seventeen primitives, on the CPU when it is decoded, so both lanes draw the same
 ([ADR 190](190-a-placed-svg-draws-its-filters.md)). The same change makes SVG gradients
 interpolate their stops unpremultiplied and samples a pattern tile that lands on whole pixels
 nearest, as `resvg` did. Raster images and text inside an SVG stay undrawn.
+
+## Amendment — 2026-11-18
+
+Two statements of decision 3 no longer hold, and with them part of the Consequences.
+
+1. **A glyph is known by its path.** Decision 3 left a glyph whose outline is exactly a
+   rectangle to be adjusted wherever the list carries no glyph-run table: every list the editor
+   builds, and every render that does not collect one. Inter's I and l, a hyphen and a
+   bar are such glyphs. Each one had its stem rounded to whole device pixels while the letters
+   around it kept their exact weight, so two I's of one line came out a pixel apart (at 12 pt on
+   a 2× screen, 2 or 3 px for a 2.23 px stem). The text emitter now interns a glyph's outline
+   under a key of its own (`PathKey::Glyph`, `PathBuffer::intern_glyph`), which a cached
+   emission's replay carries along, and the mapping reads `PathBuffer::is_glyph`: a fill of a
+   glyph's outline is text and is not adjusted, with or without the table. A glyph copied into a
+   symbol instance is pushed anonymously and is known from the table alone; an equation's
+   outlines are interned as shapes.
+2. **Adjustment and flattening need the device pixel grid.** Decision 3 adjusts "at the device
+   transform of the surface drawn into". The editor's screen scene on WebGPU
+   (`screen_page_scene`) is built in page space and cached; the presenter places it under the
+   camera's scale and pan each frame. Its fills and strokes were adjusted and flattened at that
+   page-space transform, as if a point were a pixel: every rectangle and axis stroke rounded to
+   whole points and every filled curve flattened to 0.1 pt, then magnified. At 335 % on a 2×
+   screen (6.7 px per pt) the business-card template's headline showed it: Inter's 1.11 pt I
+   drawn 2 pt wide in NORTHWIND and 1 pt in PRINT, both sunk 0.4 pt below the baseline. A
+   0.25 pt rule drew 1 pt, Outline view's one-pixel hairlines 1 pt wherever they ran along an
+   axis, and a curve's chords sagged by up to 0.67 px. A scene without a grid now draws its paths
+   as they are: nothing is snapped, and Vello flattens the curves in device space when it
+   renders. A GPU snapshot knows its grid (`build_snapshot_scene`, and `renderPageVelloPng`,
+   which now draws through it), so its artwork is built in device pixels and adjusted as the CPU
+   snapshot is; the readback no longer carries the editor's 1 pt page edge, which no export
+   draws.
+
+The Consequences' "on screen too" therefore holds on the CPU lane's screen and in every snapshot
+and export, not on the WebGPU screen, where an edge along an axis is anti-aliased where it
+falls. Adjusting that screen as well would take the presenter rebuilding a page's scene for each
+device scale and sub-pixel pan.
+
+Tests: `glyph_stems` in `paged-gpu` (both I's of the headline at the still's scale and at 2 px
+per pt, on the CPU lane and through the screen scene on the GPU) and in `paged-renderer` (the
+card built as the editor builds it, the I's measured on the CPU lane); `vello_map`'s
+`a_glyph_outline_is_left_alone_without_a_glyph_run_table` and
+`a_page_space_scene_draws_its_paths_as_they_are`; `PathBuffer`'s
+`a_glyph_outline_is_a_glyph_through_replay`; the text emitter's `every_emitted_outline_is_a_glyph`.

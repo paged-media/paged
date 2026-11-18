@@ -49,6 +49,10 @@ const FRAMES: [number, number, number, number] = [30, 30, 590, 270];
 
 const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
 
+/** The wait for File ▸ Open…'s chooser spans the pointer's travel through
+ *  the menu, which a busy machine slows past the take's 30 s default. */
+const CHOOSER = { timeout: 120_000 };
+
 /** A rectangle of the editor window (CSS px: x0, y0, x1, y1) in page points,
  *  for punching in on a panel: focus() aims through the page camera. */
 async function viewRect(
@@ -132,7 +136,7 @@ film("web", async (k) => {
   // ── An HTML file becomes a web frame. ──
   await k.scene("open", async () => {
     await k.hold(300);
-    const chooser = page.waitForEvent("filechooser");
+    const chooser = page.waitForEvent("filechooser", CHOOSER);
     await menu(k, ["File", "Open…"]);
     k.chip("spring-mailer.html", "file");
     await (await chooser).setFiles(join(ASSETS, "spring-mailer.html"));
@@ -148,9 +152,10 @@ film("web", async (k) => {
   });
 
   // ── The source panel (already showing the imported frame): one CSS
-  //    value changed and saved. Before the threading on purpose: selecting
-  //    a threaded web frame while the screencast runs has frozen the page
-  //    in two of three takes. ──
+  //    value changed and saved. The takes that froze here waited forever
+  //    on a mouse move Chrome never acknowledged: on its way to Save the
+  //    pointer crosses the sandboxed preview as it loads the edit (the
+  //    kit's MOUSE_ACK_MS). ──
   await k.scene("css", async () => {
     k.unfocus();
     const css = page.locator("[data-web-css] [data-code-input]");
@@ -286,7 +291,7 @@ film("web", async (k) => {
       await tapSceneLayers(page);
       await k.hold(800);
     });
-    const chooser = page.waitForEvent("filechooser");
+    const chooser = page.waitForEvent("filechooser", CHOOSER);
     await menu(k, ["File", "Open…"]);
     k.chip(saved.split("/").pop()!, "file");
     await (await chooser).setFiles(saved);

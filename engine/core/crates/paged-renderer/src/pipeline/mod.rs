@@ -595,7 +595,7 @@ pub struct BodyStoryPageDelta {
     pub paths: Vec<paged_compose::PathData>,
     /// The intern key of each of `paths` (`None` = anonymous), so the
     /// replay registers them as the emit did (ADR 027).
-    pub path_keys: Vec<Option<u64>>,
+    pub path_keys: Vec<Option<paged_compose::PathKey>>,
     /// The page's path-buffer fingerprint before the story emitted: a
     /// hit is spliced only into a buffer that has it, which is what makes
     /// the delta's path ids (including references to paths an earlier
@@ -631,7 +631,7 @@ pub struct MasterTextEmitDelta {
     /// resolve correctly.
     pub paths: Vec<paged_compose::PathData>,
     /// The intern key of each of `paths` (ADR 027).
-    pub path_keys: Vec<Option<u64>>,
+    pub path_keys: Vec<Option<paged_compose::PathKey>>,
     /// The page's path-buffer fingerprint before the emit; a hit is
     /// spliced only into a buffer that has it.
     pub pre_fingerprint: u64,

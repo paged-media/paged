@@ -259,6 +259,32 @@ const S = SOURCE_TEXT;
  *  refresh. Document writes do NOT ride this timer — see `persistDraft`. */
 export const PREVIEW_DEBOUNCE_MS = 300;
 
+/** The preview's markups lately made trusted, and what they became. */
+const previewDocs = new Map<string, string>();
+
+/** `markup` as the preview's trusted HTML (editor ADR 240): the same
+ *  object for the same markup. `createHTML` answers a new TrustedHTML
+ *  object on every call, React sets an attribute again whenever its value
+ *  is a different object, and every set srcdoc navigates the frame, to the
+ *  same markup too. Made afresh in each render, it navigated the sandboxed
+ *  preview on every render: each keystroke, each document change, each
+ *  render of the panel around it. Each navigation under the pointer is also
+ *  a chance for Chrome to lose a mouse event's acknowledgement, which froze
+ *  the web film (its kit's MOUSE_ACK_MS). A few markups are kept, for a
+ *  second panel showing another frame. */
+function trustedPreview(markup: string): string {
+  let doc = previewDocs.get(markup);
+  if (doc === undefined) {
+    // The composed preview: pasted HTML is sanitized on the way in, and
+    // the frame runs no script (sandbox="").
+    doc = trustedHtml("paged-web-preview", (d) => d, markup);
+    previewDocs.set(markup, doc);
+    if (previewDocs.size > 4)
+      previewDocs.delete(previewDocs.keys().next().value!);
+  }
+  return doc;
+}
+
 // ---------------------------------------------------------------- styles
 // Token-layer styling per the brand system: sentence case labels,
 // UPPERCASE kicker labels with wide tracking, mono tabular code,
@@ -1808,10 +1834,9 @@ function SourceEditor({
           data-web-preview
           title={t(S.previewTitle)}
           sandbox=""
-          // Trusted Types (editor ADR 240): the composed preview — the
-          // source pasted HTML is sanitized on the way in, and the frame
-          // runs no script (sandbox="").
-          srcDoc={trustedHtml("paged-web-preview", (doc) => doc, srcdoc)}
+          // Trusted HTML, and the same object while the markup is the
+          // same: a new one would navigate the preview (`trustedPreview`).
+          srcDoc={trustedPreview(srcdoc)}
           style={{
             width: viewportWidth ? `${viewportWidth}px` : "100%",
             height: frameSize ? `${frameSize.height}px` : 180,

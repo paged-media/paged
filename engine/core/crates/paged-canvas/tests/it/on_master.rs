@@ -122,6 +122,7 @@ fn a_master_item_is_edited_like_a_page_item() {
         master: master.clone(),
         mutation: Box::new(Mutation::DeleteFrame {
             frame_id: rect.clone(),
+            with_story: false,
         }),
     })
     .expect("delete the master rectangle");
@@ -150,6 +151,7 @@ fn page_operations_are_refused_inside_a_master() {
             master: "nope".into(),
             mutation: Box::new(Mutation::DeleteFrame {
                 frame_id: "x".into(),
+                with_story: false,
             }),
         })
         .is_err());

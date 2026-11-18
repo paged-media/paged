@@ -119,7 +119,8 @@ export const BINDINGS = defineMessages("data.bindings", {
   bind: "Bind",
   cancel: "Cancel",
   importFirst: "Import a data source first, in Data sources.",
-  merged: "Merged {records} record(s) onto {pages} page(s)",
+  merged:
+    "Merged {records, plural, one {# record} other {# records}} onto {pages, plural, one {# page} other {# pages}}",
   mergedOverset: " — {count} overset",
   mergeFailed: "Merge failed: {reasons}",
   noColumns: `No columns to map — "{query}" returned no data. Refresh data and try again.`,
@@ -628,9 +629,10 @@ export const STATUS = defineMessages("data.status", {
   templateExportSkipped:
     "Data Merge template: {count} field(s), {skipped} skipped.",
   mergeFailedWith: "Merge failed: {reason}",
-  merged: "Merged {records} record(s) onto {pages} page(s).",
+  merged:
+    "Merged {records, plural, one {# record} other {# records}} onto {pages, plural, one {# page} other {# pages}}.",
   mergedOverset:
-    "Merged {records} record(s) onto {pages} page(s), {overset} overset.",
+    "Merged {records, plural, one {# record} other {# records}} onto {pages, plural, one {# page} other {# pages}}, {overset} overset.",
   mergeFailed: "Merge failed.",
   recordFlowRecords: `Record flow "{id}": {total} record(s).`,
   ruleUndo: `Rule "{scope}"`,

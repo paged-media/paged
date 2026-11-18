@@ -335,6 +335,28 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
           expect(names, `page ${p + 1} images`).toEqual(recorded);
         }
 
+        // ── nothing of the template is left without a frame ─────────────────
+        // (data ADR 566, amendment of 2026-11-18): its story and the
+        // placeholders' hyperlinks went with its frame, so the IDML export
+        // leaves no story or hyperlink out.
+        const stories = await host.document.collection<{ selfId: string }>(
+          "stories",
+        );
+        const placed = new Set(
+          [...oversetByStory.keys()].filter((id) =>
+            stories.some((s) => s.selfId === id),
+          ),
+        );
+        expect(stories.length, "one story per merged text frame").toBe(
+          placed.size,
+        );
+        const lost = ((await h.exportDocument("idml")).lost ?? []).filter(
+          (l) =>
+            l.code.startsWith("idml.story.") ||
+            l.code.startsWith("idml.hyperlink."),
+        );
+        expect(lost).toEqual([]);
+
         // ── undo restores the template ──────────────────────────────────────
         for (let i = 0; i < result.mutateCalls; i++) await host.document.undo();
         expect((await host.document.collection("pages")).length).toBe(1);

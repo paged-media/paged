@@ -666,11 +666,13 @@ fn delete_frame_removes_an_instance__feat__frames_paths_symbol_instance() {
     };
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: first.clone(),
+        with_story: false,
     })
     .expect("delete by id");
     gate(&m, "delete by id");
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: format!("instance:{second}"),
+        with_story: false,
     })
     .expect("delete by address");
     gate(&m, "delete by address");

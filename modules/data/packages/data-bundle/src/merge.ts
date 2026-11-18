@@ -936,10 +936,14 @@ export function pageMutations(
   return ops.length === 0 ? null : { op: "batch", args: { ops } };
 }
 
+/** The template's frames, each with its story (`withStory`, engine ADR 200,
+ *  amended 2026-11-18): a consumed template leaves no story behind that no
+ *  frame holds, and the IDML export of the merged document leaves nothing of
+ *  it out (data ADR 566, amendment of 2026-11-18). */
 function removeTemplateFrames(template: MergeTemplate): Mutation[] {
   return template.frames.map((f) => ({
     op: "deleteFrame",
-    args: { frameId: f.element.id as string },
+    args: { frameId: f.element.id as string, withStory: true },
   }));
 }
 

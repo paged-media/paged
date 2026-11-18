@@ -76,12 +76,12 @@ pub(super) fn list_get_or_intern_glyph_outline<O: GlyphOutliner>(
     outliner: &O,
     list: &mut DisplayList,
 ) -> Option<paged_compose::PathId> {
-    let key = GlyphCacheKey { font_id, glyph_id }.to_u64();
-    if let Some(existing) = list.paths.find_by_key(key) {
+    let key = GlyphCacheKey { font_id, glyph_id };
+    if let Some(existing) = list.paths.find_glyph(key) {
         return Some(existing);
     }
     let outline = outliner.outline(glyph_id)?;
-    let (id, _) = list.paths.intern(key, outline);
+    let (id, _) = list.paths.intern_glyph(key, outline);
     Some(id)
 }
 

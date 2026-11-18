@@ -771,13 +771,14 @@ impl SurfacePresenter {
         Ok(true)
     }
 
-    /// A page as a snapshot draws it on the GPU, scaled to `dpi`: the
-    /// white page body and the page's content, built exactly as
-    /// [`Self::build_page_scene`] builds them for the screen and placed
-    /// the way [`Self::present_scenes`] places a page (`Scene::append`
-    /// under the page → pixel transform), without the editor's 1 pt
-    /// page-edge border. Returns the scene and its size in pixels, which
-    /// is `RasterOptions::pixel_size` — the CPU snapshot's size.
+    /// A page as a snapshot draws it on the GPU at `dpi`: the white page
+    /// body and the page's content, without the editor's 1 pt page-edge
+    /// border. Unlike the screen's page scene, which the presenter places
+    /// at a scale it does not know when it builds it, a snapshot knows its
+    /// pixel grid, so the content is built in device pixels and stroke
+    /// adjustment applies as on the CPU snapshot (engine ADR 189,
+    /// amendment of 2026-11-18). Returns the scene and its size in pixels,
+    /// which is `RasterOptions::pixel_size` — the CPU snapshot's size.
     pub fn build_snapshot_scene(
         list: &DisplayList,
         width_pt: f32,
@@ -785,19 +786,17 @@ impl SurfacePresenter {
         dpi: f32,
     ) -> (Scene, u32, u32) {
         use vello::peniko;
-        let mut page = Scene::new();
-        page.fill(
+        let mut scene = Scene::new();
+        scene.fill(
             peniko::Fill::NonZero,
-            kurbo::Affine::IDENTITY,
+            kurbo::Affine::scale((dpi / 72.0) as f64),
             peniko::Color::from_rgba8(255, 255, 255, 255),
             None,
             &kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64),
         );
         // Engine ADR 1311 — the pictures at the snapshot's resolution.
-        let content = crate::vello_rs::build_page_space_scene(list, Some(dpi / 72.0));
-        page.append(&content, None);
-        let mut scene = Scene::new();
-        scene.append(&page, Some(kurbo::Affine::scale((dpi / 72.0) as f64)));
+        let content = crate::vello_rs::build_device_scene(list, dpi);
+        scene.append(&content, None);
         let mut opts = crate::RasterOptions::new(width_pt, height_pt);
         opts.dpi = dpi;
         let (w, h) = opts.pixel_size();

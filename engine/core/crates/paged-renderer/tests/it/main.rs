@@ -42,6 +42,7 @@ mod footnote_split;
 mod footnotes;
 mod forced_line_break_pipeline;
 mod glyph_runs_follow_commands;
+mod glyph_stems;
 mod guides_non_export;
 mod hard_hyphen_pipeline;
 mod image_adjustments;

@@ -345,7 +345,7 @@ describe.skipIf(!ready && !required)(
       };
       expect(out.ok, out.message).toBe(true);
       expect(out.records).toBe(5);
-      expect(out.message).toMatch(/^Merged 5 record\(s\) onto \d+ page\(s\)/);
+      expect(out.message).toMatch(/^Merged 5 records onto \d+ pages?\b/);
       // Every record's name is on a page, nothing of the template is left.
       const texts: string[] = [];
       for (const id of await elementsOf(host, "textFrame")) {
@@ -374,6 +374,106 @@ describe.skipIf(!ready && !required)(
       )) as { ok: boolean; records: number; pages: number };
       expect(plain).toMatchObject({ ok: true, records: 5, pages: 5 });
       expect((await other.host.document.collection("pages")).length).toBe(6);
+    });
+
+    it("DATA-5: a merge that consumes its template takes the template's stories with its frames; the IDML export leaves nothing out [data.lower.merge-writer]", async () => {
+      expect(
+        ready,
+        "real core and the data-js wasm must both be available",
+      ).toBe(true);
+      const mod = await loadBundleModule();
+      const { h, host, s } = await open(mod);
+      const { frames } = await cardTemplate(host);
+      const storyOf = async (id: ElementId) =>
+        (
+          (await host.document.elementGeometry([id]))[0] as {
+            storyId?: string;
+          }
+        ).storyId!;
+      const templateStories = [
+        await storyOf(frames[0]),
+        await storyOf(frames[1]),
+      ];
+      const storyIds = async () =>
+        (await host.document.collection<{ selfId: string }>("stories")).map(
+          (st) => st.selfId,
+        );
+      /** Every story's text: an id alone says little, core mints a freed
+       *  one again for the next story. */
+      const storyTexts = async () => {
+        const out: string[] = [];
+        for (const id of await storyIds()) {
+          const c = await host.document.storyContent(id);
+          out.push(
+            (c?.paragraphs ?? [])
+              .map((p) => p.runs.map((x) => x.text).join(""))
+              .join("\n"),
+          );
+        }
+        return out;
+      };
+      const unplaced = async () =>
+        ((await h.exportDocument("idml")).lost ?? []).filter((l) =>
+          l.code.startsWith("idml.story."),
+        );
+
+      // Keep template off, one record per page: the database-publishing film.
+      const r = await s.mergeRecords({
+        query: "q_all",
+        template: "consume",
+        recordsPerPage: { mode: "single" },
+      });
+      expect(r.ok, r.diagnostics.join("; ")).toBe(true);
+      expect((await host.document.collection("pages")).length).toBe(5);
+      // The merged records' stories only: two frames on each of five pages,
+      // none of them the template's <<fields>>.
+      const after = await storyTexts();
+      expect(after).toHaveLength(10);
+      expect(after.filter((t) => t.includes("<<"))).toEqual([]);
+      // None is held by no frame, so the export leaves none out.
+      expect(await unplaced()).toEqual([]);
+
+      // Undo brings the template back, its stories and their text with it.
+      for (let i = 0; i < r.mutateCalls; i++) await host.document.undo();
+      const back = await storyIds();
+      for (const id of templateStories) expect(back).toContain(id);
+      const text = await host.document.storyContent(templateStories[1]);
+      expect(
+        text?.paragraphs.map((p) => p.runs.map((x) => x.text).join("")),
+      ).toEqual(["SKU <<sku>>"]);
+      expect(await unplaced()).toEqual([]);
+    });
+
+    it("DATA-6: merging again replaces the merged frames and their stories; the IDML export leaves nothing out [data.lower.merge-writer]", async () => {
+      expect(
+        ready,
+        "real core and the data-js wasm must both be available",
+      ).toBe(true);
+      const mod = await loadBundleModule();
+      const { h, host, s } = await open(mod);
+      await cardTemplate(host);
+      const options = {
+        query: "q_all",
+        template: "keep" as const,
+        recordsPerPage: { mode: "single" as const },
+      };
+      const first = await s.mergeRecords(options);
+      expect(first.ok, first.diagnostics.join("; ")).toBe(true);
+      const stories = (
+        await host.document.collection<{ selfId: string }>("stories")
+      ).length;
+      const again = await s.mergeRecords(options);
+      expect(again.ok, again.diagnostics.join("; ")).toBe(true);
+      expect((await host.document.collection("pages")).length).toBe(6);
+      // The second run's frames replace the first's, stories included.
+      expect(
+        (await host.document.collection<{ selfId: string }>("stories")).length,
+      ).toBe(stories);
+      expect(
+        ((await h.exportDocument("idml")).lost ?? []).filter((l) =>
+          l.code.startsWith("idml.story."),
+        ),
+      ).toEqual([]);
     });
   },
 );

@@ -387,15 +387,15 @@ fn get_or_intern_glyph_outline(
     outliner: &impl GlyphOutliner,
     list: &mut DisplayList,
 ) -> Option<PathId> {
-    let key = GlyphCacheKey { font_id, glyph_id }.to_u64();
-    // `PathBuffer::intern` already treats a repeated key as a cache
-    // hit and does not store a second copy. Build the outline only on
-    // a miss by probing the cache first.
-    if let Some(existing) = list.paths.find_by_key(key) {
+    let key = GlyphCacheKey { font_id, glyph_id };
+    // `PathBuffer::intern_glyph` already treats a repeated key as a
+    // cache hit and does not store a second copy. Build the outline only
+    // on a miss by probing the cache first.
+    if let Some(existing) = list.paths.find_glyph(key) {
         return Some(existing);
     }
     let outline = outliner.outline(glyph_id)?;
-    let (id, _fresh) = list.paths.intern(key, outline);
+    let (id, _fresh) = list.paths.intern_glyph(key, outline);
     Some(id)
 }
 
@@ -496,6 +496,32 @@ mod tests {
             "expected ≤ 2 unique paths, got {}",
             list.paths.len()
         );
+    }
+
+    #[test]
+    fn every_emitted_outline_is_a_glyph() {
+        // The unit-square outliner's every glyph is a rectangle, as Inter's
+        // I is: the rasterizers must know these fills are text even with
+        // no glyph-run table, or they snap them as rules.
+        let p = laid_out("IIl");
+        let mut list = DisplayList::new();
+        emit_paragraph(
+            &p,
+            FontRef::plain(1),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        assert!(list.glyph_runs.is_none());
+        assert!(!list.commands.is_empty());
+        for cmd in &list.commands {
+            let DisplayCommand::FillPath { path_id, .. } = cmd else {
+                panic!("expected FillPath, got {cmd:?}");
+            };
+            assert!(list.paths.is_glyph(*path_id), "{path_id:?}");
+        }
     }
 
     #[test]

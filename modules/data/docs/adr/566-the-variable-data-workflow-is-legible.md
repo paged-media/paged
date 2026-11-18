@@ -1,6 +1,6 @@
 # ADR 566 — The variable-data workflow is legible: six steps, a record scrubber, an outlier finder, badges as an editing aid
 
-- **Status:** Accepted, 2026-11-14.
+- **Status:** Accepted, 2026-11-14; amended 2026-11-18 (the merge leaves none of the template's stories; its message counts in plurals).
 - **Scope:** `data-bundle/src/workflow.ts` (new: the steps' states), `src/outliers.ts` (new: the
   ranking), `src/panels/data-workflow.tsx` (new: `WorkflowSteps`, `RecordScrubber`,
   `OutlierFinder`, `measureImageRatio`), `src/panels/bindings-panel.tsx`, `src/session.ts`
@@ -78,3 +78,32 @@ checkboxes (F-46).
 - The data journeys and showcase pages press **Place on page**.
 - Locale-specific overflow (a German text longer than the English) is found by previewing in that
   locale and checking for overflow; the finder does not switch locales on its own.
+
+## Amendment 2026-11-18 — Publish leaves nothing of the template behind, and says so in words
+
+Recording the database-publishing film found two faults in the workflow's last step, the merge:
+
+- **Keep template off left the template's stories.** A merge that consumes its template deletes
+  the template's frames (`merge.ts`, `removeTemplateFrames`), and an update deletes what the run
+  before wrote (`relower.ts`: a re-merge's frames, a record flow's, a table's). Core keeps the
+  story of a text frame it deletes (free for a path), so the merged document carried the
+  template's `<<field>>` stories, and one more per frame a re-merge cleared, placed by no frame;
+  its IDML export left them out ("4 items left out"). Decision: what paged.data deletes, it
+  deletes **with the story**: every `deleteFrame` the bundle sends asks for `withStory` (engine ADR
+  200, amendment of 2026-11-18), so core removes the story the frame alone held, the
+  placeholders' hyperlinks in it with it, in the same undo step. The merge does not reuse the
+  template's frames: the copies `duplicatePage` makes need the page emptied first, and reusing
+  them would cost the merge its one undo step. A merged document holds the merged records'
+  stories only, its IDML export reports nothing left out because of the merge, and one undo still
+  restores the template, stories and all.
+- **The merge counted in "(s)".** "Merged 24 record(s) onto 2 page(s)" becomes "Merged 24 records
+  onto 2 pages" (and "1 record onto 1 page"): the Bindings panel's and the status line's merge
+  messages are ICU plurals, as the panel's other counts already were, in English and German
+  (`messages.ts`, `locales/de.json`).
+
+Tests: `src/__tests__/merge.test.ts` and `relower.test.ts` (every `deleteFrame` asks for
+`withStory`), `test/films-real-core.spec.ts` (DATA-5: consuming the template leaves none of its
+stories and the IDML export no story loss, undo restores them; DATA-6: a re-merge keeps the story
+count and the export clean), `test/merge-real-core.spec.ts` (on all eight InDesign templates, one
+story per merged frame and no story or hyperlink left out of the export), `test/strings-de.spec.ts`
+(the merge's plural forms), and the engine's `delete_unheld_stories.rs` and `data_merge_pages.rs`.
