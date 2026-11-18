@@ -242,6 +242,7 @@ pub fn reconstruct(
                 let groups: Vec<Vec<text::Line>> = text::blocks(lines)
                     .into_iter()
                     .flat_map(text::split_display)
+                    .flat_map(text::split_far)
                     .flat_map(text::split_measures)
                     .collect();
                 let boxes: Vec<Vec<[f32; 4]>> = groups

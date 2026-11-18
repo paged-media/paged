@@ -50,8 +50,9 @@ repeats.
    and a tenth of an em), so text set tight and text tracked open both keep their words. A
    line with a gap no line near it repeats is not a row of a table but items on one baseline (a
    label beside the next, a caption and its mark), each set where the page sets it. Lines join a frame while they run down the same column within a few lines;
-   a frame splits where display type (14 pt and up) meets body text, and where its lines change
-   measure (frames threaded one under the other). A frame's width is bounded by its own
+   a frame splits where display type (14 pt and up) meets body text, where its lines change
+   measure (frames threaded one under the other), and where a left-set frame's next line starts
+   more than two fifths of its width away (a table's cell over a full-width row). A frame's width is bounded by its own
    breaks: a soft break happens because the next word would not fit, so each bounds the width
    from above, the widest line from below, and the frame takes the middle — a face a little
    wider or narrower than the original still breaks where the page breaks. In Chinese and
