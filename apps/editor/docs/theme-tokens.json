@@ -525,6 +525,39 @@
         "dark": "0 0% 100%"
       }
     },
+    "--paper": {
+      "group": "paper — document content inside a panel",
+      "light": "#ffffff",
+      "dark": "#ffffff"
+    },
+    "--paper-fg": {
+      "group": "paper — document content inside a panel",
+      "light": "#171717",
+      "dark": "#171717",
+      "highContrast": {
+        "light": "#000000",
+        "dark": "#000000"
+      }
+    },
+    "--paper-rule": {
+      "group": "paper — document content inside a panel",
+      "light": "#d4d4d8",
+      "dark": "#d4d4d8",
+      "highContrast": {
+        "light": "#6e6e76",
+        "dark": "#6e6e76"
+      }
+    },
+    "--paper-selection": {
+      "group": "paper — document content inside a panel",
+      "light": "hsl(263 73% 43%)",
+      "dark": "hsl(263 73% 43%)"
+    },
+    "--paper-selection-wash": {
+      "group": "paper — document content inside a panel",
+      "light": "rgba(91, 30, 190, 0.12)",
+      "dark": "rgba(91, 30, 190, 0.12)"
+    },
     "--pg-bg": {
       "group": "surfaces & interaction",
       "light": "#ffffff",

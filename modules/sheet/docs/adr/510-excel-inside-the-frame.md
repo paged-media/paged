@@ -141,3 +141,17 @@ that looks as the grid did.
 - The root's `data-heading-pt="w,h"` gives the heading strips in points. The screen-vs-page
   journey (`sheet-screen-vs-page.journey.spec.ts`) uses it to line up the grid's cells with the
   page's table.
+
+## Amendment (2026-11-18): the Grid panel's grid is paper
+
+- The grid scene carries the workbook's own fills and font colours (the styler above, ADR 518),
+  in the Grid panel as in the frame. In the frame they are drawn on the page; the panel drew
+  them on the editor's chrome, so a workbook's body cells (Excel's default font is "Text 1",
+  stored black) were near-black on the dark theme's panel and could not be read.
+- The panel's grid surface is paper: the editor's `--paper-*` tokens (editor ADR 210, amendment
+  2026-11-18), the same in every theme. The cells keep their stored colours; text without one,
+  the gridlines, the selection and the cell editor take the paper's ink, rule and selection. The
+  formula bar, find and the other controls around it stay chrome.
+- `packages/sheet-bundle/test/grid-paper.dom.test.tsx` checks every cell's text against the
+  ground it is drawn on, with the colours resolved from the editor's `theme.css`, in the light
+  and dark themes and their high-contrast variants.

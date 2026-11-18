@@ -31,6 +31,14 @@
 // triggers session actions (setGridSelection, editCell). Token-layer
 // styling (--pg-*, --space-*, --font-mono, --radius-*) mirrors the
 // workbook panel so it reads native in both themes.
+//
+// The cells are the workbook's own: the scene carries the fills and font
+// colours the workbook stores (ADR 510, ADR 518), so the grid surface is
+// paper (`--paper-*`, the same in every theme), as the frame's grid is
+// drawn on the page. A stored dark ink (an Excel workbook's default font
+// is "Text 1", black) on the dark panel could not be read; what has no
+// colour of its own (text, gridlines, the selection, the cell editor)
+// takes the paper's ink, rule and selection.
 
 import {
   useCallback,
@@ -47,6 +55,7 @@ import {
   color,
   Disclosure,
   font,
+  paper,
   radius,
   space,
 } from "@paged-media/panel-kit";
@@ -104,13 +113,14 @@ const note: CSSProperties = {
   color: "var(--pg-muted-fg)",
 };
 
+// The cell editor sits on the paper, over its cell.
 const editorInput: CSSProperties = {
   position: "absolute",
   boxSizing: "border-box",
   font: `12px ${font.mono}`,
-  color: "var(--pg-fg)",
-  background: "var(--pg-bg)",
-  border: "1px solid var(--pg-primary)",
+  color: paper.ink,
+  background: paper.surface,
+  border: `1px solid ${paper.selection}`,
   borderRadius: 0,
   padding: "0 3px",
   margin: 0,
@@ -1149,7 +1159,8 @@ function makeGridView(
           </p>
         )}
 
-        {/* The grid surface: the engine-windowed SVG + the cell editor. */}
+        {/* The grid surface: the engine-windowed SVG + the cell editor,
+            on paper (the cells keep the workbook's colours). */}
         <div
           data-grid-surface
           ref={surfaceRef}
@@ -1162,7 +1173,8 @@ function makeGridView(
             height: hPx,
             border: "1px solid var(--pg-border)",
             borderRadius: radius.sm,
-            background: "var(--pg-bg)",
+            background: paper.surface,
+            colorScheme: "light",
             overflow: "hidden",
           }}
         >
@@ -1298,11 +1310,14 @@ const scrollBtn: CSSProperties = {
   cursor: "pointer",
 };
 
+/** The paper's colours for what has no colour of its own; a cell's stored
+ *  font colour and fill still win (the scene's styles). */
 const GRID_SVG_OPTIONS = {
   ...DEFAULT_GRID_SVG_OPTIONS,
-  gridColor: "var(--pg-border)",
-  textColor: "var(--pg-fg)",
-  selectionColor: "var(--pg-primary)",
+  gridColor: paper.rule,
+  textColor: paper.ink,
+  selectionColor: paper.selection,
+  selectionFill: paper.selectionWash,
 };
 
 /** The SVG string of a scene, built once per scene. The session memoises
