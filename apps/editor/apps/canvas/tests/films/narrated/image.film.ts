@@ -317,22 +317,17 @@ film("image", async (k) => {
       .poll(() => status(page), { timeout: 20_000 })
       .toContain("Committed revision");
     await k.hold(600);
-    // The pixel selection is let go: its task bar (Generative fill, Remove)
-    // otherwise stays on the page after the raster context closes, over
-    // the place the next frame is drawn.
-    await press(
-      k,
-      page.getByRole("button", { name: "Deselect", exact: true }).first(),
-    );
-    await expect(page.getByPlaceholder("Describe what to fill in")).toHaveCount(
-      0,
-    );
   });
 
   // ── A layered PSD, opened into a frame of its own. ──
   await k.scene("psd", async () => {
     await k.key("Escape");
     await expect.poll(() => editContext(page)).toBe(null);
+    // The selection's task bar (Generative fill, Remove) went with the
+    // raster context: nothing sits where the next frame is drawn.
+    await expect(page.getByPlaceholder("Describe what to fill in")).toHaveCount(
+      0,
+    );
     await k.key("f", "Rectangle frame tool");
     await pointer.drag(
       await pt(k, PSD_FRAME.x0, PSD_FRAME.y0),
