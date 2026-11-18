@@ -760,9 +760,7 @@ fn cpu_check(ctx: &GpuContext, s: &mut LayerStack, step: &str) -> Result<(), Tes
             // divisor nears zero (Divide, the dodges and burns, Vivid
             // Light; the non-separable four divide by a colour's range
             // and by its distance from its luminosity); there only the
-            // share holds, and a wider one: 98 % (measured on Metal: Vivid
-            // Light over an opaque noise plate at 99 % opacity, 45 of 3150
-            // texels past two levels).
+            // 99 % holds.
             let divides = s.layers().iter().any(|l| {
                 [
                     "compose.divide",
@@ -776,9 +774,8 @@ fn cpu_check(ctx: &GpuContext, s: &mut LayerStack, step: &str) -> Result<(), Tes
                 ]
                 .contains(&l.blend.id)
             });
-            let share = if divides { 2 } else { 1 };
             prop_assert!(
-                (worst <= CPU_WORST || divides) && off * 100 <= share * d.len(),
+                (worst <= CPU_WORST || divides) && off * 100 <= d.len(),
                 "{step}: the CPU fold is {worst} levels from the GPU fold, {off} of {} texels \
                  more than {CPU_LEVELS}",
                 d.len()

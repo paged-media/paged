@@ -2964,8 +2964,8 @@ mod tests {
 
     #[test]
     fn codes_that_are_glyph_ids_in_the_standard_order_read_moved_back() {
-        // "upto off HILLARYS" with every code 29 below its character.
-        let shifted: String = "upto off HILLARYS colour range"
+        // "upto off WINDOWS" with every code 29 below its character.
+        let shifted: String = "upto off WINDOWS colour range"
             .chars()
             .map(|c| char::from_u32(c as u32 - 29).unwrap())
             .collect();
@@ -2983,7 +2983,7 @@ mod tests {
         mark_unreadable(&mut items, &mut fonts);
         let Item::Text(t) = &items[0] else { panic!() };
         assert!(!t.outline);
-        assert_eq!(t.text, "upto off HILLARYS colour range");
+        assert_eq!(t.text, "upto off WINDOWS colour range");
     }
 
     #[test]
