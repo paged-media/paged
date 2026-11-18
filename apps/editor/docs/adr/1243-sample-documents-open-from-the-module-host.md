@@ -32,9 +32,10 @@ not carry them; the host registers them.
 3. **Two ways in.** The empty canvas lists the samples under "Sample documents" with their covers
    and page counts. A link with `?sample=<id>` opens that sample as soon as the editor is up, so
    the website and the films land on the document.
-4. **Offered where a catalog is expected:** the demo and development builds, or any build given
-   `VITE_SAMPLES_URL`. An unreachable or malformed catalog is no samples, not an error; the
-   empty canvas stays as it was.
+4. **Offered where a catalog is expected:** the demo build (play.paged.media), or any build given
+   `VITE_SAMPLES_URL`. No other build asks the module host for it: the editor's network wall
+   admits no request it was not asked for. An unreachable or malformed catalog is no samples,
+   not an error; the empty canvas stays as it was.
 
 5. **Published like the films** ([ADR 224](224-films-are-recorded-by-the-editor.md)): the files travel as
    the assets of a draft release and `editor / samples-publish` puts them under `samples/` on the

@@ -68,13 +68,13 @@ export function catalogUrl(): string {
   );
 }
 
-/** Whether this build offers samples: the demo and dev builds, or any
- *  build told where a catalog is. */
+/** Whether this build offers samples: the demo build (play.paged.media),
+ *  or any build told where a catalog is. Others reach no host for them:
+ *  the editor's network wall (ADR 220) admits no request it was not asked
+ *  for. */
 export function samplesEnabled(): boolean {
   return (
-    import.meta.env.MODE === "demo" ||
-    !import.meta.env.PROD ||
-    Boolean(import.meta.env.VITE_SAMPLES_URL)
+    import.meta.env.MODE === "demo" || Boolean(import.meta.env.VITE_SAMPLES_URL)
   );
 }
 
@@ -96,26 +96,17 @@ export function parseCatalog(json: unknown): Sample[] {
   );
 }
 
-let cached: Promise<Sample[]> | null = null;
-
-/** The catalog (fetched once per page). An unreachable or malformed
- *  catalog is no samples, not an error. */
+/** The catalog. An unreachable or malformed catalog is no samples, not an
+ *  error. The browser's cache answers a second read (the empty canvas and a
+ *  `?sample=` link may both ask). */
 export function loadCatalog(
   fetcher: typeof fetch = fetch,
   url = catalogUrl(),
 ): Promise<Sample[]> {
-  if (!cached) {
-    cached = fetcher(url, { cache: "no-cache" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(parseCatalog)
-      .catch(() => []);
-  }
-  return cached;
-}
-
-/** Forget the fetched catalog (tests). */
-export function resetCatalog(): void {
-  cached = null;
+  return fetcher(url)
+    .then((r) => (r.ok ? r.json() : null))
+    .then(parseCatalog)
+    .catch(() => []);
 }
 
 /** `rel` against the catalog's URL (itself read against the page, so a

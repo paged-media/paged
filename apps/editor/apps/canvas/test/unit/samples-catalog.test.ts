@@ -26,7 +26,6 @@ import {
   loadCatalog,
   openSample,
   parseCatalog,
-  resetCatalog,
   resolve,
   type Sample,
 } from "../../src/samples/catalog";
@@ -71,24 +70,9 @@ describe("parseCatalog", () => {
 
 describe("loadCatalog", () => {
   test("an unreachable catalog is no samples, not an error", async () => {
-    resetCatalog();
     const failing = (() =>
       Promise.reject(new Error("offline"))) as unknown as typeof fetch;
     expect(await loadCatalog(failing, BASE)).toEqual([]);
-    resetCatalog();
-  });
-
-  test("fetches once per page", async () => {
-    resetCatalog();
-    let calls = 0;
-    const once = (() => {
-      calls++;
-      return Promise.resolve(Response.json({ v: 1, samples: [sample] }));
-    }) as unknown as typeof fetch;
-    expect((await loadCatalog(once, BASE)).length).toBe(1);
-    expect((await loadCatalog(once, BASE)).length).toBe(1);
-    expect(calls).toBe(1);
-    resetCatalog();
   });
 });
 
