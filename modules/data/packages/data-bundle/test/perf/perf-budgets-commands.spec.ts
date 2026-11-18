@@ -499,10 +499,13 @@ describe.skipIf(!RUN_BUDGETS)(
     // symbol's modules by their label and remove them in the same batch.
     // Settled before counting (the setup's debounced save no longer lands in
     // the command): -1 parts.write.
+    // The frame's own page (data ADR 551, amendment 2026-11-18): the symbol
+    // is drawn on the page its frame geometry names, so the active page is
+    // no longer read: -2 reads (document.meta, the pages collection).
     const W4: Measured = onLabelled(
       {
-        hostCalls: 7,
-        hostReads: 5,
+        hostCalls: 5,
+        hostReads: 3,
         mutates: 1,
         mutationOps: 673,
         undoSteps: 1,
