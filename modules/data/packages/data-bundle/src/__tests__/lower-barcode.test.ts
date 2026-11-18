@@ -1,6 +1,9 @@
-// A barcode lands in its frame's page coordinates: the frame's own bounds go
-// through its item transform first. On a verso the bounds alone sit a page
-// width into the spread, and the symbol was drawn beside its frame.
+// A barcode lands in its frame: on the frame's own page, whatever page is
+// active, at the frame's page coordinates — its own bounds through its item
+// transform. On a verso the bounds alone sit a page width into the spread, and
+// the symbol was drawn beside its frame; drawn on the active page, it landed
+// at the frame's coordinates on whatever page was showing (the cover, in the
+// showcase's catalog chapter).
 
 import { describe, expect, it } from "bun:test";
 
@@ -10,17 +13,21 @@ import { commitLoweredBarcode } from "../lower";
 
 const KEY = "x-paged:media.paged.data";
 
-function fakeHost(itemTransform: number[] | null) {
+function fakeHost(
+  itemTransform: number[] | null,
+  where: { active?: string; framePage?: string | null } = {},
+) {
   const sent: any[] = [];
+  const framePage = "framePage" in where ? where.framePage : "p2";
   const host = {
     log: { info() {}, warn() {}, debug() {} },
     document: {
-      meta: async () => ({ activePage: "p2" }),
+      meta: async () => ({ activePage: where.active ?? "p2" }),
       collection: async () => [],
       elementGeometry: async () => [
         {
           id: { kind: "rectangle", id: "u1" },
-          pageId: "p2",
+          ...(framePage !== undefined ? { pageId: framePage } : {}),
           bounds: [100, -480, 172, -408],
           ...(itemTransform ? { itemTransform } : {}),
         },
@@ -51,6 +58,14 @@ const firstAnchor = (sent: any[]) =>
   sent[0].args.ops.find((o: any) => o.op === "insertPath").args.anchors[0]
     .anchor;
 
+const pagesDrawnOn = (sent: any[]) => [
+  ...new Set(
+    sent[0].args.ops
+      .filter((o: any) => o.op === "insertPath")
+      .map((o: any) => o.args.pageId),
+  ),
+];
+
 describe("commitLoweredBarcode [data.barcode.symbology]", () => {
   it("draws a verso frame's symbol inside the frame, through its item transform", async () => {
     const { host, sent } = fakeHost([1, 0, 0, 1, 540, 0]);
@@ -60,6 +75,34 @@ describe("commitLoweredBarcode [data.barcode.symbology]", () => {
       session: null,
     });
     expect(firstAnchor(sent)).toEqual([60, 100]);
+  });
+
+  it("draws on the frame's page, not the active page", async () => {
+    const { host, sent } = fakeHost([1, 0, 0, 1, 540, 0], {
+      active: "p1",
+      framePage: "p2",
+    });
+    expect(await commitLoweredBarcode(host, BARCODE, "u1")).toBe(2);
+    expect(pagesDrawnOn(sent)).toEqual(["p2"]);
+    expect(firstAnchor(sent)).toEqual([60, 100]);
+  });
+
+  it("refuses a frame on the pasteboard instead of drawing on the active page", async () => {
+    const { host, sent } = fakeHost([1, 0, 0, 1, 540, 0], {
+      active: "p1",
+      framePage: null,
+    });
+    expect(await commitLoweredBarcode(host, BARCODE, "u1")).toBe(0);
+    expect(sent).toEqual([]);
+  });
+
+  it("falls back to the active page for a host that names no page", async () => {
+    const { host, sent } = fakeHost([1, 0, 0, 1, 540, 0], {
+      active: "p1",
+      framePage: undefined,
+    });
+    await commitLoweredBarcode(host, BARCODE, "u1");
+    expect(pagesDrawnOn(sent)).toEqual(["p1"]);
   });
 
   it("reads bounds as they are from a host that sends no transform", async () => {

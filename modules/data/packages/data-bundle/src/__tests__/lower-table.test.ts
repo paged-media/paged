@@ -120,6 +120,23 @@ describe("commitLoweredTable is one batch [data.lower.content]", () => {
     ]);
   });
 
+  it("a re-lower that replaces its frame keeps the frame's page and corner, not the active page [data.lower.content]", async () => {
+    const fake = fakeHost(() => ({ applied: true }));
+    const clear: Mutation[] = [
+      { op: "deleteFrame", args: { frameId: "uOld" } } as Mutation,
+    ];
+    await commitLoweredTable(fake.host, table, undefined, undefined, {
+      clear,
+      at: { pageId: "p2" as never, topPt: 200, leftPt: 60 },
+    });
+    const insert = fake.sent[0]!.find((o) => o.op === "insertTextFrame")!;
+    expect(insert.args).toEqual({
+      pageId: "p2",
+      bounds: [200, 60, 224, 190],
+    });
+    expect(fake.sent[0]!).toContainEqual(clear[0]);
+  });
+
   it("any other rejection places nothing and does not degrade [data.lower.content]", async () => {
     const fake = fakeHost(() => ({
       applied: false,

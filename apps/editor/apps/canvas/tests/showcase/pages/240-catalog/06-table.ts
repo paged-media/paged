@@ -37,9 +37,9 @@
 // binding, and says so).
 //
 // Runs LAST because `lowerAll` re-lowers everything: the six bound
-// barcodes re-draw onto the active page and the bound table would
-// re-commit as a fresh frame on any later pass — this module is the
-// pass, and it cleans what the pass re-drew.
+// barcodes are redrawn in their own frames on their own pages, and the
+// bound table would re-commit on any later pass — this module is the
+// pass, and it checks where the pass put each thing.
 
 import { expect } from "@playwright/test";
 
@@ -53,14 +53,14 @@ import {
   partitionByPage,
   removeRefs,
   sceneRefs,
-  settle,
 } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   DATASET_PANEL,
   addAuthoredBinding,
+  assignLayerBatch,
   ensureOrdersReady,
-  settleStableNew,
+  placeBindings,
   spreadOffset,
 } from "./00-support";
 
@@ -143,32 +143,42 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const polysBefore = await sceneRefs(page, "polygon");
     await withActivePage(page, pageId, async () => {
       await doc.designer.placeCaret(throwawayStory, 0);
-      await page.getByRole("button", { name: /^place on page$/i }).click();
-      await settle(
-        page,
-        async () => (await newRefs(page, "textFrame", framesBefore)).length > 0,
-        30_000,
-      );
-      await page.waitForTimeout(1_000);
+      // Answers when the whole pass is over: the table and every symbol
+      // it redraws are on the page before anything below reads it.
+      await placeBindings(page);
     });
 
-    // The re-drawn barcodes: every bound symbol drew a fresh copy onto
-    // this (active) page. None of this page's own content is a path, so
-    // every new polygon goes, wherever it landed — read at STABILITY,
-    // because the pass commits symbol after symbol and an early sample
-    // would leave the late ones as litter (measured on the symbology
-    // page).
-    const strayPolys = await settleStableNew(
+    // The redrawn barcodes: the pass re-lowered every bound symbol in its
+    // own frame, on its own page, replacing the old modules. None of this
+    // page's own content is a path, so a new polygon HERE is a symbol
+    // that missed its page: it goes, on the record.
+    const polys = await partitionByPage(
       page,
-      "polygon",
-      polysBefore,
-      20_000,
+      await newRefs(page, "polygon", polysBefore),
+      pageId,
     );
-    if (strayPolys.length > 0) {
-      await removeRefs(doc, strayPolys);
+    if (polys.elsewhere.length > 0) {
+      await assignLayerBatch(
+        doc,
+        "polygon",
+        polys.elsewhere.map((r) => r.id),
+        LAYER.content,
+      ).catch((err) => {
+        notes.push(
+          `layer assignment for the redrawn symbols was refused: ${String(err).slice(0, 120)}`,
+        );
+      });
       notes.push(
-        `lowerAll re-drew the six bound symbols during the table pass — ` +
-          `${strayPolys.length} stray path modules removed from the active page.`,
+        `the table pass redrew the bound symbols in place — ` +
+          `${polys.elsewhere.length} path modules in their own frames on ` +
+          "their own pages.",
+      );
+    }
+    if (polys.here.length > 0) {
+      await removeRefs(doc, polys.here);
+      notes.push(
+        `${polys.here.length} path modules of the table pass landed on this ` +
+          "page, outside every bound frame — removed.",
       );
     }
 

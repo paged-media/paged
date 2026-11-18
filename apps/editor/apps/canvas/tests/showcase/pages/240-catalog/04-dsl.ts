@@ -40,18 +40,16 @@
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { withActivePage } from "../../active-page";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
-import { geometryOf, sceneRefs } from "../../plugin-support";
+import { geometryOf, newRefs, sceneRefs } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   addAuthoredBinding,
   assignLayerBatch,
   ensureOrdersReady,
-  clickLower,
+  placeBindings,
   readDslRoster,
-  settleStableNew,
   spreadOffset,
   units,
-  correctSeam,
 } from "./00-support";
 
 /** Page-space (x0, y0, x1, y1) exhibit slots on the 25/12 grid. */
@@ -197,39 +195,14 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await addAuthoredBinding(page, "barcode", QR_EXPR, "qr");
 
     const before = await sceneRefs(page, "polygon");
-    let fresh: Awaited<ReturnType<typeof settleStableNew>> = [];
-    await withActivePage(page, pageId, async () => {
-      await page.getByRole("button", { name: /^refresh data$/i }).click();
-      await page.waitForTimeout(600);
-      await clickLower(page);
-      // Stabilized, not first-hit: the pass commits one symbol batch
-      // after another, and sampling at the first new module reads the
-      // pass mid-flight (measured on the symbology page).
-      fresh = await settleStableNew(page, "polygon", before);
-    });
+    // The pass refreshes the data itself and answers when every binding
+    // is lowered: nothing is read until it is over.
+    await withActivePage(page, pageId, () => placeBindings(page));
+    const fresh = await newRefs(page, "polygon", before);
+    // Geometry `bounds` speak STORED coordinates: a page-local slot sits
+    // at slot + this page's spread offset (the barcode lowering draws
+    // through the frame's item transform, on the frame's own page).
     const off = await spreadOffset(ctx, pageId);
-    // The seam correction — see unshiftSeam: on this verso (stored at
-    // −540) a lowering that feeds its stored-geometry origin to the wire
-    // lands the symbols one page width off, on the pasteboard; one that
-    // lands them in their slots is left alone (correctSeam).
-    const seam = await correctSeam(page, doc, "polygon", fresh, off, [
-      C128_SLOT,
-      QR_SLOT,
-    ]);
-    if (seam.shifted) {
-      notes.push(
-        "SEAM FINDING — the barcode lowering feeds the bound rectangle's " +
-          "STORED geometry to the page-local insertPath wire, so on this " +
-          `page (stored offset ${off[0]},${off[1]}) every module landed one ` +
-          "page width off, on the pasteboard; the page translated the " +
-          "fresh modules back by the measured offset in one batch.",
-      );
-    }
-    // Geometry `bounds` report the item's UNTRANSFORMED anchors and a
-    // corrective translate lives in the transform, so the modules' bounds
-    // sit at slot + 2×offset when the seam was corrected, at slot +
-    // offset when they landed in place.
-    const boff = seam.boff;
     const inSlot = (
       b: [number, number, number, number],
       slot: [number, number, number, number],
@@ -237,21 +210,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       const cx = (b[1] + b[3]) / 2;
       const cy = (b[0] + b[2]) / 2;
       return (
-        cx >= slot[0] + boff[0] - 6 &&
-        cx <= slot[2] + boff[0] + 6 &&
-        cy >= slot[1] + boff[1] - 6 &&
-        cy <= slot[3] + boff[1] + 6
+        cx >= slot[0] + off[0] - 6 &&
+        cx <= slot[2] + off[0] + 6 &&
+        cy >= slot[1] + off[1] - 6 &&
+        cy <= slot[3] + off[1] + 6
       );
     };
     const geo = await geometryOf(page, fresh);
-    const c128Count = geo.filter(
+    const here = geo.filter((g) => g.pageId === pageId);
+    const c128Count = here.filter(
       (g) => g.bounds && inSlot(g.bounds, C128_SLOT),
     ).length;
-    const qrCount = geo.filter(
+    const qrCount = here.filter(
       (g) => g.bounds && inSlot(g.bounds, QR_SLOT),
     ).length;
     const strays = geo.filter(
       (g) =>
+        g.pageId !== pageId ||
         !g.bounds ||
         (!inSlot(g.bounds, C128_SLOT) && !inSlot(g.bounds, QR_SLOT)),
     );
@@ -281,8 +256,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       notes.push(
         `${strays.length} lowered path module(s) landed outside both bound ` +
           "frames — left in place and reported, since this pass had nothing " +
-          "earlier to re-draw (see the symbology page for the re-draw " +
-          "economics).",
+          "earlier to redraw.",
       );
     }
     await assignLayerBatch(

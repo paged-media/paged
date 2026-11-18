@@ -419,9 +419,11 @@ query, expr }` (an expression property binding, which `apply` writes with the se
   barcode re-lower or preview step removes the previous symbol's modules in the batch that
   draws the new one. The table's address and the modules come from what the session saw
   minted; after a reopen only the labels are known, so a table frame is replaced rather than
-  reused and only a barcode's labelled last module is found. A new table still goes into a
-  new frame at a fixed inset on the active page, with column widths estimated from character
-  counts.
+  reused and only a barcode's labelled last module is found; the new frame takes the old
+  one's page and top-left. A barcode is drawn on its frame's page whatever page is active
+  ([ADR 551](adr/551-compiled-to-native-content.md), amendment 2026-11-18). A new table still
+  goes into a new frame at a fixed inset on the active page, with column widths estimated
+  from character counts.
 - **Sync review limits.** Accepting the source of a table only re-links it: a table is
   written again as a whole when lowered ([ADR 551](adr/551-compiled-to-native-content.md)),
   so the panel says to lower it. Nothing marks a field `Overridden` when a user types into

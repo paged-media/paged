@@ -88,3 +88,26 @@ the bundle. `data-lower/src/lib.rs:36-37` says the crate depends only on `data-c
 - [ADR 310](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/310-one-write-door.md) — `document.mutate` as the single write door
 - [ADR 013](https://github.com/paged-media/core/blob/main/docs/adr/013-in-frame-scenelayer.md) — in-frame scene layers, which this plugin does not use
 - [ADR 552](552-binding-is-a-recipe.md), [ADR 554](554-record-flow-pagination.md) — what is stored; record flow
+
+## Amendment 2026-11-18: content is placed on its frame's page
+
+A lowering that has a frame draws on that frame's page, whatever page is active:
+
+- A barcode is drawn on its bound rectangle's own page, at the rectangle's page-local
+  top-left (its bounds through its item transform; `packages/data-bundle/src/lower.ts`
+  `barcodeOrigin`). It used to be drawn on the active page at those coordinates: a pass
+  run from another page put the symbol on that page, at the frame's position. In the
+  editor showcase this put the catalog chapter's symbols on the cover whenever a
+  `lowerAll` pass outlived the page the chapter held active, and redrew every earlier
+  page's symbols onto the page the pass ran from. A rectangle on the pasteboard belongs to
+  no page and is refused, as in the headless writer (`paged data apply`), which already
+  drew on the frame's page.
+- A table whose earlier frame a re-lower must replace (its table cannot be addressed in
+  place, as after a reopen) is placed on that frame's page, at its top-left, not at the
+  inset on the active page (`TableReplace.at`).
+- Content with no frame of its own still starts on the active page: a new table, a new
+  variable field without a caret or a selected frame, and a record flow.
+
+Tests: `packages/data-bundle/src/__tests__/lower-page.test.ts` (a `lowerAll` from page 1
+over bindings on pages 2 and 3), `lower-barcode.test.ts`, `lower-table.test.ts`, and against
+the real engine `packages/data-bundle/test/lower-page-real-core.spec.ts`.

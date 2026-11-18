@@ -28,14 +28,13 @@
 //
 // RUN ORDER ≠ PAGE ORDER, on purpose (pages keep their book order;
 // modules need not run in it). The plugin's data session is shared
-// across the chapter and `lowerAll` re-lowers EVERY binding — a
-// re-lower re-draws each bound barcode afresh onto the ACTIVE page and
-// re-commits the demo table as a new frame — so the modules run in
-// dependency order instead: cards (mints the variable bindings), sets
-// (previews/applies while only in-place-refreshing bindings exist),
-// dsl (the first frame-bound bindings), barcodes (cleans dsl's
-// re-draws), and the table LAST (the final lowering pass, cleaning all
-// six symbols' re-draws behind itself).
+// across the chapter and `lowerAll` re-lowers EVERY binding — each
+// bound barcode is redrawn in its own frame, on its own page, and the
+// demo table re-commits — so the modules run in dependency order
+// instead: cards (mints the variable bindings), sets (previews/applies
+// while only in-place-refreshing bindings exist), dsl (the first
+// frame-bound bindings), barcodes (its pass redraws dsl's two in
+// place), and the table LAST (the final lowering pass).
 
 import { annualChapter } from "../chapter";
 import { p } from "../names-annual";

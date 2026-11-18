@@ -171,6 +171,10 @@ export interface TableReplace {
   /** Put the table in this frame's story (a table dropped on a text frame,
    *  editor ADR 291) instead of a fresh frame. */
   into?: { frame: ElementId; storyId: string };
+  /** Where the frame stood that `clear` removes because its table could not
+   *  be addressed in place (a re-lower after a reload): the fresh frame takes
+   *  its page and top-left, not the active page. */
+  at?: { pageId: PageId; topPt: number; leftPt: number };
 }
 
 /** Commit a lowered dynamic table to a fresh page frame as ONE batch — one
@@ -246,12 +250,12 @@ export async function commitLoweredTable(
     if (id) replace.onTable?.({ frame, storyId, tableId: id });
     return frame.id as string;
   }
-  const pageId = await pageFor(host, ctx);
+  const pageId = replace?.at?.pageId ?? (await pageFor(host, ctx));
   if (!pageId) {
     host.log.warn("lower: no page to place the data table into");
     return null;
   }
-  const placement = defaultPlacement(pageId, table.bounds);
+  const placement = defaultPlacement(pageId, table.bounds, replace?.at);
   const envelope = makeEnvelope({
     kind: "table",
     region: table.region,
@@ -986,9 +990,10 @@ export async function commitLoweredImage(
  *  the bound frame's content box; this drives one `insertPath` closed filled
  *  rect per dark module (the VECTOR lane — resolution-independent, no
  *  asset-store door; raster is BLOCKED because placeImage needs a resolvable
- *  uri). `elementId` (when given) is the bound rectangle's Self id — its
- *  page-coordinate top-left is read so the modules land inside it; without one,
- *  the symbol lands at a default page inset. The whole symbol is ONE undoable
+ *  uri). `elementId` (when given) is the bound rectangle's Self id — its page
+ *  and page-local top-left are read so the modules land inside it, whatever
+ *  page is active (`barcodeOrigin`); without one, the symbol lands at a default
+ *  inset on the active page. The whole symbol is ONE undoable
  *  batch with the binding envelope. Returns the number of modules drawn (0 when
  *  the value was empty — the missing policy, never a fake symbol). */
 export async function commitLoweredBarcode(
@@ -1012,34 +1017,9 @@ export async function commitLoweredBarcode(
     );
     return 0;
   }
-  const pageId = await activePageId(host);
-  if (!pageId) {
-    host.log.warn("barcode: no page to draw onto");
-    return 0;
-  }
+  const placement = await barcodeOrigin(host, barcode, elementId);
+  if (!placement) return 0;
 
-  // Page origin: the bound rectangle's top-left if one is given, else a default
-  // inset. The engine modules are content-space offsets from this origin (§9.6).
-  let topPt = 36;
-  let leftPt = 36;
-  if (elementId) {
-    const geom = await host.document.elementGeometry([
-      { kind: "rectangle", id: elementId } as ElementId,
-    ]);
-    const bounds = geom[0]?.bounds as
-      [number, number, number, number] | undefined;
-    if (bounds) {
-      // The frame's own bounds through its item transform: page-local, the
-      // space `insertPath` takes. On a verso the bounds alone sit a page
-      // width into the spread, and the symbol landed beside its frame.
-      [topPt, leftPt] = transformBounds(
-        bounds,
-        geom[0]?.itemTransform as number[] | null | undefined,
-      );
-    }
-  }
-
-  const placement: BarcodePlacement = { pageId, topPt, leftPt };
   const envelope = makeEnvelope({
     ...(stamp ?? {}),
     kind: "barcode",
@@ -1077,6 +1057,71 @@ export async function commitLoweredBarcode(
       (barcode.text ? ` (HRI "${barcode.text}")` : ""),
   );
   return barcode.modules.length;
+}
+
+/** Where a barcode's modules go: the page and page-local top-left of its bound
+ *  frame (data ADR 551, amendment of 2026-11-18).
+ *
+ *  The FRAME's page, never the active one. The modules are offsets from the
+ *  frame's page-local corner, so drawing them on any other page put the symbol
+ *  at the frame's coordinates on the wrong page — on the cover, when a
+ *  `lowerAll` pass outlived the page the editor held active, and onto whatever
+ *  page was showing for every earlier binding a pass re-lowered. The headless
+ *  writer (`paged data apply`) always drew on the frame's page; this is the
+ *  same rule. A frame on the pasteboard belongs to no page and is refused, as
+ *  there. Only a symbol with no frame (or a frame the document no longer has)
+ *  lands at the default inset on the active page. Null: nothing to draw onto. */
+async function barcodeOrigin(
+  host: BundleHost,
+  barcode: LoweredBarcode,
+  elementId?: string | null,
+): Promise<BarcodePlacement | null> {
+  const at = elementId
+    ? await frameOrigin(host, { kind: "rectangle", id: elementId } as ElementId)
+    : null;
+  if (at?.pageId === null) {
+    host.log.warn(
+      `barcode "${barcode.target}": its frame ${elementId} sits on the ` +
+        "pasteboard, on no page — nothing drawn",
+    );
+    return null;
+  }
+  const pageId = at?.pageId ?? (await activePageId(host));
+  if (!pageId) {
+    host.log.warn("barcode: no page to draw onto");
+    return null;
+  }
+  return at
+    ? { pageId, topPt: at.topPt, leftPt: at.leftPt }
+    : { pageId, topPt: 36, leftPt: 36 };
+}
+
+/** Where a page item stands: its page and its page-local top-left. */
+export interface FrameOrigin {
+  /** Null: the item sits on the pasteboard, on no page. Undefined: the host
+   *  predates C-23 and names no page (the caller falls back to the active
+   *  page, as every lowering did before). */
+  pageId: PageId | null | undefined;
+  topPt: number;
+  leftPt: number;
+}
+
+/** Read where `element` stands, or null when the document has no such item.
+ *  Its bounds go through its item transform: page-local on its own page, the
+ *  space the inserts take (on a verso the bounds alone sit a page width into
+ *  the spread). */
+export async function frameOrigin(
+  host: BundleHost,
+  element: ElementId,
+): Promise<FrameOrigin | null> {
+  const geom = await host.document.elementGeometry([element]);
+  const g = geom[0];
+  if (!g?.bounds) return null;
+  const [topPt, leftPt] = transformBounds(
+    g.bounds as [number, number, number, number],
+    g.itemTransform as number[] | null | undefined,
+  );
+  return { pageId: g.pageId, topPt, leftPt };
 }
 
 /** How a barcode re-lower replaces its previous symbol (`relower.ts`). */
