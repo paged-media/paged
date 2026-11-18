@@ -34,13 +34,16 @@ export interface Placement {
 /** Default page inset for a freshly-lowered region (pt). */
 export const DEFAULT_INSET_PT = 36;
 
-/** A default top-left placement sized to a lowered region's content box. */
+/** A placement sized to a lowered region's content box, at `at` (the
+ *  page-coordinate top-left of the frame it replaces), else at the default
+ *  inset. */
 export function defaultPlacement(
   pageId: PageId,
   bounds: ContentBox,
+  at?: { topPt: number; leftPt: number },
 ): Placement {
-  const top = DEFAULT_INSET_PT;
-  const left = DEFAULT_INSET_PT;
+  const top = at?.topPt ?? DEFAULT_INSET_PT;
+  const left = at?.leftPt ?? DEFAULT_INSET_PT;
   return {
     pageId,
     bounds: [top, left, top + bounds.heightPt, left + bounds.widthPt],
