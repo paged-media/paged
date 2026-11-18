@@ -339,6 +339,14 @@ pub fn reconstruct(
             if ba.lines.len() < 3 {
                 continue;
             }
+            // A story runs on through columns several words wide; frames
+            // narrower than eight ems are a table's cells, each its own.
+            let narrow = |b: &Block| {
+                b.frame[2] - b.frame[0] < 8.0 * b.lines.first().map_or(10.0, |l| l.size)
+            };
+            if narrow(ba) {
+                continue;
+            }
             let ka = ParaKey::of(last);
             for &b in flat.iter().skip(k + 1) {
                 if b.0 > a.0 + 1 {
@@ -348,7 +356,7 @@ pub fn reconstruct(
                     continue;
                 }
                 let bb = &spread_blocks[b.0][b.1].1;
-                if bb.turn != 0.0 {
+                if bb.turn != 0.0 || narrow(bb) {
                     continue;
                 }
                 let first = &bb.paras[0];

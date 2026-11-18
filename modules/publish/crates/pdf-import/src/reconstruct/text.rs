@@ -473,7 +473,43 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
     }
     // In order along the line: a right column by where its cells start.
     cols.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
-    cols
+    // Two stops closer than a cell could fit between (figures with and
+    // without a superscript mark end a little apart) are one column: the
+    // one more cells line up on.
+    let size = {
+        let mut v: Vec<f32> = lines.iter().map(|l| l.size).collect();
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[v.len() / 2]
+    };
+    let support = |c: &TabCol| -> usize {
+        lines
+            .iter()
+            .flat_map(|l| cells_dec(l).into_iter().skip(1))
+            .filter(|(_, a, b, d)| {
+                let at = if c.decimal {
+                    d.unwrap_or(f32::MAX)
+                } else if c.right {
+                    *b
+                } else {
+                    *a
+                };
+                (at - c.x).abs() <= 1.5
+            })
+            .count()
+    };
+    let mut kept: Vec<TabCol> = Vec::new();
+    for c in cols {
+        match kept.last() {
+            Some(k) if c.x - k.x < 0.8 * size => {
+                if support(&c) > support(k) {
+                    kept.pop();
+                    kept.push(c);
+                }
+            }
+            _ => kept.push(c),
+        }
+    }
+    kept
 }
 
 /// Whether `line` is a row whose first cell is empty: two cells or more,
@@ -675,13 +711,48 @@ fn split_lone_rows(lines: Vec<Line>) -> Vec<Line> {
     let lone: Vec<bool> = (0..lines.len())
         .map(|i| rows[i].len() >= 2 && !is_row(i))
         .collect();
+    // A table of cells several lines deep paints each cell's lines, then
+    // the next cell's: one cell's last line and the next's first share a
+    // baseline and run together. The next cell goes on below on its own (a
+    // line of one cell starting in its column, a line or so down), where a
+    // tabbed table's next row has cells again: there the line is two.
+    let goes_on_alone = |i: usize, c: &(usize, f32, f32)| -> bool {
+        let li = &lines[i];
+        lines.iter().zip(&rows).any(|(lj, rj)| {
+            let dy = lj.baseline - li.baseline;
+            dy > 0.5
+                && dy < 1.6 * li.size.max(lj.size)
+                && rj.len() == 1
+                && lj.x0 > c.1 - 1.0 * li.size
+                && lj.x0 < c.1 + 1.5 * li.size
+        })
+    };
+    let split_at: Vec<Vec<usize>> = (0..lines.len())
+        .map(|i| {
+            if lone[i] {
+                rows[i].iter().map(|c| c.0).collect()
+            } else if rows[i].len() >= 2 {
+                let mut s = vec![rows[i][0].0];
+                s.extend(
+                    rows[i]
+                        .iter()
+                        .skip(1)
+                        .filter(|c| goes_on_alone(i, c))
+                        .map(|c| c.0),
+                );
+                s
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
     let mut out = Vec::with_capacity(lines.len());
     for (i, l) in lines.into_iter().enumerate() {
-        if !lone[i] {
+        let starts = &split_at[i];
+        if starts.len() < 2 {
             out.push(l);
             continue;
         }
-        let starts: Vec<usize> = rows[i].iter().map(|c| c.0).collect();
         let mut part: Option<Line> = None;
         for (gi, g) in l.glyphs.into_iter().enumerate() {
             if starts.contains(&gi) && gi != starts[0] {
@@ -2258,6 +2329,55 @@ mod tests {
         }
         let block = build_block(lines(g, &[]));
         assert_eq!(block.paras.len(), 5, "{:?}", texts(&block));
+    }
+
+    #[test]
+    fn cells_several_lines_deep_painted_one_after_another_are_their_own_lines() {
+        // A header row, then one row whose second cell is one line and whose
+        // third goes on for two more lines beneath it.
+        let mut g = Vec::new();
+        g.extend(set("Element", 0.0, 100.0, 0));
+        g.extend(set("Changes", 150.0, 100.0, 0));
+        g.extend(set("Alignment", 250.0, 100.0, 0));
+        g.extend(set("Base", 0.0, 112.0, 1));
+        g.extend(set("Fit for purpose", 150.0, 112.0, 2));
+        g.extend(set("Some figure (3%)", 250.0, 112.0, 3));
+        g.extend(set("from January", 250.0, 124.0, 3));
+        g.extend(set("current role", 250.0, 136.0, 3));
+        let ls = lines(g, &[]);
+        // The cell that goes on beneath is a line of its own; the cells
+        // that do not stay the row they are.
+        assert!(
+            ls.iter().any(|l| l.text().trim() == "Some figure (3%)"),
+            "{:?}",
+            ls.iter().map(|l| l.text()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn figures_with_and_without_a_mark_are_one_column() {
+        let mut g = Vec::new();
+        for (k, y) in [100.0, 112.0, 124.0, 136.0].into_iter().enumerate() {
+            g.extend(set("Row label", 0.0, y, 0));
+            // Every other figure carries a superscript mark past its end.
+            let fig = if k % 2 == 0 { "12.5" } else { "3.75" };
+            g.extend(set_right(fig, 150.0, y, 0));
+            if k % 2 == 1 {
+                g.extend(set("^", 150.5, y, 0));
+            }
+            g.extend(set_right("9.0", 250.0, y, 0));
+        }
+        let block = build_block(lines(g, &[]));
+        assert_eq!(
+            block.tabs.len(),
+            2,
+            "{:?}",
+            block
+                .tabs
+                .iter()
+                .map(|t| (t.x, t.right, t.decimal))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

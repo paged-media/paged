@@ -94,7 +94,11 @@ repeats.
    whose negatives in parentheses run past the positives' last digit — and become the block's
    tab stops (a decimal one aligns on the full stop); each row is a paragraph of its own, with as many tabs as columns a cell skips (a total
    with an empty label cell starts with them). A column of figures that lines up every way (one
-   figure repeated) is set right, and a nil dash joins the column it stands under. Rows of
+   figure repeated) is set right, a nil dash joins the column it stands under, and two stops
+   closer than a cell could fit between (figures with and without a superscript mark) are the
+   one more cells line up on. A table of cells several lines deep paints one cell's lines,
+   then the next's: where the next cell goes on below on its own, the line its first line
+   shares with the last cell's is two. Rows of
    different blocks never join across a page edge. A row is set No Break, in every run: a
    substitute face a little wider than its columns' gaps runs it past the frame's edge rather
    than onto a second line.
@@ -106,7 +110,8 @@ repeats.
 5. **Stories and threads.** A frame whose last paragraph runs to its end unfinished, followed
    in reading order (to its right, below it, or on the next spread) by a frame that starts in
    the same face, size and colour, continues the story — so does one whose first paragraph
-   starts mid-sentence, unless the earlier frame's text ends one; the paragraph cut by the frame break is
+   starts mid-sentence, unless the earlier frame's text ends one (frames narrower than eight
+   ems, a table's cells, are never threaded); the paragraph cut by the frame break is
    joined back into one. A frame the story runs on from ends just under its last line, so the
    next line goes on; the last frame keeps a line's room, and up to three where its column is
    free of other text down to the page's foot.
