@@ -70,7 +70,9 @@ fn contour_idml(kind: ContourOptionType) -> Option<&'static str> {
         ContourOptionType::DetectEdges => "DetectEdges",
         ContourOptionType::AlphaChannel => "AlphaChannel",
         ContourOptionType::PhotoshopPath => "PhotoshopPath",
-        _ => return None,
+        ContourOptionType::BoundingBox => "BoundingBox",
+        ContourOptionType::UserModifiedPath => "UserModifiedPath",
+        ContourOptionType::Other => return None,
     })
 }
 

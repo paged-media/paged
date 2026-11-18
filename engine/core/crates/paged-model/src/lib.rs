@@ -3548,6 +3548,10 @@ pub enum ContourOptionType {
     AlphaChannel,
     /// `PhotoshopPath` — use a named Photoshop path.
     PhotoshopPath,
+    /// `BoundingBox` — the graphic's bounding box.
+    BoundingBox,
+    /// `UserModifiedPath` — a wrap path the user edited.
+    UserModifiedPath,
     /// Any other / unrecognised value.
     Other,
 }
@@ -3561,6 +3565,8 @@ impl ContourOptionType {
             "DetectEdges" => Self::DetectEdges,
             "AlphaChannel" => Self::AlphaChannel,
             "PhotoshopPath" => Self::PhotoshopPath,
+            "BoundingBox" => Self::BoundingBox,
+            "UserModifiedPath" => Self::UserModifiedPath,
             _ => Self::Other,
         }
     }
@@ -3574,6 +3580,8 @@ impl ContourOptionType {
             Self::DetectEdges => "DetectEdges",
             Self::AlphaChannel => "AlphaChannel",
             Self::PhotoshopPath => "PhotoshopPath",
+            Self::BoundingBox => "BoundingBox",
+            Self::UserModifiedPath => "UserModifiedPath",
             Self::Other => "SameAsClipping",
         }
     }

@@ -39,9 +39,11 @@ pptx-fonts = { path = "../../../engine/core/crates/pptx-fonts" }
 paged-fmt = { path = "../../../engine/core/crates/paged-fmt" }
 # The neutral math tree the OMML reader builds (engine ADR 1090).
 paged-math = { path = "../../../engine/core/crates/paged-math" }
-# Held at 0.12 for the app's wasm budget (docs/migration/rust-majors.md).
-ooxmlsdk = { version = "0.12", features = ["mce"], optional = true }
-zip = { version = "9.0.4", default-features = false }
+# 0.14: the first release on zip 9 (^9.0.5). `mce` needs ooxmlsdk's `parts`,
+# which always brings its zip, and 0.12/0.13 brought zip 8, which carries
+# RUSTSEC-2026-0545..0548 (docs/migration/rust-majors.md).
+ooxmlsdk = { version = "0.14", features = ["mce"], optional = true }
+zip = { version = "9.0.5", default-features = false }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
 # Held at 0.41 with ooxmlsdk, which requires it (docs/migration/rust-majors.md).
 quick-xml = { version = "0.41", default-features = false }
@@ -49,7 +51,7 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
-zip = { version = "9.0.4", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 
 [lints.clippy]
 all = "warn"
