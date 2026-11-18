@@ -96,6 +96,7 @@ mod nested_group_transform;
 mod note_comments;
 mod note_ops;
 mod object_model_targets;
+mod object_style_stroke_weight;
 mod on_master;
 mod opacity_mask_and_text_path_wire;
 mod oval_path_geometry;

@@ -1619,45 +1619,55 @@ fn js_address(value: &JsValue, ctx: &mut Context) -> Option<paged_wire::Address>
     paged_wire::Address::parse(&s).ok()
 }
 
+/// Why `paged.set` plans no write.
+enum SetRefusal {
+    /// The target, or the path on it, does not resolve.
+    Unresolved,
+    /// The value does not fit the path's schema: the schema's reason,
+    /// which names the accepted values (engine ADR 1315).
+    Value(String),
+}
+
 /// `paged.set(address, path, value)` through `Mutation::Set`: coerce the
 /// JS value against the path's schema on the target's kind. The planned
-/// mutation, or `None` when the target, path or value does not resolve.
+/// mutation, or why there is none.
 fn plan_set_virtual(
     address: paged_wire::Address,
     path: &str,
     value: &JsValue,
     ctx: &mut Context,
-) -> Option<Mutation> {
-    let target = with_model(|m| m.target_of(&address)).ok()?;
+) -> Result<Mutation, SetRefusal> {
+    let target = with_model(|m| m.target_of(&address)).map_err(|_| SetRefusal::Unresolved)?;
     let family = match &target {
         paged_wire::VirtualTarget::Style { family, .. } => Some(family.as_str()),
         _ => None,
     };
-    let schema = paged_introspect::virtual_paths::schema_for(target.address_kind(), family, path)?;
-    let value = js_to_value_by_schema(value, &schema, ctx)?;
-    Some(Mutation::Set {
+    let schema = paged_introspect::virtual_paths::schema_for(target.address_kind(), family, path)
+        .ok_or(SetRefusal::Unresolved)?;
+    let value = js_to_value_by_schema(value, &schema, ctx).map_err(SetRefusal::Value)?;
+    Ok(Mutation::Set {
         address,
         path: path.to_string(),
         value,
     })
 }
 
-/// The ONE mutation `paged.set(target, path, value)` applies, or `None`
-/// when it does not resolve. Shared by `paged.set` and the core half of
-/// an object `paged.batch`.
+/// The ONE mutation `paged.set(target, path, value)` applies, or why it
+/// does not resolve. Shared by `paged.set` and the core half of an object
+/// `paged.batch`.
 fn plan_set(
     target: &JsValue,
     path: &str,
     value_arg: &JsValue,
     ctx: &mut Context,
-) -> Option<Mutation> {
+) -> Result<Mutation, SetRefusal> {
     let element_id = target
         .as_string()
         .and_then(|s| parse_element_id(&s.to_std_string_escaped()));
     let Some(element_id) = element_id else {
         // Any other object (ADR 131 address string, or the deprecated
         // target object) goes through `Set`.
-        let address = js_address(target, ctx)?;
+        let address = js_address(target, ctx).ok_or(SetRefusal::Unresolved)?;
         return plan_set_virtual(address, path, value_arg, ctx);
     };
 
@@ -1670,7 +1680,7 @@ fn plan_set(
     // `SetElementProperty`.
     if path == "groupTransform" {
         let paged_canvas::element_selection::ElementId::Group(group_id) = element_id else {
-            return None;
+            return Err(SetRefusal::Unresolved);
         };
         // `null` clears to identity; a 6-element array sets the matrix.
         let transform = if value_arg.is_null() {
@@ -1678,10 +1688,14 @@ fn plan_set(
         } else {
             match js_value_to_wire(value_arg, paged_mutate::PropertyPath::FrameTransform, ctx) {
                 Some(paged_mutate::Value::Transform(t)) => t,
-                _ => return None,
+                _ => {
+                    return Err(SetRefusal::Value(
+                        "a transform is [a, b, c, d, tx, ty]".to_string(),
+                    ))
+                }
             }
         };
-        return Some(Mutation::SetGroupTransform {
+        return Ok(Mutation::SetGroupTransform {
             group_id,
             transform,
         });
@@ -1693,8 +1707,9 @@ fn plan_set(
         let address = paged_wire::Address::from(element_id);
         return plan_set_virtual(address, path, value_arg, ctx);
     };
-    let wire_value = js_value_to_wire(value_arg, wire_path, ctx)?;
-    Some(Mutation::SetElementProperty {
+    let wire_value =
+        js_value_to_wire_checked(value_arg, wire_path, ctx).map_err(SetRefusal::Value)?;
+    Ok(Mutation::SetElementProperty {
         element_id,
         path: wire_path,
         value: wire_value,
@@ -1725,8 +1740,17 @@ fn paged_set(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
             ctx,
         );
     }
-    let Some(mutation) = plan_set(target, &path, &value_arg, ctx) else {
-        return Ok(JsValue::from(false));
+    let mutation = match plan_set(target, &path, &value_arg, ctx) {
+        Ok(mutation) => mutation,
+        // Engine ADR 1315 — a value the path does not take says why, with
+        // the values it does take: the answer stays `false`.
+        Err(SetRefusal::Value(reason)) => {
+            push_output(format!(
+                "[warn] paged.set — {path}: {reason}; returning false"
+            ));
+            return Ok(JsValue::from(false));
+        }
+        Err(SetRefusal::Unresolved) => return Ok(JsValue::from(false)),
     };
     Ok(JsValue::from(with_model(|m| {
         m.apply_mutation(&mutation).is_ok()
@@ -5031,12 +5055,35 @@ fn paged_set_style_property(
         .get_or_undefined(2)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let Some(path) = parse_property_path(&path_str) else {
+    // A style family's own paths (`objectStyleCornerOption`,
+    // `objectStyleStrokeTint`) are named on its `style:<family>` address,
+    // not among the element paths; this door takes them too, as `Set` on
+    // the style's address does.
+    let family = match collection {
+        paged_mutate::StyleCollection::Paragraph => "style:paragraph",
+        paged_mutate::StyleCollection::Character => "style:character",
+        paged_mutate::StyleCollection::Object => "style:object",
+        paged_mutate::StyleCollection::Cell => "style:cell",
+        paged_mutate::StyleCollection::Table => "style:table",
+    };
+    let own_path = || {
+        paged_introspect::catalog::ADDRESSED_PATHS
+            .iter()
+            .find(|(name, _, kind)| *name == path_str && *kind == family)
+            .map(|(_, p, _)| *p)
+    };
+    let Some(path) = parse_property_path(&path_str).or_else(own_path) else {
         return Ok(JsValue::from(false));
     };
     let value_arg = args.get_or_undefined(3).clone();
-    let Some(value) = js_value_to_wire(&value_arg, path, ctx) else {
-        return Ok(JsValue::from(false));
+    let value = match js_value_to_wire_checked(&value_arg, path, ctx) {
+        Ok(value) => value,
+        Err(reason) => {
+            push_output(format!(
+                "[warn] paged.setStyleProperty — {path_str}: {reason}; returning false"
+            ));
+            return Ok(JsValue::from(false));
+        }
     };
     Ok(apply_bool(&Mutation::SetStyleProperty {
         collection,
@@ -6341,12 +6388,18 @@ fn object_batch(ops: Vec<serde_json::Value>, ctx: &mut Context) -> JsResult<JsVa
         let target = JsValue::from(js_string!(address));
         let value = JsValue::from_json(&value, ctx).unwrap_or(JsValue::null());
         match plan_set(&target, path, &value, ctx) {
-            Some(m) => mutations.push(m),
-            None => {
+            Ok(m) => mutations.push(m),
+            Err(refusal) => {
+                let why = match refusal {
+                    SetRefusal::Value(reason) => reason,
+                    SetRefusal::Unresolved => {
+                        "the address, path or value does not resolve".to_string()
+                    }
+                };
                 error = Some(refuse(
                     i,
                     "invalidValue",
-                    format!("{address} {path}: the address, path or value does not resolve"),
+                    format!("{address} {path}: {why}"),
                 ));
                 break;
             }
@@ -6973,8 +7026,17 @@ fn js_value_to_wire(
     path: paged_mutate::PropertyPath,
     ctx: &mut Context,
 ) -> Option<paged_mutate::Value> {
-    use paged_mutate::PropertyPath as P;
-    use paged_mutate::Value as W;
+    js_value_to_wire_checked(value, path, ctx).ok()
+}
+
+/// [`js_value_to_wire`], with the reason a value is refused: the schema's
+/// own words for a scalar or a `{ type, value }` wrapper (an enum's
+/// members, a number's range; engine ADR 1315).
+fn js_value_to_wire_checked(
+    value: &JsValue,
+    path: paged_mutate::PropertyPath,
+    ctx: &mut Context,
+) -> Result<paged_mutate::Value, String> {
     // ADR 132 — scalars coerce against the path's SCHEMA: the wire form
     // (`Length` / `Text` / `ColorRef` / `Bool`), the range and, for a
     // closed enum, the members. This replaces the hand list that chose
@@ -6986,73 +7048,104 @@ fn js_value_to_wire(
         return paged_introspect::schema::coerce(
             &schema,
             paged_introspect::schema::Input::Text(&s),
-        )
-        .ok();
+        );
     }
     if let Some(input) = js_scalar(value) {
-        return paged_introspect::schema::coerce(&schema, input).ok();
+        return paged_introspect::schema::coerce(&schema, input);
     }
-    if let Some(obj) = value.as_object() {
-        // Structured paths whose natural JS form is not the `{ type,
-        // value }` wrapper: a script hands a path as its anchors, and a
-        // dash array (and a gradient start, engine ADR 1007) as its
-        // numbers. Without these arms the bridge read
-        // `[6, 3]` as nothing and `[a, b, c, d]` as BOUNDS, and a bare
-        // `{ anchors }` failed the wrapper's decode — `paged.set` returned
-        // false on paths the catalog advertises as settable.
-        // Engine ADR 1039 — an instance's tint and 9-slice guides are
-        // number lists too (`[]` clears).
-        if matches!(
-            path,
-            P::FramePath
-                | P::FrameStrokeDashArray
-                | P::SymbolInstanceTint
-                | P::SymbolInstanceNineSlice
-                | P::FrameGradientFillStart
-        ) {
-            let json = value.to_json(ctx).ok()??;
-            let is_wrapper = json.get("type").is_some() && json.get("value").is_some();
-            if !is_wrapper {
-                return match path {
-                    P::FramePath => frame_path_from_json(&json),
-                    _ => json
-                        .as_array()?
+    let unconvertible = || {
+        format!(
+            "expected {:?}, got a value of another shape",
+            schema.value_type
+        )
+    };
+    if value.as_object().is_none() {
+        return Err(unconvertible());
+    }
+    if let Some(converted) = natural_form_to_wire(value, path, ctx) {
+        return converted.ok_or_else(unconvertible);
+    }
+    // `{ type, value }` shape — round-trip via JSON, then through the
+    // schema, so a typed `{ type: "enum" }` is checked against the
+    // members and a `{ type: "number" }` lands in the wire form.
+    let json = value
+        .to_json(ctx)
+        .ok()
+        .flatten()
+        .ok_or_else(unconvertible)?;
+    let wire = serde_json::from_value::<paged_mutate::Value>(json).map_err(|_| unconvertible())?;
+    paged_introspect::schema::validate(&schema, &wire)
+}
+
+/// A structured value in a path's natural JS form rather than the
+/// `{ type, value }` wrapper: `Some` with its conversion (`None` inside
+/// when it does not convert), or `None` when the value is not in one.
+fn natural_form_to_wire(
+    value: &JsValue,
+    path: paged_mutate::PropertyPath,
+    ctx: &mut Context,
+) -> Option<Option<paged_mutate::Value>> {
+    use paged_mutate::PropertyPath as P;
+    use paged_mutate::Value as W;
+    let obj = value.as_object()?;
+    // Structured paths whose natural JS form is not the `{ type,
+    // value }` wrapper: a script hands a path as its anchors, and a
+    // dash array (and a gradient start, engine ADR 1007) as its
+    // numbers. Without these arms the bridge read
+    // `[6, 3]` as nothing and `[a, b, c, d]` as BOUNDS, and a bare
+    // `{ anchors }` failed the wrapper's decode — `paged.set` returned
+    // false on paths the catalog advertises as settable.
+    // Engine ADR 1039 — an instance's tint and 9-slice guides are
+    // number lists too (`[]` clears).
+    if matches!(
+        path,
+        P::FramePath
+            | P::FrameStrokeDashArray
+            | P::SymbolInstanceTint
+            | P::SymbolInstanceNineSlice
+            | P::FrameGradientFillStart
+    ) {
+        let Some(json) = value.to_json(ctx).ok().flatten() else {
+            return Some(None);
+        };
+        let is_wrapper = json.get("type").is_some() && json.get("value").is_some();
+        if !is_wrapper {
+            return Some(match path {
+                P::FramePath => frame_path_from_json(&json),
+                _ => json.as_array().and_then(|items| {
+                    items
                         .iter()
                         .map(|n| n.as_f64().map(|n| n as f32))
                         .collect::<Option<Vec<f32>>>()
-                        .map(W::Lengths),
-                };
-            }
+                        .map(W::Lengths)
+                }),
+            });
         }
-        if obj.is_array() {
-            let len = obj
-                .get(js_string!("length"), ctx)
-                .ok()?
-                .to_length(ctx)
-                .ok()? as usize;
-            if len == 4 {
-                let mut out = [0.0f32; 4];
-                for (i, slot) in out.iter_mut().enumerate() {
-                    let v = obj.get(i as u32, ctx).ok()?;
-                    *slot = v.as_number()? as f32;
-                }
-                return Some(W::Bounds(out));
-            }
-            if len == 6 {
-                let mut out = [0.0f32; 6];
-                for (i, slot) in out.iter_mut().enumerate() {
-                    let v = obj.get(i as u32, ctx).ok()?;
-                    *slot = v.as_number()? as f32;
-                }
-                return Some(W::Transform(Some(out)));
-            }
+    }
+    if obj.is_array() {
+        let len = obj
+            .get(js_string!("length"), ctx)
+            .ok()
+            .and_then(|l| l.to_length(ctx).ok())
+            .unwrap_or(0) as usize;
+        let numbers = |n: usize, ctx: &mut Context| -> Option<Vec<f32>> {
+            (0..n)
+                .map(|i| {
+                    obj.get(i as u32, ctx)
+                        .ok()
+                        .and_then(|v| v.as_number())
+                        .map(|v| v as f32)
+                })
+                .collect()
+        };
+        if len == 4 {
+            return Some(numbers(4, ctx).map(|v| W::Bounds([v[0], v[1], v[2], v[3]])));
         }
-        // `{ type, value }` shape — round-trip via JSON, then through the
-        // schema, so a typed `{ type: "enum" }` is checked against the
-        // members and a `{ type: "number" }` lands in the wire form.
-        let json = value.to_json(ctx).ok()??;
-        let wire = serde_json::from_value::<paged_mutate::Value>(json).ok()?;
-        return paged_introspect::schema::validate(&schema, &wire).ok();
+        if len == 6 {
+            return Some(
+                numbers(6, ctx).map(|v| W::Transform(Some([v[0], v[1], v[2], v[3], v[4], v[5]]))),
+            );
+        }
     }
     None
 }
@@ -7083,13 +7176,17 @@ fn js_to_value_by_schema(
     value: &JsValue,
     schema: &paged_introspect::schema::PropertySchema,
     ctx: &mut Context,
-) -> Option<paged_mutate::Value> {
+) -> Result<paged_mutate::Value, String> {
     let json = if value.is_null() {
         serde_json::Value::Null
     } else {
-        value.to_json(ctx).ok()??
+        value
+            .to_json(ctx)
+            .ok()
+            .flatten()
+            .ok_or_else(|| format!("expected {:?}", schema.value_type))?
     };
-    paged_introspect::schema::from_json(schema, &json).ok()
+    paged_introspect::schema::from_json(schema, &json)
 }
 
 /// One point `[x, y]` of a path in its script spelling.

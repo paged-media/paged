@@ -1,6 +1,7 @@
 # ADR 607 — The OOXML foundation is one shared crate, and every package read has a memory budget
 
-- **Status:** Accepted 2026-10-19.
+- **Status:** Accepted 2026-10-19. Amended 2026-11-18: ooxmlsdk 0.14, and the doc wasm's ceiling
+  is 10 MiB (see the amendment).
 - **Scope:** `platform/shared/ooxml` (the crate `paged-ooxml`), and the package readers of
   modules/doc, modules/slide and modules/sheet. Supersedes slide ADR 701.
 
@@ -63,7 +64,8 @@ sheet take it as a path dependency (PM-0005).
 - **Each writer keeps its own zip options.** doc and slide write through `OpcPackage::write`,
   sheet through its own writer (level 6, mode 0644). Their container bytes are asserted by
   tests, and merging the two would change one of them.
-- Pins: `ooxmlsdk` 0.12 and `quick-xml` 0.41, as `docs/migration/rust-majors.md` records.
+- Pins: `ooxmlsdk` 0.12 and `quick-xml` 0.41, as `docs/migration/rust-majors.md` records
+  (`ooxmlsdk` 0.14 since the amendment of 2026-11-18).
 
 ## Evidence
 
@@ -91,3 +93,21 @@ sheet take it as a path dependency (PM-0005).
   its sources, and their CI lanes run on its path.
 - The crate is internal. A community extension cannot depend on it; publishing it would be a
   separate decision.
+
+## Amendment (2026-11-18): ooxmlsdk 0.14, and a 10 MiB ceiling for the doc wasm
+
+`dom` (doc's WordprocessingML reader) moves from ooxmlsdk 0.12 to 0.14. ooxmlsdk's `mce`
+feature needs its `parts` feature, which always brings its own zip, and up to 0.13 that was zip
+8, which carries RUSTSEC-2026-0545 to -0548 with no fixed 8.x release. 0.14 is the first release
+on zip 9 (`^9.0.5`), so zip 8 leaves every lockfile. Nothing here calls the affected zip APIs;
+the advisories still fail the supply-chain gate, and they are fixed, not ignored.
+
+0.14 resolves `mc:Choice/@Requires` to namespaces; the run's AlternateContent reader
+(`docx-import`, `objects::alternate_content`) compares them by their canonical prefix. It still
+requires quick-xml `^0.41`.
+
+The growth is ooxmlsdk's own generated readers, as with 0.13 (rust-majors.md): `docx_js_bg.wasm`
+measures 9,786,183 B in CI's `doc / bun test` (8,985,228 B on main before it, +800,955 B), over
+the 9 MiB `maxBytes`. Under ADR 627's amendment 2 the manifest's `maxBytes` goes from 9,437,184 B
+to 10,485,760 B (10 MiB), about 0.67 MiB of headroom. The app's wasm budget (150 MB) and the
+editor's `dist/` budget (100 MiB, PM-0013 amendment 9) take it.

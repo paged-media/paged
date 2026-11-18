@@ -111,7 +111,22 @@ pub use path_math::fit_polyline_to_anchors;
 /// string; a caller authoring a composer is refused here instead, with the
 /// accepted values. The canvas runs this on every wire mutation (batch
 /// children included) before translating it.
+///
+/// Engine ADR 1315 — the same holds for an object style's
+/// `objectStyleCornerOption`: the style keeps the token it read, but a
+/// token the model has no corner for would draw none, so a caller may not
+/// author one.
 pub fn refuse_unauthorable_value(path: PropertyPath, value: &Value) -> Result<(), OperationError> {
+    if path == PropertyPath::ObjectStyleCornerOption {
+        if let Value::Text(s) = value {
+            if !s.is_empty() && paged_model::CornerOption::from_idml(s).is_none() {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: format!("Text: \"\" | {}", apply::CORNER_OPTION_NAMES),
+                });
+            }
+        }
+    }
     if path == PropertyPath::ParagraphComposer {
         if let Value::Text(s) = value {
             if !s.is_empty()

@@ -1548,6 +1548,7 @@ mod nested;
 mod opacity_mask;
 mod page_layout;
 mod paragraph;
+pub(crate) use helpers::CORNER_OPTION_NAMES;
 pub use paragraph::caret_paragraphs;
 pub(crate) use paragraph::COMPOSER_EXPECTED;
 mod path_topology;

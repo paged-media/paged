@@ -73,14 +73,12 @@ pub(crate) fn object_style_cascade<'a>(frame: &mut ResolvedFrame<'a>, style: &'a
     if frame.stroke_color.is_none() {
         frame.stroke_color = style.stroke_color.as_deref();
     }
-    // ResolvedFrame caches stroke_weight as `f32` (defaulted to 1.0
-    // by the adapter); we can only tell whether the frame "carries"
-    // a stroke weight by re-reading the parser struct. Punt: leave
-    // it alone. Real-world IDMLs almost always set StrokeWeight on
-    // the frame when the object style uses it; the legacy code's
-    // `.or()` cascade only kicked in when both were missing —
-    // matching today by leaving the resolved-frame default in
-    // place is functionally equivalent.
+    // Engine ADR 1316 — the weight cascades like the colour: a frame that
+    // states none is stroked at its style's (the 1 pt default only when
+    // neither says).
+    if frame.stroke_weight.is_none() {
+        frame.stroke_weight = style.stroke_weight;
+    }
 
     // A frame that states none of its four corners takes its style's four.
     // InDesign reads a style's corners, like a frame's, from the per-corner
