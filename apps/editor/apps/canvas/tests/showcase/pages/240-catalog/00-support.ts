@@ -27,19 +27,18 @@
 // CSV and mints the card's variable bindings, and every later module
 // builds on those. That coupling is deliberate and it dictates the RUN
 // ORDER the chapter spec declares (pages keep their book order; modules
-// need not run in it): `lowerAll` re-lowers EVERY binding — a re-lower
-// re-draws every bound barcode afresh onto the CURRENT active page and
-// re-commits the demo table as a NEW frame — so the modules that add
-// barcode/table bindings run LAST-first-defined-last-lowered, each
-// cleaning up the re-draws of its predecessors' symbols, and the module
-// that mints the table runs at the very end.
+// need not run in it): `lowerAll` re-lowers EVERY binding — each bound
+// barcode is redrawn in its own frame, on its own page (data ADR 551,
+// amended 2026-11-18: it used to land on the ACTIVE page), and the
+// demo table is re-committed — so the module that mints the table runs
+// at the very end.
 //
-// The spread seam (measured, not assumed): wire INSERTS re-base
-// page-local anchors by the spread origin, while geometry reads and the
-// transform/resize lanes speak STORED coordinates — on this fixture a
-// verso is its spread's origin page and the facing recto sits at +540.
-// `spreadOffset` probes the live answer per page; every post-insert
-// placement folds it in.
+// The spread seam (measured, not assumed): wire INSERTS take page-local
+// anchors, while geometry reads and the transform/resize lanes speak
+// STORED coordinates — on this fixture a verso is its spread's origin
+// page and the facing recto sits at +540. `spreadOffset` probes the
+// live answer per page; every read-back and post-insert placement
+// folds it in.
 
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -51,7 +50,7 @@ import { expect } from "@playwright/test";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
 import type { ShowcaseDoc } from "../../driver";
-import { geometryOf, newRefs, settle, type Ref } from "../../plugin-support";
+import { geometryOf, settle } from "../../plugin-support";
 import type { PageContext } from "../../types";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -472,6 +471,37 @@ export async function clickLower(page: Page): Promise<void> {
   await page.getByRole("button", { name: /^place on page$/i }).click();
 }
 
+/** The Data menu's "Place bindings on the page" — the pass the panel's
+ *  Place on page button runs (session.lowerAll), as a command. */
+export const PLACE_BINDINGS_CMD = "media.paged.data.command.lowerBinding";
+
+/**
+ * Run the whole lowering pass and return when it is OVER. The command's
+ * answer is the pass itself: it refreshes the data, then lowers every
+ * binding of the session, one symbol batch after another. Sampling the
+ * scene for "no new modules for a while" read a slow pass mid-flight on
+ * the nightly lane (four seconds between two symbols), and the caller's
+ * `withActivePage` then let go of the page while the rest of the pass
+ * was still drawing.
+ */
+export async function placeBindings(page: Page): Promise<void> {
+  const state = await page.evaluate((id) => {
+    const reg = (
+      globalThis as unknown as {
+        __canvas: {
+          registries: {
+            commands: { applicability: (id: string) => { state: string } };
+          };
+        };
+      }
+    ).__canvas.registries;
+    return reg.commands.applicability(id).state;
+  }, PLACE_BINDINGS_CMD);
+  // A command that does not apply answers without running.
+  expect(state, `${PLACE_BINDINGS_CMD} applies here`).toBe("here");
+  await invokeFor<void>(page, PLACE_BINDINGS_CMD);
+}
+
 /** Author one binding through the panel's authoring row (kind picker +
  *  field/expression input + Add). Image/barcode kinds bind the SELECTED
  *  rectangle — the caller selects it first; a table takes its columns as
@@ -525,105 +555,6 @@ export async function assignLayerBatch(
       },
     })),
   );
-}
-
-/**
- * Poll until the set of NEW elements of `kind` is non-empty AND its
- * count holds across two consecutive samples — a `lowerAll` pass
- * commits several symbols one batch after another, and settling on the
- * FIRST new module snapshots the pass mid-flight (this page measured
- * exactly that: the later symbols landed after the read and looked
- * like they had never drawn). The 220 chapter's settle discipline.
- */
-export async function settleStableNew(
-  page: Page,
-  kind: string,
-  before: Ref[],
-  timeoutMs = 45_000,
-): Promise<Ref[]> {
-  const deadline = Date.now() + timeoutMs;
-  let lastCount = -1;
-  for (;;) {
-    const fresh = await newRefs(page, kind, before);
-    if (fresh.length > 0 && fresh.length === lastCount) return fresh;
-    lastCount = fresh.length;
-    if (Date.now() >= deadline) return fresh;
-    await page.waitForTimeout(700);
-  }
-}
-
-/**
- * Translate freshly lowered path modules back across the spread seam.
- *
- * THE SEAM FINDING (measured on this fixture, 2026-08-27): the barcode
- * commit reads its bound rectangle's STORED geometry and feeds those
- * numbers to the page-local `insertPath` wire — which re-bases them by
- * the spread origin AGAIN. On a spread-origin page (offset 0) the two
- * lanes agree and nothing shows; on a page stored at −540 the symbol
- * lands one page width off, on the pasteboard. The corrective translate
- * is `−offset` as ONE transform batch — ordinary same-spread layout,
- * recorded in the module's notes wherever it fires.
- */
-export async function unshiftSeam(
-  doc: ShowcaseDoc,
-  kind: string,
-  ids: string[],
-  off: [number, number],
-): Promise<boolean> {
-  if ((off[0] === 0 && off[1] === 0) || ids.length === 0) return false;
-  await doc.batch(
-    ids.map((id) => ({
-      op: "setElementProperty",
-      args: {
-        elementId: { kind, id },
-        path: "frameTransform",
-        value: { type: "transform", value: [1, 0, 0, 1, -off[0], -off[1]] },
-      },
-    })),
-  );
-  return true;
-}
-
-/**
- * The seam correction, only where the seam shows: {@link unshiftSeam} when
- * the fresh modules landed one page width off (their bounds at slot +
- * 2×offset), nothing when they landed in their slots (slot + offset, as
- * the lowering places them since it reads the page-local geometry). The
- * answer is the offset the modules' UNTRANSFORMED bounds sit at, the one
- * a slot test adds to a page-local slot.
- */
-export async function correctSeam(
-  page: Page,
-  doc: ShowcaseDoc,
-  kind: string,
-  refs: Ref[],
-  off: [number, number],
-  slots: ReadonlyArray<readonly [number, number, number, number]>,
-): Promise<{ boff: [number, number]; shifted: boolean }> {
-  const at = (b: [number, number, number, number], o: [number, number]) =>
-    slots.some((slot) => {
-      const cx = (b[1] + b[3]) / 2;
-      const cy = (b[0] + b[2]) / 2;
-      return (
-        cx >= slot[0] + o[0] - 6 &&
-        cx <= slot[2] + o[0] + 6 &&
-        cy >= slot[1] + o[1] - 6 &&
-        cy <= slot[3] + o[1] + 6
-      );
-    });
-  const twice: [number, number] = [off[0] * 2, off[1] * 2];
-  if (off[0] === 0 && off[1] === 0) return { boff: off, shifted: false };
-  const geo = await geometryOf(page, refs);
-  const placed = geo.filter((g) => g.bounds && at(g.bounds, off)).length;
-  const displaced = geo.filter((g) => g.bounds && at(g.bounds, twice)).length;
-  if (displaced <= placed) return { boff: off, shifted: false };
-  await unshiftSeam(
-    doc,
-    kind,
-    refs.map((r) => r.id),
-    off,
-  );
-  return { boff: twice, shifted: true };
 }
 
 // ── the DSL roster (build-time read) ─────────────────────────────────

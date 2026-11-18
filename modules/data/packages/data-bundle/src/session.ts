@@ -166,6 +166,7 @@ import {
   commitLoweredVisibility,
   commitRule,
   failedBatchChild,
+  frameOrigin,
   frameStory,
   resolveElementId,
   type LowerContext,
@@ -4583,11 +4584,18 @@ export function createSession(
             (m.args as { frameId?: unknown }).frameId === into.frame.id;
           // A labelled frame whose table we cannot address goes, too.
           const clear = plan.remove.filter((m) => !own(m as Mutation));
-          if (plan.reuse && !inPlace && plan.reuse.id !== into?.frame.id)
+          const replaced =
+            plan.reuse && !inPlace && plan.reuse.id !== into?.frame.id
+              ? plan.reuse
+              : null;
+          if (replaced)
             clear.push({
               op: "deleteFrame",
-              args: { frameId: plan.reuse.id as string, withStory: true },
+              args: { frameId: replaced.id as string, withStory: true },
             });
+          // The table it replaces stays where it stood: the fresh frame goes
+          // on that frame's page and corner, not on the active page.
+          const was = replaced ? await frameOrigin(host, replaced) : null;
           const frameId = await commitLoweredTable(
             host,
             lowered as never,
@@ -4598,6 +4606,15 @@ export function createSession(
               clear,
               onTable: (at) => tableAt.set(id, at),
               ...(into ? { into } : {}),
+              ...(was?.pageId
+                ? {
+                    at: {
+                      pageId: was.pageId,
+                      topPt: was.topPt,
+                      leftPt: was.leftPt,
+                    },
+                  }
+                : {}),
             },
           );
           if (frameId) {

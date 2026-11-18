@@ -27,36 +27,30 @@
 // at any output size. Each symbol's payload is printed beneath it, as
 // resolved for the first order.
 //
-// THE RE-DRAW ECONOMICS, met here on purpose: `lowerAll` re-lowers
-// EVERY binding, and a re-lowered barcode draws a fresh copy of its
-// module set onto the CURRENT active page. The expression page ran
-// before this one and left two bound symbols alive, so this page's
-// lowering also re-drew those two onto p112 — found by geometry,
-// removed, and recorded, which is what the honest cost of the shared
-// session looks like.
+// THE SHARED SESSION, met here on purpose: `lowerAll` re-lowers EVERY
+// binding. The expression page ran before this one and left two bound
+// symbols alive, so this page's pass redraws those two as well — in
+// their own frames on p114, replacing the old modules in the same
+// batch. They used to land on p112 instead (the ACTIVE page, at their
+// p114 coordinates), and whatever of the pass outlived the page this
+// module held active landed on the cover (data ADR 551, amended
+// 2026-11-18). This page now checks where every new module went.
 
 import { expect } from "@playwright/test";
 
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { withActivePage } from "../../active-page";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
-import {
-  geometryOf,
-  removeRefs,
-  sceneRefs,
-  type Ref,
-} from "../../plugin-support";
+import { geometryOf, newRefs, sceneRefs, type Ref } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   addAuthoredBinding,
   assignLayerBatch,
   chapterData,
   ensureOrdersReady,
-  clickLower,
-  settleStableNew,
+  placeBindings,
   spreadOffset,
   units,
-  correctSeam,
 } from "./00-support";
 
 interface Symbology {
@@ -172,41 +166,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
 
     const before = await sceneRefs(page, "polygon");
-    let fresh: Ref[] = [];
-    await withActivePage(page, pageId, async () => {
-      await page.getByRole("button", { name: /^refresh data$/i }).click();
-      await page.waitForTimeout(600);
-      await clickLower(page);
-      // Stabilized, not first-hit: this page MEASURED the difference —
-      // settling on the first new module read the pass mid-flight and
-      // two whole symbols looked as if they had never drawn.
-      fresh = await settleStableNew(page, "polygon", before);
-    });
+    // The pass refreshes the data itself and answers when every binding
+    // is lowered: nothing is read until it is over.
+    await withActivePage(page, pageId, () => placeBindings(page));
+    const fresh = await newRefs(page, "polygon", before);
+    // Geometry `bounds` speak STORED coordinates: a page-local slot sits
+    // at slot + this page's spread offset.
     const off = await spreadOffset(ctx, pageId);
-    // The seam correction (see unshiftSeam and the expression page's
-    // finding): stored-geometry origins re-based a second time by the
-    // page-local wire put every module one page width off here too.
-    const seam = await correctSeam(
-      page,
-      doc,
-      "polygon",
-      fresh,
-      off,
-      SYMBOLS.map((s) => s.slot),
-    );
-    if (seam.shifted) {
-      notes.push(
-        "SEAM FINDING — the four symbols (and the re-drawn expression " +
-          `specimens) landed one page width off (stored offset ${off[0]},` +
-          `${off[1]}); translated back by the measured offset in one batch ` +
-          "before classification.",
-      );
-    }
-    // Geometry `bounds` report the item's UNTRANSFORMED anchors and a
-    // corrective translate lives in the transform, so the modules' bounds
-    // sit at slot + 2×offset when the seam was corrected, at slot +
-    // offset when they landed in place.
-    const boff = seam.boff;
     const inSlot = (
       b: [number, number, number, number],
       slot: [number, number, number, number],
@@ -214,17 +180,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       const cx = (b[1] + b[3]) / 2;
       const cy = (b[0] + b[2]) / 2;
       return (
-        cx >= slot[0] + boff[0] - 6 &&
-        cx <= slot[2] + boff[0] + 6 &&
-        cy >= slot[1] + boff[1] - 6 &&
-        cy <= slot[3] + boff[1] + 6
+        cx >= slot[0] + off[0] - 6 &&
+        cx <= slot[2] + off[0] + 6 &&
+        cy >= slot[1] + off[1] - 6 &&
+        cy <= slot[3] + off[1] + 6
       );
     };
     const geo = await geometryOf(page, fresh);
     const counts = new Map<string, number>();
     const mine: Ref[] = [];
     const strays: Ref[] = [];
+    /** The expression page's symbols, redrawn on their own page. */
+    const redrawn: Ref[] = [];
     for (const g of geo) {
+      if (g.pageId !== pageId) {
+        redrawn.push(g.ref);
+        continue;
+      }
       const owner = g.bounds
         ? SYMBOLS.find((s) => inSlot(g.bounds!, s.slot))
         : undefined;
@@ -243,29 +215,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       "the symbology bindings drew native modules into their bound frames",
     ).toBeGreaterThan(0);
 
-    if (strays.length > 0 && drawn.length > 0) {
-      // The re-drawn copies of the expression page's two symbols — the
-      // lowerAll re-lower, landed on THIS page because it was active.
-      // With any slot proven live, everything outside the slots is that
-      // re-draw (or a misplacement) and goes, with its count on record.
-      await removeRefs(doc, strays);
+    if (redrawn.length > 0) {
       notes.push(
-        `lowerAll re-drew the expression page's bound symbols onto this page ` +
-          `(${strays.length} stray path modules) — removed; a re-lower always ` +
-          "draws afresh onto the active page rather than replacing in place.",
+        `the pass also redrew the expression page's bound symbols — ` +
+          `${redrawn.length} path modules, in their own frames on their own ` +
+          "page, replacing the old ones.",
       );
-    } else if (strays.length > 0) {
+    }
+    if (strays.length > 0) {
       notes.push(
-        `${strays.length} new path modules landed outside every slot and NO ` +
-          "slot drew — left in place so the evidence of where the lowering " +
-          "actually put them survives review.",
+        `${strays.length} new path modules landed on this page outside ` +
+          "every slot — left in place so the evidence of where the " +
+          "lowering actually put them survives review.",
       );
     }
 
+    // The redrawn symbols are new items too: they take the layer the
+    // expression page gave the ones they replace.
     await assignLayerBatch(
       doc,
       "polygon",
-      mine.map((r) => r.id),
+      [...mine, ...redrawn].map((r) => r.id),
       LAYER.content,
     ).catch((err) => {
       notes.push(`layer assignment refused: ${String(err).slice(0, 120)}`);
@@ -343,10 +313,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "A re-lower draws every bound symbol afresh instead of replacing it " +
-        "in place; this page removed the re-drawn copies of the expression " +
-        "page's two symbols. The raster barcode lane stays closed by " +
-        "design. → Appendix A",
+      "Placing these four re-lowered every binding of the session: the " +
+        "expression page's two symbols were redrawn in their own frames, " +
+        "in place. The raster barcode lane stays closed by design. " +
+        "→ Appendix A",
     ),
   );
 

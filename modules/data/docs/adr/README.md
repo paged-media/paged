@@ -15,7 +15,7 @@ the code as it stood, for decisions made earlier; their status says so.
 | [014](014-data-provider-arrow-seam.md) | The data-provider seam: `RecordSet` = Arrow IPC, no `arrow-rs` (D-09) | Accepted (amended 2026-10-02 and 2026-11-01: not an isolation matter any more, PM-0017) |
 | [015](015-duckdb-wasm-vendored.md) | DuckDB-WASM 1.29 vendored as paged.data's query engine | Superseded by 561 (2026-10-24) |
 | [550](550-own-binding-language.md) | The binding language is the plugin's own, stored as source text | Accepted, recorded retroactively 2026-10-02 |
-| [551](551-compiled-to-native-content.md) | Bound content is compiled to native document content through a pure intermediate form | Accepted, recorded retroactively 2026-10-02 |
+| [551](551-compiled-to-native-content.md) | Bound content is compiled to native document content through a pure intermediate form | Accepted, recorded retroactively 2026-10-02 (amended 2026-11-18: content is placed on its frame's page) |
 | [552](552-binding-is-a-recipe.md) | A binding is a recipe stored in the document; resolved values are committed content | Accepted, recorded retroactively 2026-10-02 |
 | [553](553-non-destructive-refresh.md) | Refresh is non-destructive: five sync states over content hashes | Accepted, recorded retroactively 2026-10-02 |
 | [554](554-record-flow-pagination.md) | Record flow is paginated by the plugin over a host-supplied frame chain | Accepted, recorded retroactively 2026-10-02 |
