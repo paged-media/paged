@@ -2804,6 +2804,7 @@ fn paged_delete_element(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
         .to_std_string_escaped();
     Ok(apply_bool(&Mutation::DeleteFrame {
         frame_id: bare_id(&id),
+        with_story: false,
     }))
 }
 

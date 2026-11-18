@@ -259,6 +259,7 @@ fn the_index_follows_an_edit() {
     // Move the oval away; its old quadrant point is no longer a target.
     m.apply_mutation(&Mutation::DeleteFrame {
         frame_id: "o1".into(),
+        with_story: false,
     })
     .expect("delete");
     let r = m.snap_point(&query(481.0, 402.0));

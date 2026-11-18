@@ -132,7 +132,7 @@ is not written yet.
 | [197](197-undo-restores-the-model-exactly.md) | Undo restores the model exactly | Accepted 2026-10-19 |
 | [198](198-a-link-that-resolves-to-nothing-is-missing.md) | A link that resolves to nothing is missing, however it was placed | Accepted 2026-10-20 |
 | [199](199-a-changed-number-is-written-as-the-f32-it-is.md) | The IDML writer spells a changed number as the f32 it is | Accepted 2026-10-20 |
-| [200](200-threading-returns-and-unset-margins.md) | Threading drops the target's empty story; "\r" is a paragraph return; an unset margin reads as laid out | Accepted 2026-10-20 |
+| [200](200-threading-returns-and-unset-margins.md) | Threading drops the target's empty story; "\r" is a paragraph return; an unset margin reads as laid out | Accepted 2026-10-20 (amended 2026-11-18: `deleteFrame { withStory }` takes the story the frame alone held) |
 | [201](201-ascent-is-the-os2-typographic-ascender.md) | A face's ascent is its OS/2 typographic ascender | Accepted 2026-10-20 |
 | [202](202-the-outer-cells-edges-are-the-table-border.md) | A table's outer cells' edges are its border | Accepted 2026-10-20 |
 | [203](203-a-frames-effects-apply-to-its-picture.md) | A frame's feathers and interior effects apply to its picture | Accepted 2026-10-20 |

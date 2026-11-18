@@ -2008,6 +2008,7 @@ fn frame_cases(c: &mut Vec<Case>) {
     c.push(paints("DeleteFrame", "geometry", |m| {
         Mutation::DeleteFrame {
             frame_id: rect_ids(m)[0].clone(),
+            with_story: false,
         }
     }));
     c.push(paints("SetElementProperty", "geometry", |m| {

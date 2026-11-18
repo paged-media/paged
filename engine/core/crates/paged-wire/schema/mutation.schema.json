@@ -1609,6 +1609,7 @@
           ]
         },
         {
+          "description": "Delete a page item. A text frame's story stays in the document\nunless `with_story` asks for it to go: then the story this delete\nleaves held by nothing (a text frame's own, a text path's on a\nshape), the stories anchored in it and the hyperlinks whose source\ntext they hold go in the same step (engine ADR 200, amended\n2026-11-18). A story still threaded on to a frame that stays is\nkept. A plain delete leaves the story free for a path; the IDML\nexport leaves such a story out and says so.",
           "type": "object",
           "properties": {
             "op": {
@@ -1620,6 +1621,9 @@
               "properties": {
                 "frameId": {
                   "type": "string"
+                },
+                "withStory": {
+                  "type": "boolean"
                 }
               },
               "required": [

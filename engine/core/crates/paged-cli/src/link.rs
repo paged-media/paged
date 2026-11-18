@@ -311,6 +311,7 @@ pub fn place_svg(session: &mut Session, frame: &str, bytes: Vec<u8>) -> Result<S
     applied(
         session.send(MainToWorkerKind::Mutate(Mutation::DeleteFrame {
             frame_id: self_id,
+            with_story: false,
         }))?,
         "remove the frame the SVG replaced",
     )?;
@@ -356,6 +357,7 @@ pub fn place_psd_layers(session: &mut Session, frame: &str, bytes: Vec<u8>) -> R
     applied(
         session.send(MainToWorkerKind::Mutate(Mutation::DeleteFrame {
             frame_id: self_id,
+            with_story: false,
         }))?,
         "remove the frame the layers replaced",
     )?;

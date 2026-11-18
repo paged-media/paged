@@ -89,6 +89,7 @@ mod snapshot_story;
 pub mod svg_io;
 pub mod template;
 pub mod undo_label;
+mod unheld_stories;
 pub mod view;
 
 pub use camera::{Camera, CameraLayout, CameraSabLayout, CAMERA_SAB_BYTES};
