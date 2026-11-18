@@ -65,8 +65,9 @@ repeats.
    in passes (a shaded column of figures after the rest): short or numeric lines on a shared
    baseline join. Gaps are measured from the last inked glyph, so the space glyph a layout
    program sets before a tab's jump does not hide the tab. A block's columns are where its rows'
-   cells line up — right edges for figures, left edges for text — and become the block's tab
-   stops; each row is a paragraph of its own, with as many tabs as columns a cell skips (a total
+   cells line up — right edges for figures, left edges for text, the decimal point for figures
+   whose negatives in parentheses run past the positives' last digit — and become the block's
+   tab stops (a decimal one aligns on the full stop); each row is a paragraph of its own, with as many tabs as columns a cell skips (a total
    with an empty label cell starts with them). Rows of different blocks never join across a
    page edge. A row is set No Break: a substitute face a little wider than its columns' gaps
    runs it past the frame's edge rather than onto a second line.

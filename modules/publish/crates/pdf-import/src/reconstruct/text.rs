@@ -217,12 +217,40 @@ pub struct Token {
     pub glyph: usize,
 }
 
-/// A tab column of a block: the x its cells start at (left) or end at
-/// (right, figures).
+/// A tab column of a block: the x its cells start at (left), end at
+/// (right, figures), or have their decimal point at (decimal: figures
+/// whose negatives in parentheses run past the positives' last digit).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabCol {
     pub x: f32,
     pub right: bool,
+    pub decimal: bool,
+}
+
+/// Where a cell's decimal point is: a full stop between digits, in the
+/// glyphs from `from` up to (not including) `to`.
+fn cell_decimal(line: &Line, from: usize, to: usize) -> Option<f32> {
+    let g = &line.glyphs;
+    let digit = |i: usize| {
+        g.get(i)
+            .and_then(|x| x.text.chars().next())
+            .is_some_and(|c| c.is_ascii_digit())
+    };
+    (from + 1..to.min(g.len()).saturating_sub(1))
+        .find(|&i| g[i].text == "." && digit(i - 1) && digit(i + 1))
+        .map(|i| g[i].x)
+}
+
+/// The cells of a line with their decimal points: (first glyph, start,
+/// end, decimal).
+fn cells_dec(line: &Line) -> Vec<(usize, f32, f32, Option<f32>)> {
+    let c = cells(line);
+    (0..c.len())
+        .map(|k| {
+            let to = c.get(k + 1).map_or(line.glyphs.len(), |n| n.0);
+            (c[k].0, c[k].1, c[k].2, cell_decimal(line, c[k].0, to))
+        })
+        .collect()
 }
 
 /// The cells of a line: runs of ink set apart by more than a tab's gap
@@ -257,10 +285,12 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
     }
     let mut starts: Vec<f32> = Vec::new();
     let mut ends: Vec<f32> = Vec::new();
+    let mut points: Vec<f32> = Vec::new();
     for l in lines {
-        for (_, a, b) in cells(l).into_iter().skip(1) {
+        for (_, a, b, d) in cells_dec(l).into_iter().skip(1) {
             starts.push(a);
             ends.push(b);
+            points.extend(d);
         }
     }
     if starts.is_empty() {
@@ -290,9 +320,59 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
         .into_iter()
         .filter(|c| c.1 >= 2)
         .collect();
+    let decimals: Vec<(f32, usize)> = clusters(&mut points.clone())
+        .into_iter()
+        .filter(|c| c.1 >= 2)
+        .collect();
+    let near = |v: &[(f32, usize)], x: f32| -> Option<(f32, usize)> {
+        v.iter()
+            .filter(|c| (c.0 - x).abs() <= 1.5)
+            .max_by_key(|c| c.1)
+            .copied()
+    };
+    // A decimal column where the points line its figures up better than
+    // their ends do (a negative's closing parenthesis runs past).
+    let decimal_for = |b: f32, d: Option<f32>| -> Option<f32> {
+        let (x, n) = near(&decimals, d?)?;
+        (n > near(&right, b).map_or(0, |r| r.1)).then_some(x)
+    };
+    let used: Vec<f32> = lines
+        .iter()
+        .flat_map(|l| cells_dec(l).into_iter().skip(1))
+        .filter_map(|(_, _, b, d)| decimal_for(b, d))
+        .collect();
     let mut cols: Vec<TabCol> = Vec::new();
+    let mut add = |col: TabCol| {
+        if !cols
+            .iter()
+            .any(|c| c.right == col.right && c.decimal == col.decimal && (c.x - col.x).abs() <= 1.5)
+        {
+            cols.push(col);
+        }
+    };
     for l in lines {
-        for (_, a, b) in cells(l).into_iter().skip(1) {
+        for (_, a, b, d) in cells_dec(l).into_iter().skip(1) {
+            if let Some(x) = decimal_for(b, d) {
+                add(TabCol {
+                    x,
+                    right: false,
+                    decimal: true,
+                });
+                continue;
+            }
+            // A dash or a figure without a point beside a decimal column
+            // is that column's.
+            if let Some(&x) = used
+                .iter()
+                .find(|&&x| x > a - 0.6 * l.size && x < b + 0.6 * l.size)
+            {
+                add(TabCol {
+                    x,
+                    right: false,
+                    decimal: true,
+                });
+                continue;
+            }
             let r = right
                 .iter()
                 .filter(|c| (c.0 - b).abs() <= 1.5)
@@ -305,23 +385,25 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
                 (Some(r), Some(lf)) if r.1 > lf.1 => TabCol {
                     x: r.0,
                     right: true,
+                    decimal: false,
                 },
                 (_, Some(lf)) => TabCol {
                     x: lf.0,
                     right: false,
+                    decimal: false,
                 },
                 (Some(r), None) => TabCol {
                     x: r.0,
                     right: true,
+                    decimal: false,
                 },
-                (None, None) => TabCol { x: a, right: false },
+                (None, None) => TabCol {
+                    x: a,
+                    right: false,
+                    decimal: false,
+                },
             };
-            if !cols
-                .iter()
-                .any(|c| c.right == col.right && (c.x - col.x).abs() <= 1.5)
-            {
-                cols.push(col);
-            }
+            add(col);
         }
     }
     // In order along the line: a right column by where its cells start.
@@ -342,25 +424,29 @@ fn leads_with_tab(line: &Line, left: f32) -> bool {
 /// is indented, not tabbed.
 fn cell_columns(line: &Line, cols: &[TabCol], left: f32) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
-    let all = cells(line);
+    let all = cells_dec(line);
     let skip = usize::from(!leads_with_tab(line, left));
-    for (gi, a, b) in all.into_iter().skip(skip) {
+    for (gi, a, b, d) in all.into_iter().skip(skip) {
+        // How far a column is from where the cell meets it: its point,
+        // its end or its start; a cell without a point meets a decimal
+        // column anywhere across it.
+        let off = |c: &TabCol| -> f32 {
+            if c.decimal {
+                match d {
+                    Some(d) => (c.x - d).abs(),
+                    None if c.x >= a && c.x <= b => 0.0,
+                    None => (c.x - a).abs().min((c.x - b).abs()),
+                }
+            } else if c.right {
+                (c.x - b).abs()
+            } else {
+                (c.x - a).abs()
+            }
+        };
         let best = cols
             .iter()
             .enumerate()
-            .min_by(|(_, x), (_, y)| {
-                let dx = if x.right {
-                    (x.x - b).abs()
-                } else {
-                    (x.x - a).abs()
-                };
-                let dy = if y.right {
-                    (y.x - b).abs()
-                } else {
-                    (y.x - a).abs()
-                };
-                dx.partial_cmp(&dy).unwrap()
-            })
+            .min_by(|(_, x), (_, y)| off(x).partial_cmp(&off(y)).unwrap())
             .map(|(i, _)| i);
         if let Some(i) = best {
             out.push((gi, i));
@@ -1608,6 +1694,30 @@ mod tests {
         assert_eq!(
             texts,
             ["UNIT", "Subunits", "Vertical position denotes pitch"]
+        );
+    }
+
+    #[test]
+    fn figures_aligned_on_their_points_are_a_decimal_column() {
+        // Negatives in parentheses: their point lines up with the
+        // positives', their closing parenthesis runs past.
+        let mut g = Vec::new();
+        g.extend(set("Revenue", 0.0, 100.0, 0));
+        g.extend(set("1,095.3", 120.0, 100.0, 0)); // point at 145
+        g.extend(set("Cost of sales", 0.0, 112.0, 0));
+        g.extend(set("(751.6)", 125.0, 112.0, 0)); // point at 145
+        g.extend(set("Gross profit", 0.0, 124.0, 0));
+        g.extend(set("343.7", 130.0, 124.0, 0)); // point at 145
+        let block = build_block(lines(g, &[]));
+        assert_eq!(block.tabs.len(), 1, "{:?}", block.tabs);
+        assert!(block.tabs[0].decimal && (block.tabs[0].x - 145.0).abs() < 1.0);
+        assert_eq!(
+            texts(&block),
+            [
+                "Revenue\t1,095.3",
+                "Cost of sales\t(751.6)",
+                "Gross profit\t343.7"
+            ]
         );
     }
 

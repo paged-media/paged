@@ -1046,9 +1046,16 @@ fn story_from(
                     .map(|t| paged_model::TabStop {
                         position: (t.x - fl).max(0.0),
                         alignment: Some(
-                            if t.right { "RightAlign" } else { "LeftAlign" }.to_string(),
+                            if t.decimal {
+                                "CharacterAlign"
+                            } else if t.right {
+                                "RightAlign"
+                            } else {
+                                "LeftAlign"
+                            }
+                            .to_string(),
                         ),
-                        alignment_character: None,
+                        alignment_character: t.decimal.then(|| ".".to_string()),
                         leader: None,
                     })
                     .collect();
