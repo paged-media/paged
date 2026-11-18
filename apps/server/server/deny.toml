@@ -22,6 +22,12 @@ ignore = [
     "RUSTSEC-2025-0048", # tsify-next — unmaintained (use tsify)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via resvg; no safe upgrade, awaits upstream skrifa migration)
     "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via resvg/usvg; no safe upgrade available)
+    # chrono is UNMAINTAINED (informational, no vulnerability, no patched
+    # release). No crate of ours uses it; it is a required, non-optional
+    # dependency of the Cloudflare `worker` crate (paged-server), 0.8.7 and its
+    # newest release 0.9.0 alike. Reviewed 2026-11-18; revisit by 2027-02-18,
+    # or earlier when `worker` moves to jiff or time.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; only transitive and required (worker), no safe upgrade; reviewed 2026-11-18, revisit by 2027-02-18" },
 ]
 
 [licenses]

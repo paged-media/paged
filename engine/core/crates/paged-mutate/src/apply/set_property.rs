@@ -1232,6 +1232,16 @@ fn apply_set_property_core(
             PropertyPath::FrameTextWrapMode,
         ) => {
             let new_val = expect_text(path, value)?;
+            let mode = closed_token(
+                node,
+                path,
+                &new_val,
+                |s| match paged_model::TextWrapMode::from_idml(s) {
+                    paged_model::TextWrapMode::Other => None,
+                    m => Some(m),
+                },
+                "None | BoundingBoxTextWrap | Contour | JumpObjectTextWrap | NextColumnTextWrap",
+            )?;
             let tw = find_text_wrap_mut(doc, node)
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
             let prev_mode = tw.map(|t| t.mode.as_idml().to_string()).unwrap_or_default();
@@ -1240,11 +1250,9 @@ fn apply_set_property_core(
             // W2.5 — preserve any contour-option knobs through a mode set.
             let prev_contour = tw.and_then(|t| t.contour_type);
             let prev_inside = tw.and_then(|t| t.include_inside_edges);
-            if new_val.is_empty() {
-                *tw = None;
-            } else {
+            if let Some(mode) = mode {
                 *tw = Some(paged_model::TextWrap {
-                    mode: paged_model::TextWrapMode::from_idml(&new_val),
+                    mode,
                     offsets: prev_offsets,
                     invert: prev_invert,
                     contour_type: prev_contour,
@@ -1252,6 +1260,8 @@ fn apply_set_property_core(
                     side: tw.and_then(|t| t.side),
                     apply_to_master_page_only: tw.and_then(|t| t.apply_to_master_page_only),
                 });
+            } else {
+                *tw = None;
             }
             let _ = prev_offsets;
             (
@@ -1326,11 +1336,16 @@ fn apply_set_property_core(
             let prev_offsets = tw.map(|t| t.offsets).unwrap_or([0.0; 4]);
             let prev_invert = tw.and_then(|t| t.invert);
             let prev_inside = tw.and_then(|t| t.include_inside_edges);
-            let new_contour = if new_val.is_empty() {
-                None
-            } else {
-                Some(paged_model::ContourOptionType::from_idml(&new_val))
-            };
+            let new_contour = closed_token(
+                node,
+                path,
+                &new_val,
+                |s| match paged_model::ContourOptionType::from_idml(s) {
+                    paged_model::ContourOptionType::Other => None,
+                    c => Some(c),
+                },
+                "BoundingBox | DetectEdges | AlphaChannel | PhotoshopPath | GraphicFrame | SameAsClipping | UserModifiedPath",
+            )?;
             *tw = Some(paged_model::TextWrap {
                 mode: prev_mode,
                 offsets: prev_offsets,
@@ -3324,11 +3339,13 @@ fn apply_set_property_core(
                 .vertical_justification
                 .map(vj_as_idml)
                 .unwrap_or_default();
-            frame.vertical_justification = if new_val.is_empty() {
-                None
-            } else {
-                paged_model::VerticalJustification::from_idml(&new_val)
-            };
+            frame.vertical_justification = closed_token(
+                node,
+                path,
+                &new_val,
+                paged_model::VerticalJustification::from_idml,
+                "TopAlign | CenterAlign | BottomAlign | JustifyAlign",
+            )?;
             (
                 Value::Text(prev.to_string()),
                 InvalidationHint {
@@ -3345,11 +3362,13 @@ fn apply_set_property_core(
                 .auto_sizing
                 .map(auto_sizing_as_idml)
                 .unwrap_or_default();
-            frame.auto_sizing = if new_val.is_empty() {
-                None
-            } else {
-                paged_model::AutoSizingType::from_idml(&new_val)
-            };
+            frame.auto_sizing = closed_token(
+                node,
+                path,
+                &new_val,
+                paged_model::AutoSizingType::from_idml,
+                "Off | HeightOnly | WidthOnly | HeightAndWidth | HeightAndWidthProportionally",
+            )?;
             (
                 Value::Text(prev.to_string()),
                 InvalidationHint {
@@ -3366,11 +3385,13 @@ fn apply_set_property_core(
                 .first_baseline_offset
                 .map(first_baseline_as_idml)
                 .unwrap_or_default();
-            frame.first_baseline_offset = if new_val.is_empty() {
-                None
-            } else {
-                paged_model::FirstBaselineOffset::from_idml(&new_val)
-            };
+            frame.first_baseline_offset = closed_token(
+                node,
+                path,
+                &new_val,
+                paged_model::FirstBaselineOffset::from_idml,
+                "AscentOffset | CapHeight | XHeight | EmBoxHeight | LeadingOffset | FixedHeight",
+            )?;
             (
                 Value::Text(prev.to_string()),
                 InvalidationHint {
@@ -3922,6 +3943,16 @@ fn apply_set_property_core(
             | PropertyPath::FrameCornerOptionBottomRight,
         ) => {
             let new_val = expect_text(path, value)?;
+            // Engine ADR 1315 — a token the model has no corner for is
+            // refused: stored, it read as no corner and the write reported
+            // success (`"Rounded"` for `RoundedCorner`).
+            let option = closed_token(
+                node,
+                path,
+                &new_val,
+                paged_model::CornerOption::from_idml,
+                CORNER_OPTION_NAMES,
+            )?;
             let i = corner_index(path);
             let corners = find_corners_mut(doc, node)
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
@@ -3929,11 +3960,7 @@ fn apply_set_property_core(
                 .option
                 .map(corner_option_as_idml)
                 .unwrap_or_default();
-            corners[i].option = if new_val.is_empty() {
-                None
-            } else {
-                paged_model::CornerOption::from_idml(&new_val)
-            };
+            corners[i].option = option;
             (
                 Value::Text(prev.to_string()),
                 InvalidationHint {

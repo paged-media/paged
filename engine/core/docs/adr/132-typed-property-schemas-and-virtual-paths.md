@@ -165,3 +165,13 @@ in the `address` position as a deprecated alias (`VirtualTarget → Address` is 
   set through `Set`, read back through the read twin, and undone.
 - `crates/paged-script/tests/it/object_model_surface.rs` and `script_surface.rs` (Boa);
   `crates/paged-cli/tests/it/object_surface.rs` and `cli_surface.rs` (command line).
+
+## Amendment — 2026-11-18: an enum is closed unless its vocabulary is open in fact
+
+Thirty-six enum rows were `open`, and a script's misspelt token was taken and lost
+(`frameCornerOptionTopLeft = "Rounded"` stored no corner and answered `true`). Every enum row is
+closed now except the four whose vocabulary is open in fact (stroke types, kerning methods,
+text variable types, the RGB policy); a closed row's members are the tokens the engine holds, and a
+refusal names them. [ADR 1315](1315-a-value-outside-an-enum-is-refused-and-says-what-it-takes.md)
+records the decision; `every_enum_row_refuses_a_stranger_and_keeps_its_members` in
+`crates/paged-canvas/tests/it/virtual_paths.rs` is its gate.

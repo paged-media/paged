@@ -68,7 +68,7 @@ ten workspaces (draw had none):
 | base64 | 0.22 → 0.23 | core, doc, publish, server, slide | serialization | updated |
 | toml | 0.8 → 1 | core | serialization | updated |
 | compact_str | 0.8 → 0.10 | data, doc, sheet, slide | serialization | updated |
-| ooxmlsdk | 0.12 → 0.13 | doc, slide | ooxmlsdk | held, see below (landed, then went back for the wasm budget) |
+| ooxmlsdk | 0.12 → 0.13 | doc, slide | ooxmlsdk | held, see below (landed, then went back for the wasm budget; 0.14 since 2026-11-18 for zip 9) |
 | ureq | 2 → 3 | server | server-net | updated |
 | tungstenite | 0.24 → 0.30 | server (dev) | server-net | updated |
 | criterion | 0.5 → 0.8 | core, data, image, sheet, web-render (dev) | tooling | updated |
@@ -190,6 +190,16 @@ ooxmlsdk; its 0.13 fixes (attribute whitespace and carriage returns kept
 through a read, case-insensitive content types and relationships) are not ones
 doc or slide relies on today. boa 0.22 stays: its 0.48 MB is Boa's own growth,
 and with ooxmlsdk back the app keeps about 0.50 MB of the budget free.
+
+**2026-11-18: ooxmlsdk 0.14.** The hold ended for security: `mce` needs
+ooxmlsdk's `parts`, which brings its zip, and 0.12 and 0.13 bring zip 8, which
+carries RUSTSEC-2026-0545 to -0548 with no fixed 8.x release. 0.14 is the
+first release on zip 9 (`^9.0.5`), and zip 8 is gone from every lockfile. The
+room is there now: the app budget is 150 MB (apps/editor/scripts/wasm-budget.mjs).
+`docx_js_bg.wasm` grew from 8,985,228 to 9,786,183 bytes (+800,955, ooxmlsdk's
+generated readers again), so doc's manifest `maxBytes` went to 10 MiB (doc ADR
+607, amendment of 2026-11-18). slide no longer compiles ooxmlsdk. 0.14 still
+requires quick-xml ^0.41.
 
 ### moxcms stays on 0.8
 

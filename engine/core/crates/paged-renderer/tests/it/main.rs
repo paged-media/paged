@@ -68,6 +68,7 @@ mod navigation;
 mod nested_groups;
 mod object_style_corners;
 mod object_style_options_pipeline;
+mod object_style_stroke;
 mod opacity_mask;
 mod overprint;
 mod overset_continuation;

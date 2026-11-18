@@ -40,7 +40,7 @@ after the table gives the dependency direction.
   imports `doc-host-model` through the workspace; the editor builds both from source. The split into Rust semantics, a
   forwarding wasm class and a translating TypeScript package is the shape of
   [ADR 314](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/314-plugin-shape.md).
-- Third-party Rust: `ooxmlsdk` 0.12 (feature `mce`), `zip` 2, `quick-xml` 0.41, `wasm-bindgen`
+- Third-party Rust: `ooxmlsdk` 0.14 (feature `mce`), `zip` 9, `quick-xml` 0.41, `wasm-bindgen`
   0.2. `ooxmlsdk` comes from crates.io: the README and several comments call it "vendored",
   but there is no `vendor/` directory and no patch ([ADR 601](adr/601-own-package-container.md)).
 

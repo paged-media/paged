@@ -220,8 +220,11 @@ pub struct PropertySchema {
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     pub members: &'static [&'static str],
     /// `true` when `members` are the KNOWN values but the engine stores
-    /// any string (an open vocabulary: blend modes InDesign may extend,
-    /// language names). Coercion does not reject outside an open enum.
+    /// any string, kept and read back as given (an open vocabulary: a
+    /// document's own stroke styles, IDML's `$ID/` spellings of a kerning
+    /// method). Coercion does not reject outside an open enum. Engine ADR
+    /// 1315: every other enum is closed, and a closed enum's members are
+    /// exactly the tokens the engine holds.
     #[serde(skip_serializing_if = "is_false")]
     pub open: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -376,7 +379,10 @@ pub const fn enum_(members: &'static [&'static str]) -> PropertySchema {
     }
 }
 
-/// An open enum: `members` are the known values, others are stored.
+/// An open enum: `members` are the known values, others are stored and
+/// read back as given. Only for a vocabulary the document itself extends
+/// (engine ADR 1315); a vocabulary the engine holds as a closed type is
+/// [`enum_`], or a stranger is taken and lost.
 pub const fn enum_open(members: &'static [&'static str]) -> PropertySchema {
     PropertySchema {
         open: true,
@@ -719,6 +725,9 @@ pub const CONTOUR_TYPES: &[&str] = &[
     "SameAsClipping",
     "UserModifiedPath",
 ];
+/// `FittingOnEmptyFrame`: InDesign's empty-frame fittings (with
+/// `ContentAwareFit`, which the renderer fills proportionally) and the two
+/// one-shot fits the engine also keeps there.
 pub const FITTING: &[&str] = &[
     "None",
     "Proportionally",
@@ -726,6 +735,7 @@ pub const FITTING: &[&str] = &[
     "ContentToFrame",
     "CenterContent",
     "FrameToContent",
+    "ContentAwareFit",
 ];
 pub const DROP_SHADOW_MODES: &[&str] = &["None", "Drop"];
 /// `Capitalization` as InDesign writes it: `CapToSmallCap` is "all small
@@ -740,13 +750,22 @@ pub const POSITIONS: &[&str] = &[
     "OTNumerator",
     "OTDenominator",
 ];
+/// Open: IDML spells them `$ID/Metrics` and `$ID/Optical` as well, and
+/// InDesign has methods beyond these three; the renderer reads either.
 pub const KERNING_METHODS: &[&str] = &["Metrics", "Optical", "None"];
 pub const LIST_TYPES: &[&str] = &["NoList", "BulletList", "NumberedList"];
+/// The composers as IDML spells them (`paged_model::Composer`): Adobe's
+/// paragraph and single-line composers, their World-Ready ("Optyca") and
+/// Japanese twins, and paged's Word first-fit (engine ADR 1016). The names
+/// InDesign shows ("Adobe Paragraph Composer") are not written to IDML.
 pub const COMPOSERS: &[&str] = &[
     "HL Composer",
     "HL Single",
-    "Adobe Paragraph Composer",
-    "Adobe Single-line Composer",
+    "HL Composer Optyca",
+    "HL Single Optyca",
+    "HL Composer J",
+    "HL Single J",
+    "Word First-fit",
 ];
 pub const GLOW_SOURCES: &[&str] = &["EdgeSourced", "CenterSourced"];
 pub const BEVEL_STYLES: &[&str] = &["OuterBevel", "InnerBevel", "Emboss", "PillowEmboss"];
@@ -807,6 +826,8 @@ pub const FOOTNOTE_SHOW_PREFIX_SUFFIX: &[&str] = &[
     "PrefixSuffixText",
     "PrefixSuffixBoth",
 ];
+/// Open: InDesign has variable types (a caption's metadata) beyond these,
+/// and a document keeps its own as written.
 pub const TEXT_VARIABLE_TYPES: &[&str] = &[
     "CustomTextType",
     "FileNameType",
