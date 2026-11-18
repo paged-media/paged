@@ -41,7 +41,9 @@ repeats.
    ligatures from the face it sets. A font whose text is not text — a `ToUnicode` that maps
    every code to itself, as flattened advertisements carry: control codes, a page's worth of
    `+ = ; ? $`, letters with hardly a vowel, or glyph names that contradict it — is read by its program's glyph names where
-   they name every glyph, and otherwise keeps its look as outlines. A glyph's control code is
+   they name every glyph, and otherwise keeps its look as outlines. A font of letters whose
+   codes are its glyph ids in TrueType's standard order (each character less 29) reads moved
+   back, where that turns its text into words (four in five, and far more than as it stood). A glyph's control code is
    never its text. Text a page draws twice exactly over itself is read once, and text past the
    page's own edges (an exporter that writes each page with its whole spread) is not the
    page's.

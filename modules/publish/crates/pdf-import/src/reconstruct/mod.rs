@@ -2588,8 +2588,113 @@ fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
             }
         }
     }
+    // A font whose codes are its glyph ids in TrueType's standard order
+    // (the space at 3, `A` at 36: the character less 29) reads once they
+    // are moved back, where that gives words.
+    let mut keys = HashSet::new();
+    font_keys(items, &mut keys);
+    let shifted: HashSet<u128> = keys
+        .into_iter()
+        .filter(|k| reads_shifted(items, *k))
+        .collect();
+    if !shifted.is_empty() {
+        shift_back(items, &shifted);
+        outlined.retain(|k| !shifted.contains(k));
+        by_name.retain(|k| !shifted.contains(k));
+    }
     if !by_name.is_empty() || !outlined.is_empty() {
         mend(items, fonts, &by_name, &outlined);
+    }
+}
+
+/// The text a glyph's code gives if the code is its glyph id in TrueType's
+/// standard order: the character 29 above it (3 is the space).
+fn standard_order(g: &vectors::ir::GlyphPos) -> Option<char> {
+    let code = match g.text.chars().collect::<Vec<_>>().as_slice() {
+        [c] => *c as u32,
+        [] => g.gid?,
+        _ => return None,
+    };
+    char::from_u32(code + 29).filter(|c| (' '..='~').contains(c))
+}
+
+/// Whether a font's glyphs, moved back to TrueType's standard order, read
+/// as words where as they are they do not: of its words (letters, a vowel
+/// among them), four in five or more moved back, and fewer by far as they
+/// stand.
+fn reads_shifted(items: &[Item], key: u128) -> bool {
+    fn walk(items: &[Item], key: u128, plain: &mut String, moved: &mut String) {
+        for it in items {
+            match it {
+                Item::Group(g) => walk(&g.items, key, plain, moved),
+                Item::Text(t) if t.font_key == Some(key) => {
+                    for g in &t.glyphs {
+                        plain.push_str(if g.text.is_empty() { " " } else { &g.text });
+                        moved.push(standard_order(g).unwrap_or('?'));
+                    }
+                    plain.push(' ');
+                    moved.push(' ');
+                }
+                _ => {}
+            }
+        }
+    }
+    let words = |s: &str| -> (usize, usize) {
+        let all: Vec<&str> = s
+            .split_whitespace()
+            .filter(|w| w.chars().count() >= 2)
+            .collect();
+        let good = all
+            .iter()
+            .filter(|w| {
+                w.chars()
+                    .all(|c| c.is_alphabetic() || ".,:;'’-()".contains(c))
+                    && w.chars().any(|c| "aeiouyAEIOUY".contains(c))
+            })
+            .count();
+        (good, all.len())
+    };
+    let (mut plain, mut moved) = (String::new(), String::new());
+    walk(items, key, &mut plain, &mut moved);
+    let (pg, pn) = words(&plain);
+    let (mg, mn) = words(&moved);
+    let share = |g: usize, n: usize| if n == 0 { 0.0 } else { g as f32 / n as f32 };
+    let (p, m) = (share(pg, pn), share(mg, mn));
+    // Text as it stands, mostly letters: a font of figures moves back into
+    // letters too, and stays figures.
+    let ink: Vec<char> = plain.chars().filter(|c| !c.is_whitespace()).collect();
+    let lettered = ink.iter().filter(|c| c.is_alphabetic()).count() * 5 >= ink.len() * 2;
+    lettered && mn >= 2 && m >= 0.8 && m - p >= 0.3
+}
+
+fn font_keys(items: &[Item], out: &mut HashSet<u128>) {
+    for it in items {
+        match it {
+            Item::Group(g) => font_keys(&g.items, out),
+            Item::Text(t) => {
+                if let Some(k) = t.font_key {
+                    out.insert(k);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn shift_back(items: &mut [Item], keys: &HashSet<u128>) {
+    for it in items.iter_mut() {
+        match it {
+            Item::Group(g) => shift_back(&mut g.items, keys),
+            Item::Text(t) if t.font_key.is_some_and(|k| keys.contains(&k)) => {
+                for g in t.glyphs.iter_mut() {
+                    if let Some(c) = standard_order(g) {
+                        g.text = c.to_string();
+                    }
+                }
+                t.text = t.glyphs.iter().map(|g| g.text.as_str()).collect();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -2838,12 +2943,45 @@ mod tests {
     #[test]
     fn a_font_of_consonants_keeps_its_look() {
         let mut items = vec![
-            run("XSWR RII GGHBHRBHENTRS KLMNPQRST BCDFG", 1),
+            run("BCDFG HJKLM NPQRST VWXZ BCDFGH KLMN", 1),
             run("Made-to-measure blinds, curtains and shutters", 2),
         ];
         let mut fonts = FontTable::default();
         mark_unreadable(&mut items, &mut fonts);
         assert_eq!(outlined(&items), vec![true, false]);
+    }
+
+    #[test]
+    fn codes_that_are_glyph_ids_in_the_standard_order_read_moved_back() {
+        // "upto off HILLARYS" with every code 29 below its character.
+        let shifted: String = "upto off HILLARYS colour range"
+            .chars()
+            .map(|c| char::from_u32(c as u32 - 29).unwrap())
+            .collect();
+        let mut items = vec![run(&shifted, 1)];
+        // The space's code (3) is a control: no text, its id kept.
+        if let Item::Text(t) = &mut items[0] {
+            for g in t.glyphs.iter_mut() {
+                if g.text == "\u{3}" {
+                    g.text.clear();
+                    g.gid = Some(3);
+                }
+            }
+        }
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let Item::Text(t) = &items[0] else { panic!() };
+        assert!(!t.outline);
+        assert_eq!(t.text, "upto off HILLARYS colour range");
+    }
+
+    #[test]
+    fn a_font_of_figures_is_never_moved_back() {
+        let mut items = vec![run("40,744 39,128 (12.3) 92.05 1,559.4", 1)];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let Item::Text(t) = &items[0] else { panic!() };
+        assert_eq!(t.text, "40,744 39,128 (12.3) 92.05 1,559.4");
     }
 
     #[test]
