@@ -38,7 +38,13 @@ repeats.
    A glyph the PDF maps to no text (a small capital or an alternate outside its `ToUnicode`) is
    read by the name its embedded program gives it, the Adobe Glyph List's way (`s.sc` is an S);
    a ligature's presentation form (ﬁ, ﬀ …) reads as its letters, for the composer forms
-   ligatures from the face it sets.
+   ligatures from the face it sets. A font whose text is not text — a `ToUnicode` that maps
+   every code to itself, as flattened advertisements carry: control codes, a page's worth of
+   `+ = ; ? $`, or glyph names that contradict it — is read by its program's glyph names where
+   they name every glyph, and otherwise keeps its look as outlines. A glyph's control code is
+   never its text. Text a page draws twice exactly over itself is read once, and text past the
+   page's own edges (an exporter that writes each page with its whole spread) is not the
+   page's.
 2. **Glyphs → lines → frames → paragraphs** (`text.rs`). Glyphs join a line along a baseline
    in paint order. A word space is a gap past the line's own letter spacing (its median gap
    and a tenth of an em), so text set tight and text tracked open both keep their words. A
@@ -61,6 +67,17 @@ repeats.
    Hanging punctuation and display letters pulled into the margin read as optical margin
    alignment, not as indents. InDesign's All Caps is read from the ink: a lowercase letter
    drawn at cap height.
+   **Text wrap.** Three lines or more in a row that start well in from the frame's left edge,
+   or end well short of its right (justified: short of the measure; ragged: breaking where the
+   next word would still have fit), step round something the text wraps round — a picture, a
+   round portrait. A clear step starts the run and smaller ones beside it carry it on; an even
+   indent of a few ems (a passage, a hung list) and a centred passage are not one, and a line
+   that ends a sentence never starts a run. The obstacle becomes an unpainted shape whose
+   contour wraps text: per line, a box over the band the engine measures a wrap across (the
+   line above's baseline down to its own) from the frame's edge to where the line starts, or to
+   midway between its end and the end of the next word. The lines are read as if nothing stood
+   beside them, so their paragraphs, alignment and soft breaks are the column's, and an edit
+   reflows round the same obstacle.
 3. **Tables as tabbed rows.** Cells on one baseline are one row, also when the page paints them
    in passes (a shaded column of figures after the rest): short or numeric lines on a shared
    baseline join. Gaps are measured from the last inked glyph, so the space glyph a layout
@@ -68,9 +85,11 @@ repeats.
    cells line up — right edges for figures, left edges for text, the decimal point for figures
    whose negatives in parentheses run past the positives' last digit — and become the block's
    tab stops (a decimal one aligns on the full stop); each row is a paragraph of its own, with as many tabs as columns a cell skips (a total
-   with an empty label cell starts with them). Rows of different blocks never join across a
-   page edge. A row is set No Break: a substitute face a little wider than its columns' gaps
-   runs it past the frame's edge rather than onto a second line.
+   with an empty label cell starts with them). A column of figures that lines up every way (one
+   figure repeated) is set right, and a nil dash joins the column it stands under. Rows of
+   different blocks never join across a page edge. A row is set No Break, in every run: a
+   substitute face a little wider than its columns' gaps runs it past the frame's edge rather
+   than onto a second line.
 4. **Hyphens resolved against the document.** A line-end hyphen inside a word is hyphenation
    (dropped, the paragraph set to hyphenate) unless the document spells that word with a
    hyphen mid-line or the word is already hyphenated elsewhere ("state-of-the-art"). InDesign
@@ -78,7 +97,8 @@ repeats.
    zero-advance space between letters; all three read as what they are.
 5. **Stories and threads.** A frame whose last paragraph runs to its end unfinished, followed
    in reading order (to its right, below it, or on the next spread) by a frame that starts in
-   the same face, size and colour, continues the story; the paragraph cut by the frame break is
+   the same face, size and colour, continues the story — so does one whose first paragraph
+   starts mid-sentence, unless the earlier frame's text ends one; the paragraph cut by the frame break is
    joined back into one. A frame the story runs on from ends just under its last line, so the
    next line goes on; the last frame keeps a line's room, and up to three where its column is
    free of other text down to the page's foot.

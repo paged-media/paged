@@ -740,11 +740,18 @@ impl<'a> Device<'a> for Collector {
                     hayro_interpret::hayro_cmap::BfString::String(s) => glyph_text.push_str(&s),
                 }
             }
-            // A glyph the PDF maps to no text (a small capital or an
-            // alternate outside its ToUnicode): its id, for the program's
-            // name for it (the structure reader looks it up).
+            // A code the PDF passes through as text (a font without a
+            // usable ToUnicode, its codes mapped to themselves): a control
+            // character is no glyph's text, so the program's name for the
+            // glyph is read instead.
+            if glyph_text.chars().all(char::is_control) {
+                glyph_text.clear();
+            }
+            // The glyph's id, for the program's name for it (the structure
+            // reader looks it up where the PDF's text is missing or not
+            // text at all).
             let gid = match &**g {
-                Glyph::Outline(o) if glyph_text.is_empty() => Some(o.glyph_id().to_u32()),
+                Glyph::Outline(o) => Some(o.glyph_id().to_u32()),
                 _ => None,
             };
             text.push_str(&glyph_text);

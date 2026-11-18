@@ -35,13 +35,13 @@ pub mod recipe;
 mod styles;
 mod text;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use kurbo::Affine;
 use paged_model::{
     Bounds, CharacterRun, CharacterStyleDef, DesignMap, FirstBaselineOffset, FrameRef,
-    Justification, Page, Paragraph, ParagraphStyleDef, Section, Spread, SpreadRef, Story, StoryRef,
-    TextFrame, AUTO_PAGE_NUMBER_MARKER,
+    Justification, Page, Paragraph, ParagraphStyleDef, PathAnchor, Polygon, Section, Spread,
+    SpreadRef, Story, StoryRef, TextFrame, TextWrap, TextWrapMode, AUTO_PAGE_NUMBER_MARKER,
 };
 use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
 use serde::Serialize;
@@ -216,6 +216,9 @@ pub fn reconstruct(
             if !recipe.outline_fonts.is_empty() {
                 mark_outlined(&mut page.items, &fonts.faces, &recipe.outline_fonts);
             }
+            drop_off_page_text(&mut page.items, page.width_pt, page.height_pt);
+            mark_unreadable(&mut page.items, &mut fonts);
+            drop_repeated_text(&mut page.items, &mut HashSet::new());
             bake_image_masks(&mut page.items);
             // Glyphs by reading direction (tenths of a degree; 0 upright),
             // each turned direction read in its own axes.
@@ -234,12 +237,23 @@ pub fn reconstruct(
                 for line in &lines {
                     hyphenated_words.extend(mid_line_compounds(&line.text()));
                 }
-                for b in text::blocks(lines)
+                let groups: Vec<Vec<text::Line>> = text::blocks(lines)
                     .into_iter()
                     .flat_map(text::split_display)
                     .flat_map(text::split_measures)
-                {
-                    let mut block = text::build_block(b);
+                    .collect();
+                let boxes: Vec<Vec<[f32; 4]>> = groups
+                    .iter()
+                    .map(|g| g.iter().map(text::line_box).collect())
+                    .collect();
+                for (gi, b) in groups.into_iter().enumerate() {
+                    let others: Vec<[f32; 4]> = boxes
+                        .iter()
+                        .enumerate()
+                        .filter(|(j, _)| *j != gi)
+                        .flat_map(|(_, v)| v.iter().copied())
+                        .collect();
+                    let mut block = text::build_block_among(b, &others);
                     block.turn = turn;
                     // The frame's centre on the spread (its axes turned back).
                     let (lx, ly) = (
@@ -351,9 +365,12 @@ pub fn reconstruct(
                 if !(later_page || right_of || below) {
                     continue;
                 }
-                // A paragraph that runs on shows it over two lines at least;
-                // a one-line list item that ends unpunctuated does not.
-                if last.open_end && last.n_lines >= 2 || first.open_start {
+                // A paragraph that runs on shows it over two lines at least,
+                // or continues mid-sentence in the frame it runs into; a
+                // one-line list item that ends unpunctuated does not, nor
+                // does a story that ends (a frame that starts mid-sentence
+                // continues another one).
+                if last.open_end && last.n_lines >= 2 || first.open_start && !last.closed {
                     next.insert(a, b);
                     taken.insert(b);
                 }
@@ -623,6 +640,15 @@ pub fn reconstruct(
                 .frames_in_order
                 .push(FrameRef::TextFrame(spread.text_frames.len() - 1));
             report.text_frames += 1;
+            // What the frame's lines wrap round (an upright frame's).
+            if block.turn == 0.0 {
+                for boxes in &block.wraps {
+                    spread.polygons.push(wrap_shape(ids.id("pdfw"), boxes));
+                    spread
+                        .frames_in_order
+                        .push(FrameRef::Polygon(spread.polygons.len() - 1));
+                }
+            }
         }
         spreads.push(ParsedSpread {
             src: format!(
@@ -920,6 +946,58 @@ fn room_below(blocks: &[(usize, Block)], bi: usize, page_h: f32) -> f32 {
     room.max(0.0)
 }
 
+/// What a frame's lines wrap round, as they saw it (`text::find_wraps`):
+/// an unpainted shape of one box per line whose contour wraps text, so
+/// the lines keep the room they had and an edit reflows round the same
+/// obstacle.
+fn wrap_shape(id: String, boxes: &[[f32; 4]]) -> Polygon {
+    let mut anchors = Vec::new();
+    let mut starts = Vec::new();
+    let (mut l, mut t, mut r, mut b) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for &[x0, y0, x1, y1] in boxes {
+        starts.push(anchors.len());
+        for p in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
+            anchors.push(PathAnchor {
+                anchor: p,
+                left: p,
+                right: p,
+            });
+        }
+        (l, t, r, b) = (l.min(x0), t.min(y0), r.max(x1), b.max(y1));
+    }
+    let mut opens = vec![false; boxes.len()];
+    // One contour takes the canonical single form (no starts, no flags).
+    if boxes.len() == 1 {
+        starts.clear();
+        opens.clear();
+    }
+    Polygon {
+        item_transform: Some(IDENTITY),
+        anchors,
+        subpath_starts: starts,
+        subpath_open: opens,
+        stroke_weight: Some(0.0),
+        text_wrap: Some(TextWrap {
+            mode: TextWrapMode::ContourTextWrap,
+            offsets: [0.0; 4],
+            invert: None,
+            contour_type: None,
+            include_inside_edges: None,
+            side: None,
+            apply_to_master_page_only: None,
+        }),
+        ..Polygon::new(
+            id,
+            Bounds {
+                top: t,
+                left: l,
+                bottom: b,
+                right: r,
+            },
+        )
+    }
+}
+
 /// A block's frame: its box, its first baseline fixed where the PDF has it.
 fn text_frame(id: &str, story: &str, b: &Block, threaded_on: bool, room: f32) -> TextFrame {
     let [l, t, r, _] = b.frame;
@@ -992,16 +1070,19 @@ fn story_from(
             let mut runs: Vec<CharacterRun> = Vec::new();
             // Runs of digits counted across the paragraph's runs.
             let mut digit_k = 0usize;
+            // A row of a table (one line, reached by tabs) never wraps, in
+            // any of its runs: a substitute face a little wider than the
+            // columns' gaps runs past the frame's edge instead of breaking
+            // the row (its label as much as its figures).
+            let row = p.n_lines == 1
+                && !b.tabs.is_empty()
+                && p.runs.iter().any(|r| r.text.contains('\t'));
             for r in &p.runs {
                 let ck = CharKey::of(r, &key);
                 let mut text = r.text.clone();
                 if let Some(page_runs) = folio {
                     text = folio_text(&text, page_runs, &mut digit_k);
                 }
-                // A row of a table (one line, reached by tabs) never wraps:
-                // a substitute face a little wider than the columns' gaps
-                // runs past the frame's edge instead of breaking the row.
-                let row = p.n_lines == 1 && !b.tabs.is_empty() && r.text.contains('\t');
                 runs.push(CharacterRun {
                     character_style: ck
                         .and_then(|k| styles.character.get(&k))
@@ -1401,6 +1482,19 @@ struct FontTable {
 }
 
 impl FontTable {
+    /// The text the font program's name for a glyph gives (`s.sc` is an
+    /// s), read once per glyph.
+    fn named_text(&mut self, key: u128, gid: u32) -> Option<String> {
+        let programs = &self.programs;
+        self.named
+            .entry((key, gid))
+            .or_insert_with(|| {
+                programs
+                    .get(&key)
+                    .and_then(|p| vectors::glyph_name_text(p, gid))
+            })
+            .clone()
+    }
     fn intern(&mut self, name: &str) -> u32 {
         if let Some(&i) = self.index.get(name) {
             return i;
@@ -1514,18 +1608,7 @@ fn collect_glyphs(
                     // No text from the PDF: the font program's name for the
                     // glyph (`s.sc` is an s).
                     let from_name = match (g.text.is_empty(), g.gid, t.font_key) {
-                        (true, Some(gid), Some(key)) => {
-                            let programs = &fonts.programs;
-                            fonts
-                                .named
-                                .entry((key, gid))
-                                .or_insert_with(|| {
-                                    programs
-                                        .get(&key)
-                                        .and_then(|p| vectors::glyph_name_text(p, gid))
-                                })
-                                .clone()
-                        }
+                        (true, Some(gid), Some(key)) => fonts.named_text(key, gid),
                         _ => None,
                     };
                     // A "space" with ink is a symbol its font maps to a
@@ -2251,6 +2334,199 @@ fn mark_outlined(
     }
 }
 
+/// Characters a font's text is rarely made of: a run of them is a font
+/// whose codes the PDF passes through as text (no ToUnicode, a custom
+/// encoding), not words. Brackets, %, currency, points and dashes are
+/// figures' company and do not count.
+const CODE_SYMBOLS: &str = "\"#$*+;<=>?@[\\]^_`{|}~!&";
+
+/// How a font's glyphs on a page read.
+#[derive(Default)]
+struct Legibility {
+    /// Glyphs with ink.
+    inked: u32,
+    /// Of those, with no text and no name.
+    unread: u32,
+    /// With text made of [`CODE_SYMBOLS`].
+    symbols: u32,
+    /// With a name in the font program that says what they are.
+    named: u32,
+    /// Of the named ones with text, those whose name says otherwise (a
+    /// ToUnicode that maps every code to itself).
+    contradicted: u32,
+    /// And those whose name agrees.
+    confirmed: u32,
+}
+
+impl Legibility {
+    /// Its text is not text: mostly unread, a page's worth of symbols, or
+    /// contradicted by the program's own names for its glyphs.
+    fn illegible(&self) -> bool {
+        self.unread * 2 > self.inked
+            || (self.inked >= 12 && self.symbols * 5 > self.inked)
+            || (self.contradicted >= 5 && self.contradicted > 2 * self.confirmed)
+    }
+    /// Its program names its glyphs well enough to read them all by name.
+    fn named(&self) -> bool {
+        self.named * 10 >= self.inked * 9
+    }
+}
+
+/// Text past the page's own edges: an exporter that writes each page with
+/// its whole spread puts the facing page's text outside the page box,
+/// where a viewer never shows it. Set beside that facing page, it would
+/// lie over the facing page's own text, a second time.
+fn drop_off_page_text(items: &mut Vec<Item>, w: f32, h: f32) {
+    items.retain_mut(|it| match it {
+        Item::Group(g) => {
+            drop_off_page_text(&mut g.items, w, h);
+            true
+        }
+        Item::Text(t) => {
+            t.glyphs
+                .retain(|g| g.x > -1.0 && g.x < w + 1.0 && g.y > -1.0 && g.y < h + 1.0);
+            !t.glyphs.is_empty()
+        }
+        _ => true,
+    });
+}
+
+/// Text a page draws twice, exactly over itself (an exporter that paints
+/// each text object again): the copy adds nothing to the page, and as a
+/// second frame it would leave an edit's old text standing under the new.
+fn drop_repeated_text(items: &mut Vec<Item>, seen: &mut HashSet<String>) {
+    items.retain_mut(|it| match it {
+        Item::Group(g) => {
+            drop_repeated_text(&mut g.items, seen);
+            true
+        }
+        Item::Text(t) if !t.glyphs.is_empty() => {
+            let at: Vec<(i32, i32)> = t
+                .glyphs
+                .iter()
+                .map(|g| ((g.x * 50.0).round() as i32, (g.y * 50.0).round() as i32))
+                .collect();
+            let key = format!(
+                "{:?}|{}|{:?}|{}|{:?}|{:?}|{:?}",
+                t.font_key,
+                t.text,
+                t.fill,
+                t.opacity,
+                t.blend,
+                (t.font_size_pt * 100.0).round(),
+                at
+            );
+            seen.insert(key)
+        }
+        _ => true,
+    });
+}
+
+/// Two spellings of a glyph's text the same letters: case aside (a small
+/// capital's name gives its capital), ligatures spelt out.
+fn same_letters(a: &str, b: &str) -> bool {
+    let norm = |s: &str| -> String {
+        s.chars()
+            .flat_map(|c| match c {
+                '\u{FB00}' => "ff".chars().collect::<Vec<_>>(),
+                '\u{FB01}' => "fi".chars().collect(),
+                '\u{FB02}' => "fl".chars().collect(),
+                '\u{FB03}' => "ffi".chars().collect(),
+                '\u{FB04}' => "ffl".chars().collect(),
+                '\u{FB05}' | '\u{FB06}' => "st".chars().collect(),
+                c => c.to_lowercase().collect(),
+            })
+            .collect()
+    };
+    norm(a) == norm(b)
+}
+
+/// A font whose text is not text (no ToUnicode and a custom encoding: an
+/// advertisement's fonts, set elsewhere and flattened, give control codes
+/// and punctuation for letters) is read by its program's glyph names where
+/// they name every glyph; otherwise its runs on the page keep their look as
+/// outlines. A font with the odd unnamed glyph (an ornament) stays text.
+fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
+    fn tally(items: &[Item], fonts: &mut FontTable, out: &mut HashMap<u128, Legibility>) {
+        for it in items {
+            match it {
+                Item::Group(g) => tally(&g.items, fonts, out),
+                Item::Text(t) if !t.outline => {
+                    let Some(key) = t.font_key else { continue };
+                    for g in &t.glyphs {
+                        if g.ink_top.is_none() {
+                            continue;
+                        }
+                        let name = g.gid.and_then(|gid| fonts.named_text(key, gid));
+                        let e = out.entry(key).or_default();
+                        e.inked += 1;
+                        if g.text.is_empty() && name.is_none() {
+                            e.unread += 1;
+                        }
+                        if g.text.chars().any(|c| CODE_SYMBOLS.contains(c)) {
+                            e.symbols += 1;
+                        }
+                        if let Some(n) = &name {
+                            e.named += 1;
+                            if !g.text.is_empty() {
+                                if same_letters(n, &g.text) {
+                                    e.confirmed += 1;
+                                } else {
+                                    e.contradicted += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    fn mend(
+        items: &mut [Item],
+        fonts: &mut FontTable,
+        by_name: &HashSet<u128>,
+        outlined: &HashSet<u128>,
+    ) {
+        for it in items.iter_mut() {
+            match it {
+                Item::Group(g) => mend(&mut g.items, fonts, by_name, outlined),
+                Item::Text(t) => {
+                    let Some(key) = t.font_key else { continue };
+                    if outlined.contains(&key) {
+                        t.outline = true;
+                    } else if by_name.contains(&key) {
+                        for g in t.glyphs.iter_mut() {
+                            if let Some(n) = g.gid.and_then(|gid| fonts.named_text(key, gid)) {
+                                if g.ink_top.is_some() {
+                                    g.text = n;
+                                }
+                            }
+                        }
+                        t.text = t.glyphs.iter().map(|g| g.text.as_str()).collect();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut counts = HashMap::new();
+    tally(items, fonts, &mut counts);
+    let (mut by_name, mut outlined) = (HashSet::new(), HashSet::new());
+    for (k, l) in counts {
+        if l.illegible() {
+            if l.named() {
+                by_name.insert(k);
+            } else {
+                outlined.insert(k);
+            }
+        }
+    }
+    if !by_name.is_empty() || !outlined.is_empty() {
+        mend(items, fonts, &by_name, &outlined);
+    }
+}
+
 /// Debug: the page's item tree, one line per item.
 fn dump_items(items: &[Item], depth: usize) {
     for it in items {
@@ -2400,4 +2676,122 @@ fn para_lines(blocks: &[&Block], styles: &Styles) -> Vec<(u32, String, String)> 
         join_next = b.paras.last().is_some_and(|p| p.open_end);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vectors::ir::{GlyphPos, TextItem};
+
+    fn run(text: &str, key: u128) -> Item {
+        let glyphs = text
+            .chars()
+            .enumerate()
+            .map(|(i, c)| GlyphPos {
+                text: c.to_string(),
+                x: i as f32 * 5.0,
+                y: 100.0,
+                advance: Some(5.0),
+                size: 10.0,
+                hscale: 1.0,
+                ink_top: (c != ' ').then_some(0.7),
+                ink_bottom: (c != ' ').then_some(0.0),
+                gid: None,
+            })
+            .collect();
+        Item::Text(TextItem {
+            bbox: [0.0, 90.0, 5.0 * text.chars().count() as f32, 12.0],
+            text: text.to_string(),
+            font_name: None,
+            font_size_pt: 10.0,
+            fill: None,
+            outlines: Vec::new(),
+            rotated: false,
+            opacity: 1.0,
+            blend: None,
+            glyphs,
+            face: None,
+            font_key: Some(key),
+            outline: false,
+            turn: None,
+        })
+    }
+
+    fn outlined(items: &[Item]) -> Vec<bool> {
+        items
+            .iter()
+            .map(|i| match i {
+                Item::Text(t) => t.outline,
+                _ => false,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_font_whose_codes_pass_through_as_punctuation_keeps_its_look() {
+        // An advertisement's font with no ToUnicode: its letters arrive as
+        // the codes' ASCII, punctuation for most of them.
+        let mut items = vec![
+            run("8\" -+= 1+ ?+;1 2\"+= 1 $)28", 1),
+            run("Fast and easy to install, fits all showers", 2),
+            run("(12.3) 40,744 92.05% £29.95 – 1/2", 3),
+        ];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        assert_eq!(outlined(&items), vec![true, false, false]);
+    }
+
+    #[test]
+    fn spellings_of_one_glyph_agree_across_case_and_ligatures() {
+        assert!(same_letters("A", "a"));
+        assert!(same_letters("fi", "\u{FB01}"));
+        assert!(!same_letters("H", "8"));
+    }
+
+    #[test]
+    fn text_drawn_twice_over_itself_is_read_once() {
+        let mut items = vec![run("Revenue", 1), run("Revenue", 1), run("Revenue", 2)];
+        drop_repeated_text(&mut items, &mut HashSet::new());
+        // The copy goes; the same words in another font are their own.
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn the_facing_page_text_a_page_carries_is_not_its_own() {
+        // A page 100 wide; its spread's left page's text at x < 0.
+        let mut items = vec![run("Revenue", 1), run("Revenue", 1)];
+        if let Item::Text(t) = &mut items[1] {
+            for g in t.glyphs.iter_mut() {
+                g.x -= 612.0;
+            }
+        }
+        drop_off_page_text(&mut items, 100.0, 200.0);
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn a_short_run_of_symbols_stays_text() {
+        // Too few glyphs to judge (a heading's ampersand).
+        let mut items = vec![run("& HEARTY", 1)];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        assert_eq!(outlined(&items), vec![false]);
+    }
+
+    #[test]
+    fn a_font_of_glyphs_without_text_or_names_keeps_its_look() {
+        let mut items = vec![run("abcdefgh", 1), run("abcdefgh", 2)];
+        if let Item::Text(t) = &mut items[0] {
+            for g in t.glyphs.iter_mut().take(6) {
+                g.text.clear();
+            }
+        }
+        if let Item::Text(t) = &mut items[1] {
+            // An ornament now and then stays in its text.
+            t.glyphs[3].text.clear();
+        }
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        assert_eq!(outlined(&items), vec![true, false]);
+    }
 }

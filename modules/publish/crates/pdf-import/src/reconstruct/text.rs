@@ -36,6 +36,9 @@ pub struct Line {
     pub x1: f32,
     /// The largest em size on the line.
     pub size: f32,
+    /// It ends short because something the text wraps round stands beside
+    /// it ([`find_wraps`]): its break is the obstacle's, not the measure's.
+    pub cut_short: bool,
 }
 
 impl Line {
@@ -49,6 +52,7 @@ impl Line {
             x1: if blank { f32::MIN } else { g.x + g.adv },
             size: g.size,
             glyphs: vec![g],
+            cut_short: false,
         }
     }
     fn push(&mut self, g: Glyph) {
@@ -145,7 +149,14 @@ impl Line {
     }
     /// The width of the line's first word (to its first space).
     fn first_word_width(&self) -> f32 {
-        let mut end = self.x0;
+        // From its first ink (a line beside a wrap is read from the
+        // column's edge: `x0` is not where its text starts).
+        let start = self
+            .glyphs
+            .iter()
+            .find(|g| !g.text.trim().is_empty())
+            .map_or(self.x0, |g| g.x);
+        let mut end = start;
         let mut prev_end = None::<f32>;
         for g in &self.glyphs {
             if g.text.trim().is_empty() {
@@ -164,7 +175,7 @@ impl Line {
             end = g.x + g.adv;
             prev_end = Some(end);
         }
-        end - self.x0
+        end - start
     }
 }
 
@@ -336,13 +347,29 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
         let (x, n) = near(&decimals, d?)?;
         (n > near(&right, b).map_or(0, |r| r.1)).then_some(x)
     };
+    // A cell of figures (digits, signs, brackets, a dash for nil): a column
+    // of them that lines up both ways is set right.
+    let figures = |l: &Line, i0: usize, b: f32| -> bool {
+        let t: String = l.glyphs[i0..]
+            .iter()
+            .take_while(|g| g.x < b - 0.01)
+            .map(|g| g.text.as_str())
+            .collect();
+        let t = t.trim();
+        !t.is_empty()
+            && t.chars()
+                .all(|c| c.is_ascii_digit() || ".,()-–—%£$€+ ".contains(c))
+    };
     let used: Vec<f32> = lines
         .iter()
         .flat_map(|l| cells_dec(l).into_iter().skip(1))
         .filter_map(|(_, _, b, d)| decimal_for(b, d))
         .collect();
     let mut cols: Vec<TabCol> = Vec::new();
-    let mut add = |col: TabCol| {
+    // A nil dash is its column's (set centred or loose under figures):
+    // read after the figures, it joins the column it sits in.
+    let mut dashes: Vec<(f32, f32, f32)> = Vec::new();
+    let add = |cols: &mut Vec<TabCol>, col: TabCol| {
         if !cols
             .iter()
             .any(|c| c.right == col.right && c.decimal == col.decimal && (c.x - col.x).abs() <= 1.5)
@@ -351,13 +378,25 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
         }
     };
     for l in lines {
-        for (_, a, b, d) in cells_dec(l).into_iter().skip(1) {
+        for (i0, a, b, d) in cells_dec(l).into_iter().skip(1) {
+            let t: String = l.glyphs[i0..]
+                .iter()
+                .take_while(|g| g.x < b - 0.01)
+                .map(|g| g.text.as_str())
+                .collect();
+            if matches!(t.trim(), "–" | "—" | "-") {
+                dashes.push((a, b, l.size));
+                continue;
+            }
             if let Some(x) = decimal_for(b, d) {
-                add(TabCol {
-                    x,
-                    right: false,
-                    decimal: true,
-                });
+                add(
+                    &mut cols,
+                    TabCol {
+                        x,
+                        right: false,
+                        decimal: true,
+                    },
+                );
                 continue;
             }
             // A dash or a figure without a point beside a decimal column
@@ -366,11 +405,14 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
                 .iter()
                 .find(|&&x| x > a - 0.6 * l.size && x < b + 0.6 * l.size)
             {
-                add(TabCol {
-                    x,
-                    right: false,
-                    decimal: true,
-                });
+                add(
+                    &mut cols,
+                    TabCol {
+                        x,
+                        right: false,
+                        decimal: true,
+                    },
+                );
                 continue;
             }
             let r = right
@@ -382,7 +424,7 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
                 .filter(|c| (c.0 - a).abs() <= 1.5)
                 .max_by_key(|c| c.1);
             let col = match (r, lf) {
-                (Some(r), Some(lf)) if r.1 > lf.1 => TabCol {
+                (Some(r), Some(lf)) if r.1 > lf.1 || r.1 == lf.1 && figures(l, i0, b) => TabCol {
                     x: r.0,
                     right: true,
                     decimal: false,
@@ -403,7 +445,30 @@ pub fn tab_columns(lines: &[Line]) -> Vec<TabCol> {
                     decimal: false,
                 },
             };
-            add(col);
+            add(&mut cols, col);
+        }
+    }
+    for (a, b, size) in dashes {
+        // Figures run left from a right stop, right from a left one, both
+        // ways from a point.
+        let under = |c: &TabCol| {
+            if c.decimal {
+                (c.x - 0.5 * (a + b)).abs() <= 1.5 * size
+            } else if c.right {
+                c.x >= a - 0.6 * size && c.x <= b + 2.5 * size
+            } else {
+                c.x <= b + 0.6 * size && c.x >= a - 2.5 * size
+            }
+        };
+        if !cols.iter().any(under) {
+            add(
+                &mut cols,
+                TabCol {
+                    x: b,
+                    right: true,
+                    decimal: false,
+                },
+            );
         }
     }
     // In order along the line: a right column by where its cells start.
@@ -782,6 +847,8 @@ pub struct Para {
     /// Its last line ends where the frame does and without closing
     /// punctuation: it may go on in another frame.
     pub open_end: bool,
+    /// Its last line ends a sentence (or an article: an end mark).
+    pub closed: bool,
     /// Its first line looks like a continuation (no indent where the
     /// style indents, a lowercase start).
     pub open_start: bool,
@@ -826,6 +893,9 @@ pub struct Block {
     pub turn: f32,
     /// Its tab columns (tabbed rows: a table set with tabs).
     pub tabs: Vec<TabCol>,
+    /// What its lines wrap round, as they saw it ([`find_wraps`]): per
+    /// obstacle, a box per line `[left, top, right, bottom]`.
+    pub wraps: Vec<Vec<[f32; 4]>>,
 }
 
 /// Group the page's lines into blocks (frames), in paint order.
@@ -975,7 +1045,23 @@ const CLOSERS: &[char] = &[
 /// alignment): a line that starts with one starts left of its column.
 const HANGERS: &[char] = &['“', '"', '‘', '\'', '„', '«', '»', '-', '–', '—', '(', '['];
 
-pub fn build_block(mut lines: Vec<Line>) -> Block {
+pub fn build_block(lines: Vec<Line>) -> Block {
+    build_block_among(lines, &[])
+}
+
+/// A line's box: its ink's extent across its em, `[left, top, right, bottom]`.
+pub fn line_box(l: &Line) -> [f32; 4] {
+    [
+        l.x0,
+        l.baseline - 0.8 * l.size,
+        l.x1,
+        l.baseline + 0.2 * l.size,
+    ]
+}
+
+/// [`build_block`] among the page's other lines (`others`, their boxes):
+/// what this block's lines wrap round stands where no other text does.
+pub fn build_block_among(mut lines: Vec<Line>, others: &[[f32; 4]]) -> Block {
     // Hanging punctuation: a line opening with a quote mark sits left of
     // the column by about the mark's width. Its column edge is where its
     // first letter would sit without the hang: the block's common left.
@@ -1028,6 +1114,11 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
             .count()
             * 3
             >= body_lines.len() * 2;
+    let wraps = if tabs.is_empty() {
+        find_wraps(&mut lines, left, right, justified_block, others)
+    } else {
+        Vec::new()
+    };
 
     // Split into paragraphs.
     let mut groups: Vec<Vec<usize>> = Vec::new();
@@ -1149,7 +1240,7 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
     for g in &groups {
         for w in g.windows(2) {
             let (p, l) = (&lines[w[0]], &lines[w[1]]);
-            if !measured(p) {
+            if !measured(p) || p.cut_short {
                 continue;
             }
             if p.last_char().is_some_and(|c| is_hyphen(&c.to_string())) {
@@ -1247,7 +1338,184 @@ pub fn build_block(mut lines: Vec<Line>) -> Block {
         optical,
         turn: 0.0,
         tabs,
+        wraps,
     }
+}
+
+/// Runs of at least `min` consecutive lines that `extend` holds for and
+/// that `seed` holds for somewhere: a clear case starts a run, weaker ones
+/// beside it carry it on (a round picture cuts into its first and last
+/// lines by a little).
+fn runs_of(seed: &[bool], extend: &[bool], min: usize) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < extend.len() {
+        if extend[i] {
+            let j = (i..extend.len()).take_while(|&k| extend[k]).last().unwrap();
+            if j + 1 - i >= min && (i..=j).any(|k| seed[k]) {
+                out.push((i, j));
+            }
+            i = j + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Lines beside something the column's text wraps round (a picture it
+/// steps around): three or more lines in a row that start well in from the
+/// block's left edge, or that end well short of its right (a justified
+/// column's lines short of the measure, a ragged one's breaking where the
+/// next word would still have fit). Each run is the obstacle as its lines
+/// saw it: per line, a box over the band the engine measures a wrap across
+/// (the line above's baseline down to its own) from the column's edge to
+/// where the line starts, or to where it could have gone on. The lines are
+/// then read as if nothing stood beside them (one pushed in starts at the
+/// edge; one cut short, justified, reaches the measure, ragged, has a soft
+/// break), so their paragraphs and alignment are the column's.
+fn find_wraps(
+    lines: &mut [Line],
+    left: f32,
+    right: f32,
+    justified: bool,
+    others: &[[f32; 4]],
+) -> Vec<Vec<[f32; 4]>> {
+    // An obstacle's room holds no other text: the space beside a column
+    // that another column's lines fill is that column, not a picture.
+    let free = |boxes: &[[f32; 4]]| {
+        boxes.iter().all(|b| {
+            others.iter().all(|o| {
+                o[2] <= b[0] + 0.5 || o[0] >= b[2] - 0.5 || o[3] <= b[1] + 0.5 || o[1] >= b[3] - 0.5
+            })
+        })
+    };
+    let n = lines.len();
+    if n < 3 {
+        return Vec::new();
+    }
+    let lead = typical_lead(lines).unwrap_or(1.2 * lines[0].size);
+    // Inside each line's band by a sliver, so no box reaches the band of the
+    // line above or below.
+    let band = |lines: &[Line], i: usize| -> (f32, f32) {
+        let d = (0.12 * lead).min(1.0);
+        let top = if i == 0 {
+            lines[0].baseline - lead
+        } else {
+            lines[i - 1].baseline
+        };
+        (top + d, lines[i].baseline - d)
+    };
+    let mut out = Vec::new();
+    // Pushed in from the left, in a column set from its left edge.
+    let at_left = lines
+        .iter()
+        .filter(|l| (l.x0 - left).abs() < 0.3 * l.size)
+        .count();
+    if at_left * 5 >= n * 2 {
+        let pushed: Vec<bool> = lines
+            .iter()
+            .map(|l| l.size < 14.0 && l.x0 - left > 1.2 * l.size)
+            .collect();
+        let nudged: Vec<bool> = lines
+            .iter()
+            .map(|l| l.size < 14.0 && l.x0 - left > 0.25 * l.size)
+            .collect();
+        for (a, b) in runs_of(&pushed, &nudged, 3) {
+            let em = lines[a].size;
+            let gaps: Vec<f32> = (a..=b).map(|i| lines[i].x0 - left).collect();
+            // An even indent of a few ems is a passage or a hung list.
+            if gaps.iter().all(|g| (g - gaps[0]).abs() < 0.6) && gaps[0] < 3.0 * em {
+                continue;
+            }
+            // A centred passage moves both ends alike.
+            let centred = (a..=b)
+                .filter(|&i| ((lines[i].x0 - left) - (right - lines[i].x1)).abs() < 0.8 * em)
+                .count();
+            if centred * 2 >= b + 1 - a {
+                continue;
+            }
+            let boxes: Vec<[f32; 4]> = (a..=b)
+                .map(|i| {
+                    let (t, bt) = band(lines, i);
+                    [left - 1.0, t, lines[i].x0 - 0.25, bt]
+                })
+                .collect();
+            if !free(&boxes) {
+                continue;
+            }
+            for l in lines[a..=b].iter_mut() {
+                l.x0 = left;
+            }
+            out.push(boxes);
+        }
+    }
+    // Cut short on the right: clearly (an em and a half short), or by a
+    // little beside a clear one.
+    let short_by = |i: usize, by: f32| -> bool {
+        let l = &lines[i];
+        if l.size >= 14.0 || right - l.x1 < by * l.size {
+            return false;
+        }
+        justified
+            || lines
+                .get(i + 1)
+                .is_some_and(|nx| l.x1 + 0.25 * l.size + nx.first_word_width() < right - 0.25)
+    };
+    // A line that ends a sentence may end a paragraph: short for that, it
+    // says nothing of an obstacle (it carries a run, never starts one).
+    let ended: Vec<bool> = lines
+        .iter()
+        .map(|l| l.last_char().is_some_and(|c| CLOSERS.contains(&c)))
+        .collect();
+    let ends = |i: usize| ended[i];
+    let cut: Vec<bool> = (0..n).map(|i| short_by(i, 1.5) && !ends(i)).collect();
+    let nicked: Vec<bool> = (0..n).map(|i| short_by(i, 0.4)).collect();
+    for (a, b) in runs_of(&cut, &nicked, 3) {
+        // Justified, a line runs to the obstacle; ragged, the obstacle
+        // stood between its end and the end of the next word.
+        let edge = |i: usize| {
+            let l = &lines[i];
+            if justified {
+                l.x1 + 0.3
+            } else {
+                let next = lines.get(i + 1).map_or(l.size, |nx| nx.first_word_width());
+                l.x1 + 0.5 * (0.25 * l.size + next)
+            }
+        };
+        let mut boxes = Vec::new();
+        for i in a..=b {
+            // A sentence's end takes its neighbours' room.
+            let e = if ends(i) {
+                let near = [i.checked_sub(1), Some(i + 1)]
+                    .into_iter()
+                    .flatten()
+                    .filter(|&j| j >= a && j <= b && !ends(j))
+                    .map(edge)
+                    .fold(f32::MIN, f32::max);
+                if near > f32::MIN {
+                    near.max(edge(i))
+                } else {
+                    edge(i)
+                }
+            } else {
+                edge(i)
+            };
+            let (t, bt) = band(lines, i);
+            boxes.push([e.min(right), t, right + 1.0, bt]);
+        }
+        if !free(&boxes) {
+            continue;
+        }
+        for l in lines[a..=b].iter_mut() {
+            l.cut_short = true;
+            if justified {
+                l.x1 = right;
+            }
+        }
+        out.push(boxes);
+    }
+    out
 }
 
 /// Where the frame starts: at the block's left, or around its centre (or
@@ -1414,7 +1682,8 @@ fn build_para(
                     Align::Left | Align::Justify => l.x1 - left,
                     _ => l.width(),
                 };
-                let fits = filled + space + ls[li + 1].first_word_width() < width - 0.25;
+                let fits =
+                    !l.cut_short && filled + space + ls[li + 1].first_word_width() < width - 0.25;
                 // Display type (a heading of a few lines) breaks where its
                 // designer broke it: those breaks are kept as breaks, so a
                 // face of other widths cannot move them.
@@ -1551,6 +1820,7 @@ fn build_para(
         chars,
         dominant,
         open_end,
+        closed: ends_punct,
         open_start,
         first_in_frame: gi == 0,
         hyphenated,
@@ -1719,6 +1989,134 @@ mod tests {
                 "Gross profit\t343.7"
             ]
         );
+    }
+
+    /// `n` characters of words, ending in a letter.
+    fn words(n: usize) -> String {
+        let mut t: String = "abcd efgh ijkl mnop qrst uvwx yzab "
+            .repeat(n / 35 + 1)
+            .chars()
+            .take(n)
+            .collect();
+        if t.ends_with(' ') {
+            t.pop();
+            t.push('z');
+        }
+        t
+    }
+
+    #[test]
+    fn lines_cut_short_by_a_picture_on_the_right_keep_their_paragraph() {
+        // A ragged column 290 wide; three lines beside a picture end at 145
+        // although the next word would have fit.
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        for (k, y) in [112.0, 124.0, 136.0].into_iter().enumerate() {
+            g.extend(set(&words(29 - k), 0.0, y, 0));
+        }
+        g.extend(set(&words(58), 0.0, 148.0, 0));
+        g.extend(set("the end.", 0.0, 160.0, 0));
+        let block = build_block(lines(g, &[]));
+        assert_eq!(block.paras.len(), 1, "{:?}", texts(&block));
+        assert!(
+            !texts(&block)[0].contains('\u{2028}'),
+            "soft breaks beside the picture: {:?}",
+            texts(&block)
+        );
+        assert_eq!(block.wraps.len(), 1);
+        let boxes = &block.wraps[0];
+        assert_eq!(boxes.len(), 3);
+        // From where each line could have gone on to past the edge, inside
+        // the band from the line above's baseline to its own.
+        assert!(
+            boxes
+                .iter()
+                .all(|b| b[0] > 135.0 && b[0] < 170.0 && b[2] > 290.0),
+            "{boxes:?}"
+        );
+        assert!(boxes[0][1] > 100.0 && boxes[0][3] < 112.0, "{:?}", boxes[0]);
+    }
+
+    #[test]
+    fn lines_pushed_in_by_a_picture_on_the_left_start_at_the_column_edge() {
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        // Beside a round picture: in by 60, 80 and 70, each running to the edge.
+        for (x, y) in [(60.0, 112.0), (80.0, 124.0), (70.0, 136.0)] {
+            g.extend(set(&words(((290.0 - x) / 5.0) as usize), x, y, 0));
+        }
+        g.extend(set(&words(58), 0.0, 148.0, 0));
+        g.extend(set("the end.", 0.0, 160.0, 0));
+        let block = build_block(lines(g, &[]));
+        assert_eq!(
+            block.paras.len(),
+            1,
+            "no first-line indents: {:?}",
+            texts(&block)
+        );
+        assert_eq!(block.paras[0].left_indent, 0.0);
+        assert_eq!(block.wraps.len(), 1);
+        let ends: Vec<f32> = block.wraps[0].iter().map(|b| b[2]).collect();
+        assert!(
+            ends.iter()
+                .zip([60.0, 80.0, 70.0])
+                .all(|(e, x)| (e - x).abs() < 0.5),
+            "each box ends where its line starts: {ends:?}"
+        );
+    }
+
+    #[test]
+    fn short_lines_beside_another_column_are_not_a_wrap() {
+        // The same short lines, but another column's text stands where the
+        // obstacle would be.
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        for (k, y) in [112.0, 124.0, 136.0].into_iter().enumerate() {
+            g.extend(set(&words(29 - k), 0.0, y, 0));
+        }
+        g.extend(set(&words(58), 0.0, 148.0, 0));
+        let others = [[200.0, 110.0, 280.0, 126.0]];
+        let block = build_block_among(lines(g, &[]), &others);
+        assert!(block.wraps.is_empty());
+    }
+
+    #[test]
+    fn an_even_indent_is_not_a_wrap() {
+        let mut g = Vec::new();
+        g.extend(set(&words(58), 0.0, 100.0, 0));
+        for y in [112.0, 124.0, 136.0] {
+            g.extend(set(&words(54), 20.0, y, 0));
+        }
+        let block = build_block(lines(g, &[]));
+        assert!(block.wraps.is_empty());
+    }
+
+    #[test]
+    fn a_column_of_one_figure_repeated_is_one_stop_with_its_dashes() {
+        // "(0.1)" in every row lines up by start, end and point alike; the
+        // dashes in the same column sit a little apart from all three.
+        let mut g = Vec::new();
+        for (k, y) in [100.0, 112.0, 124.0, 136.0].into_iter().enumerate() {
+            g.extend(set("Row label", 0.0, y, 0));
+            if k % 2 == 0 {
+                g.extend(set_right("(0.1)", 150.0, y, 0));
+            } else {
+                g.extend(set_right("–", 140.0, y, 0));
+            }
+            g.extend(set_right("12.0", 250.0, y, 0));
+        }
+        let block = build_block(lines(g, &[]));
+        assert_eq!(
+            block.tabs.len(),
+            2,
+            "{:?}",
+            block
+                .tabs
+                .iter()
+                .map(|t| (t.x, t.right, t.decimal))
+                .collect::<Vec<_>>()
+        );
+        assert!(block.tabs.iter().all(|t| t.right || t.decimal));
     }
 
     #[test]

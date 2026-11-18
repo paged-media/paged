@@ -320,8 +320,8 @@ pub struct GlyphPos {
     /// Where the ink ends below that, in ems above the baseline (negative
     /// below it).
     pub ink_bottom: Option<f32>,
-    /// The glyph's id in its font program, kept when the PDF gives it no
-    /// text: the program's name for it may say what it is.
+    /// The glyph's id in its font program: the program's name for it may
+    /// say what it is where the PDF's text does not.
     pub gid: Option<u32>,
 }
 
