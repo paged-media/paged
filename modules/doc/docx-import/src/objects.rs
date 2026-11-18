@@ -990,12 +990,16 @@ pub(crate) fn alternate_content(
     diagrams: &mut Vec<DiagramDrawing>,
     other_drawings: &mut u32,
 ) {
+    use paged_ooxml::ooxmlsdk::common::XmlNamespace;
     use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_markup_compatibility_2006::AlternateContentChoice as B;
     const KNOWN: &[&str] = &["wps", "wp14", "a14", "w14"];
+    // `Requires` arrives resolved to namespaces (ooxmlsdk >= 0.14): a prefix
+    // bound to a known namespace, or a known prefix left undeclared, is
+    // `Known`, compared by its canonical prefix; anything else is `Raw`.
+    let understood =
+        |r: &XmlNamespace| matches!(r, XmlNamespace::Known(ns) if KNOWN.contains(&ns.prefix()));
     let choice = ac.alternate_content_choice.iter().find_map(|b| match b {
-        B::Choice(c) if c.requires.split_whitespace().all(|r| KNOWN.contains(&r)) => {
-            Some((&c.xml_children, false))
-        }
+        B::Choice(c) if c.requires.iter().all(understood) => Some((&c.xml_children, false)),
         _ => None,
     });
     let branch = choice.or_else(|| {

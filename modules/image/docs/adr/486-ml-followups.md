@@ -51,3 +51,33 @@ has no action slot for this (a new action would be a contract change), and a pay
   them on open.
 - Tests: `test/ml-followups.spec.ts` (the SDK `fakeMlProvider`: one face in the centre third, five
   points), `test/ml-taskbar.dom.test.tsx`, `test/ml-section.dom.test.tsx`.
+
+## Amendment — 2026-11-18: the task bar is the image context's
+
+The session keeps the image and its selection after the `rasterImage` context closes (the Image
+panel and scripts still read them), and the bar drew whenever a selection existed. So after
+Commit and Escape it stayed on the page, at screen size, under where the selection was: the
+next frame drag landed on its prompt (it stops pointer events, so nothing was drawn and the
+prompt took focus) and every key after that went into the field. The decision changes as
+follows; everything else stands.
+
+- **The bar draws only while the context is open on the image's frame.** The context's
+  `onEnter` names the frame and `onExit` clears it (`makeTaskBarOverlay`'s `setEnteredFrame`);
+  the bar needs that frame to be the session's source, a selection with an area and the fit.
+  Every way out of the context (Escape, a commit, a press outside, another tool; editor
+  [ADR 1214](../../../../apps/editor/docs/adr/1214-one-way-out-of-a-context.md)) runs `onExit`,
+  so each takes the bar with it. The selection itself is kept as before.
+- **Focus inside the bar goes back to the canvas when the bar goes** (editor
+  [ADR 1206](../../../../apps/editor/docs/adr/1206-focus-returns-to-the-opener.md)): to the
+  focusable surface the overlay layer sits in, the canvas viewport, never to the page. The bar's
+  root ref does it as it is removed.
+- **Escape in the prompt is the field's rung of the ladder** (editor
+  [ADR 1207](../../../../apps/editor/docs/adr/1207-one-escape.md)). The arbiter defers a focused
+  field's keys, so the press used to do nothing at all. It now hands focus back to the canvas
+  and the context stays; the next Escape leaves the context and the bar goes with it. Every other
+  key stays the field's.
+
+Tests: `test/ml-taskbar.dom.test.tsx` (the context gate, the hand-back, the prompt's Escape) and
+the journey `apps/editor/apps/canvas/tests/journey/plugins/image-taskbar.journey.spec.ts` (enter,
+select, Escape in the prompt, commit, Escape, and a frame drawn where the bar was). The image
+film no longer deselects before it leaves the context.

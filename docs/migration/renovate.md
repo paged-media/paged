@@ -125,13 +125,15 @@ their paths, while this job sees every workspace and runs daily.
 
 ## bun audit
 
-`bun audit` reads `/bun.lock` and needs no install. It reports one advisory, only cleared
-by Tailwind 4 (held, see npm-latest.md), build-time only (the braces advisory under the same
-chain is no longer reported, and its entry is gone):
+`bun audit` reads `/bun.lock` and needs no install. It reports two advisories, both
+build-time only: one only cleared by Tailwind 4 (held, see npm-latest.md; the braces
+advisory under the same chain is no longer reported, and its entry is gone), and picomatch's,
+which no release fixes yet (2026-11-18):
 
 | Advisory | Package | Severity | Allowed until |
 |---|---|---|---|
 | GHSA-rj75-hqrm-r3gf | postcss-selector-parser (tailwindcss 3 > postcss-nested) | moderate | 2026-12-31 |
+| GHSA-fc5q-39xc-vjpf | picomatch (vite, tinyglobby, tailwindcss 3 > fast-glob, micromatch, chokidar; no fixed release) | high | 2026-12-18 |
 
 `tooling/supply-chain/bun-audit.mjs` fails on an advisory the list does not name, on a listed
 one past its expiry, and on a listed one bun no longer reports (delete the entry in the change

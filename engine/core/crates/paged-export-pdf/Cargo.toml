@@ -61,7 +61,9 @@ paged-test-resources.workspace = true
 # engine's own CPU raster of the same page.
 paged-renderer = { path = "../paged-renderer", features = ["cpu"] }
 anyhow = { workspace = true }
-lopdf = "0.45"
+# The tests only re-parse what the writer wrote; lopdf's default features add
+# chrono (PDF date helpers) and rayon, which they never use.
+lopdf = { version = "0.45", default-features = false }
 serde_json = "1"
 paged-scene = { path = "../paged-scene" }
 paged-gen = { path = "../paged-gen" }

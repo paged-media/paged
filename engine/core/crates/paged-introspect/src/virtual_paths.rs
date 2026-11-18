@@ -93,6 +93,9 @@ const RENDERING_INTENTS: &[&str] = &[
     "RelativeColorimetric",
     "AbsoluteColorimetric",
 ];
+/// Open (engine ADR 1315): the policy is carried, not interpreted, and its
+/// spellings are not settled — IDML writes `PreserveEmbeddedProfiles` and
+/// `ColorPolicyOff`, which `setColorSettings` passes through as given.
 const RGB_POLICIES: &[&str] = &["PreserveEmbedded", "ConvertToWorking", "Off"];
 const OPACITY_MASK_TYPES: &[&str] = &["luminosity", "alpha"];
 
@@ -447,7 +450,7 @@ pub const VIRTUAL_PATHS: &[VirtualPath] = &[
     v(
         "section",
         "numberingStyle",
-        enum_open(PAGE_NUMBER_STYLES).idml(idml![child(Section, PageNumberStyle)]),
+        enum_(PAGE_NUMBER_STYLES).idml(idml![child(Section, PageNumberStyle)]),
         "editSection",
         "numberingStyle",
     ),
