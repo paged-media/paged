@@ -61,6 +61,23 @@ export const chrome = {
   panelBg: "var(--chrome-panel-bg, #fafafa)",
 } as const;
 
+/** Paper: the ground of document content a panel shows with its own
+ *  colours (a sheet's cells in the Grid panel), the same in every theme,
+ *  as the page is. What has no colour of its own is drawn with these, so
+ *  a stored dark ink never lands on the dark chrome. */
+export const paper = {
+  /** The ground. */
+  surface: "var(--paper, #ffffff)",
+  /** Text without a colour of its own. */
+  ink: "var(--paper-fg, #171717)",
+  /** Rules: gridlines. */
+  rule: "var(--paper-rule, #d4d4d8)",
+  /** The selection's outline. */
+  selection: "var(--paper-selection, hsl(263 73% 43%))",
+  /** The selection's translucent wash. */
+  selectionWash: "var(--paper-selection-wash, rgba(91, 30, 190, 0.12))",
+} as const;
+
 /** The status signals: the outcome of an action, a finding, a state. */
 export const status = {
   /** Done, valid, approved. */

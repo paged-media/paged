@@ -150,6 +150,18 @@
   --overlay-halo: #ffffff;
   --overlay-halo-edge: #000000;
 
+  /* ── paper — document content inside a panel ───────────────── */
+  /* Content shown with its own colours (a sheet's cells in the Grid
+     panel: the fills and font colours the workbook stores) sits on
+     paper, as it does on the page, in every theme: a stored dark ink
+     never lands on the dark chrome. What has no colour of its own (text,
+     rules, the selection) takes these. .dark does not redefine them. */
+  --paper: #ffffff;
+  --paper-fg: #171717; /* text without a colour of its own: 17.9:1 */
+  --paper-rule: #d4d4d8; /* gridlines (decorative) */
+  --paper-selection: hsl(263 73% 43%); /* the accent on paper: 8.9:1 */
+  --paper-selection-wash: rgba(91, 30, 190, 0.12);
+
   /* ── type ──────────────────────────────────────────────────── */
   --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --font-mono:
@@ -346,6 +358,10 @@
   --overlay-target: #9e0000;
   --overlay-halo: #ffffff;
   --overlay-halo-edge: #000000;
+
+  /* paper: ink 7:1 or more, rules 4.5:1 */
+  --paper-fg: #000000;
+  --paper-rule: #6e6e76;
 }
 
 [data-paged-editor].dark[data-contrast="more"] {
@@ -405,4 +421,8 @@
   --overlay-target: #ff7070;
   --overlay-halo: #000000;
   --overlay-halo-edge: #ffffff;
+
+  /* paper stays paper: the light values, as in high-contrast light */
+  --paper-fg: #000000;
+  --paper-rule: #6e6e76;
 }

@@ -365,8 +365,8 @@ export interface FrameWindow {
 
 /** Tunable geometry for `gridSceneToSvg` — paint-time constants the panel
  *  picks (token-resolved colours, text padding/baseline). All defaults
- *  are sober publishing values; the panel overrides colours from the
- *  token layer. */
+ *  are sober publishing values for paper; the panel passes the paper
+ *  tokens (`--paper-*`). */
 export interface GridSvgOptions {
   /** Left inset of cell text from its column's leading edge (pt). */
   pad: number;
@@ -402,8 +402,10 @@ export interface GridSvgOptions {
   dataBarOpacity: number;
 }
 
-/** Sober defaults; the panel overrides the colour fields from the token
- *  layer (`--pg-*`) so the grid reads native in both themes. */
+/** Sober defaults, drawn for paper: the cells carry the workbook's own
+ *  fills and font colours, so the grid is always drawn on a paper ground
+ *  (the page, or the Grid panel's paper surface), never on the chrome.
+ *  The panel passes the paper tokens (`--paper-*`) for these colours. */
 export const DEFAULT_GRID_SVG_OPTIONS: GridSvgOptions = {
   pad: 3,
   baseline: 11,

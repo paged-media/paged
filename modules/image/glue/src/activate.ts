@@ -53,7 +53,7 @@ import de from "../locales/de.json" with { type: "json" };
 
 import manifest from "../manifest.json";
 
-import { createImageSession } from "./session";
+import { createImageSession, elementIdOf } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { contributeMasking } from "./masking-contrib";
@@ -456,11 +456,13 @@ export function activate(host: BundleHost): BundleHandle {
     host.log.debug("type overlay: the host has no overlay layer", err);
   }
 
-  // WP8.2 — the contextual task bar over a selection (image ADR 486).
+  // WP8.2 — the contextual task bar over a selection (image ADR 486), while
+  // the image's context is open on its frame (the context's hooks below).
+  const taskBar = makeTaskBarOverlay(host, session, PANEL_ID);
   try {
     host.contribute.overlay({
       id: "media.paged.image.overlay.taskBar",
-      render: makeTaskBarOverlay(host, session, PANEL_ID),
+      render: taskBar.render,
       z: 150,
     });
   } catch (err) {
@@ -2326,9 +2328,13 @@ export function activate(host: BundleHost): BundleHandle {
       const source = session.sourceElement() as { id?: unknown } | null;
       const entered = ctx.id as unknown as { id?: unknown };
       if (source?.id !== entered.id) void session.ingestSelection();
+      taskBar.setEnteredFrame(elementIdOf(ctx.id));
     },
     onExit: () => {
       host.log.debug("rasterImage context exited");
+      // The selection's task bar is the context's: it goes with it, and
+      // focus in its prompt goes back to the canvas (image ADR 486).
+      taskBar.setEnteredFrame(null);
       // An open transform box does not outlive the context.
       host.transformBox.active()?.cancel();
       workspaceSub.setContextActive(false);
