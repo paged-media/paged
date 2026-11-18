@@ -59,9 +59,15 @@ function harness(
     pageRects: new Map([["pg1", { x: 10, y: 20, width: 200, height: 100 }]]),
   } as unknown as OverlayProps;
   // The overlay layer sits inside the canvas, a focusable surface (the
-  // viewport, editor ADR 234).
+  // viewport, editor ADR 234). What the canvas hears of a key the bar let
+  // through is recorded: the editor's own key listeners come after it.
+  const heard: string[] = [];
   const view = render(
-    <div tabIndex={0} data-testid="canvas">
+    <div
+      tabIndex={0}
+      data-testid="canvas"
+      onKeyDown={(e) => void heard.push(e.key)}
+    >
       <svg>
         <Bar {...props} />
       </svg>
@@ -77,7 +83,7 @@ function harness(
       "[data-image-task-bar-prompt]",
     ) as HTMLInputElement | null;
   const canvas = view.getByTestId("canvas");
-  return { view, q, bar, prompt, canvas, calls, opened, overlay };
+  return { view, q, bar, prompt, canvas, heard, calls, opened, overlay };
 }
 
 describe("the contextual task bar", () => {
@@ -144,24 +150,21 @@ describe("the contextual task bar", () => {
   // canvas; the next Escape is the canvas's (the context, which takes the
   // bar with it). Other keys stay the field's.
   it("Escape in the prompt gives focus back to the canvas; other keys stay the bar's", async () => {
-    const { prompt, canvas, bar } = harness({ x: 0, y: 0, w: 200, h: 100 });
+    const { prompt, canvas, bar, heard } = harness({
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 100,
+    });
     await waitFor(() => expect(prompt()).not.toBeNull());
-    // The editor's own key listeners sit on the window, after the bar.
-    const heard: string[] = [];
-    const hear = (e: KeyboardEvent) => void heard.push(e.key);
-    window.addEventListener("keydown", hear);
-    try {
-      prompt()!.focus();
-      fireEvent.keyDown(prompt()!, { key: "f" });
-      expect(document.activeElement).toBe(prompt());
-      expect(heard, "a letter typed in the prompt is no tool key").toEqual([]);
-      const escape = fireEvent.keyDown(prompt()!, { key: "Escape" });
-      expect(escape, "the field took the press").toBe(false);
-      expect(document.activeElement).toBe(canvas);
-      expect(bar(), "the context is still open: the bar stays").not.toBeNull();
-      expect(heard).toEqual([]);
-    } finally {
-      window.removeEventListener("keydown", hear);
-    }
+    prompt()!.focus();
+    fireEvent.keyDown(prompt()!, { key: "f" });
+    expect(document.activeElement).toBe(prompt());
+    expect(heard, "a letter typed in the prompt is no tool key").toEqual([]);
+    const escape = fireEvent.keyDown(prompt()!, { key: "Escape" });
+    expect(escape, "the field took the press").toBe(false);
+    expect(document.activeElement).toBe(canvas);
+    expect(bar(), "the context is still open: the bar stays").not.toBeNull();
+    expect(heard).toEqual([]);
   });
 });
