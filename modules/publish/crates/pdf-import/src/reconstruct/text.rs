@@ -1102,24 +1102,26 @@ fn setting_lead(lines: &[Line]) -> Option<f32> {
 }
 
 /// Where a left-set block's next line starts far from the line above (more
-/// than two fifths of the block's width: no indent does that; a table's
-/// cell and the full-width row under it do), the block ends.
+/// than three tenths of the block's width: no indent does that; a table's
+/// columns and the full-width rows between them do), the block ends.
 pub fn split_far(lines: Vec<Line>) -> Vec<Vec<Line>> {
     if lines.len() < 2 {
         return vec![lines];
     }
     let left = lines.iter().map(|l| l.x0).fold(f32::MAX, f32::min);
     let width = lines.iter().map(|l| l.x1).fold(f32::MIN, f32::max) - left;
-    // Left-set: most lines start at one of a few edges (a centred or
-    // right-set block moves every line).
-    let mut xs: Vec<f32> = lines.iter().map(|l| l.x0).collect();
-    xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let shared = xs
-        .iter()
-        .map(|x| xs.iter().filter(|y| (*y - x).abs() < 1.0).count())
-        .max()
-        .unwrap_or(0);
-    if shared * 2 < lines.len() {
+    // Left-set: most lines start at one of a few edges (a table's columns;
+    // a centred or right-set block moves every line).
+    let mut edges: Vec<(f32, usize)> = Vec::new();
+    for l in &lines {
+        match edges.iter_mut().find(|e| (e.0 - l.x0).abs() < 1.0) {
+            Some(e) => e.1 += 1,
+            None => edges.push((l.x0, 1)),
+        }
+    }
+    edges.sort_by_key(|e| std::cmp::Reverse(e.1));
+    let on_edges: usize = edges.iter().take(3).map(|e| e.1).sum();
+    if on_edges * 5 < lines.len() * 4 {
         return vec![lines];
     }
     let mut out: Vec<Vec<Line>> = Vec::new();
@@ -1127,7 +1129,7 @@ pub fn split_far(lines: Vec<Line>) -> Vec<Vec<Line>> {
         let far = out
             .last()
             .and_then(|b| b.last())
-            .is_some_and(|p| (l.x0 - p.x0).abs() > 0.4 * width && l.size < 14.0 && p.size < 14.0);
+            .is_some_and(|p| (l.x0 - p.x0).abs() > 0.3 * width && l.size < 14.0 && p.size < 14.0);
         if far || out.is_empty() {
             out.push(vec![l]);
         } else {
