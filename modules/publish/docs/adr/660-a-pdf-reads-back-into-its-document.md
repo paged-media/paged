@@ -58,7 +58,9 @@ repeats.
    Japanese, which break between any two characters, the next line's first word is its first
    character. A break that bound
    does not explain is a forced line break; display type keeps every break as a forced one.
-   Paragraphs end at extra space, a change of size or colour, a first-line indent, a short line
+   Paragraphs end at extra space (against the block's leading: the smallest line spacing that
+   recurs, since a list's items set apart by space can outnumber the lines inside them), a
+   change of size or colour, a first-line indent, a short line
    in a justified frame, or a change of face where a sentence ends. A first line hung left of
    the rest is a negative first-line indent (a bullet or number in the margin); a line that
    opens with a bullet, or steps back out to the edge the hung lines were indented from, starts

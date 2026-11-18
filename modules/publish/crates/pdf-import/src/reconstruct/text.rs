@@ -1007,6 +1007,29 @@ pub fn split_measures(lines: Vec<Line>) -> Vec<Vec<Line>> {
     out
 }
 
+/// The leading a block is set at: the smallest line spacing that recurs
+/// (twice at least, within a third of a point). Where a list's items are
+/// paragraphs set apart by space, the spacing between items can outnumber
+/// the spacing inside one; the median would take the space for the
+/// leading and run the items together.
+fn setting_lead(lines: &[Line]) -> Option<f32> {
+    let median = typical_lead(lines)?;
+    let mut d: Vec<f32> = lines
+        .windows(2)
+        .filter(|w| w[1].size.max(w[0].size) < 14.0 || lines.iter().all(|l| l.size >= 14.0))
+        .map(|w| w[1].baseline - w[0].baseline)
+        .filter(|d| *d > 0.0)
+        .collect();
+    d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let floor = 0.9 * lines.iter().map(|l| l.size).fold(f32::MAX, f32::min);
+    let recurring = d
+        .iter()
+        .copied()
+        .filter(|&x| x >= floor)
+        .find(|&x| d.iter().filter(|&&y| (y - x).abs() <= 0.3).count() >= 2);
+    Some(recurring.map_or(median, |r| r.min(median)))
+}
+
 fn typical_lead(lines: &[Line]) -> Option<f32> {
     let mut d: Vec<f32> = lines
         .windows(2)
@@ -1125,7 +1148,7 @@ pub fn build_block_among(mut lines: Vec<Line>, others: &[[f32; 4]], painted: &[[
 
     // Split into paragraphs.
     let mut groups: Vec<Vec<usize>> = Vec::new();
-    let lead_all = typical_lead(&lines);
+    let lead_all = setting_lead(&lines);
     // A block whose paragraphs are set apart by space says where its
     // paragraphs end: a change of face with no space is inside one.
     let spaced = lines.windows(2).any(|w| {
@@ -2217,6 +2240,24 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert!(block.tabs.iter().all(|t| t.right || t.decimal));
+    }
+
+    #[test]
+    fn items_set_apart_by_space_are_paragraphs_even_when_the_space_outnumbers_the_leading() {
+        // Five items, two of them two lines at 10 pt leading, 14 pt between
+        // items: the item spacing is the commoner, the leading the smaller.
+        let mut g = Vec::new();
+        let mut y = 100.0;
+        for (k, two) in [true, false, true, false, false].into_iter().enumerate() {
+            g.extend(set(&format!("Item{k} {}", words(40)), 0.0, y, 0));
+            if two {
+                y += 10.0;
+                g.extend(set(&words(20), 0.0, y, 0));
+            }
+            y += 14.0;
+        }
+        let block = build_block(lines(g, &[]));
+        assert_eq!(block.paras.len(), 5, "{:?}", texts(&block));
     }
 
     #[test]
