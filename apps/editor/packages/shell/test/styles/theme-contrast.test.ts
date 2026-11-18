@@ -138,6 +138,9 @@ const TEXT: Array<[string, string]> = [
   ["--status-info", "--pg-bg"],
   ["--status-draft", "--pg-bg"],
   ["--status-progress", "--pg-bg"],
+  // Paper (document content inside a panel): the same in every theme.
+  ["--paper-fg", "--paper"],
+  ["--paper-selection", "--paper"],
 ];
 
 /** Non-text: glyphs and the focus ring (3:1, AA's 1.4.11); in high
@@ -168,6 +171,7 @@ const CONTROLS: Array<[string, string]> = [
  *  4.5:1 in high contrast). */
 const BOUNDARIES: Array<[string, string]> = [
   ["--border", "--background"],
+  ["--paper-rule", "--paper"],
   ["--chrome-divider", "--chrome-panel-bg"],
   ["--chrome-border", "--chrome-panel-bg"],
 ];
