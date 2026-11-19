@@ -323,6 +323,10 @@ pub struct GlyphPos {
     /// The glyph's id in its font program: the program's name for it may
     /// say what it is where the PDF's text does not.
     pub gid: Option<u32>,
+    /// The control code the PDF gave as the glyph's text (cleared from
+    /// `text`): a code passed through, which a font in TrueType's standard
+    /// order still reads from.
+    pub passed_code: Option<char>,
 }
 
 /// A font as the page names it.

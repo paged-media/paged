@@ -42,8 +42,16 @@ repeats.
    every code to itself, as flattened advertisements carry: control codes, a page's worth of
    `+ = ; ? $`, letters with hardly a vowel, or glyph names that contradict it — is read by its program's glyph names where
    they name every glyph, and otherwise keeps its look as outlines. A font of letters whose
-   codes are its glyph ids in TrueType's standard order (each character less 29) reads moved
-   back, where that turns its text into words (four in five, and far more than as it stood). A glyph's control code is
+   codes are its glyph ids in TrueType's standard order (each character less 29, or a few
+   more or fewer where the subset keeps more or fewer glyphs ahead of the space: 20 to 40 are
+   tried) reads moved back, where that turns its
+   text into words (four in five, a fifth more than as it stood) whose letters read more like
+   English (their mean log frequency); a control code the PDF gives as a glyph's text is kept
+   for this beside the glyph. Each run of such a font moves back only where it reads better
+   so (a heading in plain codes in the same font stays); a run that reads neither way (another
+   subset merged into the same font program, its codes in first-use order) keeps its look as
+   outlines, and a run that moves back to figures only where its glyphs are not also such a
+   run's. A run left with no text keeps its look as outlines. A glyph's control code is
    never its text. Text a page draws twice exactly over itself is read once, and text past the
    page's own edges (an exporter that writes each page with its whole spread) is not the
    page's.

@@ -744,7 +744,12 @@ impl<'a> Device<'a> for Collector {
             // usable ToUnicode, its codes mapped to themselves): a control
             // character is no glyph's text, so the program's name for the
             // glyph is read instead.
+            // The code itself is kept beside the glyph: a font whose codes
+            // are its glyph ids in TrueType's standard order reads from it.
+            let mut passed_code = None;
             if glyph_text.chars().all(char::is_control) {
+                let mut cs = glyph_text.chars();
+                passed_code = cs.next().filter(|_| cs.next().is_none());
                 glyph_text.clear();
             }
             // The glyph's id, for the program's name for it (the structure
@@ -808,6 +813,7 @@ impl<'a> Device<'a> for Collector {
                 ink_top,
                 ink_bottom,
                 gid,
+                passed_code,
             });
         }
         if origins.is_empty() {

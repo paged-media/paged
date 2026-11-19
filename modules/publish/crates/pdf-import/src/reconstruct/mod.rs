@@ -2578,6 +2578,23 @@ fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
     }
     let mut counts = HashMap::new();
     tally(items, fonts, &mut counts);
+    if std::env::var_os("PAGED_PDF_DEBUG_FONTS").is_some() {
+        for (k, l) in &counts {
+            let name = fonts
+                .faces
+                .get(k)
+                .map(|f| f.postscript_name.clone())
+                .unwrap_or_default();
+            let (plain, moved) = font_texts(items, *k, reads_shifted(items, *k).unwrap_or(29));
+            eprintln!(
+                "font {name}: inked {} unread {} symbols {} named {} contra {} conf {} letters {} vowels {} | illegible {} shifted {}\n  plain {:?}\n  moved {:?}",
+                l.inked, l.unread, l.symbols, l.named, l.contradicted, l.confirmed, l.letters, l.vowels,
+                l.illegible(), reads_shifted(items, *k).unwrap_or(0),
+                plain.chars().take(160).collect::<String>(),
+                moved.chars().take(160).collect::<String>()
+            );
+        }
+    }
     let (mut by_name, mut outlined) = (HashSet::new(), HashSet::new());
     for (k, l) in counts {
         if l.illegible() {
@@ -2593,17 +2610,35 @@ fn mark_unreadable(items: &mut [Item], fonts: &mut FontTable) {
     // are moved back, where that gives words.
     let mut keys = HashSet::new();
     font_keys(items, &mut keys);
-    let shifted: HashSet<u128> = keys
+    let shifted: HashMap<u128, u32> = keys
         .into_iter()
-        .filter(|k| reads_shifted(items, *k))
+        .filter_map(|k| reads_shifted(items, k).map(|off| (k, off)))
         .collect();
     if !shifted.is_empty() {
-        shift_back(items, &shifted);
-        outlined.retain(|k| !shifted.contains(k));
-        by_name.retain(|k| !shifted.contains(k));
+        shift_back(items, fonts, &shifted, &outlined, &by_name);
+        outlined.retain(|k| !shifted.contains_key(k));
+        by_name.retain(|k| !shifted.contains_key(k));
     }
     if !by_name.is_empty() || !outlined.is_empty() {
         mend(items, fonts, &by_name, &outlined);
+    }
+    keep_unread_look(items);
+}
+
+/// A run whose inked glyphs all came out with no text would set nothing:
+/// it keeps its look as outlines.
+fn keep_unread_look(items: &mut [Item]) {
+    for it in items.iter_mut() {
+        match it {
+            Item::Group(g) => keep_unread_look(&mut g.items),
+            Item::Text(t) if !t.outline => {
+                let mut inked = t.glyphs.iter().filter(|g| g.ink_top.is_some()).peekable();
+                if inked.peek().is_some() && inked.all(|g| g.text.is_empty()) {
+                    t.outline = true;
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -2614,68 +2649,133 @@ fn latin_letter(c: char) -> bool {
 }
 
 /// The text a glyph's code gives if the code is its glyph id in TrueType's
-/// standard order: the character 29 above it (3 is the space).
-fn standard_order(g: &vectors::ir::GlyphPos) -> Option<char> {
+/// standard order: the character `off` above it (29 where the order opens
+/// with .notdef, .null and a carriage return, the space at 3; a few more or
+/// fewer where the subset keeps more or fewer glyphs ahead of the space).
+fn standard_order(g: &vectors::ir::GlyphPos, off: u32) -> Option<char> {
     let code = match g.text.chars().collect::<Vec<_>>().as_slice() {
         [c] => *c as u32,
-        [] => g.gid?,
+        [] => g.passed_code? as u32,
         _ => return None,
     };
-    char::from_u32(code + 29).filter(|c| (' '..='~').contains(c))
+    char::from_u32(code + off).filter(|c| (' '..='~').contains(c))
+}
+
+/// How much a text's letters read like English: their mean log frequency
+/// (words about -3.0; letters moved off by a few places under -3.4).
+/// `None` under three letters.
+fn english_score(s: &str) -> Option<f32> {
+    const FREQ: [f32; 26] = [
+        8.2, 1.5, 2.8, 4.3, 12.7, 2.2, 2.0, 6.1, 7.0, 0.15, 0.8, 4.0, 2.4, 6.7, 7.5, 1.9, 0.1, 6.0,
+        6.3, 9.1, 2.8, 1.0, 2.4, 0.15, 2.0, 0.07,
+    ];
+    let lp: Vec<f32> = s
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(|c| (FREQ[(c.to_ascii_lowercase() as u8 - b'a') as usize] / 100.0).ln())
+        .collect();
+    (lp.len() >= 3).then(|| lp.iter().sum::<f32>() / lp.len() as f32)
 }
 
 /// Whether a font's glyphs, moved back to TrueType's standard order, read
 /// as words where as they are they do not: of its words (letters, a vowel
-/// among them), four in five or more moved back, and fewer by far as they
-/// stand.
-fn reads_shifted(items: &[Item], key: u128) -> bool {
-    fn walk(items: &[Item], key: u128, plain: &mut String, moved: &mut String) {
+/// among them), four in five or more moved back, and a fifth fewer at least
+/// as they stand.
+/// A run's text as it stands and moved back to TrueType's standard order,
+/// a word space where the glyphs leave a gap.
+fn run_texts(t: &vectors::ir::TextItem, off: u32) -> (String, String) {
+    let (mut plain, mut moved) = (String::new(), String::new());
+    let mut end: Option<f32> = None;
+    for g in &t.glyphs {
+        // A word space set as a gap, not a glyph.
+        if end.is_some_and(|e| g.x - e > 0.2 * g.size) {
+            plain.push(' ');
+            moved.push(' ');
+        }
+        end = Some(g.x + g.advance.unwrap_or(0.5 * g.size));
+        plain.push_str(if g.text.is_empty() { " " } else { &g.text });
+        moved.push(standard_order(g, off).unwrap_or('?'));
+    }
+    (plain, moved)
+}
+
+/// A font's text on a page as it stands and moved back, run after run.
+fn font_texts(items: &[Item], key: u128, off: u32) -> (String, String) {
+    fn walk(items: &[Item], key: u128, off: u32, plain: &mut String, moved: &mut String) {
         for it in items {
             match it {
-                Item::Group(g) => walk(&g.items, key, plain, moved),
+                Item::Group(g) => walk(&g.items, key, off, plain, moved),
                 Item::Text(t) if t.font_key == Some(key) => {
-                    for g in &t.glyphs {
-                        plain.push_str(if g.text.is_empty() { " " } else { &g.text });
-                        moved.push(standard_order(g).unwrap_or('?'));
-                    }
+                    let (p, m) = run_texts(t, off);
+                    plain.push_str(&p);
                     plain.push(' ');
+                    moved.push_str(&m);
                     moved.push(' ');
                 }
                 _ => {}
             }
         }
     }
-    let words = |s: &str| -> (usize, usize) {
-        let all: Vec<&str> = s
-            .split_whitespace()
-            .filter(|w| w.chars().count() >= 2)
-            .collect();
-        let good = all
-            .iter()
-            .filter(|w| {
-                w.chars()
-                    .all(|c| c.is_alphabetic() || ".,:;'’-()".contains(c))
-                    && w.chars().any(|c| "aeiouyAEIOUY".contains(c))
-            })
-            .count();
-        (good, all.len())
-    };
     let (mut plain, mut moved) = (String::new(), String::new());
-    walk(items, key, &mut plain, &mut moved);
-    let (pg, pn) = words(&plain);
-    let (mg, mn) = words(&moved);
+    walk(items, key, off, &mut plain, &mut moved);
+    (plain, moved)
+}
+
+/// Of a text's words (two characters or more, a letter among them), those
+/// that read as one: letters (and a word's punctuation), a vowel among
+/// them, set in lower case, capitals or with a capital first ("eEF" is no
+/// word). Figures (a phone number, 50%) count neither way.
+fn word_shares(s: &str) -> (usize, usize) {
+    let all: Vec<&str> = s
+        .split_whitespace()
+        .filter(|w| w.chars().count() >= 2 && w.chars().any(|c| c.is_alphabetic()))
+        .collect();
+    let good = all
+        .iter()
+        .filter(|w| {
+            let letters: Vec<char> = w.chars().filter(|c| c.is_alphabetic()).collect();
+            let cased = letters.iter().skip(1).all(|c| c.is_lowercase())
+                || letters.iter().all(|c| c.is_uppercase());
+            cased
+                && w.chars()
+                    .all(|c| c.is_alphabetic() || ".,:;'’-()".contains(c))
+                && w.chars().any(|c| "aeiouyAEIOUY".contains(c))
+        })
+        .count();
+    (good, all.len())
+}
+
+/// The offset (20 to 40) by which a font's codes read moved back, the one
+/// whose letters read most like English, if any does.
+fn reads_shifted(items: &[Item], key: u128) -> Option<u32> {
+    (20..=40)
+        .filter(|off| reads_shifted_by(items, key, *off))
+        .max_by(|a, b| {
+            let score = |off: u32| english_score(&font_texts(items, key, off).1).unwrap_or(-9.0);
+            score(*a).partial_cmp(&score(*b)).unwrap()
+        })
+}
+
+fn reads_shifted_by(items: &[Item], key: u128, off: u32) -> bool {
+    let (plain, moved) = font_texts(items, key, off);
+    let (pg, pn) = word_shares(&plain);
+    let (mg, mn) = word_shares(&moved);
     let share = |g: usize, n: usize| if n == 0 { 0.0 } else { g as f32 / n as f32 };
     let (p, m) = (share(pg, pn), share(mg, mn));
-    // Text as it stands, mostly letters: a font of figures moves back into
-    // letters too, and stays figures.
-    let ink: Vec<char> = plain.chars().filter(|c| !c.is_whitespace()).collect();
-    let letters: Vec<char> = ink.iter().copied().filter(|c| latin_letter(*c)).collect();
-    let lettered = letters.len() * 5 >= ink.len() * 2;
-    // As it stands, letters at random: under three in ten vowels (words run
-    // near two in five, and a heading in a font of its own still reads).
+    // As it stands, six letters at least (a font of figures moves back into
+    // letters too, and stays figures), at random: under three in ten vowels
+    // (words run near two in five, and a heading in a font of its own still
+    // reads).
+    let letters: Vec<char> = plain.chars().filter(|c| latin_letter(*c)).collect();
     let vowels = |cs: &[char]| cs.iter().filter(|c| "aeiouyAEIOUY".contains(**c)).count();
     let random = letters.len() >= 6 && vowels(&letters) * 10 < letters.len() * 3;
-    lettered && random && mn >= 2 && m >= 0.8 && m - p >= 0.3
+    // And its letters read like English moved back, more than as they stand.
+    let english = match (english_score(&plain), english_score(&moved)) {
+        (Some(p), Some(m)) => m > p && m >= -3.4,
+        (None, Some(m)) => m >= -3.4,
+        _ => false,
+    };
+    random && english && mn >= 2 && m >= 0.8 && m - p >= 0.2
 }
 
 fn font_keys(items: &[Item], out: &mut HashSet<u128>) {
@@ -2692,21 +2792,157 @@ fn font_keys(items: &[Item], out: &mut HashSet<u128>) {
     }
 }
 
-fn shift_back(items: &mut [Item], keys: &HashSet<u128>) {
-    for it in items.iter_mut() {
-        match it {
-            Item::Group(g) => shift_back(&mut g.items, keys),
-            Item::Text(t) if t.font_key.is_some_and(|k| keys.contains(&k)) => {
-                for g in t.glyphs.iter_mut() {
-                    if let Some(c) = standard_order(g) {
-                        g.text = c.to_string();
+/// How a run of a font that moves back reads best.
+#[derive(Clone, Copy, PartialEq)]
+enum RunReading {
+    /// Moved back: its words read.
+    Moved,
+    /// Nothing left to show as it stands (codes cleared as controls) and
+    /// figures moved back (a phone number): moved unless its glyphs are
+    /// also those of a run that reads neither way.
+    Figures,
+    /// As it stands (a heading in plain codes in the same font).
+    Kept,
+    /// Neither way (codes of another order, as where a merged font carries
+    /// several subsets): its look as outlines.
+    Unread,
+}
+
+fn run_reading(t: &vectors::ir::TextItem, off: u32) -> RunReading {
+    let (plain, moved) = run_texts(t, off);
+    let (pg, pn) = word_shares(&plain);
+    let (mg, mn) = word_shares(&moved);
+    let (sp, sm) = (english_score(&plain), english_score(&moved));
+    let gain = match (sp, sm) {
+        (Some(p), Some(m)) => m - p,
+        (None, Some(_)) => 1.0,
+        _ => 0.0,
+    };
+    // Letters that read worse moved back stay as they are.
+    let readable = gain >= 0.0;
+    let figures = {
+        let ink: Vec<char> = moved.chars().filter(|c| !c.is_whitespace()).collect();
+        !ink.is_empty() && ink.iter().filter(|c| c.is_ascii_digit()).count() * 5 >= ink.len() * 3
+    };
+    // A tie on words in a font that moves back follows the font, unless its
+    // letters read much worse so (three letters say little: "off" scores
+    // under "RII").
+    let tie = mg * pn == pg * mn && gain > -0.8;
+    let blank = plain.trim().is_empty();
+    // Better moved back: more of its words read, or its letters read more
+    // like words, or it had none and gains some.
+    let better = (readable || tie)
+        && if pn > 0 {
+            mn > 0 && (mg * pn > pg * mn || gain >= 0.3 || tie)
+        } else {
+            mn > 0 && mg * 5 >= mn * 4
+        };
+    if better {
+        return RunReading::Moved;
+    }
+    if blank && figures {
+        return RunReading::Figures;
+    }
+    // Half its glyphs without text, or no letter either way: it reads
+    // neither as it stands nor moved back.
+    let inked: Vec<_> = t.glyphs.iter().filter(|g| g.ink_top.is_some()).collect();
+    let unread = inked.iter().filter(|g| g.text.is_empty()).count();
+    let lettered = |s: &str| s.chars().any(char::is_alphabetic);
+    if !inked.is_empty() && (unread * 2 >= inked.len() || (!lettered(&plain) && !lettered(&moved)))
+    {
+        return RunReading::Unread;
+    }
+    RunReading::Kept
+}
+
+/// Moves back the runs of the fonts in `keys` that read better moved back
+/// (a font can carry a heading in plain codes beside an advertisement's
+/// standard-order ones); runs that read neither way keep their look as
+/// outlines, and the others their font's own treatment: outlines, or the
+/// program's glyph names.
+fn shift_back(
+    items: &mut [Item],
+    fonts: &mut FontTable,
+    keys: &HashMap<u128, u32>,
+    outlined: &HashSet<u128>,
+    by_name: &HashSet<u128>,
+) {
+    /// The glyphs of the runs that read neither way.
+    fn unread_glyphs(items: &[Item], keys: &HashMap<u128, u32>, out: &mut HashSet<(u128, u32)>) {
+        for it in items {
+            match it {
+                Item::Group(g) => unread_glyphs(&g.items, keys, out),
+                Item::Text(t) => {
+                    let Some((key, off)) = t.font_key.and_then(|k| keys.get(&k).map(|o| (k, *o)))
+                    else {
+                        continue;
+                    };
+                    if run_reading(t, off) == RunReading::Unread {
+                        out.extend(t.glyphs.iter().filter_map(|g| g.gid.map(|gid| (key, gid))));
                     }
                 }
-                t.text = t.glyphs.iter().map(|g| g.text.as_str()).collect();
+                _ => {}
             }
-            _ => {}
         }
     }
+    fn apply(
+        items: &mut [Item],
+        fonts: &mut FontTable,
+        keys: &HashMap<u128, u32>,
+        outlined: &HashSet<u128>,
+        by_name: &HashSet<u128>,
+        unread: &HashSet<(u128, u32)>,
+    ) {
+        for it in items.iter_mut() {
+            match it {
+                Item::Group(g) => apply(&mut g.items, fonts, keys, outlined, by_name, unread),
+                Item::Text(t) => {
+                    let Some((key, off)) = t.font_key.and_then(|k| keys.get(&k).map(|o| (k, *o)))
+                    else {
+                        continue;
+                    };
+                    let reading = match run_reading(t, off) {
+                        RunReading::Figures
+                            if t.glyphs
+                                .iter()
+                                .any(|g| g.gid.is_some_and(|gid| unread.contains(&(key, gid)))) =>
+                        {
+                            RunReading::Unread
+                        }
+                        RunReading::Figures => RunReading::Moved,
+                        r => r,
+                    };
+                    match reading {
+                        RunReading::Moved => {
+                            for g in t.glyphs.iter_mut() {
+                                if let Some(c) = standard_order(g, off) {
+                                    g.text = c.to_string();
+                                }
+                            }
+                            t.text = t.glyphs.iter().map(|g| g.text.as_str()).collect();
+                        }
+                        RunReading::Unread => t.outline = true,
+                        _ if outlined.contains(&key) => t.outline = true,
+                        _ if by_name.contains(&key) => {
+                            for g in t.glyphs.iter_mut() {
+                                if let Some(n) = g.gid.and_then(|gid| fonts.named_text(key, gid)) {
+                                    if g.ink_top.is_some() {
+                                        g.text = n;
+                                    }
+                                }
+                            }
+                            t.text = t.glyphs.iter().map(|g| g.text.as_str()).collect();
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut unread = HashSet::new();
+    unread_glyphs(items, keys, &mut unread);
+    apply(items, fonts, keys, outlined, by_name, &unread);
 }
 
 /// Debug: the page's item tree, one line per item.
@@ -2879,6 +3115,7 @@ mod tests {
                 ink_top: (c != ' ').then_some(0.7),
                 ink_bottom: (c != ' ').then_some(0.0),
                 gid: None,
+                passed_code: None,
             })
             .collect();
         Item::Text(TextItem {
@@ -2970,12 +3207,12 @@ mod tests {
             .map(|c| char::from_u32(c as u32 - 29).unwrap())
             .collect();
         let mut items = vec![run(&shifted, 1)];
-        // The space's code (3) is a control: no text, its id kept.
+        // The space's code (3) is a control: no text, the code kept beside.
         if let Item::Text(t) = &mut items[0] {
             for g in t.glyphs.iter_mut() {
                 if g.text == "\u{3}" {
                     g.text.clear();
-                    g.gid = Some(3);
+                    g.passed_code = Some('\u{3}');
                 }
             }
         }
@@ -2984,6 +3221,161 @@ mod tests {
         let Item::Text(t) = &items[0] else { panic!() };
         assert!(!t.outline);
         assert_eq!(t.text, "upto off WINDOWS colour range");
+    }
+
+    #[test]
+    fn a_line_with_figures_and_punctuation_below_32_moves_back_whole() {
+        // "upto 50% off 0800 587 WINDOWS.CO.UK": the figures, the spaces, the
+        // stops and % have codes under 32 (controls, cleared from the text).
+        let real = "upto 50% off 0800 587 WINDOWS.CO.UK";
+        let codes: String = real
+            .chars()
+            .map(|c| char::from_u32(c as u32 - 29).unwrap())
+            .collect();
+        let mut items = vec![run(&codes, 1)];
+        if let Item::Text(t) = &mut items[0] {
+            for g in t.glyphs.iter_mut() {
+                let c = g.text.chars().next().unwrap();
+                if c.is_control() {
+                    g.text.clear();
+                    g.passed_code = Some(c);
+                }
+            }
+        }
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let Item::Text(t) = &items[0] else { panic!() };
+        assert_eq!(t.text, real);
+    }
+
+    #[test]
+    fn a_plain_heading_in_a_moved_font_stays_as_it_reads() {
+        let codes = |s: &str| -> String {
+            s.chars()
+                .map(|c| char::from_u32(c as u32 - 29).unwrap())
+                .collect()
+        };
+        let mut items = vec![
+            run("Marketplace", 1),
+            run(&codes("Beautiful bespoke window coverings"), 1),
+            run(&codes("have been made to measure for years"), 1),
+        ];
+        for it in items.iter_mut() {
+            if let Item::Text(t) = it {
+                for g in t.glyphs.iter_mut() {
+                    let c = g.text.chars().next().unwrap();
+                    if c.is_control() {
+                        g.text.clear();
+                        g.passed_code = Some(c);
+                    }
+                }
+            }
+        }
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let texts: Vec<String> = items
+            .iter()
+            .map(|i| match i {
+                Item::Text(t) => t.text.clone(),
+                _ => String::new(),
+            })
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "Marketplace",
+                "Beautiful bespoke window coverings",
+                "have been made to measure for years"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_short_word_in_a_moved_font_follows_the_font() {
+        let codes = |s: &str| -> String {
+            s.chars()
+                .map(|c| char::from_u32(c as u32 - 29).unwrap())
+                .collect()
+        };
+        let mut items = vec![
+            run(&codes("off"), 1),
+            run(&codes("Beautiful bespoke window coverings"), 1),
+            run(&codes("have been made to measure for years"), 1),
+        ];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let Item::Text(t) = &items[0] else { panic!() };
+        assert_eq!(t.text, "off");
+    }
+
+    #[test]
+    fn runs_of_another_order_in_a_moved_font_keep_their_look() {
+        let codes = |s: &str| -> String {
+            s.chars()
+                .map(|c| char::from_u32(c as u32 - 29).unwrap())
+                .collect()
+        };
+        // Codes 1, 2, 3, ... in first use (another subset merged into the
+        // font): no text, and the same glyph 11 as the figures-only run.
+        let other = |cs: &[(u32, u32)]| {
+            let mut it = run(&"x".repeat(cs.len()), 1);
+            if let Item::Text(t) = &mut it {
+                for (g, (code, gid)) in t.glyphs.iter_mut().zip(cs) {
+                    g.text.clear();
+                    g.passed_code = char::from_u32(*code);
+                    g.gid = Some(*gid);
+                }
+                t.text.clear();
+            }
+            it
+        };
+        let mut items = vec![
+            run(&codes("Beautiful bespoke window coverings"), 1),
+            run(&codes("have been made to measure for years"), 1),
+            other(&[(8, 14), (21, 11), (30, 15)]),
+            other(&[(21, 11), (21, 11)]),
+        ];
+        for it in items.iter_mut().take(2) {
+            if let Item::Text(t) = it {
+                for g in t.glyphs.iter_mut() {
+                    let c = g.text.chars().next().unwrap();
+                    if c.is_control() {
+                        g.text.clear();
+                        g.passed_code = Some(c);
+                    }
+                }
+            }
+        }
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let looks: Vec<(String, bool)> = items
+            .iter()
+            .map(|i| match i {
+                Item::Text(t) => (t.text.clone(), t.outline),
+                _ => (String::new(), false),
+            })
+            .collect();
+        assert_eq!(
+            looks[0],
+            ("Beautiful bespoke window coverings".into(), false)
+        );
+        assert!(looks[2].1 && looks[3].1, "{looks:?}");
+        assert_eq!(looks[3].0, "");
+    }
+
+    #[test]
+    fn a_folio_and_a_web_address_stay_as_they_read() {
+        let mut items = vec![run("NORR11.COM", 1), run("134", 1), run("NORR11.COM", 1)];
+        let mut fonts = FontTable::default();
+        mark_unreadable(&mut items, &mut fonts);
+        let texts: Vec<String> = items
+            .iter()
+            .map(|i| match i {
+                Item::Text(t) => t.text.clone(),
+                _ => String::new(),
+            })
+            .collect();
+        assert_eq!(texts, ["NORR11.COM", "134", "NORR11.COM"]);
     }
 
     #[test]
