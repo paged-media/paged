@@ -502,10 +502,13 @@ describe.skipIf(!RUN_BUDGETS)(
     // The frame's own page (data ADR 551, amendment 2026-11-18): the symbol
     // is drawn on the page its frame geometry names, so the active page is
     // no longer read: -2 reads (document.meta, the pages collection).
+    // The bars' black (data ADR 551, amendment 2026-11-20): +1 read — the
+    // swatches collection, so a document without Color/Black gets it made in
+    // the same batch (a PDF read-back may have none).
     const W4: Measured = onLabelled(
       {
-        hostCalls: 5,
-        hostReads: 3,
+        hostCalls: 6,
+        hostReads: 4,
         mutates: 1,
         mutationOps: 673,
         undoSteps: 1,
