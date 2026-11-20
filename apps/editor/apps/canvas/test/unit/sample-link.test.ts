@@ -23,16 +23,16 @@
 
 import { expect, test } from "bun:test";
 import {
+  createSampleLinkState,
   sampleLinkPending,
   sampleLinkSettled,
-  settleSampleLink,
 } from "../../src/samples/link";
 
 const env = import.meta.env as Record<string, unknown>;
 
 test("a script on a page without ?sample= starts at once", async () => {
   expect(sampleLinkPending("?script=tour")).toBe(false);
-  await sampleLinkSettled("?script=tour");
+  await sampleLinkSettled(createSampleLinkState(), "?script=tour");
 });
 
 test("without a catalog this build opens no sample, so nothing waits", () => {
@@ -44,17 +44,22 @@ test("without a catalog this build opens no sample, so nothing waits", () => {
   if (before !== undefined) env.VITE_SAMPLES_URL = before;
 });
 
-test("with a catalog, a script waits until the sample link settles", async () => {
+test("with a catalog, a script waits until this editor's sample link settles", async () => {
   const before = env.VITE_SAMPLES_URL;
   env.VITE_SAMPLES_URL = "https://host.example/samples/catalog.json";
   try {
     const search = "?sample=lookbook&script=tour-publication";
+    const link = createSampleLinkState();
+    const other = createSampleLinkState();
     expect(sampleLinkPending(search)).toBe(true);
     let started = false;
-    const waiting = sampleLinkSettled(search).then(() => (started = true));
+    const waiting = sampleLinkSettled(link, search).then(
+      () => (started = true),
+    );
+    other.settle(); // another editor's link settles nothing here
     await Promise.resolve();
     expect(started).toBe(false);
-    settleSampleLink();
+    link.settle();
     await waiting;
     expect(started).toBe(true);
   } finally {

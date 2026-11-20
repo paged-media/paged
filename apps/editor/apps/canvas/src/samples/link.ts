@@ -20,11 +20,24 @@
 // A `?sample=` link and a `?script=` run on one page (editor ADR 1243,
 // amendment 2): the script is a tour of the sample, so it waits until the
 // sample has opened — or the link has given up — before it starts. Without
-// a sample to wait for, it starts at once, as before.
+// a sample to wait for, it starts at once, as before. The wait is the
+// editor's own (a scoped store, created per editor and dropped with it).
+import { scoped } from "@paged-media/shell";
 import { samplesEnabled } from "./catalog";
 
-let settle!: () => void;
-const settled = new Promise<void>((resolve) => (settle = resolve));
+/** This editor's sample link: settled once it has opened its sample or given up. */
+export interface SampleLinkState {
+  readonly settled: Promise<void>;
+  settle(): void;
+}
+
+export function createSampleLinkState(): SampleLinkState {
+  let settle!: () => void;
+  const settled = new Promise<void>((resolve) => (settle = resolve));
+  return { settled, settle: () => settle() };
+}
+
+export const SAMPLE_LINK = scoped("sampleLink", createSampleLinkState);
 
 /** Whether this page's URL asks for a sample this build will open. */
 export function sampleLinkPending(
@@ -35,11 +48,9 @@ export function sampleLinkPending(
 
 /** Resolves once the page's `?sample=` link has opened its sample or given
  *  up; at once when there is none to wait for. */
-export function sampleLinkSettled(search?: string): Promise<void> {
-  return sampleLinkPending(search) ? settled : Promise.resolve();
-}
-
-/** The link has opened its sample, or given up (SampleLink). */
-export function settleSampleLink(): void {
-  settle();
+export function sampleLinkSettled(
+  link: SampleLinkState,
+  search?: string,
+): Promise<void> {
+  return sampleLinkPending(search) ? link.settled : Promise.resolve();
 }

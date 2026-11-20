@@ -22,12 +22,13 @@
 // empty canvas. Renders nothing; opens the sample once the editor is up.
 
 import { useEffect, useRef } from "react";
-import { useOptionalPaged } from "@paged-media/shell";
+import { useOptionalPaged, useScoped } from "@paged-media/shell";
 import { loadCatalog, openSample, samplesEnabled } from "./catalog";
-import { settleSampleLink } from "./link";
+import { SAMPLE_LINK } from "./link";
 
 export function SampleLink() {
   const paged = useOptionalPaged();
+  const link = useScoped(SAMPLE_LINK);
   const done = useRef(false);
   useEffect(() => {
     if (!paged || done.current || !samplesEnabled()) return;
@@ -47,7 +48,7 @@ export function SampleLink() {
         }).catch((e) => console.warn(`[samples] ${String(e)}`));
       })
       // A `?script=` on the same page starts now (link.ts).
-      .finally(settleSampleLink);
-  }, [paged]);
+      .finally(link.settle);
+  }, [paged, link]);
   return null;
 }

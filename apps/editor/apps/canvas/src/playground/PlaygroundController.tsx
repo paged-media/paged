@@ -54,6 +54,7 @@ import {
   type Statement,
   useEditorKeys,
   useEscapeHandler,
+  useScoped,
 } from "@paged-media/shell";
 import { tokenizeJs, type CodeToken } from "@paged-media/ui";
 import {
@@ -70,7 +71,7 @@ import {
   type GuidePrefs,
   type GuideSide,
 } from "./guide-prefs";
-import { sampleLinkSettled } from "../samples/link";
+import { SAMPLE_LINK, sampleLinkSettled } from "../samples/link";
 
 interface ScriptMeta {
   id: string;
@@ -146,6 +147,7 @@ export function PlaygroundController(): React.ReactElement | null {
   const moveFocus = useRef(false);
   const cardId = useId();
   const scriptId_ = useId();
+  const link = useScoped(SAMPLE_LINK);
 
   // 1) load the script source + metadata
   useEffect(() => {
@@ -161,7 +163,7 @@ export function PlaygroundController(): React.ReactElement | null {
         .then((r) => (r.ok ? r.json() : { scripts: [] }))
         .catch(() => ({ scripts: [] })),
       // A `?sample=` on the same page opens first: the script tours it.
-      sampleLinkSettled(),
+      sampleLinkSettled(link),
     ])
       .then(([src, manifest]) => {
         if (!alive) return;
@@ -180,7 +182,7 @@ export function PlaygroundController(): React.ReactElement | null {
     return () => {
       alive = false;
     };
-  }, [scriptId]);
+  }, [scriptId, link]);
 
   // 2) (re)create the session whenever the running source changes; it
   // starts at the speed and autoplay of the render it runs after (the
