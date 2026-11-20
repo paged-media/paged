@@ -3749,7 +3749,11 @@ mod tests {
 
     #[test]
     fn a_folio_and_a_web_address_stay_as_they_read() {
-        let mut items = vec![run("EXAMPLE11.COM", 1), run("134", 1), run("EXAMPLE11.COM", 1)];
+        let mut items = vec![
+            run("EXAMPLE11.COM", 1),
+            run("134", 1),
+            run("EXAMPLE11.COM", 1),
+        ];
         let mut fonts = FontTable::default();
         mark_unreadable(&mut items, &mut fonts);
         let texts: Vec<String> = items

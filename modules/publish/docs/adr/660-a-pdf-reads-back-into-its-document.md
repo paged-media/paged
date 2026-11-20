@@ -61,7 +61,9 @@ repeats.
    spacing is measured per stretch of one face at one size: a tracked heading and a tight
    standfirst on one baseline each keep their own. Latin small print (6.5 pt or less) set with
    its letters overlapping keeps word spaces under a tenth of an em: a tenth past its letters,
-   down to a twentieth. Text turned to another reading direction (its glyphs neither sheared
+   down to a twentieth. A ragged frame's width, set between its widest line and the narrowest
+   that would have taken the next line's first word, reads that word by the same word
+   spaces. Text turned to another reading direction (its glyphs neither sheared
    nor mirrored; scaled across too where the run is a line of glyphs) reads in its own axes and
    sets in a turned frame; a letter placed on its own along a curve (a map's label) keeps its
    look as outlines. A

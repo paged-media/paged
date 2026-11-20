@@ -147,7 +147,9 @@ impl Line {
             .iter()
             .find_map(|g| g.text.trim_start().chars().next())
     }
-    /// The width of the line's first word (to its first space).
+    /// The width of the line's first word (to its first space, as
+    /// [`line_tokens`] reads the line's word spaces: a gap past its own
+    /// letter spacing, a space glyph, a tab).
     fn first_word_width(&self) -> f32 {
         // From its first ink (a line beside a wrap is read from the
         // column's edge: `x0` is not where its text starts).
@@ -157,23 +159,22 @@ impl Line {
             .find(|g| !g.text.trim().is_empty())
             .map_or(self.x0, |g| g.x);
         let mut end = start;
-        let mut prev_end = None::<f32>;
-        for g in &self.glyphs {
-            if g.text.trim().is_empty() {
-                break;
-            }
-            // Chinese and Japanese break between any two characters: the
-            // first "word" of such a line is its first character.
-            if prev_end.is_some() && g.text.chars().next().is_some_and(is_cjk) {
-                break;
-            }
-            if let Some(pe) = prev_end {
-                if g.x - pe > 0.2 * g.size {
+        let mut inked = false;
+        for t in line_tokens(self) {
+            if t.text.trim().is_empty() {
+                if inked {
                     break;
                 }
+                continue;
+            }
+            let g = &self.glyphs[t.glyph];
+            // Chinese and Japanese break between any two characters: the
+            // first "word" of such a line is its first character.
+            if inked && t.text.chars().next().is_some_and(is_cjk) {
+                break;
             }
             end = g.x + g.adv;
-            prev_end = Some(end);
+            inked = true;
         }
         end - start
     }
@@ -658,8 +659,14 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
         if is_space {
             // A "space" the next glyph starts on top of advances nothing:
             // an invisible discretionary hyphen InDesign maps to a space.
+            // Only where the line's widths are its positions' (a measured
+            // letter spacing): a PDF whose glyphs are set by positions its
+            // widths do not add up to keeps every space it draws.
             if let Some(n) = line.glyphs.get(i + 1) {
-                if n.x - g.x < 0.3 * g.adv.max(0.1 * g.size) && !n.text.trim().is_empty() {
+                if line_gap.is_some()
+                    && n.x - g.x < 0.3 * g.adv.max(0.1 * g.size)
+                    && !n.text.trim().is_empty()
+                {
                     continue;
                 }
             }
