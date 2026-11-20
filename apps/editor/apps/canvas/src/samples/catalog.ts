@@ -125,14 +125,20 @@ export async function openSample(
     setStatus: (s: string) => void;
     pushWarning: (w: string) => void;
   },
-  deps: { fetcher?: typeof fetch; open?: typeof openDocumentFile } = {},
+  deps: {
+    fetcher?: typeof fetch;
+    open?: typeof openDocumentFile;
+    /** The catalog the sample came from, when not the build's own. */
+    base?: string;
+  } = {},
 ): Promise<void> {
   const fetcher = deps.fetcher ?? fetch;
   const open = deps.open ?? openDocumentFile;
+  const base = deps.base ?? catalogUrl();
   sinks.setStatus(`fetching ${sample.title}…`);
   const fonts = await Promise.all(
     sample.fonts.map(async (f) => {
-      const r = await fetcher(resolve(f.url));
+      const r = await fetcher(resolve(f.url, base));
       if (!r.ok) throw new Error(`font ${f.family} (${r.status})`);
       return { f, bytes: new Uint8Array(await r.arrayBuffer()) };
     }),
@@ -140,7 +146,7 @@ export async function openSample(
   for (const { f, bytes } of fonts) {
     await editor.client.registerFont(f.family, bytes, f.style ?? null);
   }
-  const doc = await fetcher(resolve(sample.document));
+  const doc = await fetcher(resolve(sample.document, base));
   if (!doc.ok) throw new Error(`document (${doc.status})`);
   const bytes = await doc.arrayBuffer();
   const name = `${sample.title}.paged`;

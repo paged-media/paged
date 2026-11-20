@@ -15,6 +15,11 @@
       "id": "draw-live",
       "title": "paged.draw, live",
       "description": "Hands-free: a curve by its anchors, live rounded corners and a Pathfinder union, drawn by a script in the real editor."
+    },
+    {
+      "id": "tour-publication",
+      "title": "Tour a real publication",
+      "description": "Open with ?sample=<id>: spreads and masters, threaded text, paragraph styles, swatches and preflight in a finished publication, narrated by a script."
     }
   ]
 }

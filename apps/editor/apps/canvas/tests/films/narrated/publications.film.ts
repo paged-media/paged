@@ -30,9 +30,10 @@
 import { expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { film, type Kit } from "../kit/film";
+import { film } from "../kit/film";
 import { typeHuman } from "../kit/pointer";
 import { menu, press } from "../kit/ui";
+import { goTo, jumpTo, opened, storyLengths } from "../kit/samples";
 
 /** The documents the take opens and where it goes in them. */
 interface Take {
@@ -65,22 +66,6 @@ interface Item {
   bounds: Bounds;
   hasImage: boolean;
   storyId?: string;
-}
-
-/** The open document's stories, each with its character count. */
-async function storyLengths(page: Page): Promise<number[]> {
-  return page.evaluate(async () => {
-    const c = (
-      globalThis as unknown as {
-        __canvas: {
-          client: {
-            collection(n: string): Promise<Array<{ characterCount: number }>>;
-          };
-        };
-      }
-    ).__canvas;
-    return (await c.client.collection("stories")).map((s) => s.characterCount);
-  });
 }
 
 /** Every page item with its bounds and its story. */
@@ -158,66 +143,9 @@ async function storyWith(
   throw new Error(`no story has "${words}"`);
 }
 
-/** The sample open: its title in the window, its stories loaded, every
- *  page prepared. A recovery offer for the document left before (the take
- *  typed into it) is declined: the next sample opens as it was published. */
-async function opened(page: Page, title: RegExp): Promise<void> {
-  const notNow = page.getByRole("button", { name: "Not now" });
-  await expect(page).toHaveTitle(title, { timeout: 120_000 });
-  await expect
-    .poll(async () => (await storyLengths(page)).length, { timeout: 120_000 })
-    .toBeGreaterThan(10);
-  if (await notNow.isVisible().catch(() => false)) await notNow.click();
-  await expect(page.getByText(/Preparing pages/).first()).toBeHidden({
-    timeout: 180_000,
-  });
-  if (await notNow.isVisible().catch(() => false)) await notNow.click();
-}
-
 /** To a spread through the Document Map's row for it ("Pages 4–5"):
  *  the row scrolled into view and settled before the click, and the page
  *  bar's "N / total" showing its first page after it. */
-async function goTo(k: Kit, row: string): Promise<void> {
-  const first = row.replace(/^Pages /, "").split("–")[0];
-  const item = k.page.getByText(row, { exact: true }).first();
-  await item.scrollIntoViewIfNeeded();
-  await k.hold(700);
-  await press(k, item);
-  await expect(
-    k.page.getByText(new RegExp(`^${first} / \\d+$`)).first(),
-  ).toBeVisible({ timeout: 15_000 });
-  await k.hold(900);
-  await k.recamera();
-}
-
-/** To page `n` by the editor's go-to-page command (off camera, in a cut):
- *  a long document's Document Map is still filling while it prepares. */
-async function jumpTo(k: Kit, n: number): Promise<void> {
-  await k.page.evaluate(async (want) => {
-    const c = (
-      globalThis as unknown as {
-        __canvas: {
-          client: { executeScript(s: string): Promise<{ output: string[] }> };
-          registries: {
-            commands: { invoke(id: string, args: unknown): Promise<unknown> };
-          };
-        };
-      }
-    ).__canvas;
-    const r = await c.client.executeScript("JSON.stringify(paged.pages())");
-    const pages = JSON.parse(JSON.parse(r.output[0])) as Array<{
-      selfId: string;
-      index: number;
-    }>;
-    const target = pages.find((p) => p.index === want);
-    if (!target) throw new Error(`no page ${want}`);
-    await c.registries.commands.invoke("paged.view.goToPage", {
-      page: target.selfId,
-    });
-  }, n);
-  await k.hold(1200);
-  await k.recamera();
-}
 
 film("publications", async (k) => {
   const { page } = k;

@@ -230,6 +230,18 @@ export interface EditorConfig {
    * code `unknownSeed`.
    */
   seed?: string;
+  /**
+   * A sample publication to open, by its id in the sample catalog: its
+   * faces are registered, then its `.paged` opens. Ignored when `document`
+   * is given. The catalog is read before anything mounts; an id it does not
+   * list, or a catalog that cannot be read, refuses with an `EditorError` of
+   * code `unknownSample`. The host page's Content-Security-Policy must admit
+   * the catalog's host.
+   */
+  sample?: string;
+  /** The sample catalog's URL; `https://modules.paged.media/samples/catalog.json`
+   *  by default. */
+  samplesUrl?: string;
   /** What the host decides: save, submit, close, back. */
   actions?: HostActions;
   /** Field values to set once the document is open. */
@@ -302,7 +314,10 @@ export type EditorErrorCode =
    *  through `@paged-media/editor/iframe`; the message says how. */
   | "notCrossOriginIsolated"
   /** `EditorConfig.seed` names no seed document; the message lists them. */
-  | "unknownSeed";
+  | "unknownSeed"
+  /** `EditorConfig.sample` names no sample in the catalog, or the catalog
+   *  could not be read; the message says which catalog and what it lists. */
+  | "unknownSample";
 
 /** An error the editor refuses with; `isEditorError` tells it apart. */
 export interface EditorError extends Error {

@@ -148,4 +148,26 @@ describe("openSample", () => {
     ).rejects.toThrow("font Display Sans (404)");
     expect(opened).toBe(false);
   });
+
+  test("reads every file against the catalog it was given (editor ADR 212, amendment 2)", async () => {
+    const urls: string[] = [];
+    const fetcher = ((url: string) => {
+      urls.push(url);
+      return Promise.resolve(new Response(new Uint8Array([1])));
+    }) as unknown as typeof fetch;
+    const editor = {
+      client: { registerFont: () => Promise.resolve() },
+    } as unknown as PagedEditor;
+    await openSample(
+      editor,
+      sample,
+      { setStatus: () => undefined, pushWarning: () => undefined },
+      { fetcher, open: () => Promise.resolve(), base: BASE },
+    );
+    expect(urls).toEqual([
+      "https://host.example/samples/lookbook/fonts/display.ttf",
+      "https://host.example/samples/lookbook/fonts/display-italic.ttf",
+      "https://host.example/samples/lookbook/lookbook.paged",
+    ]);
+  });
 });

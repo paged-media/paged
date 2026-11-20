@@ -8,6 +8,8 @@
   "app.emptyCanvas.samples": "Beispieldokumente",
   "app.emptyCanvas.samplePages": "{count} Seiten",
   "app.emptyCanvas.sampleFailed": "{name} wurde nicht geöffnet: {reason}",
+  "app.samples.credit": "© {publisher}",
+  "app.samples.notice": "Diese Beispielpublikationen dienen ausschließlich der Veranschaulichung und Demonstration. Sie stammen von archive.org und bleiben Eigentum ihrer Verlage; ihre Schrift ist mit Google Fonts gesetzt, die für die Schriften der Verlage stehen.",
   "app.emptyCanvas.title": "Kein Dokument geöffnet",
   "app.referenceCommands.footnote": "Fußnote einfügen",
   "app.referenceCommands.endnote": "Endnote einfügen",

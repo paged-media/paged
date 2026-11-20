@@ -24,6 +24,7 @@
 import { useEffect, useRef } from "react";
 import { useOptionalPaged } from "@paged-media/shell";
 import { loadCatalog, openSample, samplesEnabled } from "./catalog";
+import { settleSampleLink } from "./link";
 
 export function SampleLink() {
   const paged = useOptionalPaged();
@@ -33,17 +34,20 @@ export function SampleLink() {
     const id = new URLSearchParams(window.location.search).get("sample");
     if (!id) return;
     done.current = true;
-    void loadCatalog().then((samples) => {
-      const sample = samples.find((s) => s.id === id);
-      if (!sample) {
-        console.warn(`[samples] no sample "${id}" in the catalog`);
-        return;
-      }
-      return openSample(paged, sample, {
-        setStatus: () => undefined,
-        pushWarning: (w) => console.warn(`[samples] ${w}`),
-      }).catch((e) => console.warn(`[samples] ${String(e)}`));
-    });
+    void loadCatalog()
+      .then((samples) => {
+        const sample = samples.find((s) => s.id === id);
+        if (!sample) {
+          console.warn(`[samples] no sample "${id}" in the catalog`);
+          return;
+        }
+        return openSample(paged, sample, {
+          setStatus: () => undefined,
+          pushWarning: (w) => console.warn(`[samples] ${w}`),
+        }).catch((e) => console.warn(`[samples] ${String(e)}`));
+      })
+      // A `?script=` on the same page starts now (link.ts).
+      .finally(settleSampleLink);
   }, [paged]);
   return null;
 }

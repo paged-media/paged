@@ -50,7 +50,13 @@ import { loadLocale } from "@paged-media/strings";
 
 import type { HostActions, ShellAccess } from "../app/instance";
 import { isSeedId, SEED_PAGE_PT, SEEDS } from "../playground/seeds";
-import { assertEmbeddable, unknownSeed } from "./errors";
+import { assertEmbeddable, unknownSample, unknownSeed } from "./errors";
+import {
+  catalogUrl,
+  loadCatalog,
+  openSample,
+  type Sample,
+} from "../samples/catalog";
 
 /** A field's value, as the handle takes and gives it. */
 export type FieldValue = TemplateFieldValue["value"];
@@ -72,6 +78,18 @@ export interface EditorConfig {
    * (editor ADR 212, amendment 1).
    */
   seed?: string;
+  /**
+   * A sample publication to open, by its id in the sample catalog (editor
+   * ADR 1243): its faces are registered, then its `.paged` opens. Ignored
+   * when `document` is given. The catalog is read before anything mounts;
+   * an id it does not list, or a catalog that cannot be read, refuses with
+   * an `EditorError` of code `unknownSample` (editor ADR 212, amendment 2).
+   * The host page's Content-Security-Policy must admit the catalog's host.
+   */
+  sample?: string;
+  /** The sample catalog's URL; the module host's
+   *  (`https://modules.paged.media/samples/catalog.json`) by default. */
+  samplesUrl?: string;
   /** What the host decides: save, submit, close, back. */
   actions?: HostActions;
   /** Field values to set once the document is open. */
@@ -254,6 +272,10 @@ export async function createEditor(
   assertEmbeddable();
   if (config.seed !== undefined && !isSeedId(config.seed))
     throw unknownSeed(config.seed, Object.keys(SEEDS));
+  const sample =
+    config.sample !== undefined && !config.document
+      ? await findSample(config.sample, config.samplesUrl)
+      : undefined;
   const profile = profileOf(config);
   const { strings, problem } = await loadLocale(config.locale ?? "en", {
     ...(config.messages ? { messages: config.messages } : {}),
@@ -393,6 +415,10 @@ export async function createEditor(
 
   try {
     if (config.document) await handle.load(config.document);
+    else if (sample)
+      await openSample(paged, sample, sinks, {
+        base: config.samplesUrl ?? catalogUrl(),
+      });
     else if (config.seed !== undefined && isSeedId(config.seed))
       await seedDocument(
         handle,
@@ -408,6 +434,27 @@ export async function createEditor(
   }
   emit({ type: "ready" });
   return handle;
+}
+
+/**
+ * The catalog entry `id` names, read before the editor mounts, so a host
+ * that names a sample the catalog does not list (or a catalog that cannot
+ * be read) gets an `unknownSample` refusal and nothing on its page.
+ */
+export async function findSample(
+  id: string,
+  url: string = catalogUrl(),
+  fetcher: typeof fetch = fetch,
+): Promise<Sample> {
+  const samples = await loadCatalog(fetcher, url);
+  const found = samples.find((s) => s.id === id);
+  if (!found)
+    throw unknownSample(
+      id,
+      url,
+      samples.map((s) => s.id),
+    );
+  return found;
 }
 
 /** View ▸ Fit selection in window (app-commands.ts,

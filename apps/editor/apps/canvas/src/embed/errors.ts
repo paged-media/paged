@@ -27,7 +27,10 @@
 export type EditorErrorCode =
   | "notCrossOriginIsolated"
   /** `config.seed` names no seed document (editor ADR 212, amendment 1). */
-  | "unknownSeed";
+  | "unknownSeed"
+  /** `config.sample` names no sample in the catalog, or the catalog could
+   *  not be read (editor ADR 212, amendment 2). */
+  | "unknownSample";
 
 /** An error the embedding API refuses with. */
 export interface EditorError extends Error {
@@ -38,6 +41,7 @@ export interface EditorError extends Error {
 const CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   "notCrossOriginIsolated",
   "unknownSeed",
+  "unknownSample",
 ]);
 
 /** An `EditorError` with this code and message. */
@@ -115,5 +119,20 @@ export function unknownSeed(
   return editorError(
     "unknownSeed",
     `No seed document is named "${name}". The seeds: ${known.join(", ")}.`,
+  );
+}
+
+/** The refusal of a sample id the catalog does not list; the message says
+ *  which catalog and the ids it does list, or that it could not be read. */
+export function unknownSample(
+  id: string,
+  catalog: string,
+  known: readonly string[],
+): EditorError {
+  return editorError(
+    "unknownSample",
+    known.length === 0
+      ? `No sample is named "${id}": the catalog at ${catalog} could not be read or lists none.`
+      : `No sample is named "${id}" in the catalog at ${catalog}. It lists: ${known.join(", ")}.`,
   );
 }

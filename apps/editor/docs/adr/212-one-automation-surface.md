@@ -113,6 +113,23 @@ held to the sources by `test/conformance.ts`). Tests: `test/embed/seed.dom.test.
 `test/unit/settings/playground-url.dom.test.tsx`. The `paged:run` bridge stays until the docs
 lab ships on the embedding API.
 
+## Amendment 2 (2026-11-20) — a sample publication through the embedding API, and a tour that waits for it
+
+`EditorConfig.sample` opens a sample publication by its id in the sample catalog (editor ADR 1243),
+`samplesUrl` names another catalog. The catalog is read before anything mounts, like a seed's
+name: an id it does not list, or a catalog that cannot be read, refuses with an `EditorError` of
+code `unknownSample` and leaves the host's element empty (`findSample`). Once mounted, the
+sample's faces are registered and its `.paged` opens through the one load path; `document` still
+wins over both. The iframe gets it with no change (`FrameConfig` is `EditorConfig` without
+`actions`); a host that mounts `createEditor` itself must admit the catalog's host in its
+Content-Security-Policy. The public contract follows (`packages/editor/src/types.ts`).
+
+On play.paged.media a `?sample=` link and a `?script=` on one page no longer race: the script
+waits until the link has opened its sample or given up (`src/samples/link.ts`), so a script can
+be a tour of the publication. `public/scripts/tour-publication.js` is that tour; it names no
+publication and walks whichever is open. Tests: `test/embed/sample.dom.test.ts`,
+`test/unit/sample-link.test.ts`, `test/unit/samples-catalog.test.ts`.
+
 ## Related
 
 - [ADR 203](203-shell-is-a-registry-host.md), [ADR 205](205-client-packaged-as-write-sdk.md) — the registries `editor.*` wraps; the client the handle exposes

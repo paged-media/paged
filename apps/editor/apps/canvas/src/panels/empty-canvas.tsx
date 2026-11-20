@@ -45,6 +45,7 @@ import {
   samplesEnabled,
   type Sample,
 } from "../samples/catalog";
+import { SampleCredit, SampleNotice } from "../samples/SampleNotice";
 
 const M = defineMessages("app.emptyCanvas", {
   title: "No document is open",
@@ -204,10 +205,15 @@ export function EmptyCanvas() {
                         {strings.t(M.samplePages, { count: s.pages })}
                       </span>
                     )}
+                    <SampleCredit
+                      publisher={s.credit}
+                      style={sampleMetaStyle}
+                    />
                   </button>
                 </li>
               ))}
             </ul>
+            <SampleNotice style={formatsStyle} />
           </div>
         )}
         <p style={formatsStyle} data-empty-formats>

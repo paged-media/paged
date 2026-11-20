@@ -70,6 +70,7 @@ import {
   type GuidePrefs,
   type GuideSide,
 } from "./guide-prefs";
+import { sampleLinkSettled } from "../samples/link";
 
 interface ScriptMeta {
   id: string;
@@ -159,6 +160,8 @@ export function PlaygroundController(): React.ReactElement | null {
       fetch(`/scripts/manifest.json`)
         .then((r) => (r.ok ? r.json() : { scripts: [] }))
         .catch(() => ({ scripts: [] })),
+      // A `?sample=` on the same page opens first: the script tours it.
+      sampleLinkSettled(),
     ])
       .then(([src, manifest]) => {
         if (!alive) return;

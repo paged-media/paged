@@ -54,3 +54,16 @@ no third-party document or font.
   visitors never open, and every new sample would be a release.
 - **Embed the faces in the `.paged`.** The format does not carry faces; the host registers them,
   and the catalog is where a host learns which.
+
+## Amendment 1 (2026-11-20): the samples say whose they are
+
+The samples are other publishers' publications, shown for illustration. The empty canvas now
+names each one's publisher under its title (the catalog's `credit`, which until now was carried
+but never shown), and under the list one line of text says that the sample publications are used
+for illustrative and demonstration purposes only, come from archive.org and remain their
+publishers' property, and that their type is set in Google Fonts standing in for the publishers'
+own (`src/samples/SampleNotice.tsx`, `test/unit/sample-notice.dom.test.tsx`).
+
+The notice is text beside the pictures, never part of a cover, a still or a film frame; a page
+that shows a sample (the website, the documentation, a film's disclosure) carries the same notice
+in its own text. The editor names no sample: the words come with the catalog.
