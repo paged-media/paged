@@ -34,6 +34,7 @@ import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { hover, menu, press, screenPoint } from "../kit/ui";
 import { decodeEan13 } from "../kit/ean";
+import { cutToSample, pagePoint, sampleRole } from "../kit/samples";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const CSV = join(MEDIA, "assets", "catalogue.csv");
@@ -651,6 +652,70 @@ film("data", async (k) => {
     await k.key("z", "Zoom tool");
     for (let i = 0; i < 4; i++) {
       await pointer.click(await pt(k, 435, PAGE2_Y + 645), { targetWidth: 60 });
+      await k.hold(350);
+    }
+    await k.hold(1800);
+  });
+
+  // ── A real publication (website ADR 863): the same data, its EAN drawn
+  //    as a barcode on a real catalogue page (films/samples.take.json). ──
+  const real = sampleRole("data");
+  await cutToSample(k, real, "Opening a real catalogue");
+  await k.scene("real", async () => {
+    await press(
+      k,
+      page.getByRole("button", { name: "Data layout", exact: true }).last(),
+    );
+    await k.hold(600);
+    const chooser = page.waitForEvent("filechooser");
+    await press(k, visible("[data-data-import-csv]"));
+    k.chip("catalogue.csv", "file");
+    await (await chooser).setFiles(CSV);
+    const st = page.locator("[data-status]").last();
+    await expect
+      .poll(
+        async () =>
+          (await st.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 60_000,
+        },
+      )
+      .toBe("ready");
+    // A frame in the page's open space, under the photograph (the Data
+    // layout workspace has no control bar: drawn where it belongs).
+    await k.key("m", "Rectangle tool");
+    const [x0, y0, x1, y1] = real.rect as [number, number, number, number];
+    const n = real.page as number;
+    await pointer.drag(
+      await pagePoint(k, n, x0, y0),
+      await pagePoint(k, n, x1, y1),
+      { speed: 1.4 },
+    );
+    await press(k, page.getByText("Bindings", { exact: true }).last());
+    const author = page.locator("[data-data-bind-author]");
+    await choose(k, author.locator("[data-data-bind-kind]"), "barcode");
+    await choose(
+      k,
+      author
+        .locator("select")
+        .filter({ has: page.locator('option[value="ean13"]') })
+        .first(),
+      "ean13",
+    );
+    await press(k, author.locator("[data-data-bind-field]"));
+    await page.keyboard.type("ean", { delay: 90 });
+    await press(k, author.locator("[data-data-bind-add]"));
+    await press(k, page.getByRole("button", { name: /^place on page$/i }));
+    await expect(page.locator("[data-status]").last()).toHaveText(
+      /Resolved \+ lowered barcode/,
+      { timeout: 15_000 },
+    );
+    // Off the selection, then the editor's own zoom on the bars.
+    await k.key("Escape");
+    await k.key("z", "Zoom tool");
+    const mid = await pagePoint(k, n, (x0 + x1) / 2, (y0 + y1) / 2);
+    for (let z = 0; z < 3; z++) {
+      await pointer.click(mid, { targetWidth: 60 });
       await k.hold(350);
     }
     await k.hold(1800);

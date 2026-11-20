@@ -30,6 +30,7 @@ import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { typeHuman } from "../kit/pointer";
 import { hover, menu, press, screenPoint } from "../kit/ui";
+import { cutToSample, sampleRole } from "../kit/samples";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 
@@ -208,5 +209,12 @@ film("indesign", async (k) => {
   //    from this take's files; the editor holds while it shows. ──
   await k.scene("compare", async () => {
     await k.hold(400);
+  });
+
+  // ── A real publication (website ADR 863): the same editor opens one,
+  //    rebuilt from its publisher's PDF (the take's sample: films/samples.take.json). ──
+  await cutToSample(k, sampleRole("indesign"), "Opening a real magazine");
+  await k.scene("real", async () => {
+    await k.hold(3800);
   });
 });

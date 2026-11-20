@@ -37,6 +37,7 @@ import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { typeHuman } from "../kit/pointer";
 import { menu, press, screenPoint } from "../kit/ui";
+import { cutToSample, sampleRole } from "../kit/samples";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const FONTS = join(
@@ -456,5 +457,26 @@ film("designers", async (k) => {
       await expect.poll(mode).toBe(id);
       await k.hold(label === "Design" ? 400 : 1000);
     }
+  });
+
+  // ── A real publication (website ADR 863): the same tools reading a real
+  //    magazine's page — its text threads, its own paragraph styles
+  //    (films/samples.take.json, "designers"). ──
+  await cutToSample(k, sampleRole("designers"), "Opening a real magazine");
+  await k.scene("real", async () => {
+    await k.hold(900);
+    await menu(k, ["View", "Editing aids", "Text threads"]);
+    await k.hold(1600);
+    await press(
+      k,
+      page.getByRole("button", { name: "Styles", exact: true }).first(),
+    );
+    // The Styles rail opens on object styles; the magazine's paragraph
+    // styles are the tab beside them.
+    await press(
+      k,
+      page.locator('[data-dock-tab="paged.paragraph-styles"]').first(),
+    );
+    await k.hold(2600);
   });
 });

@@ -36,6 +36,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { menu, press, screenPoint } from "../kit/ui";
+import { cutToSample, sampleRole } from "../kit/samples";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const CSV = join(MEDIA, "assets", "catalogue.csv");
@@ -692,5 +693,21 @@ film("database-publishing", async (k) => {
     // amendment of 2026-11-18): the export leaves nothing out, so the
     // editor has no "items left out" to report.
     await expect(page.getByText(/\bleft out\b/)).toHaveCount(0);
+  });
+
+  // ── A real publication (website ADR 863): the same editor opens one,
+  //    rebuilt from its publisher's PDF (the take's sample: films/samples.take.json). ──
+  await cutToSample(
+    k,
+    sampleRole("database-publishing"),
+    "Opening a real catalogue",
+  );
+  await k.scene("real", async () => {
+    await k.hold(1500);
+    await press(
+      k,
+      page.getByRole("button", { name: "Pages", exact: true }).first(),
+    );
+    await k.hold(3200);
   });
 });

@@ -41,6 +41,7 @@ import {
 } from "../../e2e/harness/idml-stories";
 import { cameraScale, screenPoint } from "../../e2e/harness/viewport";
 import { openPanel } from "../../fidelity/canvas-driver";
+import { cutToSample, moveTo, sampleRole } from "../kit/samples";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 
@@ -598,5 +599,28 @@ film("sheet", async (k) => {
     ]) {
       expect(labels, `the chart's "${label}" label`).toContain(label);
     }
+  });
+
+  // ── A real publication (website ADR 863): the price list's chart, lowered
+  //    onto a real catalogue page as vectors, moved to its open space. ──
+  const real = sampleRole("sheet");
+  await cutToSample(k, real, "Opening a real catalogue");
+  await k.scene("real", async () => {
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await menu(k, ["Insert", "Spreadsheet…"]);
+    k.chip("price-list.xlsx", "file");
+    await (await chooser).setFiles(join(ASSETS, "price-list.xlsx"));
+    const charts = page.locator('[data-sheet-section="charts"]');
+    await expect(charts).toBeVisible({ timeout: 20_000 });
+    await press(k, charts.locator("summary"));
+    await press(k, page.locator("[data-sheet-chart-lower]").first());
+    await expect(page.getByLabel("Left edge (pt)").first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await k.hold(600);
+    // Into the page's open space, under its text.
+    const [x, y] = real.spot as [number, number];
+    await moveTo(k, x, y);
+    await k.hold(2400);
   });
 });

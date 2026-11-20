@@ -32,6 +32,7 @@ import { film, type Kit } from "../kit/film";
 import { hover, menu, press } from "../kit/ui";
 import { cameraScale } from "../../e2e/harness/viewport";
 import { typeHuman } from "../kit/pointer";
+import { cutToSample, sampleRole } from "../kit/samples";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 const NOTE = "Ask who reads the mailing edition.";
@@ -379,5 +380,12 @@ film("slide", async (k) => {
     );
     await expect(page.locator("[data-notes-text]")).toHaveValue(NOTE);
     await k.hold(800);
+  });
+
+  // ── A real publication (website ADR 863): the same editor opens one,
+  //    rebuilt from its publisher's PDF (the take's sample: films/samples.take.json). ──
+  await cutToSample(k, sampleRole("slide"), "Opening a real annual report");
+  await k.scene("real", async () => {
+    await k.hold(4200);
   });
 });

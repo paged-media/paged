@@ -28,20 +28,25 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { film, type Kit } from "../kit/film";
 import { typeHuman } from "../kit/pointer";
 import { hover, menu, press, screenPoint } from "../kit/ui";
+import {
+  fitPage,
+  jumpTo,
+  openSample,
+  pagePoint,
+  sampleRole,
+} from "../kit/samples";
 
-const SWATCHES = `for (const [selfId, name, rgb] of [
-  ["Color/Rose", "Rose", [244, 127, 192]],
-  ["Color/Mint", "Mint", [111, 220, 155]],
-  ["Color/Violet", "Violet", [169, 139, 245]],
-]) paged.createSwatch({ selfId, name, space: "RGB", value: rgb, model: "Process" });
-const page = JSON.parse(paged.pages())[0].selfId;
-[[90, 80, 250, 290, "Color/Rose"], [90, 322, 250, 532, "Color/Mint"], [290, 80, 450, 290, "Color/Mint"], [290, 322, 450, 532, "Color/Rose"]]
-  .forEach(([t, l, b, r, fill]) => paged.set(paged.insertFrame(page, [t, l, b, r]), "frameFillColor", fill));
+// The scenes run on a page of a real publication (website ADR 863): which
+// one is the storyboard's (films/samples.take.json, "developers"). The
+// swatch the batch fills with is made off camera.
+const VIOLET = `paged.createSwatch({ selfId: "Color/Violet", name: "Violet", space: "RGB", value: [169, 139, 245], model: "Process" });
 paged.clearSelection();`;
 
-const QUERY = `paged.query("page:#1 > frame")`;
+const QUERY = (n: number) => `paged.query("page:#${n} > frame")`;
 
-const BATCH = `const frames = JSON.parse(paged.query("page:#1 > frame"));
+const BATCH = (
+  n: number,
+) => `const frames = JSON.parse(paged.query("page:#${n} > frame"));
 paged.batch(frames.flatMap((f) => [
   { op: "set", address: f, path: "frameFillColor", value: "Color/Violet" },
   { op: "set", address: f, path: "frameRotationAngle", value: -6 },
@@ -70,11 +75,12 @@ async function run(page: Page, source: string): Promise<string[]> {
 /** Each frame on page 1: its fill and rotation. */
 async function frames(
   page: Page,
+  n: number,
 ): Promise<Array<{ fill: unknown; angle: unknown }>> {
   const out = await run(
     page,
     `const v = (f, p) => JSON.parse(paged.get(f, p)).value;
-console.log(JSON.stringify(JSON.parse(paged.query("page:#1 > frame")).map((f) => ({ fill: v(f, "frameFillColor"), angle: v(f, "frameRotationAngle") }))));`,
+console.log(JSON.stringify(JSON.parse(paged.query("page:#${n} > frame")).map((f) => ({ fill: v(f, "frameFillColor"), angle: v(f, "frameRotationAngle") }))));`,
   );
   return JSON.parse(out[0].replace(/^\[log\] /, ""));
 }
@@ -111,6 +117,9 @@ async function scriptArea(
 
 film("developers", async (k) => {
   const { page, designer, pointer } = k;
+  const real = sampleRole("developers");
+  const PAGE = real.page as number;
+  let before: string[] = [];
   const panel = page.locator("[data-script-editor]");
   const source = panel.locator("[data-script-source]");
   const log = panel.locator("[data-script-log]");
@@ -172,10 +181,10 @@ film("developers", async (k) => {
     await k.hold(1500);
   });
 
-  // The script plays to its end, then a fresh page with four frames; the
+  // The script plays to its end, then a page of a real publication; the
   // edit removes the wait. (Restart does not stop a statement already
   // running: it would go on drawing into the fresh page.)
-  await k.cut("a fresh page", async () => {
+  await k.cut("Opening a real magazine", async () => {
     await expect(page.locator("[data-playground-status]")).toHaveAttribute(
       "data-playground-status",
       "done",
@@ -183,9 +192,12 @@ film("developers", async (k) => {
     );
     await page.locator("[data-playground-toggle]").click();
     await expect(page.locator("[data-playground-source]")).toHaveCount(0);
-    await designer.newDocument();
-    await run(page, SWATCHES);
-    await expect.poll(async () => (await frames(page)).length).toBe(4);
+    await openSample(k, real);
+    await jumpTo(k, PAGE);
+    await fitPage(k);
+    await run(page, VIOLET);
+    before = (await frames(page, PAGE)).map((f) => `${f.fill}/${f.angle}`);
+    expect(before.length, "frames on the page").toBeGreaterThan(3);
     await k.hold(600);
     await k.recamera();
   });
@@ -204,10 +216,9 @@ film("developers", async (k) => {
     await press(k, source);
     await page.keyboard.press("Meta+a");
     await page.keyboard.press("Backspace");
-    await typeHuman(page, QUERY, 11);
+    await typeHuman(page, QUERY(PAGE), 11);
     await press(k, panel.locator("[data-action=run]"));
-    for (const n of [1, 2, 3, 4])
-      await expect(log).toContainText(`rectangle:u${n}`);
+    await expect(log).toContainText(/(rectangle|textFrame|polygon):/);
   });
 
   // ── One batch: every frame restyled, as one step. ──
@@ -215,12 +226,12 @@ film("developers", async (k) => {
     await press(k, source);
     await page.keyboard.press("Meta+a");
     k.chip("Paste", "key", "⌘V");
-    await page.keyboard.insertText(BATCH);
+    await page.keyboard.insertText(BATCH(PAGE));
     await k.hold(900);
     await press(k, panel.locator("[data-action=run]"));
     await expect
       .poll(async () =>
-        (await frames(page)).every(
+        (await frames(page, PAGE)).every(
           (f) => f.fill === "Color/Violet" && f.angle === -6,
         ),
       )
@@ -233,13 +244,10 @@ film("developers", async (k) => {
   await k.scene("undo", async () => {
     await k.key("Meta+z", "Undo", "⌘Z");
     await expect
-      .poll(async () => (await frames(page)).map((f) => `${f.fill}/${f.angle}`))
-      .toEqual([
-        "Color/Rose/0",
-        "Color/Mint/0",
-        "Color/Mint/0",
-        "Color/Rose/0",
-      ]);
+      .poll(async () =>
+        (await frames(page, PAGE)).map((f) => `${f.fill}/${f.angle}`),
+      )
+      .toEqual(before);
   });
 
   // ── A plugin is a manifest: the terminal shows paged.draw's. ──
@@ -247,12 +255,14 @@ film("developers", async (k) => {
 
   // ── Its panel opens like any other. ──
   await k.scene("panel", async () => {
-    // Select the first frame, so the panel shows its appearance.
+    // Select the page's photograph, so the panel shows its appearance.
     await k.key("v");
-    await pointer.click(await screenPoint(page, 120, 120), { targetWidth: 60 });
+    await pointer.click(await pagePoint(k, PAGE, 300, 190), {
+      targetWidth: 60,
+    });
     await expect
       .poll(async () => (await run(page, `console.log(paged.selection())`))[0])
-      .toContain('"id":"u1"');
+      .toMatch(/"id":"/);
     await press(
       k,
       page.getByRole("menubar").getByText("Plugins", { exact: true }).first(),

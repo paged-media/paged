@@ -41,6 +41,7 @@ import {
   webSource,
   type ElementRef,
 } from "../../journey/plugins/web-kit";
+import { cutToSample, moveTo, sampleRole } from "../kit/samples";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 
@@ -319,5 +320,23 @@ film("web", async (k) => {
     ).toBeLessThan(1.5);
     k.focus(FRAMES);
     await k.hold(2200);
+  });
+
+  // ── A real publication (website ADR 863): the mailer, opened onto a real
+  //    catalogue page as a web frame, moved to the page's open space. ──
+  const real = sampleRole("web");
+  await cutToSample(k, real, "Opening a real catalogue");
+  await k.scene("real", async () => {
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await menu(k, ["File", "Open…"]);
+    k.chip("spring-mailer.html", "file");
+    await (await chooser).setFiles(join(ASSETS, "spring-mailer.html"));
+    await expect(page.getByLabel("Left edge (pt)").first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await k.hold(700);
+    const [x, y] = real.spot as [number, number];
+    await moveTo(k, x, y);
+    await k.hold(2400);
   });
 });

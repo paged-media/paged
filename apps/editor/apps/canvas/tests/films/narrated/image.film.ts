@@ -35,6 +35,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { hover, menu, press, screenPoint } from "../kit/ui";
+import { cutToSample, sampleRole } from "../kit/samples";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 const PHOTO = "pexels-618833-dolomites.jpg";
@@ -389,5 +390,23 @@ film("image", async (k) => {
       "Signal:scrn:64",
     ]);
     await k.hold(1000);
+  });
+
+  // ── A real publication (website ADR 863): auto-enhance on the publisher's
+  //    own photograph, selected in the cut (films/samples.take.json). ──
+  await cutToSample(k, sampleRole("image"), "Opening a real magazine");
+  await k.scene("real", async () => {
+    await menu(k, ["Plugins", "Image", "Adjust…"]);
+    await expect
+      .poll(() => editContext(page), { timeout: 20_000 })
+      .toBe("rasterImage");
+    await k.hold(800);
+    await press(k, page.locator("[data-image-auto-enhance]"));
+    await k.hold(2200);
+    await press(k, apply);
+    await expect
+      .poll(() => status(page), { timeout: 30_000 })
+      .toContain("Composited");
+    await k.hold(2200);
   });
 });

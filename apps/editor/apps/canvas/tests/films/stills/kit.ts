@@ -333,3 +333,22 @@ export async function openShowcase(page: Page): Promise<void> {
   );
   await page.waitForTimeout(2000);
 }
+
+/** Open a sample publication (editor ADR 1243) for a still: the stage
+ *  dressed as for the showcase, the sample by its `?sample=` link, its pages
+ *  prepared. Which sample is the storyboard's (films/samples.take.json). */
+export async function openSampleStill(
+  page: Page,
+  ref: { sample: string; title: string },
+): Promise<void> {
+  await dressStage(page);
+  await seasoned(page);
+  await new Designer(page).open({ search: `?sample=${ref.sample}` });
+  await expect(page).toHaveTitle(new RegExp(ref.title), { timeout: 240_000 });
+  await page.waitForFunction(
+    () => !document.body.innerText.includes("Preparing pages"),
+    null,
+    { timeout: 240_000 },
+  );
+  await page.waitForTimeout(2000);
+}

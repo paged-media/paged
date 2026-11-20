@@ -39,6 +39,7 @@ import { join } from "node:path";
 import { dressStage } from "../kit/stage";
 import { FONTS, park, ROOT, seasoned, shot, STILL_VIEW } from "./kit";
 import { LAB_THEMES } from "./lab-themes";
+import { sampleRole } from "../kit/samples";
 
 test.skip(!ROOT, "PAGED_MEDIA_ROOT is not set (stills are captured locally)");
 test.use({
@@ -174,16 +175,25 @@ const still = <T>(page: Page, fn: string) =>
 
 // ── The four presets a host embeds (docs: embedding/profiles-and-presets). ──
 
+// The full editor and the viewer open a sample publication (website ADR
+// 863) through the embedding API's `sample` option; which one is the
+// storyboard's (films/samples.take.json, "profiles").
 test("stills · profile-full", async ({ page }) => {
-  test.setTimeout(240_000);
-  await embed(page, { profile: "full" }, "businessCard", "editor");
+  test.setTimeout(400_000);
+  const ref = sampleRole("profiles");
+  await embed(
+    page,
+    { profile: "full", sample: ref.sample },
+    undefined,
+    "editor",
+  );
   await expect(page.locator('[role="menubar"]')).toBeVisible();
   await park(page);
   await shot(page, "profile-full", {
     shows:
-      'createEditor({ profile: "full" }): the whole editor, the business-card template open',
+      'createEditor({ profile: "full", sample }): the whole editor, a sample publication open',
     profile: "full",
-    document: "business card (src/demos/templates.ts)",
+    sample: ref.sample,
   });
 });
 
@@ -217,16 +227,22 @@ test("stills · profile-template-fill", async ({ page }) => {
 });
 
 test("stills · profile-viewer", async ({ page }) => {
-  test.setTimeout(240_000);
-  await embed(page, { profile: "viewer" }, "businessCard", "viewer");
+  test.setTimeout(400_000);
+  const ref = sampleRole("profiles");
+  await embed(
+    page,
+    { profile: "viewer", sample: ref.sample },
+    undefined,
+    "viewer",
+  );
   await expect(page.locator('[role="menubar"]')).toHaveCount(0);
   await park(page);
   await shot(page, "profile-viewer", {
     shows:
-      'createEditor({ profile: "viewer" }): the canvas and its pages, nothing to change',
+      'createEditor({ profile: "viewer", sample }): the canvas and its pages, a sample publication, nothing to change',
     profile: "viewer",
     role: "viewer",
-    document: "business card (src/demos/templates.ts)",
+    sample: ref.sample,
   });
 });
 

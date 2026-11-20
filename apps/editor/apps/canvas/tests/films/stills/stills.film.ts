@@ -35,6 +35,7 @@ import { join } from "node:path";
 import { Designer } from "../../journey/driver/designer";
 import { ShowcaseDoc } from "../../showcase/driver";
 import { dressStage } from "../kit/stage";
+import { sampleRole } from "../kit/samples";
 import {
   ASSETS,
   openShowcase,
@@ -43,6 +44,7 @@ import {
   FONTS,
   goTo,
   hidePanels,
+  openSampleStill,
   OUT,
   park,
   ROOT,
@@ -89,105 +91,6 @@ test("stills · from the showcase annual", async ({ page }) => {
   );
   await openShowcase(page);
 
-  // ── type: page 29, a caret in a styled paragraph, the paragraph styles. ──
-  await goTo(page, 29);
-  const hit = await canvas(
-    page,
-    async (c) =>
-      (
-        await c.client.send({
-          kind: "hitTest",
-          payload: {
-            pageId: c.handle.pageIds[28],
-            docPoint: [300, 150],
-            filter: "text",
-          },
-        })
-      ).payload,
-  );
-  expect(hit.storyId, "a story under the paragraph").toBeTruthy();
-  await canvas(
-    page,
-    (c, s) => c.setContentSelection({ storyId: s, start: 120, end: 120 }),
-    hit.storyId,
-  );
-  await showPanel(page, "paged.paragraph-styles");
-  const scale29 = await zoomAt(page, 29, 270, 70, 1.2);
-  await park(page);
-  await expect(page.getByRole("combobox").first()).toHaveValue(/./);
-  const caret = await canvas(page, (c) => c.contentSelection);
-  expect(caret?.storyId).toBe(hit.storyId);
-  // The control bar's style select and the panel both name the caret's style.
-  await expect(
-    page.getByText("Field Note", { exact: true }).filter({ visible: true }),
-  ).toHaveCount(1);
-  const barStyle = await page
-    .locator("select:visible")
-    .first()
-    .evaluate(
-      (el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent,
-    );
-  expect(barStyle).toBe("Field Note");
-  await page.waitForTimeout(800);
-  await shot(page, "type", {
-    page: 29,
-    story: hit.storyId,
-    scale: scale29,
-    style: "Field Note",
-  });
-  await hidePanels(page, /paragraph-styles$/);
-
-  // ── image: page 71, the photograph open for editing where it sits. ──
-  await goTo(page, 71);
-  const photo = await canvas(page, async (c) => {
-    const ids = (
-      await c.client.marqueeHits(c.handle.pageIds[70], [30, 350, 500, 670])
-    ).filter((i: any) => i.kind === "rectangle");
-    c.setElementSelection(ids, "replace");
-    return ids;
-  });
-  expect(photo, "one placed photograph").toHaveLength(1);
-  await page
-    .locator("header")
-    .getByText("Plugins", { exact: true })
-    .first()
-    .click();
-  await page
-    .getByRole("menuitem", { name: /^Image/ })
-    .first()
-    .hover();
-  await page
-    .getByRole("menuitem", { name: /^Adjust/ })
-    .first()
-    .click();
-  await expect(page.getByText("Image adjustments")).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByText(/2200×1469 px/).first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect
-    .poll(() => canvas(page, (c) => c.debugContext().editContext?.type ?? null))
-    .toBe("rasterImage");
-  // Zoomed once the editing bar has taken its height: the chapter title to the photo's foot.
-  const scale71 = await zoomAt(page, 71, 264, 505, 0.93);
-  // The menu trigger keeps focus (and its ring) after the click.
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur(),
-  );
-  await park(page);
-  await page.waitForTimeout(1500);
-  await shot(page, "image", {
-    page: 71,
-    element: photo[0],
-    pixels: "2200×1469",
-    context: "rasterImage",
-    scale: scale71,
-  });
-  await page.keyboard.press("Escape");
-  await hidePanels(page, /image/i);
-  await page.waitForTimeout(800);
-
   // ── tables: page 66, a table in its document style, and the table styles. ──
   await goTo(page, 66);
   const story66 = await canvas(
@@ -232,20 +135,148 @@ test("stills · from the showcase annual", async ({ page }) => {
     scale: scale66,
   });
   await hidePanels(page, /table-styles$/);
+});
 
-  // ── prepress: page 123, Prepress mode, the real output check run. ──
-  await goTo(page, 123);
+// ── On a sample publication (website ADR 863): type, image, prepress and the
+//    command bar on a page of a real magazine, rebuilt from its publisher's
+//    PDF. Which one, which page and where on it is the storyboard's
+//    (films/samples.take.json, "stills"): this repository names no
+//    publication. The table still stays on the showcase: a sample's tables
+//    are set with tabs, not table objects. ──
+test("stills · on a sample publication", async ({ page }) => {
+  test.setTimeout(900_000);
+  await page.route("**/api/ai/**", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 405,
+          contentType: "application/json",
+          body: '{"type":"error","error":{"type":"invalid_request_error","message":"POST only"}}',
+        })
+      : route.abort(),
+  );
+  const ref = sampleRole("stills");
+  const n = ref.page as number;
+  const at = (key: string) => ref[key] as number[];
+  await openSampleStill(page, ref);
+  await goTo(page, n);
+  const fitPage = () =>
+    canvas(page, (c) => c.registries.commands.invoke("paged.view.fitPage"));
+
+  // ── type: a caret in a paragraph of the magazine, the paragraph styles. ──
+  const [tx, ty] = at("typePoint");
+  const hit = await canvas(
+    page,
+    async (c, a) =>
+      (
+        await c.client.send({
+          kind: "hitTest",
+          payload: {
+            pageId: c.handle.pageIds[a.n - 1],
+            docPoint: [a.tx, a.ty],
+            filter: "text",
+          },
+        })
+      ).payload,
+    { n, tx, ty },
+  );
+  expect(hit.storyId, "a story under the paragraph").toBeTruthy();
+  await canvas(
+    page,
+    (c, s) => c.setContentSelection({ storyId: s, start: 40, end: 40 }),
+    hit.storyId,
+  );
+  await showPanel(page, "paged.paragraph-styles");
+  const [zx, zy, zs] = at("typeZoom");
+  const typeScale = await zoomAt(page, n, zx, zy, zs);
+  await park(page);
+  await expect(page.getByRole("combobox").first()).toHaveValue(/./);
+  const style = await page
+    .locator("select:visible")
+    .first()
+    .evaluate(
+      (el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent,
+    );
+  expect(style, "the caret's paragraph wears a named style").toBeTruthy();
+  await page.waitForTimeout(800);
+  await shot(page, "type", {
+    page: n,
+    story: hit.storyId,
+    scale: typeScale,
+    style,
+  });
+  await hidePanels(page, /paragraph-styles$/);
+
+  // ── image: the magazine's photograph, open for editing where it sits. ──
+  await goTo(page, n);
+  await fitPage();
+  const photo = await canvas(
+    page,
+    async (c, a) => {
+      const ids = (
+        await c.client.marqueeHits(c.handle.pageIds[a.n - 1], a.rect)
+      ).filter((i: any) => i.kind === "rectangle");
+      c.setElementSelection(ids.slice(0, 1), "replace");
+      return ids.slice(0, 1);
+    },
+    { n, rect: at("photoRect") },
+  );
+  expect(photo, "a placed photograph").toHaveLength(1);
+  await page
+    .locator("header")
+    .getByText("Plugins", { exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole("menuitem", { name: /^Image/ })
+    .first()
+    .hover();
+  await page
+    .getByRole("menuitem", { name: /^Adjust/ })
+    .first()
+    .click();
+  await expect(page.getByText("Image adjustments")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect
+    .poll(
+      () => canvas(page, (c) => c.debugContext().editContext?.type ?? null),
+      {
+        timeout: 30_000,
+      },
+    )
+    .toBe("rasterImage");
+  const [ix, iy, is] = at("imageZoom");
+  const imageScale = await zoomAt(page, n, ix, iy, is);
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  await park(page);
+  await page.waitForTimeout(1500);
+  await shot(page, "image", {
+    page: n,
+    element: photo[0],
+    context: "rasterImage",
+    scale: imageScale,
+  });
+  await page.keyboard.press("Escape");
+  await hidePanels(page, /image/i);
+  await page.waitForTimeout(800);
+
+  // ── prepress: Prepress mode, the real output check run on the publication. ──
+  await goTo(page, n);
+  await fitPage();
   await page
     .getByRole("button", { name: "Prepress", exact: true })
     .last()
     .click();
   await page.getByRole("button", { name: "Validate output" }).first().click();
-  const findings = page.getByText(/\d+ findings?\b/).first();
-  await expect(findings).toBeVisible({ timeout: 60_000 });
+  // A clean publication reports "No findings".
+  const findings = page.getByText(/\d+ findings?\b|No findings/).first();
+  await expect(findings).toBeVisible({ timeout: 120_000 });
   await park(page);
   await page.waitForTimeout(800);
   await shot(page, "prepress", {
-    page: 123,
+    page: n,
     findings: await findings.textContent(),
     readiness: await page
       .getByText(/Not ready|Ready/)
@@ -258,17 +289,18 @@ test("stills · from the showcase annual", async ({ page }) => {
     .click();
 
   // ── command: the command bar, asked for something no command does. ──
-  await goTo(page, 29);
+  await goTo(page, n);
+  await fitPage();
   await showPanel(page, "paged.paragraph-styles");
   await page.keyboard.press("Meta+k");
   const input = page.getByPlaceholder("Ask or search anything…");
   await input.waitFor();
-  const ask = "Make every chapter title one size larger";
+  const ask = "Make every headline one size larger";
   await input.pressSequentially(ask, { delay: 15 });
   await expect(page.locator("[data-palette-ai]")).toBeVisible();
   await park(page);
   await page.waitForTimeout(700);
-  await shot(page, "command", { page: 29, query: ask });
+  await shot(page, "command", { page: n, query: ask });
   await page.keyboard.press("Escape");
 });
 

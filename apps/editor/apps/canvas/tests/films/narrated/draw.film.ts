@@ -28,6 +28,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { hover, menu, press, screenPoint } from "../kit/ui";
+import { cutToSample, moveTo, sampleRole } from "../kit/samples";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 
@@ -369,5 +370,27 @@ film("draw", async (k) => {
     expect(svg).toContain("<svg");
     expect(svg).toContain("<path");
     await k.hold(800);
+  });
+
+  // ── Onto a real publication (website ADR 863): the SVG the take saved,
+  //    imported as paths onto a sample catalogue's page. ──
+  const real = sampleRole("furniture");
+  await cutToSample(k, real, "Opening a real catalogue");
+  await k.scene("real", async () => {
+    const before = (await ids(page, "polygon")).length;
+    const chooser = page.waitForEvent("filechooser");
+    await menu(k, ["File", "Import", "SVG…"]);
+    k.chip("exported.svg", "file");
+    await (await chooser).setFiles(join(k.dir, "exported.svg"));
+    await expect
+      .poll(async () => (await ids(page, "polygon")).length, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(before);
+    await k.hold(700);
+    // Into the open space under the page's right-hand photograph.
+    const spot = real.spot as [number, number];
+    await moveTo(k, spot[0], spot[1]);
+    await k.hold(2200);
   });
 });

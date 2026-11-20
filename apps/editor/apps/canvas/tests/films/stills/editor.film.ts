@@ -34,12 +34,13 @@ import {
   webFrames,
 } from "../../journey/plugins/web-kit";
 import { dressStage } from "../kit/stage";
+import { sampleRole } from "../kit/samples";
 import {
   ASSETS,
   canvas,
   deselect,
   goTo,
-  openShowcase,
+  openSampleStill,
   pagePt,
   park,
   ROOT,
@@ -334,23 +335,27 @@ test("stills · slide", async ({ page }) => {
   });
 });
 
-// ── overview: the showcase annual, a spread fitted, the editor's panels. ──
+// ── overview: a sample publication (website ADR 863), a page fitted, the
+//    editor's panels. Which one is the storyboard's (films/samples.take.json,
+//    "overview"). ──
 test("stills · overview", async ({ page }) => {
-  test.setTimeout(300_000);
-  await openShowcase(page);
+  test.setTimeout(400_000);
+  const ref = sampleRole("overview");
+  const n = ref.page as number;
+  await openSampleStill(page, ref);
   await showPanel(page, "paged.pages");
-  await goTo(page, 70);
+  await goTo(page, n);
   await deselect(page);
-  // Fitted last, once the dock and the selection are settled.
-  await run(page, "paged.view.fitSpread");
+  // Fitted last, once the dock and the selection are settled. The editor
+  // lays a publication's pages one under the other: the page is fitted.
+  await run(page, "paged.view.fitPage");
   await settled(page);
   await park(page);
   await page.waitForTimeout(1500);
   await shot(page, "overview", {
-    shows:
-      "the showcase annual (134 pages), the spread of page 70 fitted, the Pages panel",
-    document: "showcase.paged",
-    page: 70,
+    shows: `a sample publication, page ${n} fitted, the Pages panel`,
+    sample: ref.sample,
+    page: n,
   });
 });
 

@@ -43,6 +43,7 @@ import { hover, menu, press, screenPoint } from "../kit/ui";
 import { decodeEan13, type Bounds } from "../kit/ean";
 import { openPanel } from "../../fidelity/canvas-driver";
 import { readZipText, zipEntryNames } from "../../e2e/harness/read-zip";
+import { cutToSample, sampleRole } from "../kit/samples";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const ASSETS = join(MEDIA, "assets");
@@ -978,5 +979,17 @@ film("home", async (k) => {
     await k.recamera();
     k.focus(SPREAD, 1.3);
     await k.hold(1800);
+  });
+
+  // ── A real publication (website ADR 863): the same editor opens one,
+  //    rebuilt from its publisher's PDF (the take's sample: films/samples.take.json). ──
+  await cutToSample(k, sampleRole("home"), "Opening a real magazine");
+  await k.scene("real", async () => {
+    await k.hold(1800);
+    await press(
+      k,
+      page.getByRole("button", { name: "Preflight", exact: true }).first(),
+    );
+    await k.hold(2800);
   });
 });
