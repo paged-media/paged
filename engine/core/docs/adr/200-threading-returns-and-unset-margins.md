@@ -1,6 +1,6 @@
 # ADR 200 — Threading drops the target's empty story; "\r" is a paragraph return; an unset margin reads as laid out
 
-- **Status:** Accepted 2026-10-20; amended 2026-11-18 (`deleteFrame { withStory }` takes the story the frame alone held).
+- **Status:** Accepted 2026-10-20; amended 2026-11-18 (`deleteFrame { withStory }` takes the story the frame alone held) and 2026-11-20 (a frame unthreaded from its own story can be threaded back).
 - **Scope:** `paged-mutate` (`apply_link_frames`), `paged-canvas` (`apply_insert_text`, the page
   arm of `virtual_set.rs`), `paged-introspect` (`schema.rs` text coercion), `paged-cli`
   (`main.rs`, `render.rs`, `package.rs`, `engine_serve.rs`).
@@ -70,3 +70,22 @@ amendment of 2026-11-18). No wire op could remove a story.
 - The editor's Delete and `deletePage` are unchanged; whether they should take stories too is left
   to the Type on a Path workflow, which needs a free story.
 - `delete_unheld_stories.rs` and `data_merge_pages.rs` assert the rule.
+
+## Amendment 2026-11-20 — threading back into a frame unthreaded from its own story
+
+A user unlink (`unlinkFrames { frame }`) clears the frame's `NextTextFrame` and leaves the
+frames after the break on the story: the composer's chain walk no longer reaches them, so
+they show nothing and the first frame is overset. Threading back into one of them is the way
+back, but `linkFrames` refused it: the target "owns story content", because its story is the
+threaded story and that has text. A broken thread could be mended only by undo.
+
+`linkFrames(from, to)` now also accepts a `to` that is a frame of `from`'s own story which the
+story's chain does not reach: no frame of the story threads into it, and it is not the chain's
+head as `frame_chain` finds it (the story's first frame, in document order, that nothing
+threads into). The head holds the text and stays refused; a frame the chain still reaches is
+refused as before; the cycle check is unchanged. Nothing about the target's story changes, so
+there is no story to drop and undo restores the unlinked state. Found filming the designers
+film on a sample publication, where the page's interview is unthreaded and threaded again
+through the ports (`paged-mutate`, `unthreaded_from_own_story`; tests
+`relink_after_unlink_threads_back`, `link_into_the_story_head_is_rejected`,
+`link_into_a_threaded_frame_of_the_same_story_is_rejected`).

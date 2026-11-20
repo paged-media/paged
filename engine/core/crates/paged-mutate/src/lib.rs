@@ -8550,6 +8550,91 @@ mod tests {
             assert!(matches!(err, OperationError::InvalidValue { .. }));
         }
 
+        /// After a user unlink the frames past the break stay on the
+        /// story, unreached and showing nothing. Threading back into one
+        /// is the way back: it used to be refused as a frame that "owns
+        /// story content", so a broken thread could only be mended by undo.
+        #[test]
+        fn relink_after_unlink_threads_back() {
+            let mut p = Project::new(doc_two_frames());
+            let link = || Operation::LinkFrames {
+                from: "TextFrame/from".to_string(),
+                to: "TextFrame/to".to_string(),
+            };
+            p.apply(link()).expect("link");
+            p.apply(Operation::UnlinkFrames {
+                frame: "TextFrame/from".to_string(),
+                prev_next: None,
+                restore_target: None,
+            })
+            .expect("unlink");
+            let frames = |p: &Project| p.document().spreads[0].spread.text_frames.clone();
+            assert_eq!(frames(&p)[1].parent_story.as_deref(), Some("Story/u1"));
+            p.apply(link())
+                .expect("thread back into the unthreaded frame");
+            assert_eq!(
+                frames(&p)[0].next_text_frame.as_deref(),
+                Some("TextFrame/to")
+            );
+            assert_eq!(frames(&p)[1].parent_story.as_deref(), Some("Story/u1"));
+            assert_eq!(p.document().stories.len(), 1, "the story stays");
+            p.undo().expect("undo the relink");
+            assert!(frames(&p)[0].next_text_frame.is_none());
+            assert_eq!(frames(&p)[1].parent_story.as_deref(), Some("Story/u1"));
+            p.redo().expect("redo the relink");
+            assert_eq!(
+                frames(&p)[0].next_text_frame.as_deref(),
+                Some("TextFrame/to")
+            );
+        }
+
+        /// The frame the story starts in holds its text: threading the
+        /// unthreaded frame into it is still refused.
+        #[test]
+        fn link_into_the_story_head_is_rejected() {
+            let mut p = Project::new(doc_two_frames());
+            p.apply(Operation::LinkFrames {
+                from: "TextFrame/from".to_string(),
+                to: "TextFrame/to".to_string(),
+            })
+            .expect("link");
+            p.apply(Operation::UnlinkFrames {
+                frame: "TextFrame/from".to_string(),
+                prev_next: None,
+                restore_target: None,
+            })
+            .expect("unlink");
+            let err = p
+                .apply(Operation::LinkFrames {
+                    from: "TextFrame/to".to_string(),
+                    to: "TextFrame/from".to_string(),
+                })
+                .unwrap_err();
+            assert!(matches!(err, OperationError::InvalidValue { .. }));
+        }
+
+        /// A frame of the same story that the chain still reaches is not
+        /// free: linking past it is refused.
+        #[test]
+        fn link_into_a_threaded_frame_of_the_same_story_is_rejected() {
+            let mut doc = doc_two_frames();
+            {
+                let frames = &mut doc.spreads[0].spread.text_frames;
+                frames[0].next_text_frame = Some("TextFrame/to".to_string());
+                frames[1].parent_story = Some("Story/u1".to_string());
+                frames[1].next_text_frame = Some("TextFrame/third".to_string());
+                frames.push(text_frame("TextFrame/third", Some("Story/u1")));
+            }
+            let mut p = Project::new(doc);
+            let err = p
+                .apply(Operation::LinkFrames {
+                    from: "TextFrame/from".to_string(),
+                    to: "TextFrame/third".to_string(),
+                })
+                .unwrap_err();
+            assert!(matches!(err, OperationError::InvalidValue { .. }));
+        }
+
         #[test]
         fn link_creating_a_cycle_is_rejected() {
             let mut doc = doc_two_frames();

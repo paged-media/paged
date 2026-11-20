@@ -192,20 +192,27 @@ export class Pointer {
     this.log({ ...this.at, down: false });
   }
 
-  /** Press at `from`, travel to `to` with the button held, release. */
+  /** Press at `from`, travel to `to` with the button held, release.
+   *  `hold` is a key held while the pointer travels, pressed after the
+   *  button and let go after it (⌘ to ignore snapping, say). */
   async drag(
     from: Point,
     to: Point,
-    opts: { speed?: number } = {},
+    opts: { speed?: number; hold?: string } = {},
   ): Promise<void> {
     await this.moveTo(from, { targetWidth: 12 });
     await this.page.mouse.down();
     this.down = true;
     this.log({ ...this.at, down: true });
     await new Promise((r) => setTimeout(r, 90));
-    await this.moveTo(to, { targetWidth: 200, speed: opts.speed ?? 0.8 });
-    await new Promise((r) => setTimeout(r, 120));
-    await this.page.mouse.up();
+    if (opts.hold) await this.page.keyboard.down(opts.hold);
+    try {
+      await this.moveTo(to, { targetWidth: 200, speed: opts.speed ?? 0.8 });
+      await new Promise((r) => setTimeout(r, 120));
+      await this.page.mouse.up();
+    } finally {
+      if (opts.hold) await this.page.keyboard.up(opts.hold);
+    }
     this.down = false;
     this.log({ ...this.at, down: false });
   }

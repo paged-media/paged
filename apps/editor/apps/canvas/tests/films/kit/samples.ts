@@ -261,8 +261,21 @@ export async function moveTo(k: Kit, left: number, top: number): Promise<void> {
   await retype(k, k.page.getByLabel("Top edge (pt)").first(), String(top));
 }
 
+/** An item of a page, as the editor's geometry reports it: bounds are
+ *  spread-relative `[top, left, bottom, right]` (pt). */
+export interface PageItem {
+  id: { kind: string; id: string };
+  bounds: number[];
+  storyId?: string;
+  hasImage?: boolean;
+}
+
 /** The ids of every item on page `label` (its number, as the tree labels it). */
-async function itemsOnPage(k: Kit, label: string, kind?: string) {
+export async function itemsOnPage(
+  k: Kit,
+  label: string,
+  kind?: string,
+): Promise<PageItem[]> {
   return k.page.evaluate(
     async ({ label, kind }) => {
       type Node = {
@@ -308,7 +321,49 @@ async function itemsOnPage(k: Kit, label: string, kind?: string) {
       return g.payload.items ?? [];
     },
     { label, kind },
+  ) as Promise<PageItem[]>;
+}
+
+/** Page `n`'s size (pt). */
+export async function pageSize(k: Kit, n: number): Promise<[number, number]> {
+  return k.page.evaluate(
+    (n) =>
+      (
+        globalThis as unknown as {
+          __canvas: { handle: { pageSizesPt: [number, number][] } };
+        }
+      ).__canvas.handle.pageSizesPt[n - 1],
+    n,
   );
+}
+
+/** Spread-relative bounds as page `n`'s own `[top, left, bottom, right]`:
+ *  in a facing spread whose first page stands alone on the right, an even
+ *  page is the left one and starts at minus its width. */
+export function pageLocal(b: number[], n: number, width: number): number[] {
+  const dx = n % 2 === 0 ? width : 0;
+  return [b[0], b[1] + dx, b[2], b[3] + dx];
+}
+
+/** A rect on page `n` (`[x0, y0, x1, y1]`, page pt) in the coordinates a
+ *  zoom (`k.focus`) is aimed in: the first page's, the pages standing
+ *  24 pt apart one under the other (as `pagePoint` reads them). */
+export async function pageRect(
+  k: Kit,
+  n: number,
+  r: [number, number, number, number],
+): Promise<[number, number, number, number]> {
+  const top = await k.page.evaluate((n) => {
+    const sizes = (
+      globalThis as unknown as {
+        __canvas: { handle: { pageSizesPt: [number, number][] } };
+      }
+    ).__canvas.handle.pageSizesPt;
+    let top = 0;
+    for (let j = 0; j < n - 1; j++) top += sizes[j][1] + 24;
+    return top;
+  }, n);
+  return [r[0], r[1] + top, r[2], r[3] + top];
 }
 
 /** Select, off camera, the largest frame of `kind` on page `label` — the

@@ -3244,6 +3244,47 @@ pub(super) fn frame_has_no_own_content(doc: &Document, frame_id: &str) -> bool {
     }
 }
 
+/// Whether `to` is a frame of `from`'s own story that the story's chain
+/// no longer reaches: what a user unlink leaves after the break. It shows
+/// none of the story's text (the text is the chain's), so threading `from`
+/// back into it takes nothing from anyone.
+///
+/// The chain is found as the composer finds it (`ParsedDocument::
+/// frame_chain`): its head is the story's first frame, in document order,
+/// that no frame of the story threads into. A frame after the break has no
+/// predecessor either, but it is not the head; the head holds the text and
+/// stays refused.
+pub(super) fn unthreaded_from_own_story(doc: &Document, from: &str, to: &str) -> bool {
+    let story = |id: &str| {
+        find_text_frame_pos(doc, id)
+            .and_then(|(si, fi)| doc.spreads[si].spread.text_frames[fi].parent_story.clone())
+    };
+    let Some(own) = story(from) else {
+        return false;
+    };
+    if story(to).as_deref() != Some(own.as_str()) {
+        return false;
+    }
+    let frames: Vec<&paged_model::TextFrame> = doc
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.text_frames.iter())
+        .filter(|f| f.parent_story.as_deref() == Some(own.as_str()))
+        .collect();
+    let targeted: std::collections::HashSet<&str> = frames
+        .iter()
+        .filter_map(|f| f.next_text_frame.as_deref())
+        .collect();
+    if targeted.contains(to) {
+        return false;
+    }
+    let head = frames
+        .iter()
+        .find(|f| f.self_id.as_deref().is_none_or(|id| !targeted.contains(id)))
+        .and_then(|f| f.self_id.as_deref());
+    head != Some(to)
+}
+
 /// Walk the existing `NextTextFrame` chain forward from `start` and
 /// report whether `target` is reachable (i.e. linking `start → target`
 /// would close a cycle). Bounded so a pre-existing malformed cycle in
@@ -3288,8 +3329,11 @@ pub(super) fn apply_link_frames(
             to.to_string(),
         )));
     }
-    // InDesign threads into empty frames only.
-    if !frame_has_no_own_content(doc, to) {
+    // InDesign threads into empty frames only. A frame unthreaded from
+    // this same story counts as empty: a user unlink leaves the frames
+    // after the break on the story, unreached (they show nothing), and
+    // threading back into one is the way back (UnlinkFrames below).
+    if !frame_has_no_own_content(doc, to) && !unthreaded_from_own_story(doc, from, to) {
         return Err(OperationError::InvalidValue {
             node: NodeId::TextFrame(to.to_string()),
             path: PropertyPath::FrameBounds,

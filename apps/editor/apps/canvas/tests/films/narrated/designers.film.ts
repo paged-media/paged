@@ -18,71 +18,53 @@
  */
 
 // For designers, the audience film for /designers (ADR 224): the website's
-// `films/designers.yaml`. A page whose copy is already in a frame, with an
-// empty frame beside it, then the
-// things a layout person does with it, each through the editor's own
-// controls: the threading ports, the Type tool, View ▸ Show text threads, the
-// Paragraph styles and Glyphs panels, File ▸ Place…, a frame handle, the
-// command palette and the workflow modes. Every step is asserted.
+// `films/designers.yaml`. A page of a real magazine (a sample publication,
+// website ADR 863; which one, and where in it, is the take's
+// `films/samples.take.json` "designers"), and the things a layout person
+// does with it, each through the editor's own controls: the threading
+// ports, View ▸ Editing aids ▸ Text threads, the Type tool, the Paragraph
+// styles and Glyphs panels, File ▸ Place…, a frame handle, the command
+// palette and the workflow modes. Every step is asserted.
 //
-// Off camera: the fonts the styles name are registered (OFL faces from
-// core's corpus/fonts; the editor has no user path to add a font yet), two
-// paragraph styles are defined, the copy is inserted through the same
-// insertText op the keyboard uses (the editor has no text paste yet), and the
-// second, empty frame is made.
+// Off camera: the sample opened at its page, and the page's story
+// unthreaded after its first frame (the user's own unlink): the frames
+// after the break empty, the first one overset. On camera the thread is
+// made again, through the ports.
 
 import { expect, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { film, type Kit } from "../kit/film";
+import { film } from "../kit/film";
 import { typeHuman } from "../kit/pointer";
-import { menu, press, screenPoint } from "../kit/ui";
-import { cutToSample, sampleRole } from "../kit/samples";
+import { menu, press } from "../kit/ui";
+import {
+  fitPage,
+  itemsOnPage,
+  jumpTo,
+  openSample,
+  pageLocal,
+  pagePoint,
+  pageRect,
+  pageSize,
+  sampleRole,
+  type PageItem,
+} from "../kit/samples";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
-const FONTS = join(
-  import.meta.dirname,
-  "..",
-  "..",
-  "..",
-  "..",
-  "..",
-  "..",
-  "..",
-  "engine",
-  "core",
-  "corpus",
-  "fonts",
-);
 const PHOTO = join(MEDIA, "assets", "pexels-618833-dolomites.jpg");
+/** The photograph's natural size (px): Place keeps its proportions. */
+const PHOTO_PX = { width: 2200, height: 1469 };
 
-type Bounds = [number, number, number, number]; // top, left, bottom, right (pt)
 type Rect = [number, number, number, number]; // x0, y0, x1, y1 (pt), for focus()
 
-const LEFT: Bounds = [96, 54, 290, 294];
-const RIGHT: Bounds = [96, 318, 290, 558];
-const COPY: Rect = [30, 70, 582, 320];
-const PICTURE: Rect = [30, 300, 582, 680];
-const PLACE_AT = { x: 54, y: 322 };
-const CROP_TO = { right: 294, bottom: 560 };
-
-const HEAD = "The quiet page";
-const BODY = [
-  "Good typography is invisible until it is missing. A line that breaks in the wrong place, a word left alone at the top of a column, a heading that crowds its text: the reader feels each of them without knowing why.",
-  "The work of a layout is to remove those small frictions. Measure, leading and rhythm decide how a page reads long before anyone looks at the words themselves.",
-  "A grid gives the page its order. Columns, margins and a baseline that every line sits on let text and pictures share a page without arguing.",
-  "Styles keep that order from drifting. A heading set once is set everywhere; change the style, and every heading in the document follows it.",
-];
-
-interface Item {
-  id: { kind: string; id: string };
-  bounds: Bounds;
-  hasImage: boolean;
-  storyId?: string;
+/** What the take names on the page: a point in the story's opening
+ *  paragraph and the style it is given, a point on the headline's last
+ *  line and the word the dagger follows. */
+interface DesignersTake {
+  lede: [number, number];
+  ledeStyle: string;
+  headEnd: [number, number];
+  headWord: string;
 }
-
-const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
-const mid = (b: Bounds) => [(b[1] + b[3]) / 2, (b[0] + b[2]) / 2] as const;
 
 async function mutate(
   page: Page,
@@ -102,78 +84,6 @@ async function mutate(
     },
     { op, args },
   );
-}
-
-async function registerFonts(page: Page): Promise<void> {
-  const faces = [
-    { family: "Fraunces", style: null, file: "Fraunces-VF.ttf" },
-    { family: "Source Serif 4", style: null, file: "SourceSerif4.ttf" },
-  ];
-  await page.route("**/__film-fonts/*", (route) => {
-    const name = decodeURIComponent(
-      route.request().url().split("/__film-fonts/")[1],
-    );
-    return route.fulfill({
-      status: 200,
-      contentType: "font/ttf",
-      body: readFileSync(join(FONTS, name)),
-    });
-  });
-  await page.evaluate(async (list) => {
-    const c = (
-      globalThis as unknown as {
-        __canvas: {
-          client: {
-            registerFont(
-              f: string,
-              b: Uint8Array,
-              s: string | null,
-            ): Promise<void>;
-          };
-        };
-      }
-    ).__canvas;
-    for (const f of list) {
-      const res = await fetch(`/__film-fonts/${encodeURIComponent(f.file)}`);
-      if (!res.ok) throw new Error(`font ${f.file}: ${res.status}`);
-      await c.client.registerFont(
-        f.family,
-        new Uint8Array(await res.arrayBuffer()),
-        f.style,
-      );
-    }
-  }, faces);
-  await page.unroute("**/__film-fonts/*");
-}
-
-/** Every page item with its bounds, whether it holds an image, and its story. */
-async function items(page: Page): Promise<Item[]> {
-  return page.evaluate(async () => {
-    type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
-    const c = (
-      globalThis as unknown as {
-        __canvas: {
-          client: {
-            executeScript(s: string): Promise<{ output: string[] }>;
-            send(m: unknown): Promise<{ payload: { items?: unknown[] } }>;
-          };
-        };
-      }
-    ).__canvas;
-    const r = await c.client.executeScript("JSON.stringify(paged.tree())");
-    const ids: { kind: string; id: string }[] = [];
-    const walk = (n: Node) => {
-      if (n.id) ids.push(n.id);
-      for (const ch of n.children ?? []) walk(ch);
-    };
-    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[])
-      walk(root);
-    const g = await c.client.send({
-      kind: "requestElementGeometry",
-      payload: { ids },
-    });
-    return (g.payload.items ?? []) as Item[];
-  });
 }
 
 async function story(
@@ -210,102 +120,92 @@ async function story(
   }, storyId);
 }
 
-/** Click the pasteboard beside the page with the selection tool. */
-async function deselect(k: Kit): Promise<void> {
-  await press(k, k.page.locator('[data-tool-slot="select"]').first());
-  await k.pointer.click(await pt(k, -110, 420), { targetWidth: 120 });
-  await k.hold(200);
+/** A frame's properties as the inspector reads them, as JSON. */
+async function properties(page: Page, id: PageItem["id"]): Promise<string> {
+  return page.evaluate(async (id) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: { client: { send(m: unknown): Promise<unknown> } };
+      }
+    ).__canvas;
+    return JSON.stringify(
+      await c.client.send({
+        kind: "requestElementProperties",
+        payload: { id },
+      }),
+    );
+  }, id);
 }
 
 film("designers", async (k) => {
   const { page, pointer } = k;
-  let storyId = "";
+  const ref = sampleRole("designers");
+  const take = ref as unknown as DesignersTake;
+  const N = ref.page!;
+  let width = 0;
+  // The page's items in page-local [top, left, bottom, right].
+  const onPage = async (kind?: string) =>
+    (await itemsOnPage(k, String(N), kind))
+      .map((i) => ({ ...i, local: pageLocal(i.bounds, N, width) }))
+      .filter((i) => i.local[1] >= -1 && i.local[3] <= width + 1);
+  const at = (x: number, y: number) => pagePoint(k, N, x, y);
+  const mid = (b: number[]) => at((b[1] + b[3]) / 2, (b[0] + b[2]) / 2);
+  const zoom = async (r: Rect) => k.focus(await pageRect(k, N, r));
+  const around = (bs: number[][], pad = 12): Rect => [
+    Math.min(...bs.map((b) => b[1])) - pad,
+    Math.min(...bs.map((b) => b[0])) - pad,
+    Math.max(...bs.map((b) => b[3])) + pad,
+    Math.max(...bs.map((b) => b[2])) + pad,
+  ];
+  const deselect = async () => {
+    await press(k, page.locator('[data-tool-slot="select"]').first());
+    await pointer.click(await at(-60, 300), { targetWidth: 80 });
+    await k.hold(200);
+  };
+
+  let first: PageItem & { local: number[] };
+  let next: PageItem & { local: number[] };
+  let body = "";
 
   await k.setup(async () => {
-    await k.designer.open();
-    await k.designer.newDocument();
-    await registerFonts(page);
-    const styles: Array<[string, string, Array<[string, unknown]>]> = [
-      [
-        "ParagraphStyle/Headline",
-        "Headline",
-        [
-          ["characterFontFamily", "Fraunces"],
-          ["characterFontSize", 28],
-          ["characterLeading", 32],
-          ["paragraphSpaceAfter", 6],
-        ],
-      ],
-      [
-        "ParagraphStyle/Body",
-        "Body",
-        [
-          ["characterFontFamily", "Source Serif 4"],
-          ["characterFontSize", 11],
-          ["characterLeading", 16],
-        ],
-      ],
-    ];
-    for (const [selfId, name, props] of styles) {
-      await mutate(page, "createParagraphStyle", {
-        selfId,
-        name,
-        basedOn: null,
-      });
-      for (const [path, v] of props) {
-        const value =
-          typeof v === "string"
-            ? { type: "text", value: v }
-            : { type: "length", value: v };
-        expect(
-          (
-            await mutate(page, "setStyleProperty", {
-              collection: "paragraph",
-              styleId: selfId,
-              path,
-              value,
-            })
-          ).kind,
-        ).toBe("mutationApplied");
-      }
-    }
-    const pageId = await page.evaluate(
-      () =>
-        (
-          globalThis as unknown as {
-            __canvas: { handle: { pageIds: string[] } };
-          }
-        ).__canvas.handle.pageIds[0],
-    );
-    await mutate(page, "insertTextFrame", { pageId, bounds: LEFT });
-    storyId = (await items(page)).find(
-      (i) => i.id.kind === "textFrame",
-    )!.storyId!;
-    // The empty frame the story will continue into. Made here, not drawn on
-    // camera: after a frame is drawn with the Type tool, every later pointer
-    // move across the canvas pans the view (a product bug).
-    await mutate(page, "insertTextFrame", { pageId, bounds: RIGHT });
-    const text = [HEAD, ...BODY].join("\n");
-    await mutate(page, "insertText", { storyId, offset: 0, text });
-    await mutate(page, "applyStyle", {
-      storyId,
-      start: HEAD.length + 1,
-      end: text.length,
-      style: "ParagraphStyle/Body",
-      scope: "paragraph",
+    await openSample(k, ref);
+    // A take that ended in another workspace reopens there.
+    const design = page.getByRole("button", { name: "Design", exact: true });
+    if (await design.isVisible().catch(() => false)) await design.click();
+    await expect(page.locator("canvas").first()).toBeAttached({
+      timeout: 30_000,
     });
+    await jumpTo(k, N);
+    await fitPage(k);
+    width = (await pageSize(k, N))[0];
+    // The story threaded through most frames of this page, and its first
+    // two frames, left to right.
+    const frames = (await onPage("textFrame")).filter((f) => f.storyId);
+    const byStory = new Map<string, typeof frames>();
+    for (const f of frames)
+      byStory.set(f.storyId!, [...(byStory.get(f.storyId!) ?? []), f]);
+    const chain = [...byStory.values()].sort((a, b) => b.length - a.length)[0];
+    expect(chain.length).toBeGreaterThanOrEqual(2);
+    chain.sort((a, b) => a.local[1] - b.local[1] || a.local[0] - b.local[0]);
+    [first, next] = chain;
+    body = first.storyId!;
+    expect(await properties(page, first.id)).toContain(next.id.id);
+    // The user's unlink, made here: the story stops after its first frame.
+    expect(
+      (await mutate(page, "unlinkFrames", { frame: first.id.id })).kind,
+    ).toBe("mutationApplied");
     await page.keyboard.press("Escape");
-    await k.hold(1200);
+    await k.hold(1500);
   });
   await k.roll();
+  const columns = around([first!.local, next!.local]);
 
   // ── The copy runs over its frame. ──
   await k.scene("story", async () => {
-    k.focus(COPY);
+    await zoom(columns);
     await k.hold(500);
     await press(k, page.locator('[data-tool-slot="select"]').first());
-    const [x, y] = mid(LEFT);
-    await pointer.click(await pt(k, x, y), { targetWidth: 120 });
+    await pointer.click(await mid(first.local), { targetWidth: 120 });
     await expect(page.locator('[data-thread-port="out"]')).toHaveAttribute(
       "data-thread-state",
       "overset",
@@ -313,22 +213,13 @@ film("designers", async (k) => {
     await k.hold(600);
   });
 
-  // ── Thread the story into it. ──
+  // ── Thread the story on. ──
   await k.scene("thread", async () => {
-    // The copy frame is still selected from the last scene: its out-port is
-    // the red marker.
+    // The first frame is still selected: its out-port is the red marker.
     await press(k, page.locator('[data-thread-port="out"]').first());
     await k.hold(300);
-    const [rx, ry] = mid(RIGHT);
-    await pointer.click(await pt(k, rx, ry), { targetWidth: 120 });
-    await expect
-      .poll(
-        async () =>
-          (await items(page)).filter(
-            (i) => i.id.kind === "textFrame" && i.storyId === storyId,
-          ).length,
-      )
-      .toBe(2);
+    await pointer.click(await mid(next.local), { targetWidth: 120 });
+    await expect.poll(() => properties(page, first.id)).toContain(next.id.id);
     await expect(page.locator('[data-thread-port="out"]')).not.toHaveAttribute(
       "data-thread-state",
       "overset",
@@ -340,82 +231,118 @@ film("designers", async (k) => {
   await k.scene("threads", async () => {
     k.unfocus();
     await menu(k, ["View", "Editing aids", "Text threads"]);
-    await expect(page.locator("[data-thread-hop]")).toHaveCount(1);
+    await expect
+      .poll(() => page.locator("[data-thread-hop]").count())
+      .toBeGreaterThan(0);
     // Punch-ins hold at least 2 s, or the compositor drops them as twitches.
-    k.focus(COPY);
+    await zoom(columns);
     await k.hold(2200);
   });
 
-  // ── The heading takes its style. ──
+  // ── A paragraph takes one of the magazine's styles. ──
   await k.scene("styles", async () => {
     k.unfocus();
     await press(k, page.locator('[data-tool-slot="type"]').first());
-    await pointer.click(await pt(k, LEFT[1] + 30, LEFT[0] + 8), {
-      targetWidth: 40,
-    });
+    await pointer.click(await at(...take.lede), { targetWidth: 40 });
     await menu(k, ["Type", "Paragraph styles"]);
     await press(
       k,
-      page.locator('[data-apply-item="ParagraphStyle/Headline"]').first(),
+      page.locator(`[data-apply-item="${take.ledeStyle}"]`).first(),
     );
     await expect
-      .poll(async () => (await story(page, storyId))[0]?.style)
-      .toBe("ParagraphStyle/Headline");
-    k.focus(COPY);
+      .poll(async () => (await story(page, body))[0]?.style)
+      .toBe(take.ledeStyle);
+    await zoom(around([first.local]));
     await k.hold(2200);
   });
 
   // ── A character from the Glyphs panel. ──
+  let head = "";
   await k.scene("glyph", async () => {
     k.unfocus();
+    const [hx, hy] = take.headEnd;
+    const frame = (await onPage("textFrame")).find(
+      (f) =>
+        f.local[1] <= hx &&
+        hx <= f.local[3] &&
+        f.local[0] <= hy &&
+        hy <= f.local[2],
+    );
+    expect(frame?.storyId).toBeTruthy();
+    head = frame!.storyId!;
+    await pointer.click(await at(hx, hy), { targetWidth: 40 });
     await k.key("End");
     await menu(k, ["Type", "Glyphs…"]);
     await press(k, page.locator('[data-glyph="†"]:visible').first());
     await expect
-      .poll(async () => (await story(page, storyId))[0]?.text)
-      .toBe(`${HEAD}†`);
-    k.focus(COPY);
+      .poll(async () =>
+        (await story(page, head)).some((p) =>
+          p.text.includes(`${take.headWord}†`),
+        ),
+      )
+      .toBe(true);
+    await zoom(around([frame!.local], 24));
     await k.hold(2200);
     k.unfocus();
-    await deselect(k);
+    await deselect();
   });
 
-  // ── A photograph, placed at its own size. ──
+  // ── A photograph, placed over the portrait in the box it should fill. ──
+  const pictures = async () =>
+    (await onPage("rectangle")).filter((i) => i.hasImage);
+  let portrait: number[] = [];
+  let before = new Set<string>();
   await k.scene("place", async () => {
+    const now = await pictures();
+    before = new Set(now.map((i) => i.id.id));
+    const area = (b: number[]) => (b[2] - b[0]) * (b[3] - b[1]);
+    portrait = now.sort((a, b) => area(b.local) - area(a.local))[0].local;
+    const [top, left, , right] = portrait;
+    // As wide as the portrait: the photograph's own proportions decide the
+    // height, a little more than the portrait's.
+    const tall = ((right - left) * PHOTO_PX.height) / PHOTO_PX.width;
     const chooser = page.waitForEvent("filechooser");
     await menu(k, ["File", "Place…"]);
     k.chip("dolomites.jpg", "file");
     await (await chooser).setFiles(PHOTO);
     await k.hold(500);
-    await pointer.click(await pt(k, PLACE_AT.x, PLACE_AT.y), {
-      targetWidth: 40,
+    await pointer.drag(await at(left, top), await at(right, top + tall + 2), {
+      speed: 0.8,
     });
     await expect
-      .poll(async () => (await items(page)).some((i) => i.hasImage))
-      .toBe(true);
-    k.focus(PICTURE);
+      .poll(
+        async () =>
+          (await pictures()).filter((i) => !before.has(i.id.id)).length,
+      )
+      .toBe(1);
+    await zoom(around([portrait], 30));
     await k.hold(900);
   });
 
-  // ── Cropped by its frame. ──
+  // ── Cropped by its frame to the portrait's. ──
   await k.scene("crop", async () => {
-    const photo = (await items(page)).find((i) => i.hasImage)!;
+    const placed = (await pictures()).find((i) => !before.has(i.id.id))!;
+    // ⌘ held while dragging, as the modifier hints say, ignores snapping:
+    // the corner stops on the portrait's own (an edge nearby pulled it
+    // 6 pt off).
     await pointer.drag(
-      await pt(k, photo.bounds[3], photo.bounds[2]),
-      await pt(k, CROP_TO.right, CROP_TO.bottom),
-      { speed: 0.9 },
+      await at(placed.local[3], placed.local[2]),
+      await at(portrait[3], portrait[2]),
+      { speed: 0.9, hold: "Meta" },
     );
     await expect
       .poll(async () =>
-        (await items(page)).find((i) => i.hasImage)?.bounds.map(Math.round),
+        (await pictures())
+          .find((i) => i.id.id === placed.id.id)
+          ?.local.map(Math.round),
       )
       .toEqual([
-        Math.round(photo.bounds[0]),
-        Math.round(photo.bounds[1]),
-        CROP_TO.bottom,
-        CROP_TO.right,
+        Math.round(placed.local[0]),
+        Math.round(placed.local[1]),
+        Math.round(portrait[2]),
+        Math.round(portrait[3]),
       ]);
-    await deselect(k);
+    await deselect();
     await k.hold(900);
   });
 
@@ -457,26 +384,5 @@ film("designers", async (k) => {
       await expect.poll(mode).toBe(id);
       await k.hold(label === "Design" ? 400 : 1000);
     }
-  });
-
-  // ── A real publication (website ADR 863): the same tools reading a real
-  //    magazine's page — its text threads, its own paragraph styles
-  //    (films/samples.take.json, "designers"). ──
-  await cutToSample(k, sampleRole("designers"), "Opening a real magazine");
-  await k.scene("real", async () => {
-    await k.hold(900);
-    await menu(k, ["View", "Editing aids", "Text threads"]);
-    await k.hold(1600);
-    await press(
-      k,
-      page.getByRole("button", { name: "Styles", exact: true }).first(),
-    );
-    // The Styles rail opens on object styles; the magazine's paragraph
-    // styles are the tab beside them.
-    await press(
-      k,
-      page.locator('[data-dock-tab="paged.paragraph-styles"]').first(),
-    );
-    await k.hold(2600);
   });
 });
