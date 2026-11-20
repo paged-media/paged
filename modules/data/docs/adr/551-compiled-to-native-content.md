@@ -111,3 +111,18 @@ A lowering that has a frame draws on that frame's page, whatever page is active:
 Tests: `packages/data-bundle/src/__tests__/lower-page.test.ts` (a `lowerAll` from page 1
 over bindings on pages 2 and 3), `lower-barcode.test.ts`, `lower-table.test.ts`, and against
 the real engine `packages/data-bundle/test/lower-page-real-core.spec.ts`.
+
+## Amendment 2026-11-20: the bars' black exists in the document
+
+A barcode's modules are filled with `Color/Black` (`paged-data-lower` `BARCODE_FILL_SWATCH`),
+on the ground that every IDML document carries that swatch. A document read back from a PDF
+(publish ADR 660) carries the publication's own swatches and may have none by that name: the
+modules then referenced a swatch that did not exist and drew pale grey, a barcode no scanner
+reads. Found while filming the data film's close on a sample catalogue (website ADR 863).
+
+The lowering's batch now starts by making `Color/Black` — process CMYK 0/0/0/100 — when the
+document's swatch list lacks it (`blackSwatchMutations`, `packages/data-host-model/src/barcode.ts`;
+`commitLoweredBarcode`, `packages/data-bundle/src/lower.ts`), so the swatch and the bars are one
+undo step. A swatch list that cannot be read makes nothing: re-creating a swatch the document
+has would refuse the whole batch. Tests: `packages/data-bundle/test/barcode-black-real-core.spec.ts`
+(the unit cases, and against the real core a document whose Black was deleted).

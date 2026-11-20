@@ -159,3 +159,33 @@ export function barcodeToMutations(
 export function barcodeModuleCount(barcode: LoweredBarcode): number {
   return barcode.modules.length;
 }
+
+/** The swatch the bars are filled with (paged-data-lower
+ *  `BARCODE_FILL_SWATCH`), and how it is made when a document lacks it. */
+export const BARCODE_BLACK = "Color/Black";
+
+/** `Color/Black` is in every IDML document's swatch list, so the lowering
+ *  names it. A document read back from a PDF (publish ADR 660) has its own
+ *  swatches and may have none by that name: the bars would then reference a
+ *  swatch that does not exist and print as no colour. The lowering's batch
+ *  starts by making it — black, process CMYK 0/0/0/100 — when it is missing,
+ *  so the swatch and the bars are one undo step. Empty when it is there. */
+export function blackSwatchMutations(
+  swatches: readonly { selfId: string }[],
+): Mutation[] {
+  if (swatches.some((s) => s.selfId === BARCODE_BLACK)) return [];
+  return [
+    {
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: BARCODE_BLACK,
+          name: "Black",
+          space: "CMYK",
+          value: [0, 0, 0, 100],
+          model: "Process",
+        },
+      },
+    } as Mutation,
+  ];
+}

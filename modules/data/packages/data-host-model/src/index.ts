@@ -48,8 +48,10 @@ export {
 } from "./variables";
 
 export {
+  BARCODE_BLACK,
   barcodeToMutations,
   barcodeModuleCount,
+  blackSwatchMutations,
   type BarcodeModule,
   type BarcodePlacement,
 } from "./barcode";

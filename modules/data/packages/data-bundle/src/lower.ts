@@ -31,6 +31,7 @@ import type {
 } from "@paged-media/plugin-api";
 import {
   barcodeToMutations,
+  blackSwatchMutations,
   bindingMetadata,
   cellStyleSelf,
   createRuleCellStyle,
@@ -1037,7 +1038,20 @@ export async function commitLoweredBarcode(
   // ("position N out of range for parent Spread … (len 0)"), so a re-lower or
   // a preview step left the old symbol standing. The label still lands on the
   // last new module (`$created`); the removals follow it.
+  // The bars are filled with `Color/Black`; a document without it (one read
+  // back from a PDF) gets it in the same batch (`blackSwatchMutations`).
+  // A swatch list that cannot be read makes nothing: creating a swatch the
+  // document already has would refuse the whole batch.
+  let black: Mutation[] = [];
+  try {
+    black = blackSwatchMutations([
+      ...(await host.document.collection<{ selfId: string }>("swatches")),
+    ]);
+  } catch {
+    black = [];
+  }
   const ops = [
+    ...black,
     ...barcodeToMutations(barcode, placement, envelope),
     ...(replace?.clear ?? []),
   ];
