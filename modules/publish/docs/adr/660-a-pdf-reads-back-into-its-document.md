@@ -57,7 +57,14 @@ repeats.
    page's.
 2. **Glyphs → lines → frames → paragraphs** (`text.rs`). Glyphs join a line along a baseline
    in paint order. A word space is a gap past the line's own letter spacing (its median gap
-   and a tenth of an em), so text set tight and text tracked open both keep their words. A
+   and a tenth of an em), so text set tight and text tracked open both keep their words. The
+   spacing is measured per stretch of one face at one size: a tracked heading and a tight
+   standfirst on one baseline each keep their own. Latin small print (6.5 pt or less) set with
+   its letters overlapping keeps word spaces under a tenth of an em: a tenth past its letters,
+   down to a twentieth. Text turned to another reading direction (its glyphs neither sheared
+   nor mirrored; scaled across too where the run is a line of glyphs) reads in its own axes and
+   sets in a turned frame; a letter placed on its own along a curve (a map's label) keeps its
+   look as outlines. A
    line with a gap no line near it repeats is not a row of a table but items on one baseline (a
    label beside the next, a caption and its mark), each set where the page sets it. Lines join a frame while they run down the same column within a few lines;
    a frame splits where display type (14 pt and up) meets body text, where its lines change
@@ -113,7 +120,8 @@ repeats.
    shares with the last cell's is two. Rows of
    different blocks never join across a page edge. A row is set No Break, in every run: a
    substitute face a little wider than its columns' gaps runs it past the frame's edge rather
-   than onto a second line.
+   than onto a second line. It keeps to its line through a character style, `No Break` (or
+   the run's own style's `… No Break` variant, based on it), not a local override.
 4. **Hyphens resolved against the document.** A line-end hyphen inside a word is hyphenation
    (dropped, the paragraph set to hyphenate) unless the document spells that word with a
    hyphen mid-line or the word is already hyphenated elsewhere ("state-of-the-art"). InDesign
@@ -132,7 +140,11 @@ repeats.
    takes a character style. Names say what a style is (`Medium 11/12`, `Black 50/42 Caps White
    Centered`); a recipe renames them to what they are for. Space before is the gap between two
    paragraphs of one style; a style never followed by itself (a heading) leaves its air as
-   space after. What does not fit the styles is local, and counted.
+   space after. Each gap weighs as much text as its paragraph sets: a style keeps the gap most
+   of its text sits at, not the most paragraphs. Paragraphs that keep a spacing or a leading of
+   their own, grouped by style and values, become variants of their style (`Body Space Before
+   12`, based on it), the largest groups first, until what stays local is under 1 % of the
+   text. What does not fit the styles is local, and counted.
 7. **The metric fit.** The document is set in substitute faces (a PDF's fonts are the
    publisher's licence, not ours). Each style's tracking is the PDF's measured letter spacing
    plus what makes the substitute's advances (read with `skrifa`, at the named instance a style
@@ -151,14 +163,20 @@ repeats.
    as facing spreads; single pages can be paired by the recipe.
 9. **Pictures in frames.** A clip around one image — a picture frame as its PDF writes it —
    lowers to one native image frame: the clip its bounds, the image placed by its own transform,
-   so the crop survives and the picture moves inside its frame. Opaque photographs that the
-   reader decoded to PNG (an ICC-based or CMYK JPEG) are stored as JPEG at quality 92.
+   so the crop survives and the picture moves inside its frame. A JPEG whose colour is device
+   RGB or grey, or an ICC profile that names itself sRGB (what the engine reads RGB as), keeps
+   the PDF's own bytes. Opaque photographs that the reader decoded to PNG (another ICC
+   profile, CMYK, JPEG 2000) are stored as JPEG at quality 92.
 10. **The recipe** (`recipe.rs`): what the page cannot say — the font map (PostScript name →
    family and style), style and swatch names, layout, page range, thread fixes, section starts.
    An empty recipe reads the PDF on its own.
-11. **Reported, not hidden.** The report counts pages, frames, stories, thread links, styles
+11. **Characters a substitute lacks.** A character a run's face has no glyph for reads in a
+    spelling the face has (a non-breaking hyphen as a hyphen, ‟ as “, ⅛ as 1⁄8), else in a
+    face of the document's fonts that has it, through a character style naming that face
+    (based on the run's own).
+12. **Reported, not hidden.** The report counts pages, frames, stories, thread links, styles
     (with a sample and page each), swatches, masters, local overrides, every font with the
-    characters its substitute lacks, and every loss the page reader recorded; it maps each
+    characters it still lacks, and every loss the page reader recorded; it maps each
     document page to the PDF page and offset it came from, for comparison.
 
 ## Evidence

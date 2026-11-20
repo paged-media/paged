@@ -113,6 +113,19 @@ impl FontBook {
         FontBook::from_bytes(files)
     }
 
+    /// The families with a glyph for `ch`, sorted.
+    pub fn families_with(&self, ch: char) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .faces
+            .iter()
+            .filter(|f| FontRef::new(&f.data).is_ok_and(|font| font.charmap().map(ch).is_some()))
+            .map(|f| f.family.clone())
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
     pub fn has_family(&self, family: &str) -> bool {
         self.faces
             .iter()

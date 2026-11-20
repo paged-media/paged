@@ -611,12 +611,12 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
     // set tight (word spaces of a sixth of an em) or tracked open alike.
     // The letter spacing is the median gap between neighbouring letters;
     // estimated advances (a font without widths) keep the fixed share.
-    let letter_gap = {
-        let ink: Vec<&Glyph> = line
-            .glyphs
-            .iter()
-            .filter(|g| !g.text.trim().is_empty())
-            .collect();
+    // Measured per stretch of one font at one size: a line that joins a
+    // tracked heading and a tight standfirst on one baseline keeps each
+    // one's own spacing (the heading's open letters are no word spaces,
+    // the standfirst's word spaces no letter spacing); the whole line's
+    // median where a stretch is too short to say.
+    let median_gap = |ink: &[&Glyph]| -> Option<f32> {
         let mut gaps: Vec<f32> = ink
             .windows(2)
             .filter(|w| w[0].has_adv && w[1].has_adv)
@@ -626,6 +626,29 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
         gaps.sort_by(|a, b| a.partial_cmp(b).unwrap());
         (gaps.len() >= 6).then(|| gaps[gaps.len() / 2])
     };
+    // The inked glyphs by their index in the line.
+    let ink: Vec<usize> = (0..line.glyphs.len())
+        .filter(|&i| !line.glyphs[i].text.trim().is_empty())
+        .collect();
+    let at = |ix: &[usize]| -> Vec<&Glyph> { ix.iter().map(|&i| &line.glyphs[i]).collect() };
+    let line_gap = median_gap(&at(&ink));
+    let same_face = |a: &Glyph, b: &Glyph| a.font == b.font && (a.size - b.size).abs() <= 0.1;
+    let mut gap_at: Vec<Option<f32>> = vec![line_gap; line.glyphs.len()];
+    let mut split_at: Vec<Option<f32>> = vec![None; line.glyphs.len()];
+    let mut start = 0;
+    while start < ink.len() {
+        let mut end = start + 1;
+        while end < ink.len() && same_face(&line.glyphs[ink[end - 1]], &line.glyphs[ink[end]]) {
+            end += 1;
+        }
+        let gap = median_gap(&at(&ink[start..end])).or(line_gap);
+        let split = gap.and_then(|m| tight_small_print(&at(&ink[start..end]), m));
+        for &i in &ink[start..end] {
+            gap_at[i] = gap;
+            split_at[i] = split;
+        }
+        start = end;
+    }
     // Gaps are measured from the last inked glyph: a layout program sets
     // a tab as a space glyph and then a jump, and the jump is the tab.
     let mut last_ink_end: Option<f32> = None;
@@ -662,9 +685,10 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
                     });
                 }
             } else if gap
-                > match letter_gap {
-                    Some(m) => (m + 0.1).max(0.1) * g.size,
-                    None => 0.18 * g.size,
+                > match (split_at[i], gap_at[i]) {
+                    (Some(t), _) => t * g.size,
+                    (None, Some(m)) => (m + 0.1).max(0.1) * g.size,
+                    (None, None) => 0.18 * g.size,
                 }
             {
                 out.push(Token {
@@ -681,6 +705,21 @@ pub fn line_tokens(line: &Line) -> Vec<Token> {
         last_ink_end = Some(g.x + g.adv);
     }
     out
+}
+
+/// Small print set tight (Latin, 6.5 pt or less, its letters overlapping:
+/// a median gap under -0.02 em) sets its word spaces tight too, under a
+/// tenth of an em: a word space there is a tenth of an em past the
+/// letters' own gap, down to a twentieth of an em.
+fn tight_small_print(ink: &[&Glyph], median: f32) -> Option<f32> {
+    // Latin letters, punctuation and currency signs: no CJK, whose
+    // glyphs set close without word spaces.
+    let latin = |c: char| (c as u32) < 0x250 || ('\u{2000}'..='\u{20CF}').contains(&c);
+    (median < -0.02
+        && ink
+            .iter()
+            .all(|g| g.size <= 6.5 && g.text.chars().all(latin)))
+    .then_some((median + 0.1).max(0.05))
 }
 
 /// A line with a gap that no line near it repeats is not a row of a
@@ -2081,6 +2120,72 @@ mod tests {
     /// `s` set to end at `right`.
     fn set_right(s: &str, right: f32, y: f32, order: u32) -> Vec<Glyph> {
         set(s, right - s.chars().count() as f32 * 0.5 * EM, y, order)
+    }
+
+    /// `s` at `size` in font `font` from `x`: each letter half an em wide
+    /// and `letter` ems from the next; a space in `s` is no glyph, a gap of
+    /// `word` ems.
+    fn spaced(s: &str, x: f32, size: f32, font: u32, letter: f32, word: f32) -> Vec<Glyph> {
+        let mut out = Vec::new();
+        let mut at = x;
+        for c in s.chars() {
+            if c == ' ' {
+                at += (word - letter) * size;
+                continue;
+            }
+            out.push(Glyph {
+                text: c.to_string(),
+                x: at,
+                y: 100.0,
+                adv: 0.5 * size,
+                has_adv: true,
+                size,
+                hscale: 1.0,
+                font,
+                color: [0, 0, 0],
+                order: 0,
+                caps: None,
+            });
+            at += (0.5 + letter) * size;
+        }
+        out
+    }
+
+    fn line_text(glyphs: Vec<Glyph>) -> String {
+        let ls = lines(glyphs, &[]);
+        assert_eq!(ls.len(), 1, "one line");
+        line_tokens(&ls[0])
+            .iter()
+            .map(|t| t.text.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_tracked_heading_and_a_tight_standfirst_keep_their_own_spacing() {
+        let mut g = spaced("MODERN VINTAGE", 0.0, 10.0, 1, 0.135, 0.45);
+        let end = g.last().map_or(0.0, |l| l.x + l.adv);
+        g.extend(spaced("a quaint mix of", end + 3.0, 10.0, 0, 0.0, 0.18));
+        assert_eq!(line_text(g), "MODERN VINTAGE a quaint mix of");
+    }
+
+    #[test]
+    fn tight_small_print_keeps_its_word_spaces() {
+        let g = spaced(
+            "would like to contact you by post",
+            0.0,
+            5.0,
+            0,
+            -0.04,
+            0.07,
+        );
+        assert_eq!(line_text(g), "would like to contact you by post");
+    }
+
+    #[test]
+    fn tight_body_text_gains_no_spaces_inside_its_words() {
+        // Set tight at a body size: its kerning is no word space.
+        let g = spaced("superintelligence arrives", 0.0, 10.0, 0, -0.04, 0.2);
+        assert_eq!(line_text(g), "superintelligence arrives");
     }
 
     fn texts(block: &Block) -> Vec<String> {

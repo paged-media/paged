@@ -809,9 +809,46 @@ pub fn reconstruct(
             },
         );
     }
+    // The rows' "No Break" styles the stories use: the plain one, and each
+    // character style's variant based on it.
+    let mut no_break = BTreeSet::new();
+    for st in &stories {
+        for p in &st.story.paragraphs {
+            for r in &p.runs {
+                if let Some(cs) = &r.character_style {
+                    if cs.ends_with(NO_BREAK) {
+                        no_break.insert(cs.clone());
+                    }
+                }
+            }
+        }
+    }
+    for id in no_break {
+        let name = id.trim_start_matches("CharacterStyle/").to_string();
+        let based_on = name
+            .strip_suffix(&format!(" {NO_BREAK}"))
+            .map(|b| format!("CharacterStyle/{b}"));
+        report.character_styles.push(name.clone());
+        sheet.character_styles.insert(
+            id.clone(),
+            CharacterStyleDef {
+                self_id: id,
+                name: Some(name),
+                based_on,
+                no_break: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    spacing_variants(&mut stories, &mut sheet);
+    let uncovered = cover_missing(&mut stories, &mut sheet, book);
     name_swatches(&mut palette, recipe);
     report.swatches = palette.graphic.colors.len();
     report.fonts = fonts.report(recipe, book);
+    // What the fonts lack and the coverage pass could not set otherwise.
+    for f in report.fonts.iter_mut() {
+        f.missing_chars.retain(|c| uncovered.contains(&c));
+    }
 
     // Sections: one, numbered as the folios say.
     let start = masters
@@ -1053,6 +1090,9 @@ fn text_frame(id: &str, story: &str, b: &Block, threaded_on: bool, room: f32) ->
     }
 }
 
+/// The character style that keeps a table's row on one line.
+const NO_BREAK: &str = "No Break";
+
 /// The story of a chain of blocks: their paragraphs, a paragraph cut by a
 /// frame break joined back into one.
 #[allow(clippy::too_many_arguments)]
@@ -1094,12 +1134,18 @@ fn story_from(
                 if let Some(page_runs) = folio {
                     text = folio_text(&text, page_runs, &mut digit_k);
                 }
+                // A row keeps to its line through a character style, "No
+                // Break" or the run's own style's "… No Break" variant,
+                // not a local override on every run.
+                let base = ck.and_then(|k| styles.character.get(&k));
+                let character_style = match (row, base) {
+                    (true, Some(n)) => Some(format!("CharacterStyle/{n} {NO_BREAK}")),
+                    (true, None) => Some(format!("CharacterStyle/{NO_BREAK}")),
+                    (false, b) => b.map(|n| format!("CharacterStyle/{n}")),
+                };
                 runs.push(CharacterRun {
-                    character_style: ck
-                        .and_then(|k| styles.character.get(&k))
-                        .map(|n| format!("CharacterStyle/{n}")),
+                    character_style,
                     text,
-                    no_break: row.then_some(true),
                     ..Default::default()
                 });
             }
@@ -2086,27 +2132,28 @@ fn spacing(styles: &mut Styles, blocks: &[&Block]) {
             .get(&ParaKey::of(p))
             .map_or(1.2 * p.dominant.1, |s| s.leading)
     };
-    let mut same: HashMap<String, Vec<f32>> = HashMap::new();
+    // Each gap weighs as much text as the paragraph below it sets: the
+    // style keeps the gap most of its text sits at (a body's paragraphs
+    // set close outweigh its short ones set apart), so the fewest
+    // characters carry a spacing of their own.
+    let weight = |p: &Para| p.runs.iter().map(|r| r.text.chars().count()).sum::<usize>() as f32;
+    let mut same: HashMap<String, Vec<(f32, f32)>> = HashMap::new();
     for b in blocks {
         for w in b.paras.windows(2) {
             if let (Some(a), Some(c)) = (name_of(&w[0]), name_of(&w[1])) {
                 if a == c {
                     same.entry(a)
                         .or_default()
-                        .push(effective_space(&w[1], lead_of(&w[1])));
+                        .push((effective_space(&w[1], lead_of(&w[1])), weight(&w[1])));
                 }
             }
         }
     }
-    let median = |mut v: Vec<f32>| -> f32 {
-        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        v.get(v.len() / 2).copied().unwrap_or(0.0).max(0.0)
-    };
     let before: HashMap<String, f32> = same
         .into_iter()
-        .map(|(k, v)| (k, (median(v) * 4.0).round() / 4.0))
+        .map(|(k, v)| (k, weighted_mode(&v)))
         .collect();
-    let mut after: HashMap<String, Vec<f32>> = HashMap::new();
+    let mut after: HashMap<String, Vec<(f32, f32)>> = HashMap::new();
     for b in blocks {
         for w in b.paras.windows(2) {
             if let (Some(a), Some(c)) = (name_of(&w[0]), name_of(&w[1])) {
@@ -2115,19 +2162,19 @@ fn spacing(styles: &mut Styles, blocks: &[&Block]) {
                     after
                         .entry(a)
                         .or_default()
-                        .push(effective_space(&w[1], lead_of(&w[1])) - sb);
+                        .push((effective_space(&w[1], lead_of(&w[1])) - sb, weight(&w[0])));
                 }
             }
         }
     }
     let after: HashMap<String, f32> = after
         .into_iter()
-        .map(|(k, v)| (k, (median(v) * 4.0).round() / 4.0))
+        .map(|(k, v)| (k, weighted_mode(&v)))
         .collect();
     // A style never set twice in a row (a sub-heading between paragraphs)
     // takes its space before from the gap above it, beyond what the
     // paragraph above leaves.
-    let mut before2: HashMap<String, Vec<f32>> = HashMap::new();
+    let mut before2: HashMap<String, Vec<(f32, f32)>> = HashMap::new();
     for b in blocks {
         for w in b.paras.windows(2) {
             if let (Some(a), Some(c)) = (name_of(&w[0]), name_of(&w[1])) {
@@ -2136,18 +2183,288 @@ fn spacing(styles: &mut Styles, blocks: &[&Block]) {
                     before2
                         .entry(c)
                         .or_default()
-                        .push(effective_space(&w[1], lead_of(&w[1])) - sa);
+                        .push((effective_space(&w[1], lead_of(&w[1])) - sa, weight(&w[1])));
                 }
             }
         }
     }
     let mut before = before;
     for (k, v) in before2 {
-        before.insert(k, (median(v) * 4.0).round() / 4.0);
+        before.insert(k, weighted_mode(&v));
     }
     for s in styles.paragraph.values_mut() {
         s.space_before = before.get(&s.name).copied().unwrap_or(0.0);
         s.space_after = after.get(&s.name).copied().unwrap_or(0.0);
+    }
+}
+
+/// The family and style a run is set in: its character style's, else its
+/// paragraph style's, each through the styles it is based on.
+fn run_font(
+    sheet: &paged_model::StyleSheet,
+    para_style: Option<&str>,
+    char_style: Option<&str>,
+) -> Option<(String, String)> {
+    let mut cs = char_style.and_then(|id| sheet.character_styles.get(id));
+    let (mut family, mut style) = (None, None);
+    for _ in 0..16 {
+        let Some(c) = cs else { break };
+        family = family.or(c.font.clone());
+        style = style.or(c.font_style.clone());
+        cs = c
+            .based_on
+            .as_deref()
+            .and_then(|id| sheet.character_styles.get(id));
+    }
+    let mut ps = para_style.and_then(|id| sheet.paragraph_styles.get(id));
+    for _ in 0..16 {
+        let Some(p) = ps else { break };
+        family = family.or(p.font.clone());
+        style = style.or(p.font_style.clone());
+        ps = p
+            .based_on
+            .as_deref()
+            .and_then(|id| sheet.paragraph_styles.get(id));
+    }
+    Some((family?, style.unwrap_or_else(|| "Regular".to_string())))
+}
+
+/// The same character in another spelling a font is likelier to have.
+fn equivalents(ch: char) -> &'static [&'static str] {
+    match ch {
+        '\u{2011}' => &["\u{2010}", "-"],
+        '\u{2010}' => &["-"],
+        '\u{201F}' => &["\u{201C}", "\""],
+        '\u{201B}' => &["\u{2018}", "'"],
+        '\u{215B}' => &["1\u{2044}8", "1/8"],
+        '\u{215C}' => &["3\u{2044}8", "3/8"],
+        '\u{215D}' => &["5\u{2044}8", "5/8"],
+        '\u{215E}' => &["7\u{2044}8", "7/8"],
+        '\u{2153}' => &["1\u{2044}3", "1/3"],
+        '\u{2154}' => &["2\u{2044}3", "2/3"],
+        _ => &[],
+    }
+}
+
+/// Characters a run's font has no glyph for: an equivalent spelling the
+/// font has (a non-breaking hyphen as a hyphen, ⅛ as 1⁄8), else the
+/// character in a font of the document's that has it, through a character
+/// style naming that font (based on the run's own). Returns what stays
+/// uncovered.
+fn cover_missing(
+    stories: &mut [ParsedStory],
+    sheet: &mut paged_model::StyleSheet,
+    book: &FontBook,
+) -> BTreeSet<char> {
+    let mut has: HashMap<(String, String, char), bool> = HashMap::new();
+    let mut has_char = |family: &str, style: &str, ch: char| -> bool {
+        *has.entry((family.to_string(), style.to_string(), ch))
+            .or_insert_with(|| {
+                book.metrics(family, style, [ch])
+                    .is_some_and(|m| !m.missing.contains(&ch))
+            })
+    };
+    let mut holders: HashMap<char, Option<String>> = HashMap::new();
+    let mut new_styles: BTreeMap<String, paged_model::CharacterStyleDef> = BTreeMap::new();
+    let mut uncovered = BTreeSet::new();
+    for st in stories.iter_mut() {
+        for p in st.story.paragraphs.iter_mut() {
+            let ps = p.paragraph_style.clone();
+            let mut runs = Vec::with_capacity(p.runs.len());
+            for r in p.runs.drain(..) {
+                let Some((family, style)) =
+                    run_font(sheet, ps.as_deref(), r.character_style.as_deref())
+                else {
+                    runs.push(r);
+                    continue;
+                };
+                if !book.has_family(&family)
+                    || r.text
+                        .chars()
+                        .all(|c| c.is_control() || has_char(&family, &style, c))
+                {
+                    runs.push(r);
+                    continue;
+                }
+                // Pieces of the run: its own font's, and each fallback's.
+                let mut pieces: Vec<(Option<String>, String)> = Vec::new();
+                for c in r.text.chars() {
+                    let (font, text) = if c.is_control() || has_char(&family, &style, c) {
+                        (None, c.to_string())
+                    } else if let Some(e) = equivalents(c)
+                        .iter()
+                        .find(|e| e.chars().all(|x| has_char(&family, &style, x)))
+                    {
+                        (None, e.to_string())
+                    } else {
+                        let holder = holders
+                            .entry(c)
+                            .or_insert_with(|| {
+                                let mut fams = book.families_with(c);
+                                fams.sort_by_key(|f| !f.starts_with("Noto Sans"));
+                                fams.into_iter().next()
+                            })
+                            .clone();
+                        if holder.is_none() {
+                            uncovered.insert(c);
+                        }
+                        (holder, c.to_string())
+                    };
+                    match pieces.last_mut() {
+                        Some((f, t)) if *f == font => t.push_str(&text),
+                        _ => pieces.push((font, text)),
+                    }
+                }
+                for (font, text) in pieces {
+                    let mut piece = r.clone();
+                    piece.text = text;
+                    if let Some(fam) = font {
+                        let base = r
+                            .character_style
+                            .as_deref()
+                            .map(|id| id.trim_start_matches("CharacterStyle/").to_string());
+                        let name = match &base {
+                            Some(b) => format!("{b} {fam}"),
+                            None => fam.clone(),
+                        };
+                        let id = format!("CharacterStyle/{name}");
+                        new_styles.entry(id.clone()).or_insert_with(|| {
+                            paged_model::CharacterStyleDef {
+                                self_id: id.clone(),
+                                name: Some(name.clone()),
+                                based_on: r.character_style.clone(),
+                                font: Some(fam.clone()),
+                                font_style: Some("Regular".to_string()),
+                                ..Default::default()
+                            }
+                        });
+                        piece.character_style = Some(id);
+                    }
+                    runs.push(piece);
+                }
+            }
+            p.runs = runs;
+        }
+    }
+    for (id, def) in new_styles {
+        sheet.character_styles.entry(id).or_insert(def);
+    }
+    uncovered
+}
+
+/// The value most weight sits at, in quarter points (gaps within 0.75 pt
+/// of each other count as one, as the paragraphs read them): the heaviest
+/// cluster's weighted mean, never below 0.
+fn weighted_mode(v: &[(f32, f32)]) -> f32 {
+    let mut q: Vec<(f32, f32)> = v
+        .iter()
+        .map(|(x, w)| (((x * 4.0).round() / 4.0).max(0.0), w.max(1.0)))
+        .collect();
+    q.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let mut best = (0.0f32, 0.0f32);
+    for &(c, _) in &q {
+        let near: Vec<&(f32, f32)> = q.iter().filter(|(x, _)| (x - c).abs() <= 0.75).collect();
+        let w: f32 = near.iter().map(|(_, w)| w).sum();
+        if w > best.1 + 1e-3 {
+            let mean = near.iter().map(|(x, w)| x * w).sum::<f32>() / w;
+            best = ((mean * 4.0).round() / 4.0, w);
+        }
+    }
+    best.0
+}
+
+/// Paragraphs that keep a spacing or a leading of their own, grouped by
+/// style and values: the largest groups become variants of their style
+/// (based on it, named for what they change), until what stays local is
+/// under 1 % of the text. A designer sets a body "Space Before 12" style
+/// once, not 400 paragraphs' space before.
+fn spacing_variants(stories: &mut [ParsedStory], sheet: &mut paged_model::StyleSheet) {
+    type Key = (String, Option<i32>, Option<i32>, Option<i32>);
+    let q = |v: f32| (v * 4.0).round() as i32;
+    let key_of = |p: &Paragraph| -> Option<Key> {
+        let style = p.paragraph_style.clone()?;
+        let leading = p
+            .runs
+            .first()
+            .and_then(|r| r.leading)
+            .filter(|l| p.runs.iter().all(|r| r.leading == Some(*l)));
+        let k = (
+            style,
+            p.space_before.map(q),
+            p.space_after.map(q),
+            leading.map(q),
+        );
+        (k.1.is_some() || k.2.is_some() || k.3.is_some()).then_some(k)
+    };
+    let chars = |p: &Paragraph| p.runs.iter().map(|r| r.text.chars().count()).sum::<usize>();
+    let mut total = 0usize;
+    let mut groups: BTreeMap<Key, usize> = BTreeMap::new();
+    for st in stories.iter() {
+        for p in &st.story.paragraphs {
+            let n = chars(p);
+            total += n;
+            if let Some(k) = key_of(p) {
+                *groups.entry(k).or_default() += n;
+            }
+        }
+    }
+    let mut order: Vec<(Key, usize)> = groups.into_iter().collect();
+    order.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut local: usize = order.iter().map(|(_, n)| n).sum();
+    let mut variants: HashMap<Key, String> = HashMap::new();
+    for (k, n) in order {
+        if local * 100 < total {
+            break;
+        }
+        let Some(base) = sheet.paragraph_styles.get(&k.0) else {
+            continue;
+        };
+        let pt = |v: i32| {
+            let x = v as f32 / 4.0;
+            if x.fract() == 0.0 {
+                format!("{x:.0}")
+            } else {
+                format!("{x}")
+            }
+        };
+        let mut name = base.name.clone().unwrap_or_default();
+        if let Some(v) = k.1 {
+            name.push_str(&format!(" Space Before {}", pt(v)));
+        }
+        if let Some(v) = k.2 {
+            name.push_str(&format!(" Space After {}", pt(v)));
+        }
+        if let Some(v) = k.3 {
+            name.push_str(&format!(" Leading {}", pt(v)));
+        }
+        let id = format!("ParagraphStyle/{name}");
+        sheet.paragraph_styles.insert(
+            id.clone(),
+            ParagraphStyleDef {
+                self_id: id.clone(),
+                name: Some(name),
+                based_on: Some(k.0.clone()),
+                space_before: k.1.map(|v| v as f32 / 4.0),
+                space_after: k.2.map(|v| v as f32 / 4.0),
+                leading: k.3.map(|v| v as f32 / 4.0),
+                ..Default::default()
+            },
+        );
+        variants.insert(k, id);
+        local -= n;
+    }
+    for st in stories.iter_mut() {
+        for p in st.story.paragraphs.iter_mut() {
+            let Some(id) = key_of(p).and_then(|k| variants.get(&k)) else {
+                continue;
+            };
+            p.paragraph_style = Some(id.clone());
+            p.space_before = None;
+            p.space_after = None;
+            for r in p.runs.iter_mut() {
+                r.leading = None;
+            }
+        }
     }
 }
 
@@ -3364,8 +3681,75 @@ mod tests {
     }
 
     #[test]
+    fn a_style_keeps_the_gap_most_of_its_text_sits_at() {
+        // Many short paragraphs set apart, a few long ones set close.
+        let mut v = vec![(11.0, 40.0); 6];
+        v.extend([(0.0, 900.0), (0.2, 800.0)]);
+        assert_eq!(weighted_mode(&v), 0.0);
+        // Gaps within 0.75 pt are one: their weighted mean, in quarters.
+        assert_eq!(weighted_mode(&[(11.0, 40.0), (11.1, 40.0)]), 11.0);
+    }
+
+    #[test]
+    fn recurring_spacing_becomes_a_variant_style_and_one_offs_stay_local() {
+        let para = |text: &str, sb: Option<f32>| Paragraph {
+            paragraph_style: Some("ParagraphStyle/Body".into()),
+            space_before: sb,
+            runs: vec![CharacterRun {
+                text: text.into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let body = "x".repeat(1000);
+        let mut paragraphs = vec![para(&body, None); 3];
+        paragraphs.extend(vec![para(&"y".repeat(400), Some(12.0)); 3]);
+        paragraphs.push(para("z", Some(3.0)));
+        let mut stories = vec![ParsedStory {
+            src: "Stories/Story_s.xml".into(),
+            self_id: "s".into(),
+            story: Story {
+                paragraphs,
+                ..Default::default()
+            },
+        }];
+        let mut sheet = paged_model::StyleSheet::default();
+        sheet.paragraph_styles.insert(
+            "ParagraphStyle/Body".into(),
+            ParagraphStyleDef {
+                self_id: "ParagraphStyle/Body".into(),
+                name: Some("Body".into()),
+                ..Default::default()
+            },
+        );
+        spacing_variants(&mut stories, &mut sheet);
+        let ps = &stories[0].story.paragraphs;
+        assert_eq!(
+            ps[3].paragraph_style.as_deref(),
+            Some("ParagraphStyle/Body Space Before 12")
+        );
+        assert_eq!(ps[3].space_before, None);
+        let v = &sheet.paragraph_styles["ParagraphStyle/Body Space Before 12"];
+        assert_eq!(v.based_on.as_deref(), Some("ParagraphStyle/Body"));
+        assert_eq!(v.space_before, Some(12.0));
+        // One character in 4,201 stays local: under 1 %.
+        assert_eq!(ps[6].space_before, Some(3.0));
+        assert_eq!(
+            ps[6].paragraph_style.as_deref(),
+            Some("ParagraphStyle/Body")
+        );
+    }
+
+    #[test]
+    fn a_character_the_font_lacks_reads_in_a_spelling_it_has() {
+        assert_eq!(equivalents('\u{2011}'), &["\u{2010}", "-"]);
+        assert_eq!(equivalents('\u{215B}')[0], "1\u{2044}8");
+        assert!(equivalents('a').is_empty());
+    }
+
+    #[test]
     fn a_folio_and_a_web_address_stay_as_they_read() {
-        let mut items = vec![run("NORR11.COM", 1), run("134", 1), run("NORR11.COM", 1)];
+        let mut items = vec![run("EXAMPLE11.COM", 1), run("134", 1), run("EXAMPLE11.COM", 1)];
         let mut fonts = FontTable::default();
         mark_unreadable(&mut items, &mut fonts);
         let texts: Vec<String> = items
@@ -3375,7 +3759,7 @@ mod tests {
                 _ => String::new(),
             })
             .collect();
-        assert_eq!(texts, ["NORR11.COM", "134", "NORR11.COM"]);
+        assert_eq!(texts, ["EXAMPLE11.COM", "134", "EXAMPLE11.COM"]);
     }
 
     #[test]

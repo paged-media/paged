@@ -624,10 +624,13 @@ fn rgba8(data: ImageData, alpha: Option<LumaData>) -> Option<(u32, u32, Vec<u8>)
 }
 
 /// The raw stream of an image the engine decodes as it stands: a plain
-/// 8-bit RGB or grey JPEG with no mask and no decode array.
+/// 8-bit RGB or grey JPEG with no mask and no decode array, its colour
+/// device RGB or grey, or an ICC profile that is sRGB (what the engine
+/// reads RGB as): the PDF's own bytes, not a second compression.
 fn passthrough_jpeg(
     stream: &hayro_interpret::hayro_syntax::object::Stream<'_>,
 ) -> Option<(u32, u32, Vec<u8>)> {
+    use hayro_interpret::hayro_syntax::object::{Array, Stream};
     let filters = stream.filters();
     if filters.len() != 1 || !matches!(filters[0], Filter::DctDecode) {
         return None;
@@ -636,8 +639,18 @@ fn passthrough_jpeg(
     if dict.contains_key(b"SMask") || dict.contains_key(b"Mask") || dict.contains_key(b"Decode") {
         return None;
     }
-    let cs = dict.get::<Name<'_>>(b"ColorSpace")?;
-    if !matches!(&*cs, b"DeviceRGB" | b"DeviceGray") {
+    let device = dict
+        .get::<Name<'_>>(b"ColorSpace")
+        .is_some_and(|cs| matches!(&*cs, b"DeviceRGB" | b"DeviceGray"));
+    let srgb = || {
+        let arr = dict.get::<Array<'_>>(b"ColorSpace")?;
+        let mut it = arr.flex_iter();
+        let kind = it.next::<Name<'_>>()?;
+        let profile = it.next::<Stream<'_>>()?;
+        (&*kind == b"ICCBased").then_some(())?;
+        icc_is_srgb(&profile.decoded().ok()?).then_some(())
+    };
+    if !device && srgb().is_none() {
         return None;
     }
     if dict.get::<u8>(b"BitsPerComponent").is_some_and(|b| b != 8) {
@@ -646,6 +659,34 @@ fn passthrough_jpeg(
     let w = dict.get::<u32>(b"Width")?;
     let h = dict.get::<u32>(b"Height")?;
     Some((w, h, stream.raw_data().into_owned()))
+}
+
+/// An RGB ICC profile that names itself sRGB (its `desc` tag, ASCII in a
+/// version 2 profile, UTF-16 in a version 4 one).
+fn icc_is_srgb(icc: &[u8]) -> bool {
+    if icc.len() < 132 || &icc[16..20] != b"RGB " {
+        return false;
+    }
+    let be = |at: usize| -> Option<usize> {
+        icc.get(at..at + 4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize)
+    };
+    let Some(count) = be(128) else { return false };
+    for i in 0..count.min(64) {
+        let at = 132 + i * 12;
+        if icc.get(at..at + 4) != Some(b"desc") {
+            continue;
+        }
+        let (Some(off), Some(len)) = (be(at + 4), be(at + 8)) else {
+            return false;
+        };
+        let Some(tag) = icc.get(off..off.saturating_add(len)) else {
+            return false;
+        };
+        let utf16: Vec<u8> = "sRGB".bytes().flat_map(|b| [0, b]).collect();
+        return tag.windows(4).any(|w| w == b"sRGB") || tag.windows(8).any(|w| w == utf16);
+    }
+    false
 }
 
 impl<'a> Device<'a> for Collector {
@@ -716,6 +757,10 @@ impl<'a> Device<'a> for Collector {
         let mut face: Option<FontFace> = None;
         let mut font_key: Option<u128> = None;
         let mut turn: Option<f32> = None;
+        // A turn whose glyphs are also scaled across (a line set narrower
+        // or wider): a reading direction too where the run is a line of
+        // glyphs, not one letter placed on a curve.
+        let mut scaled_turn: Option<f32> = None;
         for g in run.glyphs() {
             let m = props.transform * g.transform();
             let [a, b, c, d, e, f] = m.as_coeffs();
@@ -728,8 +773,12 @@ impl<'a> Device<'a> for Collector {
                 // direction a frame can be turned to.
                 let square = (a * c + b * d).abs() <= 1e-3 * (a * a + b * b).max(1e-12);
                 let same = ((a.hypot(b)) - (c.hypot(d))).abs() <= 1e-3 * a.hypot(b).max(1e-12);
-                if rotated && square && same && a * d - b * c < 0.0 {
-                    turn = Some(b.atan2(a) as f32);
+                if rotated && square && a * d - b * c < 0.0 {
+                    if same {
+                        turn = Some(b.atan2(a) as f32);
+                    } else {
+                        scaled_turn = Some(b.atan2(a) as f32);
+                    }
                 }
             }
             origins.push(Point::new(e, f));
@@ -815,6 +864,9 @@ impl<'a> Device<'a> for Collector {
                 gid,
                 passed_code,
             });
+        }
+        if turn.is_none() && origins.len() >= 2 {
+            turn = scaled_turn;
         }
         if origins.is_empty() {
             return;
@@ -1105,5 +1157,39 @@ mod glyph_name_tests {
         assert_eq!(name_text("u1F600").as_deref(), Some("\u{1F600}"));
         assert_eq!(name_text("three.onum").as_deref(), Some("3"));
         assert_eq!(name_text("gid12"), None);
+    }
+}
+
+#[cfg(test)]
+mod icc_tests {
+    use super::icc_is_srgb;
+
+    /// A profile of `space` with one `desc` tag holding `text`.
+    fn profile(space: &[u8; 4], text: &[u8]) -> Vec<u8> {
+        let mut p = vec![0u8; 128];
+        p[16..20].copy_from_slice(space);
+        p.extend_from_slice(&1u32.to_be_bytes());
+        p.extend_from_slice(b"desc");
+        p.extend_from_slice(&144u32.to_be_bytes());
+        p.extend_from_slice(&(text.len() as u32).to_be_bytes());
+        p.extend_from_slice(text);
+        p
+    }
+
+    #[test]
+    fn an_srgb_profile_is_read_as_the_engine_reads_rgb() {
+        assert!(icc_is_srgb(&profile(
+            b"RGB ",
+            b"desc\0\0\0\0\0\0\0\x12sRGB IEC61966-2.1"
+        )));
+        let v4: Vec<u8> = "sRGB v4".bytes().flat_map(|b| [0, b]).collect();
+        assert!(icc_is_srgb(&profile(b"RGB ", &v4)));
+    }
+
+    #[test]
+    fn another_rgb_profile_or_a_cmyk_one_is_not() {
+        assert!(!icc_is_srgb(&profile(b"RGB ", b"desc Adobe RGB (1998)")));
+        assert!(!icc_is_srgb(&profile(b"CMYK", b"desc sRGB")));
+        assert!(!icc_is_srgb(&[0u8; 40]));
     }
 }
