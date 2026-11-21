@@ -1,8 +1,22 @@
 # Paged
 
-Paged is a page-layout platform: an IDML render engine, an editor, and the
-built-in modules for images, vector drawing, spreadsheets, data publishing,
-Word, PowerPoint, HTML and PDF. This repository holds all of it at one revision.
+**Paged is an open platform for professional page layout and programmable
+publishing.** Design magazines, catalogues and reports in the browser, work
+with InDesign documents through IDML, and run the same engine from the command
+line to render and export print-ready PDF. Features and their release state
+vary; the [capability record](https://docs.paged.media/state/) says what is
+stable, what is experimental and what is planned.
+
+- See a real publication: [The Paged Annual](https://paged.media/library/)
+- Try the editor: [play.paged.media](https://play.paged.media)
+- Understand IDML compatibility: [Coming from InDesign](https://paged.media/indesign/)
+- Run the command line: [CLI reference](https://docs.paged.media/cli/)
+- Build an extension: [plugin SDK](https://docs.paged.media/plugin-sdk/)
+- Evaluate commercial licensing: [paged.media/enterprise](https://paged.media/enterprise/)
+
+This repository holds all of it at one revision: an IDML render engine, the
+editor, and the built-in modules for images, vector drawing, spreadsheets, data
+publishing, Word, PowerPoint, HTML and PDF.
 
 | Path                  | What it is                                                                              |
 | --------------------- | --------------------------------------------------------------------------------------- |

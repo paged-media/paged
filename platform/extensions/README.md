@@ -1,4 +1,4 @@
-# paged-media/plugin-sdk
+# Extensions platform (`platform/extensions`)
 
 Plugin contract + tooling for the Paged editor. One public package,
 `@paged-media/plugin-sdk`: the runtime (with the `paged-plugin` bin) and, as its
@@ -84,11 +84,11 @@ How the contract is designed and built is in [`docs/`](./docs/README.md) and in
 
 ## Status
 
-`plugin-sdk` is one of the three public npm packages of this repository
-([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md), amendment 3): a
+`plugin-sdk` is one of the four public npm packages of this repository
+([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md), amendment 3; PM-0013): a
 release tag `v0.<protocol>.<patch>` publishes it, at the tag's version, with the
-engine's `@paged-media/paged` and `@paged-media/viewer`
-(`.github/workflows/release.yml`). It ships the `paged-plugin` bin, which was the
+engine's `@paged-media/paged` and `@paged-media/viewer` and the editor's
+`@paged-media/editor` (`.github/workflows/release.yml`). It ships the `paged-plugin` bin, which was the
 `@paged-media/plugin-cli` package, and the contract as `./api`, which was the
 `@paged-media/plugin-api` package. The in-tree versions (`0.2.N-canary.0`) count
 contract changes for the contract guard; they are not the published versions. A

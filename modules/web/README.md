@@ -1,4 +1,4 @@
-# paged-media/plugin-web
+# paged.web (`modules/web`)
 
 **paged.web** — HTML/CSS as a first-class content type for the Paged editor.
 Concept: [`docs/concept.md`](./docs/concept.md) ("InDesign can't speak

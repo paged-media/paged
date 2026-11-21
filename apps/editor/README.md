@@ -1,10 +1,10 @@
-# paged-media/editor
+# Paged editor
 
-The editor for **paged** — a pixel-faithful Adobe IDML renderer. The
-frontend that sits on top of the open render engine (`paged-media/core`):
-a React canvas editor, an SDK client that binds the engine wasm, and the
-panel/shell machinery that turns the engine into an editable
-InDesign-class application.
+The editor of **Paged**, a professional page-layout platform built on an
+IDML render engine. It is the frontend on top of the engine
+(`engine/core` in this repository): a React canvas editor, an SDK client
+that binds the engine wasm, and the panel/shell machinery that turns the
+engine into an editable InDesign-class application.
 
 > **Dual-licensed: AGPL-3.0 OR the Paged Media Enterprise License (PMEL).**
 > © And The Next GmbH. (The engine is under the same terms.) See [`LICENSE.md`](./LICENSE.md),
@@ -13,14 +13,14 @@ InDesign-class application.
 
 ## What this is
 
-`paged-media/core` is the engine: the Rust render pipeline (IDML parse
-→ scene → text layout → compose → GPU/CPU raster), dual-licensed
-AGPL-3.0 OR PMEL, publishing the `@paged-media/*` SDK + wasm packages.
+`engine/core` is the engine: the Rust render pipeline (IDML parse
+→ scene → text layout → compose → GPU/CPU raster), under the same
+AGPL-3.0 OR PMEL terms as the rest of the repository.
 
-This repo is everything **above** that boundary — where the product
-and the revenue live. It consumes the engine strictly as a published
-dependency (wasm + SDK packages), **never** as a Rust path dependency,
-and never reaches into the engine's source tree.
+This directory is everything **above** that boundary. It consumes the
+engine through the `@paged-media/canvas-wasm` workspace package (wasm,
+glue and types), **never** as a Rust path dependency, and never reaches
+into the engine's source tree.
 
 ## Documentation
 
@@ -64,20 +64,19 @@ apps/canvas ──► @paged-media/shell ──► @paged-media/catalog ──�
             └─► @paged-media/client
 ```
 
-`@paged-media/client` is the single chokepoint to the engine. Nothing
-else imports wasm.
+`@paged-media/client` is the editor's API to the engine.
 
 ### Engine boundary
 
-`packages/client` is the only thing that touches the engine, and it
-touches it **across a package boundary**:
+The editor touches the engine only **across a package boundary**:
 
-- The build script (`apps/canvas/build-wasm.sh`) compiles
-  `paged-canvas-wasm` from a core checkout and emits the bundle into
-  `packages/client/src/wasm/`.
-- Only the tsify-generated `paged_canvas_wasm.d.ts` is **tracked**
-  (vendored so PR diffs show wire-format / protocol changes). The
-  `.wasm` binary and `.js` loader are **gitignored build output**.
+- `@paged-media/canvas-wasm` (`engine/core/packages/canvas-wasm`) is a
+  `workspace:*` dependency. The canvas worker loads its wasm, the
+  library worker its `./repo` entry; `packages/client` binds them for
+  the rest of the editor.
+- Its generated files (the glue, the `.d.ts`, the wasm) are
+  **gitignored build output** of `moon run core:wasm-pkg` (see the wasm
+  prerequisite below).
 - The wire-format contract is pinned by `PROTOCOL_VERSION` on both
   sides; the worker reconciles the Rust-owned SAB layout against the
   TS mirrors at startup and warns on drift.

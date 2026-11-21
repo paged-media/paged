@@ -5,11 +5,12 @@ packages, lays out text with an InDesign-calibrated Knuth–Plass composer,
 emits a versioned display list, and rasterises it through Vello: `vello_cpu`
 on the CPU (default) or Vello on wgpu (GPU). Public APIs target both native and WASM.
 
-This repository is the **open engine** — the rendering pipeline, including
-the fidelity-critical pieces (calibrated line-breaking, ICC colour, the
-Vello/WebGPU print path). The commercial editor built on top of it is
-closed and lives elsewhere; it consumes the published `@paged-media` SDK
-across a package boundary, never as a source dependency.
+This directory is the **engine** of the Paged monorepo — the rendering
+pipeline, including the fidelity-critical pieces (calibrated line-breaking,
+ICC colour, the Vello/WebGPU print path). The editor (`apps/editor`) and the
+built-in modules live in the same repository under the same licence. They
+reach the engine through its packages (`@paged-media/canvas-wasm`,
+`@paged-media/viewer`), never through its Rust crates.
 
 The engine is format-agnostic in design; IDML is the first input format.
 

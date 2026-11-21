@@ -1,4 +1,4 @@
-# plugin-sheets — paged.sheet
+# paged.sheet (`modules/sheet`)
 
 The spreadsheet subsystem of the Paged ecosystem: a Rust/WASM
 calculation engine and sheet document model delivered as a **Paged
@@ -9,11 +9,11 @@ truth and the page as its typeset projection. **A publishing instrument,
 not an Excel replacement.**
 
 Concept (the authority):
-[`docs/concept.md`](./docs/concept.md) (v0.3). SDK gap punch
-list: [`BREAKAGE_LOG.md`](./BREAKAGE_LOG.md) (S-NN). Dual-licensed
+[`docs/concept.md`](./docs/concept.md) (v0.3). Dual-licensed
 AGPL-3.0-only OR PMEL (see [`LICENSE.md`](./LICENSE.md)). First-party in
 authorship, third-party in discipline: the only dependency surface is
-the published plugin SDK.
+the plugin contract (`@paged-media/plugin-api` and `@paged-media/plugin-sdk`,
+from the workspace).
 
 ## Documentation
 

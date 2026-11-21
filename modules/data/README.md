@@ -57,7 +57,7 @@ cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/j
 # wasm artifact (100 MB app wasm budget; lands in packages/data-bundle/bin/)
 bash scripts/build-wasm.sh
 
-# TS (the bundle); the plugin contract comes from npm at an exact pin
+# TS (the bundle); the plugin contract comes from the workspace (workspace:*)
 bun install && bun run typecheck && bun run test
 bun run validate:manifest   # uses the in-repo platform/extensions plugin-cli
 

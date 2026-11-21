@@ -15,11 +15,12 @@ The surface the bundle gives the editor (every command, panel and the file impor
 registers) is asserted for behaviour, and each test names the surface id it vouches for with
 `covers()` (the surface-conformance gate,
 [`platform/extensions/docs/testing-plugins.md`](../../../platform/extensions/docs/testing-plugins.md)).
-All of them run the REAL bundle (`dataBundle.activate`) over the real data-js engine and a
-real DuckDB, booted from disk (`packages/data-bundle/test/conformance/env.ts`). Without the
-data-js wasm (`scripts/build-wasm.sh`) or DuckDB-WASM (`scripts/vendor-duckdb.sh`) they are
-skipped and name what is missing; the CI lane (`REQUIRE_REAL_DUCKDB`, `REQUIRE_REAL_ENGINE`,
-`REQUIRE_REAL_CORE`) makes that a failure.
+All of them run the REAL bundle (`dataBundle.activate`) over the real data-js engine, with
+its Turso store compiled in (ADR 561), booted from disk
+(`packages/data-bundle/test/conformance/env.ts`). Without the data-js wasm
+(`scripts/build-wasm.sh`) or, for the headless layer, the canvas engine they are skipped and
+name what is missing; the CI lane (`REQUIRE_REAL_ENGINE`, `REQUIRE_REAL_CORE`) makes that a
+failure.
 
 | Layer     | File                                                                            | What it asserts                                                                                                                                                                                                                                                                                                                                     |
 | --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

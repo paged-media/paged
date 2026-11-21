@@ -6,6 +6,10 @@ to a handle you drive it by: load and save documents, fill a template's fields, 
 switch features, theme it, listen to its events. `@paged-media/editor/iframe` drives an editor
 running in a frame instead.
 
+> **Not on npm yet.** The package is built in this repository (`bun run build` in
+> `apps/editor/packages/editor`) and is published by the next release tag; until then, build it
+> from the repository. Once released:
+
 ```sh
 npm i @paged-media/editor react react-dom
 ```

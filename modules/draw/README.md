@@ -1,14 +1,14 @@
-# paged-media/plugin-draw
+# paged.draw (`modules/draw`)
 
 **paged.draw** — the vector-illustration plugin for the Paged editor, and the
 forcing function for the plugin platform. Concept:
 [`docs/concept.md`](./docs/concept.md).
 
 Strategy: **incubate-then-extract.** Draw capability grows as host-agnostic
-packages here; the editor consumes the published bundle and wraps the
-machines in thin gesture-handler shims. Gaps in the plugin surface are
-recorded in the internal gap register. `CLAUDE.md` is the detailed
-orientation for this repo.
+packages here; the editor builds the bundle from source in this
+repository and wraps the machines in thin gesture-handler shims. Gaps in
+the plugin surface are recorded in the internal gap register. `CLAUDE.md`
+is the detailed orientation for this module.
 
 ## Documentation
 
