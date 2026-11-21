@@ -552,10 +552,26 @@ fn data_code128_decoder_reads_the_published_vector__feat__data_barcode_symbology
 }
 
 /// QR through rqrr: rasterise the module grid (4 px per module) and decode.
+/// rqrr's grid fit can be misled by a data pattern: one byte-mode payload
+/// under mask 4 (pinned in proptest-regressions/oracle_props.txt) fails to
+/// decode at 4 and at 5–10 px a module, yet decodes at 2 and 3 px, and macOS
+/// CoreImage reads all eight masks of it at any size (2026-11-21). The module
+/// matrix is the same at every scale, so the oracle tries 4, 3 and 2 px and
+/// accepts the first decode; an encoder defect fails at all three.
 fn decode_qr(g: &BarcodeGeometry) -> Result<String, String> {
-    const PX: usize = 4;
+    let mut last = String::new();
+    for px in [4, 3, 2] {
+        match decode_qr_at(g, px) {
+            Ok(s) => return Ok(s),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
+}
+
+fn decode_qr_at(g: &BarcodeGeometry, px: usize) -> Result<String, String> {
     let n = g.modules_x as usize;
-    let side = n * PX;
+    let side = n * px;
     let mut dark = vec![false; n * n];
     for r in &g.rects {
         let (x, y) = (
@@ -573,7 +589,7 @@ fn decode_qr(g: &BarcodeGeometry) -> Result<String, String> {
         }
     }
     let mut img = rqrr::PreparedImage::prepare_from_greyscale(side, side, |x, y| {
-        if dark[(y / PX) * n + x / PX] {
+        if dark[(y / px) * n + x / px] {
             0
         } else {
             255

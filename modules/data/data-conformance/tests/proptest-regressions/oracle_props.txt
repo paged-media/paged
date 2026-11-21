@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc c9d9de26a2edcc2e7da1a72d1182939905ddac056dab5feb0bda7b3001644abc # shrinks to digits = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 cc ef8f497604a257739c58e3f93c329733827dacf1d7d79e26834592bb75084f4e # shrinks to names = ["⁰"], exprs = ["a"], sets = [], line = 2.333521884661322e-113
+cc 1bd09366049edb097ad3c7bc6258cac2613363694900ca3c038386d1a77ab83d # shrinks to payload = "Foq$𐡒ଇIkfHх𐀀 ꤁ȹ$%﷏''#ȴ\u{a0}e?[?𑦪<𑜡𝄺𑢮~u𝼍𑘀'vᦒﬗ*&EJ ὝଏᥱK<\""
