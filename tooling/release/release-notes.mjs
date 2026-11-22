@@ -3,11 +3,15 @@
 //
 //   node tooling/release/release-notes.mjs <tag> [--repo <dir>] [--deprecations <file>]
 //
-//   - the commits since the previous `v*` tag that <tag> descends from
-//     (merges left out), each under the component it changes most, by the
-//     first path segments: engine, modules/<m>, apps/<a>, packages/<p>,
-//     platform, docs, tests, and tooling for the rest (CI, root files); the
-//     other components a commit touches follow it in brackets;
+//   - the commits since the previous `v*` tag: the highest release below
+//     <tag> in version order (for a prerelease, the highest tag below it).
+//     The range is `<previous>..<tag>`, what <tag> has that the previous
+//     release did not, which holds where that release was tagged on a branch
+//     <tag> does not descend from. Merges are left out; each commit is under
+//     the component it changes most, by the first path segments: engine,
+//     modules/<m>, apps/<a>, packages/<p>, platform, docs, tests, and tooling
+//     for the rest (CI, root files); the other components it touches follow
+//     it in brackets;
 //   - the deprecated feature ids, the Markdown that
 //     `bun apps/editor/scripts/feature-ids.mjs --release-notes` printed at
 //     the tag (--deprecations names the file it was written to; without it
@@ -157,20 +161,45 @@ function git(repo, args) {
   });
 }
 
-/** The nearest `v*` tag `tag`'s parent descends from; null for none. */
-function previousTag(repo, tag) {
-  try {
-    return git(repo, [
-      "describe",
-      "--tags",
-      "--abbrev=0",
-      "--match",
-      "v[0-9]*",
-      `${tag}^`,
-    ]).trim();
-  } catch {
-    return null;
+const TAG_RE = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+
+/** Semantic-version precedence of two `v*` tags (a prerelease before its
+ *  release); NaN when either is not a release tag. */
+export function compareTags(a, b) {
+  const x = TAG_RE.exec(a);
+  const y = TAG_RE.exec(b);
+  if (!x || !y) return NaN;
+  for (let i = 1; i <= 3; i++) {
+    const d = Number(x[i]) - Number(y[i]);
+    if (d) return d;
   }
+  if (!x[4] || !y[4]) return (x[4] ? -1 : 0) - (y[4] ? -1 : 0);
+  const p = x[4].split(".");
+  const q = y[4].split(".");
+  for (let i = 0; i < Math.max(p.length, q.length); i++) {
+    if (p[i] === undefined) return -1;
+    if (q[i] === undefined) return 1;
+    const m = /^\d+$/.test(p[i]);
+    const n = /^\d+$/.test(q[i]);
+    if (m && n && Number(p[i]) !== Number(q[i]))
+      return Number(p[i]) - Number(q[i]);
+    if (m !== n) return m ? -1 : 1;
+    if (p[i] !== q[i]) return p[i] < q[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/** The tag a release's notes start from: for a release, the highest release
+ *  below it (its prereleases are on the way to it, not before it); for a
+ *  prerelease, the highest tag below it. Null for none. */
+export function previousTagOf(tags, tag) {
+  const prerelease = TAG_RE.exec(tag)?.[4] !== undefined;
+  return (
+    tags
+      .filter((t) => compareTags(t, tag) < 0)
+      .filter((t) => prerelease || TAG_RE.exec(t)?.[4] === undefined)
+      .sort((a, b) => compareTags(b, a))[0] ?? null
+  );
 }
 
 function main() {
@@ -185,7 +214,7 @@ function main() {
   const repo = opt("--repo") ?? ".";
   const deprecationsFile = opt("--deprecations");
   const [tag] = args;
-  if (!tag || !/^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(tag)) {
+  if (!tag || !TAG_RE.test(tag)) {
     console.error(
       "usage: node tooling/release/release-notes.mjs <vMAJOR.MINOR.PATCH[-pre]> [--repo <dir>] [--deprecations <file>]",
     );
@@ -197,7 +226,10 @@ function main() {
     console.error(`release-notes: ${repo} has no tag ${tag}`);
     process.exit(1);
   }
-  const previous = previousTag(repo, tag);
+  const previous = previousTagOf(
+    git(repo, ["tag", "--list", "v[0-9]*"]).split("\n").filter(Boolean),
+    tag,
+  );
   const log = git(repo, [
     "log",
     "--no-merges",
