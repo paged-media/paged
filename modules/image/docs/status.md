@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-14, commit `affabce78`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What `paged.image` ships and what it does not, read from the code on `main`, 2026-10-24, at
 `@paged-media/image` 0.1.0-canary.21 (manifest version 0.1.0). How the parts fit is in
 [`architecture.md`](architecture.md).

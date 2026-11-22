@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-02, commit `f801b12e0`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What this repository ships and what it does not, read from the code at commit `6994ad1`
 (`packages/publish-bundle/package.json` 0.1.1-canary.0, `packages/pdf-bundle/package.json`
 0.2.6-canary.0). How the parts fit is in [`architecture.md`](architecture.md).
@@ -53,64 +57,6 @@ What this repository ships and what it does not, read from the code at commit `6
   licence allows copying, instructions and a report), and the document as `.paged`, which
   carries the module content IDML cannot; the report lists those parts (`--no-paged` leaves
   the file out, as in the Rust `paged package`).
-
-## Pending release: core protocol 71
-
-The `om/object-model` branch carries IDML export fixes that need core protocol 71 (core
-branch `om/protocol-71`, not yet tagged). They do not build against the current core pin
-(`f6a8c56`, protocol 70): the model field `Spread::item_names` and the store reader
-`paged_store::from_parts` exist from protocol 71 on. Built and tested against a local
-checkout of that core branch:
-
-- **Hidden and locked page items.** `Visible` and `Locked` follow the model on items the
-  source carried and on items created since load. Before, a hidden item came back visible.
-- **Authored text variables.** A variable created in the model is written as a
-  `<TextVariable>` definition in `designmap.xml`, in InDesign's own spelling; a changed one
-  is rewritten and a deleted one dropped. An instance inserted into text is written as a
-  `<TextVariableInstance>` in a range of its own, in a source story or in a story written
-  whole. The importer reads both back.
-- **Text on a path with no end bracket.** `EndBracket` is written as the host path's arc
-  length. InDesign reads a missing `EndBracket` as 0 and shows no text.
-- **Page-item names.** The `item-names` feature gate is removed: `Name` is always read
-  into `Spread::item_names` and written for new and renamed items.
-- **PDF import test.** The model part keeps its images as separate blob parts (pgm v4), so
-  the round-trip test reads it with `paged_store::from_parts`.
-
-InDesign 2025 (20.0.1) opened an export with all four changes, saved it as `.indd` and
-reopened it. The hidden item stayed hidden, the locked frame stayed locked, the variable
-showed `9.99`, the text sat on the path without overset, and the new name stayed. The
-recording is `crates/idml-export/tests/fixtures/indesign-2025-object-model/verify.json`.
-`crates/idml-export/tests/indesign/probe.sh` re-records it.
-
-### Release order
-
-> Historical: this was the protocol-71 release, when the engine and this repository were
-> separate and pinned each other by git revision. Since
-> [PM-0005](../../../docs/adr/PM-0005-workspace-policy.md) the adapter lives in the engine
-> workspace and one commit changes both, so there is no release order any more.
-
-The two repositories pin each other by git revision, so the steps run in this order:
-
-1. **core:** merge `om/protocol-71` into `main` and tag `v0.71.0`. Call that commit `C`.
-2. **plugin-publish:** in the workspace `Cargo.toml`, move the three core pins
-   (`paged-model`, `paged-scene`, `paged-store`) to `rev = "C"` and update `Cargo.lock`. No
-   local `[patch]` block may be committed. Run `cargo test --workspace`,
-   `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`,
-   then commit the pin together with this branch, so `main` never holds the ungated code on
-   the old pin. Call the merged commit `P`.
-3. **core:** move the eight `idml-import` / `idml-export` git pins
-   (`paged-canvas` ×2, `paged-cli`, `paged-export-pdf`, `paged-gen`, `paged-introspect`,
-   `paged-introspect-wasm`, `paged-mutate`) to `rev = "P"`. The pinned-defect assertions
-   in `crates/paged-canvas/tests/it/idml_export_object_model_state.rs` then fail. Change them
-   to assert the fix:
-   - `a_hidden_item_is_visible_false_in_the_exported_spread` should assert
-     `Visible="false"`;
-   - `an_authored_text_variable_reaches_the_idml` should assert that both the definition
-     and the instance are written.
-     Then commit and push, and check that CI passes.
-4. **core:** tag the patch release `v0.71.1`. The wire protocol does not change, so the
-   plugin SDK's vendored contract stays as it is. Downstream, the editor moves its engine
-   pins, and plugin-draw drops its `textPathEndBracketAbsent` finding, which now flips.
 
 ## Limits of what is shipped
 
@@ -175,3 +121,65 @@ The two repositories pin each other by git revision, so the steps run in this or
 - A build of the shipped `pdf-import` artifact (`scripts/build-wasm.sh`, the `wasm-bindgen`
   output in `packages/pdf-bundle/bin/`) in CI or in the publish workflow. CI compiles the
   crate for `wasm32` as a check only.
+
+## History
+
+Older release and pending-release records, kept as they were written.
+
+### Pending release: core protocol 71
+
+The `om/object-model` branch carries IDML export fixes that need core protocol 71 (core
+branch `om/protocol-71`, not yet tagged). They do not build against the current core pin
+(`f6a8c56`, protocol 70): the model field `Spread::item_names` and the store reader
+`paged_store::from_parts` exist from protocol 71 on. Built and tested against a local
+checkout of that core branch:
+
+- **Hidden and locked page items.** `Visible` and `Locked` follow the model on items the
+  source carried and on items created since load. Before, a hidden item came back visible.
+- **Authored text variables.** A variable created in the model is written as a
+  `<TextVariable>` definition in `designmap.xml`, in InDesign's own spelling; a changed one
+  is rewritten and a deleted one dropped. An instance inserted into text is written as a
+  `<TextVariableInstance>` in a range of its own, in a source story or in a story written
+  whole. The importer reads both back.
+- **Text on a path with no end bracket.** `EndBracket` is written as the host path's arc
+  length. InDesign reads a missing `EndBracket` as 0 and shows no text.
+- **Page-item names.** The `item-names` feature gate is removed: `Name` is always read
+  into `Spread::item_names` and written for new and renamed items.
+- **PDF import test.** The model part keeps its images as separate blob parts (pgm v4), so
+  the round-trip test reads it with `paged_store::from_parts`.
+
+InDesign 2025 (20.0.1) opened an export with all four changes, saved it as `.indd` and
+reopened it. The hidden item stayed hidden, the locked frame stayed locked, the variable
+showed `9.99`, the text sat on the path without overset, and the new name stayed. The
+recording is `crates/idml-export/tests/fixtures/indesign-2025-object-model/verify.json`.
+`crates/idml-export/tests/indesign/probe.sh` re-records it.
+
+#### Release order
+
+> Historical: this was the protocol-71 release, when the engine and this repository were
+> separate and pinned each other by git revision. Since
+> [PM-0005](../../../docs/adr/PM-0005-workspace-policy.md) the adapter lives in the engine
+> workspace and one commit changes both, so there is no release order any more.
+
+The two repositories pin each other by git revision, so the steps run in this order:
+
+1. **core:** merge `om/protocol-71` into `main` and tag `v0.71.0`. Call that commit `C`.
+2. **plugin-publish:** in the workspace `Cargo.toml`, move the three core pins
+   (`paged-model`, `paged-scene`, `paged-store`) to `rev = "C"` and update `Cargo.lock`. No
+   local `[patch]` block may be committed. Run `cargo test --workspace`,
+   `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`,
+   then commit the pin together with this branch, so `main` never holds the ungated code on
+   the old pin. Call the merged commit `P`.
+3. **core:** move the eight `idml-import` / `idml-export` git pins
+   (`paged-canvas` ×2, `paged-cli`, `paged-export-pdf`, `paged-gen`, `paged-introspect`,
+   `paged-introspect-wasm`, `paged-mutate`) to `rev = "P"`. The pinned-defect assertions
+   in `crates/paged-canvas/tests/it/idml_export_object_model_state.rs` then fail. Change them
+   to assert the fix:
+   - `a_hidden_item_is_visible_false_in_the_exported_spread` should assert
+     `Visible="false"`;
+   - `an_authored_text_variable_reaches_the_idml` should assert that both the definition
+     and the instance are written.
+     Then commit and push, and check that CI passes.
+4. **core:** tag the patch release `v0.71.1`. The wire protocol does not change, so the
+   plugin SDK's vendored contract stays as it is. Downstream, the editor moves its engine
+   pins, and plugin-draw drops its `textPathEndBracketAbsent` finding, which now flips.

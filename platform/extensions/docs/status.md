@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-10-28, commit `cfb27e921`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What the plugin contract ships and what it does not, read from the code on `main`
 (2026-10-18): `@paged-media/plugin-api` and `@paged-media/plugin-sdk` 0.2.63-canary.0,
 `@paged-media/plugin-cli` 0.1.6, `@paged-media/ai` 0.1.0-canary.4, `@paged-media/cli`

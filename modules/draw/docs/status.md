@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-14, commit `e319726c8`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What `paged.draw` ships and what it does not, read from the code on `main`, 2026-10-24, at
 `@paged-media/draw` 0.1.0-canary.20 (a private workspace package; manifest version 0.5.0). The
 bundle takes `@paged-media/plugin-api` and `@paged-media/plugin-sdk` from the workspace as peers;
@@ -530,7 +534,11 @@ Recolouring a raster is pixel work and is not registered.
 - A preview of a Boolean, region or offset operation's RESULT before it is applied: the
   engine offers no dry run (the Pathfinder outlines its operands instead, ADR 370).
 
-## Releases
+## History
+
+Older release and pending-release records, kept as they were written.
+
+### Releases
 
 What each published canary of `@paged-media/draw` added since 0.1.0-canary.13. A merge that
 leaves the version unchanged publishes nothing.

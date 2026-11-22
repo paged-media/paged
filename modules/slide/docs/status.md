@@ -1,5 +1,9 @@
 # paged.slide — status
 
+> Status as of 2026-11-11, commit `9ea72df91`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 Read from the code on 2026-10-30.
 
 ## Built

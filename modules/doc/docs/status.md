@@ -1,5 +1,9 @@
 # paged.doc — status
 
+> Status as of 2026-11-14, commit `b51c55f4e`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 ## Story view and Story Map (2026-11-14, ADR 630)
 
 - **Story view** (View ▸ Story view): the story of the caret as continuous text in place of the

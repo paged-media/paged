@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-14, commit `176736b22`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What `paged.web` ships and what it does not, read from the code on 2026-10-06
 (`@paged-media/web` 0.1.0-canary.11, not yet published). How the parts fit is in
 [`architecture.md`](architecture.md); the gaps against Chrome and InDesign, the test baseline

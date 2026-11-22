@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-18, commit `d6efb6292`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What the editor ships and what it does not, read from the code at commit `6d098eb`
 (engine `@paged-media/canvas-wasm` 0.66.0, protocol 66). How the parts fit is in
 [`architecture.md`](architecture.md). Panel-by-panel detail is in

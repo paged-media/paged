@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-18, commit `2b5cd5b4b`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What `paged.data` ships and what it does not, read from the code on `main` at
 `@paged-media/data` 0.1.0-canary.17 (2026-10-17). The bundle declares
 `@paged-media/plugin-api` and `@paged-media/plugin-sdk` `>=0.2.45-canary.0` as peers; its tests
@@ -556,7 +560,11 @@ the document label has since been released.
 | No document-scoped plugin label: `setMetadata` takes a leaf `ElementId` only     | not on the wire                              | the session's hash cannot be recorded in an undoable place of its own; lowered content carries it instead. Released in the engine as `setDocumentMetadata` (core v0.69.0); the plugin uses it where the engine has it (`src/doc-label.ts`) |
 | Window ▸ Bindings is greyed outside the `dataBinding` edit context               | host UI                                      | the Bindings panel opens from Object ▸ Insert data binding… or the command palette                                                                                                                                                         |
 
-## Gaps found in step 6
+## History
+
+Older release and pending-release records, kept as they were written.
+
+### Gaps found in step 6
 
 Measured on 2026-10-05 against DuckDB-WASM 1.29.0 (engine v1.1.1), the shipped EH variant.
 DuckDB is gone since ADR 561; the rows stay as the record of why.
@@ -570,7 +578,7 @@ DuckDB is gone since ADR 561; the rows stay as the record of why.
 | A local file cannot be watched from a browser page                                                                                                                                                                                                                                                           | platform                                 | file sources refresh on open or by importing again; interval is refused                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | The shipped eh build has no parquet or json extension; DuckDB loaded them on first use from extensions.duckdb.org, which the editor's CSP (connect-src 'self') refuses — the worker trapped ("unreachable") on Parquet, JSON and XLSX (`read_json`) imports, while the Node lanes passed by downloading them | engine limitation (packaging) + host CSP | FIXED 2026-10-06: the package ships both (json 696,809 B, parquet 2,803,379 B, DuckDB Labs-signed, MIT, SHA-256 pinned by `scripts/vendor-duckdb.sh`) in `bin/duckdb-ext/v1.1.1/wasm_eh/`; `bootDuckDB` points `custom_extension_repository` there and turns autoinstall off before the configuration lock. The browser lane imports JSON, NDJSON, Parquet and XLSX with no off-origin request; the Node lanes load the same files through a local-only `XMLHttpRequest` and refuse every other URL. The data plugin's wasm is now 40.6 MB of the app's 94.7 MB |
 
-## Releases
+### Releases
 
 What each published canary of `@paged-media/data` added, from the first that ships DuckDB. The
 publish workflow skips a version already on npm, so a merge that leaves the version unchanged

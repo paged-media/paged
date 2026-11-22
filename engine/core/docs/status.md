@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-18, commit `cd6f99450`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What the engine ships and what it does not, read from the code of the protocol-72 batch
 (`PROTOCOL_VERSION` 72: generated text, editorial notes and bookmarks over the wire — Generate
 Index, Update Cross-References, notes, bookmark editing and PDF bookmarks — on top of protocol
@@ -395,13 +399,6 @@ template fields | fill | check` run the same messages headlessly.
 - **The size gate measures a stand-in.** `spikes/wasm-size` links the viewer crate and
   wgpu 22; the size of the published viewer wasm is printed at release, not enforced.
 
-## Releases
-
-Protocol 71 shipped as `v0.71.0` through `v0.71.13`; the fields of
-[ADR 159](adr/159-what-a-committed-change-reports.md) are additive and arrive in `v0.71.13`.
-The release order when core and the IDML adapter pin each other is in
-[`reference/protocol-governance.md`](reference/protocol-governance.md).
-
 ## Not built
 
 - A retained layout tree or demand-driven recomputation. Every build is the whole-document
@@ -419,3 +416,14 @@ The release order when core and the IDML adapter pin each other is in
 - A digest comparison between the browser wasm and the native build; the equivalence test
   runs natively (`crates/paged-sdk/tests/it/digest_equivalence.rs:24-26`).
 - A bundled typeface or ICC profile; crates on a Rust registry (`publish = false`).
+
+## History
+
+Older release and pending-release records, kept as they were written.
+
+### Releases
+
+Protocol 71 shipped as `v0.71.0` through `v0.71.13`; the fields of
+[ADR 159](adr/159-what-a-committed-change-reports.md) are additive and arrive in `v0.71.13`.
+The release order when core and the IDML adapter pin each other is in
+[`reference/protocol-governance.md`](reference/protocol-governance.md).

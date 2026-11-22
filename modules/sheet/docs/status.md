@@ -1,5 +1,9 @@
 # Status
 
+> Status as of 2026-11-14, commit `f29de6bd9`: the last time this page was brought up to date. The
+> live, tested state of every capability is the capability record,
+> [docs.paged.media/state](https://docs.paged.media/state/).
+
 What `paged.sheet` ships and what it does not, read from the code on `main` at
 `@paged-media/sheet` 0.1.0-canary.24 (2026-10-18), with `@paged-media/plugin-api` and
 `@paged-media/plugin-sdk` `>=0.2.45-canary.0` as peers. The tests run against
@@ -632,7 +636,11 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 - **Three registry rows marked `planned`:** `sheet.chart.design-markers`,
   `sheet.format.locale.cjk-followup`, `sheet.style.doc-style-group`.
 
-## Releases
+## History
+
+Older release and pending-release records, kept as they were written.
+
+### Releases
 
 What each published canary of `@paged-media/sheet` added since 0.1.0-canary.8. A merge that
 leaves the version unchanged publishes nothing; 0.1.0-canary.9 to .12 were never published.
