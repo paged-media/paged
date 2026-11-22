@@ -8,14 +8,6 @@
       "owner": "@drietsch",
       "expires": "2026-12-31",
       "reason": "Build-time only: tailwindcss 3 > postcss-nested > postcss-selector-parser 6 in the editor's CSS build. The fix is in 7.1.6, which postcss-nested under Tailwind 3 does not accept; Tailwind 4 clears it (held, docs/migration/npm-latest.md)."
-    },
-    {
-      "id": "GHSA-fc5q-39xc-vjpf",
-      "package": "picomatch",
-      "severity": "high",
-      "owner": "@drietsch",
-      "expires": "2026-12-18",
-      "reason": "No fixed release: every picomatch through 4.0.7, the newest, is affected (reviewed 2026-11-18). Build-time only: vite and tinyglobby, tailwindcss 3 (fast-glob, micromatch, chokidar) and sucrase; none of the published packages depends on it. The ReDoS needs an attacker-supplied glob pattern, and these tools match only the globs of our own configs. Bump picomatch when a fixed release ships."
     }
   ]
 }
