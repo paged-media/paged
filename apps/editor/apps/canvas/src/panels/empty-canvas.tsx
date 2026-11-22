@@ -21,7 +21,8 @@
 // "Drop an IDML file here, or use File ▸ Open IDML…", named one format and
 // a menu item that does not exist, and offered nothing to click. Now: New
 // document and Open…, the documents of the local library opened last, and
-// every format the editor opens, the importers' included.
+// every format the editor opens, the importers' included. And where the
+// files go (the privacy line, below).
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { DocumentEntry } from "@paged-media/repository";
@@ -46,6 +47,7 @@ import {
   type Sample,
 } from "../samples/catalog";
 import { SampleCredit, SampleNotice } from "../samples/SampleNotice";
+import { useOptionalEditorInstance } from "../app/instance";
 
 const M = defineMessages("app.emptyCanvas", {
   title: "No document is open",
@@ -59,7 +61,62 @@ const M = defineMessages("app.emptyCanvas", {
   samples: "Sample documents",
   samplePages: "{count} pages",
   sampleFailed: "{name} did not open: {reason}",
+  privacy:
+    "Files you open are read in this browser and are not uploaded. Before a request goes to Claude, the editor lists what leaves this device and waits for you to agree.",
+  privacyServer:
+    "Files you open are read in this browser. They reach {server} only when you push a document or connect this tab to Claude in the Library panel. Before a request goes to Claude, the editor lists what leaves this device and waits for you to agree.",
 });
+
+// ADR 225 — the paged.server this build syncs with (`PAGED_SERVER_URL` at
+// build time), as the Library panel reads it. Empty: no server.
+declare const __PAGED_SERVER__: string | undefined;
+const SERVER = typeof __PAGED_SERVER__ === "undefined" ? "" : __PAGED_SERVER__;
+
+/** The server as a reader knows it: its host, or the setting as written. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Where an opened file goes, worded as the code behaves. A file is read in
+ * the page: an importer bundle or the engine's worker parses its bytes
+ * (`openFile`, shell `state/commands/file-commands.ts`), and the library
+ * keeps it in the browser's private file system (`rememberOpenedFile`,
+ * `opfsFs`). The page's network wall is `connect-src 'self'` plus the module
+ * host it downloads from (`public/_headers`). Only two things send: a build
+ * with a paged.server sends a document when the Library panel's Push or
+ * Connect to Claude is pressed, and the assistant sends a request only after
+ * its consent card has said what leaves the device and the user agreed
+ * (`shell/src/ai/messages.ts`, `PROPOSAL.consent*`; the Checks run on the
+ * device).
+ *
+ * Only an editor that is the page says it: an embedded editor's host takes
+ * the document through its own save action or handle, and where that goes
+ * is the host's to say.
+ */
+export function PrivacyLine({
+  server = SERVER,
+  style,
+}: {
+  /** The paged.server this build syncs with; empty for none. */
+  server?: string;
+  style?: React.CSSProperties;
+}) {
+  const strings = useStrings();
+  const instance = useOptionalEditorInstance();
+  if (!instance?.ownsPage) return null;
+  return (
+    <p style={style} data-empty-privacy="">
+      {server
+        ? strings.t(M.privacyServer, { server: hostOf(server) })
+        : strings.t(M.privacy)}
+    </p>
+  );
+}
 
 /** Recent library documents listed. */
 const RECENT = 5;
@@ -221,6 +278,7 @@ export function EmptyCanvas() {
           {extensions.length > 0 &&
             ` ${strings.t(M.moreFormats, { list: extensions.join(", ") })}`}
         </p>
+        <PrivacyLine style={formatsStyle} />
       </div>
     </div>
   );

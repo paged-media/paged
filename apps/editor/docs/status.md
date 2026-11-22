@@ -22,15 +22,17 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   after a crash or a reload: Restore (as a new document), Compare, Discard
   ([ADR 1204](adr/1204-recovery-journal.md)). The native picker and the empty canvas offer every
   format an importer opens (the empty canvas also New, Open… and the library's recent
-  documents), and a file that is no package or that the engine cannot read leaves the open
-  document as it was and says why. A file dragged over the canvas says what the drop will do
-  before it lands (place, place into the frame under the pointer, import, open, open in place
-  of this document, or refused and why), and the drop does that
-  ([ADR 1205](adr/1205-drop-says-what-it-will-do.md)).
+  documents; in the editor that is the page, where opened files go: read in the browser, not
+  uploaded, and what a request to Claude sends), and a file that is no package or that the
+  engine cannot read leaves the open document as it was and says why. A file dragged over the
+  canvas says what the drop will do before it lands (place, place into the frame under the
+  pointer, import, open, open in place of this document, or refused and why), and the drop
+  does that ([ADR 1205](adr/1205-drop-says-what-it-will-do.md)).
 - **Export.** PDF through the export dialog, with progress and cancel; page images as PNG;
   every exporter a plugin registers, listed in the Outputs panel. Swatch libraries can be
   imported and exported as `.ase`.
-- **Canvas.** Rendering in a worker, on WebGPU with a CPU fallback. Pan and zoom; click and
+- **Canvas.** Rendering in a worker, on WebGPU with a CPU fallback, which a notice under the
+  header names until it is hidden (`panels/runtime-notices.tsx`). Pan and zoom; click and
   marquee selection; move, resize, scale and rotate gestures with snap guides; frame content
   transforms; path-edit mode, where anchors, handles and segments drag, several anchors
   select by marquee, arrows nudge them and Delete removes them, each edit one undo step;
@@ -56,7 +58,8 @@ What the editor ships and what it does not, read from the code at commit `6d098e
 - **Phones and tablets.** The `template-fill` and `form` presets work on a phone below 720 px:
   the field sheet or the form first, 44 px touch targets, one-finger pan, pinch zoom and zoom
   buttons, and a camera input for a picture field ([ADR 294](adr/294-the-fill-presets-on-phones-and-tablets.md)).
-  The full and focused editors are desktop editors.
+  The full and focused editors are desktop editors; below 720 px a notice says so and names the
+  fill layouts.
 - **Scripting.** A script editor panel runs `paged.*` scripts in the engine's interpreter,
   `paged.data.*` included (it reads the document's data service); a REPL panel parses one-line commands (`set`, `insert`, `remove`, `move`, `undo`, `redo`,
   `inspect`) into mutations. An Actions panel records and replays command invocations.

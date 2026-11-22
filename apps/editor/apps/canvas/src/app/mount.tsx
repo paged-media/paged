@@ -228,6 +228,10 @@ import {
 } from "../panels/template/open-as-template-dialog";
 import { TemplateNotice } from "../panels/template/template-notice";
 import {
+  CpuRenderingNotice,
+  DesktopScreenNotice,
+} from "../panels/runtime-notices";
+import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
 } from "../core-command-entries";
@@ -2188,8 +2192,15 @@ function CanvasAppRoot() {
       // furniture with no meaning in a drawing app.
       headerExtras={instance.surfaces.plain ? <CorpusPicker /> : null}
       // A template opened as a document says so and offers "Edit
-      // template" (ADR 293).
-      notices={<TemplateNotice />}
+      // template" (ADR 293); a canvas drawn on the CPU and a desktop editor
+      // on a phone say so too (runtime-notices.tsx).
+      notices={
+        <>
+          <TemplateNotice />
+          <CpuRenderingNotice />
+          <DesktopScreenNotice />
+        </>
+      }
       initialMode={instance.surfaces.initialMode}
       initialDocumentSizePt={instance.surfaces.initialDocumentSizePt}
       regions={instance.profile.regions}

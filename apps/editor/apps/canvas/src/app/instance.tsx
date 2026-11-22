@@ -331,6 +331,12 @@ export function EditorInstanceProvider({
   );
 }
 
+/** The editor this component is mounted in; null outside a mount (a panel
+ *  rendered on its own, a DOM test). */
+export function useOptionalEditorInstance(): EditorInstance | null {
+  return useContext(InstanceContext);
+}
+
 /** The editor this component is mounted in. */
 export function useEditorInstance(): EditorInstance {
   const instance = useContext(InstanceContext);
