@@ -37,7 +37,20 @@
     "react": "catalog:",
     "typescript": "catalog:"
   },
-  "description": "The Paged extension SDK: the contract, type-only, as ./api; the runtime (loadBundle, the in-process BundleHost adapter, the gesture kit, the headless host, version negotiation); and the paged-plugin CLI (scaffold a plugin, validate a manifest, stamp and host its wasm).",
+  "description": "Paged — professional page layout and publishing: the extension SDK, with the contract (type-only, as ./api); the runtime (loadBundle, the in-process BundleHost adapter, the gesture kit, the headless host, version negotiation); and the paged-plugin CLI (scaffold a plugin, validate a manifest, stamp and host its wasm).",
+  "keywords": [
+    "page-layout",
+    "publishing",
+    "idml",
+    "typesetting",
+    "pdf",
+    "webassembly",
+    "plugin",
+    "plugin-sdk",
+    "extensions",
+    "sdk"
+  ],
+  "homepage": "https://docs.paged.media/plugin-sdk/",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "bin": {
     "paged-plugin": "./bin/paged-plugin.mjs"

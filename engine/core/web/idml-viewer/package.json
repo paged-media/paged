@@ -1,7 +1,20 @@
 {
   "name": "@paged-media/viewer",
   "version": "0.84.0-dev",
-  "description": "Standalone IDML viewer for the browser: camera, pages, input and events over the engine's WebGPU ViewerSession, which ships in the package (./session).",
+  "description": "Paged — professional page layout and publishing: a standalone IDML viewer for the browser, with camera, pages, input and events over the engine's WebGPU ViewerSession, which ships in the package (./session).",
+  "keywords": [
+    "page-layout",
+    "publishing",
+    "idml",
+    "typesetting",
+    "pdf",
+    "webassembly",
+    "viewer",
+    "webgpu",
+    "rendering",
+    "canvas"
+  ],
+  "homepage": "https://docs.paged.media/sdk/",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {
     "type": "git",
