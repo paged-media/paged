@@ -33,8 +33,7 @@
 // SAB and posts attach/resize messages.
 //
 // Sub-phases B/C/D layer in WebGPU + Vello underneath the same render
-// loop — see /Users/drietsch/.claude/plans/...canvas... for the full
-// plan.
+// loop.
 
 import { CameraBuffer, type Camera } from "@paged-media/client";
 import { layoutPages, type PageRect } from "../ui/layout";
