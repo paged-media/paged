@@ -1,6 +1,6 @@
 # Status
 
-> Status as of 2026-11-18, commit `d6efb6292`: the last time this page was brought up to date. The
+> Status as of 2026-11-22, commit `88c33430a`: the last time this page was brought up to date. The
 > live, tested state of every capability is the capability record,
 > [docs.paged.media/state](https://docs.paged.media/state/).
 
