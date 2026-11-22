@@ -1,0 +1,120 @@
+# The notes of a release. A pushed `v*` tag gets a DRAFT GitHub Release whose
+# body says what changed for the people who use it:
+#
+#   - the commits since the previous `v*` tag, merges left out, each under the
+#     component it changes most (engine, modules/<m>, apps/<a>, packages/<p>,
+#     platform, docs, tests, tooling);
+#   - the deprecated feature ids at the tag
+#     (`bun apps/editor/scripts/feature-ids.mjs --release-notes`);
+#   - the known limits: the capability record, https://docs.paged.media/state/.
+#
+# The owner reads the draft, edits it and publishes it. Nothing here publishes
+# a package; release.yml does that from the same tag and does not depend on
+# this workflow (nor this on it).
+#
+# A dispatch with a `tag` only prints the notes (the log and the run's
+# summary) and makes no release: the dry run for any existing tag.
+#
+# The notes are written by tooling/release/release-notes.mjs from THIS
+# workflow's checkout, so a dispatch can print the notes of a tag older than
+# the script; the history and the feature ids are read from the tag's own
+# checkout (`at-tag/`).
+name: release notes
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "A v* tag whose notes to print (no release is made)"
+        required: true
+        type: string
+
+# Declaring this block sets every unlisted scope to none; the job widens only
+# what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  notes:
+    name: notes (a draft release for a pushed tag)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # the draft release; a dispatch writes nothing
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the tag is a release tag
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::$TAG is not vMAJOR.MINOR.PATCH[-prerelease]."
+            exit 1
+          fi
+
+      # The tag's tree with the whole history and every tag: the range
+      # starts at the previous `v*` tag the release descends from.
+      - name: the tag's checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          path: at-tag
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Bun at the version in /.prototools (the feature-id inventory runs on
+      # Bun and reads the editor's sources through the workspace).
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+
+      - name: install at the tag
+        working-directory: at-tag
+        run: bun install --frozen-lockfile
+
+      - name: deprecated feature ids at the tag
+        working-directory: at-tag
+        run: bun apps/editor/scripts/feature-ids.mjs --release-notes > "$RUNNER_TEMP/deprecations.md"
+
+      - name: the notes
+        run: |
+          set -euo pipefail
+          node tooling/release/release-notes.mjs "$TAG" --repo at-tag \
+            --deprecations "$RUNNER_TEMP/deprecations.md" > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # A tag push only. A release for the tag that is already published is
+      # left as it is; a draft from an earlier run takes the new notes.
+      - name: the draft release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          state=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 \
+            --json tagName,isDraft \
+            --jq "map(select(.tagName == \"$TAG\")) | if length == 0 then \"none\" elif .[0].isDraft then \"draft\" else \"published\" end")
+          case "$state" in
+            none)
+              gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+                --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+              echo "a draft release for $TAG, with the notes above"
+              ;;
+            draft)
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+              echo "the draft release for $TAG takes the notes above"
+              ;;
+            *)
+              echo "::notice::$TAG already has a published release; its notes are left as they are"
+              ;;
+          esac
