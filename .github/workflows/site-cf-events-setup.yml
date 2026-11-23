@@ -17,8 +17,19 @@ name: site / cf-events-setup
 #
 # Afterwards the website's check:live reads X-Paged-Event: written from
 # /api/event (not-bound before).
+#
+# mode=diagnose prints the project's production settings (names only for
+# variables and secrets), its latest deployments' stages and the error lines of
+# the newest failed one. mode=unbind removes the EVENTS binding again. The log
+# is public: nothing else of the account or the build is printed.
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "setup, diagnose or unbind"
+        type: choice
+        options: [setup, diagnose, unbind]
+        default: setup
 
 permissions:
   contents: read
@@ -33,7 +44,50 @@ jobs:
       DATASET: paged_site_events
       HOST: paged.media
     steps:
+      - name: diagnose the project and its latest deployments
+        if: inputs.mode == 'diagnose'
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$A/pages/projects/$PROJECT"
+          curl -sS "$api" -H "Authorization: Bearer $T" | python3 -c 'import json,sys
+          d=json.load(sys.stdin)
+          if not d.get("success"): print("  errors:", d.get("errors")); sys.exit(1)
+          r=d["result"]
+          print("== build: root", repr((r.get("build_config") or {}).get("root_dir")), "| output", repr((r.get("build_config") or {}).get("destination_dir")))
+          for env in ("production", "preview"):
+              c=r["deployment_configs"][env]
+              plain={k: c.get(k) for k in ("compatibility_date","compatibility_flags","usage_model","fail_open","always_use_latest_compatibility_date","analytics_engine_datasets","placement","build_image_major_version") if k in c}
+              names={k: sorted((c.get(k) or {}).keys()) for k in c if isinstance(c.get(k), dict) and k not in plain}
+              print("==", env, plain, "| names:", names)'
+          curl -sS "$api/deployments?per_page=4" -H "Authorization: Bearer $T" | python3 -c 'import json,sys
+          d=json.load(sys.stdin)
+          for x in d.get("result") or []:
+              m=(x.get("deployment_trigger") or {}).get("metadata") or {}
+              print("== deployment", x["id"][:8], m.get("commit_hash","")[:7], x.get("environment"), "| latest stage", (x.get("latest_stage") or {}).get("name"), (x.get("latest_stage") or {}).get("status"))
+              print("   stages:", [(s.get("name"), s.get("status")) for s in x.get("stages") or []])' 
+          failed=$(curl -sS "$api/deployments?per_page=10" -H "Authorization: Bearer $T" | python3 -c 'import json,sys
+          d=json.load(sys.stdin)
+          print(next((x["id"] for x in d.get("result") or [] if (x.get("latest_stage") or {}).get("status")=="failure"), ""))')
+          if [ -n "$failed" ]; then
+            echo "== error lines of ${failed:0:8}"
+            curl -sS "$api/deployments/$failed/history/logs" -H "Authorization: Bearer $T" | python3 -c 'import json,re,sys
+          d=json.load(sys.stdin)
+          lines=[(l.get("line") or "") for l in ((d.get("result") or {}).get("data") or [])]
+          hits=[l for l in lines if re.search(r"error|fail|invalid|binding|analytics", l, re.I)]
+          for l in (hits or lines[-15:])[-40:]: print("  ", l[:240])'
+          fi
+
+      - name: unbind EVENTS
+        if: inputs.mode == 'unbind'
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$A/pages/projects/$PROJECT"
+          body='{"deployment_configs":{"production":{"analytics_engine_datasets":{"EVENTS":null}},"preview":{"analytics_engine_datasets":{"EVENTS":null}}}}'
+          curl -sS -X PATCH "$api" -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d "$body" \
+            | python3 -c 'import json,sys;d=json.load(sys.stdin);print("  ok" if d.get("success") else d.get("errors"));[print(" ", e, (d["result"]["deployment_configs"][e].get("analytics_engine_datasets"))) for e in ("production","preview") if d.get("success")]'
+
       - name: bind EVENTS to the Analytics Engine dataset
+        if: inputs.mode == 'setup'
         run: |
           set -euo pipefail
           api="https://api.cloudflare.com/client/v4/accounts/$A"
@@ -53,6 +107,7 @@ jobs:
             -H "Content-Type: application/json" -d "$body" | python3 -c "$show"
 
       - name: Cloudflare Web Analytics for paged.media
+        if: inputs.mode == 'setup'
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -90,6 +145,7 @@ jobs:
           s=d["result"]; print("  created the site | auto_install", s.get("auto_install"))'
 
       - name: redeploy (bindings apply to new deployments)
+        if: inputs.mode != 'diagnose'
         run: |
           set -euo pipefail
           api="https://api.cloudflare.com/client/v4/accounts/$A/pages/projects/$PROJECT"
