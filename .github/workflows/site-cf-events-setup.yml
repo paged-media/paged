@@ -59,18 +59,21 @@ jobs:
           api="https://api.cloudflare.com/client/v4/accounts/$A"
           echo "== Web Analytics sites"
           list=$(curl -sS "$api/rum/site_info/list?per_page=100" -H "Authorization: Bearer $T")
+          # Only the site for $HOST is printed: this log is public, and the
+          # account's other sites are none of this repository's business.
           echo "$list" | python3 -c 'import json,os,sys
-          d=json.load(sys.stdin)
+          d=json.load(sys.stdin); h=os.environ["HOST"]
           if not d.get("success"):
               print("  cannot list Web Analytics sites (the token needs Account Analytics / Web Analytics):", d.get("errors")); sys.exit(0)
-          for s in d.get("result") or []:
+          mine=[s for s in (d.get("result") or []) if s.get("host")==h or (s.get("ruleset") or {}).get("zone_name")==h]
+          for s in mine:
               r = s.get("ruleset") or {}
-              print("  site", s.get("site_tag"), "| host", s.get("host"), "| zone", r.get("zone_name"), "| auto_install", s.get("auto_install"), "| token", s.get("site_token"))
-          if not d.get("result"): print("  none")'
+              print("  site for", h, "| auto_install", s.get("auto_install"), "| ruleset enabled", r.get("enabled"))
+          if not mine: print("  none for", h)'
           found=$(echo "$list" | python3 -c 'import json,os,sys
           d=json.load(sys.stdin); h=os.environ["HOST"]
           print(next((s["site_tag"] for s in (d.get("result") or []) if s.get("host")==h or (s.get("ruleset") or {}).get("zone_name")==h), ""))' 2>/dev/null || true)
-          if [ -n "$found" ]; then echo "== a site for $HOST exists ($found); nothing to create"; exit 0; fi
+          if [ -n "$found" ]; then echo "== a site for $HOST exists; nothing to create"; exit 0; fi
           zone=$(curl -sS "https://api.cloudflare.com/client/v4/zones?name=$HOST" -H "Authorization: Bearer $T" \
             | python3 -c 'import json,sys;d=json.load(sys.stdin);r=d.get("result") or [];print(r[0]["id"] if d.get("success") and r else "")' 2>/dev/null || true)
           if [ -n "$zone" ]; then
@@ -84,7 +87,7 @@ jobs:
             | python3 -c 'import json,sys
           d=json.load(sys.stdin)
           if not d.get("success"): print("  errors:", d.get("errors")); sys.exit(0)
-          s=d["result"]; print("  site", s.get("site_tag"), "| auto_install", s.get("auto_install"), "| token", s.get("site_token"))'
+          s=d["result"]; print("  created the site | auto_install", s.get("auto_install"))'
 
       - name: redeploy (bindings apply to new deployments)
         run: |
