@@ -462,7 +462,7 @@
   "shell.header.darkMode": "Dunkler Modus",
   "shell.header.lightMode": "Heller Modus",
   "shell.header.noDocument": "Kein Dokument",
-  "shell.header.pageTitle": "{name} — paged",
+  "shell.header.pageTitle": "{name} — Paged.",
   "shell.header.searchOrAsk": "Suchen oder fragen …",
   "shell.header.searchOrAskKey": "Suchen oder fragen ({key})",
   "shell.header.untitled": "Unbenanntes Dokument",

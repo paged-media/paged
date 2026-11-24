@@ -177,6 +177,14 @@ test.describe("Styleguide — cockpit chrome", () => {
     // The wordmark + at least the uppercase kicker label + a mono value
     // are part of the always-present cockpit chrome.
     expect(present).toContain("pg-wordmark");
+    const wordmark = page.locator(".pg-wordmark");
+    await expect(wordmark).toHaveText("Paged.");
+    await expect(wordmark).toHaveCSS("font-family", /Newsreader/);
+    await expect(wordmark).toHaveCSS("font-weight", "600");
+    await expect(wordmark.locator(".dot")).toHaveCSS(
+      "color",
+      "rgb(181, 31, 25)",
+    );
     expect(present).toContain("pg-label");
     expect(present).toContain("pg-value");
   });

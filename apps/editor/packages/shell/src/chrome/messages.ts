@@ -142,7 +142,7 @@ export const HEADER = defineMessages("shell.header", {
   lightMode: "Light mode",
   darkMode: "Dark mode",
   /** The browser tab's title while a document is open (F-24). */
-  pageTitle: "{name} — paged",
+  pageTitle: "{name} — Paged.",
 });
 
 /** The header's save status (editor ADR 1203): a label per state, and the

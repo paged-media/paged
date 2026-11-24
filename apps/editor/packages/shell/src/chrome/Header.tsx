@@ -28,7 +28,7 @@
 //   what the last save really did and where (editor ADR 1203,
 //   `SaveStatus`): a dot, and its label when the header has room.
 //   While a document opens, the chip shows the load's stage instead
-//   (UXI-PRF-003), and the browser tab reads "<document> — paged" when the
+//   (UXI-PRF-003), and the browser tab reads "<document> — Paged." when the
 //   editor is the page (UX audit F-24).
 // - The menus scroll sideways inside their zone rather than push the rest
 //   off a narrow editor (F-55).
@@ -261,7 +261,7 @@ function DocumentChip({ status }: { status?: string }) {
   );
 }
 
-/** The browser tab says what is open — "<document> — paged" — when the
+/** The browser tab says what is open — "<document> — Paged." — when the
  *  editor is the page (never an embedding host's tab, F-24); the page's
  *  own title comes back when the document closes. */
 function usePageTitle(name: string | null) {
@@ -279,17 +279,13 @@ function usePageTitle(name: string | null) {
   }, [scope, title]);
 }
 
-/** The `paged.` wordmark — the oxblood period IS the mark. */
 function Brand() {
   return (
     <span
       className="pg-wordmark"
       style={{ fontSize: 19, color: "var(--pg-fg)" }}
     >
-      paged
-      <span className="dot" style={{ color: "var(--wordmark-dot)" }}>
-        .
-      </span>
+      Paged<span className="dot">.</span>
     </span>
   );
 }

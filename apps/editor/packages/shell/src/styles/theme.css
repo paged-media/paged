@@ -166,8 +166,8 @@
   --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --font-mono:
     "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
-  --font-logo: "Cormorant Garamond", Georgia, serif; /* the "paged." wordmark */
-  --wordmark-dot: #8f1d1f; /* oxblood — the period IS the mark */
+  --font-logo: "Newsreader Variable", Georgia, serif;
+  --wordmark-dot: #b51f19;
   --tracking-wide: 0.14em; /* uppercase labels / kickers */
 
   /* ── rhythm, radii, elevation, motion ──────────────────────── */

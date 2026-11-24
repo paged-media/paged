@@ -179,7 +179,7 @@ the clean-room icon system, and the cockpit UI kit
   (`overlay-tokens.spec.ts` guards this). Selection = magenta,
   guides = violet — the DTP cues.
 - **Fonts**: IBM Plex Sans/Mono self-hosted via fontsource;
-  Cormorant only for the `paged.` wordmark (`.pg-wordmark`).
+  Newsreader Semibold for the `Paged.` wordmark (`.pg-wordmark`).
 - **Icons**: three registries (`tool-`/`panel-`/`ui-*`) in
   `packages/shell/src/icons/` — 24×24 line SVG, currentColor,
   1.5–1.9 stroke. Author new glyphs to those rules; never emoji or

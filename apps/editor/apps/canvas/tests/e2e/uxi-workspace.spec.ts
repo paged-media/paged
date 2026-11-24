@@ -552,7 +552,7 @@ test.describe("UXI workspace and camera", () => {
   }) => {
     await openCanvas(page, { adaptiveWorkspace: true });
     await loadViaReactPath(page, "geometry-groups");
-    await expect(page).toHaveTitle(/ — paged$/);
+    await expect(page).toHaveTitle(/ — Paged\.$/);
     await expect(page.locator("[data-save-status]")).toHaveCount(1);
     const share = page.locator("[data-collab-share]");
     await expect(share).toBeDisabled();

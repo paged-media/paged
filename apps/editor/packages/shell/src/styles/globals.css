@@ -31,8 +31,8 @@
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
-/* Cormorant Garamond — ONLY the "paged." wordmark. */
-@import "@fontsource/cormorant-garamond/700.css";
+/* The Paged. wordmark uses the same Newsreader optical-size face as the site. */
+@import "@fontsource-variable/newsreader/opsz.css";
 
 @import "./theme.css";
 @import "./view-transitions.css";
@@ -162,11 +162,10 @@
     font-variant-numeric: tabular-nums;
     color: var(--pg-muted-fg);
   }
-  /* the "paged." wordmark — the oxblood period IS the mark */
   .pg-wordmark {
     font-family: var(--font-logo);
-    font-weight: 700;
-    letter-spacing: -0.005em;
+    font-weight: 600;
+    letter-spacing: -0.07em;
     line-height: 1;
     display: inline-flex;
     align-items: baseline;

@@ -1,0 +1,23 @@
+<!--
+This file is part of paged (https://paged.media), the commercial editor
+for the paged IDML engine.
+
+paged is free software: you may redistribute it and/or modify it under the
+terms of the GNU Affero General Public License, version 3, as published by
+the Free Software Foundation, OR under the Paged Media Enterprise License
+(PMEL), a commercial license available from And The Next GmbH. Full
+copyright and license information is available in LICENSE.md, distributed
+with this source code.
+
+paged is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the licenses for details.
+
+ @copyright  Copyright (c) And The Next GmbH
+ @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#f3f0e8"/>
+  <path fill="#171815" fill-rule="evenodd" d="M7 11h27c11 0 17 5.4 17 13.5S45 38 34 38h-9v10h6v4H7v-4h6V15H7zm18 4v19h8c6 0 8.6-3.6 8.6-9.5S39 15 33 15z"/>
+  <circle cx="56" cy="48.5" r="4.6" fill="#b51f19"/>
+</svg>
