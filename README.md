@@ -150,11 +150,16 @@ Tool versions are pinned: install [proto](https://moonrepo.dev/proto) for Bun, M
 [rustup](https://rustup.rs) for the Rust toolchains each workspace names.
 
 ```sh
-proto install                       # Bun, Moon and Node at the pinned versions
-tooling/bootstrap.sh --check        # wasm-bindgen and binaryen at the versions the engine needs
-bun install --frozen-lockfile       # every JavaScript package, once, at the root
-moon run core:wasm-pkg doc:wasm slide:wasm sheet:wasm data:wasm web:wasm   # the engine and module wasm
-cd apps/editor/apps/canvas && bun run dev    # the editor at http://localhost:5173
+# Bun, Moon and Node at the pinned versions; wasm-bindgen and binaryen as the engine needs them
+proto install
+tooling/bootstrap.sh --check
+
+# every JavaScript package, once, at the root; then the engine's and the modules' wasm
+bun install --frozen-lockfile
+moon run core:wasm-pkg doc:wasm slide:wasm sheet:wasm data:wasm web:wasm
+
+# the editor, at http://localhost:5173
+cd apps/editor/apps/canvas && bun run dev
 ```
 
 `moon run <project>:test` runs a component's tests, and `moon ci --base origin/main --head HEAD` runs
