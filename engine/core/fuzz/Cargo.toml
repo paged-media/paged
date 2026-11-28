@@ -34,6 +34,7 @@ doctest = false
 bench = false
 
 [dependencies]
+crc32fast = "1"
 libfuzzer-sys = "0.4"
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2"] }
 idml-import = { path = "../crates/idml-import" }

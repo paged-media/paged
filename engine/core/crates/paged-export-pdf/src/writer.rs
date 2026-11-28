@@ -830,20 +830,15 @@ fn write_outlines(
 
 /// A 128-bit digest of `bytes`, for the identifiers a deterministic file
 /// derives from its own content (the trailer's `/ID`, the XMP document
-/// id). Two 64-bit FNV-1a lanes with different bases and multipliers; not
-/// a cryptographic hash, which an identifier does not need.
+/// id). Two 64-bit FNV-1a lanes from different starts, each closed with
+/// the length; not a cryptographic hash, which an identifier does not need.
 pub(crate) fn digest128(bytes: &[u8]) -> [u8; 16] {
-    let mut a: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut b: u64 = 0x6c62_272e_07bb_0142;
-    for &byte in bytes {
-        a = (a ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
-        b = (b ^ u64::from(byte))
-            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
-            .rotate_left(29);
-    }
+    use paged_pixel::{fnv1a_64_update, FNV1A_64_OFFSET};
     // The length, so a run of zero bytes of another length differs.
-    a = (a ^ bytes.len() as u64).wrapping_mul(0x0000_0100_0000_01b3);
-    b = (b ^ bytes.len() as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let len = (bytes.len() as u64).to_be_bytes();
+    let a = fnv1a_64_update(fnv1a_64_update(FNV1A_64_OFFSET, bytes), &len);
+    let start = fnv1a_64_update(FNV1A_64_OFFSET, b"paged-export-pdf/id");
+    let b = fnv1a_64_update(fnv1a_64_update(start, &len), bytes);
     let mut out = [0u8; 16];
     out[..8].copy_from_slice(&a.to_be_bytes());
     out[8..].copy_from_slice(&b.to_be_bytes());

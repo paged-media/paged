@@ -465,23 +465,12 @@ fn svg() -> Vec<Named> {
     ]
 }
 
-fn crc32(bytes: &[u8]) -> u32 {
-    let mut crc = !0u32;
-    for &b in bytes {
-        crc ^= b as u32;
-        for _ in 0..8 {
-            crc = (crc >> 1) ^ (0xEDB8_8320 & (!(crc & 1)).wrapping_add(1));
-        }
-    }
-    !crc
-}
-
 fn png_chunk(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
     let mut out = (body.len() as u32).to_be_bytes().to_vec();
     let mut tagged = kind.to_vec();
     tagged.extend_from_slice(body);
     out.extend_from_slice(&tagged);
-    out.extend_from_slice(&crc32(&tagged).to_be_bytes());
+    out.extend_from_slice(&crc32fast::hash(&tagged).to_be_bytes());
     out
 }
 

@@ -458,6 +458,7 @@ dependencies = [
 name = "engine-fuzz"
 version = "0.0.0"
 dependencies = [
+ "crc32fast",
  "docx-import",
  "draw-dxf",
  "idml-import",
