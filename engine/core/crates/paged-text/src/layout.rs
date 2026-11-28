@@ -33,7 +33,8 @@ use paragraph_breaker::{Breakpoint, Item};
 
 use crate::compose::{compose_paragraph, ComposeOptions, TextShaper};
 use crate::shape::{
-    apply_tracking, shape_run, shape_run_with_features_at, Face, ShapedRun, ADVANCE_PRECISION,
+    apply_tracking, shape_run, shape_run_with_features, shape_run_with_features_at, Face,
+    ShapedRun, ADVANCE_PRECISION,
 };
 
 /// Stretch of the finishing glue that ends every paragraph. Knuth–Plass
@@ -775,19 +776,13 @@ pub struct StyledRun<'a> {
 /// shape whose glyphs are all non-notdef. Used by `layout_runs` when
 /// `StyledRun::fallback_faces` is non-empty (P-20).
 fn shape_with_per_cluster_fallback(
-    primary: &Face,
+    primary_shape: ShapedRun,
     fallbacks: &[&Face],
     text: &str,
     point_size: f32,
-    mut pen: f64,
+    features: crate::shape::ShapingFeatures,
+    vertical: bool,
 ) -> ShapedRun {
-    let primary_shape = shape_run_with_features_at(
-        primary,
-        text,
-        point_size,
-        crate::shape::ShapingFeatures::default(),
-        &mut pen,
-    );
     if primary_shape.glyphs.iter().all(|g| g.glyph_id != 0) {
         return primary_shape;
     }
@@ -833,7 +828,13 @@ fn shape_with_per_cluster_fallback(
         let sub = &text[start..end];
         let mut chosen = None;
         for fb in fallbacks {
-            let fb_shape = shape_run(fb, sub, point_size);
+            // The run's own features and direction: a fallback glyph is
+            // still small caps, proportional kana or a vertical form.
+            let fb_shape = if vertical {
+                crate::shape::shape_run_vertical_at(fb, sub, point_size, features, &mut 0.0)
+            } else {
+                shape_run_with_features(fb, sub, point_size, features)
+            };
             if fb_shape.glyphs.iter().all(|g| g.glyph_id != 0) {
                 chosen = Some(fb_shape);
                 break;
@@ -994,7 +995,6 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
                 }
             }
         }
-        let run_pen = pen;
         let mut s = if options.vertical {
             crate::shape::shape_run_vertical_at(
                 r.face,
@@ -1014,11 +1014,12 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
         // covers "primary face present but glyph missing".
         if !r.fallback_faces.is_empty() && s.glyphs.iter().any(|g| g.glyph_id == 0) {
             s = shape_with_per_cluster_fallback(
-                r.face,
+                s,
                 r.fallback_faces,
                 r.text,
                 r.point_size,
-                run_pen,
+                r.shaping_features,
+                options.vertical,
             );
         }
         let natural: Vec<i32> = s.glyphs.iter().map(|g| g.x_advance).collect();
@@ -2681,8 +2682,12 @@ fn decimal_offset(
     if start >= end || end > glyphs.len() {
         return None;
     }
-    let segment_start_byte = glyphs[start].cluster as usize;
-    let segment_end_byte = glyphs[end - 1].cluster as usize + 1;
+    // The byte span is the range the segment's clusters cover, not
+    // first-glyph..last-glyph: in a right-to-left line the clusters run
+    // downwards, and the first glyph holds the highest byte.
+    let seg = &glyphs[start..end];
+    let segment_start_byte = seg.iter().map(|g| g.cluster as usize).min()?;
+    let segment_end_byte = seg.iter().map(|g| g.cluster as usize).max()? + 1;
     let bytes = paragraph_text.as_bytes();
     if segment_end_byte > bytes.len() {
         return None;
@@ -4006,5 +4011,75 @@ mod tests {
             0.0,
         );
         assert_eq!(line.glyphs[3].x, 2304, "',' lands at the stop");
+    }
+
+    /// A right-to-left segment's clusters run downwards: its first glyph
+    /// holds the highest byte. The byte span used to be first..last, an
+    /// inverted range that panicked on the slice.
+    #[test]
+    fn a_decimal_tab_in_a_right_to_left_segment_does_not_slice_backwards() {
+        let text = "12.5";
+        // Visual order of an RTL run: glyphs for bytes 3, 2, 1, 0.
+        let glyphs: Vec<PositionedGlyph> = [3u32, 2, 1, 0]
+            .iter()
+            .enumerate()
+            .map(|(i, &cluster)| PositionedGlyph {
+                cluster,
+                x: i as i32 * 100,
+                x_advance: 100,
+                ..pg(12.0)
+            })
+            .collect();
+        assert_eq!(decimal_offset(&glyphs, 0, 4, text, '.'), Some(100));
+        assert_eq!(decimal_offset(&glyphs, 0, 4, text, ','), None);
+        // A cluster past the text is refused, not sliced.
+        let mut stray = glyphs.clone();
+        stray[0].cluster = 99;
+        assert_eq!(decimal_offset(&stray, 0, 4, text, '.'), None);
+    }
+
+    /// A cluster the primary face lacks is reshaped in the fallback with
+    /// the run's features, not the defaults.
+    #[test]
+    fn a_fallback_cluster_keeps_the_runs_opentype_features() {
+        let font = |name: &str| {
+            std::fs::read(
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../corpus/fonts")
+                    .join(name),
+            )
+            .expect("font fixture")
+        };
+        let latin = font("Inter.ttf");
+        let cjk = font("NotoSansJP-VF.ttf");
+        let primary = crate::shape::Face::from_slice(&latin, 0).expect("parse Inter");
+        let fallback = crate::shape::Face::from_slice(&cjk, 0).expect("parse Noto Sans JP");
+        let features = crate::shape::ShapingFeatures {
+            proportional_widths: true,
+            ..Default::default()
+        };
+        let text = "\u{300c}";
+        let plain = shape_run(&fallback, text, 20.0);
+        let featured = shape_run_with_features(&fallback, text, 20.0, features);
+        assert_ne!(
+            plain.total_advance, featured.total_advance,
+            "the fixture must tell the two apart: palt narrows the bracket"
+        );
+        let primary_shape = shape_run_with_features(&primary, text, 20.0, features);
+        assert!(
+            primary_shape.glyphs.iter().any(|g| g.glyph_id == 0),
+            "the primary must lack the glyph"
+        );
+        let out = shape_with_per_cluster_fallback(
+            primary_shape,
+            &[&fallback],
+            text,
+            20.0,
+            features,
+            false,
+        );
+        assert_eq!(out.total_advance, featured.total_advance);
+        assert_eq!(out.glyphs.len(), featured.glyphs.len());
+        assert_eq!(out.glyphs[0].glyph_id, featured.glyphs[0].glyph_id);
     }
 }

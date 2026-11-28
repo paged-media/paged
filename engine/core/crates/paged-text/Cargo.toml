@@ -11,7 +11,6 @@ description = "Text engine: shaping (harfrust), Knuth-Plass line breaking, hyphe
 workspace = true
 
 [dependencies]
-paged-scene = { path = "../paged-scene" }
 # Shaping engine (rustybuzz's official successor on the fontations
 # stack). ttf-parser stays alongside it for metric/table reads — the
 # two share the same font bytes via `shape::Face`.

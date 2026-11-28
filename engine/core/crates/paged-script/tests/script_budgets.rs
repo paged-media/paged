@@ -450,3 +450,62 @@ fn a_cyclic_or_endless_error_object_is_formatted_to_a_bounded_depth() {
     let result = execute_script(&mut model, "throw new TypeError('boom');");
     assert!(result.error.unwrap().contains("TypeError: boom"));
 }
+
+// ------------------------------------------------------ segment guard
+
+/// A panic inside a running script (here: the host's clock, read at a
+/// host call) unwinds through the segment. The model pointer and the
+/// clock reference must not stay armed behind it.
+#[test]
+fn a_panic_inside_a_script_disarms_the_segment() {
+    let mut model = load();
+    let calls = Cell::new(0u32);
+    let clock = || {
+        calls.set(calls.get() + 1);
+        assert!(calls.get() < 3, "the clock fails");
+        0.0
+    };
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        execute_script_with(
+            &mut model,
+            "for (let i = 0; i < 10; i++) console.log(i);",
+            ScriptBudget::default(),
+            &clock,
+        )
+    }));
+    assert!(unwound.is_err(), "the clock's panic must reach the caller");
+    assert!(calls.get() >= 3);
+    assert!(
+        !paged_script::segment_armed(),
+        "a panicked segment left its model pointer or clock armed"
+    );
+    // The clock that panics before the segment's deadline is set.
+    let never = || -> f64 { panic!("the clock fails at once") };
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        execute_script_with(&mut model, "1", ScriptBudget::default(), &never)
+    }));
+    assert!(unwound.is_err());
+    assert!(!paged_script::segment_armed());
+    // And the next script runs as usual.
+    let result = execute_script(&mut model, "console.log('after')");
+    assert_eq!(result.error, None);
+    assert!(result.output.iter().any(|l| l.contains("after")));
+    assert!(!paged_script::segment_armed());
+}
+
+/// An array whose length a script set, never filled, reaches the JSON
+/// conversion of a host call and of the result printer. It is refused,
+/// not reserved.
+#[test]
+fn a_huge_array_length_does_not_reach_the_json_conversion() {
+    let mut model = load();
+    let result = execute_script(
+        &mut model,
+        "const a = []; a.length = 4294967295; console.log(a); a",
+    );
+    assert_eq!(result.error, None);
+    assert!(
+        result.output.iter().all(|l| l.len() < 1024),
+        "the array must print as a short placeholder"
+    );
+}

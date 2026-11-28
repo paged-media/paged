@@ -109,7 +109,45 @@ impl<S: Store> Repo<S> {
         Ok(())
     }
 
-    /// The only way a ref moves: policy, then compare-and-set.
+    /// The commits a ref reaches: the ones whose objects are known to be
+    /// complete (see [`Self::verify_closure`]).
+    pub(crate) fn anchored(&self) -> BTreeSet<Hash> {
+        let mut seen = BTreeSet::new();
+        let mut queue: Vec<Hash> = self.store.refs().into_iter().map(|(_, h)| h).collect();
+        while let Some(h) = queue.pop() {
+            if seen.contains(&h) {
+                continue;
+            }
+            if let Ok(commit) = read_commit(&self.store, &h) {
+                seen.insert(h);
+                queue.extend(commit.parents);
+            }
+        }
+        seen
+    }
+
+    /// Everything `head` reaches is in the store. The walk stops at a commit
+    /// a ref already reaches: a ref moves only through [`Self::update_ref`],
+    /// after this check, so what it reaches is complete. A commit that is
+    /// merely stored proves nothing: its objects may have arrived without
+    /// the rest (an earlier push that was refused, a host that writes
+    /// objects before it moves the ref).
+    fn verify_closure(&self, head: Hash) -> Result<(), Error> {
+        let heads: BTreeSet<Hash> = self.store.refs().into_iter().map(|(_, h)| h).collect();
+        // Every ancestor of a ref, walked only when the heads do not settle it.
+        let anchored: std::cell::OnceCell<BTreeSet<Hash>> = std::cell::OnceCell::new();
+        let known =
+            |c: &Hash| heads.contains(c) || anchored.get_or_init(|| self.anchored()).contains(c);
+        for (_, h) in reachable(&self.store, &[head], known)? {
+            if !self.store.has(&h) {
+                return Err(Error::Missing(h));
+            }
+        }
+        Ok(())
+    }
+
+    /// The only way a ref moves: the new head's closure is present, then
+    /// policy, then compare-and-set.
     fn update_ref(
         &mut self,
         name: &str,
@@ -118,6 +156,9 @@ impl<S: Store> Repo<S> {
         ctx: &Ctx,
         via_merge: bool,
     ) -> Result<(), Error> {
+        if let Some(head) = new {
+            self.verify_closure(head)?;
+        }
         let fast_forward = match (expected, new) {
             (Some(old), Some(new)) => is_ancestor(&self.store, old, new)?,
             _ => true,
@@ -168,28 +209,30 @@ impl<S: Store> Repo<S> {
         via_merge: bool,
     ) -> Result<(), Error> {
         let mut fresh = Vec::new();
-        let mut fresh_ids = BTreeSet::new();
         for (h, (kind, bytes)) in &objects {
             if *kind == Kind::Commit && !self.store.has(h) {
                 fresh.push(decode::<Commit>(bytes)?);
-                fresh_ids.insert(*h);
             }
         }
         if let Err(r) = self.check_new_commits(ctx, &fresh) {
             return self.refuse(ctx, "receive", ref_name, r);
         }
+        let added: Vec<Hash> = objects
+            .keys()
+            .filter(|h| !self.store.has(h))
+            .copied()
+            .collect();
         self.ingest(objects)?;
-        // A commit the store already had reaches only what it has (this check
-        // ran when it arrived), so only the arriving commits are walked.
-        if let Some(head) = new {
-            let had = |c: &Hash| !fresh_ids.contains(c) && self.store.has(c);
-            for (_, h) in reachable(&self.store, &[head], had)? {
-                if !self.store.has(&h) {
-                    return Err(Error::Missing(h));
-                }
+        let moved = self.update_ref(ref_name, expected, new, ctx, via_merge);
+        if matches!(moved, Err(Error::Missing(_) | Error::Tampered(_))) {
+            // An incomplete push leaves nothing behind: a commit stored
+            // without what it reaches must not wait for a later push to
+            // name it as a head.
+            for h in &added {
+                self.store.remove(h);
             }
         }
-        self.update_ref(ref_name, expected, new, ctx, via_merge)
+        moved
     }
 
     /// Commits `tree` (with the objects it needs) on top of `ref_name`.

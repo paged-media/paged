@@ -28,7 +28,11 @@
 //! they agree with PostgreSQL's: `'…'` strings with `''` escapes, `"…"`
 //! identifiers with `""` escapes, `--` line comments and `/* */` comments.
 //! Anything whose lexing differs between dialects is refused: `E'…'`,
-//! `U&'…'`, `$`-quoting and `$` parameters. Then:
+//! `U&'…'`, `$`-quoting and `$` parameters, and a comment inside a comment
+//! (the store ends it at the first `*/`, PostgreSQL nests). `` `…` `` is a
+//! quoted name, as in the store; `[` is a bracket, as in the store's lexer
+//! (not SQLite's `[name]`), so what stands inside it is checked as code.
+//! Then:
 //! - exactly one statement (no `;`), with balanced brackets;
 //! - it starts with SELECT, WITH, FROM, VALUES or `(`;
 //! - no statement keyword anywhere (DELETE, ATTACH, PRAGMA, VACUUM, …);
@@ -206,33 +210,39 @@ fn lex(text: &[char]) -> Result<Vec<Token>, GuardError> {
             });
             *last_end = Some(end);
         };
-        if c.is_whitespace() {
+        // What the store skips between tokens. Every other space (U+00A0,
+        // U+2028, …) is a name character to it, and lexes as one here.
+        if matches!(c, ' ' | '\t' | '\n' | '\u{c}' | '\r') {
             i += 1;
         } else if c == '-' && at(i + 1) == Some('-') {
             while i < text.len() && text[i] != '\n' {
                 i += 1;
             }
         } else if c == '/' && at(i + 1) == Some('*') {
+            // The store ends a comment at the first `*/`; PostgreSQL nests.
+            // A nesting lexer reads `/* /* */ … */` as one comment and hides
+            // the code after the first `*/`, which the store runs.
             let start = i;
-            let mut depth = 0usize;
+            i += 2;
             loop {
                 if i >= text.len() {
                     return Err(refuse("a comment is not terminated", Some(start)));
                 }
-                if text[i] == '/' && at(i + 1) == Some('*') {
-                    depth += 1;
+                if text[i] == '*' && at(i + 1) == Some('/') {
                     i += 2;
-                } else if text[i] == '*' && at(i + 1) == Some('/') {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-                if depth == 0 {
                     break;
                 }
+                if text[i] == '/' && at(i + 1) == Some('*') {
+                    return Err(refuse(
+                        "a comment inside a comment cannot be used in a data query",
+                        Some(i),
+                    ));
+                }
+                i += 1;
             }
-        } else if c == '\'' || c == '"' {
+        } else if c == '\'' || c == '"' || c == '`' {
+            // The store reads `…` as a quoted name (`` doubles): a quote or
+            // a comment marker inside it is part of the name, not code.
             if c == '\'' {
                 if let Some(prev) = out.last().filter(|_| last_end == Some(i)) {
                     if prev.kind == Kind::Word && prev.value.eq_ignore_ascii_case("e") {

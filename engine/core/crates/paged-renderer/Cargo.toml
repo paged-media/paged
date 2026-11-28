@@ -11,12 +11,16 @@ description = "Top-level renderer coordinator. The public Rust API surface."
 workspace = true
 
 [features]
-default = ["cpu", "mutate-roundtrip"]
+default = ["cpu", "mutate-roundtrip", "inspect"]
 # The `--mutate-roundtrip` conformance hook on the paged-inspect bin.
 # OPTIONAL because paged-mutate is an editor crate: the paged-sdk wasm
 # (renderer-core only, default-features = false) must never link it —
 # the publish-wasm subset audit enforces that boundary.
 mutate-roundtrip = ["dep:paged-mutate"]
+# What only the paged-inspect bin uses: its argument parser, its log
+# output and the IDML writer behind `--roundtrip`. A library consumer
+# (`default-features = false`) builds none of them.
+inspect = ["dep:clap", "dep:idml-export", "dep:tracing-subscriber"]
 # Pulls in the CPU rasterizer so `render()` is callable. Disabling this
 # leaves only `build()` — useful for WASM builds that rely on a
 # different backend. `image` is now a non-optional dep because
@@ -30,11 +34,11 @@ gpu = ["paged-gpu/vello-backend"]
 [[bin]]
 name = "paged-inspect"
 path = "src/bin/inspect.rs"
-required-features = ["cpu", "mutate-roundtrip"]
+required-features = ["cpu", "mutate-roundtrip", "inspect"]
 
 [[test]]
 name = "inspect_e2e"
-required-features = ["mutate-roundtrip"]
+required-features = ["mutate-roundtrip", "inspect"]
 
 [dependencies]
 paged-model = { path = "../paged-model" }
@@ -79,7 +83,7 @@ paged-gpu = { path = "../paged-gpu", default-features = false, features = ["svg"
 # W3.B2 — IDML save-back, used by the `paged-inspect --roundtrip`
 # conformance hook. Lightweight (idml-import + paged-scene + zip +
 # quick-xml, all already in the dep graph), no native-only deps.
-idml-export = { path = "../idml-export" }
+idml-export = { path = "../idml-export", optional = true }
 # W4.14 — the operation surface, used by the `paged-inspect
 # --mutate-roundtrip` conformance hook (the bin applies one typed
 # Operation, saves, and re-verifies it survived). paged-mutate carries
@@ -94,7 +98,7 @@ zip = { workspace = true }
 base64 = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive"], optional = true }
 ttf-parser = "0.25"
 # A line's drop shadow is cast by its stroke OUTLINE: kurbo strokes the
 # centreline into the band the shadow stamps (same version paged-mutate uses).
@@ -131,7 +135,7 @@ usvg = { version = "0.48", default-features = false, features = ["svgz"] }
 paged-svg = { path = "../paged-svg", default-features = false }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
 
 # A native build keeps hayro's base-14 fonts and predefined CMaps, so a
 # placed PDF that names Helvetica without embedding it still sets its text.
@@ -142,6 +146,8 @@ hayro-interpret = { version = "0.8", default-features = false, features = ["embe
 
 [dev-dependencies]
 paged-test-resources.workspace = true
+# The reflow test writes its grown document back to IDML.
+idml-export = { path = "../idml-export" }
 # The placed-PSD tests write their documents with paged-psd.
 paged-psd = { path = "../paged-psd" }
 paged-fidelity = { path = "../paged-fidelity" }

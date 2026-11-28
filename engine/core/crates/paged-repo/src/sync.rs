@@ -87,7 +87,10 @@ pub fn push<A: Store, B: Store>(
             found: None,
         })?;
     let expected = remote.store.get_ref(ref_name);
-    let offer = reachable(&local.store, &[head], |c| remote.store.has(c))?;
+    // Only a commit one of the remote's refs reaches is known to be whole
+    // there; one it merely stores may lack what it reaches.
+    let whole = remote.anchored();
+    let offer = reachable(&local.store, &[head], |c| whole.contains(c))?;
     let kinds: BTreeMap<Hash, Kind> = offer.iter().map(|(k, h)| (*h, *k)).collect();
     let hashes: Vec<Hash> = offer.iter().map(|(_, h)| *h).collect();
     let mut objects = BTreeMap::new();

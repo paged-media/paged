@@ -475,12 +475,43 @@ impl std::fmt::Debug for ScriptSession {
     }
 }
 
+/// Disarms the per-segment thread-locals when it goes out of scope, so a
+/// panic or an early return inside a segment cannot leave the model
+/// pointer or the clock reference behind for a later host call to read
+/// after the borrow they were made from has ended.
+#[must_use = "the segment is disarmed when the guard is dropped"]
+struct SegmentGuard;
+
+impl Drop for SegmentGuard {
+    fn drop(&mut self) {
+        // `try_with`: a thread that is ending may already have dropped them.
+        let _ = MODEL_PTR.try_with(|p| *p.borrow_mut() = None);
+        let _ = DEADLINE.try_with(|d| *d.borrow_mut() = None);
+        let _ = DEADLINE_TRIPPED.try_with(|c| c.set(false));
+    }
+}
+
+/// Whether a segment's model pointer or clock is armed. Outside a running
+/// script this is `false`, also after one that panicked.
+#[doc(hidden)]
+pub fn segment_armed() -> bool {
+    MODEL_PTR.with(|p| p.borrow().is_some()) || DEADLINE.with(|d| d.borrow().is_some())
+}
+
 /// Arm the per-segment thread-locals (model, deadline) for one synchronous
-/// stretch of a script. [`leave_segment`] disarms them; both run on the
-/// same stack, which is what keeps the lifetime-erased pointers sound.
-fn enter_segment(model: &mut CanvasModel, budget: &ScriptBudget, clock: &Clock<'_>) {
+/// stretch of a script. The returned guard disarms them when the caller's
+/// frame ends, however it ends ([`leave_segment`] does so earlier, on the
+/// ordinary path); both run on the same stack, which is what keeps the
+/// lifetime-erased pointers sound.
+fn enter_segment(
+    model: &mut CanvasModel,
+    budget: &ScriptBudget,
+    clock: &Clock<'_>,
+) -> SegmentGuard {
     let ptr = model as *mut CanvasModel;
     MODEL_PTR.with(|p| *p.borrow_mut() = Some(ptr));
+    // From here on: the host's clock below may panic.
+    let guard = SegmentGuard;
     OUTPUT.with(|o| o.borrow_mut().clear());
     DEADLINE_TRIPPED.with(|c| c.set(false));
     // Clear any stale deadline up front too, so a `wall_clock_ms: None`
@@ -503,6 +534,7 @@ fn enter_segment(model: &mut CanvasModel, budget: &ScriptBudget, clock: &Clock<'
             });
         });
     }
+    guard
 }
 
 fn leave_segment() -> Vec<String> {
@@ -529,7 +561,7 @@ pub fn start_script(
     let undo_mark = model.last_applied_seq();
     let history_mark = model.history_moves();
     model.begin_page_change_tracking();
-    enter_segment(model, &budget, clock);
+    let _segment = enter_segment(model, &budget, clock);
     host_bridge::open_queue(host_objects);
     let mut ctx = budgeted_context(&budget);
     let outcome = evaluate(&mut ctx, source);
@@ -574,7 +606,7 @@ impl ScriptSession {
             .extend(committed.iter().copied().filter(|&s| s > self.undo_mark));
         self.segment_start = model.last_applied_seq();
         model.begin_page_change_tracking();
-        enter_segment(model, &self.budget, clock);
+        let _segment = enter_segment(model, &self.budget, clock);
         host_bridge::open_queue(true);
         for (i, queued) in std::mem::take(&mut self.pending).into_iter().enumerate() {
             host_bridge::settle(queued, answers.get(i), &mut self.ctx, &mut self.rejected);
@@ -2135,7 +2167,7 @@ fn apply_insert_table(mutation: &Mutation) -> JsValue {
 
 /// JS value → `serde_json::Value`, or `None` when it cannot be represented.
 fn to_json_value(value: &JsValue, ctx: &mut Context) -> Option<serde_json::Value> {
-    value.to_json(ctx).ok().flatten()
+    paged_action::js::value_to_json(value, ctx).ok().flatten()
 }
 
 /// Deserialize a JS arg into a serde spec type (`PathAnchorSpec`,
@@ -7069,8 +7101,7 @@ fn js_value_to_wire_checked(
     // `{ type, value }` shape — round-trip via JSON, then through the
     // schema, so a typed `{ type: "enum" }` is checked against the
     // members and a `{ type: "number" }` lands in the wire form.
-    let json = value
-        .to_json(ctx)
+    let json = paged_action::js::value_to_json(value, ctx)
         .ok()
         .flatten()
         .ok_or_else(unconvertible)?;
@@ -7106,7 +7137,7 @@ fn natural_form_to_wire(
             | P::SymbolInstanceNineSlice
             | P::FrameGradientFillStart
     ) {
-        let Some(json) = value.to_json(ctx).ok().flatten() else {
+        let Some(json) = paged_action::js::value_to_json(value, ctx).ok().flatten() else {
             return Some(None);
         };
         let is_wrapper = json.get("type").is_some() && json.get("value").is_some();
@@ -7181,8 +7212,7 @@ fn js_to_value_by_schema(
     let json = if value.is_null() {
         serde_json::Value::Null
     } else {
-        value
-            .to_json(ctx)
+        paged_action::js::value_to_json(value, ctx)
             .ok()
             .flatten()
             .ok_or_else(|| format!("expected {:?}", schema.value_type))?
@@ -7374,7 +7404,7 @@ fn format_value_at(value: &JsValue, ctx: &mut Context, depth: usize) -> String {
         }
     }
     // Fallback: JSON.stringify equivalent via Boa's to_json.
-    if let Ok(Some(json)) = value.to_json(ctx) {
+    if let Ok(Some(json)) = paged_action::js::value_to_json(value, ctx) {
         return serde_json::to_string(&json).unwrap_or_else(|_| "[opaque]".to_string());
     }
     "[opaque]".to_string()

@@ -224,7 +224,7 @@ fn imagemask(i: &mut Interp<'_>) -> R {
         return Ok(());
     }
     let n = spec.w * spec.h;
-    i.alloc(n * 5)?;
+    i.alloc_n(n, 5)?;
     let mut alpha = Vec::with_capacity(n);
     for y in 0..spec.h {
         for x in 0..spec.w {
@@ -266,7 +266,7 @@ fn image_transform(i: &Interp<'_>, spec: &Spec) -> Result<Affine, PsError> {
 /// interleaved rows see their own rows; a string source is used again
 /// as often as needed.
 fn read_sources(i: &mut Interp<'_>, sources: &[Obj], need: usize) -> Result<Vec<Vec<u8>>, PsError> {
-    i.alloc(need * sources.len())?;
+    i.alloc_n(need, sources.len())?;
     let mut out: Vec<Vec<u8>> = vec![Vec::with_capacity(need); sources.len()];
     let mut done = vec![false; sources.len()];
     loop {
@@ -383,7 +383,7 @@ fn draw(i: &mut Interp<'_>, spec: Spec, cs: Rc<ColorSpace>) -> R {
         && matches!(&*cs, ColorSpace::Gray | ColorSpace::Rgb | ColorSpace::Cmyk)
         && spec.decode.chunks(2).all(|d| d == [0.0, 1.0])
         && spec.mask_color.is_none();
-    i.alloc(n * (ncomp + 1))?;
+    i.alloc_n(n, ncomp + 1)?;
     let pixels = if direct {
         let mut v = Vec::with_capacity(n * ncomp);
         for y in 0..spec.h {

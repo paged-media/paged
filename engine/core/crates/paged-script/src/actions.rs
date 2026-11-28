@@ -50,7 +50,7 @@ fn type_error(message: impl Into<String>) -> boa_engine::JsError {
 }
 
 fn json(value: &JsValue, ctx: &mut Context) -> JsResult<Value> {
-    Ok(value.to_json(ctx)?.unwrap_or(Value::Null))
+    Ok(paged_action::js::value_to_json(value, ctx)?.unwrap_or(Value::Null))
 }
 
 fn kind(v: Option<&Value>, what: &str) -> JsResult<ActionKind> {

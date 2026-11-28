@@ -186,7 +186,7 @@ fn transform_font(i: &mut Interp<'_>, f: &PsDict, m: &Affine) -> Result<PsDict, 
         copy.put(k, v);
     }
     copy.put_name("FontMatrix", matrix_obj(&font_matrix(f).then(m)));
-    i.alloc(f.len() * 48)?;
+    i.alloc_n(f.len(), 48)?;
     Ok(copy)
 }
 
@@ -315,7 +315,8 @@ fn outline(i: &mut Interp<'_>, font: &PsDict, name: &[u8]) -> Result<GlyphOutlin
         type1_outline(i, font, id, name)?
     };
     let g = g.map(Rc::new);
-    i.alloc(g.as_ref().map_or(16, |g| g.0.len() * 56 + 64))?;
+    i.alloc_n(g.as_ref().map_or(0, |g| g.0.len()), 56)?;
+    i.alloc(64)?;
     i.font_cache.glyphs.insert(key, g.clone());
     Ok(g)
 }

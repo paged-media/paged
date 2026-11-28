@@ -107,3 +107,59 @@ fn a_refusal_points_at_the_word_it_refuses() {
     assert!(check_query("SELECT EXTRACT(year FROM d) FROM people").is_ok());
     assert!(check_query("SELECT a IS DISTINCT FROM b FROM people").is_ok());
 }
+
+/// The store ends a comment at the first `*/` and reads `` `…` `` as a
+/// quoted name. A guard that nests comments, or reads a backtick as
+/// punctuation, sees less code than the store runs: the write hides behind
+/// what only the guard takes for a comment or a string.
+#[test]
+fn a_statement_hidden_behind_a_nested_comment_or_a_backtick_name_is_refused() {
+    let hostile = [
+        // A nesting lexer reads everything up to the last `*/` as comment.
+        "SELECT 1 /* /* */ ; DROP TABLE people -- */",
+        "SELECT 1 /* /* */ ; DELETE FROM people /* */ */",
+        "SELECT * FROM people /* /* */ , read_csv('/etc/passwd') /* */ */",
+        "SELECT 1 /* a /* b */ UNION SELECT * FROM pragma_table_info('people') -- */",
+        "/* /* */ PRAGMA query_only = 0 -- */ SELECT 1",
+        // The quote inside the backtick name is the name's; a lexer that
+        // takes it for a string's start swallows the statements after it.
+        "SELECT `'`; DELETE FROM people --'",
+        "SELECT `'`; DROP TABLE people; SELECT '`'",
+        "SELECT `'` FROM read_csv('/etc/passwd') --'",
+        "SELECT `/*` FROM people; UPDATE people SET name = 'x' -- */",
+        "SELECT `--` FROM people; DELETE FROM people",
+        "SELECT `a``'` ; ATTACH 'x.db' AS x --'",
+        // A backtick name in a table position is checked as a name.
+        "SELECT * FROM `https://example.com/x.csv`",
+        "SELECT * FROM `read_csv`('x.csv')",
+        // Not terminated: nothing after it can be told from the name.
+        "SELECT `people",
+    ];
+    for sql in hostile {
+        assert!(check_query(sql).is_err(), "admitted {sql:?}");
+    }
+    let e = check_query("SELECT 1 /* /* */ ; DROP TABLE people -- */").unwrap_err();
+    assert!(e.message.contains("a comment inside a comment"), "{e}");
+    assert_eq!(e.at, Some(12));
+    let e = check_query("SELECT `'`; DELETE FROM people --'").unwrap_err();
+    assert!(e.message.contains("exactly one SELECT"), "{e}");
+    // What stays a query: one comment, a backtick name, a backtick table.
+    for sql in [
+        "SELECT 1 /* one * / comment */ FROM people",
+        "SELECT `name` FROM people",
+        "SELECT `na``me'` FROM `people`",
+        "SELECT name FROM main.`people`",
+    ] {
+        assert!(check_query(sql).is_ok(), "refused {sql:?}");
+    }
+}
+
+/// Only what the store skips is space. Another space character is part of
+/// a name there, so it must not split a word here.
+#[test]
+fn only_the_stores_space_characters_separate_tokens() {
+    // U+00A0 joins the two words into one name: no DELETE word to refuse,
+    // and none for the store to run either.
+    assert!(check_query("SELECT 1\u{a0}DELETE").is_ok());
+    assert!(check_query("SELECT 1 \t\n\u{c}\r FROM people").is_ok());
+}

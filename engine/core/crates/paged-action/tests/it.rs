@@ -257,3 +257,75 @@ fn a_js_action_reaches_nothing_and_runs_within_its_budget__feat__plugin_platform
         .unwrap_err()
         .contains("not a function"));
 }
+
+/// Boa counts loop iterations per call frame, so loops nested across
+/// functions and tree recursion stayed under it forever. The budget is
+/// the whole run's.
+#[test]
+fn the_loop_budget_is_the_whole_runs_not_one_frames() {
+    use paged_action::js::{eval, OVER_BUDGET};
+    let budget = JsBudget {
+        loop_iterations: 1000,
+        recursion_depth: 64,
+    };
+    // 900 iterations per frame, 900 frames: no frame reaches 1000.
+    let nested = "() => { const inner = () => { for (let i = 0; i < 900; i++) {} };
+        for (let i = 0; i < 900; i++) inner(); return 1; }";
+    assert_eq!(call(nested, &[], budget).unwrap_err(), OVER_BUDGET);
+    // 2^40 calls, 40 deep: under the recursion limit, and no loop at all.
+    let tree = "function f(n) { return n === 0 ? 0 : f(n - 1) + f(n - 1); }";
+    assert_eq!(call(tree, &[json!(40)], budget).unwrap_err(), OVER_BUDGET);
+    // A build script is held to it too.
+    let script = "function f(n) { return n === 0 ? 0 : f(n - 1) + f(n - 1); } f(40)";
+    assert_eq!(eval(script, budget).unwrap_err(), OVER_BUDGET);
+    // Work inside the budget runs to its end, arguments and all.
+    assert_eq!(
+        call(
+            "(n) => { let s = 0; for (let i = 0; i < n; i++) s += i; return s; }",
+            &[json!(100)],
+            budget
+        )
+        .unwrap(),
+        json!(4950)
+    );
+    assert_eq!(
+        eval("[1, 2].map((x) => x * 2)", budget).unwrap(),
+        Some(json!([2, 4]))
+    );
+}
+
+/// A script sets an array's length without filling it; the conversion to
+/// JSON used to reserve that length. Too large, too deep and cyclic values
+/// are refused with an error.
+#[test]
+fn a_value_too_large_for_json_is_refused_not_allocated() {
+    use paged_action::js::eval;
+    let budget = JsBudget::default();
+    for source in [
+        "() => { const a = []; a.length = 4294967295; return a; }",
+        "() => { const a = []; a.length = 4294967295; return { nested: [a] }; }",
+        // Every level holds the one below twice: 2^40 leaves.
+        "() => { let a = [1]; for (let i = 0; i < 40; i++) a = [a, a]; return a; }",
+        // 10 000 levels deep.
+        "() => { let a = []; for (let i = 0; i < 10000; i++) a = [a]; return a; }",
+        "() => { const a = []; a.push(a); return a; }",
+    ] {
+        let e = call(source, &[], budget).unwrap_err();
+        assert!(
+            e.contains("too large or too deeply nested"),
+            "{source}: {e}"
+        );
+    }
+    let e = eval("const a = []; a.length = 4294967295; a", budget).unwrap_err();
+    assert!(e.contains("too large or too deeply nested"), "{e}");
+    // Ordinary values cross as before, holes as null.
+    assert_eq!(
+        call(
+            "() => ({ a: [1, , 3], b: { c: 'x' }, d: undefined })",
+            &[],
+            budget
+        )
+        .unwrap(),
+        json!({ "a": [1, null, 3], "b": { "c": "x" } })
+    );
+}

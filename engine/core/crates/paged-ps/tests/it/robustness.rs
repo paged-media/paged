@@ -284,3 +284,53 @@ fn random_bytes_and_truncations_never_panic() {
         let _ = paged_ps::interpret(&full[..k], &limits());
     }
 }
+
+/// A sampled function's `Size` is the program's: its product is taken
+/// saturating, so a table whose size wraps `usize` is refused instead of
+/// passing the size check as a small one.
+#[test]
+fn a_sampled_function_whose_size_wraps_is_refused() {
+    let wrapping = "<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 1 0]
+        /Function << /FunctionType 0 /Domain [0 1 0 1 0 1 0 1] /Range [0 1]
+          /Size [65536 65536 65536 65536] /BitsPerSample 8 /DataSource <00> >> >> shfill";
+    assert!(matches!(
+        paged_ps::interpret(&eps(wrapping), &limits()),
+        Err(Error::PostScript { .. })
+    ));
+}
+
+/// Images, masks, sampled functions and rastered shadings charge the
+/// memory budget for what they build, and a budget too small for it
+/// refuses the program.
+#[test]
+fn pixel_buffers_are_charged_to_the_memory_budget() {
+    let tight = || {
+        with(Limits {
+            max_memory: 64 << 10,
+            ..Limits::default()
+        })
+    };
+    let programs = [
+        // 400 x 400 samples of a function-based shading.
+        "<< /ShadingType 1 /ColorSpace /DeviceRGB /Domain [0 1 0 1] /Matrix [1000 0 0 1000 0 0]
+            /Function {pop 0 0} >> shfill",
+        // A 1000 x 1000 image and mask read from an 8-byte string.
+        "1000 1000 8 [1000 0 0 1000 0 0] <0000000000000000> image",
+        "1000 1000 true [1000 0 0 1000 0 0] <0000000000000000> imagemask",
+        // A 1 << 20 entry sample table.
+        "<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 1 0]
+            /Function << /FunctionType 0 /Domain [0 1 0 1] /Range [0 1]
+              /Size [1024 1024] /BitsPerSample 8 /DataSource <00> >> >> shfill",
+    ];
+    for program in programs {
+        let big = format!("0 0 1000 1000 rectclip {program}");
+        let src = String::from_utf8(eps(&big))
+            .expect("ascii")
+            .replace("%%BoundingBox: 0 0 10 10", "%%BoundingBox: 0 0 1000 1000");
+        assert_eq!(
+            paged_ps::interpret(src.as_bytes(), &tight()),
+            Err(Error::Limit(LimitKind::Memory)),
+            "{program}"
+        );
+    }
+}

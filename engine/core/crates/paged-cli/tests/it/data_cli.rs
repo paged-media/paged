@@ -180,8 +180,16 @@ fn data_apply_writes_the_bound_values_at_a_record__feat__data_bind_labels_native
 fn data_apply_without_a_source_file_says_which_it_needs() {
     let d = dir("missing");
     let doc = document(&d);
-    let report: Value =
-        serde_json::from_str(&ok(paged(&["data", "apply", s(&doc), "--json"]))).unwrap();
+    // No binding could be applied: the report is printed whole, and the
+    // run fails, naming the bindings, so a build does not take it for done.
+    let run = paged(&["data", "apply", s(&doc), "--json"]);
+    assert!(!run.status.success(), "a failed apply must not exit 0");
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        stderr.contains("2 binding(s) failed: op (") && stderr.contains("; v_name ("),
+        "{stderr}"
+    );
+    let report: Value = serde_json::from_slice(&run.stdout).unwrap();
     assert_eq!(report["missingSources"][0], "products", "{report:#}");
     let q = report["queries"]
         .as_array()
@@ -960,8 +968,35 @@ fn apply_remote(
     for (k, v) in env {
         command.env(k, v);
     }
-    let report: Value = serde_json::from_str(&ok(command.output().unwrap())).unwrap();
-    report["applied"].as_array().unwrap().clone()
+    let run = command.output().unwrap();
+    // The report is printed either way; the exit status says whether every
+    // binding was applied, and a failure names the bindings that were not.
+    let report: Value = serde_json::from_slice(&run.stdout).unwrap();
+    let applied = report["applied"].as_array().unwrap().clone();
+    let failed: Vec<&str> = applied
+        .iter()
+        .filter(|a| a["outcome"] == "failed")
+        .filter_map(|a| a["binding"].as_str())
+        .collect();
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert_eq!(
+        run.status.success(),
+        failed.is_empty(),
+        "exit {:?} with failed bindings {failed:?}: {stderr}",
+        run.status.code()
+    );
+    for id in &failed {
+        assert!(
+            stderr.contains(&format!("binding(s) failed: {id} ("))
+                || stderr.contains(&format!("; {id} (")),
+            "the failure names {id}: {stderr}"
+        );
+    }
+    assert!(
+        failed.is_empty() || out.is_file(),
+        "the result is still written, so what failed can be looked at"
+    );
+    applied
 }
 
 #[test]

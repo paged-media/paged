@@ -27,10 +27,13 @@
 //! Values cross as JSON: an asset as `{ bytes: number[], mediaType }`, a
 //! table in the provider shape, a selection as an array of addresses.
 
+use std::future::Future;
 use std::rc::Rc;
 
 use boa_engine::context::time::{Clock, JsInstant};
-use boa_engine::{Context, JsValue, Source};
+use boa_engine::object::builtins::{JsArray, JsProxy};
+use boa_engine::property::Attribute;
+use boa_engine::{js_string, Context, JsNativeError, JsResult, JsValue, Script, Source};
 use serde_json::{Map, Value};
 
 use crate::{Action, ActionKind, ActionValue};
@@ -38,6 +41,10 @@ use crate::{Action, ActionKind, ActionValue};
 /// The budget of one run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JsBudget {
+    /// Loop iterations. Boa counts them per call frame, so on its own the
+    /// limit never trips on nested loops in separate functions or on
+    /// recursion; [`eval`] and [`call`] therefore also hold the whole run
+    /// to the work this many iterations buy ([`WORK_PER_ITERATION`]).
     pub loop_iterations: u64,
     pub recursion_depth: usize,
 }
@@ -182,6 +189,122 @@ pub fn sandbox_context(sandbox: Sandbox) -> Result<Context, String> {
     Ok(ctx)
 }
 
+/// The work one budgeted loop iteration buys the whole run, in Boa's
+/// instruction cost units (a loop's own bookkeeping is about ten; the
+/// rest is its body).
+pub const WORK_PER_ITERATION: u64 = 64;
+
+/// Cost units between two looks at the run's budget.
+const SLICE: u32 = 1 << 16;
+
+/// What a run over its whole-run budget fails with.
+pub const OVER_BUDGET: &str = "the script ran over its loop budget for the whole run";
+
+/// Evaluate `source` in `ctx`, stopping once the whole run has spent the
+/// work `budget.loop_iterations` buys. Boa's own loop limit is per call
+/// frame; this one counts every instruction of the script and of the
+/// functions it calls, however they nest or recurse. A context whose run
+/// was stopped is left mid-script: drop it.
+///
+/// A callback a built-in calls (`forEach`, a `sort` comparator) runs to
+/// its end inside one instruction; Boa's per-frame limits bound it.
+pub fn eval_within_budget(
+    ctx: &mut Context,
+    source: &str,
+    budget: JsBudget,
+) -> Result<JsValue, String> {
+    let script = Script::parse(Source::from_bytes(source), None, ctx).map_err(message)?;
+    let slices = budget.loop_iterations.saturating_mul(WORK_PER_ITERATION) / u64::from(SLICE) + 1;
+    let mut run = std::pin::pin!(script.evaluate_async_with_budget(ctx, SLICE));
+    // The future only ever yields to hand the budget back; nothing wakes it.
+    let mut task = std::task::Context::from_waker(std::task::Waker::noop());
+    let mut spent = 0u64;
+    while spent < slices {
+        if let std::task::Poll::Ready(out) = run.as_mut().poll(&mut task) {
+            return out.map_err(message);
+        }
+        spent += 1;
+    }
+    Err(OVER_BUDGET.to_string())
+}
+
+/// The most array slots and properties one value may have to cross as JSON.
+pub const MAX_JSON_NODES: u64 = 1 << 24;
+
+/// The deepest nesting of a value that crosses as JSON.
+pub const MAX_JSON_DEPTH: usize = 256;
+
+/// `value` as JSON (`None` for `undefined`), refused when it is larger
+/// than [`MAX_JSON_NODES`] or deeper than [`MAX_JSON_DEPTH`].
+///
+/// Boa's own conversion reserves an array's `length` up front and recurses
+/// per level, so `a.length = 2 ** 32 - 1` on an empty array asks for
+/// gigabytes, an object tree that shares its children doubles per level,
+/// and a deep or cyclic one runs the native stack out. This walks the same
+/// data properties first and counts them.
+pub fn value_to_json(value: &JsValue, ctx: &mut Context) -> JsResult<Option<Value>> {
+    let too_large = || {
+        JsNativeError::range()
+            .with_message("the value is too large or too deeply nested to convert to JSON")
+    };
+    let mut nodes = 0u64;
+    let mut stack: Vec<(JsValue, usize)> = vec![(value.clone(), 0)];
+    while let Some((value, depth)) = stack.pop() {
+        let Some(obj) = value.as_object() else {
+            continue;
+        };
+        if depth >= MAX_JSON_DEPTH {
+            return Err(too_large().into());
+        }
+        // The conversion reads a proxy's own storage, which is empty.
+        if JsProxy::from_object(obj.clone()).is_ok() {
+            continue;
+        }
+        let mut children: Vec<JsValue> = Vec::new();
+        {
+            let object = obj.borrow();
+            let properties = object.properties();
+            if obj.is_array() {
+                let length = properties
+                    .get(&js_string!("length").into())
+                    .and_then(|d| d.value().and_then(JsValue::as_number))
+                    .unwrap_or(0.0);
+                nodes = nodes.saturating_add(length.max(0.0) as u64);
+            }
+            for v in properties.index_property_values() {
+                nodes = nodes.saturating_add(1);
+                if nodes > MAX_JSON_NODES {
+                    return Err(too_large().into());
+                }
+                if let Some(v) = v.value().filter(|v| v.is_object()) {
+                    children.push(v.clone());
+                }
+            }
+        }
+        if nodes > MAX_JSON_NODES {
+            return Err(too_large().into());
+        }
+        if !obj.is_array() {
+            for key in obj.own_property_keys(ctx)? {
+                nodes = nodes.saturating_add(1);
+                if nodes > MAX_JSON_NODES {
+                    return Err(too_large().into());
+                }
+                let child = obj
+                    .borrow()
+                    .properties()
+                    .get(&key)
+                    .and_then(|d| d.value().cloned());
+                if let Some(v) = child.filter(JsValue::is_object) {
+                    children.push(v);
+                }
+            }
+        }
+        stack.extend(children.into_iter().map(|v| (v, depth + 1)));
+    }
+    value.to_json(ctx)
+}
+
 fn context(budget: JsBudget) -> Result<Context, String> {
     sandbox_context(Sandbox::pure(budget))
 }
@@ -191,27 +314,34 @@ fn context(budget: JsBudget) -> Result<Context, String> {
 /// spec (paged.data's automation, data spec §10).
 pub fn eval(source: &str, budget: JsBudget) -> Result<Option<Value>, String> {
     let mut ctx = context(budget)?;
-    let out = ctx.eval(Source::from_bytes(source)).map_err(message)?;
-    out.to_json(&mut ctx).map_err(message)
+    let out = eval_within_budget(&mut ctx, source, budget)?;
+    value_to_json(&out, &mut ctx).map_err(message)
 }
 
 /// Evaluate `source` (a function expression) on `args` in a bare context.
 pub fn call(source: &str, args: &[Value], budget: JsBudget) -> Result<Value, String> {
     let mut ctx = context(budget)?;
-    let f = ctx
-        .eval(Source::from_bytes(&format!("({source}\n)")))
-        .map_err(message)?;
-    let f = f.as_callable().ok_or("the source is not a function")?;
+    let f = eval_within_budget(&mut ctx, &format!("({source}\n)"), budget)?;
+    if !f.is_callable() {
+        return Err("the source is not a function".into());
+    }
     let args = args
         .iter()
         .map(|a| JsValue::from_json(a, &mut ctx))
         .collect::<Result<Vec<_>, _>>()
         .map_err(message)?;
-    let out = f
-        .call(&JsValue::undefined(), &args, &mut ctx)
-        .map_err(message)?;
-    Ok(out
-        .to_json(&mut ctx)
+    // Called from a script, not through `JsObject::call`: only a script
+    // runs under the whole-run budget.
+    let args = JsArray::from_iter(args, &mut ctx);
+    for (name, value) in [
+        (js_string!("__action"), f),
+        (js_string!("__arguments"), args.into()),
+    ] {
+        ctx.register_global_property(name, value, Attribute::empty())
+            .map_err(message)?;
+    }
+    let out = eval_within_budget(&mut ctx, "__action(...__arguments)", budget)?;
+    Ok(value_to_json(&out, &mut ctx)
         .map_err(message)?
         .unwrap_or(Value::Null))
 }

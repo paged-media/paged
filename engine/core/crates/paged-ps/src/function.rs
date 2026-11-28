@@ -97,10 +97,14 @@ fn parse_dict(i: &mut Interp<'_>, d: &PsDict, depth: usize) -> Result<Func, PsEr
             if !matches!(bits, 1 | 2 | 4 | 8 | 12 | 16 | 24 | 32) || n_out == 0 {
                 return Err(err("rangecheck"));
             }
-            let total: usize = size.iter().product::<usize>().saturating_mul(n_out);
+            // Saturating: `Size` is the program's, and a wrapped product
+            // would pass the check below.
+            let total: usize = size.iter().fold(n_out, |acc, s| acc.saturating_mul(*s));
             if total > 1 << 22 {
                 return Err(err("limitcheck"));
             }
+            // Charged before the table is read or built.
+            i.alloc_n(total, 8)?;
             let src = d.get_name("DataSource").ok_or(err("undefined"))?;
             let need = (total * bits as usize).div_ceil(8);
             let input = crate::ops::read_input(i, &src, need)?;
@@ -121,7 +125,6 @@ fn parse_dict(i: &mut Interp<'_>, d: &PsDict, depth: usize) -> Result<Func, PsEr
             let encode = nums(d, "Encode")
                 .unwrap_or_else(|| size.iter().flat_map(|s| [0.0, (*s - 1) as f64]).collect());
             let decode = nums(d, "Decode").unwrap_or_else(|| range.clone());
-            i.alloc(total * 8)?;
             Ok(Func::Sampled {
                 domain,
                 range,

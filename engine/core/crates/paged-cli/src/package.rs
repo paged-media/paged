@@ -172,7 +172,11 @@ fn build(
 
     let mut link_rows = Vec::new();
     for link in &links {
-        let target = links_dir.join(&link.file_name);
+        // The exporter already hands out one-segment names; the name is
+        // still the document's, so it is held to that here, where it is
+        // joined onto a directory and written.
+        let file_name = safe_link_name(&link.file_name);
+        let target = links_dir.join(&file_name);
         let (status, from) = if link.has_bytes {
             std::fs::write(&target, link.bytes.as_slice())
                 .with_context(|| format!("write {}", target.display()))?;
@@ -189,7 +193,7 @@ fn build(
             }
         };
         link_rows.push(json!({
-            "fileName": link.file_name,
+            "fileName": file_name,
             "sourceUri": link.source_uri,
             "status": status,
             "from": from.map(|p| p.display().to_string()),
@@ -323,6 +327,22 @@ fn font_sources(opts: &DocumentOptions) -> Result<Vec<paged_canvas::FontFile>> {
     let mut seen = BTreeSet::new();
     files.retain(|f| seen.insert((f.path.clone(), f.family.clone())));
     Ok(files)
+}
+
+/// `name` as ONE file name inside the folder it is written to: the part
+/// after the last separator, without control characters or the `:` of a
+/// drive or stream prefix, and never empty, `.` or `..`. The same rule as
+/// the IDML exporter's link names, so a name it made passes unchanged.
+fn safe_link_name(name: &str) -> String {
+    let tail = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let cleaned: String = tail
+        .chars()
+        .map(|c| if c == ':' || c.is_control() { '_' } else { c })
+        .collect();
+    if cleaned.chars().all(|c| c == '.' || c == ' ') {
+        return "link".to_string();
+    }
+    cleaned
 }
 
 /// Where a link's file is on this machine: a `file:` URI as the path
@@ -484,5 +504,37 @@ mod tests {
         );
         assert_eq!(resolve_link("https://example.com/x.png", dir), None);
         assert_eq!(resolve_link("", dir), None);
+    }
+
+    /// A link's name is document data. Joined onto `Links/`, none of these
+    /// may name a file outside it.
+    #[test]
+    fn a_link_name_cannot_leave_the_links_folder() {
+        let base = std::path::Path::new("/pkg/Links");
+        for hostile in [
+            "../../etc/cron.d/job",
+            "..\\..\\Windows\\win.ini",
+            "/etc/passwd",
+            "C:\\Windows\\win.ini",
+            "C:evil.txt",
+            "..",
+            ".",
+            "",
+            "a/../../b.png",
+            "photo.png\0.sh",
+        ] {
+            let name = safe_link_name(hostile);
+            assert!(!name.is_empty(), "{hostile:?}");
+            assert!(
+                !name.contains(['/', '\\', ':', '\0']) && name != "." && name != "..",
+                "{hostile:?} became {name:?}"
+            );
+            let target = base.join(&name);
+            assert_eq!(target.parent(), Some(base), "{hostile:?} became {name:?}");
+        }
+        // What the exporter hands out passes unchanged.
+        for plain in ["CODE 1.jpg", "logo-2.png", "Rectangle_u12.png", "Grüße.png"] {
+            assert_eq!(safe_link_name(plain), plain);
+        }
     }
 }

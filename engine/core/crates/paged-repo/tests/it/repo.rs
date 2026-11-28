@@ -602,3 +602,56 @@ fn restoring_a_version_is_a_new_commit() {
     let old = repo.export_commit(v1, "v1", &me(), false).unwrap();
     assert_eq!(old, repo.export("main", &me(), false).unwrap());
 }
+
+/// A push in two steps: first the commit alone, with no ref to move (or a
+/// ref the store refuses), then the ref with no objects. The commit is
+/// stored by then, and a stored commit used to count as complete.
+#[test]
+fn a_ref_does_not_move_to_a_commit_whose_objects_are_incomplete() {
+    let mut a = local();
+    let head = snapshot_commit(&mut a, &doc(noise(200_000, 7)), "main", &me()).unwrap();
+    type Objects = BTreeMap<Hash, (Kind, Vec<u8>)>;
+    let commit_only = || -> Objects {
+        let bytes = a.store.get(&head).expect("the commit");
+        BTreeMap::from([(head, (Kind::Commit, bytes))])
+    };
+
+    // The commit with its ref, nothing else: refused, and not kept.
+    let mut remote = local();
+    let r = remote.receive(commit_only(), "main", None, Some(head), &me(), false);
+    assert!(matches!(r, Err(Error::Missing(_))), "{r:?}");
+    assert!(!remote.store.has(&head), "a refused push leaves no commit");
+    assert_eq!(remote.head("main"), None);
+
+    // The commit arrives without a ref to move, then the ref without objects.
+    let mut remote = local();
+    // (Policy refuses the name; the objects were stored before it was asked.)
+    let r = remote.receive(commit_only(), "scratch", None, None, &me(), false);
+    assert!(matches!(r, Err(Error::Refused(_))), "{r:?}");
+    assert!(remote.store.has(&head));
+    let r = remote.receive(Objects::new(), "main", None, Some(head), &me(), false);
+    assert!(matches!(r, Err(Error::Missing(_))), "{r:?}");
+    assert_eq!(remote.head("main"), None, "the ref must not move");
+    // Nor does a release name it.
+    let r = remote.release("1.0", head, &me());
+    assert!(matches!(r, Err(Error::Missing(_))), "{r:?}");
+    assert_eq!(remote.head("releases/1.0"), None);
+
+    // A host that wrote the commit itself, before any receive.
+    let mut remote = local();
+    remote
+        .store
+        .put(Kind::Commit, head, a.store.get(&head).unwrap());
+    let r = remote.receive(Objects::new(), "main", None, Some(head), &me(), false);
+    assert!(matches!(r, Err(Error::Missing(_))), "{r:?}");
+    assert_eq!(remote.head("main"), None);
+
+    // The whole push still lands, on top of the stray commit too.
+    assert_eq!(push(&a, &mut remote, "main", &me()).unwrap(), head);
+    assert_eq!(remote.head("main"), Some(head));
+    // And the next commit, whose parent is the head, goes on as before.
+    let next = snapshot_commit(&mut a, &doc(noise(200_000, 8)), "main", &me()).unwrap();
+    assert_eq!(push(&a, &mut remote, "main", &me()).unwrap(), next);
+    remote.release("1.0", head, &me()).unwrap();
+    assert_eq!(remote.head("releases/1.0"), Some(head));
+}

@@ -46,6 +46,9 @@ pub struct Patterns {
     /// Pattern letters (lowercase, `.` for a word boundary) → the
     /// point value at each of the `letters.len() + 1` positions.
     map: HashMap<Box<str>, Box<[u8]>>,
+    /// The longest pattern, in characters. No longer substring of a
+    /// word can match, which keeps `breaks` linear in the word.
+    max_chars: usize,
     /// The file's own `LEFTHYPHENMIN` / `RIGHTHYPHENMIN`. Kept for
     /// reference: InDesign overrides them with the paragraph's limits
     /// (measured), so they are not applied here.
@@ -71,6 +74,7 @@ impl Patterns {
         let mut map: HashMap<Box<str>, Box<[u8]>> = HashMap::new();
         let mut declared_left_min = 2;
         let mut declared_right_min = 2;
+        let mut max_chars = 0usize;
         for (i, raw) in src.lines().enumerate() {
             let line = raw.trim();
             // Line 0 is the encoding name, never a pattern.
@@ -112,10 +116,12 @@ impl Patterns {
             if letters.is_empty() {
                 continue;
             }
+            max_chars = max_chars.max(values.len() - 1);
             map.insert(letters.into_boxed_str(), values.into_boxed_slice());
         }
         Self {
             map,
+            max_chars,
             declared_left_min,
             declared_right_min,
         }
@@ -156,7 +162,8 @@ impl Patterns {
         let mut starts: Vec<usize> = keyed.char_indices().map(|(i, _)| i).collect();
         starts.push(keyed.len());
         for i in 0..keyed_chars.len() {
-            for j in (i + 1)..=keyed_chars.len() {
+            let longest = keyed_chars.len().min(i + self.max_chars);
+            for j in (i + 1)..=longest {
                 if let Some(values) = self.map.get(&keyed[starts[i]..starts[j]]) {
                     for (k, v) in values.iter().enumerate() {
                         let at = i + k;
@@ -239,6 +246,26 @@ mod tests {
         assert!(decode(bytes).contains('\u{e9}'));
         let utf8: &'static [u8] = b"UTF-8\n.a\xc3\xa91\n";
         assert!(decode(utf8).contains('\u{e9}'));
+    }
+
+    #[test]
+    fn a_long_word_is_scanned_only_as_far_as_the_longest_pattern() {
+        let p = Patterns::parse("UTF-8\na1b\n.ab1ab\nb1a2b1a.\n");
+        assert_eq!(p.max_chars, 5);
+        // Patterns anchored at both ends still match in a long word.
+        let word = "ab".repeat(20_000);
+        let started = std::time::Instant::now();
+        let breaks = p.breaks(&word, 1, 1);
+        // Every "a|b" gap, plus the one ".abab" opens after the first pair.
+        assert_eq!(breaks.len(), 20_000 + 1);
+        assert_eq!(&breaks[..3], &[1, 2, 3]);
+        // The unbounded scan hashed every substring of the word: 8e8 of
+        // them, 2e13 bytes. This bound is far above the linear scan's cost.
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "took {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]

@@ -1964,6 +1964,20 @@ pub fn apply(
             eprintln!("{written} binding(s) written in the loaded document. Nothing saved — pass -o to write the result.");
         }
     }
+    // The report above is complete either way; a binding that failed makes
+    // the run a failure, so a script or a build does not take a document
+    // with stale content for an applied one.
+    let failed: Vec<String> = applied
+        .iter()
+        .filter(|a| a.outcome == "failed")
+        .map(|a| match &a.message {
+            Some(why) => format!("{} ({why})", a.binding),
+            None => a.binding.clone(),
+        })
+        .collect();
+    if !failed.is_empty() {
+        anyhow::bail!("{} binding(s) failed: {}", failed.len(), failed.join("; "));
+    }
     Ok(())
 }
 

@@ -89,6 +89,7 @@ fn respond(stream: &mut TcpStream, status: u16, body: &Value) -> Result<()> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
+        500 => "Internal Server Error",
         503 => "Service Unavailable",
         _ => "Error",
     };
@@ -185,6 +186,14 @@ pub fn run_call(assets: &DocumentOptions, call: &Value) -> Result<Value> {
         call_suffix()
     ));
     std::fs::create_dir_all(&scratch)?;
+    // Removed when the call ends, also when the engine panics in it.
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Scratch(scratch.clone());
     let result = (|| -> Result<Value> {
         let bytes = b64().decode(
             call["file"]
@@ -271,7 +280,6 @@ pub fn run_call(assets: &DocumentOptions, call: &Value) -> Result<Value> {
         }
         Ok(out)
     })();
-    let _ = std::fs::remove_dir_all(&scratch);
     result
 }
 
@@ -285,7 +293,43 @@ fn call_suffix() -> String {
     format!("{nanos}-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
-fn handle(mut stream: TcpStream, assets: &DocumentOptions) -> Result<()> {
+/// What answers one call: [`run_call`], or a test's stand-in.
+type Runner = fn(&DocumentOptions, &Value) -> Result<Value>;
+
+/// What a panic carried, as text.
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("no message")
+}
+
+/// One call, with a panic inside the engine turned into an error. Every
+/// call has its own engine session and scratch directory, so nothing the
+/// panic left half-done is seen by the next call; the worker lives on.
+fn run_guarded(run: Runner, assets: &DocumentOptions, call: &Value) -> Result<Value, CallFailed> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(assets, call))) {
+        Ok(Ok(out)) => Ok(out),
+        Ok(Err(e)) => Err(CallFailed::Refused(e)),
+        Err(payload) => {
+            // The server's log names it; the caller is told only that the
+            // engine failed, not what its internals said.
+            eprintln!("engine call panicked: {}", panic_text(payload.as_ref()));
+            Err(CallFailed::Panicked)
+        }
+    }
+}
+
+/// How a call that gave no result ended.
+enum CallFailed {
+    /// The call was wrong, or the engine could not carry it out.
+    Refused(anyhow::Error),
+    /// The engine panicked: its fault, not the caller's.
+    Panicked,
+}
+
+fn handle(mut stream: TcpStream, assets: &DocumentOptions, run: Runner) -> Result<()> {
     // A caller that stops sending must not hold a worker forever.
     stream.set_read_timeout(Some(READ_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
@@ -331,9 +375,14 @@ fn handle(mut stream: TcpStream, assets: &DocumentOptions) -> Result<()> {
                     );
                 }
             };
-            match run_call(assets, &call) {
+            match run_guarded(run, assets, &call) {
                 Ok(out) => respond(&mut stream, 200, &out),
-                Err(e) => {
+                Err(CallFailed::Panicked) => respond(
+                    &mut stream,
+                    500,
+                    &json!({ "error": "the engine failed on this call (an internal error)" }),
+                ),
+                Err(CallFailed::Refused(e)) => {
                     if let Some(TemplateRefused(r)) = e.downcast_ref::<TemplateRefused>() {
                         let mut body = json!({ "error": "the template refused the values" });
                         if let Some(p) = r.get("problems") {
@@ -376,15 +425,25 @@ impl Concurrency {
     }
 }
 
-fn worker(rx: Arc<Mutex<Receiver<TcpStream>>>, assets: Arc<DocumentOptions>) {
+fn worker(rx: Arc<Mutex<Receiver<TcpStream>>>, assets: Arc<DocumentOptions>, run: Runner) {
     loop {
         // The lock is held only to take the next connection, not while
         // answering it, so the workers answer in parallel.
         let next = rx.lock().map(|r| r.recv());
         match next {
             Ok(Ok(stream)) => {
-                if let Err(e) = handle(stream, &assets) {
-                    eprintln!("engine call failed: {e}");
+                // The call itself is guarded in `handle`; this catches a
+                // panic in the reading and answering around it, so a worker
+                // never ends on one connection.
+                let answered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handle(stream, &assets, run)
+                }));
+                match answered {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => eprintln!("engine call failed: {e}"),
+                    Err(payload) => {
+                        eprintln!("engine worker panicked: {}", panic_text(payload.as_ref()))
+                    }
                 }
             }
             _ => return,
@@ -407,7 +466,7 @@ pub fn run(port: u16, bind: &str, assets: DocumentOptions, conc: Concurrency) ->
     let assets = Arc::new(assets);
     for _ in 0..conc.workers {
         let (rx, assets) = (rx.clone(), assets.clone());
-        std::thread::spawn(move || worker(rx, assets));
+        std::thread::spawn(move || worker(rx, assets, run_call));
     }
     for stream in listener.incoming() {
         match stream {
@@ -428,4 +487,97 @@ pub fn run(port: u16, bind: &str, assets: DocumentOptions, conc: Concurrency) ->
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assets() -> DocumentOptions {
+        DocumentOptions {
+            fonts: Vec::new(),
+            font_family: Vec::new(),
+            font: None,
+            no_default_font: true,
+            cmyk_profile: None,
+        }
+    }
+
+    /// Stands in for the engine: panics when the call says so.
+    fn runner(_: &DocumentOptions, call: &Value) -> Result<Value> {
+        if call["panic"] == json!(true) {
+            panic!("the engine hit a bug");
+        }
+        Ok(json!({ "echo": call["n"] }))
+    }
+
+    fn post(port: u16, body: &str) -> String {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        write!(
+            s,
+            "POST /run HTTP/1.1\r\ncontent-length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .expect("send");
+        let mut answer = String::new();
+        s.read_to_string(&mut answer).expect("an answer");
+        answer
+    }
+
+    /// One worker, so a worker lost to a panic would leave nobody to answer
+    /// the next call: the panicking call is answered 500 and the server
+    /// answers the calls after it.
+    #[test]
+    fn a_panicking_call_is_answered_and_the_worker_lives_on() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let (tx, rx) = sync_channel::<TcpStream>(8);
+        let rx = Arc::new(Mutex::new(rx));
+        let only_worker = std::thread::spawn(move || worker(rx, Arc::new(assets()), runner));
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                if tx.send(stream).is_err() {
+                    return;
+                }
+            }
+        });
+
+        for round in 0..3 {
+            let answer = post(port, r#"{"panic":true}"#);
+            assert!(
+                answer.starts_with("HTTP/1.1 500 Internal Server Error\r\n"),
+                "round {round}: {answer}"
+            );
+            assert!(
+                answer.contains("the engine failed on this call"),
+                "{answer}"
+            );
+            assert!(
+                !answer.contains("hit a bug"),
+                "the panic's text stays in the server's log: {answer}"
+            );
+            let answer = post(port, &format!(r#"{{"n":{round}}}"#));
+            assert!(answer.starts_with("HTTP/1.1 200 OK\r\n"), "{answer}");
+            assert!(
+                answer.ends_with(&format!(r#"{{"echo":{round}}}"#)),
+                "{answer}"
+            );
+        }
+        assert!(
+            !only_worker.is_finished(),
+            "the worker must still be running"
+        );
+    }
+
+    #[test]
+    fn a_guarded_call_reports_a_panic_as_one() {
+        assert!(matches!(
+            run_guarded(runner, &assets(), &json!({ "panic": true })),
+            Err(CallFailed::Panicked)
+        ));
+        assert!(matches!(
+            run_guarded(runner, &assets(), &json!({ "n": 1 })),
+            Ok(v) if v == json!({ "echo": 1 })
+        ));
+    }
 }

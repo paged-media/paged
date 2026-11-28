@@ -293,11 +293,12 @@ fn push_raster(
     (w, h): (usize, usize),
     mut sample: impl FnMut(&mut Interp<'_>, Point) -> Result<Option<Color>, PsError>,
 ) -> R {
+    // Charged before the buffers exist: a refused raster allocates nothing.
+    i.alloc_n(w.saturating_mul(h), 8)?;
     let mut rgb = Vec::with_capacity(w * h * 3);
     let mut cmyk: Option<Vec<u8>> = None;
     let mut alpha = Vec::with_capacity(w * h);
     let mut any_hole = false;
-    i.alloc(w * h * 8)?;
     for row in 0..h {
         for col in 0..w {
             // Row 0 is the top of the box (the image's first row).

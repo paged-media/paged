@@ -414,6 +414,10 @@ pub fn layout_runs_key(runs: &[StyledRun], options: &LayoutOptions) -> [u8; 32] 
         h.add_bool(f.historical);
         h.add_u32(f.position as u32);
         h.add_bool(f.all_caps);
+        // The three that select other glyphs or advances in a CJK face.
+        h.add_bool(f.proportional_widths);
+        h.add_bool(f.vertical);
+        h.add_bool(f.ruby_glyphs);
         h.sep();
     }
     fold_layout_options(&mut h, options);
@@ -821,6 +825,41 @@ mod tests {
                 base_key, key,
                 "two runs differing only in {field} must hash to distinct \
                  layout-cache keys (else the cache aliases them)",
+            );
+        }
+
+        // The shaping features the key once left out.
+        for (field, features) in [
+            (
+                "proportional_widths",
+                crate::shape::ShapingFeatures {
+                    proportional_widths: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "ruby_glyphs",
+                crate::shape::ShapingFeatures {
+                    ruby_glyphs: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "vertical",
+                crate::shape::ShapingFeatures {
+                    vertical: true,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            let run = StyledRun {
+                shaping_features: features,
+                ..base
+            };
+            assert_ne!(
+                base_key,
+                layout_runs_key(std::slice::from_ref(&run), &opts),
+                "two runs differing only in {field} must not share a cache entry",
             );
         }
 
