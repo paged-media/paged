@@ -3169,6 +3169,7 @@ mod tests {
                 transform,
                 paint,
                 unicode: Some('x'),
+                text: None,
                 is_stroke: false,
                 structure: table.current,
             });

@@ -3555,7 +3555,20 @@ pub(super) fn emit_cell_paragraph(
     }
 
     let list = &mut pages[target_page].list;
+    // The cell paragraph's text, for the glyph capture of a PDF export: a
+    // ligature's glyph stands for all of its letters.
+    let glyph_text: Option<String> = list
+        .glyph_runs
+        .is_some()
+        .then(|| styled_runs.iter().map(|r| r.text).collect());
     for line in lines {
+        if let (Some(text), Some(runs)) = (&glyph_text, list.glyph_runs.as_mut()) {
+            runs.set_line_text(
+                text,
+                line.byte_range.clone(),
+                line.glyphs.iter().map(|g| g.cluster),
+            );
+        }
         let mut start = 0;
         while start < line.glyphs.len() {
             let fid = line.glyphs[start].font_id;
@@ -3603,6 +3616,9 @@ pub(super) fn emit_cell_paragraph(
                 );
             }
             start = end;
+        }
+        if let Some(runs) = list.glyph_runs.as_mut() {
+            runs.clear_line_text();
         }
     }
     let glyph_count: usize = lines.iter().map(|l| l.glyphs.len()).sum();

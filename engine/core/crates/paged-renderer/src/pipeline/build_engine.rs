@@ -9592,6 +9592,16 @@ fn emit_paragraph_lines(
             );
         }
 
+        // The line's source characters, for the glyph capture of a PDF
+        // export: a ligature's glyph stands for all of its letters.
+        if let Some(runs) = pages[target_page].list.glyph_runs.as_mut() {
+            let text: String = styled_runs_ref.iter().map(|r| r.text).collect();
+            runs.set_line_text(
+                &text,
+                line.byte_range.clone(),
+                line.glyphs.iter().map(|g| g.cluster),
+            );
+        }
         let mut start = 0;
         while start < line.glyphs.len() {
             let fid = line.glyphs[start].font_id;
@@ -9676,6 +9686,9 @@ fn emit_paragraph_lines(
             }
             em.tag_glyphs(&mut pages[target_page].list, false);
             start = end;
+        }
+        if let Some(runs) = pages[target_page].list.glyph_runs.as_mut() {
+            runs.clear_line_text();
         }
         emit_line_decorations(
             &line,

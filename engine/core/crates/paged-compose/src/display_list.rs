@@ -1678,10 +1678,14 @@ pub struct GlyphRunEntry {
     /// pixel-identical to the outline it replaces.
     pub transform: Transform,
     pub paint: Paint,
-    /// The character(s) this glyph represents, for `/ToUnicode`.
-    /// Single char covers the common case; ligatures carry the
-    /// first char v1 (multi-char mapping is a refinement).
+    /// The first source character of the glyph's cluster, for
+    /// `/ToUnicode`; all of it for the common one-character cluster.
     pub unicode: Option<char>,
+    /// Every source character of the glyph's cluster when the cluster
+    /// holds more than one (the "ffl" of a ligature, a letter with the
+    /// marks composed onto it), so the PDF's text layer reads as the
+    /// source does. `None` when [`Self::unicode`] is all of it.
+    pub text: Option<Box<str>>,
     pub is_stroke: bool,
     /// The paragraph this glyph is text of, for a tagged PDF's logical
     /// structure (ADR 182): the producer's [`GlyphRunTable::current`]
@@ -1723,12 +1727,110 @@ pub struct GlyphRunTable {
     /// The paragraph the producer is emitting now (ADR 182): every entry
     /// pushed while it is set carries it as [`GlyphRunEntry::structure`].
     pub current: Option<StructKey>,
+    /// The clusters of the line being emitted that hold more than one
+    /// source character, by byte offset in the line's text (ascending):
+    /// what [`Self::cluster_text`] answers from. The producer sets it
+    /// with [`Self::set_line_text`] before a line's glyphs and clears it
+    /// after them.
+    pub line_clusters: Vec<(u32, Box<str>)>,
 }
 
 impl GlyphRunTable {
     pub fn push(&mut self, entry: GlyphRunEntry) {
         self.entries.push(entry);
     }
+
+    /// Take the source characters of the line about to be emitted:
+    /// `text` is the text its glyphs' clusters are byte offsets into,
+    /// `line` the line's bytes, `clusters` the cluster of every glyph on
+    /// it (see [`cluster_texts`]).
+    pub fn set_line_text(
+        &mut self,
+        text: &str,
+        line: std::ops::Range<usize>,
+        clusters: impl IntoIterator<Item = u32>,
+    ) {
+        self.line_clusters = cluster_texts(text, line, clusters);
+    }
+
+    /// Forget the line's text, so glyphs emitted from another text (a
+    /// list marker, ruby, a drop cap) never read it.
+    pub fn clear_line_text(&mut self) {
+        self.line_clusters.clear();
+    }
+
+    /// The characters of the cluster at `cluster` when the line's text
+    /// (see [`Self::set_line_text`]) has more than one there. `first` is
+    /// the character the layout recorded for the glyph: a glyph whose
+    /// character is not the cluster's first was not shaped from this
+    /// text (a synthetic hyphen, a tab leader) and gets nothing.
+    pub fn cluster_text(&self, cluster: u32, first: Option<char>) -> Option<Box<str>> {
+        let at = self
+            .line_clusters
+            .binary_search_by_key(&cluster, |(c, _)| *c)
+            .ok()?;
+        let text = &self.line_clusters[at].1;
+        (first.is_some() && text.chars().next() == first).then(|| text.clone())
+    }
+}
+
+/// The clusters that hold more than one source character, as (byte
+/// offset, characters), ascending by offset. `text` is the shaped text,
+/// `range` the part of it the glyphs stand for (a line), `clusters` the
+/// cluster of each glyph: a cluster runs from its offset to the next
+/// glyph's, or to the end of `range`.
+///
+/// Characters that draw nothing at the end of a cluster (the space a
+/// line break swallows, a discretionary hyphen, a zero-width joiner) are
+/// not counted, so a cluster is reported only for a glyph that stands
+/// for several visible characters. A cluster several glyphs share is
+/// left out: its characters cannot be dealt among them.
+pub fn cluster_texts(
+    text: &str,
+    range: std::ops::Range<usize>,
+    clusters: impl IntoIterator<Item = u32>,
+) -> Vec<(u32, Box<str>)> {
+    let end = range.end.min(text.len());
+    let mut offsets: Vec<u32> = clusters
+        .into_iter()
+        .filter(|c| (*c as usize) >= range.start && (*c as usize) < end)
+        .collect();
+    offsets.sort_unstable();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < offsets.len() {
+        let at = offsets[i];
+        let mut next = i + 1;
+        while next < offsets.len() && offsets[next] == at {
+            next += 1;
+        }
+        let shared = next - i > 1;
+        let stop = offsets.get(next).map_or(end, |c| *c as usize);
+        i = next;
+        if shared {
+            continue;
+        }
+        let Some(slice) = text.get(at as usize..stop) else {
+            continue;
+        };
+        let visible = slice.trim_end_matches(draws_nothing);
+        if visible.chars().nth(1).is_some() {
+            out.push((at, Box::from(visible)));
+        }
+    }
+    out
+}
+
+/// A character with no glyph of its own at the end of a cluster:
+/// whitespace, a control, or a format character (soft hyphen, zero-width
+/// space and joiners, direction marks, word joiner, byte-order mark).
+fn draws_nothing(c: char) -> bool {
+    c.is_whitespace()
+        || c.is_control()
+        || matches!(
+            c,
+            '\u{00AD}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{FEFF}'
+        )
 }
 
 /// W1.4 — where a clickable link region points. Sourced from an IDML
@@ -2150,6 +2252,39 @@ mod tests {
     /// Engine ADR 1046 — a tail spliced back into an earlier slot keeps
     /// every glyph-run entry on the command it was captured for.
     #[test]
+    fn a_ligature_cluster_carries_all_its_characters() {
+        // "office": o, ffi (one glyph for bytes 1..4), c, e.
+        let text = "office waffle ";
+        let got = cluster_texts(text, 0..text.len(), [0, 1, 4, 5, 6, 7, 8, 9, 12]);
+        assert_eq!(
+            got,
+            vec![(1, Box::from("ffi")), (9, Box::from("ffl"))],
+            "the last glyph's trailing space is not part of its cluster"
+        );
+        // A cluster two glyphs share (a base and its mark) is left out,
+        // as is a glyph outside the line.
+        assert!(cluster_texts("e\u{301}x", 0..4, [0, 0, 3]).is_empty());
+        assert!(cluster_texts("fi", 0..2, [7]).is_empty());
+        // One glyph for a letter and its combining mark keeps both.
+        assert_eq!(
+            cluster_texts("e\u{301}x", 0..4, [0, 3]),
+            vec![(0, Box::from("e\u{301}"))]
+        );
+        // A discretionary hyphen at the line's end draws nothing.
+        assert!(cluster_texts("ab\u{AD}", 0..4, [0, 1]).is_empty());
+
+        let mut table = GlyphRunTable::default();
+        table.set_line_text(text, 0..text.len(), [0, 1, 4, 5, 6, 7, 8, 9, 12]);
+        assert_eq!(table.cluster_text(1, Some('f')).as_deref(), Some("ffi"));
+        // A synthetic glyph at the same offset is not the cluster's text.
+        assert_eq!(table.cluster_text(1, Some('-')), None);
+        assert_eq!(table.cluster_text(1, None), None);
+        assert_eq!(table.cluster_text(0, Some('o')), None);
+        table.clear_line_text();
+        assert_eq!(table.cluster_text(1, Some('f')), None);
+    }
+
+    #[test]
     fn move_tail_to_moves_commands_and_their_glyph_runs() {
         let mut list = DisplayList::new();
         let path_id = list.paths.push_anon(PathData::default());
@@ -2170,12 +2305,13 @@ mod tests {
             transform: Transform::IDENTITY,
             paint: Paint::Solid(Color::WHITE),
             unicode: None,
+            text: None,
             is_stroke: false,
             structure: None,
         };
         list.glyph_runs = Some(GlyphRunTable {
             entries: (0..5).map(entry).collect(),
-            current: None,
+            ..Default::default()
         });
         // Commands 3 and 4 move to slot 1.
         list.move_tail_to(3, 1);

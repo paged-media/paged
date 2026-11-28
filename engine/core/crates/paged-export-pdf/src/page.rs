@@ -864,8 +864,15 @@ impl<'a, 'b> Walker<'a, 'b> {
                     None => {
                         let ok = entry
                             .face_id
-                            .and_then(|face| input.fonts.and_then(|f| f.font_bytes(face)))
-                            .map(|bytes| self.state.fonts.check_embeddable(entry.font_id, bytes))
+                            .and_then(|face| {
+                                let fonts = input.fonts?;
+                                Some((fonts.font_bytes(face)?, fonts.face_index(face)))
+                            })
+                            .map(|(bytes, index)| {
+                                self.state
+                                    .fonts
+                                    .check_embeddable(entry.font_id, bytes, index)
+                            })
                             .unwrap_or(false);
                         self.outline_font.insert(entry.font_id, ok);
                         ok
@@ -895,19 +902,24 @@ impl<'a, 'b> Walker<'a, 'b> {
                     if !slice.is_empty() && !entry.is_stroke {
                         let mut font_name = String::new();
                         let mut font_ref = pdf_writer::Ref::new(1);
-                        let pairs: Vec<(&GlyphRunEntry, u16)> = slice
+                        // Each glyph with the source characters it stands
+                        // for: the font's ToUnicode holds them, or, for a
+                        // glyph already mapped to others, an ActualText
+                        // span around this use does.
+                        let pairs: Vec<(&GlyphRunEntry, u16, Option<String>)> = slice
                             .iter()
                             .map(|e| {
-                                let (name, fref, new_gid) = self.state.fonts.use_glyph(
+                                let text = crate::text::glyph_text(e);
+                                let (name, fref, new_gid, mapped) = self.state.fonts.use_glyph(
                                     &mut self.state.refs,
                                     e.font_id,
                                     e.face_id,
                                     e.glyph_id,
-                                    e.unicode,
+                                    text.as_deref(),
                                 );
                                 font_name = name;
                                 font_ref = fref;
-                                (*e, new_gid)
+                                (*e, new_gid, text.filter(|_| !mapped))
                             })
                             .collect();
                         self.resources
@@ -917,8 +929,11 @@ impl<'a, 'b> Walker<'a, 'b> {
                         let upem = *self.upem_cache.entry(entry.font_id).or_insert_with(|| {
                             entry
                                 .face_id
-                                .and_then(|face| input.fonts.and_then(|f| f.font_bytes(face)))
-                                .and_then(|b| ttf_parser::Face::parse(b, 0).ok())
+                                .and_then(|face| {
+                                    let fonts = input.fonts?;
+                                    Some((fonts.font_bytes(face)?, fonts.face_index(face)))
+                                })
+                                .and_then(|(b, index)| ttf_parser::Face::parse(b, index).ok())
                                 .map(|f| f.units_per_em() as f32)
                                 .unwrap_or(1000.0)
                         });
@@ -1578,10 +1593,16 @@ impl<'a, 'b> Walker<'a, 'b> {
             pat.y_step(tile.period.1);
             pat.matrix(matrix);
             let mut res = pat.resources();
-            if !cell_resources.color_spaces.is_empty() {
+            // The cell's own dictionary names the document's DefaultRGB
+            // too: nothing outside the cell reaches into it.
+            let default_rgb = self.state.default_rgb;
+            if !cell_resources.color_spaces.is_empty() || default_rgb.is_some() {
                 let mut d = res.color_spaces();
                 for (name, r) in &cell_resources.color_spaces {
                     d.pair(Name(name.as_bytes()), *r);
+                }
+                if let Some(space) = default_rgb {
+                    d.pair(Name(b"DefaultRGB"), space);
                 }
             }
         }

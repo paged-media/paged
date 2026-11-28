@@ -283,6 +283,7 @@ mod tests {
                 is_stroke: false,
                 structure: runs.current,
                 unicode: None,
+                text: None,
             });
         }
         list.glyph_runs = Some(runs);
@@ -363,6 +364,7 @@ mod tests {
                 is_stroke: false,
                 structure: runs.current,
                 unicode: None,
+                text: None,
             });
         }
         list.glyph_runs = Some(runs);

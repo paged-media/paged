@@ -45,8 +45,11 @@ pub struct FontUsage {
     /// directly; the SAME remapper drives `subsetter::subset` at
     /// finish, so the two agree by construction.
     pub remapper: subsetter::GlyphRemapper,
-    /// new gid → unicode (for /ToUnicode).
-    pub to_unicode: BTreeMap<u16, char>,
+    /// new gid → the source characters it stands for (for /ToUnicode):
+    /// one for most glyphs, several for a ligature. The first use of a
+    /// glyph decides; a later use standing for other characters is
+    /// written with `/ActualText` instead (see [`FontPool::use_glyph`]).
+    pub to_unicode: BTreeMap<u16, String>,
     pub embeddable: Option<bool>,
     pub outlined_runs: usize,
     /// The id that resolves to FACE BYTES for this usage — not the
@@ -58,16 +61,21 @@ pub struct FontUsage {
 
 impl FontPool {
     /// Record one glyph's use; returns the page-resource font name,
-    /// the (stable, pre-allocated) Type0 ref, and the REMAPPED gid
-    /// to show in the content stream.
+    /// the (stable, pre-allocated) Type0 ref, the REMAPPED gid to show
+    /// in the content stream, and whether the font's `/ToUnicode` says
+    /// `text` for that gid. `text` is the source characters the glyph
+    /// stands for here. It is `false` when the glyph was first used for
+    /// other characters (one glyph drawn for "A" and for a Greek alpha,
+    /// a ligature glyph reached from two spellings): the caller then
+    /// names the characters with `/ActualText` around this one use.
     pub fn use_glyph(
         &mut self,
         refs: &mut RefAllocator,
         font_id: u32,
         face_id: Option<u32>,
         glyph_id: u32,
-        unicode: Option<char>,
-    ) -> (String, Ref, u16) {
+        text: Option<&str>,
+    ) -> (String, Ref, u16, bool) {
         let usage = self.fonts.entry(font_id).or_insert_with(|| FontUsage {
             type0_ref: refs.alloc(),
             face_id,
@@ -77,20 +85,29 @@ impl FontPool {
             outlined_runs: 0,
         });
         let new_gid = usage.remapper.remap(glyph_id as u16);
-        if let Some(u) = unicode {
-            usage.to_unicode.entry(new_gid).or_insert(u);
-        }
-        (format!("F{font_id}"), usage.type0_ref, new_gid)
+        let mapped = match text.filter(|t| !t.is_empty()) {
+            Some(t) => {
+                usage
+                    .to_unicode
+                    .entry(new_gid)
+                    .or_insert_with(|| t.to_owned())
+                    == t
+            }
+            None => true,
+        };
+        (format!("F{font_id}"), usage.type0_ref, new_gid, mapped)
     }
 
-    /// fsType gate, memoised per font. `true` = embeddable.
-    pub fn check_embeddable(&mut self, font_id: u32, face_bytes: &[u8]) -> bool {
+    /// fsType gate, memoised per font. `true` = embeddable. `face_index`
+    /// is the face in `face_bytes` when they are a collection
+    /// ([`crate::FontByteSource::face_index`]).
+    pub fn check_embeddable(&mut self, font_id: u32, face_bytes: &[u8], face_index: u32) -> bool {
         if let Some(usage) = self.fonts.get(&font_id) {
             if let Some(known) = usage.embeddable {
                 return known;
             }
         }
-        let embeddable = fs_type_allows_embedding(face_bytes);
+        let embeddable = fs_type_allows_embedding(face_bytes, face_index);
         if let Some(usage) = self.fonts.get_mut(&font_id) {
             usage.embeddable = Some(embeddable);
         }
@@ -98,11 +115,26 @@ impl FontPool {
     }
 }
 
+/// The source characters a captured glyph stands for: its whole cluster
+/// when it holds several, else its one character.
+pub fn glyph_text(entry: &paged_compose::GlyphRunEntry) -> Option<String> {
+    match &entry.text {
+        Some(text) => Some(text.to_string()),
+        None => entry.unicode.map(String::from),
+    }
+}
+
+/// `text` as the hex digits of its UTF-16BE code units: the destination
+/// of a ToUnicode `bfchar` entry.
+fn utf16_hex(text: &str) -> String {
+    text.encode_utf16().map(|u| format!("{u:04X}")).collect()
+}
+
 /// OS/2 fsType bit 0x0002 = "restricted licence embedding" (the
 /// only combination that forbids embedding outright when no other
 /// permissive bit is set).
-fn fs_type_allows_embedding(face_bytes: &[u8]) -> bool {
-    let Ok(face) = ttf_parser::Face::parse(face_bytes, 0) else {
+fn fs_type_allows_embedding(face_bytes: &[u8], face_index: u32) -> bool {
+    let Ok(face) = ttf_parser::Face::parse(face_bytes, face_index) else {
         return false;
     };
     match face.tables().os2 {
@@ -124,20 +156,33 @@ fn fs_type_allows_embedding(face_bytes: &[u8]) -> bool {
 /// ⇒ `Tm_linear = transform_linear · upem / size`,
 /// `Tm_t = (gx, gy)` — the glyph lands pixel-identical to the
 /// outline it replaces, REMAPPED to the subset gid at finish.
+///
+/// An entry's third member is the text to name with `/ActualText`
+/// around that one glyph, for a use the font's `/ToUnicode` does not
+/// describe ([`FontPool::use_glyph`]); `None` for every other glyph.
 pub fn emit_text_slice(
     content: &mut Content,
     font_name: &str,
     font_size: f32,
     units_per_em: f32,
-    entries: &[(&paged_compose::GlyphRunEntry, u16)],
+    entries: &[(&paged_compose::GlyphRunEntry, u16, Option<String>)],
 ) {
     content.begin_text();
     content.set_font(Name(font_name.as_bytes()), font_size);
     let k = units_per_em / font_size.max(1e-6);
-    for (e, new_gid) in entries {
+    for (e, new_gid, actual_text) in entries {
         let t = e.transform.0;
+        if let Some(text) = actual_text {
+            content
+                .begin_marked_content_with_properties(Name(b"Span"))
+                .properties()
+                .actual_text(pdf_writer::TextStr(text));
+        }
         content.set_text_matrix([t[0] * k, t[1] * k, t[2] * k, t[3] * k, t[4], t[5]]);
         content.show(Str(&new_gid.to_be_bytes()));
+        if actual_text.is_some() {
+            content.end_marked_content();
+        }
     }
     content.end_text();
 }
@@ -182,10 +227,13 @@ pub fn write_fonts(
 
         // Subset with the SAME remapper the content streams used.
         let glyph_remapper = &usage.remapper;
-        let subset = subsetter::subset(face_bytes, 0, glyph_remapper)
+        // The face of a collection the layout shaped with: the subset,
+        // its metrics and its widths all come from that one face.
+        let face_index = usage.face_id.map_or(0, |f| fonts.face_index(f));
+        let subset = subsetter::subset(face_bytes, face_index, glyph_remapper)
             .map_err(|e| ExportError::Subset(format!("{e:?}")))?;
         let is_cff = {
-            let face = ttf_parser::Face::parse(face_bytes, 0).ok();
+            let face = ttf_parser::Face::parse(face_bytes, face_index).ok();
             face.map(|f| {
                 f.tables().cff.is_some()
                     || f.raw_face()
@@ -198,7 +246,7 @@ pub fn write_fonts(
         // Metrics for the CIDFont (from the ORIGINAL face; ids are
         // remapped in the subset, widths must be in subset-gid
         // space).
-        let face = ttf_parser::Face::parse(face_bytes, 0)
+        let face = ttf_parser::Face::parse(face_bytes, face_index)
             .map_err(|e| ExportError::Subset(format!("face parse: {e:?}")))?;
         let units = face.units_per_em() as f32;
         let scale = 1000.0 / units;
@@ -301,21 +349,22 @@ pub fn write_fonts(
             cmap.push_str(
                 "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
             );
-            let pairs: Vec<(u16, char)> = usage
+            // One code to one string of UTF-16BE units: a ligature's
+            // glyph maps to all of its letters. A section holds at most
+            // 100 entries (the CMap format's limit).
+            let pairs: Vec<(u16, &str)> = usage
                 .to_unicode
                 .iter()
-                .map(|(gid, ch)| (*gid, *ch))
+                .map(|(gid, text)| (*gid, text.as_str()))
                 .collect();
-            cmap.push_str(&format!("{} beginbfchar\n", pairs.len()));
-            for (gid, ch) in pairs {
-                let mut buf = [0u16; 2];
-                let encoded = ch.encode_utf16(&mut buf);
-                let hex: String = encoded.iter().map(|u| format!("{u:04X}")).collect();
-                cmap.push_str(&format!("<{gid:04X}> <{hex}>\n"));
+            for section in pairs.chunks(100) {
+                cmap.push_str(&format!("{} beginbfchar\n", section.len()));
+                for (gid, text) in section {
+                    cmap.push_str(&format!("<{gid:04X}> <{}>\n", utf16_hex(text)));
+                }
+                cmap.push_str("endbfchar\n");
             }
-            cmap.push_str(
-                "endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n",
-            );
+            cmap.push_str("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
             let stream = pdf.stream(tounicode_ref, cmap.as_bytes());
             stream.finish();
         }
@@ -362,17 +411,17 @@ mod tests {
         let mut refs = crate::writer::RefAllocator::new();
         // .notdef is pinned at 0, so the first real glyph gets 1,
         // the second 2, and a REPEAT of the first stays 1.
-        let (_, _, a) = pool.use_glyph(&mut refs, 7, Some(7), 42, Some('A'));
-        let (_, _, b) = pool.use_glyph(&mut refs, 7, Some(7), 17, Some('B'));
-        let (_, _, a2) = pool.use_glyph(&mut refs, 7, Some(7), 42, Some('A'));
+        let (_, _, a, _) = pool.use_glyph(&mut refs, 7, Some(7), 42, Some("A"));
+        let (_, _, b, _) = pool.use_glyph(&mut refs, 7, Some(7), 17, Some("B"));
+        let (_, _, a2, _) = pool.use_glyph(&mut refs, 7, Some(7), 42, Some("A"));
         assert_eq!((a, b, a2), (1, 2, 1));
         // ToUnicode keys by the REMAPPED gid.
         let usage = pool.fonts.get(&7).unwrap();
-        assert_eq!(usage.to_unicode.get(&1), Some(&'A'));
-        assert_eq!(usage.to_unicode.get(&2), Some(&'B'));
+        assert_eq!(usage.to_unicode.get(&1).map(String::as_str), Some("A"));
+        assert_eq!(usage.to_unicode.get(&2).map(String::as_str), Some("B"));
         // Same font ⇒ same resource name + ref; other font differs.
-        let (name_a, ref_a, _) = pool.use_glyph(&mut refs, 7, Some(7), 99, None);
-        let (name_b, ref_b, _) = pool.use_glyph(&mut refs, 8, Some(8), 99, None);
+        let (name_a, ref_a, _, _) = pool.use_glyph(&mut refs, 7, Some(7), 99, None);
+        let (name_b, ref_b, _, _) = pool.use_glyph(&mut refs, 8, Some(8), 99, None);
         assert_eq!(name_a, "F7");
         assert_eq!(name_b, "F8");
         assert_ne!(ref_a, ref_b);
@@ -394,10 +443,11 @@ mod tests {
             transform: paged_compose::Transform([0.012, 0.0, 0.0, -0.012, 100.0, 200.0]),
             paint: paged_compose::Paint::Solid(paged_compose::Color::BLACK),
             unicode: Some('x'),
+            text: None,
             is_stroke: false,
             structure: None,
         };
-        emit_text_slice(&mut content, "F1", 12.0, 1000.0, &[(&entry, 1)]);
+        emit_text_slice(&mut content, "F1", 12.0, 1000.0, &[(&entry, 1, None)]);
         let ops = String::from_utf8(content.finish().to_vec()).unwrap();
         // 0.012 × (1000/12) = 1 exactly.
         assert!(ops.contains("BT"), "{ops}");
@@ -405,6 +455,55 @@ mod tests {
         assert!(ops.contains("1 0 0 -1 100 200 Tm"), "{ops}");
         // pdf-writer encodes the 2-byte CID as a literal string.
         assert!(ops.contains("(\\000\\001) Tj"), "{ops}");
+    }
+
+    #[test]
+    fn a_glyph_standing_for_other_characters_is_named_in_place() {
+        let mut pool = FontPool::default();
+        let mut refs = crate::writer::RefAllocator::new();
+        // A ligature glyph maps to all of its letters.
+        let (_, _, lig, mapped) = pool.use_glyph(&mut refs, 3, Some(3), 80, Some("ffl"));
+        assert!(mapped);
+        assert_eq!(pool.fonts[&3].to_unicode[&lig], "ffl");
+        assert_eq!(utf16_hex("ffl"), "00660066006C");
+        // The same glyph for other characters: ToUnicode keeps the first,
+        // and the caller is told to name this use.
+        let (_, _, again, mapped) = pool.use_glyph(&mut refs, 3, Some(3), 80, Some("fl"));
+        assert_eq!(again, lig);
+        assert!(!mapped);
+        assert_eq!(pool.fonts[&3].to_unicode[&lig], "ffl");
+        // A glyph with no known character says nothing either way.
+        let (_, _, _, mapped) = pool.use_glyph(&mut refs, 3, Some(3), 80, None);
+        assert!(mapped);
+
+        let entry = paged_compose::GlyphRunEntry {
+            command_index: 0,
+            font_id: 3,
+            face_id: Some(3),
+            glyph_id: 80,
+            font_size: 10.0,
+            transform: paged_compose::Transform([0.01, 0.0, 0.0, -0.01, 0.0, 0.0]),
+            paint: paged_compose::Paint::Solid(paged_compose::Color::BLACK),
+            unicode: Some('f'),
+            text: Some("fl".into()),
+            is_stroke: false,
+            structure: None,
+        };
+        assert_eq!(glyph_text(&entry).as_deref(), Some("fl"));
+        let mut content = Content::new();
+        emit_text_slice(
+            &mut content,
+            "F3",
+            10.0,
+            1000.0,
+            &[(&entry, lig, Some("fl".to_string()))],
+        );
+        let ops = String::from_utf8_lossy(&content.finish()).into_owned();
+        let open = ops.find("/Span").expect("a Span");
+        let show = ops.find("Tj").expect("a shown glyph");
+        let close = ops.find("EMC").expect("the Span closes");
+        assert!(ops.contains("/ActualText"), "{ops}");
+        assert!(open < show && show < close, "{ops}");
     }
 
     #[test]

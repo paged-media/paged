@@ -470,6 +470,15 @@ pub enum ExportError {
 /// `CanvasModel` can implement this.
 pub trait FontByteSource {
     fn font_bytes(&self, font_id: u32) -> Option<&[u8]>;
+
+    /// The face in those bytes the layout shaped `font_id` with, when
+    /// they are a font collection (`.ttc`, `.otc`): the face the exporter
+    /// reads metrics from, subsets and embeds. 0, the default, for a
+    /// single-face file and for a source whose layout only ever reads a
+    /// collection's first face.
+    fn face_index(&self, _font_id: u32) -> u32 {
+        0
+    }
 }
 
 impl FontByteSource for paged_renderer::FontTable {
@@ -650,48 +659,66 @@ impl ExportSession {
 /// Re-export for consumers assembling glyph tables.
 pub use paged_compose::GlyphRunEntry;
 
-/// The PDF/X-4 XMP packet. DETERMINISTIC: ids derive from a content
-/// hash of the export inputs; dates are a fixed epoch (PDF/X allows
-/// any valid date — golden-file byte-identity wins).
-pub(crate) fn xmp_packet(input: &ExportInput<'_>) -> String {
-    let mut xmp = xmp_writer::XmpWriter::new();
-    if let Some(title) = &input.options.title {
-        xmp.title([(None, title.as_str())]);
+/// What the Info dictionary's `/Creator` and the packet's
+/// `xmp:CreatorTool` both say.
+pub(crate) const CREATOR_TOOL: &str = "paged";
+/// What the Info dictionary's `/Producer` and the packet's `pdf:Producer`
+/// both say.
+pub(crate) const PRODUCER: &str = "paged-export-pdf";
+/// The fixed date (year, month, day; midnight UTC) every date of the file
+/// is: never the wall clock, so the same export is the same bytes. PDF/X
+/// asks for the dates to be present and to agree, not to be recent.
+pub(crate) const EPOCH: (u16, u8, u8) = (2000, 1, 1);
+
+/// The document's title as the Info dictionary and the XMP packet both
+/// write it. PDF/X-4 wants one, so an untitled document is "Untitled"
+/// there; a plain PDF 1.7 without a title writes none.
+pub(crate) fn document_title<'a>(input: &'a ExportInput<'_>) -> Option<&'a str> {
+    match input.options.title.as_deref().filter(|t| !t.is_empty()) {
+        Some(title) => Some(title),
+        None => (input.options.standard == PdfStandard::PdfX4).then_some("Untitled"),
     }
-    xmp.creator(["paged"]);
+}
+
+/// The PDF/X-4 XMP packet. DETERMINISTIC: the ids are `digest` (a digest
+/// of the file's objects, `writer::digest128`); dates are a fixed epoch
+/// (PDF/X allows any valid date — golden-file byte-identity wins).
+///
+/// It carries what ISO 15930-7 asks of the metadata stream
+/// (`pdfxid:GTS_PDFXVersion`, `xmp:CreateDate`, `xmp:ModifyDate`,
+/// `xmp:MetadataDate`, `pdf:Trapped`, `dc:title`) and says the same as
+/// the Info dictionary wherever both speak (`writer::DocState::finish`).
+pub(crate) fn xmp_packet(input: &ExportInput<'_>, digest: &[u8; 16]) -> String {
+    let mut xmp = xmp_writer::XmpWriter::new();
+    if let Some(title) = document_title(input) {
+        xmp.title([(None, title)]);
+    }
+    xmp.creator_tool(CREATOR_TOOL);
+    xmp.producer(PRODUCER);
     xmp.pdf_version("1.6");
     // Fixed epoch — never wall-clock (determinism, concept AC-9).
-    let date = xmp_writer::DateTime::date(2000, 1, 1);
+    let (year, month, day) = EPOCH;
+    let date = xmp_writer::DateTime {
+        year,
+        month: Some(month),
+        day: Some(day),
+        hour: Some(0),
+        minute: Some(0),
+        second: Some(0),
+        timezone: Some(xmp_writer::Timezone::Utc),
+    };
     xmp.create_date(date);
     xmp.modify_date(date);
+    xmp.metadata_date(date);
+    xmp.trapped(false);
     // Deterministic ids from the document content.
-    let hash = content_hash(input);
-    let id = format!("uuid:paged-{hash:032x}");
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    let id = format!("uuid:paged-{hex}");
     xmp.document_id(&id);
     xmp.instance_id(&id);
     // PDF/X conformance key.
     xmp.pdfx_version("PDF/X-4");
     xmp.finish(None)
-}
-
-fn content_hash(input: &ExportInput<'_>) -> u128 {
-    // FNV-1a over the page dimensions + command counts — stable
-    // across runs for the same document, cheap, and unique enough
-    // for an instance id.
-    let mut h: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
-    let prime: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
-    let mut feed = |v: u64| {
-        for b in v.to_le_bytes() {
-            h ^= b as u128;
-            h = h.wrapping_mul(prime);
-        }
-    };
-    for page in &input.doc.pages {
-        feed(page.width_pt.to_bits() as u64);
-        feed(page.height_pt.to_bits() as u64);
-        feed(page.list.commands.len() as u64);
-    }
-    h
 }
 
 /// True when this paint needs the CMYK overprint graphics state.

@@ -21,9 +21,12 @@
 //! (the honest, Acrobat-free conformance gate; veraPDF/Acrobat
 //! preflight are the manual sign-off lane).
 //!
-//! Fixture-gated like paged-color's parity tests: corpus/generated
-//! IDMLs are regenerated locally by `diff.sh` and may be absent on a
-//! fresh checkout — the tests skip (pass with a notice) then.
+//! The tests over corpus/generated IDMLs (regenerated locally, absent
+//! on a fresh checkout) and the one through a licensed CMYK profile
+//! report the resource unavailable when it is missing
+//! (`paged_test_resources::skip!`, docs/development/testing.md). The
+//! PDF/X-4 structure itself is asserted without either, over a sample
+//! generated in process and a stand-in output profile.
 
 use paged_export_pdf::{
     export_pdf, ExportInkSettings, ExportInput, ExportOptions, ExportProfiles, PdfStandard,
@@ -163,76 +166,12 @@ fn export(built: &Built, profile: Option<&[u8]>) -> Vec<u8> {
     result.bytes
 }
 
-#[test]
-fn x4_export_validates_with_lopdf() {
-    let font = fallback_font();
-    let Some(built) = build_fixture("geometry.idml", &font) else {
-        skip!(
-            Resource::Fixtures,
-            "corpus/generated/geometry.idml is absent: run scripts/regen-fixtures.sh"
-        );
-    };
-    let profile = find_cmyk_profile();
-    let is_x4 = profile.is_some();
-    if !is_x4 {
-        eprintln!("export_x4: no CMYK profile — validating PDF 1.7 shape only");
-    }
-    let bytes = export(&built, profile.as_deref());
-
-    // Header version (raw bytes — the second header line is the
-    // binary-detection comment, not UTF-8).
-    if is_x4 {
-        assert!(bytes.starts_with(b"%PDF-1.6"), "X-4 must be PDF 1.6");
-    }
+/// What every export must be, whatever its standard: unencrypted, each
+/// page's TrimBox inside its MediaBox, every Type0 font embedded.
+fn assert_pdf_shape(bytes: &[u8], doc: &lopdf::Document) {
     assert!(bytes.windows(5).rev().take(64).any(|w| w == b"%%EOF"));
-
-    let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
-
     // No encryption (X-4 forbids it; we never write it).
     assert!(doc.trailer.get(b"Encrypt").is_err(), "unexpected /Encrypt");
-
-    let catalog = doc.catalog().expect("catalog");
-    if is_x4 {
-        // OutputIntent with GTS_PDFX + DestOutputProfile.
-        let intents = catalog.get(b"OutputIntents").expect("OutputIntents");
-        let arr = intents.as_array().expect("array");
-        assert!(!arr.is_empty());
-        let oi = doc
-            .dereference(&arr[0])
-            .expect("deref OutputIntent")
-            .1
-            .as_dict()
-            .expect("dict");
-        assert_eq!(
-            oi.get(b"S").and_then(|s| s.as_name()).expect("S"),
-            b"GTS_PDFX"
-        );
-        assert!(
-            oi.get(b"DestOutputProfile").is_ok(),
-            "missing DestOutputProfile"
-        );
-
-        // XMP metadata stream with the PDF/X-4 version tag.
-        let meta = catalog.get(b"Metadata").expect("Metadata");
-        let (_, meta_obj) = doc.dereference(meta).expect("deref Metadata");
-        let stream = meta_obj.as_stream().expect("stream");
-        let xmp = String::from_utf8_lossy(&stream.content);
-        assert!(
-            xmp.contains("PDF/X-4"),
-            "XMP missing GTS_PDFXVersion PDF/X-4"
-        );
-
-        // Info /Trapped must be a definite value.
-        let info = doc.trailer.get(b"Info").expect("Info");
-        let (_, info_obj) = doc.dereference(info).expect("deref Info");
-        let trapped = info_obj
-            .as_dict()
-            .expect("dict")
-            .get(b"Trapped")
-            .and_then(|t| t.as_name())
-            .expect("Trapped");
-        assert!(trapped == b"False" || trapped == b"True");
-    }
 
     // Every page: TrimBox present and inside MediaBox.
     let pages = doc.get_pages();
@@ -279,6 +218,305 @@ fn x4_export_validates_with_lopdf() {
             "Type0 font without embedded font file"
         );
     }
+}
+
+/// The text of the one XML element `name` of an XMP packet, with the
+/// `rdf:Alt` / `rdf:li` wrappers of a language alternative taken off and
+/// its character references resolved.
+fn xmp_value(xmp: &str, name: &str) -> Option<String> {
+    let open = xmp.find(&format!("<{name}"))?;
+    let rest = &xmp[open..];
+    let body = &rest[rest.find('>')? + 1..rest.find(&format!("</{name}>"))?];
+    let text = match body.rfind("</rdf:li>") {
+        Some(end) => {
+            let inner = &body[..end];
+            &inner[inner.rfind('>')? + 1..]
+        }
+        None => body,
+    };
+    Some(
+        text.trim()
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&"),
+    )
+}
+
+/// An Info dictionary text string as text (PDFDocEncoding ASCII or
+/// UTF-16BE with a byte-order mark).
+fn info_text(info: &lopdf::Dictionary, key: &[u8]) -> Option<String> {
+    let bytes = info.get(key).ok()?.as_str().ok()?;
+    Some(match bytes.strip_prefix(&[0xFE, 0xFF]) {
+        Some(utf16) => String::from_utf16(
+            &utf16
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| u16::from_be_bytes(*b))
+                .collect::<Vec<_>>(),
+        )
+        .expect("UTF-16"),
+        None => String::from_utf8_lossy(bytes).into_owned(),
+    })
+}
+
+/// The two byte strings of the trailer's `/ID`.
+fn file_id(doc: &lopdf::Document) -> (Vec<u8>, Vec<u8>) {
+    let id = doc
+        .trailer
+        .get(b"ID")
+        .expect("the trailer has an /ID")
+        .as_array()
+        .expect("an array");
+    assert_eq!(id.len(), 2, "/ID holds two strings");
+    (
+        id[0].as_str().expect("string").to_vec(),
+        id[1].as_str().expect("string").to_vec(),
+    )
+}
+
+/// What ISO 15930-7 asks of a PDF/X-4 file beyond the common shape, read
+/// from the written objects. `channels` is the output profile's channel
+/// count; `title` what the document is called.
+fn assert_x4(bytes: &[u8], doc: &lopdf::Document, channels: i64, title: &str) {
+    // Header version (raw bytes — the second header line is the
+    // binary-detection comment, not UTF-8).
+    assert!(bytes.starts_with(b"%PDF-1.6"), "X-4 must be PDF 1.6");
+
+    // The file identifier: two non-empty strings.
+    let (first, second) = file_id(doc);
+    assert_eq!(first.len(), 16);
+    assert_eq!(first, second, "a file never saved again has equal halves");
+
+    // OutputIntent with GTS_PDFX + DestOutputProfile, whose /N is the
+    // profile's own channel count.
+    let catalog = doc.catalog().expect("catalog");
+    let intents = catalog.get(b"OutputIntents").expect("OutputIntents");
+    let arr = intents.as_array().expect("array");
+    assert!(!arr.is_empty());
+    let oi = doc
+        .dereference(&arr[0])
+        .expect("deref OutputIntent")
+        .1
+        .as_dict()
+        .expect("dict");
+    assert_eq!(
+        oi.get(b"S").and_then(|s| s.as_name()).expect("S"),
+        b"GTS_PDFX"
+    );
+    let profile = doc
+        .dereference(oi.get(b"DestOutputProfile").expect("DestOutputProfile"))
+        .expect("deref profile")
+        .1
+        .as_stream()
+        .expect("stream");
+    assert_eq!(
+        profile.dict.get(b"N").and_then(|n| n.as_i64()).expect("N"),
+        channels,
+        "the output profile's /N"
+    );
+
+    // DefaultRGB in every page's resources unless the intent is RGB:
+    // DeviceRGB content is then defined through an ICCBased space.
+    for (_, page_id) in doc.get_pages() {
+        let page = doc.get_dictionary(page_id).expect("page dict");
+        let resources = doc
+            .dereference(page.get(b"Resources").expect("Resources"))
+            .expect("deref Resources")
+            .1
+            .as_dict()
+            .expect("dict");
+        let spaces = resources
+            .get(b"ColorSpace")
+            .and_then(|c| doc.dereference(c))
+            .ok()
+            .and_then(|(_, c)| c.as_dict().ok());
+        let default_rgb = spaces.and_then(|c| c.get(b"DefaultRGB").ok());
+        if channels == 3 {
+            assert!(default_rgb.is_none(), "an RGB intent needs no DefaultRGB");
+            continue;
+        }
+        let space = doc
+            .dereference(default_rgb.expect("DefaultRGB under a non-RGB output intent"))
+            .expect("deref DefaultRGB")
+            .1
+            .as_array()
+            .expect("[/ICCBased stream]");
+        assert_eq!(space[0].as_name().expect("name"), b"ICCBased");
+        let icc = doc
+            .dereference(&space[1])
+            .expect("deref ICC")
+            .1
+            .as_stream()
+            .expect("stream");
+        assert_eq!(icc.dict.get(b"N").and_then(|n| n.as_i64()).expect("N"), 3);
+        let icc = icc.decompressed_content().unwrap_or(icc.content.clone());
+        assert_eq!(icc.get(16..20), Some(b"RGB ".as_slice()), "an RGB profile");
+    }
+
+    // XMP metadata stream with the keys X-4 names.
+    let meta = catalog.get(b"Metadata").expect("Metadata");
+    let (_, meta_obj) = doc.dereference(meta).expect("deref Metadata");
+    let stream = meta_obj.as_stream().expect("stream");
+    let xmp = String::from_utf8_lossy(&stream.content).into_owned();
+    let value =
+        |name: &str| xmp_value(&xmp, name).unwrap_or_else(|| panic!("XMP has no {name}:\n{xmp}"));
+    assert_eq!(value("pdfxid:GTS_PDFXVersion"), "PDF/X-4");
+    assert_eq!(value("pdf:Trapped"), "False");
+    assert_eq!(value("dc:title"), title);
+    let created = value("xmp:CreateDate");
+    assert_eq!(value("xmp:ModifyDate"), created);
+    assert_eq!(value("xmp:MetadataDate"), created);
+    assert!(value("xmpMM:DocumentID").starts_with("uuid:"));
+
+    // The Info dictionary says the same wherever both speak.
+    let info = doc.trailer.get(b"Info").expect("Info");
+    let (_, info_obj) = doc.dereference(info).expect("deref Info");
+    let info = info_obj.as_dict().expect("dict");
+    assert_eq!(
+        info.get(b"Trapped")
+            .and_then(|t| t.as_name())
+            .expect("Trapped"),
+        b"False"
+    );
+    assert_eq!(info_text(info, b"Title").as_deref(), Some(title));
+    assert_eq!(info_text(info, b"Creator"), Some(value("xmp:CreatorTool")));
+    assert_eq!(info_text(info, b"Producer"), Some(value("pdf:Producer")));
+    // `D:YYYYMMDDHHmmSSZ` against `YYYY-MM-DDTHH:mm:SSZ`.
+    let digits = |s: &str| -> String { s.chars().filter(char::is_ascii_digit).take(14).collect() };
+    for key in [b"CreationDate".as_slice(), b"ModDate"] {
+        let date = info_text(info, key).expect("an Info date");
+        assert!(date.starts_with("D:"), "{date}");
+        assert_eq!(digits(&date), digits(&created), "{date} against {created}");
+        assert!(date.ends_with('Z') && created.ends_with('Z'), "both UTC");
+    }
+}
+
+/// A profile header (no tags) naming `space` as its data colour space:
+/// all the exporter reads of an output profile, which it embeds whole.
+/// It stands in for the licensed CMYK profile so the PDF/X-4 structure is
+/// asserted on every machine; it converts no colour (the CMM here is the
+/// profile-less one).
+fn stand_in_profile(space: &[u8; 4]) -> Vec<u8> {
+    let mut icc = vec![0u8; 128];
+    icc[..4].copy_from_slice(&128u32.to_be_bytes());
+    icc[12..16].copy_from_slice(b"prtr");
+    icc[16..20].copy_from_slice(space);
+    icc[20..24].copy_from_slice(b"Lab ");
+    icc[36..40].copy_from_slice(b"acsp");
+    icc
+}
+
+/// The `markers` sample (generated in process) exported as PDF/X-4 with
+/// `profile` as its output intent.
+fn export_sample_x4(profile: &[u8], title: Option<&str>) -> Vec<u8> {
+    let bytes = paged_gen::write_idml(&paged_gen::samples::markers::build()).expect("emit sample");
+    let font = fallback_font();
+    assert!(font.is_some(), "corpus/fonts/Inter.ttf is committed");
+    let built = build_from_bytes(&bytes, &font).expect("the sample imports");
+    let cmm = paged_color::IccCmm::new(None, paged_color::DisplaySetup::default());
+    export_pdf(ExportInput {
+        doc: &built.doc,
+        palette: &built.palette,
+        fonts: Some(&built.fonts),
+        cmm: &cmm,
+        profiles: ExportProfiles {
+            cmyk_working: None,
+            output_intent: Some(profile),
+            srgb: None,
+        },
+        inks: ExportInkSettings::default(),
+        options: ExportOptions {
+            standard: PdfStandard::PdfX4,
+            output_condition: Some("Stand-in".to_string()),
+            title: title.map(str::to_string),
+            ..Default::default()
+        },
+        doc_bleed: [0.0; 4],
+        doc_slug: [0.0; 4],
+    })
+    .expect("export")
+    .bytes
+}
+
+/// The PDF/X-4 structure, on every machine: no licensed profile needed.
+#[test]
+fn x4_structure_holds_without_a_licensed_profile() {
+    let bytes = export_sample_x4(&stand_in_profile(b"CMYK"), Some("Märkte & Marker"));
+    let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
+    assert_pdf_shape(&bytes, &doc);
+    assert_x4(&bytes, &doc, 4, "M\u{e4}rkte & Marker");
+}
+
+/// An untitled PDF/X-4 still has a title, the same in both places.
+#[test]
+fn an_untitled_x4_export_is_titled_untitled() {
+    let bytes = export_sample_x4(&stand_in_profile(b"CMYK"), None);
+    let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
+    assert_x4(&bytes, &doc, 4, "Untitled");
+}
+
+/// The output profile's `/N` is its own channel count, and only an RGB
+/// intent goes without DefaultRGB.
+#[test]
+fn the_output_intent_follows_its_profile() {
+    for (space, channels) in [(b"GRAY", 1), (b"RGB ", 3), (b"CMYK", 4)] {
+        let bytes = export_sample_x4(&stand_in_profile(space), Some("Intent"));
+        let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
+        assert_x4(&bytes, &doc, channels, "Intent");
+    }
+}
+
+/// The file identifier is the content's: the same export has the same
+/// one, another document another, and a plain PDF 1.7 has one too.
+#[test]
+fn the_file_id_is_derived_from_the_content() {
+    let profile = stand_in_profile(b"CMYK");
+    let id = |bytes: &[u8]| file_id(&lopdf::Document::load_mem(bytes).expect("lopdf re-parse"));
+    let a = export_sample_x4(&profile, Some("One"));
+    let again = export_sample_x4(&profile, Some("One"));
+    let other = export_sample_x4(&profile, Some("Two"));
+    assert_eq!(a, again, "the same export is the same bytes");
+    assert_eq!(id(&a), id(&again));
+    assert_ne!(id(&a), id(&other), "another document, another identifier");
+
+    let sample = paged_gen::write_idml(&paged_gen::samples::markers::build()).expect("emit");
+    let built = build_from_bytes(&sample, &fallback_font()).expect("the sample imports");
+    let plain = export(&built, None);
+    assert!(plain.starts_with(b"%PDF-1.7"));
+    let (first, second) = id(&plain);
+    assert_eq!((first.len(), &first), (16, &second));
+}
+
+#[test]
+fn x4_export_validates_with_lopdf() {
+    let font = fallback_font();
+    let Some(built) = build_fixture("geometry.idml", &font) else {
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry.idml is absent: run scripts/regen-fixtures.sh"
+        );
+    };
+    // The fixture as a plain PDF 1.7: its shape needs no profile.
+    let bytes = export(&built, None);
+    let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
+    assert_pdf_shape(&bytes, &doc);
+
+    // As PDF/X-4, through a real CMYK profile. Without one this half is
+    // reported unavailable (the structure itself is asserted, with a
+    // stand-in profile, by `x4_structure_holds_without_a_licensed_profile`).
+    let Some(profile) = find_cmyk_profile() else {
+        skip!(
+            Resource::Icc,
+            "no CMYK profile (set PAGED_CMYK_PROFILE): the fixture's PDF/X-4 export \
+             through a real output profile is not checked"
+        );
+    };
+    let bytes = export(&built, Some(&profile));
+    let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
+    assert_pdf_shape(&bytes, &doc);
+    assert_x4(&bytes, &doc, 4, "Untitled");
 }
 
 #[test]

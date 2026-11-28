@@ -1036,6 +1036,15 @@ pub(super) fn emit_text_path_into(
     // and the arc length its glyphs take.
     let mut line_start_y: Option<f32> = None;
     let mut set_width_pt = 0.0f32;
+    // The source characters behind each glyph, for the PDF's text layer
+    // (a live render captures no glyph runs and skips this).
+    let cluster_text = page.list.glyph_runs.is_some().then(|| {
+        paged_compose::display_list::cluster_texts(
+            &text,
+            0..text.len(),
+            glyphs.iter().map(|g| g.byte as u32),
+        )
+    });
     for g in &glyphs {
         let advance_pt = g.x_advance_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
         let x_off_pt = g.x_offset_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
@@ -1126,7 +1135,12 @@ pub(super) fn emit_text_path_into(
                 font_size: g.point_size,
                 transform: final_xf,
                 paint: g.paint,
-                unicode: None,
+                unicode: text.get(g.byte..).and_then(|s| s.chars().next()),
+                text: cluster_text.as_ref().and_then(|c| {
+                    c.binary_search_by_key(&(g.byte as u32), |(at, _)| *at)
+                        .ok()
+                        .map(|i| c[i].1.clone())
+                }),
                 is_stroke: false,
                 structure: runs.current,
             });

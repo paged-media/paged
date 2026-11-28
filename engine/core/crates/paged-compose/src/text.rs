@@ -271,6 +271,7 @@ pub fn emit_glyph_slice_blend<O, F>(
                 transform,
                 paint,
                 unicode: g.ch,
+                text: runs.cluster_text(g.cluster, g.ch),
                 is_stroke: false,
                 structure: runs.current,
             });
@@ -354,6 +355,7 @@ pub fn emit_glyph_slice_stroke<O, S>(
                 transform,
                 paint,
                 unicode: g.ch,
+                text: runs.cluster_text(g.cluster, g.ch),
                 is_stroke: true,
                 structure: runs.current,
             });

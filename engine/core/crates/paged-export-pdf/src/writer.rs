@@ -161,25 +161,69 @@ pub struct DocState {
     /// The resource dictionaries of those forms, written at finish like
     /// the pages' (fonts are complete only then).
     pub symbol_resources: Vec<(Ref, PageResources)>,
+    /// The `/DefaultRGB` colour space every resource dictionary names
+    /// (an ICCBased sRGB), or `None` when the file needs none. PDF/X-4
+    /// allows DeviceRGB only when the output intent is an RGB one; under
+    /// a CMYK or grey intent, RGB content (images, gradients, rasterised
+    /// effects, untagged RGB fills) is defined through this space instead.
+    pub default_rgb: Option<Ref>,
+}
+
+/// Whether an export to `input` must define `/DefaultRGB`: PDF/X-4 with
+/// an output intent that is not an RGB profile.
+fn needs_default_rgb(input: &ExportInput<'_>) -> bool {
+    input.options.standard == PdfStandard::PdfX4
+        && input
+            .profiles
+            .output_intent
+            .is_some_and(|icc| crate::image::icc_channels(icc) != Some(3))
 }
 
 impl DocState {
-    pub fn new(_input: &ExportInput<'_>) -> Self {
+    pub fn new(input: &ExportInput<'_>) -> Self {
         let mut refs = RefAllocator::new();
         let catalog_ref = refs.alloc();
         let page_tree_ref = refs.alloc();
+        let mut pdf = Pdf::new();
+        let mut icc_refs = BTreeMap::new();
+        let default_rgb = needs_default_rgb(input).then(|| {
+            // The caller's sRGB profile when it gave one (RGB fills are
+            // then tagged with the same object), else the engine's own.
+            let own;
+            let bytes: &[u8] = match input.profiles.srgb {
+                Some(bytes) => bytes,
+                None => {
+                    own = paged_raster::srgb_icc();
+                    &own
+                }
+            };
+            let stream_ref = refs.alloc();
+            let mut stream = pdf.icc_profile(stream_ref, bytes);
+            stream.n(3);
+            stream.finish();
+            let array_ref = refs.alloc();
+            let mut arr = pdf.indirect(array_ref).array();
+            arr.item(Name(b"ICCBased"));
+            arr.item(stream_ref);
+            arr.finish();
+            if input.profiles.srgb.is_some() {
+                icc_refs.insert("srgb", array_ref);
+            }
+            array_ref
+        });
         Self {
-            pdf: Pdf::new(),
+            pdf,
             refs,
             catalog_ref,
             page_tree_ref,
             pages: Vec::new(),
-            icc_refs: BTreeMap::new(),
+            icc_refs,
             gs_pool: BTreeMap::new(),
             separation_pool: BTreeMap::new(),
             fonts: FontPool::default(),
             symbol_forms: BTreeMap::new(),
             symbol_resources: Vec::new(),
+            default_rgb,
         }
     }
 
@@ -283,11 +327,16 @@ impl DocState {
         };
 
         for (at, res) in &self.symbol_resources {
-            write_resources(&mut self.pdf, *at, res);
+            write_resources(&mut self.pdf, *at, res, self.default_rgb);
         }
         for (page_idx, page) in self.pages.iter().enumerate() {
             // The shared indirect /Resources dict (page + its forms).
-            write_resources(&mut self.pdf, page.resources_ref, &page.resources);
+            write_resources(
+                &mut self.pdf,
+                page.resources_ref,
+                &page.resources,
+                self.default_rgb,
+            );
             let mut p = self.pdf.page(page.page_ref);
             p.parent(self.page_tree_ref);
             p.media_box(page.media_box);
@@ -315,7 +364,11 @@ impl DocState {
             Some(bytes) => {
                 let profile_ref = self.refs.alloc();
                 let mut stream = self.pdf.icc_profile(profile_ref, bytes);
-                stream.n(4);
+                // /N is the profile's own channel count (its header's
+                // data colour space): an RGB or grey output intent is not
+                // a four-channel stream. A profile whose header names no
+                // known space is written as CMYK, the print default.
+                stream.n(crate::image::icc_channels(bytes).unwrap_or(4));
                 stream.finish();
                 let oi_ref = self.refs.alloc();
                 let condition = input
@@ -337,9 +390,11 @@ impl DocState {
             None => None,
         };
 
-        // XMP metadata (X-4 conformance keys; deterministic ids).
+        // XMP metadata (X-4 conformance keys; deterministic ids: the
+        // document id is a digest of everything written so far, which is
+        // every font, page and resource of the file).
         let metadata_ref = if input.options.standard == PdfStandard::PdfX4 {
-            let xmp = crate::xmp_packet(input);
+            let xmp = crate::xmp_packet(input, &digest128(self.pdf.as_bytes()));
             let meta_ref = self.refs.alloc();
             let stream = self.pdf.metadata(meta_ref, xmp.as_bytes());
             stream.finish();
@@ -382,16 +437,29 @@ impl DocState {
         }
 
         // Info dict — deterministic (no wall-clock); Trapped is a
-        // definite value (PDF/X requirement).
+        // definite value (PDF/X requirement). Every entry an XMP packet
+        // repeats says the same there (`crate::xmp_packet`): title,
+        // creator tool, producer, the two dates and Trapped.
         {
             let info_ref = self.refs.alloc();
             let mut info = self.pdf.document_info(info_ref);
-            if let Some(title) = &input.options.title {
+            if let Some(title) = crate::document_title(input) {
                 info.title(pdf_writer::TextStr(title));
             }
-            info.creator(pdf_writer::TextStr("paged"));
-            info.producer(pdf_writer::TextStr("paged-export-pdf"));
+            info.creator(pdf_writer::TextStr(crate::CREATOR_TOOL));
+            info.producer(pdf_writer::TextStr(crate::PRODUCER));
             if input.options.standard == PdfStandard::PdfX4 {
+                let (y, mo, d) = crate::EPOCH;
+                let date = pdf_writer::Date::new(y)
+                    .month(mo)
+                    .day(d)
+                    .hour(0)
+                    .minute(0)
+                    .second(0)
+                    .utc_offset_hour(0)
+                    .utc_offset_minute(0);
+                info.creation_date(date);
+                info.modified_date(date);
                 info.trapped(pdf_writer::types::TrappingStatus::NotTrapped);
             }
             info.finish();
@@ -402,6 +470,12 @@ impl DocState {
         } else {
             self.pdf.set_version(1, 7);
         }
+        // The file identifier (the trailer's `/ID`, which PDF/X-4
+        // requires): a digest of every object of the file, so the same
+        // export has the same identifier and a different one does not.
+        // Both halves are equal, as for any file never saved again.
+        let id = digest128(self.pdf.as_bytes()).to_vec();
+        self.pdf.set_file_id((id.clone(), id));
         Ok(self.pdf.finish())
     }
 }
@@ -754,8 +828,31 @@ fn write_outlines(
     Some(root)
 }
 
-/// One indirect /Resources dictionary.
-fn write_resources(pdf: &mut Pdf, at: Ref, res: &PageResources) {
+/// A 128-bit digest of `bytes`, for the identifiers a deterministic file
+/// derives from its own content (the trailer's `/ID`, the XMP document
+/// id). Two 64-bit FNV-1a lanes with different bases and multipliers; not
+/// a cryptographic hash, which an identifier does not need.
+pub(crate) fn digest128(bytes: &[u8]) -> [u8; 16] {
+    let mut a: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut b: u64 = 0x6c62_272e_07bb_0142;
+    for &byte in bytes {
+        a = (a ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        b = (b ^ u64::from(byte))
+            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            .rotate_left(29);
+    }
+    // The length, so a run of zero bytes of another length differs.
+    a = (a ^ bytes.len() as u64).wrapping_mul(0x0000_0100_0000_01b3);
+    b = (b ^ bytes.len() as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut out = [0u8; 16];
+    out[..8].copy_from_slice(&a.to_be_bytes());
+    out[8..].copy_from_slice(&b.to_be_bytes());
+    out
+}
+
+/// One indirect /Resources dictionary. `default_rgb` is the document's
+/// `/DefaultRGB` space ([`DocState::default_rgb`]).
+fn write_resources(pdf: &mut Pdf, at: Ref, res: &PageResources, default_rgb: Option<Ref>) {
     let mut w = pdf.indirect(at).start::<pdf_writer::writers::Resources>();
     if !res.ext_g_states.is_empty() {
         let mut d = w.ext_g_states();
@@ -763,10 +860,13 @@ fn write_resources(pdf: &mut Pdf, at: Ref, res: &PageResources) {
             d.pair(Name(name.as_bytes()), *r);
         }
     }
-    if !res.color_spaces.is_empty() {
+    if !res.color_spaces.is_empty() || default_rgb.is_some() {
         let mut d = w.color_spaces();
         for (name, r) in &res.color_spaces {
             d.pair(Name(name.as_bytes()), *r);
+        }
+        if let Some(space) = default_rgb {
+            d.pair(Name(b"DefaultRGB"), space);
         }
     }
     if !res.fonts.is_empty() {
@@ -812,5 +912,13 @@ mod tests {
         // Default is the same as new() — no alternate starting point.
         let mut d = RefAllocator::default();
         assert_eq!(d.alloc(), Ref::new(1));
+    }
+
+    #[test]
+    fn the_digest_follows_the_bytes_and_their_length() {
+        assert_eq!(digest128(b"paged"), digest128(b"paged"));
+        assert_ne!(digest128(b"paged"), digest128(b"pageD"));
+        assert_ne!(digest128(&[0; 3]), digest128(&[0; 4]));
+        assert_ne!(digest128(b""), [0; 16]);
     }
 }

@@ -18,9 +18,11 @@
 
 //! Image XObjects — the quality differentiators (concept E7):
 //! placed JPEGs pass through as DCTDecode WITHOUT re-encoding (no
-//! generational loss); everything else embeds as FlateDecode from
-//! the decoded RGBA; alpha rides as an /SMask; an embedded ICC
-//! profile (when the decode retained it) tags the colour space.
+//! generational loss); an 8-bit CMYK picture in another format (a
+//! TIFF, a PSD) keeps its ink values as a FlateDecode CMYK image;
+//! everything else embeds as FlateDecode from the decoded RGBA;
+//! alpha rides as an /SMask; an embedded ICC profile (when the
+//! decode retained it) tags the colour space.
 
 use std::io::Write as _;
 
@@ -63,6 +65,88 @@ fn icc_component_count(icc: &[u8]) -> i32 {
         Some(b"GRAY") => 1,
         _ => 3,
     }
+}
+
+/// The channel count an ICC profile's header states (its data colour
+/// space, bytes 16..20), or `None` for a header too short or naming a
+/// space this does not know.
+pub(crate) fn icc_channels(icc: &[u8]) -> Option<i32> {
+    match icc.get(16..20)? {
+        b"GRAY" => Some(1),
+        b"RGB " | b"Lab " | b"XYZ " | b"Luv " | b"YCbr" | b"Yxy " | b"HSV " | b"HLS " | b"CMY " => {
+            Some(3)
+        }
+        b"CMYK" => Some(4),
+        // The N-colour spaces: "2CLR" to "FCLR".
+        [n, b'C', b'L', b'R'] => char::from(*n)
+            .to_digit(16)
+            .filter(|n| *n >= 2)
+            .map(|n| n as i32),
+        _ => None,
+    }
+}
+
+/// The samples of a picture the file holds as 8-bit CMYK, in the
+/// file's own ink values, with its alpha (straight, one byte a pixel)
+/// when it has one. `None` for every other picture: one in another
+/// colour model or depth, one whose alpha is premultiplied into the
+/// inks, one whose size is not the size the display list drew.
+///
+/// The RGBA the renderer decoded for the screen went through a
+/// CMYK to RGB conversion; writing that into a print PDF would turn
+/// every ink value into another on the way back (pure black into a
+/// four-colour black).
+fn native_cmyk8(img: &DecodedImage) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
+    use paged_raster::{Alpha, ColorModel, Samples};
+    if img.encoded.is_empty() {
+        return None;
+    }
+    // The header first: most pictures are not CMYK, and decoding one
+    // to find that out would read it twice.
+    let info = paged_raster::probe(&img.encoded).ok()?;
+    if info.color_model != ColorModel::Cmyk || info.bits_per_sample != 8 {
+        return None;
+    }
+    let raster = paged_raster::decode(&img.encoded, paged_raster::DecodeOptions::default()).ok()?;
+    if raster.model != ColorModel::Cmyk
+        || raster.alpha == Alpha::Associated
+        || raster.width != img.width
+        || raster.height != img.height
+    {
+        return None;
+    }
+    let Samples::U8(data) = raster.data else {
+        return None;
+    };
+    let n = (raster.width as usize).checked_mul(raster.height as usize)?;
+    if raster.alpha == Alpha::None {
+        return (data.len() == n.checked_mul(4)?).then_some((data, None));
+    }
+    if data.len() != n.checked_mul(5)? {
+        return None;
+    }
+    let mut cmyk = Vec::with_capacity(n * 4);
+    let mut alpha = Vec::with_capacity(n);
+    for px in data.as_chunks::<5>().0 {
+        cmyk.extend_from_slice(&px[..4]);
+        alpha.push(px[4]);
+    }
+    let alpha = alpha.iter().any(|a| *a != 255).then_some(alpha);
+    Some((cmyk, alpha))
+}
+
+/// One 8-bit grey FlateDecode image holding `alpha`, for an `/SMask`.
+fn write_alpha_mask(state: &mut DocState, alpha: &[u8], width: u32, height: u32) -> Ref {
+    let r = state.refs.alloc();
+    let data = flate(alpha);
+    let mut x = state.pdf.image_xobject(r, &data);
+    x.width(width as i32);
+    x.height(height as i32);
+    x.bits_per_component(8);
+    x.color_space().device_gray();
+    x.filter(pdf_writer::Filter::FlateDecode);
+    x.finish();
+    r
 }
 
 fn flate(data: &[u8]) -> Vec<u8> {
@@ -160,6 +244,41 @@ pub fn write_image(
         return Some(img_ref);
     }
 
+    // A CMYK picture keeps its inks: the file's own samples, tagged
+    // with the picture's CMYK profile when it carries one and
+    // DeviceCMYK otherwise (the output intent's space in PDF/X-4).
+    if downsample_to.is_none() {
+        if let Some((cmyk, alpha)) = native_cmyk8(img) {
+            let smask_ref =
+                alpha.map(|alpha| write_alpha_mask(state, &alpha, img.width, img.height));
+            let icc_ref = img
+                .icc
+                .as_ref()
+                .filter(|icc| icc_channels(icc) == Some(4))
+                .map(|icc| write_icc(state, icc));
+            let img_ref = state.refs.alloc();
+            let data = flate(&cmyk);
+            let mut x = state.pdf.image_xobject(img_ref, &data);
+            x.width(img.width as i32);
+            x.height(img.height as i32);
+            x.bits_per_component(8);
+            match icc_ref {
+                Some(r) => {
+                    x.color_space().icc_based(r);
+                }
+                None => {
+                    x.color_space().device_cmyk();
+                }
+            }
+            x.filter(pdf_writer::Filter::FlateDecode);
+            if let Some(s) = smask_ref {
+                x.s_mask(s);
+            }
+            x.finish();
+            return Some(img_ref);
+        }
+    }
+
     // Flate path from decoded RGBA (lazy-decode when only encoded
     // bytes exist — mirror the rasterizer's fallback).
     let rgba: bytes::Bytes = if !img.rgba.is_empty() {
@@ -213,20 +332,7 @@ pub fn write_image(
         }
     }
 
-    let smask_ref = if has_alpha {
-        let r = state.refs.alloc();
-        let data = flate(&alpha);
-        let mut x = state.pdf.image_xobject(r, &data);
-        x.width(out_w as i32);
-        x.height(out_h as i32);
-        x.bits_per_component(8);
-        x.color_space().device_gray();
-        x.filter(pdf_writer::Filter::FlateDecode);
-        x.finish();
-        Some(r)
-    } else {
-        None
-    };
+    let smask_ref = has_alpha.then(|| write_alpha_mask(state, &alpha, out_w, out_h));
 
     // The pixels are RGBA from the decode — a CMYK source profile
     // would mis-tag them, so only ICC-tag when the profile is RGB.
