@@ -197,16 +197,13 @@ pub fn ifna(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
 /// match) is **case-insensitive** for text — the codebase's authoritative
 /// `=`-equality lives in `criteria::apply_text_op` (`Op::Eq` is the fold with
 /// no tie-break). This helper reconciles the two: two texts are equal iff their
-/// ASCII-lowercased byte streams are equal; every other pair (cross-type,
+/// case-folded texts ([`sheet_core::casefold`]) are equal; every other pair (cross-type,
 /// number, bool, blank) defers to `compare == Equal`, which is already the
 /// equality those types want. (`compare`/`criteria` are frozen, so the
 /// reconciliation lives here in the kernel.)
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     if let (CellValue::Text(x), CellValue::Text(y)) = (a, b) {
-        return x
-            .bytes()
-            .map(|c| c.to_ascii_lowercase())
-            .eq(y.bytes().map(|c| c.to_ascii_lowercase()));
+        return sheet_core::casefold::eq(x, y);
     }
     coerce::compare(a, b) == std::cmp::Ordering::Equal
 }

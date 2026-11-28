@@ -220,7 +220,7 @@ pub fn transpose(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
 /// `Equal` here, exactly as the operator layer does in `sheet-calc::eval`.
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     if let (CellValue::Text(x), CellValue::Text(y)) = (a, b) {
-        return x.eq_ignore_ascii_case(y);
+        return sheet_core::casefold::eq(x, y);
     }
     coerce::compare(a, b) == std::cmp::Ordering::Equal
 }
@@ -617,26 +617,28 @@ pub fn textsplit(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
 }
 
 /// Split `s` on every occurrence of `delim` (non-empty). Case-insensitive
-/// matching folds ASCII when `ci`. Returns the fields including empty ones
+/// matching folds case ([`sheet_core::casefold`]) when `ci`. Returns the fields including empty ones
 /// (the caller applies `ignore_empty`).
 fn split_on<'a>(s: &'a str, delim: &str, ci: bool) -> Vec<&'a str> {
     if !ci {
         return s.split(delim).collect();
     }
-    // Case-insensitive: scan for ASCII-folded matches, slicing at byte
-    // boundaries (the delimiter is matched byte-for-byte after folding, which
-    // is correct for ASCII delimiters — the common publishing case).
+    // Case-insensitive: match the delimiter character by character under
+    // the engine's case folding, slicing at the matched characters' bytes.
+    let needle: Vec<char> = sheet_core::casefold::chars(delim).collect();
+    let hay: Vec<(usize, char)> = s
+        .char_indices()
+        .map(|(at, c)| (at, sheet_core::casefold::fold_char(c)))
+        .collect();
+    let byte_at = |i: usize| hay.get(i).map_or(s.len(), |&(at, _)| at);
     let mut out = Vec::new();
-    let dl = delim.len();
-    let hay = s.as_bytes();
-    let needle = delim.as_bytes();
     let mut start = 0;
     let mut i = 0;
-    while i + dl <= hay.len() {
-        if hay[i..i + dl].eq_ignore_ascii_case(needle) {
-            out.push(&s[start..i]);
-            i += dl;
-            start = i;
+    while i + needle.len() <= hay.len() {
+        if needle.iter().zip(&hay[i..]).all(|(n, (_, h))| n == h) {
+            out.push(&s[start..byte_at(i)]);
+            i += needle.len();
+            start = byte_at(i);
         } else {
             i += 1;
         }

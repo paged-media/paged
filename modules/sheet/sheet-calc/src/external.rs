@@ -111,14 +111,14 @@ mod tests {
     impl MapCache {
         fn put(&mut self, book: u32, sheet: &str, row: u32, col: u32, v: CellValue) {
             self.cells
-                .insert((book, sheet.to_ascii_lowercase(), row, col), v);
+                .insert((book, sheet_core::casefold::key(sheet), row, col), v);
         }
     }
 
     impl ExternalCache for MapCache {
         fn cached(&self, r: &ExternalRef) -> Option<CellValue> {
             self.cells
-                .get(&(r.book, r.sheet.to_ascii_lowercase(), r.row, r.col))
+                .get(&(r.book, sheet_core::casefold::key(&r.sheet), r.row, r.col))
                 .cloned()
         }
     }

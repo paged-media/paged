@@ -24,10 +24,9 @@
 
 import { describe, expect, it, vi } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import { createWorkbookSession } from "../src/session";
 
+import { fakeBundleHost } from "./fake-host";
 function fakeHost(opts: {
   blobSupported: boolean;
   partsSupported?: boolean;
@@ -37,7 +36,7 @@ function fakeHost(opts: {
   const read = vi.fn(opts.read ?? (async () => null));
   const partRead = vi.fn(opts.partRead ?? (async () => null));
   const partWrite = vi.fn(async () => {});
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
     document: {
@@ -65,7 +64,7 @@ function fakeHost(opts: {
       delete() {},
       keys: () => [],
     },
-  } as unknown as BundleHost;
+  });
   return { host, read, partRead, partWrite };
 }
 

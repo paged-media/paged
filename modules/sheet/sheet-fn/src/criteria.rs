@@ -238,10 +238,7 @@ fn apply_num_op(op: Op, a: f64, b: f64) -> bool {
 }
 
 fn apply_text_op(op: Op, a: &str, b: &str) -> bool {
-    let ord = a
-        .bytes()
-        .map(|x| x.to_ascii_lowercase())
-        .cmp(b.bytes().map(|x| x.to_ascii_lowercase()));
+    let ord = sheet_core::casefold::cmp(a, b);
     use std::cmp::Ordering::*;
     match op {
         Op::Eq => ord == Equal,
@@ -293,18 +290,18 @@ impl Matcher {
                     // Escape the next metachar; lone trailing ~ is literal.
                     match chars.next() {
                         Some(next @ ('*' | '?' | '~')) => {
-                            tokens.push(Tok::Lit(next.to_ascii_lowercase()))
+                            tokens.push(Tok::Lit(sheet_core::casefold::fold_char(next)))
                         }
                         Some(other) => {
                             tokens.push(Tok::Lit('~'));
-                            tokens.push(Tok::Lit(other.to_ascii_lowercase()));
+                            tokens.push(Tok::Lit(sheet_core::casefold::fold_char(other)));
                         }
                         None => tokens.push(Tok::Lit('~')),
                     }
                 }
                 '*' => tokens.push(Tok::Star),
                 '?' => tokens.push(Tok::Any),
-                other => tokens.push(Tok::Lit(other.to_ascii_lowercase())),
+                other => tokens.push(Tok::Lit(sheet_core::casefold::fold_char(other))),
             }
         }
         Matcher { tokens }
@@ -321,9 +318,9 @@ impl Matcher {
     }
 
     /// Test the whole candidate string against the pattern (anchored both
-    /// ends, as Excel criteria are). Case-insensitive (ASCII fold).
+    /// ends, as Excel criteria are). Case-insensitive ([`sheet_core::casefold`]).
     pub fn is_match(&self, candidate: &str) -> bool {
-        let cand: Vec<char> = candidate.chars().map(|c| c.to_ascii_lowercase()).collect();
+        let cand: Vec<char> = sheet_core::casefold::chars(candidate).collect();
         glob(&self.tokens, &cand)
     }
 }

@@ -46,7 +46,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use compact_str::CompactString;
 use paged_ooxml::xml::escape_text;
-use sheet_core::value::CellValue;
+use sheet_core::value::{CellError, CellValue};
 use sheet_core::{col_to_a1, ColMeta, RowMeta, SheetId, SheetModel, Worksheet};
 
 use crate::error::XlsxError;
@@ -425,6 +425,11 @@ fn render_cell(
     let mut value_xml = String::new();
     let t: Option<&str> = match &cell.value {
         CellValue::Empty => None,
+        // No `inf`/`NaN` in `<v>`: the `#NUM!` Excel computes for an overflow.
+        CellValue::Number(n) if !n.is_finite() => {
+            value_xml = format!("<{prefix}v>{}</{prefix}v>", stored_error(CellError::Num));
+            Some("e")
+        }
         CellValue::Number(n) => {
             value_xml = format!("<{prefix}v>{}</{prefix}v>", fmt_f64(*n));
             None

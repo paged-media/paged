@@ -23,7 +23,6 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  a1Of,
   cycleAbsolute,
   formulaRefs,
   refInsertable,
@@ -65,8 +64,46 @@ describe("formula references", () => {
     expect(cycleAbsolute("=SUM(", 4)).toBeNull();
   });
 
-  it("A1 text of a cell and a range", () => {
-    expect(a1Of(0, 0)).toBe("A1");
-    expect(a1Of(9, 26, 10, 27)).toBe("AA10:AB11");
+  it("F4 leaves what only reads like a cell: a function name, a defined name, text", () => {
+    // `LOG10` is columns LOG, row 10 by its letters; followed by `(` it is
+    // the function, with the caret anywhere on it.
+    for (const caret of [1, 3, 6]) {
+      expect(cycleAbsolute("=LOG10(A1)", caret)).toBeNull();
+    }
+    expect(cycleAbsolute("=LOG10(A1)", 9)!.text).toBe("=LOG10($A$1)");
+    expect(cycleAbsolute("=ATAN2(1,2)", 6)).toBeNull();
+    expect(cycleAbsolute("=DAYS360(B1,B2)", 4)).toBeNull();
+    // Part of a longer name.
+    expect(cycleAbsolute("=Taxes2024*2", 10)).toBeNull();
+    expect(cycleAbsolute("=A1.total+1", 3)).toBeNull();
+    expect(cycleAbsolute("=Größe_A1+1", 9)).toBeNull();
+    expect(cycleAbsolute("=A1ä+1", 3)).toBeNull();
+    // Inside a string literal or a quoted sheet name; a sheet named like a
+    // cell; a cell outside the grid.
+    expect(cycleAbsolute('="see B2"', 8)).toBeNull();
+    expect(cycleAbsolute("='Q1 B2'!C3", 7)).toBeNull();
+    expect(cycleAbsolute("=ABC1!D4", 5)).toBeNull();
+    expect(cycleAbsolute("=XFE1+1", 5)).toBeNull();
+  });
+
+  it("F4 cycles a sheet-qualified reference and one beside a function", () => {
+    expect(cycleAbsolute("=Sheet2!F6", 10)!.text).toBe("=Sheet2!$F$6");
+    expect(cycleAbsolute("='Q1 B2'!C3:D4", 14)!.text).toBe(
+      "='Q1 B2'!$C$3:$D$4",
+    );
+    expect(cycleAbsolute("=ABC1!D4", 8)!.text).toBe("=ABC1!$D$4");
+    expect(cycleAbsolute("=SUM(LOG10(B2),C3)", 13)).toEqual({
+      text: "=SUM(LOG10($B$2),C3)",
+      caret: 15,
+    });
+    // The bare cell LOG10 (no call) is a reference, as in Excel.
+    expect(cycleAbsolute("=LOG10+1", 6)!.text).toBe("=$LOG$10+1");
+  });
+
+  it("the grid colours no function name, sheet name or off-grid cell", () => {
+    expect(formulaRefs("=LOG10(A1)+ABC1!B2+XFE1+Taxes2024").length).toBe(1);
+    expect(formulaRefs("='A1 B2'!C3+D4").map((r) => [r.top, r.left])).toEqual([
+      [3, 3],
+    ]);
   });
 });

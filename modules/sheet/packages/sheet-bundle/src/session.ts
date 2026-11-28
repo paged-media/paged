@@ -41,7 +41,10 @@ import {
   hitCell,
   hitFillHandle,
   hitSelectionBorder,
+  a1OfCell,
+  a1OfRange,
   cellOfA1,
+  columnLetters,
   contentHash,
   parseBinding,
   rangeTopLeft,
@@ -89,7 +92,6 @@ import {
   REFUSED_AREAS,
   type AreaPlacement,
   type LowerLaneOptions,
-  a1OfCell,
   pageContent,
   placementContent,
   placementForContent,
@@ -1214,20 +1216,12 @@ export function cellToString(value: unknown): string {
  *  semantics (the engine decided the extent; this only names it). */
 export function usedRangeA1(rows: number, cols: number): string {
   if (rows <= 0 || cols <= 0) return "A1";
-  return `A1:${columnLabel(cols - 1)}${rows}`;
+  return `A1:${a1OfCell(rows - 1, cols - 1)}`;
 }
 
-/** 0-based column index → A1 column letters (0→A, 25→Z, 26→AA). A
- *  display helper, not a parser; the engine validates the real range. */
-export function columnLabel(index: number): string {
-  let n = index;
-  let label = "";
-  do {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return label;
-}
+/** 0-based column index → A1 column letters (0→A, 25→Z, 26→AA): the
+ *  sheet packages' one `columnLetters`, under the name the panels use. */
+export const columnLabel = columnLetters;
 
 /** K-6 — the A1 range string for a grid selection rectangle (anchor +
  *  span). Pure A1 formatting (NOT spreadsheet semantics — the engine reads
@@ -1238,10 +1232,13 @@ export function selectionRangeA1(
   rows: number,
   cols: number,
 ): string {
-  const start = `${columnLabel(anchorCol)}${anchorRow + 1}`;
-  if (rows <= 1 && cols <= 1) return start;
-  const end = `${columnLabel(anchorCol + cols - 1)}${anchorRow + rows}`;
-  return `${start}:${end}`;
+  if (rows <= 1 && cols <= 1) return a1OfCell(anchorRow, anchorCol);
+  return a1OfRange(
+    anchorRow,
+    anchorCol,
+    anchorRow + rows - 1,
+    anchorCol + cols - 1,
+  );
 }
 
 /** Paste special's options (Excel's dialog). `"all"` and `"formulas"` both
@@ -7224,7 +7221,7 @@ export function createWorkbookSession(
         };
       // Pure A1 naming of the block's strips; every border rule is Rust's.
       const a1 = (r0: number, c0: number, r1: number, c1: number) =>
-        `${columnLabel(c0)}${r0 + 1}:${columnLabel(c1)}${r1 + 1}`;
+        `${a1OfCell(r0, c0)}:${a1OfCell(r1, c1)}`;
       const none: EdgeStyle = { style: "none" };
       const calls: [string, CellStylePatch][] = [];
       const whole = a1(t.top, t.left, t.bottom, t.right);

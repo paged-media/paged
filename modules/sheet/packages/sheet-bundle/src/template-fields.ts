@@ -57,7 +57,7 @@ import type {
   TemplateFieldWrite,
 } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
-import { parseBinding } from "../../sheet-host-model/src";
+import { columnLetters, parseBinding } from "../../sheet-host-model/src";
 
 import type { ResolvedRange, SheetEngine } from "./engine";
 import { TEMPLATE } from "./messages";
@@ -458,19 +458,9 @@ export function contributeSheetTemplateFields(
 
   // ── range ────────────────────────────────────────────────────────────
 
-  const letters = (col: number): string => {
-    let n = col;
-    let label = "";
-    do {
-      label = String.fromCharCode(65 + (n % 26)) + label;
-      n = Math.floor(n / 26) - 1;
-    } while (n >= 0);
-    return label;
-  };
-
   const columnsOf = (d: RangeDef, r: ResolvedRange) =>
     Array.from({ length: r.right - r.left + 1 }, (_, i) => ({
-      name: letters(r.left + i),
+      name: columnLetters(r.left + i),
       ...(d.columns?.[i] ? { title: d.columns[i] } : {}),
     }));
 

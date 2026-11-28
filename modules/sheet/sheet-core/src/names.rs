@@ -93,7 +93,7 @@ impl NameTable {
         let mut workbook: Option<NameId> = None;
         let mut sheet_local: Option<NameId> = None;
         for (i, def) in self.defs.iter().enumerate() {
-            if !def.name.eq_ignore_ascii_case(name) {
+            if !crate::casefold::eq(&def.name, name) {
                 continue;
             }
             match def.scope {

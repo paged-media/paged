@@ -26,12 +26,13 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 
-import type { BundleHost, ObjectOp } from "@paged-media/plugin-api";
+import type { ObjectOp } from "@paged-media/plugin-api";
 
 import type { ChartSpec, ChartStyle, SheetEngine } from "../src/engine";
 import { ChartStyleSection } from "../src/panels/chart-style-section";
 import type { WorkbookSession } from "../src/session";
 
+import { fakeBundleHost } from "./fake-host";
 const P = "plugin:media.paged.sheet";
 
 const sw = (id: string, rgb: string) => ({
@@ -72,11 +73,11 @@ function harness(opts: { chartRoles?: ChartSpec["roles"] } = {}) {
     }),
     documentSwatchRef: async (id: string) => sw(id, "#000000"),
   } as unknown as WorkbookSession;
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     document: {
-      collection: async (name: string) =>
-        name === "characterStyles"
+      collection: async <T,>(name: string) =>
+        (name === "characterStyles"
           ? [{ selfId: "CharacterStyle/Em", name: "Em" }]
           : name === "colorGroups"
             ? [
@@ -86,7 +87,7 @@ function harness(opts: { chartRoles?: ChartSpec["roles"] } = {}) {
                   members: ["Color/Brand"],
                 },
               ]
-            : [],
+            : []) as readonly unknown[] as readonly T[],
     },
     objects: {
       set: async (address: string, path: string, value: unknown) => {
@@ -101,7 +102,7 @@ function harness(opts: { chartRoles?: ChartSpec["roles"] } = {}) {
         return { applied: true, undoSteps: 1 };
       },
     },
-  } as unknown as BundleHost;
+  });
   const styles = { body: {}, input: {}, button: {}, row: {}, note: {} };
   const { container } = render(
     createElement(ChartStyleSection, { host, session, styles, view: 1 }),

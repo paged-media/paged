@@ -54,9 +54,11 @@ import type {
 } from "@paged-media/plugin-api";
 
 import {
+  a1OfCell,
   cellOfA1,
   HEADING_INDEX,
   parseBinding,
+  rectOfA1,
   type LoweredContent,
 } from "../../sheet-host-model/src";
 import type { CellThreadInfo, SheetEngine, ThreadAuthor } from "./engine";
@@ -137,18 +139,6 @@ export interface Plan {
 
 // -- addresses ---------------------------------------------------------------
 
-/** `A`, `B`, ... `AA` for a zero-based column. */
-export function columnName(col: number): string {
-  let n = col + 1;
-  let out = "";
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    out = String.fromCharCode(65 + r) + out;
-    n = Math.floor((n - 1) / 26);
-  }
-  return out;
-}
-
 /** A sheet name as a formula reference writes it: quoted when it has to be. */
 export function sheetRef(name: string): string {
   const plain = /^[A-Za-z_][A-Za-z0-9_.]*$/.test(name);
@@ -163,7 +153,7 @@ export function cellAddress(
   row: number,
   col: number,
 ): string {
-  return `${sheetRef(sheetName)}!${columnName(col)}${row + 1}`;
+  return `${sheetRef(sheetName)}!${a1OfCell(row, col)}`;
 }
 
 /** The sheet name and zero-based cell an address names, or null. */
@@ -184,19 +174,8 @@ export function parseAddress(
 export function parseRange(
   range: string,
 ): { r0: number; c0: number; r1: number; c1: number } | null {
-  const body = range.includes("!")
-    ? range.slice(range.lastIndexOf("!") + 1)
-    : range;
-  const [a, b] = body.split(":");
-  const p = cellOfA1(a ?? "");
-  const q = b === undefined ? p : cellOfA1(b);
-  if (!p || !q) return null;
-  return {
-    r0: Math.min(p.row, q.row),
-    c0: Math.min(p.col, q.col),
-    r1: Math.max(p.row, q.row),
-    c1: Math.max(p.col, q.col),
-  };
+  const r = rectOfA1(range);
+  return r && { r0: r.top, c0: r.left, r1: r.bottom, c1: r.right };
 }
 
 /** The frame a thread on this cell is pinned to: one showing the cell, else

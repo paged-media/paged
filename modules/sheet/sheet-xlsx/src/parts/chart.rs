@@ -94,7 +94,7 @@ pub fn defined_reference(model: &sheet_core::SheetModel, name: &str) -> Option<S
     let (_, def) = model
         .names
         .iter()
-        .find(|(_, d)| d.name.eq_ignore_ascii_case(name))?;
+        .find(|(_, d)| sheet_core::casefold::eq(&d.name, name))?;
     match &def.target {
         NameTarget::Formula(t) => Some(t.trim_start_matches('=').to_string()),
         NameTarget::Range(r) => {

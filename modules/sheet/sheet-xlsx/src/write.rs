@@ -40,7 +40,7 @@ use crate::error::XlsxError;
 use crate::opc::{ContentTypes, ModeledKind, OpcContainer, PartEntry};
 use crate::sheet_doc::SheetBinding;
 use paged_ooxml::xml::{escape_attr, escape_text};
-use sheet_core::value::CellValue;
+use sheet_core::value::{CellError, CellValue};
 use sheet_core::{col_to_a1, SheetId, SheetModel};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
@@ -493,6 +493,12 @@ fn encode_cell(
     // Determine the t= attribute + inner content from the value.
     let (type_attr, inner) = match &cell.value {
         CellValue::Empty => (String::new(), String::new()),
+        // `inf` and `NaN` are not `xsd:double` text Excel reads: the cell is
+        // the `#NUM!` Excel itself computes for an overflow.
+        CellValue::Number(n) if !n.is_finite() => (
+            r#" t="e""#.to_owned(),
+            format!("<v>{}</v>", stored_error(CellError::Num)),
+        ),
         CellValue::Number(n) => (String::new(), format!("<v>{}</v>", fmt_f64(*n))),
         CellValue::Bool(b) => (
             r#" t="b""#.to_owned(),
@@ -563,8 +569,7 @@ fn encode_cell(
 /// there and refuses to open a worksheet that caches `#SPILL!`; it caches a
 /// blocked spill as `#VALUE!` itself (the real error rides a rich value Paged
 /// does not write). The anchor's formula recomputes `#SPILL!` on load.
-pub(crate) fn stored_error(e: sheet_core::value::CellError) -> &'static str {
-    use sheet_core::value::CellError;
+pub(crate) fn stored_error(e: CellError) -> &'static str {
     match e {
         // The errors newer than the file format have no `<v>` literal: Excel
         // writes `#VALUE!` (plus a rich value naming the real error, which
@@ -595,6 +600,20 @@ pub(crate) fn fmt_f64(n: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_non_finite_number_is_written_as_num_error__feat__sheet_xlsx_roundtrip() {
+        for n in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            let cell = sheet_core::Cell {
+                value: CellValue::Number(n),
+                ..Default::default()
+            };
+            let mut s = String::new();
+            encode_cell(&mut s, 0, 0, 0, &cell, &BTreeMap::new(), ArrayForm::None);
+            assert_eq!(s, r#"<c r="A1" t="e"><v>#NUM!</v></c>"#);
+        }
+    }
 
     #[test]
     fn fmt_f64_integers_and_decimals() {

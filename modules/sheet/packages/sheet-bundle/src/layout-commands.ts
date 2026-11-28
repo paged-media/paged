@@ -34,6 +34,8 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
+import { a1OfCell } from "../../sheet-host-model/src";
+
 import type { ResolvedRange, SheetEngine } from "./engine";
 import {
   PLUGIN_ID,
@@ -115,16 +117,6 @@ function sheetIdOf(engine: SheetEngine, name: string): number {
   if (!s) throw new Error(`invalidValue: no sheet named "${name}"`);
   return s.id;
 }
-
-const A1 = (row: number, col: number): string => {
-  let n = col;
-  let label = "";
-  do {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return `${label}${row + 1}`;
-};
 
 /** The commands, for the manifest spec (no engine needed). */
 export function layoutCommands(
@@ -478,8 +470,10 @@ export function layoutCommands(
             );
           if (edges === "all") set(r.range, ["top", "right", "bottom", "left"]);
           else if (edges === "outline") {
-            const row = (i: number) => `${A1(i, r.left)}:${A1(i, r.right)}`;
-            const col = (j: number) => `${A1(r.top, j)}:${A1(r.bottom, j)}`;
+            const row = (i: number) =>
+              `${a1OfCell(i, r.left)}:${a1OfCell(i, r.right)}`;
+            const col = (j: number) =>
+              `${a1OfCell(r.top, j)}:${a1OfCell(r.bottom, j)}`;
             set(row(r.top), ["top"]);
             set(row(r.bottom), ["bottom"]);
             set(col(r.left), ["left"]);

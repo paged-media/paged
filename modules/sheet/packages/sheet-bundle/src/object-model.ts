@@ -90,6 +90,7 @@ import type {
 import { labelKey, sha256HexPrefix } from "@paged-media/helpers";
 
 import manifest from "../manifest.json";
+import { a1OfCell, columnLetters } from "../../sheet-host-model/src";
 
 import type {
   CellStylePatch,
@@ -452,17 +453,7 @@ function splitSheet(id: string): { sheet: string; rest: string } | null {
   return { sheet, rest: id.slice(bang + 1) };
 }
 
-function columnLabel(col: number): string {
-  let n = col;
-  let label = "";
-  do {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return label;
-}
-const a1 = (row: number, col: number): string =>
-  `${columnLabel(col)}${row + 1}`;
+const a1 = a1OfCell;
 
 /** The address of one cell (`plugin:media.paged.sheet/cell/<sheet>!<A1>`),
  *  as the kinds format it — for a panel that publishes the active cell. */
@@ -1778,7 +1769,7 @@ export function contributeObjectModel(
     const cols = r.right - r.left + 1;
     const names = header
       ? (raw[0] ?? []).map((v, i) => rawText(v) || `column${i + 1}`)
-      : Array.from({ length: cols }, (_, i) => columnLabel(r.left + i));
+      : Array.from({ length: cols }, (_, i) => columnLetters(r.left + i));
     const body = header ? raw.slice(1) : raw;
     const fields: ProviderField[] = [];
     const columns: unknown[][] = [];

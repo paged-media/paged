@@ -38,6 +38,7 @@ import type { GridScene } from "@paged-media/sheet-host-model";
 
 import { createWorkbookSession, makeGridPanel, type SheetEngine } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 // A 2×2 viewport scene (cols 40pt, rows 20pt) with two populated cells —
 // the same shape the host-model grid.spec uses, here returned by the engine.
 function scene2x2(): GridScene {
@@ -140,7 +141,7 @@ function fakeEngine() {
 
 /** A minimal fake host — only log is touched by the grid panel. */
 function fakeHost(): BundleHost {
-  return {
+  return fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
     // The document doors every host has; nothing here fires them.
@@ -148,7 +149,7 @@ function fakeHost(): BundleHost {
       onDidChange: () => ({ dispose() {} }),
       onDidOpen: () => ({ dispose() {} }),
     },
-  } as unknown as BundleHost;
+  });
 }
 
 /** A mouse event whose currentTarget reports a zero-origin rect, so the

@@ -378,7 +378,7 @@ impl SheetSession {
                 };
                 let num = number_of(value);
                 items.iter().any(|it| {
-                    it.trim().eq_ignore_ascii_case(shown.trim())
+                    sheet_core::casefold::eq(it.trim(), shown.trim())
                         || num.is_some_and(|n| it.trim().parse::<f64>().ok() == Some(n))
                 })
             }

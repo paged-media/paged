@@ -37,6 +37,7 @@
 
 pub mod ast;
 pub mod calc_settings;
+pub mod casefold;
 pub mod cell;
 pub mod condfmt;
 pub mod filter;

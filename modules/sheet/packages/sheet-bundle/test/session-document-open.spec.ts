@@ -39,8 +39,9 @@ import { describe, expect, it } from "bun:test";
 import { waitFor, inertSurface } from "@paged-media/test-kit";
 
 import type {
-  BundleHost,
+  DocumentOpenedEvent,
   EditContextContribution,
+  ElementId,
   ExporterContribution,
   SceneLayer,
   WorkerToMain,
@@ -50,6 +51,7 @@ import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 import { activate } from "../src/activate";
 import { bootEngine } from "../src/engine";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
@@ -86,7 +88,7 @@ async function workbookWith(marker: string): Promise<Uint8Array> {
  *  `broadcasts`, every open is announced through `document.onDidOpen`. */
 
 function fakeEditor(opts: { broadcasts?: boolean } = {}) {
-  const opened = new Set<(e: unknown) => void>();
+  const opened = new Set<(e: DocumentOpenedEvent) => void>();
   const docs = new Map<string, Map<string, Uint8Array>>();
   let current = new Map<string, Uint8Array>(); // no document yet
   const blobs = new Map<string, Uint8Array>();
@@ -103,7 +105,7 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
     "contribute.editContext@1",
     "document.onDidOpen@1",
   ]);
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The contract's widget catalog (the host's NumericField, editor ADR 1216).
     widgets: FALLBACK_WIDGETS,
@@ -121,7 +123,7 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
       usage: async () => ({ used: 0, quota: 0 }),
     },
     storage: {
-      get: (k: string) => kv.get(k),
+      get: <T>(k: string) => kv.get(k) as T | undefined,
       set: (k: string, v: unknown) => void kv.set(k, v),
       delete: (k: string) => void kv.delete(k),
       keys: () => [...kv.keys()],
@@ -136,9 +138,11 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
       },
     },
     document: {
-      elementGeometry: async () => [{ bounds: [0, 0, 200, 400] }],
+      elementGeometry: async (ids: ElementId[]) => [
+        { id: ids[0]!, bounds: [0, 0, 200, 400] },
+      ],
       onDidChange: () => ({ dispose() {} }),
-      onDidOpen(l: (e: unknown) => void) {
+      onDidOpen(l: (e: DocumentOpenedEvent) => void) {
         opened.add(l);
         return { dispose: () => void opened.delete(l) };
       },
@@ -163,8 +167,11 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
       sceneLayer: () => ({
         async submit(_id: string, layer: SceneLayer) {
           submits.push(layer);
+          return { fontFallbacks: [] };
         },
         async clear() {},
+        async submitImage() {},
+        async submitImageTiles() {},
         dispose() {},
       }),
     },
@@ -172,7 +179,7 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
     selection: inertSurface({ get: () => [] }),
     objects: inertSurface({ query: async () => [] }),
     shell: { openPanel() {}, closePanel() {} },
-  } as unknown as BundleHost;
+  });
 
   return {
     host,

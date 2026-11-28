@@ -710,18 +710,28 @@ fn arith(op: BinOp, lhs: &CellValue, rhs: &CellValue) -> CellValue {
         Err(e) => return CellValue::Error(e),
     };
     match op {
-        BinOp::Add => CellValue::Number(x + y),
-        BinOp::Sub => CellValue::Number(x - y),
-        BinOp::Mul => CellValue::Number(x * y),
+        BinOp::Add => finite(x + y),
+        BinOp::Sub => finite(x - y),
+        BinOp::Mul => finite(x * y),
         BinOp::Div => {
             if y == 0.0 {
                 CellValue::Error(CellError::Div0)
             } else {
-                CellValue::Number(x / y)
+                finite(x / y)
             }
         }
         BinOp::Pow => power(x, y),
         _ => unreachable!("arith called with non-arithmetic op"),
+    }
+}
+
+/// A number, or `#NUM!` when the result left f64's finite range: Excel has no
+/// infinity and no NaN (`=1E308*10` is `#NUM!`).
+fn finite(n: f64) -> CellValue {
+    if n.is_finite() {
+        CellValue::Number(n)
+    } else {
+        CellValue::Error(CellError::Num)
     }
 }
 
@@ -734,12 +744,7 @@ fn power(x: f64, y: f64) -> CellValue {
     if x < 0.0 && y.fract() != 0.0 {
         return CellValue::Error(CellError::Num);
     }
-    let r = x.powf(y);
-    if r.is_finite() {
-        CellValue::Number(r)
-    } else {
-        CellValue::Error(CellError::Num)
-    }
+    finite(x.powf(y))
 }
 
 /// Comparison operators via the cross-type total order in `coerce::compare`.
@@ -781,7 +786,7 @@ fn excel_ordering(lhs: &CellValue, rhs: &CellValue) -> std::cmp::Ordering {
     }
     let ord = coerce::compare(lhs, rhs);
     if let (CellValue::Text(a), CellValue::Text(b)) = (lhs, rhs) {
-        if a.eq_ignore_ascii_case(b) {
+        if sheet_core::casefold::eq(a, b) {
             return Ordering::Equal;
         }
     }
@@ -2219,6 +2224,34 @@ mod tests {
         assert_eq!(
             eval_expr(&m, &div, &ctx(), &s),
             CellValue::Error(CellError::Div0)
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn arithmetic_overflow_is_num_error__feat__sheet_calc_engine() {
+        let m = model();
+        let s = spills();
+        for (op, a, b) in [
+            (BinOp::Mul, 1e308, 10.0),
+            (BinOp::Add, f64::MAX, f64::MAX),
+            (BinOp::Sub, -f64::MAX, f64::MAX),
+            (BinOp::Div, 1e308, 1e-10),
+        ] {
+            let e = Expr::Binary(op, Box::new(num(a)), Box::new(num(b)));
+            assert_eq!(
+                eval_expr(&m, &e, &ctx(), &s),
+                CellValue::Error(CellError::Num),
+                "{op:?}"
+            );
+        }
+        // The error is the operator's result, not only the stored one:
+        // `1/(1E308*10)` is `#NUM!`, never 0.
+        let inner = Expr::Binary(BinOp::Mul, Box::new(num(1e308)), Box::new(num(10.0)));
+        let outer = Expr::Binary(BinOp::Div, Box::new(num(1.0)), Box::new(inner));
+        assert_eq!(
+            eval_expr(&m, &outer, &ctx(), &s),
+            CellValue::Error(CellError::Num)
         );
     }
 

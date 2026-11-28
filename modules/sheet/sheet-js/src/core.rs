@@ -2538,16 +2538,13 @@ fn typed_value_cmp(a: &CellValue, b: &CellValue) -> Ordering {
 }
 
 /// Case-insensitive text ordering — the HONEST collation (a documented
-/// ruling, `sheet.edit.sort.collation`): char-wise Unicode default case
-/// folding (`char::to_lowercase`) compared in CODE-POINT order, ties broken
+/// ruling, `sheet.edit.sort.collation`): the engine's one case folding
+/// ([`sheet_core::casefold`]) compared in CODE-POINT order, ties broken
 /// by the exact text (determinism). NO locale tailoring, NO ICU dependency:
 /// `"ä"` sorts after `"z"`, and full case folding (`"ß"` vs `"SS"`) is not
 /// applied. Locale-tailored collation is a T2 decision.
 fn ci_text_cmp(a: &str, b: &str) -> Ordering {
-    a.chars()
-        .flat_map(char::to_lowercase)
-        .cmp(b.chars().flat_map(char::to_lowercase))
-        .then_with(|| a.cmp(b))
+    sheet_core::casefold::cmp(a, b).then_with(|| a.cmp(b))
 }
 
 /// Does `needle` match `hay` under the find options? `entire_cell` requires
@@ -2561,11 +2558,10 @@ fn text_matches(hay: &str, needle: &str, match_case: bool, entire_cell: bool) ->
 
 /// Try to match `needle` at byte offset `pos` of `hay`; returns the matched
 /// byte LENGTH in `hay`. Case-insensitive mode compares CHAR-WISE through
-/// `char::to_lowercase` (Unicode default case folding per code point) — the
-/// same honest bounds as [`ci_text_cmp`]: no locale tailoring, no full case
-/// folding (`"ß"` does not match `"SS"`), no ICU dependency. Comparing the
-/// per-char lowercase EXPANSIONS keeps multi-char lowerings (e.g. `"İ"`)
-/// correct without breaking byte-index bookkeeping in the original text.
+/// [`sheet_core::casefold`] — the same honest bounds as [`ci_text_cmp`]: no
+/// locale tailoring, no full case folding (`"ß"` does not match `"SS"`), no
+/// ICU dependency. One character folds to one, so the byte-index bookkeeping
+/// in the original text holds.
 fn fold_match_at(hay: &str, pos: usize, needle: &str, match_case: bool) -> Option<usize> {
     let rest = &hay[pos..];
     if match_case {
@@ -2575,7 +2571,7 @@ fn fold_match_at(hay: &str, pos: usize, needle: &str, match_case: bool) -> Optio
     let mut consumed = 0usize;
     for nc in needle.chars() {
         let hc = hay_chars.next()?;
-        if hc != nc && !hc.to_lowercase().eq(nc.to_lowercase()) {
+        if !sheet_core::casefold::eq_char(hc, nc) {
             return None;
         }
         consumed += hc.len_utf8();

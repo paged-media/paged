@@ -45,7 +45,7 @@ import type {
   ValidationRuleInfo,
 } from "../engine-w2";
 import { parseA1Range, type DataToolsApi } from "../data-tools";
-import { a1Of } from "./formula-refs";
+import { a1OfRange } from "../../../sheet-host-model/src";
 
 /** What the cards need from the session. */
 export type DataCardSession = DataToolsApi &
@@ -1561,7 +1561,7 @@ function useSelectionRef(session: DataCardSession): string {
     },
     () => {
       const a = session.activeCell();
-      return a ? a1Of(a.row, a.col) : "";
+      return a ? a1OfRange(a.row, a.col) : "";
     },
   );
 }

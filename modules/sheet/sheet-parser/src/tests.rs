@@ -1523,3 +1523,45 @@ fn a_call_of_an_unknown_function_prints_bare__feat__sheet_parser_dialect() {
         assert_eq!(p(canonical).root, p(input).root, "{input}");
     }
 }
+
+// ---- Hostile nesting: refused, never a stack overflow ----
+
+#[test]
+fn a_formula_nested_or_chained_too_deeply_is_a_parse_error() {
+    let ctx = Ctx::new();
+    let n = 200_000;
+    let hostile = [
+        // Nests the parser: groups, calls, prefix operators.
+        format!("{}1{}", "(".repeat(n), ")".repeat(n)),
+        "(".repeat(n),
+        format!("{}1{}", "SUM(".repeat(n), ")".repeat(n)),
+        format!("{}1", "-".repeat(n)),
+        format!("{}A1", "@".repeat(n)),
+        // Nests only the tree: chains.
+        format!("1{}", "+1".repeat(n)),
+        format!("1{}", "%".repeat(n)),
+        format!("A1{}", "#".repeat(n)),
+        format!("A1{}", " A1".repeat(n)),
+        format!("LAMBDA(x,x){}", "(1)".repeat(n)),
+        format!("(1{}", ",1".repeat(n)),
+    ];
+    for f in &hostile {
+        let err = parse(f, &ctx).expect_err(&f[..12.min(f.len())]);
+        assert!(
+            err.message.contains("nested too deeply"),
+            "{}: {}",
+            &f[..12.min(f.len())],
+            err.message
+        );
+    }
+    // What a sheet really holds parses: 64 nested calls (Excel's limit), a
+    // sum of 500 terms, a wide argument list.
+    for f in [
+        format!("{}1{}", "ABS(".repeat(64), ")".repeat(64)),
+        format!("A1{}", "+A1".repeat(499)),
+        format!("SUM(1{})", ",1".repeat(5_000)),
+        format!("{}1{}", "(".repeat(100), ")".repeat(100)),
+    ] {
+        assert!(parse(&f, &ctx).is_ok(), "{}", &f[..12]);
+    }
+}

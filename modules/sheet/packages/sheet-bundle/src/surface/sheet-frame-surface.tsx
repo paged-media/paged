@@ -55,6 +55,9 @@ import {
   rowAt,
   rowBand,
   matchFunctions,
+  a1OfRange,
+  MAX_COL,
+  MAX_ROW,
   paintGridScene,
   rowHeadingWidthPt,
   themeSwatchId,
@@ -71,7 +74,6 @@ import { usePictureImages } from "./picture-images";
 import { useDocStyleLooks, withDocumentStyles } from "./doc-style-looks";
 import {
   REF_COLORS,
-  a1Of,
   cycleAbsolute,
   formulaRefs,
   refEndingAt,
@@ -131,8 +133,6 @@ export type FrameSurfaceSession = Pick<
   | keyof DataToolsApi
 >;
 
-const MAX_ROW = 1_048_575;
-const MAX_COL = 16_383;
 /** Points per xlsx width character (the page lowering's constant). */
 const CHAR_TO_PT = 5.25;
 /** A heading border is grabbed within this many points. */
@@ -1118,7 +1118,7 @@ function SheetFrameSurfaceView({
       end = caret;
     }
     const anchor = extend ?? { row, col };
-    const ref = a1Of(
+    const ref = a1OfRange(
       Math.min(anchor.row, row),
       Math.min(anchor.col, col),
       Math.max(anchor.row, row),
@@ -1937,14 +1937,14 @@ function SheetBarView({
           ? formulaShown(session, active.row, active.col)
           : "",
       name: sel
-        ? a1Of(
+        ? a1OfRange(
             sel.anchorRow,
             sel.anchorCol,
             sel.anchorRow + sel.rows - 1,
             sel.anchorCol + sel.cols - 1,
           )
         : active
-          ? a1Of(active.row, active.col)
+          ? a1OfRange(active.row, active.col)
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
       sheetId: st.activeSheet,

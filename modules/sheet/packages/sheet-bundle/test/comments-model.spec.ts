@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { DocumentChangeEvent } from "@paged-media/plugin-api";
 
 import {
   anchorGeometry,
@@ -46,6 +46,7 @@ import {
 import { HEADING_INDEX, type LoweredContent } from "../../sheet-host-model/src";
 import type { CellThreadInfo, SheetEngine, ThreadAuthor } from "../src/engine";
 
+import { fakeBundleHost } from "./fake-host";
 describe("addresses", () => {
   it("writes and reads Sheet!A1 with quoting", () => {
     expect(cellAddress("Sheet1", 2, 1)).toBe("Sheet1!B3");
@@ -348,7 +349,7 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
     } as unknown as SheetEngine);
 
   const store: Store = [];
-  let listeners: Array<() => void> = [];
+  let listeners: Array<(e: DocumentChangeEvent) => void> = [];
   let edited = 0;
   let mintId = 0;
   const applyOne = (m: Mutation) => {
@@ -395,7 +396,7 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
         );
     }
   };
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (id: string) => id === "comments@1",
     // The comments door, as far as the controller uses it.
@@ -428,13 +429,20 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
       },
     },
     document: {
-      onDidChange: (l: () => void) => {
+      onDidChange: (l: (e: DocumentChangeEvent) => void) => {
         listeners.push(l);
         return {
           dispose: () => void (listeners = listeners.filter((x) => x !== l)),
         };
       },
-      tree: async () => [{ id: { kind: "textFrame", id: "f1" }, children: [] }],
+      tree: async () => [
+        {
+          id: { kind: "textFrame", id: "f1" },
+          kind: "textFrame",
+          label: "f1",
+          children: [],
+        },
+      ],
       getMetadata: async () => ({
         v: 2,
         data: {
@@ -446,7 +454,7 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
           sizing: "fit",
         },
       }),
-      collection: async () => {
+      collection: async <T>() => {
         const out: EngineRow[] = [];
         for (const c of store) {
           const root = c.parent ?? c.id;
@@ -463,7 +471,7 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
             source: c.source as EngineRow["source"],
           });
         }
-        return out;
+        return out as readonly unknown[] as readonly T[];
       },
       mutate: async (m: Mutation) => {
         try {
@@ -471,11 +479,12 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
         } catch (err) {
           return { applied: false, error: String(err) };
         }
-        for (const l of [...listeners]) l();
-        return { applied: true };
+        for (const l of [...listeners])
+          l({ kind: "mutationApplied", pageIds: [] });
+        return { applied: true, createdId: null, pageIds: [] };
       },
     },
-  } as unknown as BundleHost;
+  });
   const comments = createSheetComments({
     host,
     engine: () => engine,

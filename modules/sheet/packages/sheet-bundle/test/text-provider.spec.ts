@@ -36,7 +36,6 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
 import type { LoweredContent, LoweredStyle } from "../../sheet-host-model/src";
 
 import {
@@ -51,9 +50,10 @@ import {
 } from "../src/binding-provider/text-provider";
 import type { CellStylePatch } from "../src/engine";
 
-const silentHost = {
+import { fakeBundleHost } from "./fake-host";
+const silentHost = fakeBundleHost({
   log: { debug() {}, info() {}, warn() {}, error() {} },
-} as unknown as BundleHost;
+});
 
 /** A style table entry — the mirror of the Rust `LoweredStyle`. */
 function style(key: number, over: Partial<LoweredStyle> = {}): LoweredStyle {

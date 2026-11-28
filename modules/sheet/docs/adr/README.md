@@ -46,6 +46,7 @@ it stood, for decisions made earlier; their status says so.
 | [530](530-shapes-on-the-page-through-the-shared-geometry-and-mapper.md) | Drawing shapes on the page, through the shared geometry and mapper | Accepted 2026-11-08; extends 526, 527 |
 | [531](531-item-hyperlinks-on-the-engines-hyperlink-model.md) | Item hyperlinks: a picture's or shape's click action is the engine's link | Accepted 2026-11-08; extends 526, 530 |
 | [532](532-editing-cells-is-a-named-level-with-a-publication-preview.md) | Editing cells is a named level (Frame · Edit cells), left by Done, with a publication preview of the selection | Accepted 2026-11-14; extends 510, 024 |
+| [533](533-text-compares-case-insensitively-in-every-script.md) | Text compares case-insensitively in every script, through one fold; the Excel differences that remain | Accepted 2026-11-28; amends the frozen `sheet-core` |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed

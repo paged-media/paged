@@ -27,13 +27,13 @@ import {
   setActiveStrings,
   t,
 } from "@paged-media/strings";
-import type { BundleHost } from "@paged-media/plugin-api";
 
 import { GRID, NOTICES } from "../src/messages";
 import { contributeMenu } from "../src/menu";
 import { tokenLabel } from "../src/panels/format-section";
 import { sheetPropertiesPanel } from "../src/panels/properties-panel";
 
+import { fakeBundleHost } from "./fake-host";
 const german = () => setActiveStrings(createStrings("de", BUILT_IN_LOCALES.de));
 
 describe("paged.sheet strings", () => {
@@ -60,7 +60,7 @@ describe("paged.sheet strings", () => {
   it("labels its menu segments and command category, which stay English", () => {
     german();
     const paths: string[] = [];
-    const host = {
+    const host = fakeBundleHost({
       contribute: {
         menu: (m: { path: string }) => {
           paths.push(m.path);
@@ -68,7 +68,7 @@ describe("paged.sheet strings", () => {
         },
       },
       log: { info() {} },
-    } as unknown as BundleHost;
+    });
     contributeMenu(host).dispose();
     expect(paths).toContain("Sheet/Insert rows");
     expect(t("menu.Sheet")).toBe("Tabelle");

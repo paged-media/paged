@@ -215,8 +215,8 @@ fn norm_rgb(s: &str) -> String {
 
 /// Excel's wildcard match (`*`, `?`, `~` escapes), case-insensitive.
 pub fn wild_match(pattern: &str, text: &str) -> bool {
-    let p: Vec<char> = pattern.to_lowercase().chars().collect();
-    let t: Vec<char> = text.to_lowercase().chars().collect();
+    let p: Vec<char> = sheet_core::casefold::chars(pattern).collect();
+    let t: Vec<char> = sheet_core::casefold::chars(text).collect();
     fn go(p: &[char], t: &[char]) -> bool {
         match p.first() {
             None => t.is_empty(),
@@ -389,8 +389,7 @@ impl SheetSession {
                 let t = shown();
                 values
                     .iter()
-                    .any(|v| v.trim().eq_ignore_ascii_case(t.trim()))
-                    || values.iter().any(|v| v.to_lowercase() == t.to_lowercase())
+                    .any(|v| sheet_core::casefold::eq(v.trim(), t.trim()))
             }
             FilterCriterion::DateGroups {
                 values,
@@ -416,12 +415,10 @@ impl SheetSession {
                         }
                     }
                 }
-                let t = shown().to_lowercase();
-                values.iter().any(|v| v.to_lowercase() == t)
+                let t = shown();
+                values.iter().any(|v| sheet_core::casefold::eq(v, &t))
             }
-            FilterCriterion::Contains(needle) => shown()
-                .to_lowercase()
-                .contains(needle.to_lowercase().as_str()),
+            FilterCriterion::Contains(needle) => sheet_core::casefold::contains(&shown(), needle),
             FilterCriterion::Custom { and, conditions } => {
                 let mut results = conditions.iter().map(|k| {
                     let operand_num = k.val.trim().parse::<f64>().ok();
@@ -435,8 +432,7 @@ impl SheetSession {
                             } else if let (Some(n), CellValue::Number(x)) = (operand_num, &value) {
                                 *x == n
                             } else {
-                                text.eq_ignore_ascii_case(&k.val)
-                                    || text.to_lowercase() == k.val.to_lowercase()
+                                sheet_core::casefold::eq(&text, &k.val)
                             };
                             (k.op == FilterOp::Equal) == eq
                         }
@@ -445,9 +441,7 @@ impl SheetSession {
                                 (Some(n), CellValue::Number(x)) => x.partial_cmp(&n),
                                 (Some(_), _) => None,
                                 (None, CellValue::Number(_)) | (None, CellValue::Empty) => None,
-                                (None, _) => {
-                                    Some(text.to_lowercase().cmp(&k.val.to_lowercase().to_string()))
-                                }
+                                (None, _) => Some(sheet_core::casefold::cmp(&text, &k.val)),
                             };
                             let Some(ord) = ord else {
                                 return false;
@@ -1112,7 +1106,7 @@ impl SheetSession {
                     }
                     (Some(c), None, _) => match &c.criterion {
                         FilterCriterion::Values { values, .. } => {
-                            values.iter().any(|v| v.eq_ignore_ascii_case(text))
+                            values.iter().any(|v| sheet_core::casefold::eq(v, text))
                         }
                         _ => true,
                     },
@@ -1188,7 +1182,7 @@ impl SheetSession {
         let n = self.engine().model().sheets.len() as u16;
         for s in 0..n {
             for t in self.doc.table_defs(s) {
-                if t.name().eq_ignore_ascii_case(name) {
+                if sheet_core::casefold::eq(&t.name(), name) {
                     return Ok((s, t));
                 }
             }

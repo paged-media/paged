@@ -414,7 +414,7 @@ impl ColSnap {
             .get_or_insert_with(|| {
                 let mut m: FxHashMap<String, Vec<u32>> = FxHashMap::default();
                 for (i, v) in self.values.iter().enumerate() {
-                    let t = coerce::to_text(v).as_str().to_ascii_lowercase();
+                    let t = sheet_core::casefold::key(&coerce::to_text(v));
                     m.entry(t).or_default().push(self.lo + i as u32);
                 }
                 Rc::new(m)
@@ -596,7 +596,7 @@ impl ExactIndex {
                 }
                 CellValue::Bool(b) => Key::Bool(*b),
                 CellValue::Error(e) => Key::Err(*e as u8),
-                CellValue::Text(t) => Key::Text(t.as_str().to_ascii_lowercase()),
+                CellValue::Text(t) => Key::Text(sheet_core::casefold::key(t)),
             };
             map.entry(k).or_default().push(row);
         }
@@ -896,7 +896,7 @@ fn matches(snap: &ColSnap, key: &CellValue, rule: Rule) -> Option<(Matches, bool
             if rule == Rule::Lookup && t.contains(['*', '?', '~']) {
                 return None;
             }
-            lists.push(list(&Key::Text(t.as_str().to_ascii_lowercase())));
+            lists.push(list(&Key::Text(sheet_core::casefold::key(t))));
             false
         }
         CellValue::Number(n) => {
@@ -1199,8 +1199,7 @@ fn criterion_rows(snap: &ColSnap, crit: &CellValue) -> Option<Matches> {
             }
             let m = snap.text_any();
             lists.push(Rc::from(
-                m.get(&t.as_str().to_ascii_lowercase())
-                    .map_or(&[][..], |v| v),
+                m.get(&sheet_core::casefold::key(t)).map_or(&[][..], |v| v),
             ));
         }
         // `criteria::Kind::BareValue`: candidate == criterion.

@@ -24,11 +24,7 @@ import { inertSurface } from "@paged-media/test-kit";
 
 import { describe, expect, it, vi } from "bun:test";
 
-import type {
-  BundleHost,
-  Mutation,
-  SwatchSummary,
-} from "@paged-media/plugin-api";
+import type { Mutation, SwatchSummary } from "@paged-media/plugin-api";
 import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 import { paletteEntry } from "../../sheet-host-model/src";
 
@@ -38,6 +34,7 @@ import {
   SERVED_OPS,
 } from "../src/binding-provider/swatches-provider";
 
+import { fakeBundleHost } from "./fake-host";
 const CHART_BLUE = paletteEntry("chart", "4E79A7");
 const BAR_GREY = paletteEntry("dataBar", "638EC6");
 
@@ -47,7 +44,7 @@ function fakeHost(documentSwatches: SwatchSummary[] = []) {
   const mutations: Mutation[] = [];
   const warnings: string[] = [];
   let collectionThrows = false;
-  const host = {
+  const host = fakeBundleHost({
     log: {
       debug() {},
       info() {},
@@ -66,7 +63,7 @@ function fakeHost(documentSwatches: SwatchSummary[] = []) {
         return documentSwatches as unknown as readonly T[];
       },
     },
-  } as unknown as BundleHost;
+  });
   return {
     host,
     mutations,
@@ -306,7 +303,7 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
   it("activate() registers the provider for the `sheet` context when both hold", () => {
     const registered: { contextType: string }[] = [];
     let disposed = 0;
-    const host = {
+    const host = fakeBundleHost({
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
       // The contract's widget catalog (the host's NumericField, editor ADR 1216).
@@ -345,7 +342,7 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
       selection: inertSurface({ get: () => [] }),
       objects: inertSurface({ query: async () => [] }),
       shell: { openPanel() {}, closePanel() {} },
-    } as unknown as BundleHost;
+    });
 
     const handle = sheetBundle.activate(host);
     // TWO providers on the SAME context since ADR 023's third proof
@@ -361,7 +358,7 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
 
   it("activate() registers NO provider on a host without the registry", () => {
     const registered: string[] = [];
-    const host = {
+    const host = fakeBundleHost({
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
       // The contract's widget catalog (the host's NumericField, editor ADR 1216).
@@ -393,7 +390,7 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
       selection: inertSurface({ get: () => [] }),
       objects: inertSurface({ query: async () => [] }),
       shell: { openPanel() {}, closePanel() {} },
-    } as unknown as BundleHost;
+    });
 
     sheetBundle.activate(host).dispose();
     // The degradation is honest: with no registry the shared Swatches

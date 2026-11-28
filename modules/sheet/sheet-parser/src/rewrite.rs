@@ -476,7 +476,7 @@ fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable>
                         i = j + 1;
                         continue;
                     }
-                    let on = !name.starts_with('[') && bare.eq_ignore_ascii_case(s.sheet_name);
+                    let on = !name.starts_with('[') && sheet_core::casefold::eq(bare, s.sheet_name);
                     qual = Some((i..j + 1, on));
                     i = j + 1;
                 } else {
@@ -566,7 +566,7 @@ fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable>
                     let name = word.trim_start_matches('$');
                     qual = Some((
                         start..j + 1,
-                        !span_end && name.eq_ignore_ascii_case(s.sheet_name),
+                        !span_end && sheet_core::casefold::eq(name, s.sheet_name),
                     ));
                     i = j + 1;
                     continue;
@@ -917,18 +917,18 @@ pub fn shift_table(
             if plan.at > c0 && plan.at <= c1 {
                 let mut used: Vec<String> = columns
                     .iter()
-                    .map(|c| c.as_str().to_ascii_lowercase())
+                    .map(|c| sheet_core::casefold::key(c))
                     .collect();
                 let mut k = 1u32;
                 for i in 0..plan.n {
                     let name = loop {
                         let cand = format!("Column{k}");
                         k += 1;
-                        if !used.contains(&cand.to_ascii_lowercase()) {
+                        if !used.contains(&sheet_core::casefold::key(&cand)) {
                             break cand;
                         }
                     };
-                    used.push(name.to_ascii_lowercase());
+                    used.push(sheet_core::casefold::key(&name));
                     out.inserted.push((plan.at - c0 + i, name.into()));
                 }
             }

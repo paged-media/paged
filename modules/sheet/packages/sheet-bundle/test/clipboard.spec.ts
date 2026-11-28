@@ -32,6 +32,7 @@ import type { BundleHost, ClipboardPayload } from "@paged-media/plugin-api";
 
 import { createWorkbookSession, type SheetEngine } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 /** A fake engine: getRangeValues returns a fixed 2×2 grid of display
  *  strings; setCell + getCellInput are recorded so we can assert the paste
  *  lands cells through the journaled lane. */
@@ -103,7 +104,7 @@ function fakeEngine() {
 function fakeHost() {
   let slot: ClipboardPayload | null = null;
   const writes: ClipboardPayload[] = [];
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
     document: {
@@ -120,7 +121,7 @@ function fakeHost() {
         slot = payload;
       },
     },
-  } as unknown as BundleHost;
+  });
   return {
     host,
     writes,

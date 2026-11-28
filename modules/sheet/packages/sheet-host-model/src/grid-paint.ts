@@ -23,6 +23,7 @@
 // coordinate space is frame-content points (the surface scales the
 // context by pxPerPt × devicePixelRatio before calling).
 
+import { columnLetters } from "./a1";
 import {
   cellRect,
   colAt,
@@ -149,16 +150,7 @@ export function rowHeadingWidthPt(
   return Math.max(26, 8 + digits * style.fontSizePt * 0.62);
 }
 
-/** 0-based column index → letters (0 → A, 26 → AA). */
-export function columnLetters(index: number): string {
-  let n = index;
-  let label = "";
-  do {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return label;
-}
+export { columnLetters };
 
 export interface PaintOptions {
   /** Draw the heading strips (true while editing). */

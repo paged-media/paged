@@ -30,8 +30,6 @@
 import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import {
   createWorkbookSession,
   type CellEditRecord,
@@ -39,6 +37,7 @@ import {
   type SheetEngine,
 } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 /** A stateful fake: cells hold their INPUT text. `sortRange`/`replaceAll`
  *  return PRESCRIBED edit records and apply them to the cell store (the
  *  same contract the wasm engine honours), so undo/redo inverses are real.
@@ -156,7 +155,7 @@ function statefulEngine() {
   };
 }
 
-const silentHost = {
+const silentHost = fakeBundleHost({
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
   document: {
@@ -164,7 +163,7 @@ const silentHost = {
     onDidOpen: () => ({ dispose() {} }),
   },
   supports: () => false,
-} as unknown as BundleHost;
+});
 
 function booted() {
   const fake = statefulEngine();

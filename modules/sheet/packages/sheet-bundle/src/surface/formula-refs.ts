@@ -46,8 +46,48 @@ export const REF_COLORS = [
   "#b8741a",
 ];
 
-const REF =
-  /(\$?[A-Za-z]{1,3}\$?[0-9]{1,7})(?::(\$?[A-Za-z]{1,3}\$?[0-9]{1,7}))?/g;
+const CELL = String.raw`\$?[A-Za-z]{1,3}\$?[0-9]{1,7}`;
+const REF = new RegExp(`(${CELL})(?::(${CELL}))?`, "g");
+/** A character of a name: a function, a defined name or an unquoted sheet
+ *  name is letters of any script, digits, `_` and `.`. */
+const NAME_CHAR = /[\p{L}\p{N}_.]/u;
+
+/** A cell or range reference found in a formula's text. */
+interface RefSpan {
+  start: number;
+  end: number;
+  /** The text of each corner (`$B$2`); `b` only for a range. */
+  a: string;
+  b: string | undefined;
+  /** Follows a `Sheet!` qualifier. */
+  qualified: boolean;
+}
+
+/** The one reference finder: the cell and range references of `formula`,
+ *  in order. A reference is not text inside a string literal or a quoted
+ *  sheet name, not part of a longer name (`LOG10(`, `Tax2024`, `A1.total`),
+ *  not a sheet name (`ABC1!A1`), and it names cells inside the grid. */
+function refSpans(formula: string): RefSpan[] {
+  // Blank out string literals and quoted sheet names, so a "B2" inside
+  // quotes is not a reference; the spans keep their positions.
+  const masked = formula.replace(/"[^"]*"?|'(?:[^']|'')*'?/g, (m) =>
+    " ".repeat(m.length),
+  );
+  const out: RefSpan[] = [];
+  for (const m of masked.matchAll(REF)) {
+    const start = m.index ?? 0;
+    const end = start + m[0].length;
+    const before = masked[start - 1] ?? "";
+    const after = masked[end] ?? "";
+    // Part of a longer name, a call, or a sheet name before its `!`.
+    if (NAME_CHAR.test(before) || before === "$") continue;
+    if (after !== "" && (NAME_CHAR.test(after) || "($!".includes(after)))
+      continue;
+    if (!cellOfA1(m[1]!) || (m[2] !== undefined && !cellOfA1(m[2]))) continue;
+    out.push({ start, end, a: m[1]!, b: m[2], qualified: before === "!" });
+  }
+  return out;
+}
 
 /** The plain A1 references of `formula` (no sheet-qualified ones, none
  *  inside string literals). Empty unless it starts with `=`. */
@@ -55,22 +95,18 @@ export function formulaRefs(formula: string): FormulaRef[] {
   if (!formula.startsWith("=")) return [];
   const out: FormulaRef[] = [];
   const seen = new Map<string, number>();
-  // Blank out string literals so a "B2" inside quotes is not a reference.
-  const masked = formula.replace(/"[^"]*"?/g, (m) => " ".repeat(m.length));
-  for (const m of masked.matchAll(REF)) {
-    const start = m.index ?? 0;
-    const before = masked[start - 1] ?? "";
-    const after = masked[start + m[0].length] ?? "";
-    // Part of a longer name (a function, a defined name) or sheet-qualified.
-    if (/[A-Za-z0-9_.!]/.test(before) || /[A-Za-z0-9_(]/.test(after)) continue;
-    const a = cellOfA1(m[1]!);
-    const b = m[2] ? cellOfA1(m[2]) : a;
-    if (!a || !b) continue;
-    const key = m[0].replaceAll("$", "").toUpperCase();
+  for (const span of refSpans(formula)) {
+    if (span.qualified) continue;
+    const a = cellOfA1(span.a)!;
+    const b = span.b === undefined ? a : cellOfA1(span.b)!;
+    const key = formula
+      .slice(span.start, span.end)
+      .replaceAll("$", "")
+      .toUpperCase();
     if (!seen.has(key)) seen.set(key, seen.size);
     out.push({
-      start,
-      end: start + m[0].length,
+      start: span.start,
+      end: span.end,
       top: Math.min(a.row, b.row),
       left: Math.min(a.col, b.col),
       bottom: Math.max(a.row, b.row),
@@ -98,55 +134,35 @@ export function refEndingAt(formula: string, caret: number): FormulaRef | null {
   return formulaRefs(formula).find((r) => r.end === caret) ?? null;
 }
 
-/** 0-based column index → letters. */
-function letters(col: number): string {
-  let n = col;
-  let s = "";
-  do {
-    s = String.fromCharCode(65 + (n % 26)) + s;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return s;
-}
-
-/** The A1 text of a cell or a range. */
-export function a1Of(
-  top: number,
-  left: number,
-  bottom = top,
-  right = left,
-): string {
-  const a = `${letters(left)}${top + 1}`;
-  return top === bottom && left === right
-    ? a
-    : `${a}:${letters(right)}${bottom + 1}`;
+/** One corner's next step of A1 → $A$1 → A$1 → $A1 → A1. */
+function cycleCorner(part: string): string {
+  const p = /^(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)$/.exec(part);
+  if (!p) return part;
+  const [, dc, c, dr, r] = p;
+  const state = (dc ? 2 : 0) + (dr ? 1 : 0); // 0 A1, 3 $A$1, 1 A$1, 2 $A1
+  const next = { 0: 3, 3: 1, 1: 2, 2: 0 }[state as 0 | 1 | 2 | 3];
+  return `${next & 2 ? "$" : ""}${c}${next & 1 ? "$" : ""}${r}`;
 }
 
 /** F4: cycle the reference ending at (or containing) `caret` through
- *  A1 → $A$1 → A$1 → $A1 → A1, as Excel does. Returns the new text and
- *  caret, or null when the caret is not on a reference. */
+ *  A1 → $A$1 → A$1 → $A1 → A1, as Excel does, a sheet-qualified one
+ *  included. Returns the new text and caret, or null when the caret is not
+ *  on a reference: a function name that reads like a cell (`LOG10(`) and a
+ *  defined name are not references. */
 export function cycleAbsolute(
   formula: string,
   caret: number,
 ): { text: string; caret: number } | null {
-  const masked = formula.replace(/"[^"]*"?/g, (m) => " ".repeat(m.length));
-  for (const m of masked.matchAll(REF)) {
-    const start = m.index ?? 0;
-    const end = start + m[0].length;
-    if (caret < start || caret > end) continue;
-    const cycle = (part: string): string => {
-      const p = /^(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)$/.exec(part);
-      if (!p) return part;
-      const [, dc, c, dr, r] = p;
-      const state = (dc ? 2 : 0) + (dr ? 1 : 0); // 0 A1, 3 $A$1, 1 A$1, 2 $A1
-      const next = { 0: 3, 3: 1, 1: 2, 2: 0 }[state as 0 | 1 | 2 | 3];
-      return `${next & 2 ? "$" : ""}${c}${next & 1 ? "$" : ""}${r}`;
-    };
-    const replaced = m[2] ? `${cycle(m[1]!)}:${cycle(m[2])}` : cycle(m[1]!);
-    return {
-      text: formula.slice(0, start) + replaced + formula.slice(end),
-      caret: start + replaced.length,
-    };
-  }
-  return null;
+  const span = refSpans(formula).find(
+    (r) => caret >= r.start && caret <= r.end,
+  );
+  if (!span) return null;
+  const replaced =
+    span.b === undefined
+      ? cycleCorner(span.a)
+      : `${cycleCorner(span.a)}:${cycleCorner(span.b)}`;
+  return {
+    text: formula.slice(0, span.start) + replaced + formula.slice(span.end),
+    caret: span.start + replaced.length,
+  };
 }

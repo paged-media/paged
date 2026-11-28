@@ -251,7 +251,7 @@ impl SheetSession {
         let n = self.engine().model().sheets.len() as u16;
         for s in 0..n {
             for t in self.doc.table_defs(s) {
-                if t.name().eq_ignore_ascii_case(name) {
+                if sheet_core::casefold::eq(&t.name(), name) {
                     return Ok((s, t));
                 }
             }
@@ -358,7 +358,7 @@ impl SheetSession {
                 match ws
                     .tables
                     .iter_mut()
-                    .find(|t| t.name.eq_ignore_ascii_case(&old))
+                    .find(|t| sheet_core::casefold::eq(&t.name, &old))
                 {
                     Some(t) => *t = table,
                     None => ws.tables.push(table),
@@ -378,7 +378,7 @@ impl SheetSession {
             };
             let mut name = base.clone();
             let mut k = 2;
-            while out.iter().any(|o| o.eq_ignore_ascii_case(&name)) {
+            while out.iter().any(|o| sheet_core::casefold::eq(o, &name)) {
                 name = format!("{base}{k}");
                 k += 1;
             }
@@ -440,7 +440,7 @@ impl SheetSession {
                 if !valid_table_name(n) {
                     return Err(SessionError(format!("{n:?} is not a valid table name")));
                 }
-                if all.iter().any(|t| t.name().eq_ignore_ascii_case(n))
+                if all.iter().any(|t| sheet_core::casefold::eq(&t.name(), n))
                     || self.engine().model().names.resolve(n, sheet).is_some()
                 {
                     return Err(SessionError(format!("the name {n:?} is already taken")));
@@ -451,7 +451,10 @@ impl SheetSession {
                 let mut k = all.len() + 1;
                 loop {
                     let cand = format!("Table{k}");
-                    if !all.iter().any(|t| t.name().eq_ignore_ascii_case(&cand)) {
+                    if !all
+                        .iter()
+                        .any(|t| sheet_core::casefold::eq(&t.name(), &cand))
+                    {
                         break cand;
                     }
                     k += 1;
@@ -556,7 +559,7 @@ impl SheetSession {
             .doc
             .table_defs(sheet)
             .iter()
-            .filter(|t| !t.name().eq_ignore_ascii_case(name))
+            .filter(|t| !sheet_core::casefold::eq(&t.name(), name))
             .filter_map(|t| t.range())
             .any(|a| !(a.2 < r0 || a.0 > r1 || a.3 < c0 || a.1 > c1))
         {
@@ -623,12 +626,12 @@ impl SheetSession {
                 "{new_name:?} is not a valid table name"
             )));
         }
-        if !new_name.eq_ignore_ascii_case(name)
+        if !sheet_core::casefold::eq(new_name, name)
             && (self
                 .doc
                 .all_table_defs()
                 .iter()
-                .any(|t| t.name().eq_ignore_ascii_case(new_name))
+                .any(|t| sheet_core::casefold::eq(&t.name(), new_name))
                 || self
                     .engine()
                     .model()
@@ -650,13 +653,13 @@ impl SheetSession {
         self.rebuild(move |m| {
             for ws in &mut m.sheets {
                 for t in &mut ws.tables {
-                    if t.name.eq_ignore_ascii_case(&o) {
+                    if sheet_core::casefold::eq(&t.name, &o) {
                         t.name = n.as_str().into();
                     }
                 }
             }
             rewrite_all_formulas(m, &|s: &mut StructuredRef| {
-                if s.table.eq_ignore_ascii_case(&o) {
+                if sheet_core::casefold::eq(&s.table, &o) {
                     s.table = n.as_str().into();
                 }
             });
@@ -816,7 +819,7 @@ impl SheetSession {
         let mut cols = def.columns();
         let col = cols
             .iter_mut()
-            .find(|c| c.name.eq_ignore_ascii_case(column))
+            .find(|c| sheet_core::casefold::eq(&c.name, column))
             .ok_or_else(|| SessionError(format!("no column {column:?} in {name}")))?;
         col.totals_formula = None;
         col.totals_label = None;
@@ -866,7 +869,7 @@ impl SheetSession {
         let mut cols = def.columns();
         let col = cols
             .iter_mut()
-            .find(|c| c.name.eq_ignore_ascii_case(column))
+            .find(|c| sheet_core::casefold::eq(&c.name, column))
             .ok_or_else(|| SessionError(format!("no column {column:?} in {name}")))?;
         col.calculated = match formula {
             None => None,
@@ -972,7 +975,7 @@ impl SheetSession {
         let s2 = style.clone();
         if let Some(ws) = self.engine_mut().sheet_tables_mut(sheet) {
             for t in ws.iter_mut() {
-                if t.name.eq_ignore_ascii_case(&n) {
+                if sheet_core::casefold::eq(&t.name, &n) {
                     t.style_name = s2.as_deref().map(Into::into);
                 }
             }
@@ -1110,18 +1113,18 @@ impl SheetSession {
                 self.rebuild(move |m| {
                     if let Some(ws) = m.sheet_mut(sheet) {
                         for t in &mut ws.tables {
-                            if t.name.eq_ignore_ascii_case(&t2) {
+                            if sheet_core::casefold::eq(&t.name, &t2) {
                                 t.columns = new_cols.iter().map(|c| c.as_str().into()).collect();
                             }
                         }
                     }
                     rewrite_all_formulas(m, &|s: &mut StructuredRef| {
-                        if !s.table.eq_ignore_ascii_case(&t2) {
+                        if !sheet_core::casefold::eq(&s.table, &t2) {
                             return;
                         }
                         for (old, new) in &renames {
                             for c in [&mut s.col_start, &mut s.col_end].into_iter().flatten() {
-                                if c.eq_ignore_ascii_case(old) {
+                                if sheet_core::casefold::eq(c, old) {
                                     *c = new.as_str().into();
                                 }
                             }

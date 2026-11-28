@@ -26,10 +26,9 @@
 import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import { createWorkbookSession, type SheetEngine } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 function fakeEngine() {
   const cells = new Map<string, string>();
   const key = (s: number, r: number, c: number) => `${s}:${r}:${c}`;
@@ -96,7 +95,7 @@ function fakeEngine() {
   return { engine, cells, key, listFnCalls: () => listFnCalls };
 }
 
-const silentHost = {
+const silentHost = fakeBundleHost({
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
   document: {
@@ -104,7 +103,7 @@ const silentHost = {
     onDidOpen: () => ({ dispose() {} }),
   },
   supports: () => false,
-} as unknown as BundleHost;
+});
 
 function booted() {
   const fake = fakeEngine();

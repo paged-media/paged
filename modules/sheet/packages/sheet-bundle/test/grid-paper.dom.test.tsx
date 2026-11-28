@@ -40,6 +40,7 @@ import type { GridScene } from "@paged-media/sheet-host-model";
 import { stubFrameWindow } from "./frame-window-stub";
 import { createWorkbookSession, makeGridPanel, type SheetEngine } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 // ── the editor's theme, from its one token file (editor ADR 210) ─────────
 
 const css = readFileSync(
@@ -237,14 +238,14 @@ function fakeEngine(): SheetEngine {
 }
 
 function fakeHost(): BundleHost {
-  return {
+  return fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
     document: {
       onDidChange: () => ({ dispose() {} }),
       onDidOpen: () => ({ dispose() {} }),
     },
-  } as unknown as BundleHost;
+  });
 }
 
 /** The Grid panel over a loaded session, a body cell selected. */

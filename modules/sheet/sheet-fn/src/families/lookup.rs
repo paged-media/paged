@@ -588,7 +588,7 @@ pub fn lookup_fn(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
         // Text compares case-insensitively with NO byte tie-break ("c" equals
         // "C" here; `coerce::compare` orders them for a total sort).
         let ord = match (&cand, &key) {
-            (CellValue::Text(a), CellValue::Text(b)) => a.to_lowercase().cmp(&b.to_lowercase()),
+            (CellValue::Text(a), CellValue::Text(b)) => sheet_core::casefold::cmp(a, b),
             _ => coerce::compare(&cand, &key),
         };
         match ord {

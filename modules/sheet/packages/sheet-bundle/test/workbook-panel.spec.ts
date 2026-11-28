@@ -41,6 +41,7 @@ import {
 } from "../src";
 import { datasetLabel, makeDatasetsPanel } from "../src/panels/datasets-panel";
 
+import { fakeBundleHost } from "./fake-host";
 function fakeEngine(sheetCount = 2): SheetEngine {
   return {
     loadXlsx() {},
@@ -91,7 +92,7 @@ function fakeHost(features: string[] = []): {
   opened: string[];
 } {
   const opened: string[] = [];
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The contract's widget catalog (the host's NumericField, editor ADR 1216).
     widgets: FALLBACK_WIDGETS,
@@ -102,7 +103,7 @@ function fakeHost(features: string[] = []): {
     },
     supports: (f: string) => features.includes(f),
     shell: { openPanel: (id: string) => void opened.push(id) },
-  } as unknown as BundleHost;
+  });
   return { host, opened };
 }
 
@@ -230,7 +231,7 @@ describe("datasets panel names", () => {
   });
 
   it("shows the name, not the id, and keeps the id in the tooltip", () => {
-    const host = {
+    const host = fakeBundleHost({
       log: { debug() {}, info() {}, warn() {}, error() {} },
       // The document doors every host has; nothing here fires them.
       document: {
@@ -255,7 +256,7 @@ describe("datasets panel names", () => {
         get: async () => null,
         onDidChange: () => ({ dispose() {} }),
       },
-    } as unknown as BundleHost;
+    });
     const session = createWorkbookSession(host);
     const Panel = makeDatasetsPanel(host, session);
     let tree!: ReactTestRenderer;

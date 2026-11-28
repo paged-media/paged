@@ -329,7 +329,7 @@ fn exact_pos(key: &CellValue, vec: &Vector, search_mode: SearchMode) -> Option<u
 /// to the cross-type order for every non-text/non-text pair.
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     match (a, b) {
-        (CellValue::Text(x), CellValue::Text(y)) => x.eq_ignore_ascii_case(y),
+        (CellValue::Text(x), CellValue::Text(y)) => sheet_core::casefold::eq(x, y),
         // Mixed types (e.g. number vs text) never compare equal in lookup.
         (CellValue::Text(_), _) | (_, CellValue::Text(_)) => false,
         _ => coerce::compare(a, b) == std::cmp::Ordering::Equal,

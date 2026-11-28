@@ -27,7 +27,6 @@ import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
 import {
   createWorkbookEditorRegistry,
   createWorkbooksSurface,
@@ -36,6 +35,7 @@ import {
 import { WORKBOOK_EDITOR_ID, workbookEditor } from "../src";
 import { ENGINE_BUILT, authorWorkbook, readCell } from "./perf/workload";
 
+import { fakeBundleHost } from "./fake-host";
 /** A host that records every document, parts and blob door it is asked
  *  for: a detached workbook must ask none of them. */
 function recordingHost() {
@@ -50,7 +50,7 @@ function recordingHost() {
         },
       },
     );
-  const host = {
+  const host = fakeBundleHost({
     manifest: { id: "media.paged.sheet" },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
@@ -59,7 +59,7 @@ function recordingHost() {
     blob: door("blob"),
     storage: door("storage"),
     comments: door("comments"),
-  } as unknown as BundleHost;
+  });
   return { host, touched };
 }
 

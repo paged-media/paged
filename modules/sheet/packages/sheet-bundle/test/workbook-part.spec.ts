@@ -23,8 +23,6 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import {
   readFilterViewsPart,
   readWorkbookPart,
@@ -32,19 +30,20 @@ import {
   writeWorkbookPart,
 } from "../src/workbook-part";
 
+import { fakeBundleHost } from "./fake-host";
 /** A host exposing just the `parts` door, backed by an in-memory
  *  store (the host normally prepends the plugin namespace; this fake keeps the
  *  relative paths verbatim, which is all the module speaks). */
 function partsHost() {
   const store = new Map<string, Uint8Array>();
-  const host = {
+  const host = fakeBundleHost({
     parts: {
       write: async (p: string, b: Uint8Array) => void store.set(p, b),
       read: async (p: string) => store.get(p) ?? null,
       list: async (prefix?: string) =>
         [...store.keys()].filter((k) => !prefix || k.startsWith(prefix)),
     },
-  } as unknown as BundleHost;
+  });
   return { host, store };
 }
 

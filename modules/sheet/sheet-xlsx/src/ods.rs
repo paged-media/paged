@@ -1118,7 +1118,10 @@ fn excel_sheet_name(raw: &str, taken: &[Sheet]) -> String {
     };
     let mut name = base.clone();
     let mut n = 2;
-    while taken.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
+    while taken
+        .iter()
+        .any(|s| sheet_core::casefold::eq(&s.name, &name))
+    {
         let suffix = format!(" ({n})");
         let keep = 31usize.saturating_sub(suffix.chars().count());
         name = format!("{}{suffix}", base.chars().take(keep).collect::<String>());
@@ -1620,6 +1623,10 @@ fn sheet_xml(s: &Sheet, xf_of: &[usize]) -> String {
         let at = a1(r, c);
         match v {
             Value::Empty => out.push_str(&format!(r#"<c r="{at}"{st}>{fx}</c>"#)),
+            // No `inf`/`NaN` in `<v>`: the `#NUM!` Excel computes for an overflow.
+            Value::Number(n) if !n.is_finite() => {
+                out.push_str(&format!(r#"<c r="{at}"{st} t="e">{fx}<v>#NUM!</v></c>"#))
+            }
             Value::Number(n) => out.push_str(&format!(
                 r#"<c r="{at}"{st}>{fx}<v>{}</v></c>"#,
                 num_text(*n)

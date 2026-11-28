@@ -95,7 +95,10 @@ fn case_cmp(a: &str, b: &str) -> Ordering {
         if x == y {
             continue;
         }
-        let (xl, yl) = (x.to_lowercase().next(), y.to_lowercase().next());
+        let (xl, yl) = (
+            sheet_core::casefold::fold_char(x),
+            sheet_core::casefold::fold_char(y),
+        );
         if xl == yl {
             return if x.is_lowercase() {
                 Ordering::Less
@@ -130,7 +133,8 @@ fn value_cmp(
                     CellValue::Text(t) => t.to_string(),
                     other => sheet_format::format_general(other),
                 };
-                list.iter().position(|i| i.eq_ignore_ascii_case(t.trim()))
+                list.iter()
+                    .position(|i| sheet_core::casefold::eq(i, t.trim()))
             };
             match (pos(a), pos(b)) {
                 (Some(x), Some(y)) => x.cmp(&y),
@@ -142,7 +146,7 @@ fn value_cmp(
         None => match (a, b) {
             (CellValue::Text(x), CellValue::Text(y)) => {
                 let o = ci_text_cmp(x, y);
-                if o == Ordering::Equal || x.to_lowercase() == y.to_lowercase() {
+                if sheet_core::casefold::eq(x, y) {
                     if case {
                         case_cmp(x, y)
                     } else {

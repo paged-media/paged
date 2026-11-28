@@ -17,8 +17,8 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it } from "bun:test";
 
 import type {
-  BundleHost,
   ClipboardPayload,
+  ElementId,
   SceneLayer,
 } from "@paged-media/plugin-api";
 
@@ -36,6 +36,7 @@ import {
 } from "../src";
 import { makeGridPanel } from "../src/panels/grid-panel";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
@@ -186,20 +187,25 @@ describe("grid key map [sheet.grid.keyboard]", () => {
 function fakeHost(opts: { box?: [number, number, number, number] } = {}) {
   const submits: SceneLayer[] = [];
   const clip: { payload: ClipboardPayload | null } = { payload: null };
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (f: string) => f === "rendering.sceneLayer@1",
     contribute: {
       sceneLayer: () => ({
         async submit(_id: string, layer: SceneLayer) {
           submits.push(layer);
+          return { fontFallbacks: [] };
         },
         async clear() {},
+        async submitImage() {},
+        async submitImageTiles() {},
         dispose() {},
       }),
     },
     document: {
-      elementGeometry: async () => [{ bounds: opts.box ?? [0, 0, 200, 400] }],
+      elementGeometry: async (ids: ElementId[]) => [
+        { id: ids[0]!, bounds: opts.box ?? [0, 0, 200, 400] },
+      ],
       onDidChange: () => ({ dispose() {} }),
     },
     clipboard: {
@@ -211,7 +217,7 @@ function fakeHost(opts: { box?: [number, number, number, number] } = {}) {
       },
     },
     shell: { openPanel() {} },
-  } as unknown as BundleHost;
+  });
   return { host, submits, clip };
 }
 

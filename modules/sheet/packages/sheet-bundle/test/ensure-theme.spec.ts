@@ -21,11 +21,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost, Mutation } from "@paged-media/plugin-api";
+import type { Mutation } from "@paged-media/plugin-api";
 
 import type { SheetEngine, WorkbookTheme } from "../src/engine";
 import { ensureDocumentTheme } from "../src/lower";
 
+import { fakeBundleHost } from "./fake-host";
 const THEME: WorkbookTheme = {
   name: "Office",
   colors: [{ slot: "accent1", value: "4472C4" }],
@@ -36,19 +37,19 @@ const THEME: WorkbookTheme = {
 
 function fake(rows: unknown[] | Error) {
   const sent: Mutation[] = [];
-  const host = {
+  const host = fakeBundleHost({
     document: {
-      collection: async () => {
+      collection: async <T>() => {
         if (rows instanceof Error) throw rows;
-        return rows;
+        return rows as readonly T[];
       },
       mutate: async (op: Mutation) => {
         sent.push(op);
-        return { applied: true };
+        return { applied: true, createdId: null, pageIds: [] };
       },
     },
     log: { warn: () => {} },
-  } as unknown as BundleHost;
+  });
   return { host, sent };
 }
 

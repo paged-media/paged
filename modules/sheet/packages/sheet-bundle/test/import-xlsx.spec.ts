@@ -23,11 +23,10 @@
 
 import { describe, expect, it, vi } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import { pickAndImport, XLSX_MIME } from "../src/import-xlsx";
 import type { WorkbookSession } from "../src/session";
 
+import { fakeBundleHost } from "./fake-host";
 const PANEL = "media.paged.sheet.panel.workbook";
 
 function fakeSession() {
@@ -49,7 +48,7 @@ function fakeHost(opts: {
   >;
 }) {
   const opened: string[] = [];
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (f: string) => f === "shell.pickFile@1" && !!opts.pickFile,
     shell: {
@@ -57,7 +56,7 @@ function fakeHost(opts: {
       closePanel() {},
       pickFile: opts.pickFile ?? (async () => []),
     },
-  } as unknown as BundleHost;
+  });
   return { host, opened };
 }
 

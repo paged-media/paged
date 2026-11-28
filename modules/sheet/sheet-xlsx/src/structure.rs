@@ -260,7 +260,7 @@ pub fn rewrite_sheet_refs(text: &str, old: &str, replacement: &str) -> (String, 
                 name.push(chars[j]);
                 j += 1;
             }
-            if j + 1 < chars.len() && chars[j + 1] == '!' && name.eq_ignore_ascii_case(old) {
+            if j + 1 < chars.len() && chars[j + 1] == '!' && sheet_core::casefold::eq(&name, old) {
                 out.push_str(replacement);
                 out.push('!');
                 changed = true;
@@ -278,7 +278,7 @@ pub fn rewrite_sheet_refs(text: &str, old: &str, replacement: &str) -> (String, 
                 j += 1;
             }
             let run: String = chars[i..j].iter().collect();
-            if j < chars.len() && chars[j] == '!' && run.eq_ignore_ascii_case(old) {
+            if j < chars.len() && chars[j] == '!' && sheet_core::casefold::eq(&run, old) {
                 out.push_str(replacement);
                 out.push('!');
                 changed = true;

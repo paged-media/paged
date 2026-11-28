@@ -28,10 +28,9 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import { createWorkbookSession, type SheetEngine } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 /** Records every addChart call and serves a fixed kind list. `chartKinds`
  *  can be made to throw, to prove the session degrades rather than taking
  *  the panel down with it. */
@@ -95,7 +94,7 @@ function recordingEngine(opts: { kindsThrow?: boolean } = {}) {
   return { engine, authored };
 }
 
-const silentHost = {
+const silentHost = fakeBundleHost({
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
   document: {
@@ -103,7 +102,7 @@ const silentHost = {
     onDidOpen: () => ({ dispose() {} }),
   },
   supports: () => false,
-} as unknown as BundleHost;
+});
 
 function booted(opts: { kindsThrow?: boolean } = {}) {
   const { engine, authored } = recordingEngine(opts);

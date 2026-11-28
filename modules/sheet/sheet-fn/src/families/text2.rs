@@ -729,7 +729,7 @@ fn textsplit(args: &[Arg], side: Side) -> CellValue {
 }
 
 /// Every 0-based char start index where `needle` occurs in `hay`, exactly or
-/// (`ci`) case-insensitively (ASCII fold). Overlapping matches advance by one (Excel's
+/// (`ci`) case-insensitively. Overlapping matches advance by one (Excel's
 /// occurrence counting is left-to-right, non-skipping past a found start).
 fn find_all(hay: &[char], needle: &[char], ci: bool) -> Vec<usize> {
     let mut out = Vec::new();
@@ -757,11 +757,9 @@ fn find_all(hay: &[char], needle: &[char], ci: bool) -> Vec<usize> {
     out
 }
 
-/// Case-insensitive char equality (ASCII fold; non-ASCII compares as-is — T0
-/// has no Unicode case folding, D-8). [`char::eq_ignore_ascii_case`] folds
-/// only the ASCII range, so a non-ASCII pair falls back to plain equality.
+/// Case-insensitive char equality ([`sheet_core::casefold`]).
 fn eq_ci(a: char, b: char) -> bool {
-    a.eq_ignore_ascii_case(&b)
+    sheet_core::casefold::eq_char(a, b)
 }
 
 // ---- Shared optional-argument coercion for FIXED/DOLLAR. ----

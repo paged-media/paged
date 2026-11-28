@@ -105,6 +105,7 @@ import {
   type Page,
   type Placement,
   type TableFit,
+  a1OfCell,
   cellOfA1,
   chartGeometryToMutations,
   type ChartGeometry,
@@ -1444,23 +1445,6 @@ export function pageBodyTracks(content: LoweredContent): {
     .map((c) => c.index)
     .filter((i) => i !== HEADING_INDEX);
   return { rows, cols };
-}
-
-/** Column letters of a 0-based column index (`0` -> `A`, `27` -> `AB`). */
-function colName(col: number): string {
-  let n = col + 1;
-  let out = "";
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    out = String.fromCharCode(65 + r) + out;
-    n = Math.floor((n - 1) / 26);
-  }
-  return out;
-}
-
-/** The A1 address of a 0-based cell. */
-export function a1OfCell(row: number, col: number): string {
-  return `${colName(col)}${row + 1}`;
 }
 
 /** The A1 range a frame page covers (its sheet-indexed tracks, the printed

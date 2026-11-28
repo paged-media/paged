@@ -95,7 +95,7 @@ impl ExternalBook {
     pub fn sheet_index(&self, name: &str) -> Option<u32> {
         self.sheet_names
             .iter()
-            .position(|n| n.eq_ignore_ascii_case(name))
+            .position(|n| sheet_core::casefold::eq(n, name))
             .map(|i| i as u32)
     }
 

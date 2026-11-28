@@ -50,6 +50,7 @@ import {
 } from "../src";
 import { measureColumns } from "../src/lower";
 
+import { fakeBundleHost } from "./fake-host";
 // A fake engine: returns a fixed 2x1 region + one sheet.
 function fakeEngine(): SheetEngine {
   return {
@@ -124,7 +125,7 @@ function fakeHost(createdId: ElementId, storyId: string | null) {
   const mutations: Mutation[] = [];
   const selections: ElementId[][] = [];
   let frameInserted = false;
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     document: {
       async meta() {
@@ -212,7 +213,7 @@ function fakeHost(createdId: ElementId, storyId: string | null) {
         return ids;
       },
     },
-  } as unknown as BundleHost;
+  });
   return { host, mutations, selections };
 }
 
@@ -434,7 +435,7 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
 
   it("returns null when the phase-1 batch is rejected", async () => {
     const mutations: Mutation[] = [];
-    const host = {
+    const host = fakeBundleHost({
       log: { debug() {}, info() {}, warn() {}, error() {} },
       document: {
         async meta() {
@@ -461,7 +462,7 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
           return { advance: 30, ascender: 9, descender: -2 };
         },
       },
-    } as unknown as BundleHost;
+    });
     const id = await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
     expect(id).toBeNull();
     // The one-call, the one-batch and the phased frame batch — all refused.
@@ -946,7 +947,7 @@ function fakeChainHost(
     f1: "Story/f1",
   };
 
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     document: {
       async meta() {
@@ -1067,7 +1068,7 @@ function fakeChainHost(
         return ids;
       },
     },
-  } as unknown as BundleHost;
+  });
 
   // The hitTest order: the flow lowers page 0 (frame f0) then page 1 (f1).
   const pendingFrames = ["f0", "f1"];

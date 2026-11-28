@@ -42,7 +42,13 @@ import type {
   ValidationRuleArg,
   ValidationRuleInfo,
 } from "./engine-w2";
-import { a1Of } from "./surface/formula-refs";
+import {
+  a1OfRange,
+  columnLetters,
+  MAX_COL,
+  MAX_ROW,
+  rectOfA1,
+} from "../../sheet-host-model/src";
 
 /** Excel's alert when a locked cell of a protected sheet is changed. */
 export const PROTECTED_ALERT: ValidationAlert = {
@@ -211,35 +217,13 @@ export interface DataToolsContext {
   changedUi(): void;
 }
 
-const MAX_ROW = 1_048_575;
-const MAX_COL = 16_383;
-
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** `A1:F20` → its corners (0-based); null when it does not read. */
-export function parseA1Range(
-  text: string,
-): { top: number; left: number; bottom: number; right: number } | null {
-  const m = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i.exec(
-    text.trim().replace(/^.*!/, ""),
-  );
-  if (!m) return null;
-  const col = (s: string) =>
-    [...s.toUpperCase()].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) -
-    1;
-  const r0 = Number(m[2]) - 1;
-  const c0 = col(m[1]!);
-  const r1 = m[4] ? Number(m[4]) - 1 : r0;
-  const c1 = m[3] ? col(m[3]) : c0;
-  return {
-    top: Math.min(r0, r1),
-    left: Math.min(c0, c1),
-    bottom: Math.max(r0, r1),
-    right: Math.max(c0, c1),
-  };
-}
+/** `A1:F20` → its corners (0-based); null when it does not read. The
+ *  sheet packages' one `rectOfA1`, under the name the data tools use. */
+export const parseA1Range = rectOfA1;
 
 export function createDataTools(ctx: DataToolsContext): {
   api: DataToolsApi;
@@ -364,7 +348,7 @@ export function createDataTools(ctx: DataToolsContext): {
       const right = ext
         ? Math.min(t.right, Math.max(ext.cols - 1, t.left))
         : t.right;
-      return a1Of(t.top, t.left, bottom, right);
+      return a1OfRange(t.top, t.left, bottom, right);
     }
     const inside = (r: {
       top: number;
@@ -388,7 +372,7 @@ export function createDataTools(ctx: DataToolsContext): {
       if (r && inside(r)) return tb.range;
     }
     if (!ext || ext.rows === 0 || ext.cols === 0) return null;
-    return a1Of(0, 0, ext.rows - 1, ext.cols - 1);
+    return a1OfRange(0, 0, ext.rows - 1, ext.cols - 1);
   }
 
   function filtered(run: (e: SheetEngine, sheet: number) => unknown): Result {
@@ -578,7 +562,7 @@ export function createDataTools(ctx: DataToolsContext): {
             e.validationAt!(t.sheet, at.row, at.col),
           )?.rule ?? null)
         : null;
-      return { range: a1Of(t.top, t.left, t.bottom, t.right), rule };
+      return { range: a1OfRange(t.top, t.left, t.bottom, t.right), rule };
     },
 
     applyValidation(rule) {
@@ -586,7 +570,7 @@ export function createDataTools(ctx: DataToolsContext): {
       const e = ctx.engine();
       if (!t || !e?.setValidation || !e.clearValidation)
         return { ok: false, message: "this engine cannot author validation" };
-      const range = a1Of(t.top, t.left, t.bottom, t.right);
+      const range = a1OfRange(t.top, t.left, t.bottom, t.right);
       const clearsOnly =
         (rule.type === "any" || rule.type === "none") &&
         !rule.promptTitle &&
@@ -609,7 +593,7 @@ export function createDataTools(ctx: DataToolsContext): {
       if (!t || !e?.clearValidation)
         return { ok: false, message: "this engine cannot author validation" };
       try {
-        e.clearValidation(t.sheet, a1Of(t.top, t.left, t.bottom, t.right));
+        e.clearValidation(t.sheet, a1OfRange(t.top, t.left, t.bottom, t.right));
       } catch (err) {
         return { ok: false, message: message(err) };
       }
@@ -709,13 +693,12 @@ export function createDataTools(ctx: DataToolsContext): {
           header.length > 0 &&
           header.every((h) => h !== "" && !numeric(h)) &&
           below.some((b) => numeric(b) || b === "");
-        const letters = (n: number) => a1Of(0, n).replace(/\d+$/, "");
         return {
           range,
           hasHeader,
           columns: header.map((h, i) => ({
             index: i,
-            label: `Column ${letters(r.left + i)}`,
+            label: `Column ${columnLetters(r.left + i)}`,
             header: h,
           })),
         };

@@ -175,19 +175,7 @@ export function rangeTopLeft(range: string): string {
   return (body.split(":")[0] ?? "A1").replaceAll("$", "").toUpperCase() || "A1";
 }
 
-/** The zero-based `(row, col)` of an A1 cell (`"C14"` -> `{row: 13, col: 2}`),
- *  or null when it is not a cell inside Excel's grid. Pure addressing, used
- *  to start the grid at a frame's view; the engine validates real ranges. */
-export function cellOfA1(a1: string): { row: number; col: number } | null {
-  const m = /^\$?([A-Za-z]{1,3})\$?([1-9][0-9]{0,6})$/.exec(a1.trim());
-  if (!m) return null;
-  let col = 0;
-  for (const ch of m[1]!.toUpperCase())
-    col = col * 26 + (ch.charCodeAt(0) - 64);
-  const row = Number(m[2]) - 1;
-  if (col - 1 > 16383 || row > 1048575) return null;
-  return { row, col: col - 1 };
-}
+export { cellOfA1 } from "./a1";
 
 /** Build a binding envelope from its parts (pure constructor). The view
  *  starts at the range's top-left, unlocked; nothing extra is printed; the

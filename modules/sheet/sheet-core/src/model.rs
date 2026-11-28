@@ -112,12 +112,12 @@ impl SheetModel {
             return self
                 .external_sheets
                 .iter()
-                .position(|s| s.name.eq_ignore_ascii_case(name))
+                .position(|s| crate::casefold::eq(&s.name, name))
                 .map(|i| EXTERNAL_SHEET_BASE + i as SheetId);
         }
         self.sheets
             .iter()
-            .position(|s| s.name.eq_ignore_ascii_case(name))
+            .position(|s| crate::casefold::eq(&s.name, name))
             .map(|i| i as SheetId)
     }
 

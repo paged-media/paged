@@ -79,9 +79,11 @@ pub(super) fn sheet(
     }
     match eval(model, arg, ctx, spills) {
         CellValue::Error(e) => err(e),
-        CellValue::Text(t) => match model.sheets.iter().position(|ws| {
-            ws.name.eq_ignore_ascii_case(&t) || ws.name.to_lowercase() == t.to_lowercase()
-        }) {
+        CellValue::Text(t) => match model
+            .sheets
+            .iter()
+            .position(|ws| ws.name.eq_ignore_ascii_case(&t))
+        {
             Some(i) => CellValue::Number(i as f64 + 1.0),
             None => err(CellError::Na),
         },

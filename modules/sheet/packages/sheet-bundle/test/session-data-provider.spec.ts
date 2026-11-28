@@ -42,7 +42,6 @@ import { beforeEach, describe, expect, it, vi, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
 
 import type {
-  BundleHost,
   DataProviderInfo,
   DataProviderSnapshot,
   Disposable,
@@ -51,6 +50,7 @@ import type {
 import type { SheetEngine } from "../src";
 import { cellToString, createWorkbookSession, makeDatasetsPanel } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 // ---- the mocked engine module ------------------------------------------
 //
 // bootEmptyEngine() is what sourceFromDataset boots a fresh workbook with;
@@ -199,7 +199,7 @@ function fakeHost(opts?: { wired?: boolean }) {
     ),
   };
   const openedPanels: string[] = [];
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
     document: {
@@ -214,7 +214,7 @@ function fakeHost(opts?: { wired?: boolean }) {
       openPanel: (id: string) => openedPanels.push(id),
       closePanel() {},
     },
-  } as unknown as BundleHost;
+  });
   return { host, dataProviders, changeListeners, getCalls, openedPanels };
 }
 

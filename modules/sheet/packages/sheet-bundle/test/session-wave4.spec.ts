@@ -41,7 +41,6 @@ import {
 } from "@paged-media/test-kit";
 
 import type {
-  BundleHost,
   ElementId,
   FrameChainLink,
   Mutation,
@@ -61,6 +60,7 @@ import {
 import { makeWorkbookPanel } from "../src/panels/workbook-panel";
 import { createWorkbookSession, REFRESH_DEBOUNCE_MS } from "../src/session";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
@@ -91,7 +91,7 @@ function fakeDoc(
   const frameOfStory = new Map<string, string>();
   const tree: { id: ElementId; kind: string; label: string }[] = [];
   let seq = 0;
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The contract's widget catalog (the host's NumericField, editor ADR 1216).
     widgets: FALLBACK_WIDGETS,
@@ -218,7 +218,7 @@ function fakeDoc(
       },
     },
     shell: { openPanel() {} },
-  } as unknown as BundleHost;
+  });
   return { host, mutations };
 }
 

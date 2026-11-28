@@ -25,7 +25,6 @@
 import { describe, expect, it } from "bun:test";
 
 import type {
-  BundleHost,
   CommandContribution,
   CommentAnchorContribution,
   Disposable,
@@ -34,6 +33,7 @@ import type {
   ImporterContribution,
   ObjectTypeContribution,
   PanelContribution,
+  SchemaPanelContribution,
 } from "@paged-media/plugin-api";
 import { FALLBACK_WIDGETS } from "@paged-media/plugin-sdk";
 
@@ -41,12 +41,13 @@ import { covers } from "@paged-media/test-kit";
 
 import { sheetBundle } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 /** A minimal recording fake of the slice of BundleHost activate touches:
  *  contribute.panel / contribute.command, log, and shell.openPanel. Each
  *  registration returns a Disposable the fake tracks so we can assert
  *  teardown. */
 function fakeHost() {
-  const panels: PanelContribution[] = [];
+  const panels: Array<PanelContribution | SchemaPanelContribution> = [];
   const commands: CommandContribution[] = [];
   const importers: ImporterContribution[] = [];
   const exporters: ExporterContribution[] = [];
@@ -60,7 +61,7 @@ function fakeHost() {
     },
   });
   const openedPanels: string[] = [];
-  const host = {
+  const host = fakeBundleHost({
     manifest: sheetBundle.manifest,
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The contract's widget catalog (the host's NumericField, editor ADR 1216).
@@ -88,7 +89,7 @@ function fakeHost() {
         return track();
       },
       // ADR 323 — the property-rows panel registers as a schema panel.
-      schemaPanel(c: PanelContribution): Disposable {
+      schemaPanel(c: SchemaPanelContribution): Disposable {
         panels.push(c);
         return track();
       },
@@ -135,7 +136,7 @@ function fakeHost() {
       },
       closePanel() {},
     },
-  } as unknown as BundleHost;
+  });
   return {
     host,
     panels,

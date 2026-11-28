@@ -43,6 +43,7 @@ import {
   type WorkbookSession,
 } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 // A 2-col × 2-row lowered IR (model rows 0..1, model cols 0 & 2 — sparse, so
 // model col 2 maps to table col 1, proving the mapping is real).
 const LOWERED = {
@@ -122,7 +123,7 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
   ];
   const mutations: Mutation[] = [];
   let frameInserted = false;
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
     document: {
@@ -200,7 +201,7 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
         return ids;
       },
     },
-  } as unknown as BundleHost;
+  });
   return { host, mutations };
 }
 

@@ -688,7 +688,11 @@ impl SheetSession {
             }
         }
         for (sid, ws) in model.sheets.iter().enumerate() {
-            if let Some(t) = ws.tables.iter().find(|t| t.name.eq_ignore_ascii_case(text)) {
+            if let Some(t) = ws
+                .tables
+                .iter()
+                .find(|t| sheet_core::casefold::eq(&t.name, text))
+            {
                 let n = t.range.normalized();
                 return Ok((
                     sid as u16,
@@ -1267,7 +1271,7 @@ impl SheetSession {
         // A print area may list several ranges (`A!A1:C5,A!E1:F3`): stored as
         // the formula Excel writes, each area resolved and absolute.
         let areas = split_areas(refers_to);
-        let multi = name.eq_ignore_ascii_case(PRINT_AREA) && areas.len() > 1;
+        let multi = sheet_core::casefold::eq(name, PRINT_AREA) && areas.len() > 1;
         let mut ranges = Vec::with_capacity(areas.len());
         for area in if multi { areas } else { vec![refers_to] } {
             let (target_sheet, cr) = self.resolve_range(sheet, area)?;
@@ -1308,12 +1312,13 @@ impl SheetSession {
         let names = &self.engine().model().names;
         let live = names
             .iter()
-            .find(|(_, d)| d.name.eq_ignore_ascii_case(name) && d.scope == new_scope)
+            .find(|(_, d)| sheet_core::casefold::eq(&d.name, name) && d.scope == new_scope)
             .map(|(id, _)| id);
         let parked = names
             .iter()
             .find(|(_, d)| {
-                d.name.eq_ignore_ascii_case(name) && d.scope == sheet_core::NameScope::Sheet(PARKED)
+                sheet_core::casefold::eq(&d.name, name)
+                    && d.scope == sheet_core::NameScope::Sheet(PARKED)
             })
             .map(|(id, _)| id);
         let slot = live.or(parked);
@@ -1364,7 +1369,7 @@ impl SheetSession {
             .model()
             .names
             .iter()
-            .find(|(_, d)| d.name.eq_ignore_ascii_case(name.trim()) && d.scope == want)
+            .find(|(_, d)| sheet_core::casefold::eq(&d.name, name.trim()) && d.scope == want)
             .map(|(id, _)| id)
             .ok_or_else(|| SessionError(format!("no defined name {name:?} in that scope")))?;
         let spelled = self

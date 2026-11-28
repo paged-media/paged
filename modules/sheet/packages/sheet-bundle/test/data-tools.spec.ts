@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 
 import {
   createWorkbookSession,
@@ -24,6 +24,7 @@ import {
 } from "../src";
 import { parseA1Range } from "../src/data-tools";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
@@ -37,16 +38,18 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !built) {
 }
 
 function fakeHost(): BundleHost {
-  return {
+  return fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
     contribute: {},
     document: {
-      elementGeometry: async () => [{ bounds: [0, 0, 200, 400] }],
+      elementGeometry: async (ids: ElementId[]) => [
+        { id: ids[0]!, bounds: [0, 0, 200, 400] },
+      ],
       onDidChange: () => ({ dispose() {} }),
     },
     shell: { openPanel() {} },
-  } as unknown as BundleHost;
+  });
 }
 
 async function open(

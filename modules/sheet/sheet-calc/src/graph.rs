@@ -200,8 +200,8 @@ impl DepGraph {
             }
         }
         for name in &refs.tables {
-            if precise.iter().any(|p| p.eq_ignore_ascii_case(name))
-                && !imprecise.iter().any(|p| p.eq_ignore_ascii_case(name))
+            if precise.iter().any(|p| sheet_core::casefold::eq(p, name))
+                && !imprecise.iter().any(|p| sheet_core::casefold::eq(p, name))
             {
                 continue;
             }

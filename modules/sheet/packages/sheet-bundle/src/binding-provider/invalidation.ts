@@ -38,6 +38,7 @@
 
 import type { Disposable } from "@paged-media/plugin-api";
 
+import { rectOfA1 } from "../../../sheet-host-model/src";
 import type { CellRegion, SessionChange } from "../session";
 
 /** A provider handle — only `invalidate` matters here. */
@@ -59,25 +60,16 @@ export function a1Bounds(range: string): {
   lastRow: number;
   lastCol: number;
 } | null {
-  const ref = /^\$?([A-Za-z]{1,3})\$?(\d+)$/;
-  const parts = range.split(":");
-  if (parts.length < 1 || parts.length > 2) return null;
-  const cells: [number, number][] = [];
-  for (const p of parts) {
-    const m = ref.exec(p.trim());
-    if (!m) return null;
-    let col = 0;
-    for (const ch of m[1].toUpperCase())
-      col = col * 26 + (ch.charCodeAt(0) - 64);
-    cells.push([Number(m[2]) - 1, col - 1]);
-  }
-  const [a, b] = [cells[0], cells[cells.length - 1]];
-  return {
-    firstRow: Math.min(a[0], b[0]),
-    firstCol: Math.min(a[1], b[1]),
-    lastRow: Math.max(a[0], b[0]),
-    lastCol: Math.max(a[1], b[1]),
-  };
+  // A sheet-qualified range is not this selection's: it does not parse here.
+  const r = range.includes("!") ? null : rectOfA1(range);
+  return (
+    r && {
+      firstRow: r.top,
+      firstCol: r.left,
+      lastRow: r.bottom,
+      lastCol: r.right,
+    }
+  );
 }
 
 /** Does any of `regions` overlap the selection `sel`? */

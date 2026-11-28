@@ -352,7 +352,7 @@ fn dup_key(v: &CellValue) -> Option<DupKey> {
         CellValue::Empty => None,
         CellValue::Text(t) if t.is_empty() => None,
         CellValue::Number(n) => Some(DupKey::Number((n + 0.0).to_bits())),
-        CellValue::Text(t) => Some(DupKey::Text(t.to_lowercase().to_string())),
+        CellValue::Text(t) => Some(DupKey::Text(sheet_core::casefold::key(t))),
         CellValue::Bool(b) => Some(DupKey::Bool(*b)),
         CellValue::Error(e) => Some(DupKey::Error(e.as_str())),
     }
@@ -627,8 +627,8 @@ fn dxf_matches(
             if matches!(v, CellValue::Error(_)) {
                 return false;
             }
-            let hay = as_text(v).to_lowercase();
-            let needle = text.to_lowercase();
+            let hay = sheet_core::casefold::key(&as_text(v));
+            let needle = sheet_core::casefold::key(text);
             match op {
                 CfTextOp::Contains => hay.contains(&needle),
                 CfTextOp::NotContains => !hay.contains(&needle),

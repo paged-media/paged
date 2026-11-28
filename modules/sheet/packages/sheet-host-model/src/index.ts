@@ -52,6 +52,16 @@ export {
 } from "./lowered";
 
 export {
+  a1OfCell,
+  a1OfRange,
+  columnIndex,
+  MAX_COL,
+  MAX_ROW,
+  rectOfA1,
+  type A1Rect,
+} from "./a1";
+
+export {
   BINDING_KEY,
   BINDING_VERSION,
   cellOfA1,

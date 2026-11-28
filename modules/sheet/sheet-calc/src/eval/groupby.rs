@@ -204,7 +204,7 @@ fn apply(
 /// Excel's ordering for keys (numbers < text < logicals, text folded).
 fn key_cmp(a: &CellValue, b: &CellValue) -> Ordering {
     if let (CellValue::Text(x), CellValue::Text(y)) = (a, b) {
-        return x.to_lowercase().cmp(&y.to_lowercase());
+        return sheet_core::casefold::cmp(x, y);
     }
     coerce::compare(a, b)
 }

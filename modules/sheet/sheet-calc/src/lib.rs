@@ -1156,6 +1156,7 @@ impl Engine {
     /// Write an engine-owned spilled value cell (no formula, preserving any
     /// existing style). Pushes onto `changed` if the stored value changed.
     fn write_spilled_cell(&mut self, cell: CellRef, value: CellValue, changed: &mut Vec<CellRef>) {
+        let value = storable(value);
         let style = self.style_of(cell);
         let Some(ws) = self.model.sheet_mut(cell.sheet) else {
             return;
@@ -1203,6 +1204,7 @@ impl Engine {
 
     /// Write a computed value into the cell, returning whether it changed.
     fn commit_value(&mut self, cref: CellRef, value: CellValue) -> bool {
+        let value = storable(value);
         let Some(ws) = self.model.sheet_mut(cref.sheet) else {
             return false;
         };
@@ -1418,11 +1420,7 @@ impl Engine {
         self.model
             .sheets
             .iter()
-            .flat_map(|ws| {
-                ws.tables
-                    .iter()
-                    .map(|t| t.name.as_str().to_ascii_lowercase())
-            })
+            .flat_map(|ws| ws.tables.iter().map(|t| sheet_core::casefold::key(&t.name)))
             .collect()
     }
 
@@ -1471,7 +1469,7 @@ fn drop_tables(e: &sheet_core::ast::Expr, gone: &[String]) -> sheet_core::ast::E
     use sheet_core::ast::{Expr, LitValue};
     let f = |x: &Expr| drop_tables(x, gone);
     match e {
-        Expr::StructuredRef(r) if gone.contains(&r.table.as_str().to_ascii_lowercase()) => {
+        Expr::StructuredRef(r) if gone.contains(&sheet_core::casefold::key(&r.table)) => {
             Expr::Lit(LitValue::Error(CellError::Ref))
         }
         Expr::Unary(op, a) => Expr::Unary(*op, Box::new(f(a))),
@@ -1761,9 +1759,114 @@ fn expr_calls(e: &sheet_core::ast::Expr, ids: &[sheet_core::FuncId]) -> bool {
     }
 }
 
+/// The value a cell may hold: a number outside f64's finite range (an
+/// overflow, or a NaN out of a function kernel) is `#NUM!`, as in Excel, which
+/// has neither. Every computed value passes through here on its way into the
+/// model, so no reader, renderer or writer meets `inf` or `NaN`.
+fn storable(value: CellValue) -> CellValue {
+    match value {
+        CellValue::Number(n) if !n.is_finite() => CellValue::Error(CellError::Num),
+        v => v,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn storable_turns_non_finite_numbers_into_num_error__feat__sheet_calc_engine() {
+        for n in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            assert_eq!(
+                storable(CellValue::Number(n)),
+                CellValue::Error(CellError::Num)
+            );
+        }
+        assert_eq!(storable(CellValue::Number(1.5)), CellValue::Number(1.5));
+        assert_eq!(storable(CellValue::from("x")), CellValue::from("x"));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn overflowing_formulas_store_num_error_never_infinity__feat__sheet_calc_engine() {
+        let mut e = engine();
+        let formulas = [
+            "=1E308*10",
+            "=-1E308*10",
+            "=1E308+1E308",
+            "=1E308/1E-10",
+            "=PRODUCT(1E308,10)",
+            "=SUM(1E308,1E308)",
+            "=SUMPRODUCT(1E308,10)",
+            "=10^400",
+        ];
+        for (row, f) in formulas.iter().enumerate() {
+            e.enter(0, row as u32, 0, f).unwrap();
+        }
+        for (row, f) in formulas.iter().enumerate() {
+            assert_eq!(
+                value_at(&e, row as u32, 0),
+                CellValue::Error(CellError::Num),
+                "{f}"
+            );
+        }
+        // A spilled block holds no infinity either.
+        e.enter(0, 0, 2, "={1E308,1}*10").unwrap();
+        assert_eq!(value_at(&e, 0, 2), CellValue::Error(CellError::Num));
+        assert_eq!(value_at(&e, 0, 3), CellValue::Number(10.0));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn text_matches_without_case_in_any_script__feat__sheet_calc_engine() {
+        let mut m = SheetModel::new();
+        m.add_sheet("Start");
+        m.add_sheet("Übersicht");
+        m.names.define(sheet_core::NameDef {
+            name: "Größe".into(),
+            scope: sheet_core::NameScope::Workbook,
+            target: sheet_core::NameTarget::Formula("Übersicht!$A$1".into()),
+        });
+        let mut e = Engine::new(m, EngineConfig::default());
+        e.enter(1, 0, 0, "42").unwrap();
+        for (row, text) in ["Äpfel", "straße", "Öl", "ΟΔΟΣ"].iter().enumerate() {
+            e.enter(0, row as u32, 1, text).unwrap();
+        }
+        let cases: [(&str, CellValue); 18] = [
+            // The comparison operators: one character for one, so `ß` is
+            // not `SS`.
+            ("=\"Ä\"=\"ä\"", CellValue::Bool(true)),
+            ("=\"ÄRGER\"=\"ärger\"", CellValue::Bool(true)),
+            ("=\"straße\"=\"STRASSE\"", CellValue::Bool(false)),
+            ("=\"straße\"=\"STRAßE\"", CellValue::Bool(true)),
+            ("=\"Ä\"<>\"ä\"", CellValue::Bool(false)),
+            ("=\"ä\"<\"Ö\"", CellValue::Bool(true)),
+            // Lookups and criteria.
+            ("=MATCH(\"äpfel\",B1:B4,0)", CellValue::Number(1.0)),
+            (
+                "=MATCH(\"STRASSE\",B1:B4,0)",
+                CellValue::Error(CellError::Na),
+            ),
+            ("=MATCH(\"STRAßE\",B1:B4,0)", CellValue::Number(2.0)),
+            ("=XMATCH(\"οδος\",B1:B4)", CellValue::Number(4.0)),
+            ("=VLOOKUP(\"ÖL\",B1:C4,1,FALSE)", CellValue::from("Öl")),
+            ("=COUNTIF(B1:B4,\"ÄPFEL\")", CellValue::Number(1.0)),
+            ("=COUNTIF(B1:B4,\"ä*\")", CellValue::Number(1.0)),
+            ("=COUNTIF(B1:B4,\"STRASSE\")", CellValue::Number(0.0)),
+            ("=SEARCH(\"ÖL\",\"Speiseöl\")", CellValue::Number(7.0)),
+            // Sheet and defined names, typed in another case.
+            ("=übersicht!A1", CellValue::Number(42.0)),
+            ("=ÜBERSICHT!A1+1", CellValue::Number(43.0)),
+            ("=GRÖßE*2", CellValue::Number(84.0)),
+        ];
+        for (row, (f, _)) in cases.iter().enumerate() {
+            e.enter(0, row as u32, 4, f).unwrap();
+        }
+        for (row, (f, want)) in cases.iter().enumerate() {
+            assert_eq!(&value_at(&e, row as u32, 4), want, "{f}");
+        }
+    }
 
     fn engine() -> Engine {
         let mut m = SheetModel::new();

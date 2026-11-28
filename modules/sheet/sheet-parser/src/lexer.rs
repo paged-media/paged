@@ -25,7 +25,9 @@
 //! Numbers, double-quoted strings (with `""` escapes), `TRUE`/`FALSE`, the
 //! eight error literals, A1 references with `$` flags, sheet-qualified and
 //! `'quoted''sheet'`-qualified references, and identifiers (a name, or a
-//! function iff immediately followed by `(`) are all recognized here.
+//! function iff immediately followed by `(`) are all recognized here. A name
+//! is letters of any script, digits, `_` and `.` (`Übersicht!A1`, `Größe`),
+//! as in Excel.
 
 use std::ops::Range;
 
@@ -158,6 +160,28 @@ impl Lexer<'_> {
         self.bytes.get(self.pos).copied()
     }
 
+    /// The character starting at byte `i` (a character boundary).
+    fn char_at(&self, i: usize) -> Option<char> {
+        match self.bytes.get(i) {
+            Some(&b) if b < 0x80 => Some(b as char),
+            Some(_) => self.src[i..].chars().next(),
+            None => None,
+        }
+    }
+
+    /// The end of the run of name characters starting at byte `i`, with `$`
+    /// counted in when `dollar` (the `$B$7` form of a cell).
+    fn name_run(&self, mut i: usize, dollar: bool) -> usize {
+        while let Some(c) = self.char_at(i) {
+            if is_name_char(c) || (dollar && c == '$') {
+                i += c.len_utf8();
+            } else {
+                break;
+            }
+        }
+        i
+    }
+
     fn next_token(&mut self) -> Result<TokKind, ParseError> {
         let b = self.bytes[self.pos];
         if matches!(b, b'$' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z') {
@@ -232,6 +256,8 @@ impl Lexer<'_> {
             }
             // `$` or a letter begins a cell ref or an identifier.
             b'$' | b'A'..=b'Z' | b'a'..=b'z' | b'_' => self.lex_ref_or_ident(),
+            // So does a letter of any other script (`Übersicht!A1`, `Größe`).
+            _ if self.char_at(self.pos).is_some_and(is_name_start) => self.lex_ref_or_ident(),
             _ => {
                 let start = self.pos;
                 // Span the offending UTF-8 char.
@@ -406,17 +432,10 @@ impl Lexer<'_> {
     fn lex_ref_or_ident(&mut self) -> Result<TokKind, ParseError> {
         let start = self.pos;
 
-        // First: scan an unquoted sheet name candidate (letters, digits,
-        // `_`, `.`) NOT containing `$` — only if it is terminated by `!`.
-        let mut j = self.pos;
-        while j < self.bytes.len() {
-            let c = self.bytes[j];
-            if c.is_ascii_alphanumeric() || c == b'_' || c == b'.' {
-                j += 1;
-            } else {
-                break;
-            }
-        }
+        // First: scan an unquoted sheet name candidate (letters of any
+        // script, digits, `_`, `.`) NOT containing `$` — only if it is
+        // terminated by `!`.
+        let j = self.name_run(self.pos, false);
         if self.bytes.get(j) == Some(&b'!') && j > self.pos && self.bytes[self.pos] != b'$' {
             let name = self.src[self.pos..j].to_string();
             self.pos = j + 1; // consume the '!'
@@ -425,14 +444,7 @@ impl Lexer<'_> {
         // A 3D span `First:Last!` — two unquoted sheet names around `:`. The
         // qualifier carries `First:Last`; the parser splits it.
         if self.bytes.get(j) == Some(&b':') && j > self.pos && self.bytes[self.pos] != b'$' {
-            let mut k = j + 1;
-            while k < self.bytes.len()
-                && (self.bytes[k].is_ascii_alphanumeric()
-                    || self.bytes[k] == b'_'
-                    || self.bytes[k] == b'.')
-            {
-                k += 1;
-            }
+            let k = self.name_run(j + 1, false);
             if k > j + 1 && self.bytes.get(k) == Some(&b'!') {
                 let name = self.src[self.pos..k].to_string();
                 self.pos = k + 1;
@@ -443,15 +455,7 @@ impl Lexer<'_> {
         // Otherwise: consume an A1/identifier run including a leading `$`,
         // letters, digits, `.`, and `_` (a `$` may also appear mid-token for
         // `$B$7`). We then classify.
-        let mut k = self.pos;
-        while k < self.bytes.len() {
-            let c = self.bytes[k];
-            if c.is_ascii_alphanumeric() || c == b'$' || c == b'_' || c == b'.' {
-                k += 1;
-            } else {
-                break;
-            }
-        }
+        let k = self.name_run(self.pos, true);
         let tok = &self.src[self.pos..k];
         self.pos = k;
 
@@ -537,9 +541,10 @@ impl Lexer<'_> {
             return None;
         }
         // The band must END here: `A:B2`, `A:Bx`, `1:2.5`, `A:B(` are not bands.
-        if b.get(e1).is_some_and(|&c| {
-            c.is_ascii_alphanumeric() || matches!(c, b'$' | b'_' | b'.' | b'(' | b'[' | b'!')
-        }) {
+        if self
+            .char_at(e1)
+            .is_some_and(|c| is_name_char(c) || matches!(c, '$' | '(' | '[' | '!'))
+        {
             return None;
         }
         let kind = if letters0 {
@@ -577,9 +582,7 @@ impl Lexer<'_> {
         }
         j += 1;
         let name = j;
-        while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_' || b[j] == b'.') {
-            j += 1;
-        }
+        let j = self.name_run(name, false);
         if j == name || b.get(j) != Some(&b'!') {
             return None;
         }
@@ -625,6 +628,19 @@ const ERROR_CODES: [&str; 17] = [
     "#PYTHON!",
 ];
 
+/// Whether `c` may start a name: a letter of any script, or `_`. Excel's rule
+/// for defined names, table names and unquoted sheet names (its third
+/// starter, the backslash, is not read here).
+fn is_name_start(c: char) -> bool {
+    c.is_alphabetic() || c == '_'
+}
+
+/// Whether `c` may continue a name: a letter or digit of any script, `_` or
+/// `.`.
+fn is_name_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '.'
+}
+
 /// Byte length of the UTF-8 char starting with lead byte `b`.
 fn utf8_len(b: u8) -> usize {
     if b < 0x80 {
@@ -635,5 +651,158 @@ fn utf8_len(b: u8) -> usize {
         3
     } else {
         4
+    }
+}
+
+#[cfg(test)]
+#[allow(non_snake_case)]
+mod tests {
+    use super::*;
+    use crate::{parse, print, ParseCtx, SheetNames};
+    use sheet_core::ast::{Expr, NameId};
+    use sheet_core::SheetId;
+
+    fn kinds(s: &str) -> Vec<TokKind> {
+        lex(s).unwrap().into_iter().map(|t| t.kind).collect()
+    }
+
+    fn cell(row: u32, col: u32) -> TokKind {
+        TokKind::Cell {
+            row,
+            col,
+            row_abs: false,
+            col_abs: false,
+        }
+    }
+
+    #[test]
+    fn unquoted_sheet_names_take_letters_of_any_script__feat__sheet_parser_dialect() {
+        for name in [
+            "Übersicht",
+            "Résumé",
+            "Данные",
+            "データ",
+            "Größe_2.1",
+            "Sheet1",
+        ] {
+            assert_eq!(
+                kinds(&format!("{name}!A1")),
+                vec![TokKind::SheetQual(name.into()), cell(0, 0)],
+                "{name}"
+            );
+        }
+        // A non-ASCII letter after an ASCII start, and a 3D span.
+        assert_eq!(
+            kinds("Ertrag_März:Ertrag_Mai!B2"),
+            vec![
+                TokKind::SheetQual("Ertrag_März:Ertrag_Mai".into()),
+                cell(1, 1)
+            ]
+        );
+        assert_eq!(
+            kinds("[1]Übersicht!A1"),
+            vec![TokKind::SheetQual("[1]Übersicht".into()), cell(0, 0)]
+        );
+    }
+
+    #[test]
+    fn quoted_sheet_names_keep_any_text__feat__sheet_parser_dialect() {
+        assert_eq!(
+            kinds("'Übersicht 2026'!A1"),
+            vec![TokKind::SheetQual("Übersicht 2026".into()), cell(0, 0)]
+        );
+        assert_eq!(
+            kinds("'Übersicht'!A1+'L''été'!B1"),
+            vec![
+                TokKind::SheetQual("Übersicht".into()),
+                cell(0, 0),
+                TokKind::Plus,
+                TokKind::SheetQual("L'été".into()),
+                cell(0, 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn names_take_letters_of_any_script__feat__sheet_parser_dialect() {
+        assert_eq!(
+            kinds("Umsatzerlöse*Steuersatz_Österreich"),
+            vec![
+                TokKind::Ident("Umsatzerlöse".into()),
+                TokKind::Star,
+                TokKind::Ident("Steuersatz_Österreich".into()),
+            ]
+        );
+        assert_eq!(kinds("Ärger"), vec![TokKind::Ident("Ärger".into())]);
+        assert_eq!(kinds("収益.合計"), vec![TokKind::Ident("収益.合計".into())]);
+        // A letter ends neither a cell nor a column band: `A1ä` and `A:Bä`
+        // are names, not `A1` and `A:B` with a stray letter.
+        assert_eq!(kinds("A1ä"), vec![TokKind::Ident("A1ä".into())]);
+        assert_eq!(
+            kinds("A:Bä"),
+            vec![
+                TokKind::Ident("A".into()),
+                TokKind::Colon,
+                TokKind::Ident("Bä".into()),
+            ]
+        );
+        // The spans are byte spans on character boundaries.
+        let toks = lex("Größe+1").unwrap();
+        assert_eq!(toks[0].span, 0..7);
+        assert_eq!(toks[1].span, 7..8);
+    }
+
+    #[test]
+    fn what_is_no_letter_is_still_refused__feat__sheet_parser_dialect() {
+        for bad in ["€", "1+→", "A1 ∑ 2", "\u{00a0}A1"] {
+            assert!(lex(bad).is_err(), "{bad}");
+        }
+    }
+
+    struct Book;
+
+    impl ParseCtx for Book {
+        fn sheet_id(&self, name: &str) -> Option<SheetId> {
+            ["Start", "Übersicht", "Übersicht 2026"]
+                .iter()
+                .position(|s| *s == name)
+                .map(|i| i as SheetId)
+        }
+        fn name_id(&self, name: &str) -> Option<NameId> {
+            (name == "Umsatzerlöse").then_some(NameId(0))
+        }
+        fn current_sheet(&self) -> SheetId {
+            0
+        }
+    }
+
+    impl SheetNames for Book {
+        fn sheet_name(&self, id: SheetId) -> Option<&str> {
+            ["Start", "Übersicht", "Übersicht 2026"]
+                .get(id as usize)
+                .copied()
+        }
+        fn defined_name(&self, _id: NameId) -> Option<&str> {
+            Some("Umsatzerlöse")
+        }
+    }
+
+    #[test]
+    fn a_formula_over_non_ascii_sheets_and_names_parses_and_prints_back__feat__sheet_parser_dialect(
+    ) {
+        let f = parse("Übersicht!A1", &Book).unwrap();
+        assert!(matches!(&f.root, Expr::Ref(r) if r.sheet == 1 && (r.row, r.col) == (0, 0)));
+        assert_eq!(print(&f, 0, &Book), "Übersicht!A1");
+
+        let f = parse("'Übersicht 2026'!B2", &Book).unwrap();
+        assert!(matches!(&f.root, Expr::Ref(r) if r.sheet == 2 && (r.row, r.col) == (1, 1)));
+        assert_eq!(print(&f, 0, &Book), "'Übersicht 2026'!B2");
+
+        let f = parse("Umsatzerlöse*2", &Book).unwrap();
+        assert!(matches!(&f.root, Expr::Binary(_, l, _) if **l == Expr::Name(NameId(0))));
+        assert_eq!(print(&f, 0, &Book), "Umsatzerlöse*2");
+
+        let f = parse("SUM(Übersicht!A1:B2)", &Book).unwrap();
+        assert_eq!(print(&f, 0, &Book), "SUM(Übersicht!A1:B2)");
     }
 }

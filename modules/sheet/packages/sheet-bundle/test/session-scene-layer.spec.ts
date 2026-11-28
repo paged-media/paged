@@ -26,11 +26,16 @@
 import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost, SceneLayer } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  SceneLayer,
+} from "@paged-media/plugin-api";
 import type { GridScene } from "@paged-media/sheet-host-model";
 
 import { createWorkbookSession, type SheetEngine } from "../src";
 
+import { fakeBundleHost } from "./fake-host";
 // A 2×2 viewport: cols 40pt (x 0/40/80), rows 20pt (y 0/20/40).
 function scene2x2(): GridScene {
   return {
@@ -134,17 +139,20 @@ function textsOf(submit: { layer: SceneLayer }): string[] {
 function fakeHost() {
   const submits: Array<{ elementId: string; layer: SceneLayer }> = [];
   let cleared: string | null = null;
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (f: string) => f === "rendering.sceneLayer@1",
     contribute: {
       sceneLayer: () => ({
         async submit(elementId: string, layer: SceneLayer) {
           submits.push({ elementId, layer });
+          return { fontFallbacks: [] };
         },
         async clear(elementId: string) {
           cleared = elementId;
         },
+        async submitImage() {},
+        async submitImageTiles() {},
         dispose() {},
       }),
     },
@@ -152,9 +160,11 @@ function fakeHost() {
       onDidChange: () => ({ dispose() {} }),
       onDidOpen: () => ({ dispose() {} }),
       // bounds = [top, left, bottom, right] → an 80×40 content box.
-      elementGeometry: async () => [{ bounds: [0, 0, 40, 80] }],
+      elementGeometry: async (ids: ElementId[]) => [
+        { id: ids[0]!, bounds: [0, 0, 40, 80] },
+      ],
     },
-  } as unknown as BundleHost;
+  });
   return { host, submits, cleared: () => cleared };
 }
 

@@ -10,23 +10,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost } from "@paged-media/plugin-api";
-
 import { createWorkbookSession, type SheetEngine } from "../src";
 import { bootEmptyEngine } from "../src/engine";
 import { stubFrameWindow } from "./frame-window-stub";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const built = existsSync(join(HERE, "..", "bin", "sheet_js_bg.wasm"));
 
-const silentHost = {
+const silentHost = fakeBundleHost({
   log: { debug() {}, info() {}, warn() {}, error() {} },
   document: {
     onDidChange: () => ({ dispose() {} }),
     onDidOpen: () => ({ dispose() {} }),
   },
   supports: () => false,
-} as unknown as BundleHost;
+});
 
 /** A fake whose cells hold an input AND a style id; typing a `%` into a
  *  style-0 cell moves it to style 7 (the engine's restyle report), and the

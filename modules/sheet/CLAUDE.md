@@ -17,7 +17,7 @@ lane); the sheets-mode grid (T1+) renders vector on an SDK surface
 launch property.
 
 Spec (the authority): `docs/concept.md` (architecture, status and decisions are in `docs/` too;
-the original planning paper is archived at `~/paged/thoughts/docs/archive/plugin-sheets/base-idea.md`).
+the original planning paper is archived at `archive/plugin-sheets/base-idea.md` (private planning notes)).
 Where code and spec differ, `docs/status.md` and `docs/design/analysis-2026-10-04.md` say how.
 SDK gap tracker: the cross-repo RFI (the internal gap register) (S-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
 
@@ -33,7 +33,7 @@ draw/web convention): `sheet-host-model` (pure LoweredContent→Mutation
 translation) + `sheet-bundle` (manifest + `activate(host)` + workbook
 panel + grid panel + datasets panel + 12 commands + engine boot).
 
-What landed (verified — see `~/paged/cockpit/docs/features/sheet/`):
+What landed (verified — see `cockpit/docs/features/sheet/`):
 the calc engine, function library, spill, structured tables, the chart
 engine, and **XLSX round-trip** (preservation-safe both directions). The
 page surface **lowers to a native `<Table>`** (S-03 / `sheet.lower.page`),
@@ -59,7 +59,7 @@ The **in-frame grid renders + edits via K-1** (`sheet.grid.inframe`):
 ## Project State & Feature Matrix (cockpit)
 
 The feature inventory, test linkage and live status for ALL Paged repos are derived by
-[Cockpit](https://github.com/drietsch/cockpit) from `~/paged/cockpit/` (`cockpit.toml` with
+Cockpit (a private tool) from the private `cockpit` checkout (`cockpit.toml` with
 `root = ".."`; features in `cockpit/docs/features/<chapter>/<id>.md`). There is NO feature
 matrix in this repo; do not create one.
 
@@ -193,7 +193,7 @@ Rules for every code change in this repo:
 
 ## Two-registry split
 
-- `~/paged/cockpit/docs/features/sheet/<id>.md` (Cockpit, chapter `sheet`) — the
+- `cockpit/docs/features/sheet/<id>.md` (Cockpit, chapter `sheet`) — the
   STATUS ledger (component `plugin.sheet`; `claims:` planned/partial/shipped,
   health from evidence).
 - `plugin-sheets/registry/` (here) — build-consumed metadata:

@@ -10,10 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
-import type {
-  BundleHost,
-  ObjectModelContribution,
-} from "@paged-media/plugin-api";
+import type { ObjectModelContribution } from "@paged-media/plugin-api";
 
 import {
   contributeObjectModel,
@@ -24,6 +21,7 @@ import type { WorkbookSession } from "../src/session";
 import { contributeLayoutCommands } from "../src/layout-commands";
 import { contributeSheetTemplateFields } from "../src/template-fields";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
 const MANIFEST = join(PKG, "manifest.json");
@@ -33,7 +31,7 @@ function registeredModel(): ObjectModelContribution {
   // Every `contribute.objectModel` call, merged: the kinds and commands of
   // the object model, the layout commands and the template field kinds.
   const models: ObjectModelContribution[] = [];
-  const host = {
+  const host = fakeBundleHost({
     contribute: {
       objectModel(m: ObjectModelContribution) {
         models.push(m);
@@ -45,7 +43,7 @@ function registeredModel(): ObjectModelContribution {
       onDidOpen: () => ({ dispose() {} }),
     },
     log: { debug() {}, info() {}, warn() {}, error() {} },
-  } as unknown as BundleHost;
+  });
   const session = {
     objectBridge: () => ({
       engine: () => null,

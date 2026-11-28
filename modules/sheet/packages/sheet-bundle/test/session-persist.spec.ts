@@ -39,6 +39,7 @@ import type { BundleHost } from "@paged-media/plugin-api";
 
 import { createWorkbookSession } from "../src/session";
 
+import { fakeBundleHost } from "./fake-host";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
@@ -71,7 +72,7 @@ function fakeDocument(opts: { willSave?: boolean } = {}) {
   const blobs = new Map<string, Uint8Array>();
   const kv = new Map<string, unknown>();
   const partWrites = vi.fn();
-  const host = {
+  const host = fakeBundleHost({
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (f: string) =>
       f === "storage.parts@1" ||
@@ -102,12 +103,12 @@ function fakeDocument(opts: { willSave?: boolean } = {}) {
       usage: async () => ({ used: 0, quota: 0 }),
     },
     storage: {
-      get: (k: string) => kv.get(k),
+      get: <T>(k: string) => kv.get(k) as T | undefined,
       set: (k: string, v: unknown) => void kv.set(k, v),
       delete: (k: string) => void kv.delete(k),
       keys: () => [...kv.keys()],
     },
-  } as unknown as BundleHost;
+  });
   const workbookWrites = () =>
     partWrites.mock.calls.filter(([p]) => p === "workbook.xlsx").length;
   /** The editor's Save: run every will-save listener and wait for them,

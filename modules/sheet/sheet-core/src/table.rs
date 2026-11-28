@@ -57,7 +57,7 @@ impl Table {
     pub fn column_index(&self, name: &str) -> Option<u32> {
         self.columns
             .iter()
-            .position(|c| c.eq_ignore_ascii_case(name))
+            .position(|c| crate::casefold::eq(c, name))
             .map(|i| i as u32)
     }
 }
@@ -68,7 +68,11 @@ impl SheetModel {
     /// owning [`SheetId`] and a borrow of the [`Table`]; first match wins.
     pub fn resolve_table(&self, name: &str) -> Option<(SheetId, &Table)> {
         for (i, ws) in self.sheets.iter().enumerate() {
-            if let Some(t) = ws.tables.iter().find(|t| t.name.eq_ignore_ascii_case(name)) {
+            if let Some(t) = ws
+                .tables
+                .iter()
+                .find(|t| crate::casefold::eq(&t.name, name))
+            {
                 return Some((i as SheetId, t));
             }
         }

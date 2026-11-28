@@ -528,7 +528,7 @@ fn month_series(v: &[f64], n: usize, sys: sheet_core::DateSystem) -> Option<Vec<
 
 /// Names from one built-in list (weekdays / months).
 fn name_series(texts: &[&str], n: usize) -> Option<Vec<String>> {
-    let fold = |s: &str| s.to_lowercase();
+    let fold = |s: &str| sheet_core::casefold::key(s);
     for list in NAME_LISTS {
         let len = list.0.len() as i64;
         let idx: Option<Vec<i64>> = texts

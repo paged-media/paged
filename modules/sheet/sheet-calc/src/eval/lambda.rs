@@ -213,7 +213,7 @@ fn reduce_let(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillSt
             if j < last && j % 2 == 0 {
                 // A later declaration slot: re-binding the same name shadows
                 // it for everything after its own value.
-                if matches!(&rest[j], Expr::Local(n) if n.eq_ignore_ascii_case(&name)) {
+                if matches!(&rest[j], Expr::Local(n) if sheet_core::casefold::eq(n, &name)) {
                     rest[j + 1] = subst(&rest[j + 1], &name, &bound);
                     break;
                 }
@@ -393,7 +393,7 @@ fn eval_value(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) 
 fn subst(e: &Expr, name: &str, repl: &Expr) -> Expr {
     let s = |x: &Expr| subst(x, name, repl);
     match e {
-        Expr::Local(n) if n.eq_ignore_ascii_case(name) => repl.clone(),
+        Expr::Local(n) if sheet_core::casefold::eq(n, name) => repl.clone(),
         Expr::Lit(_)
         | Expr::Ref(_)
         | Expr::Range(_)
@@ -414,7 +414,7 @@ fn subst(e: &Expr, name: &str, repl: &Expr) -> Expr {
             let (params, _) = args.split_at(args.len().saturating_sub(1));
             let shadowed = params
                 .iter()
-                .any(|p| matches!(p, Expr::Local(n) if n.eq_ignore_ascii_case(name)));
+                .any(|p| matches!(p, Expr::Local(n) if sheet_core::casefold::eq(n, name)));
             if shadowed {
                 e.clone()
             } else {
@@ -431,7 +431,7 @@ fn subst(e: &Expr, name: &str, repl: &Expr) -> Expr {
             let mut j = 0;
             while j <= last && !out.is_empty() {
                 if j < last && j % 2 == 0 {
-                    if matches!(&out[j], Expr::Local(n) if n.eq_ignore_ascii_case(name)) {
+                    if matches!(&out[j], Expr::Local(n) if sheet_core::casefold::eq(n, name)) {
                         // Re-bound: substitute into its value, then stop.
                         out[j + 1] = s(&out[j + 1]);
                         break;

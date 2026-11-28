@@ -148,7 +148,7 @@ fn grid<'a>(arg: &'a Arg<'a>) -> Grid<'a> {
 /// Reuses the [`coerce::to_text`] General projection so a numeric header
 /// (`2024`) still matches the textual criteria header `"2024"`.
 fn header_eq(a: &CellValue, b: &CellValue) -> bool {
-    coerce::to_text(a).eq_ignore_ascii_case(coerce::to_text(b).as_str())
+    sheet_core::casefold::eq(&coerce::to_text(a), &coerce::to_text(b))
 }
 
 /// Resolve the `field` argument to a **0-based database column index**.

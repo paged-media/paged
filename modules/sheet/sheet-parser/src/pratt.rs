@@ -56,6 +56,8 @@ pub fn parse_tokens(
         src_len,
         in_paren: false,
         locals: Vec::new(),
+        nesting: 0,
+        depth: 0,
     };
     let e = p.parse_bp(0)?;
     if p.pos != tokens.len() {
@@ -80,7 +82,23 @@ struct Parser<'a> {
     /// parses as [`Expr::Local`] (or a [`Expr::Call`] when followed by `(`)
     /// instead of a defined name / function (Wave-7 amendment).
     locals: Vec<String>,
+    /// How many `parse_bp` calls are on the stack ([`MAX_NESTING`]).
+    nesting: usize,
+    /// The depth of the tree the last finished sub-expression is
+    /// ([`MAX_EXPR_DEPTH`]): every function that returns an [`Expr`] leaves
+    /// it here, an argument list the deepest of its arguments.
+    depth: usize,
 }
+
+/// How deep groups, calls and prefix operators may nest: each level is a
+/// few stack frames here, and a formula is untrusted text. Excel nests 64
+/// function calls.
+const MAX_NESTING: usize = 128;
+/// How deep the parsed tree may be. A chain (`1+1+1+…`, `1%%%…`,
+/// `f(1)(2)(3)…`) nests the tree without nesting the parser, and whatever
+/// walks or drops the tree recurses once per level; past this the formula
+/// is refused instead of built.
+const MAX_EXPR_DEPTH: usize = 1024;
 
 // ---- Binding powers. Higher = binds tighter. Pairs are (left, right);
 // for left-assoc ops right > left, for right-assoc left > right. ----
@@ -131,13 +149,42 @@ impl Parser<'_> {
     /// Precedence-climbing core. `min_bp` is the minimum left binding power a
     /// following infix operator must exceed to be absorbed here.
     fn parse_bp(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
+        if self.nesting >= MAX_NESTING {
+            return Err(self.too_deep());
+        }
+        self.nesting += 1;
+        let r = self.parse_bp_inner(min_bp);
+        self.nesting -= 1;
+        r
+    }
+
+    fn too_deep(&self) -> ParseError {
+        let span = self
+            .peek()
+            .map(|t| t.span.clone())
+            .unwrap_or_else(|| self.eof_span());
+        ParseError::new("formula nested too deeply", span)
+    }
+
+    /// `depth`, or the error when a tree that deep may not be built.
+    fn within_depth(&self, depth: usize) -> Result<usize, ParseError> {
+        if depth > MAX_EXPR_DEPTH {
+            return Err(self.too_deep());
+        }
+        Ok(depth)
+    }
+
+    fn parse_bp_inner(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_prefix()?;
+        // The depth of `lhs` as it grows.
+        let mut depth = self.depth;
 
         loop {
             // Postfix spill `#` (`A1#` — the spill-range of the anchor).
             if let Some(tok) = self.peek() {
                 if matches!(tok.kind, TokKind::Hash) && BP_SPILL >= min_bp {
                     self.bump();
+                    depth = self.within_depth(depth + 1)?;
                     lhs = Expr::SpillRef(Box::new(lhs));
                     continue;
                 }
@@ -147,6 +194,7 @@ impl Parser<'_> {
             if let Some(tok) = self.peek() {
                 if matches!(tok.kind, TokKind::Percent) && BP_PERCENT >= min_bp {
                     self.bump();
+                    depth = self.within_depth(depth + 1)?;
                     lhs = Expr::Unary(UnOp::Percent, Box::new(lhs));
                     continue;
                 }
@@ -159,6 +207,7 @@ impl Parser<'_> {
                     let (lbp, rbp) = BP_ISECT;
                     if lbp >= min_bp {
                         let rhs = self.parse_bp(rbp)?;
+                        depth = self.within_depth(depth.max(self.depth) + 1)?;
                         lhs = Expr::Binary(BinOp::Isect, Box::new(lhs), Box::new(rhs));
                         continue;
                     } else {
@@ -188,9 +237,11 @@ impl Parser<'_> {
                 range_operand(&lhs, &op_span)?;
                 range_operand(&rhs, &op_span)?;
             }
+            depth = self.within_depth(depth.max(self.depth) + 1)?;
             lhs = fold_binary(op, lhs, rhs);
         }
 
+        self.depth = depth;
         Ok(lhs)
     }
 
@@ -206,11 +257,13 @@ impl Parser<'_> {
             TokKind::Minus => {
                 self.bump();
                 let rhs = self.parse_bp(BP_UNARY)?;
+                self.depth = self.within_depth(self.depth + 1)?;
                 Ok(Expr::Unary(UnOp::Neg, Box::new(rhs)))
             }
             TokKind::Plus => {
                 self.bump();
                 let rhs = self.parse_bp(BP_UNARY)?;
+                self.depth = self.within_depth(self.depth + 1)?;
                 Ok(Expr::Unary(UnOp::Plus, Box::new(rhs)))
             }
             // `@` — implicit intersection (W1.0 amendment). Binds like the
@@ -219,6 +272,7 @@ impl Parser<'_> {
             TokKind::At => {
                 self.bump();
                 let rhs = self.parse_bp(BP_UNARY)?;
+                self.depth = self.within_depth(self.depth + 1)?;
                 Ok(Expr::Unary(UnOp::ImplicitIntersect, Box::new(rhs)))
             }
             _ => self.parse_primary(),
@@ -227,6 +281,8 @@ impl Parser<'_> {
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         let tok = self.bump().clone();
+        // A leaf, unless an arm below parses sub-expressions.
+        self.depth = 1;
         match tok.kind {
             TokKind::Number(n) => Ok(Expr::Lit(LitValue::Number(OrderedF64::new(n)))),
             TokKind::Str(s) => Ok(Expr::Lit(LitValue::Text(s.into()))),
@@ -411,6 +467,7 @@ impl Parser<'_> {
                 self.bump(); // '('
                 let args = self.parse_args()?;
                 self.expect(TokKind::RParen, "expected ')' after arguments")?;
+                self.depth = self.within_depth(self.depth.max(1) + 1)?;
                 let call = Expr::Call(Box::new(Expr::Local(name.into())), args);
                 return self.parse_postfix_calls(call);
             }
@@ -422,6 +479,7 @@ impl Parser<'_> {
                 self.bump(); // '('
                 let args = self.parse_args()?;
                 self.expect(TokKind::RParen, "expected ')' after arguments")?;
+                self.depth = self.within_depth(self.depth.max(1) + 1)?;
                 let call = match self.ctx.name_id(name) {
                     Some(nid) => Expr::Call(Box::new(Expr::Name(nid)), args),
                     None => Expr::UnknownFunc(name.into(), args),
@@ -436,6 +494,7 @@ impl Parser<'_> {
                 _ => self.parse_args()?,
             };
             self.expect(TokKind::RParen, "expected ')' after arguments")?;
+            self.depth = self.within_depth(self.depth + 1)?;
             let call = Expr::Func(fid, args);
             if fname == "LAMBDA" {
                 // `LAMBDA(x, x+1)(2)` — an immediately invoked lambda.
@@ -443,9 +502,11 @@ impl Parser<'_> {
             }
             Ok(call)
         } else if self.is_local(name) {
+            self.depth = 1;
             Ok(Expr::Local(name.into()))
         } else {
             // An unknown name is `#NAME?`, spelled as written (W1.0).
+            self.depth = 1;
             Ok(match self.ctx.name_id(name) {
                 Some(nid) => Expr::Name(nid),
                 None => Expr::UnknownName(name.into()),
@@ -472,14 +533,18 @@ impl Parser<'_> {
 
     /// `(args)` suffixes after a lambda-valued expression: `f(1)(2)`.
     fn parse_postfix_calls(&mut self, mut callee: Expr) -> Result<Expr, ParseError> {
+        // The depth of `callee` as it grows.
+        let mut depth = self.depth;
         while matches!(self.peek().map(|t| &t.kind), Some(TokKind::LParen))
             && self.peek().is_some_and(|t| !t.ws_before)
         {
             self.bump(); // '('
             let args = self.parse_args()?;
             self.expect(TokKind::RParen, "expected ')' after arguments")?;
+            depth = self.within_depth(depth.max(self.depth) + 1)?;
             callee = Expr::Call(Box::new(callee), args);
         }
+        self.depth = depth;
         Ok(callee)
     }
 
@@ -491,11 +556,14 @@ impl Parser<'_> {
         self.in_paren = false;
         let scope_mark = self.locals.len();
         let mut args = Vec::new();
+        // The deepest argument (a declared name is a leaf).
+        let mut deepest = 1;
         let result = (|| {
             while let Some(name) = self.at_declaration() {
                 self.bump(); // name
                 self.bump(); // ','
                 let value = self.parse_bp(0)?;
+                deepest = deepest.max(self.depth);
                 self.expect(TokKind::Comma, "LET: expected ',' after a value")?;
                 args.push(Expr::Local(name.as_str().into()));
                 args.push(value);
@@ -509,10 +577,12 @@ impl Parser<'_> {
                 return Err(ParseError::new("LET: expected a name", span));
             }
             args.push(self.parse_bp(0)?);
+            deepest = deepest.max(self.depth);
             Ok(())
         })();
         self.locals.truncate(scope_mark);
         self.in_paren = saved;
+        self.depth = deepest;
         result.map(|_| args)
     }
 
@@ -533,6 +603,7 @@ impl Parser<'_> {
         self.locals.truncate(scope_mark);
         self.in_paren = saved;
         args.push(body?);
+        // The body's depth stands (a parameter is a leaf, as shallow).
         Ok(args)
     }
 
@@ -544,8 +615,11 @@ impl Parser<'_> {
         let saved = self.in_paren;
         self.in_paren = false;
         let mut args = Vec::new();
+        // The deepest argument.
+        let mut deepest = 0;
         if matches!(self.peek().map(|t| &t.kind), Some(TokKind::RParen)) {
             self.in_paren = saved;
+            self.depth = deepest;
             return Ok(args);
         }
         loop {
@@ -556,8 +630,10 @@ impl Parser<'_> {
                 Some(TokKind::Comma | TokKind::RParen)
             ) {
                 args.push(Expr::Missing);
+                deepest = deepest.max(1);
             } else {
                 args.push(self.parse_bp(0)?);
+                deepest = deepest.max(self.depth);
             }
             match self.peek().map(|t| &t.kind) {
                 Some(TokKind::Comma) => {
@@ -567,6 +643,7 @@ impl Parser<'_> {
             }
         }
         self.in_paren = saved;
+        self.depth = deepest;
         Ok(args)
     }
 
@@ -611,6 +688,7 @@ impl Parser<'_> {
                 open_span,
             ));
         }
+        self.depth = 2;
         Ok(Expr::Array(rows))
     }
 

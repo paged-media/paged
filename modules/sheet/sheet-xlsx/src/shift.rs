@@ -937,7 +937,7 @@ impl XlsxDocument {
             }
             if pname.starts_with("xl/pivotCache/pivotCacheDefinition") && pname.ends_with(".xml") {
                 if let Some(src) = worksheet_source_sheet(p.bytes()) {
-                    if src.eq_ignore_ascii_case(name) {
+                    if sheet_core::casefold::eq(&src, name) {
                         plan.blockers.push(format!(
                             "the pivot cache {pname} reads this sheet (pivot tables are \
                              preserved, never moved — ADR 504)"

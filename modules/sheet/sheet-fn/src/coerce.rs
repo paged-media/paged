@@ -267,11 +267,7 @@ impl CompareExt for CellValue {
             _ => "",
         };
         // Case-insensitive primary key, raw bytes as a total tie-break.
-        let folded = x
-            .bytes()
-            .map(|b| b.to_ascii_lowercase())
-            .cmp(y.bytes().map(|b| b.to_ascii_lowercase()));
-        folded.then_with(|| x.cmp(y))
+        sheet_core::casefold::cmp(x, y).then_with(|| x.cmp(y))
     }
     fn cmp_bool(&self, other: &CellValue) -> std::cmp::Ordering {
         let x = matches!(self, CellValue::Bool(true));

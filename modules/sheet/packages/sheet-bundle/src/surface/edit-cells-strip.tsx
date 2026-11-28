@@ -29,26 +29,13 @@ import { useId, useState, type CSSProperties } from "react";
 
 import { useStrings } from "@paged-media/strings";
 
+import { a1OfRange } from "../../../sheet-host-model/src";
 import { SURFACE } from "../messages";
 import type { CellBlock, PublicationPreview } from "../publication-preview";
 
-/** Column letters of a 0-based column (`0` → `A`). */
-function colName(col: number): string {
-  let n = col + 1;
-  let out = "";
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    out = String.fromCharCode(65 + r) + out;
-    n = Math.floor((n - 1) / 26);
-  }
-  return out;
-}
-
 /** `B2:D9`, or `B2` for one cell. */
 export function blockA1(b: CellBlock): string {
-  const a = `${colName(b.left)}${b.top + 1}`;
-  const z = `${colName(b.right)}${b.bottom + 1}`;
-  return a === z ? a : `${a}:${z}`;
+  return a1OfRange(b.top, b.left, b.bottom, b.right);
 }
 
 /** How many rows and columns of the selection do not print. */

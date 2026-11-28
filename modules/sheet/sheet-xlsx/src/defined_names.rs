@@ -47,7 +47,7 @@ const AFTER_DEFINED_NAMES: &[&str] = &[
 /// Does `<definedName>` span `item` name `name` in scope `local`?
 fn is_match(xml: &[u8], item: &Span, name: &str, local: Option<u32>) -> Result<bool, XlsxError> {
     let a = attrs_of(xml, item)?;
-    let same_name = attr_local(&a, "name").is_some_and(|n| n.eq_ignore_ascii_case(name));
+    let same_name = attr_local(&a, "name").is_some_and(|n| sheet_core::casefold::eq(&n, name));
     let scope = attr_local(&a, "localSheetId").and_then(|s| s.parse::<u32>().ok());
     Ok(same_name && scope == local)
 }
