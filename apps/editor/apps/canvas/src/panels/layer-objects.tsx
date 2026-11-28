@@ -346,9 +346,50 @@ export function dropMutation(
     : ({ op: "batch", args: { ops } } as Mutation);
 }
 
-/** The scene tree joined with each item's facts, re-read after every edit
- *  (debounced: a burst of edits costs one read). The Layers panel and the
- *  document map's Layers lens read it. */
+type ItemFacts = {
+  layerId: string | null;
+  appearance: boolean;
+  name: string | null;
+};
+
+/** Which items' facts an edit can have changed: `"all"` of them, or only
+ *  the ones `"new"` to the tree. */
+export type EditReach = "all" | "new";
+
+/**
+ * The reach of one change message. A committed GESTURE moves, sizes,
+ * turns or reshapes items (`GestureType`: translate, resize, rotate,
+ * scale, shear, the content transforms, a path edit): it changes no
+ * item's layer, name or appearance, so the facts held stay true and only
+ * an item the gesture made (a duplicating drag) is read. Every other edit
+ * reads all: its reply names the pages it changed, and the engine names
+ * every page of the document for an object edit, so the reply does not say
+ * which items it touched.
+ */
+export function reachOf(msg: { kind: string }): EditReach {
+  return msg.kind === "gestureCommitted" ? "new" : "all";
+}
+
+const widen = (a: EditReach | null, b: EditReach): EditReach =>
+  a === "all" || b === "all" ? "all" : "new";
+
+/** The items whose facts are read after an edit of `reach`: every item,
+ *  or the ones the facts do not hold yet. */
+export function itemsToRead(
+  roots: ReadonlyArray<SceneTreeNode>,
+  known: ReadonlySet<string>,
+  reach: EditReach,
+): ElementId[] {
+  const ids = itemIds(roots);
+  return reach === "all" ? ids : ids.filter((id) => !known.has(elementKey(id)));
+}
+
+/** The scene tree joined with each item's facts, read again after an edit
+ *  (debounced: a burst of edits costs one read). The tree is read whole
+ *  (one request); the items' facts (one request each) are read only when
+ *  the edit can have changed them (`reachOf`), and otherwise the facts
+ *  held are kept. The Layers panel and the document map's Layers lens
+ *  read it. */
 export function useObjectTree(enabled: boolean) {
   const client = useCanvasClient();
   const [state, setState] = useState<{
@@ -359,27 +400,53 @@ export function useObjectTree(enabled: boolean) {
     if (!enabled) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const read = async () => {
+    /** The facts held, by item key; and the reach of the edits since the
+     *  last read began (null: none). */
+    let held = new Map<string, ItemFacts>();
+    let pending: EditReach | null = "all";
+    let reading = false;
+    const read = async (reach: EditReach, known: Map<string, ItemFacts>) => {
       const roots = await client.sceneTree();
-      const ids = itemIds(roots);
+      const ids = itemsToRead(roots, new Set(known.keys()), reach);
       const entries = await Promise.all(
         ids.map((id) => client.elementProperties(id).catch(() => null)),
       );
-      const facts = new Map<
-        string,
-        { layerId: string | null; appearance: boolean; name: string | null }
-      >();
+      const facts = new Map<string, ItemFacts>();
+      // Only the items still in the tree keep their facts.
+      for (const id of itemIds(roots)) {
+        const key = elementKey(id);
+        const kept = known.get(key);
+        if (kept) facts.set(key, kept);
+      }
       ids.forEach((id, i) =>
         facts.set(elementKey(id), readItem(entries[i]?.entries ?? null)),
       );
       return { roots, facts };
     };
     const refresh = () => {
-      void read()
-        .then((next) => {
-          if (live) setState(next);
-        })
-        .catch(() => {});
+      if (reading || pending === null) return;
+      const reach = pending;
+      pending = null;
+      reading = true;
+      void read(reach, held)
+        .then(
+          (next) => {
+            if (!live) return;
+            held = next.facts;
+            setState(next);
+          },
+          () => {
+            // The read failed: what it should have covered is still owed
+            // to the next edit's read.
+            pending = widen(pending, reach);
+          },
+        )
+        .then(() => {
+          reading = false;
+          // Edits that arrived during the read, and are not waiting on
+          // the debounce.
+          if (live && pending !== null && timer === null) refresh();
+        });
     };
     refresh();
     const off = client.subscribe((msg) => {
@@ -390,8 +457,12 @@ export function useObjectTree(enabled: boolean) {
         msg.kind === "redoApplied" ||
         msg.kind === "gestureCommitted"
       ) {
+        pending = widen(pending, reachOf(msg));
         if (timer) clearTimeout(timer);
-        timer = setTimeout(refresh, 60);
+        timer = setTimeout(() => {
+          timer = null;
+          refresh();
+        }, 60);
       }
     });
     return () => {

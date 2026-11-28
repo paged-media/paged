@@ -88,6 +88,7 @@ import {
   visibleSchemaTreeRows,
   type SchemaTreeRow,
 } from "./schema-tree";
+import { mutateReported } from "../state/mutate-reported";
 
 /** Map a schema `WidgetValueBinding` onto a catalog `Binding`. The
  *  shapes are structurally identical (panel-schema.ts mirrors the
@@ -315,7 +316,7 @@ function SchemaListRow({
           end: contentSelection.end,
         },
       } as ElementId;
-      void client.mutate({
+      void mutateReported(client, {
         op: "setElementProperty",
         args: { elementId: id, path: action.path as never, value },
       });
@@ -324,7 +325,7 @@ function SchemaListRow({
     // Element scope — fan out to every selected id, one SetProperty
     // each (the scalar hook's multi-commit shape; same undo grain).
     for (const id of elementSelection) {
-      void client.mutate({
+      void mutateReported(client, {
         op: "setElementProperty",
         args: { elementId: id, path: action.path as never, value },
       });

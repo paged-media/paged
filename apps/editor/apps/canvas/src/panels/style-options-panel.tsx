@@ -64,6 +64,7 @@ import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { SchemaSections, type SectionSpec } from "./schema-sections";
 import { sectionsIn } from "./section-strings";
+import { mutateReported } from "@paged-media/shell";
 
 export type StyleFamily =
   "paragraph" | "character" | "object" | "cell" | "table";
@@ -666,7 +667,7 @@ export function StyleOptionsPanel() {
                 value={basedOn ? basedOn.selfId : ""}
                 onChange={(e) => {
                   if (!selfId) return;
-                  void client.mutate({
+                  void mutateReported(client, {
                     op: "setStyleBasedOn",
                     args: {
                       collection: family,

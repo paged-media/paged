@@ -873,6 +873,11 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
 export const APP_KEYBINDINGS: KeybindingContribution[] = [
   { key: "cmd+=", command: PAGED_VIEW_ZOOM_IN },
   { key: "ctrl+=", command: PAGED_VIEW_ZOOM_IN },
+  // The plus key itself: unshifted on a German keyboard (where "=" is
+  // Shift+0), and what Cmd+Shift+= types elsewhere when nothing else is
+  // bound there.
+  { key: "cmd+plus", command: PAGED_VIEW_ZOOM_IN },
+  { key: "ctrl+plus", command: PAGED_VIEW_ZOOM_IN },
   { key: "cmd+-", command: PAGED_VIEW_ZOOM_OUT },
   { key: "ctrl+-", command: PAGED_VIEW_ZOOM_OUT },
   // Fit and 100 % (F-16, SH-9). They lived in a canvas hook, so the View

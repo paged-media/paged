@@ -349,25 +349,35 @@ export class RecoveryJournal {
 
   /** Apply the retention bounds to the orphaned sessions. */
   async prune(): Promise<void> {
+    await this.sweep();
+  }
+
+  /**
+   * What a start needs, in one pass over the journal: the retention bounds
+   * applied to the orphaned sessions, and the newest checkpoint of each
+   * one kept, newest first.
+   */
+  async sweep(): Promise<RecoveryCheckpoint[]> {
     const sessions = (await this.orphanSessions()).sort(
       (a, b) => b.latest.at - a.latest.at,
     );
     const now = this.now();
+    const out: RecoveryCheckpoint[] = [];
     let bytes = 0;
-    let kept = 0;
     for (const s of sessions) {
       const size = s.meta.checkpoints.reduce((n, c) => n + c.bytes, 0);
       const keep =
         now - s.latest.at <= this.maxAgeMs &&
-        kept < this.maxSessions &&
+        out.length < this.maxSessions &&
         bytes + size <= this.maxBytes;
       if (keep) {
-        kept += 1;
+        out.push(s.latest);
         bytes += size;
       } else {
         await this.fs.removeDir(s.meta.session);
       }
     }
+    return out;
   }
 
   private async orphanSessions(): Promise<
@@ -378,10 +388,12 @@ export class RecoveryJournal {
     for (const dir of await this.fs.list("")) {
       if (this.own.has(dir) || held.has(SESSION_LOCK + dir)) continue;
       const meta = await this.readMeta(dir);
-      const present: RecoveryCheckpoint[] = [];
-      for (const c of meta?.checkpoints ?? []) {
-        if ((await this.fs.read(blobPath(c))) !== null) present.push(c);
-      }
+      // Which checkpoints still have their bytes is the directory's
+      // listing: a start never reads a checkpoint it does not restore.
+      const files = new Set(meta ? await this.fs.list(dir) : []);
+      const present = (meta?.checkpoints ?? []).filter((c) =>
+        files.has(`${c.seq}.paged`),
+      );
       const latest = present.at(-1);
       if (!meta || !latest) {
         await this.fs.removeDir(dir);

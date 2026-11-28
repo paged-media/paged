@@ -345,6 +345,59 @@ interface Loc {
 interface Open {
   repo: WasmRepository;
   meta: DocumentEntry;
+  /** `refs.json` as this instance last read or wrote it: another bytes on
+   *  disk mean another tab saved since, and this copy is stale. */
+  refsOnDisk: Uint8Array | null;
+}
+
+/** The part of the Web Locks API a library needs. */
+export interface LibraryLocks {
+  request<T>(name: string, callback: () => Promise<T>): Promise<T>;
+}
+
+/** Locks within one JavaScript realm: what a library falls back to where
+ *  the browser has no Web Locks, and what a test shares between two
+ *  libraries to model two tabs. */
+export function memoryLocks(): LibraryLocks {
+  const tails = new Map<string, Promise<unknown>>();
+  return {
+    request(name, callback) {
+      const run = (tails.get(name) ?? Promise.resolve()).then(callback);
+      const tail = run.catch(() => undefined);
+      tails.set(name, tail);
+      void tail.then(() => {
+        if (tails.get(name) === tail) tails.delete(name);
+      });
+      return run;
+    },
+  };
+}
+
+/** Every library of this realm without Web Locks shares these. */
+const REALM_LOCKS = memoryLocks();
+
+function defaultLocks(): LibraryLocks {
+  const locks = (
+    globalThis.navigator as unknown as
+      | {
+          locks?: {
+            request(name: string, callback: () => Promise<unknown>): unknown;
+          };
+        }
+      | undefined
+  )?.locks;
+  if (!locks || typeof locks.request !== "function") return REALM_LOCKS;
+  return {
+    request: <T>(name: string, callback: () => Promise<T>) =>
+      locks.request(name, callback) as Promise<T>,
+  };
+}
+
+function sameBytes(a: Uint8Array | null, b: Uint8Array | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 const MAIN = "main";
@@ -358,6 +411,12 @@ export interface LibraryOptions {
   owner?: string;
   now?: () => number;
   newId?: () => string;
+  /** The locks that keep two tabs from writing one document at once.
+   *  Default: the browser's Web Locks, or locks of this realm without. */
+  locks?: LibraryLocks;
+  /** The prefix of a document's lock name: one per storage root. Default
+   *  `paged.library`. */
+  lockScope?: string;
 }
 
 export class Library {
@@ -370,6 +429,8 @@ export class Library {
 
   private readonly fs: RepoFs;
   private readonly options: LibraryOptions;
+  private readonly locks: LibraryLocks;
+  private readonly lockScope: string;
 
   constructor(fs: RepoFs, options: LibraryOptions) {
     this.fs = fs;
@@ -377,6 +438,46 @@ export class Library {
     this.owner = options.owner ?? "user:local";
     this.now = options.now ?? Date.now;
     this.newId = options.newId ?? (() => crypto.randomUUID());
+    this.locks = options.locks ?? defaultLocks();
+    this.lockScope = options.lockScope ?? "paged.library";
+  }
+
+  /**
+   * One operation on document `id` at a time, across every tab of this
+   * origin: the storage is shared, each tab keeps its own copy of the
+   * repository in memory, and a save writes a pack and `refs.json`. Under
+   * the document's lock the copy is checked against the disk first, so a
+   * save builds on what another tab saved instead of replacing it.
+   */
+  private exclusive<T>(id: string, f: () => Promise<T>): Promise<T> {
+    return this.serial(() =>
+      this.locks.request(`${this.lockScope}:${id}`, async () => {
+        await this.refresh(id);
+        return f();
+      }),
+    );
+  }
+
+  /** Drops this instance's copy of `id` when another tab wrote the
+   *  document since (the next `load` reads it again), and takes the entry
+   *  (name, remote) as the disk has it. */
+  private async refresh(id: string): Promise<void> {
+    const cached = this.open.get(id);
+    if (!cached) return;
+    const dir = `repos/${id}`;
+    const refs = await this.fs.read(`${dir}/refs.json`);
+    if (!sameBytes(refs, cached.refsOnDisk)) {
+      this.open.delete(id);
+      (cached.repo as { free?(): void }).free?.();
+      return;
+    }
+    const meta = await this.fs.read(`${dir}/meta.json`);
+    if (!meta) {
+      // Removed in another tab.
+      this.open.delete(id);
+      return;
+    }
+    cached.meta = JSON.parse(dec.decode(meta)) as DocumentEntry;
   }
 
   private serial<T>(f: () => Promise<T>): Promise<T> {
@@ -417,6 +518,7 @@ export class Library {
     const o: Open = {
       repo,
       meta: JSON.parse(dec.decode(metaBytes)) as DocumentEntry,
+      refsOnDisk: refs,
     };
     await this.provide(o, JSON.parse(repo.metadata()) as Loc[]);
     this.open.set(id, o);
@@ -466,6 +568,7 @@ export class Library {
       await this.fs.write(`${dir}/packs/${f.packId}.idx`, f.packIndex);
     }
     await this.fs.write(`${dir}/refs.json`, f.refs);
+    o.refsOnDisk = f.refs.slice();
     if (f.evidence.length)
       await this.fs.append(`${dir}/evidence.jsonl`, f.evidence);
     f.free?.();
@@ -493,7 +596,11 @@ export class Library {
         updatedAt: now,
         head: null,
       };
-      const o: Open = { repo: this.options.createRepository(this.owner), meta };
+      const o: Open = {
+        repo: this.options.createRepository(this.owner),
+        meta,
+        refsOnDisk: null,
+      };
       o.repo.importFile(bytes, name, MAIN, this.owner, now);
       await this.persist(o);
       this.open.set(id, o);
@@ -549,7 +656,7 @@ export class Library {
 
   /** The document's timeline, oldest first. */
   checkpoints(id: string): Promise<CheckpointEntry[]> {
-    return this.serial(() => this.readCheckpoints(id));
+    return this.exclusive(id, () => this.readCheckpoints(id));
   }
 
   /** Keeps `bytes` (the open document's state, saved or not) as a point of
@@ -563,7 +670,7 @@ export class Library {
     bytes: Uint8Array,
     entry: { name: string; kind: CheckpointKind; pages?: number },
   ): Promise<CheckpointEntry> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       if (bytes.length > MAX_CHECKPOINT_BYTES)
         throw new CheckpointRefused("too-large");
       const auto = entry.kind !== "named" && entry.kind !== "approved";
@@ -600,7 +707,7 @@ export class Library {
   /** Takes a checkpoint off the timeline. Its version stays in the
    *  repository's history (nothing rewinds). */
   removeCheckpoint(id: string, checkpointId: string): Promise<void> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const list = await this.readCheckpoints(id);
       await this.writeCheckpoints(
         id,
@@ -612,7 +719,7 @@ export class Library {
   /** Makes a checkpoint's state current again as a NEW version of main
    *  ("Restore …"): the versions after it stay in the history. */
   restoreCheckpoint(id: string, checkpointId: string): Promise<string> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const c = (await this.readCheckpoints(id)).find(
         (x) => x.id === checkpointId,
       );
@@ -635,7 +742,7 @@ export class Library {
     message = "Save",
     ref = MAIN,
   ): Promise<{ head: string; changed: boolean }> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const before =
         (JSON.parse(o.repo.refs()) as Record<string, string>)[ref] ?? null;
@@ -676,7 +783,7 @@ export class Library {
 
   /** The document's layout variants, oldest first. */
   variants(id: string): Promise<VariantEntry[]> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
       return (await this.readVariants(id)).map((v) => {
@@ -694,7 +801,7 @@ export class Library {
     name: string,
     bytes: Uint8Array,
   ): Promise<VariantEntry> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
       const base = refs[MAIN];
@@ -718,7 +825,7 @@ export class Library {
   /** Makes a variant the main layout as a NEW version of main: main's
    *  versions stay in its history, the variant stays a variant. */
   promoteVariant(id: string, slug: string): Promise<string> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const ref = variantRef(this.owner, slug);
       const head = (JSON.parse(o.repo.refs()) as Record<string, string>)[ref];
@@ -735,7 +842,7 @@ export class Library {
 
   /** Takes a variant off the list. Its versions stay in the history. */
   removeVariant(id: string, slug: string): Promise<void> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       await this.writeVariants(
         id,
         (await this.readVariants(id)).filter((v) => v.slug !== slug),
@@ -749,7 +856,7 @@ export class Library {
     target = MAIN,
     withHistory = false,
   ): Promise<Uint8Array> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       await this.provide(
         o,
@@ -765,7 +872,7 @@ export class Library {
   }
 
   log(id: string, ref = MAIN): Promise<CommitInfo[]> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       return JSON.parse(
         await this.faulting(o, () => o.repo.log(ref)),
@@ -774,13 +881,13 @@ export class Library {
   }
 
   refs(id: string): Promise<Record<string, string>> {
-    return this.serial(async () =>
+    return this.exclusive(id, async () =>
       JSON.parse((await this.load(id)).repo.refs()),
     );
   }
 
   release(id: string, name: string, commit: string): Promise<void> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       await this.faulting(o, () =>
         o.repo.release(name, commit, this.owner, this.now()),
@@ -791,7 +898,7 @@ export class Library {
 
   /** Makes an earlier version current again, as a new commit. */
   restore(id: string, version: string): Promise<string> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const head = await this.faulting(o, () =>
         o.repo.restore(version, MAIN, this.owner, this.now()),
@@ -802,14 +909,14 @@ export class Library {
   }
 
   diff(id: string, from: string, to: string): Promise<[string, string][]> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       return JSON.parse(await this.faulting(o, () => o.repo.diff(from, to)));
     });
   }
 
   evidence(id: string): Promise<EvidenceInfo[]> {
-    return this.serial(async () =>
+    return this.exclusive(id, async () =>
       JSON.parse((await this.load(id)).repo.evidence()),
     );
   }
@@ -861,7 +968,7 @@ export class Library {
 
   /** Pushes `main` to `remote`: only what the server lacks travels. */
   push(id: string, remote: Remote): Promise<{ sent: number; bytes: number }> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const theirs = await this.remoteRefs(remote);
       const offer = JSON.parse(
@@ -934,7 +1041,7 @@ export class Library {
     id: string,
     remote: Remote,
   ): Promise<{ head: string; changed: boolean }> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const theirs = (await this.remoteRefs(remote))[MAIN];
       if (!theirs)
@@ -994,7 +1101,11 @@ export class Library {
         head: null,
         remote: { url: remote.url, repo: remote.repo },
       };
-      const o: Open = { repo: this.options.createRepository(this.owner), meta };
+      const o: Open = {
+        repo: this.options.createRepository(this.owner),
+        meta,
+        refsOnDisk: null,
+      };
       o.repo.receivePack(pack, MAIN, "", theirs, this.owner, now);
       o.repo.record(
         this.owner,
@@ -1018,7 +1129,7 @@ export class Library {
     who: { agent: string; client: string; run: string },
     message: string,
   ): Promise<{ branch: string; head: string }> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const run = who.run.toLowerCase().replace(/[^a-z0-9-]/g, "-") || "run";
       const branch = `agent/${run}/live`;
@@ -1042,7 +1153,7 @@ export class Library {
 
   /** Merges `source` into main, approved by this library's person. */
   mergeBranch(id: string, source: string): Promise<string> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const head = await this.faulting(o, () =>
         o.repo.merge(source, MAIN, this.owner, [this.owner], this.now()),
@@ -1077,7 +1188,11 @@ export class Library {
         head: null,
         kind: "data",
       };
-      const o: Open = { repo: this.options.createRepository(this.owner), meta };
+      const o: Open = {
+        repo: this.options.createRepository(this.owner),
+        meta,
+        refsOnDisk: null,
+      };
       o.repo.importParts(
         JSON.stringify(manifest),
         bytes,
@@ -1094,7 +1209,7 @@ export class Library {
 
   /** One part of a version (a ref or a commit address). */
   readPart(id: string, path: string, ref = MAIN): Promise<Uint8Array> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       const bytes = await this.faulting(o, () => o.repo.readPart(ref, path));
       o.repo.evictBlobs();
@@ -1131,7 +1246,7 @@ export class Library {
   }
 
   rename(id: string, name: string): Promise<DocumentEntry> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       const o = await this.load(id);
       o.meta = { ...o.meta, name };
       await this.fs.write(
@@ -1143,7 +1258,7 @@ export class Library {
   }
 
   remove(id: string): Promise<void> {
-    return this.serial(async () => {
+    return this.exclusive(id, async () => {
       this.open.delete(id);
       await this.fs.removeDir(`repos/${id}`);
     });

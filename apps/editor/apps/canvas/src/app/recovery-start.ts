@@ -109,9 +109,9 @@ async function begin(
   identify: () => { key: string; stable: boolean },
 ): Promise<() => Promise<void>> {
   const session = await journal.begin();
-  await journal.prune();
   const offers = [];
-  for (const checkpoint of await journal.orphans()) {
+  // One pass: the retention bounds, then what is left to offer.
+  for (const checkpoint of await journal.sweep()) {
     // Claimed while offered, so a second tab does not offer it too.
     const release = await journal.claim(checkpoint.session);
     if (release) offers.push({ checkpoint, release });

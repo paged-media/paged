@@ -230,6 +230,11 @@ export const ENGINE_FAILURE = defineMessages("shell.engineFailure", {
   title: "The canvas engine stopped",
   body: "Nothing more can be changed in this session, and the change in progress was not applied. Work since the last save is kept in this browser's recovery copy: reload to get it back.",
   reload: "Reload",
+  bodyRestart:
+    "Nothing more can be changed in this session, and the change in progress was not applied. Restart the editor to go on.",
+  bodyHost:
+    "Nothing more can be changed in this session, and the change in progress was not applied. Close the editor and open it again to go on.",
+  restart: "Restart",
 });
 
 /** Hover preselection and the locked mark (editor ADR 235, amended by

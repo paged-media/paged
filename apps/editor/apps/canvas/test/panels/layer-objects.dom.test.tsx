@@ -34,12 +34,15 @@ import {
   buildLayerTree,
   dropMutation,
   elementKey,
+  itemIds,
+  itemsToRead,
   layerColour,
+  reachOf,
   readItem,
   type ObjectNode,
 } from "../../src/panels/layer-objects";
 import { LayersPanel } from "../../src/panels/layers-panel";
-import { shapesScene, type ShapesScene } from "./fixtures";
+import { apply, shapesScene, type ShapesScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
 afterEach(unmountAll);
@@ -391,5 +394,99 @@ describe("Layers objects: the panel", () => {
         e.getAttribute("data-object-layer"),
       ),
     ).toEqual([front.selfId, layers.find((l) => l.name === "Back")!.selfId]);
+  });
+});
+
+describe("Layers objects: which items an edit makes it read again", () => {
+  const rect = (id: string): SceneTreeNode => ({
+    id: { kind: "rectangle", id } as ElementId,
+    kind: "Rectangle",
+    label: `Rectangle ${id}`,
+  });
+  const roots: SceneTreeNode[] = [
+    {
+      kind: "Spread",
+      label: "Spread 1",
+      children: [
+        {
+          kind: "Page",
+          label: "1",
+          children: [
+            rect("a"),
+            {
+              id: { kind: "group", id: "g" } as ElementId,
+              kind: "Group",
+              label: "Group g",
+              children: [rect("m1"), rect("m2")],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  const keys = (ids: ElementId[]) => ids.map(elementKey).sort();
+
+  test("a committed gesture reads only the items new to the tree; any other edit reads all", () => {
+    expect(reachOf({ kind: "gestureCommitted" })).toBe("new");
+    for (const kind of [
+      "documentLoaded",
+      "mutationApplied",
+      "undoApplied",
+      "redoApplied",
+    ])
+      expect(reachOf({ kind })).toBe("all");
+    const known = new Set(["rectangle:a", "group:g", "rectangle:m1"]);
+    expect(keys(itemsToRead(roots, known, "new"))).toEqual(["rectangle:m2"]);
+    expect(keys(itemsToRead(roots, known, "all"))).toEqual(
+      keys(itemIds(roots)),
+    );
+  });
+});
+
+describe("Layers objects: reads after an edit", () => {
+  const propertyReads = (h: H, from: number) =>
+    h
+      .sent("requestElementProperties", from)
+      .map((m) =>
+        elementKey((m as unknown as { payload: { id: ElementId } }).payload.id),
+      )
+      .sort();
+
+  test("a committed drag reads the tree once and no item's properties", async () => {
+    const h = await mount();
+    await ready(h);
+    const from = h.mark();
+    await h.act(async () => {
+      const handle = await h.client.beginGesture([h.scene.oval], {
+        kind: "translate",
+      });
+      await h.client.updateGesture(handle, [12, 8], {
+        shift: false,
+        alt: false,
+      });
+      await h.client.commitGesture(handle);
+    });
+    await reread(h);
+    expect(h.sent("requestSceneTree", from)).toHaveLength(1);
+    expect(propertyReads(h, from)).toEqual([]);
+    expect(objRow(h, h.scene.oval)).not.toBeNull();
+  });
+
+  test("a rename is read: the facts follow a mutation", async () => {
+    const h = await mount();
+    await ready(h);
+    const from = h.mark();
+    await h.act(() =>
+      apply(h.client, {
+        op: "setElementProperty",
+        args: {
+          elementId: h.scene.oval,
+          path: "itemName",
+          value: { type: "text", value: "Masthead" },
+        },
+      } as Mutation),
+    );
+    await reread(h);
+    expect(propertyReads(h, from)).toContain(elementKey(h.scene.oval));
   });
 });

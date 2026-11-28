@@ -133,6 +133,10 @@ export type EditorEvent =
   | { type: "ready" }
   | { type: "change" }
   | { type: "fieldChange"; fields: readonly TemplateFieldSummary[] }
+  /** The engine stopped: nothing more can change in this editor. The host
+   *  disposes it and creates it again (its `actions.restart` is what the
+   *  editor's own notice offers). */
+  | { type: "engineFailure"; message: string }
   | ({ type: "idDeprecated" } & IdDeprecation);
 
 export interface EditorHandle {
@@ -320,6 +324,10 @@ export async function createEditor(
     });
   });
 
+  const offFatal = client.onFatal((error) =>
+    emit({ type: "engineFailure", message: error.message }),
+  );
+
   const sinks = {
     setStatus: () => {},
     pushWarning: (w: string) => console.warn(`[paged editor] ${w}`),
@@ -406,6 +414,7 @@ export async function createEditor(
     objects: mounted.instance.services.objects.model.objects,
     dispose() {
       offClient();
+      offFatal();
       offAliases();
       listeners.clear();
       for (const name of themed) shell.root.style.removeProperty(name);

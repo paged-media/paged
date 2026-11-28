@@ -124,6 +124,7 @@ import {
   rawClient,
   type TypingCoalescer,
 } from "./typing-coalescer";
+import { mutateReported } from "@paged-media/shell";
 
 export interface TextEditingContext {
   client: CanvasClient | null;
@@ -357,7 +358,7 @@ export function useTextEditing(ctx: TextEditingContext) {
             return;
           }
           if (!cut) return;
-          void c.mutate({
+          void mutateReported(c, {
             op: "deleteRange",
             args: {
               storyId: s.storyId,
@@ -380,13 +381,13 @@ export function useTextEditing(ctx: TextEditingContext) {
           if (sel.start === sel.end) {
             // Caret: delete one character backwards.
             const start = sel.start - 1;
-            void c.mutate({
+            void mutateReported(c, {
               op: "deleteRange",
               args: { storyId: sel.storyId, start, end: sel.start, cell },
             });
             setSel({ ...sel, start, end: start, affinity: false });
           } else {
-            void c.mutate({
+            void mutateReported(c, {
               op: "deleteRange",
               args: {
                 storyId: sel.storyId,
@@ -765,7 +766,7 @@ export function insertAt(
   const style = sel.cell ? null : heldTypingStyle(rawClient(client), sel);
   if (style) {
     const end = sel.start + byteLength(text);
-    void client.mutate({
+    void mutateReported(client, {
       op: "batch",
       args: {
         ops: [
@@ -782,9 +783,9 @@ export function insertAt(
       },
     } as Mutation);
   } else if (sel.start === sel.end) {
-    void client.mutate(insert);
+    void mutateReported(client, insert);
   } else {
-    void client.mutate({
+    void mutateReported(client, {
       op: "batch",
       args: {
         ops: [

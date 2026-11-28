@@ -30,6 +30,7 @@ import type { Mutation, SwatchSpec } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { ColorGuideSection } from "./color-guide-section";
+import { mutateReported } from "@paged-media/shell";
 
 const M = defineMessages("app.colorWheelPanel", {
   newSwatch: "New swatch",
@@ -54,7 +55,7 @@ export function ColorWheelPanel() {
       op: "createSwatch",
       args: { spec },
     }));
-    void client.mutate({ op: "batch", args: { ops } }).catch(() => {});
+    void mutateReported(client, { op: "batch", args: { ops } });
   };
 
   return (

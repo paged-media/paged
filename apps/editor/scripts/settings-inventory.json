@@ -387,6 +387,17 @@
       "sites": [["getItem", "\"paged.library\""]]
     },
     {
+      "id": "paged.locale",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.locale",
+      "default": "absent (the browser's languages decide)",
+      "effect": "the language the editor's page starts in when the URL names none (`?locale=`): a language tag; absent, the first of the browser's languages the editor ships a catalogue for, else English",
+      "source": "apps/editor/apps/canvas/src/app/locale.ts",
+      "marker": "\"paged.locale\"",
+      "sites": [["getItem", "LOCALE_KEY"]]
+    },
+    {
       "id": "paged.recovery",
       "kind": "feature-flag",
       "storage": "localStorage",

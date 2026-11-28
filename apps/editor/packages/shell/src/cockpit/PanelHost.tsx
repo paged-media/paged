@@ -25,6 +25,7 @@
 
 import { useStrings } from "@paged-media/strings";
 import { COCKPIT } from "./messages";
+import { PanelErrorBoundary } from "../chrome/ContainedError";
 import { PanelBindingScope } from "../catalog/panel-binding-surface";
 import { usePaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
@@ -79,7 +80,13 @@ export function PanelHost({ id }: { id: string }) {
       style={{ display: "contents" }}
     >
       <PanelBindingScope panelId={id}>
-        <Component paged={paged} api={{ id }} />
+        {/* A panel that throws is contained here: the slot says so and
+            offers to render it again; the other panels, the canvas and
+            Save keep working. Keyed by the panel, so the next panel in
+            this slot does not inherit the failure. */}
+        <PanelErrorBoundary key={id} id={id} name={contribution.title || id}>
+          <Component paged={paged} api={{ id }} />
+        </PanelErrorBoundary>
       </PanelBindingScope>
     </div>
   );

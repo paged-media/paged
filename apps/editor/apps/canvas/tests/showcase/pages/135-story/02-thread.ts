@@ -190,8 +190,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   if (summary?.overset) {
     // TEMP-DIAG dump — removed once the cause is known.
     const { writeFileSync } = await import("node:fs");
-    const dir =
-      "/private/tmp/claude-501/-Users-drietsch-paged/895bd912-5ecc-4a8d-a9ba-869adee4ed94/scratchpad";
+    const dir = (await import("node:os")).tmpdir();
     writeFileSync(`${dir}/diag-p34.png`, await doc.renderPage(p(34)));
     writeFileSync(`${dir}/diag-p35.png`, await doc.renderPage(p(35)));
     const chains: Record<string, unknown> = {};

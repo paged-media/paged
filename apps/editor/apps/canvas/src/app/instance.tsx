@@ -107,6 +107,11 @@ export interface HostActions {
   close?(): void;
   /** Go back in the host (`paged.host.back`). */
   back?(): void;
+  /** Start the editor again after its engine stopped (dispose it and
+   *  create it anew): what the failure notice's Restart button asks for.
+   *  An embedded editor never reloads its host's page; without this the
+   *  notice has no button and the host hears the `engineFailure` event. */
+  restart?(): void;
 }
 
 /**

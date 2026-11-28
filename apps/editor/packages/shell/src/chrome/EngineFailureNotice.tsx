@@ -22,13 +22,56 @@
 // interaction coordinator), nothing claims a change it could not make, and
 // this says so — what happened, that nothing more can change, and how to
 // get the work back (the recovery copy, editor ADR 1204).
+//
+// How the work comes back depends on whose page it is. An editor that IS
+// the page reloads it. An embedded editor never reloads its host's page:
+// it asks the host to restart it (`setEngineRestart`, the embedding API's
+// `actions.restart`), and without that it only says what happened; the
+// host hears of the failure either way (the `engineFailure` event).
 
 import { useSyncExternalStore } from "react";
 import { useStrings } from "@paged-media/strings";
 
 import { Button } from "../components/ui/button";
 import { useOptionalCanvasClient } from "../state/canvas-client-context";
+import { editorOwnsPage, editorRootOf } from "../state/editor-root";
+import {
+  scoped,
+  useEditorScope,
+  type EditorScope,
+} from "../state/editor-scope";
 import { ENGINE_FAILURE } from "./messages";
+
+const RESTART = scoped("engineRestart", () => ({
+  restart: null as (() => void) | null,
+  listeners: new Set<() => void>(),
+}));
+
+/** How `scope`'s editor is started again after its engine stopped, when
+ *  the editor is not the page: its host's restart (dispose it and create
+ *  it again). Null takes it away. */
+export function setEngineRestart(
+  scope: EditorScope,
+  restart: (() => void) | null,
+): void {
+  const store = scope.get(RESTART);
+  store.restart = restart;
+  for (const l of [...store.listeners]) l();
+}
+
+/** What the notice's button does, or null when there is nothing the
+ *  editor itself may do: reload the page when the editor is the page (or
+ *  has no root of its own: a shell on its own page), else the host's
+ *  restart. */
+export function engineRecovery(
+  scope: EditorScope,
+  reload: () => void = () => location.reload(),
+): { kind: "reload" | "restart"; run: () => void } | null {
+  const embedded = editorRootOf(scope) !== null && !editorOwnsPage(scope);
+  if (!embedded) return { kind: "reload", run: reload };
+  const restart = scope.get(RESTART).restart;
+  return restart ? { kind: "restart", run: restart } : null;
+}
 
 const never = () => () => {};
 const none = () => null;
@@ -36,19 +79,52 @@ const none = () => null;
 export function EngineFailureNotice() {
   const strings = useStrings();
   const client = useOptionalCanvasClient();
+  const scope = useEditorScope();
   const failure = useSyncExternalStore(
     client ? (notify) => client.onFatal(() => notify()) : never,
     client ? () => client.failure : none,
     none,
   );
+  // Which recovery there is, as a snapshot (ADR 229): the host may hand
+  // its restart over after the editor mounted.
+  const kind = useSyncExternalStore(
+    (notify) => {
+      const { listeners } = scope.get(RESTART);
+      listeners.add(notify);
+      return () => listeners.delete(notify);
+    },
+    () => engineRecovery(scope)?.kind ?? "none",
+    () => "none" as const,
+  );
   if (!failure) return null;
+  const recovery =
+    kind === "none" ? null : { kind, run: () => engineRecovery(scope)?.run() };
   return (
     <div role="alert" data-engine-failure="" style={noticeStyle}>
       <strong>{strings.t(ENGINE_FAILURE.title)}</strong>
-      <span style={{ flex: 1 }}>{strings.t(ENGINE_FAILURE.body)}</span>
-      <Button size="sm" variant="outline" onClick={() => location.reload()}>
-        {strings.t(ENGINE_FAILURE.reload)}
-      </Button>
+      <span style={{ flex: 1 }}>
+        {strings.t(
+          recovery?.kind === "reload"
+            ? ENGINE_FAILURE.body
+            : recovery
+              ? ENGINE_FAILURE.bodyRestart
+              : ENGINE_FAILURE.bodyHost,
+        )}
+      </span>
+      {recovery && (
+        <Button
+          size="sm"
+          variant="outline"
+          data-engine-recovery={recovery.kind}
+          onClick={recovery.run}
+        >
+          {strings.t(
+            recovery.kind === "reload"
+              ? ENGINE_FAILURE.reload
+              : ENGINE_FAILURE.restart,
+          )}
+        </Button>
+      )}
     </div>
   );
 }

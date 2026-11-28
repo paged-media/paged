@@ -18,16 +18,22 @@
  */
 
 // The editor's page entry: one editor in `#root`, configured by the URL
-// (`?profile=`, `?solo=`, `?locale=`). An embedding host calls `mountEditor`
+// (`?profile=`, `?solo=`, `?locale=`) and, for its language, the user's
+// choice and the browser's languages (`app/locale.ts`). An embedding host calls `mountEditor`
 // itself (docs/composable-editor.md §8; plan task E1); what this page adds
 // around it is the page's: the journal's error net, and in dev and demo
 // builds the `__*` handles the tests and the playground drive the editor
 // by, and the playground's tools.
 
 import { pageStorage } from "@paged-media/shell";
-import { loadLocale, type Strings } from "@paged-media/strings";
+import {
+  BUILT_IN_LOCALES,
+  loadLocale,
+  type Strings,
+} from "@paged-media/strings";
 
 import { publishDevHandles } from "./app/dev-handles";
+import { chooseLocale, needsCatalogue } from "./app/locale";
 import {
   exposeJournalForTests,
   installGlobalErrorCapture,
@@ -89,8 +95,13 @@ function mount(strings?: Strings): void {
   mirrorTheme(root);
 }
 
-const locale = new URLSearchParams(location.search).get("locale");
-if (locale) {
+const { locale } = chooseLocale({
+  search: location.search,
+  storage: pageStorage(),
+  languages: navigator.languages ?? [navigator.language],
+  shipped: Object.keys(BUILT_IN_LOCALES),
+});
+if (needsCatalogue(locale)) {
   void loadLocale(locale).then(({ strings, problem }) => {
     if (problem) console.warn(`[editor locale] ${problem}`);
     else document.documentElement.lang = locale;

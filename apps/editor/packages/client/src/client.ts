@@ -868,6 +868,37 @@ export class CanvasClient {
     for (const wake of waiters) wake();
   }
 
+  /** The subscribers that threw, so each is reported once. */
+  private readonly threw = new WeakSet<object>();
+
+  /** Call one subscriber. A subscriber that throws is its own failure:
+   *  the ones after it still hear the message (a panel that throws on
+   *  `mutationApplied` must not keep the recovery journal, the dirty flag
+   *  or the page thumbnails from hearing it). Reported once per
+   *  subscriber, not once per message. */
+  private call<A extends unknown[]>(
+    listener: (...args: A) => void,
+    what: string,
+    ...args: A
+  ): void {
+    try {
+      listener(...args);
+    } catch (err) {
+      if (this.threw.has(listener)) return;
+      this.threw.add(listener);
+      // eslint-disable-next-line no-console
+      console.error(
+        `[client] a subscriber threw on "${what}"; later messages to it are not reported again:`,
+        err,
+      );
+    }
+  }
+
+  /** Broadcast a worker message to every subscriber. */
+  private emit(msg: WorkerToMain): void {
+    for (const l of this.listeners) this.call(l, msg.kind, msg);
+  }
+
   /** Subscribe to unsolicited worker → main notifications. */
   subscribe(listener: (msg: WorkerToMain) => void): () => void {
     this.listeners.add(listener);
@@ -979,7 +1010,7 @@ export class CanvasClient {
       ...held.msg,
       payload: { ...held.msg.payload, pageIds: [...held.pageIds] },
     } as WorkerToMain;
-    for (const l of this.listeners) l(merged);
+    this.emit(merged);
   }
 
   /** v84 (engine ADR 1314) — the open document's composition: whether it
@@ -1800,7 +1831,7 @@ export class CanvasClient {
    */
   markSaved(mark?: number): void {
     this.savedAtEdit = mark ?? this.editCount;
-    for (const l of this.savedListeners) l();
+    for (const l of this.savedListeners) this.call(l, "saved");
   }
 
   /** Notified after {@link markSaved}: the dirty flag may have flipped
@@ -3613,7 +3644,8 @@ export class CanvasClient {
     for (const cb of journals) cb(null);
     for (const cb of vellos) cb(null);
     for (const cb of backendInfos) cb(null);
-    if (becameFatal) for (const l of [...this.fatalListeners]) l(err);
+    if (becameFatal)
+      for (const l of [...this.fatalListeners]) this.call(l, "fatal", err);
   }
 
   /** An uncaught error in the worker scope, or the worker script failing to
@@ -3657,6 +3689,13 @@ export class CanvasClient {
           new Error(`canvas engine/bundle mismatch: ${details}`),
           true,
         );
+        return;
+      // A WebAssembly trap (a panic, an out-of-bounds access): the engine
+      // instance is in an unknown state and the worker no longer calls
+      // it. Nothing will be answered again, so this is fatal: every
+      // caller is rejected and the editor says the engine stopped.
+      case "engineTrapped":
+        this.failAll(new Error(`canvas engine stopped: ${details}`), true);
         return;
       // One request's dispatch threw; the worker reports it with that
       // request's seq. Only that caller is rejected — a binary load
@@ -3714,7 +3753,7 @@ export class CanvasClient {
       try {
         const parsed = JSON.parse(r.replyJson) as WorkerToMain;
         this.trackEdits(parsed);
-        for (const l of this.listeners) l(parsed);
+        this.emit(parsed);
       } catch {
         // already handled
       }
@@ -3804,8 +3843,6 @@ export class CanvasClient {
     // cache-stats HUD on `mutationApplied` while the original
     // `client.mutate(...)` caller awaits the promise). Without this
     // broadcast, only the awaiter sees the reply.
-    for (const l of this.listeners) {
-      l(msg);
-    }
+    this.emit(msg);
   };
 }

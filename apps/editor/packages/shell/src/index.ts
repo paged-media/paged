@@ -776,6 +776,16 @@ export {
   type WordedFeedback,
 } from "./state/operation-feedback";
 export { FeedbackToasts } from "./chrome/FeedbackToasts";
+export { setEngineRestart } from "./chrome/EngineFailureNotice";
+export {
+  mutateReported,
+  refusedMutationReport,
+  setMutationReportSink,
+} from "./state/mutate-reported";
+export {
+  DialogErrorBoundary,
+  PanelErrorBoundary,
+} from "./chrome/ContainedError";
 // Editor ADR 1223 — the publication's issues on the page.
 export {
   activateIssue,

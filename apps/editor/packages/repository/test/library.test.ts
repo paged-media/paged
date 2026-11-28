@@ -29,6 +29,7 @@ import {
   Library,
   MAX_AUTO_CHECKPOINTS,
   MAX_CHECKPOINT_BYTES,
+  memoryLocks,
 } from "../src/library.ts";
 import { crc32 } from "@paged-media/helpers";
 
@@ -387,4 +388,79 @@ test("PX5 — a variant branches from main, saves on its own ref, and promotes a
     ["compact"],
   );
   assert.ok((await lib.exportPaged(id, again.head!)).length > 0);
+});
+
+// Two tabs: two libraries over one storage, each with its own copy of the
+// repository in memory, sharing the origin's locks.
+function twoTabs() {
+  const fs = memoryFs();
+  const locks = memoryLocks();
+  let t = 1000;
+  let n = 0;
+  const tab = () =>
+    new Library(fs, {
+      createRepository: (owner) => new Repository(owner),
+      now: () => (t += 1000),
+      newId: () => `doc-${++n}`,
+      locks,
+    });
+  return { fs, a: tab(), b: tab(), fresh: tab };
+}
+
+test("a second tab's save builds on the first tab's instead of replacing it", async () => {
+  const { a, b, fresh } = twoTabs();
+  const { id } = await a.importFile(doc(noise(300_000, 20)), "d.paged");
+  // Both tabs hold the document in memory at the same head.
+  assert.equal((await a.log(id)).length, 1);
+  assert.equal((await b.log(id)).length, 1);
+
+  const first = doc(noise(300_000, 21));
+  const second = doc(noise(300_000, 22));
+  const savedA = await a.save(id, first, "Save in tab A");
+  // Tab B's copy is stale now: its save must not take A's pack number or
+  // write refs that forget A's commit.
+  const savedB = await b.save(id, second, "Save in tab B");
+  assert.equal(savedA.changed, true);
+  assert.equal(savedB.changed, true);
+
+  const cold = fresh();
+  const log = await cold.log(id);
+  assert.deepEqual(
+    log.map((c) => c.hash).includes(savedA.head),
+    true,
+    "tab A's commit is in the history",
+  );
+  assert.equal(log.length, 3);
+  assert.equal(log[0].hash, savedB.head);
+  // Both versions read back whole from the packs.
+  assert.deepEqual(
+    await cold.exportPaged(id, savedA.head),
+    await a.exportPaged(id, savedA.head),
+  );
+  assert.deepEqual(await cold.exportPaged(id), await b.exportPaged(id));
+  // And tab A sees B's save the next time it looks.
+  assert.equal((await a.log(id))[0].hash, savedB.head);
+});
+
+test("saves started in two tabs at once both land", async () => {
+  const { a, b, fresh } = twoTabs();
+  const { id } = await a.importFile(doc(noise(200_000, 30)), "d.paged");
+  await b.log(id);
+  const [x, y] = await Promise.all([
+    a.save(id, doc(noise(200_000, 31)), "A"),
+    b.save(id, doc(noise(200_000, 32)), "B"),
+  ]);
+  const hashes = (await fresh().log(id)).map((c) => c.hash);
+  assert.equal(hashes.length, 3);
+  assert.ok(hashes.includes(x.head));
+  assert.ok(hashes.includes(y.head));
+});
+
+test("a rename in one tab survives a save in the other", async () => {
+  const { a, b, fresh } = twoTabs();
+  const { id } = await a.importFile(doc(noise(100_000, 40)), "d.paged");
+  await b.log(id);
+  await a.rename(id, "Annual report");
+  await b.save(id, doc(noise(100_000, 41)));
+  assert.equal((await fresh().list())[0].name, "Annual report");
 });

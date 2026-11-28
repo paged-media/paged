@@ -78,6 +78,7 @@ import { WorkerRenderer, type RendererWasm } from "./render";
 // `default(wasmUrl)` below.
 import canvasWasmUrl from "@paged-media/canvas-wasm/paged_canvas_wasm_bg.wasm?url";
 import { drainWorkerJournal, workerJournal } from "./journal";
+import { ENGINE_TRAPPED, isEngineTrap } from "./trap";
 
 interface CanvasWorkerInstance {
   protocolVersion: number;
@@ -246,6 +247,9 @@ let worker: CanvasWorkerInstance | null = null;
 let cameraBuffer: CameraBuffer | null = null;
 let gestureBuffer: GestureBuffer | null = null;
 let gestureDrainHandle: ReturnType<typeof setTimeout> | null = null;
+/** Why the engine may not be called again: a wasm trap left the instance
+ *  in an unknown state (`trap.ts`). Null while it can. */
+let engineTrap: string | null = null;
 let renderer: WorkerRenderer | null = null;
 /** Pending canvas attach that arrived before the wasm finished loading. */
 let pendingAttach: {
@@ -509,6 +513,9 @@ async function snapshotOnGpu(msg: MainToWorker): Promise<boolean> {
   try {
     replyJson = await worker.renderSnapshotGpu(JSON.stringify(msg));
   } catch (err) {
+    // A trap is the pump's to report (fatal): the CPU path would run on
+    // the same poisoned instance.
+    if (isEngineTrap(err)) throw err;
     console.warn("renderSnapshotGpu threw:", err);
     return false;
   }
@@ -628,6 +635,7 @@ function postResolution(): void {
  *  document) costs one run once it settles. */
 let resolutionTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleResolution(): void {
+  if (engineTrap !== null) return;
   if (resolutionTimer !== null) clearTimeout(resolutionTimer);
   resolutionTimer = setTimeout(() => {
     resolutionTimer = null;
@@ -725,7 +733,7 @@ function applyReplyEffects(reply: WorkerToMain): void {
 let composeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleCompose(delayMs: number): void {
-  if (composeTimer !== null) return;
+  if (composeTimer !== null || engineTrap !== null) return;
   composeTimer = setTimeout(composeStep, delayMs);
 }
 
@@ -885,15 +893,60 @@ function dispatchDirect(w: CanvasWorkerInstance, m: DirectMessage): void {
 const messageQueue: IncomingMessage[] = [];
 let pumping = false;
 
+const seqOf = (data: IncomingMessage): number | null =>
+  data.kind === "channel"
+    ? data.msg.seq
+    : data.kind === "direct" || data.kind === "loadDocumentBinary"
+      ? data.seq
+      : null;
+
+/** Tell the main thread the engine trapped (fatal there), for the request
+ *  `seq` when one was being answered. */
+function postEngineTrap(seq: number | null): void {
+  postBack({
+    seq,
+    protocol: PROTOCOL_VERSION,
+    kind: "warning",
+    payload: { kind: ENGINE_TRAPPED, details: engineTrap ?? "" },
+  });
+}
+
+/** The engine trapped: nothing calls it again. The loops that call it on
+ *  their own (the render loop, the gesture drain, the background
+ *  composition, the resolver) stop here; queued and later requests are
+ *  answered with the trap instead of being dispatched. */
+function haltEngine(err: unknown): void {
+  engineTrap = String(err);
+  renderer?.stop();
+  if (gestureDrainHandle !== null) clearTimeout(gestureDrainHandle);
+  gestureDrainHandle = null;
+  if (composeTimer !== null) clearTimeout(composeTimer);
+  composeTimer = null;
+  if (resolutionTimer !== null) clearTimeout(resolutionTimer);
+  resolutionTimer = null;
+}
+
 async function pump() {
   if (pumping) return;
   pumping = true;
   try {
     while (messageQueue.length > 0) {
       const data = messageQueue.shift()!;
+      if (engineTrap !== null) {
+        // The instance is poisoned: answer, never dispatch.
+        postEngineTrap(seqOf(data));
+        continue;
+      }
       try {
         await dispatch(data);
       } catch (err) {
+        if (isEngineTrap(err)) {
+          // A trap is not one request's failure: the instance cannot be
+          // used again. Reported as fatal, with the request it ended.
+          haltEngine(err);
+          postEngineTrap(seqOf(data));
+          continue;
+        }
         // Surface the failure but keep draining — a hung pump strands
         // every subsequent message (e.g. a failing attachCanvas would
         // block every requestSnapshot behind it).
@@ -902,12 +955,7 @@ async function pump() {
         // leaving it pending (finding WRK-1: a throwing load was reported
         // with no seq and never settled).
         postBack({
-          seq:
-            data.kind === "channel"
-              ? data.msg.seq
-              : data.kind === "direct" || data.kind === "loadDocumentBinary"
-                ? data.seq
-                : null,
+          seq: seqOf(data),
           protocol: PROTOCOL_VERSION,
           kind: "warning",
           payload: {
@@ -1057,6 +1105,8 @@ async function dispatch(data: IncomingMessage): Promise<void> {
         if (reply.payload.provisional) scheduleCompose(0);
       }
     } catch (e) {
+      // A trap is the pump's to report (fatal), not a warning here.
+      if (isEngineTrap(e)) throw e;
       console.warn("loadDocumentBinary post-process:", e);
     }
     return;
@@ -1362,7 +1412,7 @@ interface GestureRawOutcome {
 }
 
 function startGestureDrain() {
-  if (gestureDrainHandle !== null) return;
+  if (gestureDrainHandle !== null || engineTrap !== null) return;
   const tick = () => {
     gestureDrainHandle = setTimeout(tick, GESTURE_DRAIN_INTERVAL_MS);
     drainGestureSab();

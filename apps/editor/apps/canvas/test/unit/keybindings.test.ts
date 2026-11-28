@@ -93,7 +93,7 @@ const at = (patch: Partial<Record<keyof State, unknown>>) =>
  *  order (the window listener is attached to a stub and never used). */
 function resolveBinding(
   bindings: readonly KeybindingContribution[],
-  event: ReturnType<typeof press>,
+  event: ReturnType<typeof press> & { code?: string },
   state: () => unknown,
 ) {
   const previous = (globalThis as { window?: unknown }).window;
@@ -135,6 +135,30 @@ beforeEach(() => {
 afterEach(() => unstubAllGlobals());
 
 describe("every app binding fires its command at the document root", () => {
+  test("the plus key zooms in where it is a key of its own (a German keyboard), and through Shift when nothing else is bound there", () => {
+    covers(
+      "keybinding:cmd+plus→paged.view.zoomIn",
+      "keybinding:ctrl+plus→paged.view.zoomIn",
+    );
+    const plus = (mods: { meta?: boolean; ctrl?: boolean; shift?: boolean }) =>
+      resolveBinding(
+        TABLES,
+        {
+          key: "+",
+          metaKey: mods.meta ?? false,
+          ctrlKey: mods.ctrl ?? false,
+          altKey: false,
+          shiftKey: mods.shift ?? false,
+          // The key right of "ü" on a German keyboard; the US "]" key.
+          code: "BracketRight",
+        },
+        () => AT_ROOT,
+      )?.command ?? null;
+    // The typed "+" names the zoom, not Bring forward on the US "]" key.
+    expect(plus({ meta: true })).toBe("paged.view.zoomIn");
+    expect(plus({ ctrl: true })).toBe("paged.view.zoomIn");
+  });
+
   test("zoom and save", () => {
     covers(
       "keybinding:cmd+=→paged.view.zoomIn",

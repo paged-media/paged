@@ -142,7 +142,9 @@ import type { DropIntent } from "./state/drop-intent";
 import { RecoveryController } from "./state/recovery-controller";
 import { RecoveryPrompt } from "./chrome/RecoveryPrompt";
 import { useSaveState } from "./state/save-status";
+import { DIALOG_NAMES, DialogErrorBoundary } from "./chrome/ContainedError";
 import { ExportPdfDialog } from "./chrome/ExportPdfDialog";
+import { setMutationReportSink } from "./state/mutate-reported";
 import {
   NewDocumentDialog,
   notifyNewDocumentDialog,
@@ -678,6 +680,11 @@ function ShellChrome({
   const pushWarning = (w: string) => {
     feedback.report(shellWarning(w));
   };
+  // A write nobody waits for says its refusal here (state/mutate-reported).
+  useEffect(() => {
+    setMutationReportSink(client, (report) => feedback.report(report));
+    return () => setMutationReportSink(client, null);
+  }, [client, feedback]);
   // A remedy is a command of this editor.
   useEffect(() => {
     feedback.setCommandRunner((id, args) => {
@@ -1661,13 +1668,37 @@ function ShellChrome({
         !railHidden &&
         !focus && <ModeSwitcher />}
 
-      {chrome.has("palette") && <CommandPalette />}
+      {chrome.has("palette") && (
+        <DialogErrorBoundary
+          id="command-palette"
+          name={strings.t(DIALOG_NAMES.commandPalette)}
+        >
+          <CommandPalette />
+        </DialogErrorBoundary>
+      )}
       <DemoSpotlight />
       <DemoOverlay />
-      <ExportPdfDialog />
+      {/* Each dialog in its own error net (chrome/ContainedError.tsx): one
+       *   that throws closes and says so; the editor keeps working. */}
+      <DialogErrorBoundary
+        id="export-pdf"
+        name={strings.t(DIALOG_NAMES.exportDialog)}
+      >
+        <ExportPdfDialog />
+      </DialogErrorBoundary>
       {/* Editor ADR 1220 — File ▸ New document…. */}
-      <NewDocumentDialog />
-      <ReplaceDocumentPrompt />
+      <DialogErrorBoundary
+        id="new-document"
+        name={strings.t(DIALOG_NAMES.newDocumentDialog)}
+      >
+        <NewDocumentDialog />
+      </DialogErrorBoundary>
+      <DialogErrorBoundary
+        id="replace-document"
+        name={strings.t(DIALOG_NAMES.replacePrompt)}
+      >
+        <ReplaceDocumentPrompt />
+      </DialogErrorBoundary>
       {/* Editor ADR 1205 — what a dragged file will do, at the pointer. */}
       <DropIntentOverlay />
       {/* Editor ADR 1203 — the save state follows the open document. */}
@@ -1675,12 +1706,17 @@ function ShellChrome({
       {/* Editor ADR 1204 — the recovery journal: checkpoints of unsaved
        *   work, and the prompt that offers a crashed session's back. */}
       <RecoveryController />
-      <RecoveryPrompt
-        sinks={{
-          setStatus,
-          pushWarning,
-        }}
-      />
+      <DialogErrorBoundary
+        id="recovery"
+        name={strings.t(DIALOG_NAMES.recoveryPrompt)}
+      >
+        <RecoveryPrompt
+          sinks={{
+            setStatus,
+            pushWarning,
+          }}
+        />
+      </DialogErrorBoundary>
       {/* Editor ADR "Operation feedback" — the one toast channel. */}
       <FeedbackToasts />
 

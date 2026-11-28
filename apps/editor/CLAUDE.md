@@ -162,7 +162,7 @@ headers `SharedArrayBuffer` needs.
 ## Design system (the publishing cockpit)
 
 The visual + UX source of truth is the **`paged-media/brand`** repo
-(`~/paged/brand/editor` locally): tokens (`colors_and_type.css`),
+(a local design-source checkout): tokens (`colors_and_type.css`),
 content rules (sentence case, mono tabular values, **no emoji**),
 the clean-room icon system, and the cockpit UI kit
 (`ui_kits/editor/`). In this repo:

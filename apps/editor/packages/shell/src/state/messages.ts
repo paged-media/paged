@@ -97,6 +97,9 @@ export const RECOVERY = defineMessages("shell.recovery", {
   unreadable: "The recovery copy of {name} could not be read.",
   notRestored:
     "The recovery copy of {name} did not open. It is kept for the next start.",
+  checkpointAction: "keep a recovery copy",
+  checkpointReason:
+    "this browser's storage refused it. Unsaved work is not protected against a crash until the document is saved",
 });
 
 /** The actions the shell's own feedback names (editor ADR "Operation

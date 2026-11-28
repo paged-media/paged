@@ -70,6 +70,7 @@ import {
 } from "@paged-media/strings";
 
 import { appCatalogRegistry } from "./catalog-registry";
+import { mutateReported } from "@paged-media/shell";
 
 export const SCHEMA_TREE_DEMO_PANEL_ID = "paged.schema-tree-demo";
 export const DEMO_RENAME_LAYER_COMMAND = "paged.demo.renameLayer";
@@ -243,7 +244,7 @@ export function SchemaTreeDemoPanel() {
             if (!p || typeof p.id !== "string" || typeof p.name !== "string") {
               return;
             }
-            void client.mutate({
+            void mutateReported(client, {
               op: "layerSetName",
               args: { layerId: p.id, name: p.name },
             });
@@ -263,7 +264,7 @@ export function SchemaTreeDemoPanel() {
             // A layer is not an element, so its order is `layerMove`,
             // not `reorderElement` — the command lane exists for
             // exactly this.
-            void client.mutate({
+            void mutateReported(client, {
               op: "layerMove",
               args: { layerId: p.id, newIndex: p.toIndex },
             });

@@ -53,6 +53,7 @@ import { loadDocumentFile } from "./document-loader";
 import { scoped, type EditorScope } from "./editor-scope";
 import { currentLibraryDocument } from "./library-document";
 import { RECOVERY } from "./messages";
+import { operationFeedbackOf } from "./operation-feedback";
 import { getOpenFileHandle, setOpenFileHandle } from "./open-file-handle";
 import type { PagedEditor } from "./paged-editor";
 import { confirmReplace } from "./replace-guard";
@@ -83,6 +84,8 @@ interface RecoveryState {
    *  edits a checkpoint holds count from here. */
   baseMark: number;
   writing: Promise<RecoveryCheckpoint | null> | null;
+  /** The last checkpoint could not be written, and the user was told. */
+  checkpointFailed: boolean;
   /** Bumped by every purge: a checkpoint whose export started before one
    *  is not written after it (it would hold work that was just saved). */
   generation: number;
@@ -95,6 +98,7 @@ const STATE = scoped("recovery", (): RecoveryState => ({
   checkpointMark: null,
   baseMark: 0,
   writing: null,
+  checkpointFailed: false,
   generation: 0,
   listeners: new Set(),
 }));
@@ -242,14 +246,49 @@ export async function writeCheckpoint(
       saveStateOf(scope).dispatch({ type: "checkpoint", at: checkpoint.at });
     }
     return checkpoint;
-  })().catch((err: unknown) => {
-    console.warn("recovery: could not keep a checkpoint:", err);
-    return null;
-  });
+  })().then(
+    (checkpoint) => {
+      // A copy is kept again: the failure the user was told of is over.
+      if (checkpoint && st.checkpointFailed) {
+        st.checkpointFailed = false;
+        operationFeedbackOf(scope).resolve(CHECKPOINT_FAILURE);
+      }
+      return checkpoint;
+    },
+    (err: unknown) => {
+      console.warn("recovery: could not keep a checkpoint:", err);
+      reportCheckpointFailure(scope, st, err);
+      return null;
+    },
+  );
   st.writing = run;
   const result = await run;
   if (st.writing === run) st.writing = null;
   return result;
+}
+
+/** The repeat key of a checkpoint that could not be written. */
+const CHECKPOINT_FAILURE = "paged.recovery|checkpoint";
+
+/** Tell the user that unsaved work has no recovery copy (the storage is
+ *  full or refused, the export failed). One toast and one Problems entry,
+ *  whatever the number of attempts; the next checkpoint that lands
+ *  resolves it. */
+function reportCheckpointFailure(
+  scope: EditorScope,
+  st: RecoveryState,
+  err: unknown,
+): void {
+  st.checkpointFailed = true;
+  operationFeedbackOf(scope).report({
+    action: t(RECOVERY.checkpointAction),
+    outcome: "recoverable-failure",
+    reason: t(RECOVERY.checkpointReason),
+    detail: err instanceof Error ? err.message : String(err),
+    source: "paged.recovery",
+    key: CHECKPOINT_FAILURE,
+    persistent: true,
+  });
 }
 
 /** The work is saved, or the document closed on purpose: its checkpoints
@@ -433,17 +472,40 @@ export async function restoreCheckpoint(
     );
     return false;
   }
-  // Kept again by this editor's session before the old one is forgotten,
-  // so there is always one copy. The session purged what it held for the
-  // replaced document when this one opened; this lands after that.
   await untilOpened(scope, checkpoint.at);
   const meta = await editor.client.documentMeta().catch(() => null);
-  await writeCheckpoint(scope, editor.client, {
-    reason: "recovered",
+  await keepRestoredCopy(scope, editor.client, checkpoint, {
     name,
     pages: meta?.pageCount ?? checkpoint.pages,
+  });
+  return true;
+}
+
+/**
+ * The restored document is kept again by this editor's session, and only
+ * then is the checkpoint it came from forgotten: there is always one copy.
+ * (The session purged what it held for the replaced document when this one
+ * opened; the new checkpoint lands after that.) When the new checkpoint is
+ * not written (the export failed, the storage refused, the copy is too
+ * large to keep) the old one STAYS in the journal and is offered again at
+ * the next start. Resolves true when the new copy is kept.
+ */
+export async function keepRestoredCopy(
+  scope: EditorScope,
+  client: Pick<CanvasClient, "exportPaged" | "editMark" | "documentMeta">,
+  checkpoint: RecoveryCheckpoint,
+  input: { name: string; pages: number | null },
+): Promise<boolean> {
+  const kept = await writeCheckpoint(scope, client, {
+    reason: "recovered",
+    name: input.name,
+    pages: input.pages,
     force: true,
   });
+  if (!kept) {
+    postponeCheckpoint(scope, checkpoint);
+    return false;
+  }
   await discardCheckpoint(scope, checkpoint);
   return true;
 }

@@ -65,6 +65,7 @@ import {
 } from "@paged-media/strings";
 
 import { appCatalogRegistry } from "./catalog-registry";
+import { mutateReported } from "@paged-media/shell";
 
 export const SCHEMA_LIST_DEMO_PANEL_ID = "paged.schema-list-demo";
 export const DEMO_APPLY_STROKE_COMMAND = "paged.demo.applySwatchStroke";
@@ -167,7 +168,8 @@ export function SchemaListDemoPanel() {
           args: { elementId: id, path: "frameStrokeColor", value },
         }));
         if (ops.length === 0) return;
-        void client.mutate(
+        void mutateReported(
+          client,
           ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } },
         );
       },

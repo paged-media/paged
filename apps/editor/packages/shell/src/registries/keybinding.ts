@@ -151,14 +151,20 @@ interface KeyCombo {
  * shortcut.
  */
 function parseCombo(key: string): KeyCombo {
-  const parts = key.trim().toLowerCase().split("+");
+  const raw = key.trim().toLowerCase();
+  // The plus key: `plus` (the form to register, since the menus split a
+  // combo at its `+`), or a literal `+` in the key's place (`cmd++`, `+`).
+  const literalPlus = raw === "+" || raw.endsWith("++");
+  const parts = literalPlus
+    ? [...(raw === "+" ? [] : raw.slice(0, -2).split("+")), "plus"]
+    : raw.split("+");
   if (parts.length === 0 || parts.some((p) => !p)) {
     throw new Error(`KeybindingRegistry: malformed key "${key}"`);
   }
   // `space` names the space bar (a `" "` key cannot be written in a combo:
   // the string is trimmed). Editor ADR 299: Word's Cmd+Space.
-  const last =
-    parts[parts.length - 1] === "space" ? " " : parts[parts.length - 1];
+  const named = parts[parts.length - 1];
+  const last = named === "space" ? " " : named === "plus" ? "+" : named;
   const mods = parts.slice(0, -1);
   const combo: KeyCombo = {
     key: last,
@@ -199,39 +205,135 @@ export type KeyEventLike = Pick<
 > &
   Partial<Pick<KeyboardEvent, "code">>;
 
-/** The physical key of the punctuation an Alt binding may name. */
-const PUNCTUATION_CODES: Readonly<Record<string, string>> = {
-  "=": "equal",
-  "-": "minus",
-  "'": "quote",
-  "[": "bracketleft",
-  "]": "bracketright",
+// ── Which key a press names ────────────────────────────────────────
+//
+// A binding names a key by its character: `cmd+z`, `cmd+=`, `cmd+[`. A
+// press reports the character it types (`key`) and the physical key
+// (`code`, named after the US layout). The two disagree off a US keyboard:
+// a German one types "z" on the key the US layout calls KeyY and has no
+// unshifted "=", "[" or "]"; a French one types "&" on Digit1 and "a" on
+// KeyQ; and Option on a Mac, or Shift on a digit, changes the character on
+// every layout. The rule, in the order it is tried (the first step in
+// which the press names a registered binding decides; later steps are not
+// consulted, so a press never falls through to another binding once the
+// typed character names one):
+//
+//   1. TYPED. The character the press types, with the modifiers exact.
+//      Letters always resolve here when the press types a letter, so Z
+//      and Y, A and Q, W and Z follow the layout.
+//   2. THE LAYOUT'S KEY. The character the physical key types unmodified
+//      on the user's layout, when known (`KeyboardLayout`): Option+Shift+V
+//      types "◊" on the V key, Shift+1 types "!" on the 1 key.
+//   3. THE US POSITION. The character the physical key has on a US
+//      keyboard: digits and punctuation always (Cmd+1 on the "&" key of a
+//      French keyboard, Cmd+[ on the "ü" key of a German one); a LETTER
+//      only when the press types none and the layout's own letter is not
+//      known or not Latin (a Cyrillic layout, or Option before the layout
+//      is known). A key whose layout character is known is never read as
+//      another Latin letter.
+//   4. TYPED, SHIFT ASIDE. A symbol the layout needs Shift for ("+" on a
+//      US or French keyboard) names a binding without Shift on that
+//      symbol (`cmd+plus`), after everything above.
+
+/** The character of the punctuation keys on a US keyboard, by `code`. */
+const US_PUNCTUATION: Readonly<Record<string, string>> = {
+  equal: "=",
+  minus: "-",
+  quote: "'",
+  bracketleft: "[",
+  bracketright: "]",
+  backslash: "\\",
+  semicolon: ";",
+  comma: ",",
+  period: ".",
+  slash: "/",
+  backquote: "`",
 };
 
-/** A letter, digit, `=`, `-`, `'`, `[` or `]` binding with Alt or Shift in it
- *  matches by the physical key as well: on a Mac, Option changes `key`
- *  (Option+Shift+V types "◊", Option+= types "≠"), and Shift turns a digit
- *  or `'` into its symbol (Shift+1 types "!"), so InDesign's ⌥⇧⌘V and
- *  ⌥⌘=, and Illustrator's ⇧⌘1 and ⇧⌘' (editor ADR 287), would otherwise
- *  never match; nor would InDesign's ⌥⌘[ and ⌥⌘] (Select next object
- *  below / above), where Option turns the bracket into a quote mark. */
-function codeMatches(combo: KeyCombo, event: KeyEventLike): boolean {
-  if (!(combo.alt || combo.shift) || !event.code) return false;
-  const code = event.code.toLowerCase();
-  const punctuation = PUNCTUATION_CODES[combo.key];
-  if (punctuation) return code === punctuation;
-  if (!/^[a-z0-9]$/.test(combo.key)) return false;
-  return code === `key${combo.key}` || code === `digit${combo.key}`;
+/** The unshifted character of a physical key on a US keyboard. */
+function usPosition(code: string): string | null {
+  const c = code.toLowerCase();
+  if (/^key[a-z]$/.test(c)) return c.slice(3);
+  if (/^digit[0-9]$/.test(c)) return c.slice(5);
+  return US_PUNCTUATION[c] ?? null;
 }
 
-function eventMatches(combo: KeyCombo, event: KeyEventLike): boolean {
-  const eventKey = event.key.toLowerCase();
-  if (eventKey !== combo.key && !codeMatches(combo, event)) return false;
-  if (combo.cmd !== event.metaKey) return false;
-  if (combo.ctrl !== event.ctrlKey) return false;
-  if (combo.alt !== event.altKey) return false;
-  if (combo.shift !== event.shiftKey) return false;
-  return true;
+const isAsciiLetter = (s: string) => /^[a-z]$/.test(s);
+/** One printable ASCII character: something a Latin layout types. */
+const isAsciiChar = (s: string) => s.length === 1 && s >= "!" && s <= "~";
+const isSymbol = (s: string) => isAsciiChar(s) && !/^[a-z0-9]$/.test(s);
+
+/** What is known of the user's keyboard layout: the character each
+ *  physical key types unmodified. */
+export interface KeyboardLayout {
+  /** The lowercased character of `code`, or null when not known. */
+  base(code: string): string | null;
+}
+
+/** A layout that is learned: from the browser's layout map where it has
+ *  one, and from the presses seen (a press without Alt types the key's own
+ *  character). */
+export interface KeyboardLayoutMemory extends KeyboardLayout {
+  learn(event: KeyEventLike): void;
+  /** Take a `code → character` map (the Keyboard API's layout map). */
+  adopt(map: Iterable<readonly [string, string]>): void;
+}
+
+export function createKeyboardLayout(
+  initial: Iterable<readonly [string, string]> = [],
+): KeyboardLayoutMemory {
+  const keys = new Map<string, string>();
+  const layout: KeyboardLayoutMemory = {
+    base: (code) => keys.get(code.toLowerCase()) ?? null,
+    learn(event) {
+      if (!event.code || event.altKey || event.key.length !== 1) return;
+      const lower = event.key.toLowerCase();
+      // With Shift only a letter says what the key is ("!" does not say 1).
+      if (event.shiftKey && lower === event.key.toUpperCase()) return;
+      keys.set(event.code.toLowerCase(), lower);
+    },
+    adopt(map) {
+      for (const [code, key] of map)
+        if (key.length === 1) keys.set(code.toLowerCase(), key.toLowerCase());
+    },
+  };
+  layout.adopt(initial);
+  return layout;
+}
+
+/** How a press names a combo's key: 0 not at all, else the step of the
+ *  rule above (1 typed … 4 typed with Shift aside). Modifiers are exact. */
+function matchStep(
+  combo: KeyCombo,
+  event: KeyEventLike,
+  layout?: KeyboardLayout,
+): 0 | 1 | 2 | 3 | 4 {
+  if (combo.cmd !== event.metaKey) return 0;
+  if (combo.ctrl !== event.ctrlKey) return 0;
+  if (combo.alt !== event.altKey) return 0;
+  const typed = event.key.toLowerCase();
+  const us = event.code ? usPosition(event.code) : null;
+  if (combo.shift !== event.shiftKey) {
+    // Step 4: Shift was what it took to type the symbol.
+    return !combo.shift &&
+      typed === combo.key &&
+      isSymbol(typed) &&
+      us !== null &&
+      us !== typed
+      ? 4
+      : 0;
+  }
+  if (typed === combo.key) return 1;
+  if (!event.code) return 0;
+  const base = layout?.base(event.code) ?? null;
+  if (base !== null && base !== typed && base === combo.key) return 2;
+  if (us === null || us !== combo.key || us === base) return 0;
+  if (!isAsciiLetter(us)) return 3;
+  // A letter by position: only when neither the press nor the layout says
+  // which Latin character the key is.
+  const unknownLetter =
+    base !== null ? !isAsciiChar(base) : event.altKey || !isAsciiChar(typed);
+  return unknownLetter ? 3 : 0;
 }
 
 /**
@@ -405,22 +507,34 @@ function resolveParsed(
   event: KeyEventLike,
   getState?: () => unknown,
   offered?: (binding: KeybindingContribution) => boolean,
+  layout?: KeyboardLayout,
 ): KeybindingContribution | null {
-  let best: KeybindingContribution | null = null;
-  let bestRank = -Infinity;
+  // The bindings the press names, each with the step it names it by. A
+  // binding the editor does not offer is not a candidate, so the key stays
+  // the page's (docs/composable-editor.md §6); a scoped binding exists
+  // only while its context is the active one (editor ADR 299).
+  const named: { binding: ParsedBinding; step: number }[] = [];
+  let first = Infinity;
   for (const b of bindings) {
-    if (!eventMatches(b.combo, event)) continue;
-    // A binding onto a command the editor does not offer is not a
-    // candidate, so the key stays the page's (docs/composable-editor.md §6).
+    const step = matchStep(b.combo, event, layout);
+    if (step === 0) continue;
     if (offered && !offered(b.contribution)) continue;
-    const { when, precedence, scope } = b.contribution;
-    // Editor ADR 299 — a scoped binding exists only while its context is
-    // the active one (the frame context, else the document context), and
-    // then it outranks every host binding on the key.
+    const { scope } = b.contribution;
     if (scope && activeScopeContext(getState?.()) !== scope.editContext)
       continue;
+    named.push({ binding: b, step });
+    if (step < first) first = step;
+  }
+  let best: KeybindingContribution | null = null;
+  let bestRank = -Infinity;
+  for (const { binding: b, step } of named) {
+    // Only the first step that names a binding: a disabled binding on the
+    // typed character does not hand the press to another key's binding.
+    if (step !== first) continue;
+    const { when, precedence, scope } = b.contribution;
     if (!isEnabled(when, getState)) continue;
     let rank = when !== undefined ? 1 : 0;
+    // Inside its context a scoped binding outranks every host binding.
     if (scope) {
       rank = SCOPED_BINDING_RANK;
     } else if (precedence) {
@@ -445,6 +559,7 @@ export function resolveBinding(
   contributions: readonly KeybindingContribution[],
   event: KeyEventLike,
   getState?: () => unknown,
+  layout?: KeyboardLayout,
 ): KeybindingContribution | null {
   return resolveParsed(
     contributions.map((contribution) => ({
@@ -453,6 +568,8 @@ export function resolveBinding(
     })),
     event,
     getState,
+    undefined,
+    layout,
   );
 }
 
@@ -484,7 +601,32 @@ export function createKeybindingRegistry(
     for (const fn of [...changeListeners]) fn();
   };
 
+  // The user's layout: the browser's map where it has one (Chromium's
+  // Keyboard API), and what the presses say everywhere.
+  const layout = createKeyboardLayout();
+  const readLayoutMap = () => {
+    const keyboard = (
+      globalThis.navigator as unknown as
+        | {
+            keyboard?: {
+              getLayoutMap?(): Promise<Iterable<readonly [string, string]>>;
+            };
+          }
+        | undefined
+    )?.keyboard;
+    if (typeof keyboard?.getLayoutMap !== "function") return;
+    try {
+      void keyboard.getLayoutMap().then(
+        (map) => layout.adopt(map),
+        () => undefined,
+      );
+    } catch {
+      /* not allowed here (a frame without the permission) */
+    }
+  };
+
   const onKeyDown = (event: KeyboardEvent) => {
+    layout.learn(event);
     if (owns && !owns(event)) return;
     // Skip when the focused widget consumes this key itself, so typing
     // (and editing, and menu navigation) doesn't trigger commands. The
@@ -494,7 +636,7 @@ export function createKeybindingRegistry(
     // binding of the active context takes its keys first, Tab and the
     // arrows included, because inside a Word document they are Word's.
     if (targetOwnsKey(event) && !scopedClaim(event)) return;
-    const winner = resolveParsed(bindings, event, getState, offered);
+    const winner = resolveParsed(bindings, event, getState, offered, layout);
     if (!winner) return;
     event.preventDefault();
     void commands.invoke(winner.command);
@@ -519,7 +661,7 @@ export function createKeybindingRegistry(
     ) {
       return false;
     }
-    const winner = resolveParsed(bindings, event, getState, offered);
+    const winner = resolveParsed(bindings, event, getState, offered, layout);
     return winner?.scope !== undefined;
   };
 
@@ -528,6 +670,7 @@ export function createKeybindingRegistry(
     if (listening) return;
     window.addEventListener("keydown", onKeyDown);
     listening = true;
+    readLayoutMap();
   };
   const detach = () => {
     if (!listening) return;
@@ -569,6 +712,7 @@ export function createKeybindingRegistry(
         event,
         state === undefined ? getState : () => state,
         offered,
+        layout,
       );
     },
     claims(event) {

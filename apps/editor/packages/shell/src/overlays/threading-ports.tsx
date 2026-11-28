@@ -58,6 +58,7 @@ import { useSelection } from "../state/selection-context";
 import { useOptionalThreading } from "../state/threading-context";
 
 import { applyAffine } from "./affine";
+import { mutateReported } from "../state/mutate-reported";
 
 /** Port box half-size in screen px (camera-constant). Sized to sit
  *  clear of the 8-px resize handles (HT-07: ports never overlap resize
@@ -76,7 +77,7 @@ function ThreadingPortsRender(props: OverlayProps) {
     // `elementProperties` on the mutationApplied push, so the port
     // glyphs follow the unlink without a manual mirror update.
     const m: Mutation = { op: "unlinkFrames", args: { frame: frameId } };
-    void client.mutate(m);
+    void mutateReported(client, m);
   };
 
   // Threading is single-frame; skip multi-select and non-text kinds.

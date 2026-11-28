@@ -395,7 +395,7 @@ Goldens stored for the single pinned Chrome/Linux CI configuration; update only 
 
 ### 4.6 L6 — End-to-End (Playwright)
 
-_Status note (2026-10-02): this section predates the implementation. `apps/canvas/tests/e2e/gesture-plan-deferred.spec.ts` records the state of the twelve scenarios: E2E-05 and E2E-12 are `test.fixme` stubs, the other ten have specs in the `gesture-*.spec.ts` files. E2E-09 is written as a pane floated over the canvas (`gesture-cross-cutting.spec.ts`), because the cockpit has no popped-out canvas pane. E2E-12 has no backend to run against; see [ADR 211](../adr/211-no-backend.md)._
+_Status note (2026-10-02, revised 2026-11-28): this section predates the implementation. Ten of the twelve scenarios have specs in the `gesture-*.spec.ts` files. E2E-05 and E2E-12 have none: their empty `test.fixme` stubs (`apps/canvas/tests/e2e/gesture-plan-deferred.spec.ts`, which asserted nothing and carried `@feat` tags) were removed. E2E-05's link legs (TH-01 to TH-03) are covered by `gesture-threading.spec.ts`; its reflow indicator between linked frames is not tested. E2E-09 is written as a pane floated over the canvas (`gesture-cross-cutting.spec.ts`), because the cockpit has no popped-out canvas pane. E2E-12 has no backend to run against; see [ADR 211](../adr/211-no-backend.md)._
 
 Real browser, real WebGPU, real pointer events via CDP `Input.dispatchMouseEvent` / `dispatchTouchEvent` and Playwright's `mouse`/`keyboard` APIs.
 

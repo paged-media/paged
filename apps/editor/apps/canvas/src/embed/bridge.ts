@@ -66,7 +66,7 @@ export function serveBridge(
     if (origin) options.peer.postMessage(msg, origin, transferables(msg));
   };
   const ask = (
-    action: "save" | "submit" | "close" | "back",
+    action: "save" | "submit" | "close" | "back" | "restart",
     file?: { bytes: Uint8Array; name: string },
   ) =>
     new Promise<void>((resolve, reject) => {

@@ -76,6 +76,7 @@ import {
   type ShellBindingProviderHost,
 } from "./binding-providers";
 import { useReportBindingSurface } from "./panel-binding-surface";
+import { mutateReported } from "../state/mutate-reported";
 
 /** Stable empty literal — this hook reports PATHS only; a composition leaf
  *  never binds a collection. */
@@ -577,7 +578,8 @@ function makeOnCommit(
   path: string,
 ): (next: Value, options?: { coalesce?: string }) => void {
   return (next, options) => {
-    void client.mutate(
+    void mutateReported(
+      client,
       {
         op: "setElementProperty",
         args: { elementId: id, path: path as never, value: next },
@@ -607,7 +609,8 @@ export function sendAsOne(
   options?: { coalesce?: string },
 ): void {
   if (ops.length === 0) return;
-  void client.mutate(
+  void mutateReported(
+    client,
     ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } },
     options?.coalesce !== undefined ? { coalesce: options.coalesce } : {},
   );

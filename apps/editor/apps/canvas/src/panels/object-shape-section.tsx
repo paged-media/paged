@@ -51,6 +51,7 @@ import {
   type CornerSuffix,
 } from "@paged-media/tools";
 import { defineMessages, useStrings } from "@paged-media/strings";
+import { mutateReported } from "@paged-media/shell";
 
 const M = defineMessages("app.objectShapeSection", {
   shape: "Shape",
@@ -160,7 +161,8 @@ export function ObjectShapeSection() {
 
   const batch = (ops: Mutation[]) => {
     if (ops.length === 0) return;
-    void client.mutate(
+    void mutateReported(
+      client,
       ops.length === 1 ? ops[0]! : ({ op: "batch", args: { ops } } as Mutation),
     );
   };

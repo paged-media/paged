@@ -13,7 +13,7 @@ const PACK =
   process.env.PROBE_PACK ??
   "digital-bridesmaid-planner-template";
 // Resolved relative to this file (apps/canvas/) so the probe works on any
-// checkout — the hardcoded `/Users/drietsch/idml/...` paths here were the
+// checkout — the hardcoded absolute home-directory paths here were the
 // ARCHIVED monorepo layout and had been dead since the 2026-05-30 split.
 // `editor/corpus` is a symlink to the private corpus checkout; override
 // with PAGED_CORPUS_DIR (the corpus root every test lane reads,

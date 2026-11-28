@@ -106,6 +106,7 @@ import type {
 import { useAddressOfElement } from "../object-model";
 import { CoreCommandButton } from "../core-command-dialog";
 import { defineMessages, useStrings } from "@paged-media/strings";
+import { mutateReported } from "@paged-media/shell";
 
 const M = defineMessages("app.tablePanel", {
   top: "Top",
@@ -361,7 +362,7 @@ export function TablePanel() {
     at: number,
   ) => {
     if (!cell) return;
-    void client.mutate({
+    void mutateReported(client, {
       op,
       args: { storyId: cell.storyId, tableId: cell.tableId, at },
     } as never);
@@ -386,7 +387,7 @@ export function TablePanel() {
     const cs = Math.max(1, Math.round(nextColumnSpan));
     setRowSpan(rs);
     setColumnSpan(cs);
-    void client.mutate({
+    void mutateReported(client, {
       op: "setCellSpan",
       args: {
         storyId: cell.storyId,
@@ -418,7 +419,7 @@ export function TablePanel() {
       | "removeFooterRow",
   ) => {
     if (!cell) return;
-    void client.mutate({
+    void mutateReported(client, {
       op,
       args: { storyId: cell.storyId, tableId: cell.tableId },
     } as never);

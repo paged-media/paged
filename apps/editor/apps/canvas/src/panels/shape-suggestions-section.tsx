@@ -40,6 +40,7 @@ import {
   type ShapeSuggestion,
   type ShapeSuggestionId,
 } from "./shape-suggestions";
+import { mutateReported } from "@paged-media/shell";
 
 const M = defineMessages("app.shapeSuggestions", {
   roundCorners: "Round corners",
@@ -150,7 +151,8 @@ export function ShapeSuggestionsSection({
       return;
     }
     const ops = smoothCornerOps(shape);
-    if (ops.length > 0) void client.mutate(pointBatch(id, ops) as never);
+    if (ops.length > 0)
+      void mutateReported(client, pointBatch(id, ops) as never);
   };
 
   return (

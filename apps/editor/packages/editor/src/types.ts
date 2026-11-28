@@ -211,6 +211,11 @@ export interface HostActions {
   close?(): void;
   /** Go back in the host (`paged.host.back`). */
   back?(): void;
+  /** Start the editor again after its engine stopped (dispose it and
+   *  create it anew): what the failure notice's Restart button asks for.
+   *  An embedded editor never reloads its host's page; without this the
+   *  notice has no button and the host hears the `engineFailure` event. */
+  restart?(): void;
 }
 
 export interface EditorConfig {
@@ -242,7 +247,7 @@ export interface EditorConfig {
   /** The sample catalog's URL; `https://modules.paged.media/samples/catalog.json`
    *  by default. */
   samplesUrl?: string;
-  /** What the host decides: save, submit, close, back. */
+  /** What the host decides: save, submit, close, back, restart. */
   actions?: HostActions;
   /** Field values to set once the document is open. */
   values?: Readonly<Record<string, FieldInput>>;
@@ -303,6 +308,10 @@ export type EditorEvent =
   | { type: "ready" }
   | { type: "change" }
   | { type: "fieldChange"; fields: readonly TemplateFieldSummary[] }
+  /** The engine stopped: nothing more can change in this editor. The host
+   *  disposes it and creates it again (its `actions.restart` is what the
+   *  editor's own notice offers). */
+  | { type: "engineFailure"; message: string }
   /** Once per old id, to every listener (also for ids met before it
    *  subscribed: the config's profile). */
   | ({ type: "idDeprecated" } & IdDeprecation);
@@ -380,7 +389,7 @@ export interface EditorHandle {
 export interface MountOptions {
   /** A preset id or a profile. */
   profile?: string | EditorProfile;
-  /** What the host decides: save, submit, close, back. */
+  /** What the host decides: save, submit, close, back, restart. */
   actions?: HostActions;
   /** As `EditorConfig.assetBase`. */
   assetBase?: string;

@@ -272,3 +272,37 @@ test("an orphan offered in one tab is not offered in another; discard forgets it
   await one.discard(crashed.id);
   assert.deepEqual(await two.orphans(), []);
 });
+
+test("a start sweeps the journal in one pass and reads no checkpoint's bytes", async () => {
+  const disk = memoryFs();
+  const a = crashableLocks();
+  const first = await tab(disk, a.locks).begin();
+  await first.write({
+    document: doc,
+    bytes: bytes(64),
+    reason: "idle",
+    edits: 3,
+    pages: 2,
+  });
+  a.crash();
+
+  const reads: string[] = [];
+  const lists: string[] = [];
+  const fs: RepoFs = {
+    ...disk,
+    read: (path) => {
+      reads.push(path);
+      return disk.read(path);
+    },
+    list: (dir) => {
+      lists.push(dir);
+      return disk.list(dir);
+    },
+  };
+  const offered = await tab(fs, a.locks).sweep();
+  assert.equal(offered.length, 1);
+  assert.equal(offered[0]!.edits, 3);
+  // The session's list is read once; the checkpoint's bytes never.
+  assert.deepEqual(reads, [`${first.id}/meta.json`]);
+  assert.deepEqual(lists, ["", first.id]);
+});

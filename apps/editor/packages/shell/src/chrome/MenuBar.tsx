@@ -714,6 +714,7 @@ const KEY_GLYPHS: Record<string, string> = {
   arrowdown: "↓",
   backspace: "⌫",
   delete: "⌦",
+  plus: "+",
 };
 
 /** `cmd+shift+s` → `⇧⌘S` on a Mac (Apple's modifier order), `Ctrl+Shift+S`

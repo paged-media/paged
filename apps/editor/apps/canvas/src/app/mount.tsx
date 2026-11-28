@@ -107,6 +107,7 @@ import {
   notifySinkOf,
   onDocumentLoadLosses,
   operationFeedbackOf,
+  setEngineRestart,
 } from "@paged-media/shell";
 import {
   StringsProvider,
@@ -1011,6 +1012,14 @@ function CanvasAppIntegration() {
       for (const d of disposables) d.dispose();
     };
   }, [instance, registries]);
+  // The host's restart is what the engine-failure notice offers in an
+  // embedded editor, which never reloads its host's page.
+  useEffect(() => {
+    const restart = instance.actions.restart;
+    if (!restart) return;
+    setEngineRestart(instance.scope, () => restart());
+    return () => setEngineRestart(instance.scope, null);
+  }, [instance]);
   // ADR 230 — the replace question's Save is the save Cmd+S runs.
   useEffect(
     () =>
@@ -1319,18 +1328,25 @@ function CanvasAppIntegration() {
     return () => setCockpitPageNavigator(instance.scope, null);
   }, [navigateCamera, cameraDestination, handle, instance.scope, viewportSize]);
 
-  // SDK Phase 4 — register canvas-app commands + menu items +
-  // keybindings. Closures capture the *current* camera / handle /
-  // viewportSize so the zoom commands see live values; dependency
-  // array re-runs on each change. The registries' dedupe-by-id
-  // contract means re-registration is safe (the dispose from the
-  // previous run drops the stale handler before we add the new one).
-  useEffect(() => {
+  // The camera and the viewport as they are when a command runs. The
+  // commands read them here, not from the registering effect's closure:
+  // an effect that depended on the camera would drop and register every
+  // command, menu item and keybinding again on each pan and zoom step.
+  const liveView = useEffectEvent(() => {
     const [vw, vh] = viewportSize;
+    // Editor ADR 287 — the fits keep the view's rotation.
+    return { camera, viewportSize, vw, vh, rot: camera.rotation ?? 0 };
+  });
+
+  // SDK Phase 4 — register canvas-app commands + menu items +
+  // keybindings. The handlers read the camera and the viewport when they
+  // run (`liveView`); the effect re-runs when the document, the client or
+  // a registry changes. The registries' dedupe-by-id contract means
+  // re-registration is safe (the dispose from the previous run drops the
+  // stale handler before we add the new one).
+  useEffect(() => {
     const pageSizes = handle?.pageSizesPt ?? [];
     const rects = layoutPages(pageSizes, handle?.pageOriginsPt);
-    // Editor ADR 287 — the fits keep the view's rotation.
-    const rot = camera.rotation ?? 0;
     const commands = buildAppCommands({
       undo: () => {
         const owner = currentEditContext().activeContribution;
@@ -1441,6 +1457,7 @@ function CanvasAppIntegration() {
         });
       },
       zoomIn: () => {
+        const { camera, vw, vh } = liveView();
         const cx = vw / 2;
         const cy = vh / 2;
         const docX = (cx - camera.tx) / camera.scale;
@@ -1453,6 +1470,7 @@ function CanvasAppIntegration() {
         });
       },
       zoomOut: () => {
+        const { camera, vw, vh } = liveView();
         const cx = vw / 2;
         const cy = vh / 2;
         const docX = (cx - camera.tx) / camera.scale;
@@ -1465,6 +1483,7 @@ function CanvasAppIntegration() {
         });
       },
       zoom100: () => {
+        const { camera, vw, vh } = liveView();
         const cx = vw / 2;
         const cy = vh / 2;
         const docX = (cx - camera.tx) / camera.scale;
@@ -1475,6 +1494,7 @@ function CanvasAppIntegration() {
       // as 96 CSS px) and the calibrated size (an inch as an inch on this
       // screen). Zooms about the viewport's centre, not navigations.
       actualSize: () => {
+        const { camera, vw, vh } = liveView();
         animateCamera(zoomCameraTo(camera, ACTUAL_SIZE_SCALE, [vw, vh]));
       },
       calibratedSize: () => {
@@ -1488,6 +1508,7 @@ function CanvasAppIntegration() {
           openScreenCalibration(instance.scope, { apply: true });
           return;
         }
+        const { camera, vw, vh } = liveView();
         animateCamera(zoomCameraTo(camera, scale, [vw, vh]));
       },
       calibrateScreen: () => openScreenCalibration(instance.scope),
@@ -1501,6 +1522,7 @@ function CanvasAppIntegration() {
       },
       zoomFit: () => {
         if (rects.length === 0) return;
+        const { vw, vh, rot } = liveView();
         navigateCamera(fitCamera(vw, vh, documentBounds(rects), 40, rot));
       },
       // The fit commands and the page keys (F-31, F-16, ADR 257). The
@@ -1509,11 +1531,13 @@ function CanvasAppIntegration() {
       // where that tween is going (Next, First pressed quickly lands on
       // the first page, not on the second the tween went on to).
       fitPage: () => {
+        const { vw, vh, rot } = liveView();
         const at = currentPageIndex(rects, cameraDestination(), [vw, vh]);
         if (at < 0) return;
         navigateCamera(fitCamera(vw, vh, rects[at]!, 40, rot));
       },
       fitSpread: async () => {
+        const { vw, vh, rot } = liveView();
         const at = currentPageIndex(rects, cameraDestination(), [vw, vh]);
         if (at < 0 || !handle) return;
         let spreads: (string | null)[] = [];
@@ -1532,6 +1556,7 @@ function CanvasAppIntegration() {
       },
       fitSelection: async () => {
         if (!handle) return;
+        const { vw, vh, rot } = liveView();
         const ids = currentSelection().elementSelection;
         if (ids.length === 0) return;
         // A group's box is its leaves' (the page-position readout's rule).
@@ -1570,6 +1595,7 @@ function CanvasAppIntegration() {
         );
       },
       goToPage: (which) => {
+        const { vw, vh, rot } = liveView();
         const at = currentPageIndex(rects, cameraDestination(), [vw, vh]);
         const target = pageStep(which, at, rects.length);
         if (target === null) return;
@@ -1579,7 +1605,9 @@ function CanvasAppIntegration() {
       goToPageId: (pageId) => {
         const index = handle?.pageIds.map(String).indexOf(pageId) ?? -1;
         const rect = index >= 0 ? rects[index] : undefined;
-        if (rect) animateCamera(fitCamera(vw, vh, rect, 40, rot));
+        if (!rect) return;
+        const { vw, vh, rot } = liveView();
+        animateCamera(fitCamera(vw, vh, rect, 40, rot));
       },
       showPanel: (panelId) =>
         cockpitActionsOf(instance.scope).openPanel?.(panelId, {
@@ -1599,7 +1627,11 @@ function CanvasAppIntegration() {
       // F-41 — the spread "Unlock all / Show all on spread" act on when
       // nothing is selected: the page at the viewport's centre.
       pageInView: () =>
-        pageTargetFor({ handle, camera, viewportSize })?.pageId ?? null,
+        pageTargetFor({
+          handle,
+          camera: liveView().camera,
+          viewportSize: liveView().viewportSize,
+        })?.pageId ?? null,
       // ADR 024 — read through the SAME ref the undo routing uses, so
       // the two cannot disagree about which context is active.
       activeEditContext: () => currentEditContext().active,
@@ -1896,14 +1928,16 @@ function CanvasAppIntegration() {
     // Editor ADR 287 — View ▸ Outline / Overprint / Pixel Preview, the
     // grids, snapping and Rotate View.
     const viewCommands = buildViewCommands({
-      rotateView: (deg) =>
+      rotateView: (deg) => {
+        const { camera, vw, vh } = liveView();
         animateCamera(
           rotateCameraAbout(camera, (deg * Math.PI) / 180, vw / 2, vh / 2),
-        ),
-      resetRotation: () =>
-        animateCamera(
-          rotateCameraAbout(camera, -(camera.rotation ?? 0), vw / 2, vh / 2),
-        ),
+        );
+      },
+      resetRotation: () => {
+        const { camera, vw, vh, rot } = liveView();
+        animateCamera(rotateCameraAbout(camera, -rot, vw / 2, vh / 2));
+      },
       openPreferences: (paged) => openViewPreferences(scopeOf(paged)),
     });
     const cmdDisposables = [
@@ -2008,8 +2042,6 @@ function CanvasAppIntegration() {
     instance,
     instance.surfaces,
     client,
-    camera,
-    viewportSize,
     handle,
     sourceName,
     animateCamera,
@@ -2277,7 +2309,7 @@ export interface MountOptions {
   profile?: string | EditorProfile;
   /** The query string a URL-configured editor reads (`?profile=`, `?solo=`). */
   search?: string;
-  /** What the host decides: save, submit, close, back. */
+  /** What the host decides: save, submit, close, back, restart. */
   actions?: HostActions;
   /** Start the local document library (OPFS). Default: the plain editor only. */
   library?: boolean;

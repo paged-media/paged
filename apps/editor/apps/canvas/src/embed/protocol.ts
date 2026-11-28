@@ -56,7 +56,7 @@ export const SCRIPT_METHOD = "runScript";
 /** What the frame's editor is made with: the config without functions, and
  *  the names of the host actions the host answers. */
 export type FrameConfig = Omit<EditorConfig, "actions"> & {
-  actions?: readonly ("save" | "submit" | "close" | "back")[];
+  actions?: readonly ("save" | "submit" | "close" | "back" | "restart")[];
 };
 
 export type HostToFrame =
@@ -89,7 +89,7 @@ export type FrameToHost =
   | {
       type: "paged:action";
       id: number;
-      action: "save" | "submit" | "close" | "back";
+      action: "save" | "submit" | "close" | "back" | "restart";
       bytes?: Uint8Array;
       name?: string;
     };
