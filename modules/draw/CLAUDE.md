@@ -8,7 +8,7 @@ Next GmbH; license headers on every source file).
 
 The distillation repo for draw capability during the
 incubate-then-extract window (strategy:
-`thoughts/docs/paged/plugin-draw/reality-check.md`). One package here, `draw-bundle` (manifest + `activate(host)`). The generic
+`plugin-draw/reality-check.md` (private planning notes)). One package here, `draw-bundle` (manifest + `activate(host)`). The generic
 geometry and tool machines moved to `platform/shared/vector-geometry` (pure
 math) and `platform/shared/vector-tools` (host-agnostic state machines): draw,
 image and the editor's `tools` package all import those, and the editor wraps
@@ -562,7 +562,7 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
   machine seems to need host state, the missing piece is an event/option
   on the machine API or an RFI gap (the BREAKAGE_LOG was retired 2026-06-12, fully drained).
 - **`@paged-media/plugin-api` is the only sanctioned contract import.**
-  A need it can't meet goes to the cross-repo RFI (`thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md`); the
+  A need it can't meet goes to the cross-repo RFI (`plugin-platform/rfi-core-sdk-gaps.md` (private planning notes)); the
   log is the API-v1 punch list — keep it current, mark entries RESOLVED
   with a pointer when host/core work lands.
 - **Machines stay pure + unit-tested.** Page-local pt in, snapshots/plans

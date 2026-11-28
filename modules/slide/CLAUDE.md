@@ -45,6 +45,6 @@ PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 cargo nextest run --profil
 
 ## Feature registry
 
-Features and their tests are recorded in the cockpit (`~/paged/cockpit`, chapter `plugin-slide`).
+Features and their tests are recorded in the cockpit (the private `cockpit` checkout, chapter `plugin-slide`).
 A new capability gets a feature row; a new test links to one (a test name containing
 `[plugin-slide.<id>]`, or an entry in the cockpit test map).

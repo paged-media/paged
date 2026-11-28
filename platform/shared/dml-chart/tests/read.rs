@@ -216,3 +216,35 @@ fn the_module_reads_paints_and_text_in_file_order() {
     assert_eq!(s.points, [(1, "spPr".to_string())]);
     assert!(s.labels.as_ref().unwrap().show_value);
 }
+
+#[test]
+fn a_hostile_point_count_or_index_allocates_only_what_the_chart_may_hold() {
+    // 200 series, each declaring four thousand million points and carrying
+    // one at the far end of the index range: dense lists of that size would
+    // exhaust memory. The chart's blank slots are capped in total.
+    let ser = r#"<c:ser><c:idx val="0"/>
+      <c:cat><c:strRef><c:strCache><c:ptCount val="4294967295"/><c:pt idx="0"><c:v>a</c:v></c:pt><c:pt idx="4294967295"><c:v>z</c:v></c:pt></c:strCache></c:strRef></c:cat>
+      <c:val><c:numRef><c:numCache><c:ptCount val="4294967295"/><c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="4294967294"><c:v>9</c:v></c:pt></c:numCache></c:numRef></c:val>
+    </c:ser>"#;
+    let c = read(&format!(
+        "<c:chart><c:plotArea><c:barChart>{}</c:barChart></c:plotArea></c:chart>",
+        ser.repeat(200)
+    ));
+    let series = &c.plots[0].series;
+    assert_eq!(series.len(), 200);
+    let slots: usize = series
+        .iter()
+        .map(|s| s.categories.len() + s.values.len())
+        .sum();
+    assert!(slots <= (1 << 20) + 800, "{slots} slots");
+    assert_eq!(series[0].categories[0], "a");
+    assert_eq!(series[199].values.len(), 2, "only the points present");
+    // A fresh chart has its allowance back, and an honest sparse cache its
+    // declared length.
+    let c = read(COLUMN);
+    assert_eq!(c.plots[0].series[0].categories, vec!["Jan", "", "Mar"]);
+    assert_eq!(
+        c.plots[0].series[0].values,
+        vec![Some(1.5), Some(2.0), None]
+    );
+}

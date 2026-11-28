@@ -182,9 +182,10 @@ impl PsdFile {
             None
         };
 
-        let (w, hh) = (h.width as usize, h.height as usize);
-        let n = w * hh;
-        let mut rgba = vec![0u8; n * 4];
+        // The planes are decoded, so `width * height` fits; four bytes a
+        // pixel need not (wasm32).
+        let n = planes.first().map_or(0, Vec::len);
+        let mut rgba = vec![0u8; interleaved_len(n, 4)?];
         for i in 0..n {
             let (r, g, b) = match h.color_mode {
                 ColorMode::Rgb => (planes[0][i], planes[1][i], planes[2][i]),
@@ -287,8 +288,8 @@ impl PsdFile {
         } else {
             None
         };
-        let n = (h.width as usize) * (h.height as usize);
-        let mut cmyk = vec![0u8; n * 4];
+        let n = planes.first().map_or(0, Vec::len);
+        let mut cmyk = vec![0u8; interleaved_len(n, 4)?];
         for i in 0..n {
             let a = alpha.as_ref().map_or(255, |p| p[i]);
             for c in 0..4 {
@@ -376,7 +377,7 @@ impl PsdFile {
             } else {
                 None
             };
-        let n = (h.width as usize) * (h.height as usize);
+        let n = planes.first().map_or(0, Vec::len);
         let mid = if h.depth == 16 {
             32768.0 / 65535.0
         } else {
@@ -389,7 +390,7 @@ impl PsdFile {
                 1.0
             }
         };
-        let mut samples = Vec::with_capacity(n * channels);
+        let mut samples = Vec::with_capacity(interleaved_len(n, channels)?);
         for i in 0..n {
             let a = alpha.as_ref().map_or(1.0, |p| p[i].clamp(0.0, 1.0));
             for (c, plane) in planes.iter().take(channels).enumerate() {
@@ -490,13 +491,17 @@ fn decode_planes_f32(file: &PsdFile) -> Result<Vec<Vec<f32>>> {
         .checked_mul(h.height as usize)
         .ok_or_else(|| malformed("composite plane size overflows usize"))?;
     let sample = usize::from(h.depth / 8);
-    let stride = plane_len * sample;
+    let stride = plane_len
+        .checked_mul(sample)
+        .ok_or_else(|| malformed("RAW composite plane size overflows usize"))?;
+    let expect = stride
+        .checked_mul(channels)
+        .ok_or_else(|| malformed("RAW composite size overflows usize"))?;
     let data = &file.composite.raw;
-    if data.len() != stride * channels {
+    if data.len() != expect {
         return Err(malformed(format!(
-            "RAW composite is {} byte(s), expected {}",
-            data.len(),
-            stride * channels
+            "RAW composite is {} byte(s), expected {expect}",
+            data.len()
         )));
     }
     Ok((0..channels)
@@ -602,7 +607,9 @@ fn decode_planes(file: &PsdFile) -> Result<Vec<Vec<u8>>> {
             let table_entries = rows
                 .checked_mul(channels)
                 .ok_or_else(|| malformed("RLE count table size overflows usize"))?;
-            let table_len = table_entries * count_width;
+            let table_len = table_entries
+                .checked_mul(count_width)
+                .ok_or_else(|| malformed("RLE count table size overflows usize"))?;
             if data.len() < table_len {
                 return Err(malformed(format!(
                     "RLE count table needs {table_len} byte(s), section has {}",
@@ -619,9 +626,22 @@ fn decode_planes(file: &PsdFile) -> Result<Vec<Vec<u8>>> {
                             as usize
                     }
                 };
+                // PackBits expands at most 64 times (two bytes make a run
+                // of 128): a row whose packed bytes cannot fill the width
+                // is refused here, before a plane of the header's size is
+                // allocated for it. The planes are thereby bounded by the
+                // file's own length.
+                if n.saturating_mul(64) < cols {
+                    return Err(malformed(format!(
+                        "RLE row of {n} packed byte(s) cannot fill {cols} pixel(s)"
+                    )));
+                }
                 counts.push(n);
             }
-            let packed_total: usize = counts.iter().sum();
+            let packed_total = counts
+                .iter()
+                .try_fold(0usize, |a, &n| a.checked_add(n))
+                .ok_or_else(|| malformed("RLE packed size overflows usize"))?;
             let packed = &data[table_len..];
             // A file may end in ZERO padding past the packed rows: the
             // PSB Photoshop embeds in a new smart object is padded to
@@ -654,6 +674,13 @@ fn decode_planes(file: &PsdFile) -> Result<Vec<Vec<u8>>> {
              ZIP composites are the M2 lane)"
         ))),
     }
+}
+
+/// `pixels * per_pixel`, the length of an interleaved buffer, checked.
+fn interleaved_len(pixels: usize, per_pixel: usize) -> Result<usize> {
+    pixels
+        .checked_mul(per_pixel)
+        .ok_or_else(|| malformed("composite buffer size overflows usize"))
 }
 
 fn malformed(detail: impl Into<String>) -> PsdError {

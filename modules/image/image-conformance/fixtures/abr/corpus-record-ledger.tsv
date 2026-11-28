@@ -1,7 +1,7 @@
 # ABR corpus record ledger — ANALYST-published derived artifact.
 #
 # Derived from the licensed .abr fixture corpus described in
-# thoughts/docs/paged/plugin-image/abr-brush-format-spec.md §13.3, by an
+# the project's ABR brush format spec (abr-brush-format-spec.md) §13.3, by an
 # ANALYST-role session under the clean-room two-role protocol (plugin-
 # image/CLAUDE.md §3.1). Contains only FACTS ABOUT BEHAVIOUR — counts, key
 # names, OSTypes, unit codes, dimensions and cryptographic digests. It

@@ -1601,12 +1601,16 @@ impl Builder<'_> {
                 let Some(cell) = t.rows[r].1.get(c) else {
                     continue;
                 };
-                let (rs, cs) = (cell.span.0.max(1) as usize, cell.span.1.max(1) as usize);
+                // A span comes from the file: held to the grid, so a
+                // rowSpan or gridSpan of thousands of millions marks only
+                // the slots that exist.
+                let (rs, cs) = (
+                    (cell.span.0.max(1) as usize).min(rows - r),
+                    (cell.span.1.max(1) as usize).min(cols - c),
+                );
                 for dr in 0..rs {
                     for dc in 0..cs {
-                        if r + dr < rows && c + dc < cols {
-                            occupied[(r + dr) * cols + c + dc] = true;
-                        }
+                        occupied[(r + dr) * cols + c + dc] = true;
                     }
                 }
                 let (il, it_, ir, ib) = cell
@@ -2930,5 +2934,55 @@ mod tests {
         assert_eq!(v["data"]["deck"]["name"], "Präsentation 🎉");
         assert_eq!(v["data"]["deck"]["width"], 960.0);
         assert_eq!(v["data"]["deck"]["fonts"][0], "Calibri");
+    }
+
+    #[test]
+    fn a_cell_span_of_thousands_of_millions_is_held_to_the_grid() {
+        // Every cell claims 4294967295 rows and columns: marking the slots
+        // a span covers must stop at the grid, not loop over the span.
+        let cell = pptx_core::TableCell {
+            grid_span: u32::MAX,
+            row_span: u32::MAX,
+            ..Default::default()
+        };
+        let row = pptx_core::TableRow {
+            height: 370_840,
+            cells: vec![cell.clone(), cell.clone(), cell],
+        };
+        let table = pptx_core::Table {
+            columns: vec![914_400, 914_400],
+            rows: vec![row.clone(), row],
+            ..Default::default()
+        };
+        let deck = slide_resolve::resolve(&pptx_core::Presentation {
+            slide_size: (9_144_000, 6_858_000),
+            slides: vec![pptx_core::Slide {
+                shapes: vec![pptx_core::Shape::Frame(pptx_core::GraphicFrame {
+                    nv: Default::default(),
+                    xfrm: Some(Default::default()),
+                    content: pptx_core::FrameContent::Table(table),
+                })],
+                ..Default::default()
+            }],
+            // A slide resolves against a master; a default one will do.
+            masters: vec![Default::default()],
+            ..Default::default()
+        });
+        let built = build(&deck, &|_| None, "deck");
+        let tables: Vec<&NativeTable> = built
+            .document
+            .stories
+            .iter()
+            .flat_map(|s| &s.story.paragraphs)
+            .filter_map(|p| p.table.as_ref())
+            .collect();
+        assert_eq!(tables.len(), 1);
+        // The first cell covers the whole 2 x 2 grid; the rest are its
+        // continuation.
+        assert_eq!(tables[0].cells.len(), 1);
+        assert_eq!(
+            (tables[0].cells[0].row_span, tables[0].cells[0].column_span),
+            (2, 2)
+        );
     }
 }

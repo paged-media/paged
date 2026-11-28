@@ -47,7 +47,7 @@ impl Container {
         }
     }
 
-    /// Max canvas edge (px) — used for validation only.
+    /// Max canvas edge (px): the header parse refuses a larger canvas.
     pub const fn max_dimension(self) -> u32 {
         match self {
             Container::Psd => 30_000,

@@ -47,12 +47,27 @@ pub enum ParseError {
     UnknownFunction(String),
     #[error("trailing tokens after a complete expression")]
     Trailing,
+    /// Groups, calls or a chain of operators nested past the limit: the
+    /// expression is refused instead of built (it would overflow the stack
+    /// of whatever walks it).
+    #[error("expression nested too deeply")]
+    TooDeep,
 }
+
+/// How deep groups, calls and unary minus may nest the parser, and how deep
+/// the tree it builds may be: an expression is untrusted text, and both the
+/// parser and every walk of the tree recurse once per level.
+const MAX_DEPTH: usize = 256;
 
 /// Parse a source string into the [`Expr`] AST.
 pub fn parse(src: &str) -> Result<Expr, ParseError> {
     let tokens = lex(src).map_err(ParseError::Lex)?;
-    let mut p = Parser { tokens, pos: 0 };
+    let mut p = Parser {
+        tokens,
+        pos: 0,
+        nesting: 0,
+        depth: 0,
+    };
     let expr = p.parse_expr(0)?;
     if p.pos != p.tokens.len() {
         return Err(ParseError::Trailing);
@@ -63,6 +78,18 @@ pub fn parse(src: &str) -> Result<Expr, ParseError> {
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// The `parse_expr` calls on the stack.
+    nesting: usize,
+    /// The depth of the tree the last finished sub-expression is; after an
+    /// argument list, that of its deepest argument.
+    depth: usize,
+}
+
+fn within(depth: usize) -> Result<usize, ParseError> {
+    if depth > MAX_DEPTH {
+        return Err(ParseError::TooDeep);
+    }
+    Ok(depth)
 }
 
 impl Parser {
@@ -80,7 +107,19 @@ impl Parser {
 
     /// Precedence-climbing core.
     fn parse_expr(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
+        if self.nesting >= MAX_DEPTH {
+            return Err(ParseError::TooDeep);
+        }
+        self.nesting += 1;
+        let r = self.parse_expr_inner(min_bp);
+        self.nesting -= 1;
+        r
+    }
+
+    fn parse_expr_inner(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_prefix()?;
+        // The depth of `lhs` as the chain grows it.
+        let mut depth = self.depth;
         while let Some(tok) = self.peek() {
             let Some((lbp, op)) = infix_bp(tok) else {
                 break;
@@ -91,21 +130,26 @@ impl Parser {
             self.advance();
             // Left-associative: right side binds tighter by one.
             let rhs = self.parse_expr(lbp + 1)?;
+            depth = within(depth.max(self.depth) + 1)?;
             lhs = Expr::Binary {
                 op,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
             };
         }
+        self.depth = depth;
         Ok(lhs)
     }
 
     fn parse_prefix(&mut self) -> Result<Expr, ParseError> {
+        // A leaf, unless an arm below parses sub-expressions.
+        self.depth = 1;
         match self.advance() {
             None => Err(ParseError::UnexpectedEnd),
             Some(Token::Minus) => {
                 // Unary minus binds tighter than `* /`.
                 let rhs = self.parse_expr(50)?;
+                self.depth = within(self.depth + 1)?;
                 Ok(Expr::Unary {
                     op: UnaryOp::Neg,
                     rhs: Box::new(rhs),
@@ -131,6 +175,7 @@ impl Parser {
             // A function call.
             self.advance(); // consume '('
             let args = self.parse_args()?;
+            self.depth = within(self.depth + 1)?;
             let func = data_core::funcs::lookup_func(&name)
                 .ok_or_else(|| ParseError::UnknownFunction(name.clone()))?;
             return Ok(Expr::Call { func, args });
@@ -147,18 +192,22 @@ impl Parser {
     /// Parse a comma-separated argument list up to and including the `)`.
     fn parse_args(&mut self) -> Result<Vec<Expr>, ParseError> {
         let mut args = Vec::new();
+        let mut deepest = 0;
         if self.peek() == Some(&Token::RParen) {
             self.advance();
+            self.depth = deepest;
             return Ok(args);
         }
         loop {
             args.push(self.parse_expr(0)?);
+            deepest = deepest.max(self.depth);
             match self.advance() {
                 Some(Token::Comma) => continue,
                 Some(Token::RParen) => break,
                 _ => return Err(ParseError::ExpectedRParen),
             }
         }
+        self.depth = deepest;
         Ok(args)
     }
 }

@@ -1470,4 +1470,51 @@ mod tests {
         let none = inherit_group_fill(&kids, None);
         assert_eq!(fill_of(&none[0]), Some(Fill::None));
     }
+
+    /// A deck whose one table has a single grid column and a row of three
+    /// cells, each spanning thousands of millions of rows and columns.
+    fn hostile_table_deck() -> Presentation {
+        let cell = pptx_core::TableCell {
+            grid_span: u32::MAX,
+            row_span: u32::MAX,
+            ..Default::default()
+        };
+        let table = pptx_core::Table {
+            columns: vec![914_400],
+            rows: vec![pptx_core::TableRow {
+                height: 370_840,
+                cells: vec![cell.clone(), cell.clone(), cell],
+            }],
+            ..Default::default()
+        };
+        Presentation {
+            slides: vec![pptx_core::Slide {
+                shapes: vec![Shape::Frame(pptx_core::GraphicFrame {
+                    nv: Default::default(),
+                    xfrm: Some(Default::default()),
+                    content: FrameContent::Table(table),
+                })],
+                ..Default::default()
+            }],
+            // A slide resolves against a master; a default one will do.
+            masters: vec![Default::default()],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_row_with_more_cells_than_grid_columns_resolves() {
+        let deck = resolve(&hostile_table_deck());
+        let tables: Vec<&Table> = deck.slides[0]
+            .items
+            .iter()
+            .filter_map(|it| match &it.kind {
+                ItemKind::Table(t) => Some(t),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].columns.len(), 1);
+        assert_eq!(tables[0].rows[0].1.len(), 3);
+    }
 }

@@ -438,3 +438,45 @@ fn composite_samples_reads_every_mode_in_its_own_numbers__feat__image_io_depth_c
     assert_eq!((c.samples[0] * 255.0).round() as usize, 2);
     assert_eq!(f.indexed_palette().expect("table").colours[2], [10, 20, 30]);
 }
+
+// A header may name any canvas; every buffer is sized from it. The parse
+// holds it to the container's limit, and an RLE composite whose packed rows
+// cannot fill the canvas is refused before a plane is allocated.
+#[test]
+fn a_canvas_past_the_containers_limit_is_refused_on_parse() {
+    for (w, h) in [(30_001, 1), (1, 30_001), (u32::MAX, u32::MAX)] {
+        let err = PsdFile::parse(&psd_bytes(3, w, h, 8, 3, 0, &[])).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PsdError::Malformed {
+                    section: "header",
+                    ..
+                }
+            ),
+            "{w}x{h}: {err}"
+        );
+    }
+    assert!(PsdFile::parse(&psd_bytes(3, 30_000, 30_000, 8, 3, 0, &[])).is_ok());
+}
+
+#[test]
+fn an_rle_composite_too_short_for_its_canvas_allocates_no_plane() {
+    // 30,000 x 30,000 RGB: 2.7 GB of planes from a 180 KB file whose every
+    // row claims one packed byte.
+    let rows = 30_000usize * 3;
+    let mut payload = Vec::with_capacity(rows * 3);
+    for _ in 0..rows {
+        payload.extend_from_slice(&1u16.to_be_bytes());
+    }
+    payload.extend(std::iter::repeat_n(0u8, rows));
+    let file = PsdFile::parse(&psd_bytes(3, 30_000, 30_000, 8, 3, 1, &payload)).unwrap();
+    assert!(matches!(
+        file.composite_rgba8(),
+        Err(PsdError::Malformed { .. })
+    ));
+    assert!(matches!(
+        file.composite_samples(),
+        Err(PsdError::Malformed { .. })
+    ));
+}

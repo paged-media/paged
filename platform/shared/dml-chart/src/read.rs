@@ -58,6 +58,7 @@ impl Props for () {
 
 /// Read a chart part's root element (`c:chartSpace`).
 pub fn chart<P: Props>(root: &El, props: &P) -> Chart<P::Shape, P::Text> {
+    reset_blank_slots();
     let mut out = Chart {
         area: sp_pr(root, props),
         text: tx_pr(root, props),
@@ -244,13 +245,14 @@ fn series<P: Props>(s: &El, props: &P) -> Series<P::Shape, P::Text> {
                 .child(Ns::C, "ptCount")
                 .and_then(|c| c.attr_u32("val"))
                 .unwrap_or(0) as usize;
-            let mut vals = vec![None; count];
-            for (i, t) in points(v) {
-                if i >= vals.len() {
-                    vals.resize(i + 1, None);
-                }
-                vals[i] = t.trim().parse::<f64>().ok();
-            }
+            let vals = dense(
+                count,
+                points(v)
+                    .into_iter()
+                    .map(|(i, t)| (i, t.trim().parse::<f64>().ok()))
+                    .collect(),
+                None,
+            );
             (vals, v.child(Ns::C, "formatCode").map(|f| f.deep_text()))
         }
         None => (Vec::new(), None),
@@ -397,12 +399,48 @@ fn dense_strings(cache: &El) -> Vec<String> {
         .child(Ns::C, "ptCount")
         .and_then(|c| c.attr_u32("val"))
         .unwrap_or(0) as usize;
-    let mut out = vec![String::new(); count];
-    for (i, t) in points(cache) {
-        if i >= out.len() {
-            out.resize(i + 1, String::new());
+    dense(count, points(cache), String::new())
+}
+
+/// The blank slots (a declared `ptCount` or a point index with no `c:pt`
+/// behind it) one chart's caches may hold in all. A worksheet has this many
+/// rows; a part that declares more is corrupt or hostile.
+const BLANK_SLOTS_PER_CHART: usize = 1 << 20;
+
+thread_local! {
+    static BLANK_SLOTS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(BLANK_SLOTS_PER_CHART) };
+}
+
+/// A fresh blank-slot allowance, at the start of one chart's read.
+pub(crate) fn reset_blank_slots() {
+    BLANK_SLOTS.with(|b| b.set(BLANK_SLOTS_PER_CHART));
+}
+
+/// A cache's points as a dense list of `declared` entries (longer when a
+/// point's index lies past it). The length comes from the file, so it is
+/// held to the points actually present plus the chart's remaining blank
+/// slots: a `ptCount` or `idx` of four thousand million allocates nothing
+/// like it. A point past the granted length is dropped.
+pub(crate) fn dense<T: Clone>(declared: usize, points: Vec<(usize, T)>, blank: T) -> Vec<T> {
+    let wanted = points
+        .iter()
+        .map(|(i, _)| i.saturating_add(1))
+        .max()
+        .unwrap_or(0)
+        .max(declared);
+    let blanks = wanted.saturating_sub(points.len());
+    let granted = BLANK_SLOTS.with(|b| {
+        let g = blanks.min(b.get());
+        b.set(b.get() - g);
+        g
+    });
+    let len = wanted.min(points.len() + granted);
+    let mut out = vec![blank; len];
+    for (i, v) in points {
+        if let Some(slot) = out.get_mut(i) {
+            *slot = v;
         }
-        out[i] = t;
     }
     out
 }

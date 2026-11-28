@@ -316,6 +316,20 @@ impl<'a> Interp<'a> {
         Ok(())
     }
 
+    /// Account for `n` new objects of `each` bytes. The product is taken in
+    /// 64 bits and saturates: a count from the program times an object size
+    /// wraps a 32-bit `usize` (wasm32), which would charge almost nothing
+    /// for an allocation of gigabytes.
+    pub fn alloc_n(&mut self, n: usize, each: usize) -> R {
+        self.mem = self
+            .mem
+            .saturating_add((n as u64).saturating_mul(each as u64));
+        if self.mem > self.limits.max_memory {
+            return Err(PsError::Limit(LimitKind::Memory));
+        }
+        Ok(())
+    }
+
     pub fn new_string(&mut self, n: usize) -> Result<PsString, PsError> {
         self.alloc(n)?;
         Ok(PsString::new(vec![0; n]))

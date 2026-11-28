@@ -7279,7 +7279,9 @@ fn render_element_id_array(
     if len == 0 {
         return None;
     }
-    let mut parts = Vec::with_capacity(len);
+    // No capacity from `len`: a script sets an array's length to anything
+    // (`a.length = 4294967295`), and the first non-element ends the loop.
+    let mut parts = Vec::new();
     for i in 0..len {
         let el = obj.get(i as u32, ctx).ok()?;
         let el_obj = el.as_object()?;
@@ -7289,6 +7291,16 @@ fn render_element_id_array(
 }
 
 fn format_value(value: &JsValue, ctx: &mut Context) -> String {
+    format_value_at(value, ctx, 0)
+}
+
+/// How many error-shaped objects [`format_value`] follows through `name`,
+/// `message` and `stack`. A script can make an object its own `message`
+/// (`e.message = e`), or a getter that answers a fresh one each time;
+/// following that without a bound overflows the stack.
+const MAX_FORMAT_DEPTH: usize = 8;
+
+fn format_value_at(value: &JsValue, ctx: &mut Context, depth: usize) -> String {
     if value.is_undefined() {
         return "undefined".to_string();
     }
@@ -7315,6 +7327,9 @@ fn format_value(value: &JsValue, ctx: &mut Context) -> String {
         if let Some(addr) = element_id_address_of(&obj, ctx) {
             return addr;
         }
+        if depth >= MAX_FORMAT_DEPTH {
+            return "[nested]".to_string();
+        }
         // An array of `ElementId`s (e.g. the parsed selection) prints as
         // `[textFrame:u1, rectangle:u2]`. Only arrays whose every element is
         // ElementId-shaped take this path; all other arrays fall through to
@@ -7334,10 +7349,10 @@ fn format_value(value: &JsValue, ctx: &mut Context) -> String {
             let mut head = String::new();
             if let Some(nv) = name_v {
                 if !nv.is_undefined() && !nv.is_null() {
-                    head.push_str(&format_value(&nv, ctx));
+                    head.push_str(&format_value_at(&nv, ctx, depth + 1));
                 }
             }
-            let msg_s = format_value(msg_v.as_ref().unwrap(), ctx);
+            let msg_s = format_value_at(msg_v.as_ref().unwrap(), ctx, depth + 1);
             if !head.is_empty() {
                 head.push_str(": ");
             }
@@ -7351,7 +7366,7 @@ fn format_value(value: &JsValue, ctx: &mut Context) -> String {
             {
                 if let Ok(stack) = obj.get(js_string!("stack"), ctx) {
                     if !stack.is_undefined() && !stack.is_null() {
-                        return format!("{head}\n{}", format_value(&stack, ctx));
+                        return format!("{head}\n{}", format_value_at(&stack, ctx, depth + 1));
                     }
                 }
             }

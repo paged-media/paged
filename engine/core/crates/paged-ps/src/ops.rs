@@ -29,6 +29,9 @@ use crate::interp::{err, Frame, Interp, Loop, OpDef, PsError, R};
 use crate::object::{Key, Obj, PsArray, PsDict, PsString, V};
 use crate::scanner::real_text;
 
+/// What one array slot is charged against the memory limit.
+const OBJ_BYTES: usize = std::mem::size_of::<Obj>();
+
 macro_rules! ops {
     ($($name:literal => $f:expr),* $(,)?) => {
         &[$(OpDef { name: $name, f: $f }),*]
@@ -103,7 +106,7 @@ pub const CORE: &[OpDef] = ops! {
     "quit" => |_| Err(PsError::Quit),
     "start" => |_| Ok(()),
     // dictionaries
-    "dict" => |i| { let n = i.pop_usize()?; i.alloc(n * 48)?; i.push(Obj::dict(PsDict::new(n))) },
+    "dict" => |i| { let n = i.pop_usize()?; i.alloc_n(n, 48)?; i.push(Obj::dict(PsDict::new(n))) },
     "maxlength" => |i| { let d = i.pop_dict()?; let n = d.0.borrow().cap.max(d.len()) as i32; i.push(Obj::int(n)) },
     "begin" => |i| { let d = i.pop_dict()?; if i.dstack.len() >= 1000 { return Err(err("dictstackoverflow")); } i.dstack.push(d); Ok(()) },
     "end" => |i| { if i.dstack.len() <= 3 { return Err(err("dictstackunderflow")); } i.dstack.pop(); Ok(()) },
@@ -127,7 +130,7 @@ pub const CORE: &[OpDef] = ops! {
     "statusdict" => statusdict,
     "internaldict" => |i| { i.pop()?; let d = i.resource_dict(".internal"); i.push(Obj::dict(d)) },
     // arrays, strings, composites
-    "array" => |i| { let n = i.pop_usize()?; i.alloc(n * 24)?; i.push(Obj::array(vec![Obj::NULL; n])) },
+    "array" => |i| { let n = i.pop_usize()?; i.alloc_n(n, OBJ_BYTES)?; i.push(Obj::array(vec![Obj::NULL; n])) },
     "packedarray" => |i| { let n = i.pop_usize()?; i.need(n)?; let items = i.ostack.split_off(i.ostack.len() - n); let mut a = PsArray::new(items); a.packed = true; i.push(Obj::lit(V::Array(a))) },
     "setpacking" => |i| { i.packing = i.pop_bool()?; Ok(()) },
     "currentpacking" => |i| { let p = i.packing; i.push(Obj::bool(p)) },
@@ -433,7 +436,7 @@ fn close_array(i: &mut Interp<'_>) -> R {
     let n = to_mark(i)?;
     let items = i.ostack.split_off(i.ostack.len() - n);
     i.ostack.pop();
-    i.alloc(n * 24)?;
+    i.alloc_n(n, OBJ_BYTES)?;
     i.push(Obj::array(items))
 }
 
@@ -445,7 +448,7 @@ fn close_dict(i: &mut Interp<'_>) -> R {
     let items = i.ostack.split_off(i.ostack.len() - n);
     i.ostack.pop();
     let d = PsDict::new(n / 2);
-    i.alloc(n * 24)?;
+    i.alloc_n(n, OBJ_BYTES)?;
     let mut it = items.into_iter();
     while let (Some(k), Some(v)) = (it.next(), it.next()) {
         if matches!(k.v, V::Null) {
@@ -1122,6 +1125,33 @@ mod tests {
             Ok(v) => v.join(" "),
             Err(e) => format!("ERR {e:?}"),
         }
+    }
+
+    #[test]
+    fn a_count_times_an_object_size_saturates_instead_of_wrapping() {
+        use crate::interp::Interp;
+        use crate::LimitKind;
+        // The largest counts a program can name are refused by the memory
+        // limit, not allocated.
+        for src in ["2147483647 array", "2147483647 dict", "2147483647 string"] {
+            assert!(
+                matches!(eval(src), Err(PsError::Limit(LimitKind::Memory))),
+                "{src}"
+            );
+        }
+        // On a 32-bit `usize` 0x0AAAAAAB * 24 wraps to 8; the charge is
+        // taken in 64 bits, so the budget sees the true size.
+        let mut it = Interp::new(crate::Limits::default(), None, [0.0, 0.0, 100.0, 100.0]);
+        assert!(matches!(
+            it.alloc_n(0x0AAA_AAAB, 24),
+            Err(PsError::Limit(LimitKind::Memory))
+        ));
+        let mut it = Interp::new(crate::Limits::default(), None, [0.0, 0.0, 100.0, 100.0]);
+        assert!(matches!(
+            it.alloc_n(usize::MAX, usize::MAX),
+            Err(PsError::Limit(LimitKind::Memory))
+        ));
+        assert!(it.alloc_n(1, 1).is_err(), "the charge stays saturated");
     }
 
     #[test]

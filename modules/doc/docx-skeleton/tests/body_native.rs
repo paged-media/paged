@@ -1296,3 +1296,51 @@ fn a_chart_or_a_diagram_alone_in_a_cell_is_its_anchored_group() {
         assert!(!frames[0].children.is_empty(), "{prefix}: its pieces");
     }
 }
+
+// A grid widened by a hostile `w:gridSpan` is deferred, never allocated, and
+// a span past the grid's end is refused without overflowing.
+#[test]
+fn a_table_grid_past_the_limit_is_deferred_not_allocated() {
+    use docx_lower::ir::{LoweredCell, LoweredTable};
+    let table = |rows: u32, cols: u32, col_span: u32| {
+        LoweredBlock::Table(LoweredTable {
+            rows,
+            cols,
+            cells: vec![LoweredCell {
+                row: 0,
+                col: 1,
+                row_span: u32::MAX,
+                col_span,
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+    };
+    let mut doc = LoweredDoc::default();
+    doc.story.blocks = vec![
+        table(u32::MAX, u32::MAX, 1),
+        // 65536 x 65536 wraps to zero slots in 32 bits.
+        table(65_536, 65_536, 1),
+        table(1, 4_000_000_000, 1),
+        // In the limit, with a span that overflows the column index.
+        table(2, 2, u32::MAX),
+    ];
+    let body = native_body(&doc);
+    let reasons: Vec<&str> = body
+        .blocks
+        .iter()
+        .map(|b| match b {
+            NativeBlock::Deferred { reason } => reason.as_str(),
+            _ => "built",
+        })
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            "table grid too large",
+            "table grid too large",
+            "table grid too large",
+            "table cell span outside the grid",
+        ]
+    );
+}

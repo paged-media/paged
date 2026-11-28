@@ -418,3 +418,35 @@ fn ordinary_result_omits_budget_kind_in_json() {
         "ordinary result must omit budgetKind: {json}"
     );
 }
+
+// ------------------------------------------- formatting a thrown value
+
+// An object that is its own `message` (or whose `message` getter answers a
+// fresh error-shaped object every time) used to recurse without end while
+// being formatted: a stack overflow, which no budget catches.
+#[test]
+fn a_cyclic_or_endless_error_object_is_formatted_to_a_bounded_depth() {
+    let mut model = load();
+    for script in [
+        "const e = {}; e.message = e; throw e;",
+        "const e = { name: 'E' }; e.message = e; e.stack = e; throw e;",
+        "const mk = () => ({ get message() { return mk(); } }); throw mk();",
+        "const e = {}; e.message = e; Promise.reject(e);",
+    ] {
+        let result = execute_script(&mut model, script);
+        assert!(result.budget_kind.is_none(), "{script}: {:?}", result.error);
+    }
+    let result = execute_script(&mut model, "const e = {}; e.message = e; throw e;");
+    let error = result.error.expect("the throw is reported");
+    assert!(error.contains("[nested]"), "{error}");
+    // Logged, not thrown: the same formatter, and the script goes on.
+    let result = execute_script(
+        &mut model,
+        "const e = {}; e.message = e; console.log(e); console.log('after');",
+    );
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert!(result.output.iter().any(|l| l.contains("after")));
+    // An ordinary error reads as before.
+    let result = execute_script(&mut model, "throw new TypeError('boom');");
+    assert!(result.error.unwrap().contains("TypeError: boom"));
+}

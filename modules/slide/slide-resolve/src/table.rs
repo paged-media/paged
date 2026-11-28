@@ -322,9 +322,12 @@ pub(super) fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
             // The engine's cells have no alpha: a translucent fill is
             // composited over what shows beneath it, the table's background
             // at the cell's centre or the white slide.
-            let cx: f64 = t.columns[..c].iter().sum::<i64>() as f64 / EMU_PER_PT
+            // A row may carry more cells than the grid has columns (a
+            // corrupt file): those sit past the last column. Summed as
+            // floats, so extreme widths cannot overflow.
+            let cx: f64 = t.columns.iter().take(c).map(|w| *w as f64).sum::<f64>() / EMU_PER_PT
                 + t.columns.get(c).copied().unwrap_or(0) as f64 / EMU_PER_PT / 2.0;
-            let cy: f64 = t.rows[..r].iter().map(|x| x.height).sum::<i64>() as f64 / EMU_PER_PT
+            let cy: f64 = t.rows[..r].iter().map(|x| x.height as f64).sum::<f64>() / EMU_PER_PT
                 + row.height as f64 / EMU_PER_PT / 2.0;
             let under = probe
                 .backdrop_at(cx, cy)

@@ -112,6 +112,15 @@ impl FileHeader {
         let channels = r.u16()?;
         let height = r.u32()?;
         let width = r.u32()?;
+        // The container's canvas limit (30,000 px in PSD, 300,000 in PSB):
+        // every later buffer is sized from these two numbers.
+        let max = container.max_dimension();
+        if width > max || height > max {
+            return Err(PsdError::Malformed {
+                section: "header",
+                detail: format!("canvas {width}×{height} exceeds the {max} px limit"),
+            });
+        }
         let depth = r.u16()?;
         let color_code = r.u16()?;
         let color_mode = ColorMode::from_code(color_code).ok_or_else(|| PsdError::Malformed {

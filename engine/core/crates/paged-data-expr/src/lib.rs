@@ -132,4 +132,43 @@ mod smoke {
         // Missing field → Null (the resolver applies the MissingPolicy later).
         assert_eq!(ev("missing_field"), Value::Null);
     }
+
+    #[test]
+    fn hostile_nesting_is_a_parse_error_not_a_stack_overflow() {
+        let n = 200_000;
+        for src in [
+            format!("{}1{}", "(".repeat(n), ")".repeat(n)),
+            "(".repeat(n),
+            format!("{}1", "-".repeat(n)),
+            format!("{}1{}", "ABS(".repeat(n), ")".repeat(n)),
+            // A chain nests the tree, not the parser.
+            format!("1{}", "+1".repeat(n)),
+            format!("1{}", "&1".repeat(n)),
+        ] {
+            assert_eq!(parse(&src), Err(ParseError::TooDeep), "{}", &src[..8]);
+            assert_eq!(ev(&src), Value::Error(data_core::ValueError::Parse));
+        }
+        // What a binding really holds still parses and evaluates.
+        assert_eq!(ev(&format!("1{}", "+1".repeat(99))), Value::Number(100.0));
+        assert_eq!(
+            ev(&format!("{}-3{}", "ABS(".repeat(50), ")".repeat(50))),
+            Value::Number(3.0)
+        );
+    }
+
+    #[test]
+    fn rept_refuses_a_result_past_the_text_limit() {
+        let value = Value::Error(data_core::ValueError::Value);
+        for src in [
+            "REPT(\"ab\", 1000000000000000000)",
+            "REPT(\"ab\", 1000000000000000000*1000000000000000000)",
+            "REPT(\"ab\", 16384)",
+            "REPT(\"ab\", 0-1)",
+        ] {
+            assert_eq!(ev(src), value, "{src}");
+        }
+        assert_eq!(ev("REPT(\"ab\", 3)"), Value::text("ababab"));
+        assert_eq!(ev("LEN(REPT(\"ab\", 16383))"), Value::Number(32766.0));
+        assert_eq!(ev("REPT(\"\", 1000000000000000000)"), Value::text(""));
+    }
 }

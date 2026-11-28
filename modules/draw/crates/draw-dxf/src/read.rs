@@ -55,6 +55,10 @@ const DEFAULT_LINEWEIGHT: i16 = 25;
 const MAX_INSERT_DEPTH: usize = 8;
 /// The most copies an `INSERT` array makes.
 const MAX_ARRAY: usize = 10_000;
+/// The most block entities one drawing's `INSERT`s place in all. Arrays and
+/// nesting multiply (ten thousand copies, eight deep), so each is bounded
+/// and so is their product.
+const MAX_INSERTED_ENTITIES: usize = 500_000;
 
 /// What [`dxf_to_svg`] answers.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -100,6 +104,9 @@ struct Reader<'a> {
     k: f64,
     /// The paint order of the top-level entity being read.
     order: usize,
+    /// The block entities the `INSERT`s may still place
+    /// ([`MAX_INSERTED_ENTITIES`]).
+    insert_budget: usize,
 }
 
 /// Read `bytes` (an ASCII or binary DXF) into an SVG document.
@@ -115,6 +122,7 @@ pub fn dxf_to_svg(bytes: &[u8]) -> Result<DxfImport, String> {
         report: Report::default(),
         k,
         order: 0,
+        insert_budget: MAX_INSERTED_ENTITIES,
     };
     let inherit = Inherit {
         rgb: [0, 0, 0],
@@ -569,7 +577,7 @@ impl<'a> Reader<'a> {
         }
         let cols = usize::try_from(ins.column_count.max(1)).unwrap_or(1);
         let rows = usize::try_from(ins.row_count.max(1)).unwrap_or(1);
-        if cols * rows > MAX_ARRAY {
+        if cols.saturating_mul(rows) > MAX_ARRAY {
             self.report.dropped(
                 "insert.array",
                 "a block array of more than 10 000 copies is left out",
@@ -601,6 +609,14 @@ impl<'a> Reader<'a> {
                         .then(&base);
                 let world = m.then(&place);
                 for child in &block.entities {
+                    if self.insert_budget == 0 {
+                        self.report.dropped(
+                            "insert.budget",
+                            "block references that place more than 500 000 entities in all are cut short",
+                        );
+                        return;
+                    }
+                    self.insert_budget -= 1;
                     self.entity(child, &world, inherit, Some(layer), depth + 1);
                 }
             }

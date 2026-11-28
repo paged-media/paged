@@ -31,7 +31,7 @@ IR → Mutation[]) + `doc-bundle` (`@paged-media/doc`: manifest + `activate`).
 ## Project State & Feature Matrix (cockpit)
 
 The feature inventory, test linkage and live status for ALL Paged repos are derived by
-[Cockpit](https://github.com/drietsch/cockpit) from `~/paged/cockpit/` (`cockpit.toml` with
+Cockpit (a private tool) from the private `cockpit` checkout (`cockpit.toml` with
 `root = ".."`; features in `cockpit/docs/features/<chapter>/<id>.md`). There is NO feature
 matrix in this repo; do not create one.
 

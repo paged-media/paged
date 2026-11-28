@@ -1521,6 +1521,10 @@ fn is_empty_paragraph(p: &Paragraph) -> bool {
         && p.runs.iter().all(|r| r.text.is_empty())
 }
 
+/// The most grid slots (rows by columns) a Word table is built with. Word
+/// itself stops at 63 columns; past this the table is deferred.
+const MAX_TABLE_SLOTS: u64 = 1 << 18;
+
 /// A Word table as the model's table in a paragraph of its own (doc ADR 625,
 /// slice 3), as `insertTable` and the cell pour of the bundle make it.
 fn build_table(
@@ -1561,7 +1565,14 @@ fn build_table(
             });
         }
     }
-    let mut cells: Vec<TableCell> = Vec::with_capacity((rows * cols) as usize);
+    // The grid's size comes from the file (a `w:gridSpan` widens it): one
+    // cell is made per slot, so a grid past the limit is deferred instead of
+    // allocated.
+    let slots = u64::from(rows) * u64::from(cols);
+    if slots > MAX_TABLE_SLOTS {
+        return Err("table grid too large".into());
+    }
+    let mut cells: Vec<TableCell> = Vec::with_capacity(slots as usize);
     for c in 0..cols {
         for r in 0..rows {
             cells.push(new_table_cell(c, r));
@@ -1572,10 +1583,12 @@ fn build_table(
             return Err("table cell outside the grid".into());
         }
         // The engine keeps a span inside the grid.
-        if lc.col + lc.col_span.max(1) > cols || lc.row + lc.row_span.max(1) > rows {
+        if u64::from(lc.col) + u64::from(lc.col_span.max(1)) > u64::from(cols)
+            || u64::from(lc.row) + u64::from(lc.row_span.max(1)) > u64::from(rows)
+        {
             return Err("table cell span outside the grid".into());
         }
-        let cell = &mut cells[(lc.col * rows + lc.row) as usize];
+        let cell = &mut cells[lc.col as usize * rows as usize + lc.row as usize];
         if let Some([top, left, bottom, right]) = lc.insets_pt {
             cell.text_top_inset = top;
             cell.text_left_inset = left;

@@ -228,7 +228,7 @@ pub fn textjoin(args: &[Value], _ctx: &EvalCtx) -> Value {
 }
 
 /// `REPT(text, count)` — `text` repeated `count` times; `#VALUE` for a negative
-/// count.
+/// count or a result longer than [`REPT_MAX_BYTES`].
 pub fn rept(args: &[Value], _ctx: &EvalCtx) -> Value {
     if args[0].is_error() {
         return args[0].clone();
@@ -237,8 +237,16 @@ pub fn rept(args: &[Value], _ctx: &EvalCtx) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
-    if count < 0.0 {
+    let text = args[0].as_display();
+    // The count is the expression's own: a result past the limit (Excel's
+    // longest cell text) is `#VALUE`, never an allocation of that size. NaN
+    // fails the first comparison.
+    let fits = count >= 0.0 && count * text.len() as f64 <= REPT_MAX_BYTES as f64;
+    if !fits {
         return Value::Error(ValueError::Value);
     }
-    Value::text(args[0].as_display().repeat(count as usize))
+    Value::text(text.repeat(count as usize))
 }
+
+/// The longest text `REPT` makes, in bytes: Excel's limit on a cell's text.
+const REPT_MAX_BYTES: usize = 32_767;

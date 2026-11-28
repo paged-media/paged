@@ -81,19 +81,16 @@ fn dims(data: &El) -> Vec<Dim<'_>> {
 
 fn level_strings(l: &El) -> Vec<String> {
     let n = l.attr_u32("ptCount").unwrap_or(0) as usize;
-    let mut out = vec![String::new(); n];
-    for p in l.children_named(Ns::Cx, "pt") {
-        let i = p.attr_u32("idx").unwrap_or(0) as usize;
-        if i >= out.len() {
-            out.resize(i + 1, String::new());
-        }
-        out[i] = p.deep_text();
-    }
-    out
+    let points = l
+        .children_named(Ns::Cx, "pt")
+        .map(|p| (p.attr_u32("idx").unwrap_or(0) as usize, p.deep_text()))
+        .collect();
+    crate::read::dense(n, points, String::new())
 }
 
 /// Read a chartEx part's root element.
 pub fn chart_ex<P: Props>(root: &El, props: &P) -> Chart<P::Shape, P::Text> {
+    crate::read::reset_blank_slots();
     let mut out: Chart<P::Shape, P::Text> = Chart {
         title: None,
         plots: Vec::new(),
@@ -357,6 +354,7 @@ pub fn chart_ex<P: Props>(root: &El, props: &P) -> Chart<P::Shape, P::Text> {
 /// The levels of a multi-level category dimension, outermost first, as the
 /// part caches them (for a reader that draws from the caches).
 pub fn category_levels(root: &El, data_id: u32) -> Vec<Vec<String>> {
+    crate::read::reset_blank_slots();
     let Some(d) = root.child(Ns::Cx, "chartData").and_then(|cd| {
         cd.children_named(Ns::Cx, "data")
             .find(|d| d.attr_u32("id") == Some(data_id))

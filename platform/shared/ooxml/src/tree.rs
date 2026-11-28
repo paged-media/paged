@@ -226,6 +226,18 @@ impl El {
     }
 }
 
+/// Deepest element nesting the tree readers build, the limit of the typed
+/// reader (`dom::parse_root`). The readers themselves loop, but everything
+/// that walks a tree afterwards recurses (`deep_text`, `to_xml`, the
+/// consumers' own walks, and dropping the tree), so nesting depth in the
+/// XML becomes stack depth; a stack overflow aborts the process. Far beyond
+/// what a real part reaches.
+pub const MAX_TREE_DEPTH: usize = 256;
+
+fn too_deep() -> String {
+    format!("XML nested past the {MAX_TREE_DEPTH} level limit")
+}
+
 /// Parse a part into its root element.
 pub fn parse(bytes: &[u8]) -> Result<El, String> {
     let mut reader = NsReader::from_reader(bytes);
@@ -239,6 +251,9 @@ pub fn parse(bytes: &[u8]) -> Result<El, String> {
         };
         match event {
             Event::Start(start) => {
+                if stack.len() >= MAX_TREE_DEPTH {
+                    return Err(too_deep());
+                }
                 let el = element(&reader, &start)?;
                 stack.push(el);
             }
@@ -330,6 +345,9 @@ pub fn subtrees(
         match event {
             Event::Start(start) => {
                 if !stack.is_empty() || picked(&reader, &start, &mut want) {
+                    if stack.len() >= MAX_TREE_DEPTH {
+                        return Err(too_deep());
+                    }
                     stack.push(element(&reader, &start)?);
                 }
             }
@@ -568,7 +586,12 @@ impl XNode {
         };
         loop {
             match reader.read_event_into(&mut buf)? {
-                Event::Start(e) => stack.push(to_node(&e)?),
+                Event::Start(e) => {
+                    if stack.len() >= MAX_TREE_DEPTH {
+                        return Err(XmlError::Structure(too_deep()));
+                    }
+                    stack.push(to_node(&e)?)
+                }
                 Event::Empty(e) => {
                     let n = to_node(&e)?;
                     match stack.last_mut() {
@@ -615,6 +638,26 @@ impl XNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nesting_past_the_limit_is_refused_not_built() {
+        let nest = |n: usize| format!("{}{}", "<a>".repeat(n), "</a>".repeat(n));
+        let ok = nest(MAX_TREE_DEPTH);
+        assert!(parse(ok.as_bytes()).is_ok());
+        assert!(XNode::parse(ok.as_bytes()).is_ok());
+        // Unclosed, as a hostile part would be: a megabyte of opening tags.
+        let deep = "<a>".repeat(200_000);
+        assert!(parse(deep.as_bytes()).unwrap_err().contains("nested"));
+        assert!(subtrees(deep.as_bytes(), |_, _| true)
+            .unwrap_err()
+            .contains("nested"));
+        assert!(matches!(
+            XNode::parse(deep.as_bytes()),
+            Err(XmlError::Structure(_))
+        ));
+        let over = nest(MAX_TREE_DEPTH + 1);
+        assert!(parse(over.as_bytes()).is_err());
+    }
 
     #[test]
     fn resolves_namespaces_and_attributes() {

@@ -22,7 +22,7 @@ SDK gap tracker: the cross-repo RFI (the internal gap register) (I-NN ids in §6
 ## Project State & Feature Matrix (cockpit)
 
 The feature inventory, test linkage and live status for ALL Paged repos are derived by
-[Cockpit](https://github.com/drietsch/cockpit) from `~/paged/cockpit/` (`cockpit.toml` with
+Cockpit (a private tool) from the private `cockpit` checkout (`cockpit.toml` with
 `root = ".."`; features in `cockpit/docs/features/<chapter>/<id>.md`). There is NO feature
 matrix in this repo; do not create one.
 
@@ -48,7 +48,7 @@ Rules for every code change in this repo:
 
 - **CLEAN-ROOM / TWO-ROLE (§3.1).** `references/gegl` + `references/libvips`
   are read-only inspiration mounts. ANALYST agents may read `references/`
-  and produce _behavior specs_ into `thoughts/` (facts about behavior,
+  and produce _behavior specs_ into the private planning notes (facts about behavior,
   never expression). IMPLEMENTER agents — everyone writing kernel,
   engine, PSD, or codec code — **MUST NOT read `references/`**, ever.
   Never paste, transliterate, or closely paraphrase reference code or
@@ -115,7 +115,7 @@ Rules for every code change in this repo:
 
 ## Two-registry split
 
-- `~/paged/cockpit/docs/features/image/<id>.md` (Cockpit, chapter `image`) — the
+- `cockpit/docs/features/image/<id>.md` (Cockpit, chapter `image`) — the
   STATUS ledger (component `plugin.image`; `claims:` planned/partial/shipped,
   health from evidence).
 - `plugin-image/registry/*.yaml` (here) — the build-consumed

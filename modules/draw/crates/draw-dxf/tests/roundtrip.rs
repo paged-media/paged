@@ -295,3 +295,47 @@ fn a_drawing_survives_the_round_trip() {
     assert_eq!(again.report.items, first.report.items);
     assert_eq!(again.layers, first.layers);
 }
+
+// Block arrays multiply through nesting: eight levels of a 100 x 100 array
+// are 10^32 lines from a file of a few kilobytes. Each array is in its own
+// limit; the drawing's total is bounded too, and reported.
+#[test]
+fn nested_block_arrays_are_cut_short_at_the_drawings_budget() {
+    let mut d = Drawing::new();
+    d.header.version = AcadVersion::R2010;
+    let mut leaf = Block {
+        name: "B0".into(),
+        ..Default::default()
+    };
+    leaf.entities.push(on(
+        "0",
+        EntityType::Line(Line::new(
+            Point::new(0.0, 0.0, 0.0),
+            Point::new(1.0, 0.0, 0.0),
+        )),
+    ));
+    d.add_block(leaf);
+    let array = |name: String| Insert {
+        name,
+        column_count: 100,
+        row_count: 100,
+        column_spacing: 2.0,
+        row_spacing: 2.0,
+        ..Default::default()
+    };
+    for level in 1..8 {
+        let mut b = Block {
+            name: format!("B{level}"),
+            ..Default::default()
+        };
+        b.entities.push(on(
+            "0",
+            EntityType::Insert(array(format!("B{}", level - 1))),
+        ));
+        d.add_block(b);
+    }
+    d.add_entity(on("0", EntityType::Insert(array("B7".into()))));
+    let out = dxf_to_svg(&bytes(&d)).unwrap();
+    assert!(out.report.get("insert.budget").is_some());
+    assert!(out.report.items <= 500_000, "{} items", out.report.items);
+}

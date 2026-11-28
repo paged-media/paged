@@ -838,7 +838,9 @@ impl LayerStack {
         let (width, height) = (r.u32()?, r.u32()?);
         let active = r.u32()? as usize;
         let next_id = r.u32()?;
-        let n_px = width as usize * height as usize;
+        let n_px = (width as usize)
+            .checked_mul(height as usize)
+            .ok_or_else(|| IngestError::Decode("layer manifest: the canvas is too large".into()))?;
         let buffer = |i: u32| -> Result<Arc<[u8]>, IngestError> {
             buffers
                 .get(i as usize)
@@ -944,7 +946,7 @@ impl LayerStack {
                     ))
                 })?,
                 None => {
-                    if px.len() != n_px * bpp {
+                    if n_px.checked_mul(bpp) != Some(px.len()) {
                         return Err(IngestError::Decode(format!(
                             "layer \"{name}\": {} pixel bytes for {width}×{height}",
                             px.len()
@@ -975,11 +977,9 @@ impl LayerStack {
             let kind = match kind_code {
                 0 => LayerKind::Pixels,
                 1 => {
-                    let n = r.u32()? as usize;
-                    let mut block = Vec::with_capacity(n);
-                    for _ in 0..n {
-                        block.push(r.f32()?);
-                    }
+                    // Length-checked against the manifest before anything
+                    // is allocated for the count it declares.
+                    let block = f32s(&mut r)?;
                     let chain = AdjustParams::from_wire(&block)?;
                     // MIGRATION: a stored chain opens as its stages' ops
                     // (one stage is its typed layer).
@@ -1147,7 +1147,7 @@ impl LayerStack {
                                     ))
                                 })?
                             } else {
-                                if px.len() != n_px * px.bytes_per_pixel() {
+                                if n_px.checked_mul(px.bytes_per_pixel()) != Some(px.len()) {
                                     return Err(IngestError::Decode(format!(
                                         "layer comp \"{name}\": recorded pixels are mis-sized"
                                     )));
@@ -1271,7 +1271,8 @@ impl LayerStack {
 
 fn f32s(r: &mut R<'_>) -> Result<Vec<f32>, IngestError> {
     let n = r.u32()? as usize;
-    if n > r.b.len() {
+    // Four bytes a value must still be there: the count is the file's.
+    if n > (r.b.len() - r.at) / 4 {
         return Err(IngestError::Decode("layer manifest is truncated".into()));
     }
     (0..n).map(|_| r.f32()).collect()
@@ -1519,6 +1520,58 @@ mod tests {
         let b = back.layers[1].rgba.bounded().expect("bounded");
         assert_eq!(b.rect, Region::new(1, 1, 2, 1));
         assert_eq!(&back.layers[1].rgba.to_rgba8()[..], &dot[..]);
+    }
+
+    #[test]
+    fn a_hostile_value_count_is_refused_before_it_is_allocated() {
+        // An adjustment layer's parameter block in a version-1 manifest:
+        // `u32 n` and n floats. With n rewritten to four thousand million
+        // the import answers an error; it used to reserve 16 GB first.
+        let mut s = LayerStack::from_image(4, 3, px(4, 3, 10)).expect("stack");
+        s.add_adjustment(
+            "Grade",
+            AdjustParams {
+                exposure_ev: 0.3,
+                ..AdjustParams::default()
+            },
+        );
+        let (m, bufs) = s.export_with(1);
+        let block = s
+            .layers
+            .iter()
+            .find_map(|l| match &l.kind {
+                LayerKind::Adjustment(a) => Some(a.to_chain().unwrap_or_default().to_wire()),
+                _ => None,
+            })
+            .expect("the adjustment layer");
+        let mut wire = (block.len() as u32).to_le_bytes().to_vec();
+        for v in &block {
+            wire.extend_from_slice(&v.to_le_bytes());
+        }
+        let at = m
+            .windows(wire.len())
+            .position(|w| w == &wire[..])
+            .expect("the block is in the manifest");
+        assert!(LayerStack::import(&m, &bufs).is_ok());
+        for n in [u32::MAX, 0x4000_0000, block.len() as u32 + 1_000_000] {
+            let mut hostile = m.clone();
+            hostile[at..at + 4].copy_from_slice(&n.to_le_bytes());
+            assert!(LayerStack::import(&hostile, &bufs).is_err(), "count {n}");
+        }
+        // The shared reader of every float list holds the count to the
+        // bytes that are left.
+        let mut bytes = u32::MAX.to_le_bytes().to_vec();
+        bytes.extend_from_slice(&[0u8; 64]);
+        assert!(f32s(&mut R { b: &bytes, at: 0 }).is_err());
+        let mut bytes = 17u32.to_le_bytes().to_vec();
+        bytes.extend_from_slice(&[0u8; 64]);
+        assert!(f32s(&mut R { b: &bytes, at: 0 }).is_err());
+        let mut bytes = 16u32.to_le_bytes().to_vec();
+        bytes.extend_from_slice(&[0u8; 64]);
+        assert_eq!(
+            f32s(&mut R { b: &bytes, at: 0 }).expect("16 floats").len(),
+            16
+        );
     }
 
     #[test]
