@@ -28,7 +28,7 @@
 //! extraction lives in `paged-scene`; this crate stays focused on ZIP+XML
 //! plumbing.
 
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor};
 
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -43,6 +43,7 @@ pub mod style_lists;
 pub mod styles;
 mod util;
 pub mod xml_structure;
+pub mod zip_budget;
 
 pub use designmap::{
     parse_designmap, Bookmark, ColorSettings, DesignMap, DocumentPreference, Hyperlink,
@@ -80,7 +81,7 @@ pub use styles::{
     ResolvedCharacter, ResolvedObject, ResolvedParagraph, ResolvedTable, StripeDef, StrokeStyleDef,
     StrokeStyleKind, StyleSheet, TOCStyleDef, TOCStyleEntryDef, TableStyleDef,
 };
-pub use util::{decode_aid_escapes, parse_flag, parse_tint};
+pub use util::{decode_aid_escapes, decode_attr_value, parse_flag, parse_tint};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
@@ -94,6 +95,10 @@ pub enum ParseError {
     Zip(#[from] zip::result::ZipError),
     #[error("xml: {0}")]
     Xml(#[from] quick_xml::Error),
+    /// The package asks for more memory, or lists more entries, than a
+    /// read allows (a decompression bomb, usually).
+    #[error("package too large: {0}")]
+    Budget(#[from] zip_budget::BudgetError),
 }
 
 /// The raw IDML source archive — decompressed entries held in memory (IDML
@@ -119,8 +124,21 @@ pub struct SourceArchive {
 /// Open an IDML source archive from raw bytes — unzips the archive and confirms
 /// the mimetype, retaining `designmap.xml` bytes for the scene layer to parse.
 /// (De-inherented from `Container::open` — N7.)
+///
+/// The read is held to the default [`zip_budget::ReadLimits`]; bytes that
+/// are not a zip, a truncated archive and a decompression bomb are errors,
+/// never a panic.
 pub fn open_source_archive(bytes: &[u8]) -> Result<SourceArchive, ParseError> {
+    open_source_archive_with(bytes, zip_budget::ReadLimits::default())
+}
+
+/// [`open_source_archive`] under the caller's limits.
+pub fn open_source_archive_with(
+    bytes: &[u8],
+    limits: zip_budget::ReadLimits,
+) -> Result<SourceArchive, ParseError> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes))?;
+    let mut budget = zip_budget::ReadBudget::open(&zip, bytes.len() as u64, limits)?;
     let mut entries = std::collections::BTreeMap::<String, Bytes>::new();
 
     for i in 0..zip.len() {
@@ -129,8 +147,8 @@ pub fn open_source_archive(bytes: &[u8]) -> Result<SourceArchive, ParseError> {
             continue;
         }
         let name = entry.name()?.into_owned();
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut buf)?;
+        let declared = entry.size();
+        let buf = budget.read::<ParseError>(&name, declared, &mut entry)?;
         entries.insert(name, Bytes::from(buf));
     }
 

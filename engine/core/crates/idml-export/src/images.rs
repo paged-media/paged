@@ -188,12 +188,34 @@ impl LinkCollector {
 /// segment, percent-decoded (InDesign writes `CODE%201.jpg` for the file
 /// `CODE 1.jpg`). Shared with the loss ledger so both sides name the
 /// same file.
+///
+/// The result is always ONE name inside the directory it is written to.
+/// A link is document data, and the caller joins this name onto its link
+/// base, so a name that could walk out of it (`..`, a separator hidden
+/// behind `%2F`, a drive prefix) is made harmless here: see
+/// [`safe_file_name`].
 pub fn link_file_name(uri: &str) -> String {
     // A relative `file:` URI (`file:photo.png`) has no slash before
     // its name; the scheme is not part of it.
     let path = uri.strip_prefix("file:").unwrap_or(uri);
     let tail = path.rsplit(['/', '\\']).next().unwrap_or(path);
-    percent_decode(tail)
+    safe_file_name(&percent_decode(tail))
+}
+
+/// `name` as a single file name: the part after the last separator the
+/// percent-decoding may have revealed, without control characters or the
+/// `:` of a drive or stream prefix, and never empty, `.` or `..`.
+fn safe_file_name(name: &str) -> String {
+    let tail = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let cleaned: String = tail
+        .chars()
+        .map(|c| if c == ':' || c.is_control() { '_' } else { c })
+        .collect();
+    if cleaned.chars().all(|c| c == '.' || c == ' ') {
+        // Empty, `.`, `..` and their kin name no file.
+        return "link".to_string();
+    }
+    cleaned
 }
 
 /// Percent-encode a path for a `file:` URI the way InDesign spells it:
@@ -242,9 +264,20 @@ fn percent_decode(s: &str) -> String {
 /// A frame id as a file stem: `/` (a `Rectangle/u12`-style id) → `_`,
 /// like the story entry names.
 fn sanitize_file_stem(id: &str) -> String {
-    id.chars()
-        .map(|c| if c == '/' || c == '\\' { '_' } else { c })
-        .collect()
+    let stem: String = id
+        .chars()
+        .map(|c| {
+            if matches!(c, '/' | '\\' | ':') || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if stem.chars().all(|c| c == '.' || c == ' ') {
+        return "image".to_string();
+    }
+    stem
 }
 
 /// The file extension for an encoded image, from its magic bytes —
@@ -1011,6 +1044,86 @@ fn rewrite_placed_children(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A link is document data, and its file name is joined onto the
+    /// link base: whatever the URI says, the name stays one segment
+    /// inside that directory.
+    #[test]
+    fn a_link_name_never_leaves_the_link_directory() {
+        // Ordinary links are untouched.
+        assert_eq!(
+            link_file_name("file:/Users/x/Links/CODE%201.jpg"),
+            "CODE 1.jpg"
+        );
+        assert_eq!(link_file_name("assets/photo.png"), "photo.png");
+        assert_eq!(link_file_name("file:photo.png"), "photo.png");
+        assert_eq!(link_file_name("C:\\Links\\logo.psd"), "logo.psd");
+        // Traversal, plain and hidden behind percent-encoding.
+        for (uri, want) in [
+            ("../../etc/passwd", "passwd"),
+            ("file:///etc/passwd", "passwd"),
+            ("assets/..", "link"),
+            ("..", "link"),
+            (".", "link"),
+            ("", "link"),
+            ("assets/", "link"),
+            ("assets/%2E%2E", "link"),
+            ("assets/..%2F..%2F..%2Fetc%2Fpasswd", "passwd"),
+            ("assets/..%5C..%5Cwin.ini", "win.ini"),
+            ("assets/%2Fetc%2Fpasswd", "passwd"),
+            ("assets/C%3Aboot.ini", "C_boot.ini"),
+            ("assets/a%00b.png", "a_b.png"),
+            ("assets/%2E%2E%2F", "link"),
+        ] {
+            let name = link_file_name(uri);
+            assert_eq!(name, want, "{uri}");
+        }
+        for uri in [
+            "../../etc/passwd",
+            "assets/..%2F..%2Fx",
+            "..",
+            "%2E%2E",
+            "/abs/olute",
+            "a%2F..%2F..",
+            "x%5C..%5C..",
+        ] {
+            let name = link_file_name(uri);
+            assert!(!name.is_empty(), "{uri}");
+            assert!(name != "." && name != "..", "{uri} -> {name}");
+            assert!(!name.contains(['/', '\\', ':', '\0']), "{uri} -> {name}");
+        }
+    }
+
+    /// The same through the collector: the files it reports, and the
+    /// URIs it writes, all sit directly under the base.
+    #[test]
+    fn exported_links_sit_directly_under_the_base() {
+        let mut links = LinkCollector::new(Some("/out/Links"), false);
+        let hostile = [
+            "../../../etc/passwd",
+            "assets/..%2F..%2Fsecret.png",
+            "..",
+            "/etc/shadow",
+        ];
+        for uri in hostile {
+            let written = links.uri_for_link(uri, None);
+            let tail = written
+                .strip_prefix("file:/out/Links/")
+                .expect("under the base");
+            assert!(!tail.contains('/') && !tail.contains(".."), "{written}");
+        }
+        let minted = links
+            .uri_for_bytes("../../u1", b"\x89PNG\r\n\x1a\n")
+            .expect("png");
+        assert!(minted.starts_with("file:/out/Links/"), "{minted}");
+        for link in links.into_links() {
+            let name = &link.file_name;
+            assert!(
+                !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':']),
+                "{name}"
+            );
+        }
+    }
 
     #[test]
     fn header_dimensions_are_read_for_the_common_formats() {

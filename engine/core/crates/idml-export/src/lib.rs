@@ -187,6 +187,10 @@ pub enum WriteError {
     Zip(#[from] zip::result::ZipError),
     #[error("i/o while assembling the package: {0}")]
     Io(#[from] std::io::Error),
+    /// The source package asks for more memory, or lists more entries,
+    /// than a read allows (a decompression bomb, usually).
+    #[error("source package too large: {0}")]
+    Budget(#[from] idml_import::zip_budget::BudgetError),
     #[error("xml rewrite of {entry}: {source}")]
     Rewrite {
         entry: String,
@@ -499,6 +503,13 @@ pub(crate) fn write_package(
     let with_media = media_labels(doc);
     let doc = with_media.as_ref().unwrap_or(doc);
     let mut src = zip::ZipArchive::new(Cursor::new(original))?;
+    // Refuse a source that lists too many entries or declares more than a
+    // read may hold, before any part is inflated.
+    idml_import::zip_budget::ReadBudget::open(
+        &src,
+        original.len() as u64,
+        idml_import::zip_budget::ReadLimits::default(),
+    )?;
     // The files every placed image's `<Link>` will point at (empty
     // without a link base — see `images`).
     // A pure `.idml` with no link base embeds every picture's bytes
@@ -1427,9 +1438,19 @@ fn entry_bytes<R: Read + std::io::Seek>(
         Err(zip::result::ZipError::FileNotFound) => return Ok(None),
         Err(e) => return Err(e.into()),
     };
-    let mut buf = Vec::with_capacity(entry.size() as usize);
-    entry.read_to_end(&mut buf)?;
-    Ok(Some(buf))
+    let declared = entry.size();
+    read_bounded(path, declared, &mut entry).map(Some)
+}
+
+/// One entry's bytes, read under the default limits
+/// ([`idml_import::zip_budget`]): the header's declared size is never
+/// trusted for the allocation, and an entry past the limit is an error.
+pub(crate) fn read_bounded(
+    name: &str,
+    declared: u64,
+    entry: impl Read,
+) -> Result<Vec<u8>, WriteError> {
+    idml_import::zip_budget::ReadBudget::for_entry().read::<WriteError>(name, declared, entry)
 }
 
 /// Prepare the designmap pass's view of the model: sections with their

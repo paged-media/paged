@@ -93,7 +93,7 @@ fn self_of(e: &BytesStart) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == b"Self")
-        .and_then(|a| std::str::from_utf8(&a.value).ok().map(|s| s.to_string()))
+        .and_then(|a| idml_import::decode_attr_value(&a.value).map(|v| v.into_owned()))
 }
 
 fn raw_of(e: &BytesStart, key: &[u8]) -> Option<Vec<u8>> {

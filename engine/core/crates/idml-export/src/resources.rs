@@ -61,7 +61,7 @@ fn attr_value(e: &BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key)
-        .and_then(|a| std::str::from_utf8(&a.value).ok().map(|s| s.to_string()))
+        .and_then(|a| idml_import::decode_attr_value(&a.value).map(|v| v.into_owned()))
 }
 
 /// Emit a self-closing element from `(key, value)` pairs (values
@@ -163,13 +163,7 @@ fn write_gradient(
     writer: &mut Writer<Cursor<Vec<u8>>>,
     g: &GradientEntry,
 ) -> Result<(), quick_xml::Error> {
-    let kind = match g.kind {
-        GradientKind::Radial => "Radial",
-        // Linear is the IDML default for an unknown / linear type. IDML
-        // has no conic gradient: it goes out linear, and the canvas's
-        // export losses name it (engine ADR 1007).
-        GradientKind::Linear | GradientKind::Conic | GradientKind::Unknown => "Linear",
-    };
+    let kind = gradient_type(g.kind);
     let mut attrs: Vec<(&str, String)> = vec![("Self", g.self_id.clone())];
     if let Some(name) = &g.name {
         attrs.push(("Name", name.clone()));
@@ -180,6 +174,25 @@ fn write_gradient(
         start.push_attribute((k.as_bytes(), escape_attr(v).as_bytes()));
     }
     writer.write_event(Event::Start(start))?;
+    write_gradient_stops(writer, g)?;
+    writer.write_event(Event::End(quick_xml::events::BytesEnd::new("Gradient")))?;
+    Ok(())
+}
+
+/// The `Type` a gradient kind is written as. Linear is the IDML default
+/// for an unknown / linear type. IDML has no conic gradient: it goes out
+/// linear, and the canvas's export losses name it (engine ADR 1007).
+fn gradient_type(kind: GradientKind) -> &'static str {
+    match kind {
+        GradientKind::Radial => "Radial",
+        GradientKind::Linear | GradientKind::Conic | GradientKind::Unknown => "Linear",
+    }
+}
+
+fn write_gradient_stops(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    g: &GradientEntry,
+) -> Result<(), quick_xml::Error> {
     for s in &g.stops {
         let mut sattrs: Vec<(&str, String)> = vec![
             ("StopColor", s.stop_color.clone()),
@@ -190,8 +203,133 @@ fn write_gradient(
         }
         emit_empty(writer, "GradientStop", &sattrs)?;
     }
-    writer.write_event(Event::End(quick_xml::events::BytesEnd::new("Gradient")))?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------
+// Edits to swatches the source already declares
+// ---------------------------------------------------------------------
+//
+// A swatch the source declares passes through verbatim, which is right
+// until the model CHANGES it (`EditSwatch`, a renamed swatch, a theme
+// that recolours it, a gradient's stops): the export then carried the
+// old colour, and every user of the swatch reverted on the next open.
+// Each attribute is compared with what the source says, read the way
+// the parser reads it, and only one that differs is written, so a
+// swatch nobody edited keeps its bytes.
+
+/// The attributes of a source `<Color>` / `<Tint>` the model no longer
+/// agrees with, as `(name, value to write)`. Empty when the element
+/// still says what the model holds.
+fn color_edits(e: &BytesStart, c: &ColorEntry, is_tint: bool) -> Vec<(&'static str, String)> {
+    use idml_import::graphic::{ColorModel, ColorSpace};
+    let channels = |key: &[u8]| -> Vec<f32> {
+        attr_value(e, key)
+            .map(|s| {
+                s.split_whitespace()
+                    .filter_map(|t| t.parse::<f32>().ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut out: Vec<(&'static str, String)> = Vec::new();
+    if let Some(name) = &c.name {
+        if attr_value(e, b"Name").as_ref() != Some(name) {
+            out.push(("Name", name.clone()));
+        }
+    }
+    // A `<Tint>` that spells no channels of its own borrows them, its
+    // space and its spot model from the base colour when it is read, so
+    // what the model holds there is the BASE's, not this element's to
+    // repeat.
+    let src_value = channels(b"ColorValue");
+    let own_channels = !(is_tint && src_value.is_empty());
+    if own_channels {
+        let src_space = attr_value(e, b"Space").map(|s| ColorSpace::from_attr(&s));
+        if c.space != ColorSpace::Unknown && src_space != Some(c.space) {
+            out.push(("Space", c.space.as_attr().to_string()));
+        }
+        if !c.value.is_empty() && c.value != src_value {
+            out.push(("ColorValue", format_color_value(&c.value)));
+        }
+    }
+    if !is_tint {
+        let src_model = attr_value(e, b"Model")
+            .map(|s| ColorModel::from_attr(&s))
+            .unwrap_or(ColorModel::Process);
+        if c.model != ColorModel::Unknown && c.model != src_model {
+            out.push(("Model", c.model.as_attr().to_string()));
+        }
+    }
+    let src_alt = channels(b"AlternateColorValue");
+    if !(is_tint && src_alt.is_empty()) {
+        if let Some(alt) = c.alternate_space.filter(|a| *a != ColorSpace::Unknown) {
+            let src = attr_value(e, b"AlternateSpace").map(|s| ColorSpace::from_attr(&s));
+            if src != Some(alt) {
+                out.push(("AlternateSpace", alt.as_attr().to_string()));
+            }
+            if !c.alternate_value.is_empty() && c.alternate_value != src_alt {
+                out.push((
+                    "AlternateColorValue",
+                    format_color_value(&c.alternate_value),
+                ));
+            }
+        }
+    }
+    // `-1` is IDML's "no swatch-level tint", which the parser reads as
+    // `None` along with anything out of range.
+    let src_tint = attr_value(e, b"TintValue")
+        .and_then(|s| s.parse::<f32>().ok())
+        .filter(|v| (0.0..=100.0).contains(v));
+    if c.tint != src_tint {
+        out.push(("TintValue", c.tint.map_or("-1".to_string(), format_f32)));
+    }
+    out
+}
+
+/// A source element's start tag with `edits` applied: an attribute it
+/// has is rewritten in place, one it lacks is appended.
+fn apply_edits(
+    e: &BytesStart,
+    edits: &[(&'static str, String)],
+) -> Result<BytesStart<'static>, quick_xml::Error> {
+    let extras: Vec<(&str, String)> = edits.iter().map(|(k, v)| (*k, v.clone())).collect();
+    crate::rewrite::patch_start(
+        e,
+        |key, _| {
+            edits
+                .iter()
+                .find(|(k, _)| k.as_bytes() == key)
+                .map(|(_, v)| crate::rewrite::Patch::Set(v.clone()))
+        },
+        &extras,
+    )
+}
+
+/// The start-tag attributes of a source `<Gradient>` the model no longer
+/// agrees with. `source` is the gradient as the parser read it.
+fn gradient_edits(source: &GradientEntry, g: &GradientEntry) -> Vec<(&'static str, String)> {
+    let mut out: Vec<(&'static str, String)> = Vec::new();
+    if let Some(name) = &g.name {
+        if source.name.as_ref() != Some(name) {
+            out.push(("Name", name.clone()));
+        }
+    }
+    if gradient_type(source.kind) != gradient_type(g.kind) {
+        out.push(("Type", gradient_type(g.kind).to_string()));
+    }
+    out
+}
+
+/// Whether the model's stops are still the ones the source spells
+/// (colour reference, location, midpoint: all IDML holds of a stop).
+fn same_stops(source: &GradientEntry, g: &GradientEntry) -> bool {
+    source.stops.len() == g.stops.len()
+        && source.stops.iter().zip(&g.stops).all(|(a, b)| {
+            a.stop_color == b.stop_color
+                && a.location_pct == b.location_pct
+                && a.midpoint_pct == b.midpoint_pct
+        })
 }
 
 /// Rewrite `Resources/Graphic.xml` so every model `<Color>` / `<Gradient>`
@@ -253,11 +391,38 @@ pub fn patch_graphic_with(
     let mut seen_gradients: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut seen_inks: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // The source's gradients as the parser reads them, to tell an edited
+    // one from an untouched one. A source the parser cannot read keeps
+    // every gradient as it is.
+    let source_gradients = idml_import::graphic::parse_graphic(original)
+        .map(|g| g.gradients)
+        .unwrap_or_default();
+    // The model gradient whose stops replace the open source
+    // `<Gradient>`'s, and whether they have been written yet.
+    let mut restopping: Option<(&GradientEntry, bool)> = None;
+    // Depth inside a source `<GradientStop>` being dropped (one that is
+    // not self-closing).
+    let mut dropped_stop_depth = 0usize;
+
     loop {
         let ev = reader.read_event_into(&mut buf)?;
+        if dropped_stop_depth > 0 {
+            match ev {
+                Event::Eof => break,
+                Event::Start(_) => dropped_stop_depth += 1,
+                Event::End(_) => dropped_stop_depth -= 1,
+                _ => {}
+            }
+            buf.clear();
+            continue;
+        }
+        let is_empty = matches!(ev, Event::Empty(_));
         match ev {
             Event::Eof => break,
             Event::Start(ref e) | Event::Empty(ref e) => {
+                // The element to write in place of the source's, when
+                // the model edited it.
+                let mut edited: Option<BytesStart<'static>> = None;
                 match e.name().as_ref() {
                     // `<Tint>` counts as a colour entry: it IS one, in
                     // the spelling IDML uses for a named tint of another
@@ -268,9 +433,15 @@ pub fn patch_graphic_with(
                     // the `<Tint … BaseColor>` InDesign reads and once
                     // as the `<Color … TintValue>` it discards, and
                     // which of the two Adobe honours is not ours to say.
-                    b"Color" | b"Tint" => {
+                    name @ (b"Color" | b"Tint") => {
                         if let Some(id) = attr_value(e, b"Self") {
                             seen_paper |= id == "Color/Paper";
+                            if let Some(c) = palette.colors.get(&id) {
+                                let edits = color_edits(e, c, name == b"Tint");
+                                if !edits.is_empty() {
+                                    edited = Some(apply_edits(e, &edits)?);
+                                }
+                            }
                             seen_colors.insert(id);
                         }
                     }
@@ -280,7 +451,45 @@ pub fn patch_graphic_with(
                     }
                     b"Gradient" => {
                         if let Some(id) = attr_value(e, b"Self") {
+                            if let (Some(g), Some(source)) =
+                                (palette.gradients.get(&id), source_gradients.get(&id))
+                            {
+                                let edits = gradient_edits(source, g);
+                                let restop = !same_stops(source, g);
+                                if restop && is_empty {
+                                    // `<Gradient/>` gains stops: it opens.
+                                    writer.write_event(Event::Start(apply_edits(e, &edits)?))?;
+                                    write_gradient_stops(&mut writer, g)?;
+                                    writer.write_event(Event::End(
+                                        quick_xml::events::BytesEnd::new("Gradient"),
+                                    ))?;
+                                    seen_gradients.insert(id);
+                                    buf.clear();
+                                    continue;
+                                }
+                                if restop {
+                                    restopping = Some((g, false));
+                                }
+                                if !edits.is_empty() {
+                                    edited = Some(apply_edits(e, &edits)?);
+                                }
+                            }
                             seen_gradients.insert(id);
+                        }
+                    }
+                    b"GradientStop" => {
+                        if let Some((g, written)) = restopping.as_mut() {
+                            // The model's stops stand where the source's
+                            // first one stood; the source's are dropped.
+                            if !*written {
+                                write_gradient_stops(&mut writer, *g)?;
+                                *written = true;
+                            }
+                            if !is_empty {
+                                dropped_stop_depth = 1;
+                            }
+                            buf.clear();
+                            continue;
                         }
                     }
                     b"Ink" => {
@@ -289,6 +498,17 @@ pub fn patch_graphic_with(
                         }
                     }
                     _ => {}
+                }
+                match edited {
+                    Some(start) if is_empty => writer.write_event(Event::Empty(start))?,
+                    Some(start) => writer.write_event(Event::Start(start))?,
+                    None => writer.write_event(ev.borrow())?,
+                }
+            }
+            Event::End(ref e) if e.name().as_ref() == b"Gradient" => {
+                if let Some((g, false)) = restopping.take() {
+                    // The source gradient had no stop to stand in for.
+                    write_gradient_stops(&mut writer, g)?;
                 }
                 writer.write_event(ev.borrow())?;
             }

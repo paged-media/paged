@@ -346,6 +346,12 @@ file = "crates/idml-export/src/resources.rs"
 name = "write_gradient"
 elements = ["Gradient"]
 
+# An edited swatch's changed attributes, patched onto its source element.
+[[fn]]
+file = "crates/idml-export/src/resources.rs"
+name = "color_edits"
+elements = ["Color", "Tint"]
+
 # The page setup `patch_document_preference` writes onto the element.
 [[fn]]
 file = "crates/idml-export/src/preferences.rs"

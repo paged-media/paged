@@ -44,8 +44,9 @@
 //! same way in a later phase.
 
 use std::collections::BTreeMap;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Write};
 
+use idml_import::zip_budget::{ReadBudget, ReadLimits};
 use paged_scene::Document;
 
 use crate::WriteError;
@@ -76,6 +77,7 @@ use paged_pixel::{fnv1a_64_update as fnv1a, FNV1A_64_OFFSET as FNV_OFFSET};
 /// its name + length) so a re-zip that reorders entries hashes the same.
 pub fn idml_parts_hash(package: &[u8]) -> Result<String, WriteError> {
     let mut zip = zip::ZipArchive::new(Cursor::new(package))?;
+    let mut budget = ReadBudget::open(&zip, package.len() as u64, ReadLimits::default())?;
     let mut parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     for i in 0..zip.len() {
         let mut e = zip.by_index(i)?;
@@ -86,8 +88,8 @@ pub fn idml_parts_hash(package: &[u8]) -> Result<String, WriteError> {
         if name == MANIFEST_NAME || name == "mimetype" || name.starts_with(PAGED_PREFIX) {
             continue;
         }
-        let mut buf = Vec::with_capacity(e.size() as usize);
-        e.read_to_end(&mut buf)?;
+        let declared = e.size();
+        let buf = budget.read::<WriteError>(&name, declared, &mut e)?;
         parts.insert(name, buf);
     }
     let mut h = FNV_OFFSET;
@@ -135,9 +137,8 @@ fn read_entry(package: &[u8], name: &str) -> Result<Option<Vec<u8>>, WriteError>
         return Ok(None);
     }
     let mut e = zip.by_name(name)?;
-    let mut buf = Vec::with_capacity(e.size() as usize);
-    e.read_to_end(&mut buf)?;
-    Ok(Some(buf))
+    let declared = e.size();
+    crate::read_bounded(name, declared, &mut e).map(Some)
 }
 
 /// Build the `manifest.json` body by MERGING the core-owned fields into the
@@ -219,6 +220,7 @@ pub fn write_paged(
     let mut final_parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     {
         let mut zip = zip::ZipArchive::new(Cursor::new(&idml))?;
+        let mut budget = ReadBudget::open(&zip, idml.len() as u64, ReadLimits::default())?;
         for i in 0..zip.len() {
             let mut e = zip.by_index(i)?;
             if e.is_dir() {
@@ -228,8 +230,8 @@ pub fn write_paged(
             if !name.starts_with(PAGED_PREFIX) || new_parts.contains_key(&name) {
                 continue; // not a plugin part, or about to be replaced by a new one
             }
-            let mut buf = Vec::with_capacity(e.size() as usize);
-            e.read_to_end(&mut buf)?;
+            let declared = e.size();
+            let buf = budget.read::<WriteError>(&name, declared, &mut e)?;
             final_parts.insert(name, buf);
         }
     }

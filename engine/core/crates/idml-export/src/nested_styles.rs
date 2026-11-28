@@ -155,7 +155,7 @@ fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key)
-        .and_then(|a| std::str::from_utf8(&a.value).ok().map(str::to_string))
+        .and_then(|a| idml_import::decode_attr_value(&a.value).map(|v| v.into_owned()))
 }
 
 fn contains(hay: &[u8], needle: &[u8]) -> bool {

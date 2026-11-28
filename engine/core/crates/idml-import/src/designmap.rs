@@ -848,6 +848,14 @@ fn read_footnote_option_properties(
                         .unwrap_or_default(),
                 );
             }
+            // An entity reference is its own event: without it a swatch
+            // named `R&D` read as `RD`.
+            Event::GeneralRef(r) if field.is_some() => {
+                let name = String::from_utf8_lossy(r.as_ref());
+                if let Ok(resolved) = quick_xml::escape::unescape(&format!("&{name};")) {
+                    text.push_str(&resolved);
+                }
+            }
             Event::End(_) if field.is_some() => {
                 let value = text.trim();
                 if !value.is_empty() {

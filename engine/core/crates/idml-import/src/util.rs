@@ -18,21 +18,43 @@
 
 //! Tiny shared helpers used by every per-format parser in this crate.
 
-/// Read an XML attribute by key. Returns `None` when absent or
-/// non-UTF-8. Each parser submodule used to define its own copy of
-/// this — `lib.rs` re-exports it here so they all share one.
+/// An attribute's value as the document means it: the bytes between the
+/// quotes with the XML entity and character references resolved
+/// (`&amp;` → `&`, `&#x27;` → `'`).
+///
+/// This is the ONE decoding the model's strings go through. A style id, a
+/// swatch, font or layer name, a URL: the model holds the text, never its
+/// XML spelling, and the writer escapes it once on the way out. Holding the
+/// spelling instead made every save escape it a second time.
+///
+/// A value without `&` is returned as it stands (the common case, and no
+/// allocation). A value whose references do not resolve (a bare `&`, an
+/// entity XML does not define) is kept as written rather than dropped.
+/// `None` only for bytes that are not UTF-8.
+pub fn decode_attr_value(raw: &[u8]) -> Option<std::borrow::Cow<'_, str>> {
+    let text = std::str::from_utf8(raw).ok()?;
+    if !text.contains('&') {
+        return Some(std::borrow::Cow::Borrowed(text));
+    }
+    Some(quick_xml::escape::unescape(text).unwrap_or(std::borrow::Cow::Borrowed(text)))
+}
+
+/// Read an XML attribute by key, decoded ([`decode_attr_value`]). Returns
+/// `None` when absent or non-UTF-8. Each parser submodule used to define
+/// its own copy of this — `lib.rs` re-exports it here so they all share
+/// one.
 pub(crate) fn attr(e: &quick_xml::events::BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key)
-        .and_then(|a| std::str::from_utf8(&a.value).ok().map(str::to_string))
+        .and_then(|a| decode_attr_value(&a.value).map(|v| v.into_owned()))
 }
 
-/// Like [`attr`], but XML-NORMALIZES the value (entity unescaping) (`&quot;` → `"`,
-/// `&amp;` → `&`, …). Required for free-text carriers — Label
-/// `KeyValuePair` values hold JSON, which InDesign serialises with
-/// escaped quotes. The plain [`attr`] stays raw because the numeric /
-/// enum attributes it reads never contain entities.
+/// Like [`attr`], but with XML attribute-value NORMALIZATION on top of the
+/// decoding: a literal tab or line break in the value reads as a space,
+/// while `&#xa;` stays a line break. Required for free-text carriers —
+/// Label `KeyValuePair` values hold JSON, which InDesign serialises with
+/// escaped quotes and line-break references.
 pub(crate) fn attr_unescaped(e: &quick_xml::events::BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()

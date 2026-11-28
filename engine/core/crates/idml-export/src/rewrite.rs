@@ -242,7 +242,6 @@
 
 use std::io::Cursor;
 
-use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
@@ -423,7 +422,18 @@ where
                 content.push(b' ');
                 content.extend_from_slice(&key);
                 content.extend_from_slice(b"=\"");
-                content.extend_from_slice(escape_attr(&v).as_bytes());
+                // The model holds DECODED text (`idml_import::decode_attr_value`),
+                // so a value the source already says keeps the source's
+                // spelling of it: `&apos;` and `&#39;` are the same text,
+                // and re-escaping an untouched reference our way would
+                // change bytes nobody edited.
+                let unchanged = idml_import::decode_attr_value(attr.value.as_ref())
+                    .is_some_and(|decoded| decoded == v);
+                if unchanged {
+                    content.extend_from_slice(attr.value.as_ref());
+                } else {
+                    content.extend_from_slice(escape_attr(&v).as_bytes());
+                }
                 content.push(b'"');
             }
             Some(Patch::Remove) => { /* dropped */ }
@@ -5373,10 +5383,9 @@ fn item_layer_patch(raw: &[u8], model: &Option<String>) -> Patch {
 /// item. So a CLEARED reference restores that sentinel rather than
 /// dropping the attribute.
 ///
-/// The parser reads this value RAW (`util::attr`, no entity decoding),
-/// so an untouched reference IS the on-disk bytes — `Keep` them instead
-/// of round-tripping them through `escape_attr`, which would turn a
-/// source `&amp;` into `&amp;amp;` and break byte-identity.
+/// An untouched reference keeps the source's bytes: [`patch_start`]
+/// writes a `Set` whose text the source already says in the source's
+/// own spelling.
 fn applied_object_style_patch(raw: &[u8], v: &Option<String>) -> Patch {
     match v {
         Some(s) if s.as_bytes() == raw => Patch::Keep,
@@ -8785,7 +8794,7 @@ pub(crate) fn attr_value(e: &BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key)
-        .and_then(|Attribute { value, .. }| std::str::from_utf8(&value).ok().map(|s| s.to_string()))
+        .and_then(|a| idml_import::decode_attr_value(&a.value).map(|v| v.into_owned()))
 }
 
 // ---------------------------------------------------------------------

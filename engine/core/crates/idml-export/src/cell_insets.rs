@@ -100,7 +100,7 @@ fn with_insets(
         .attributes()
         .flatten()
         .find(|a| a.key.as_ref() == b"Self")
-        .and_then(|a| std::str::from_utf8(&a.value).ok().map(|s| s.to_string()));
+        .and_then(|a| idml_import::decode_attr_value(&a.value).map(|v| v.into_owned()));
     let values = id.as_deref().and_then(|id| known.get(id));
     let mut out = e.to_owned();
     for k in add {

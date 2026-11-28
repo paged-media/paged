@@ -66,7 +66,7 @@ fn attr_value(e: &BytesStart, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key)
-        .and_then(|a| std::str::from_utf8(&a.value).ok().map(|s| s.to_string()))
+        .and_then(|a| idml_import::decode_attr_value(&a.value).map(|v| v.into_owned()))
 }
 
 fn has_attr(e: &BytesStart, key: &[u8]) -> bool {
@@ -84,7 +84,8 @@ fn style_or_regular(style: Option<&str>) -> String {
 
 fn with_font_style(e: &BytesStart, style: &str) -> BytesStart<'static> {
     let mut owned = e.to_owned();
-    owned.push_attribute((FONT_STYLE, style.as_bytes()));
+    // Bytes go out as given, so the style (model text) is escaped here.
+    owned.push_attribute((FONT_STYLE, crate::rewrite::escape_attr(style).as_bytes()));
     owned
 }
 

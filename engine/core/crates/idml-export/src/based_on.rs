@@ -66,9 +66,8 @@ fn without_based_on(e: &BytesStart) -> (BytesStart<'static>, Option<String>) {
     let mut out = BytesStart::new(String::from_utf8_lossy(e.name().as_ref()).into_owned());
     for a in e.attributes().flatten() {
         if a.key.as_ref() == BASED_ON {
-            parent = std::str::from_utf8(&a.value)
-                .ok()
-                .map(|v| v.to_string())
+            parent = idml_import::decode_attr_value(&a.value)
+                .map(|v| v.into_owned())
                 .filter(|v| !v.trim().is_empty());
         } else {
             out.push_attribute((a.key.as_ref(), a.value.as_ref()));

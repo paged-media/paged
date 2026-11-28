@@ -299,7 +299,10 @@ impl TabField {
 
 pub fn parse_stylesheet(xml: &[u8]) -> Result<StyleSheet, ParseError> {
     let mut reader = quick_xml::Reader::from_reader(xml);
-    reader.config_mut().trim_text(true);
+    // Not trimmed by the reader: a typed property's text arrives in
+    // pieces around each entity reference, and trimming each piece would
+    // close the spaces in `A &amp; B`. Every text arm trims its own whole.
+    reader.config_mut().trim_text(false);
 
     let mut out = StyleSheet::default();
     let mut buf = Vec::new();
@@ -343,8 +346,187 @@ pub fn parse_stylesheet(xml: &[u8]) -> Result<StyleSheet, ParseError> {
         std::collections::BTreeMap::new();
     // Paragraph styles that spelled `<AllNestedStyles>` (even empty).
     let mut spelled_nested: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    // The text of the open typed property (`<AppliedFont>`, `<BasedOn>`,
+    // …), gathered until its end tag. It arrives in pieces: the reader
+    // reports an entity reference as its own event, so `Font &amp; Sons`
+    // is text, a reference, text. Taking only the first piece read the
+    // font as `Font ` and a parent style named `A & B` as `A `.
+    let mut property_text = String::new();
     loop {
-        match reader.read_event_into(&mut buf)? {
+        let event = reader.read_event_into(&mut buf)?;
+        let in_property = pending_property.is_some() && tab_field.is_none() && toc_field.is_none();
+        let gathered = match &event {
+            Event::Text(t) if in_property => {
+                property_text.push_str(
+                    &t.xml_content(quick_xml::XmlVersion::Implicit1_0)
+                        .unwrap_or_default(),
+                );
+                true
+            }
+            Event::GeneralRef(r) if in_property => {
+                let name = String::from_utf8_lossy(r.as_ref());
+                if let Ok(resolved) = quick_xml::escape::unescape(&format!("&{name};")) {
+                    property_text.push_str(&resolved);
+                }
+                true
+            }
+            _ => false,
+        };
+        if gathered {
+            drop(event);
+            buf.clear();
+            continue;
+        }
+        if matches!(event, Event::End(_)) && pending_property.is_some() {
+            let text = std::mem::take(&mut property_text).trim().to_string();
+            if text.is_empty() {
+                pending_property = None;
+            } else {
+                match (current_style, pending_property) {
+                    (Some(CurrentStyle::Paragraph), Some(prop)) => {
+                        if let Some(id) = current_paragraph_style.as_deref() {
+                            if let Some(p) = out.paragraph_styles.get_mut(id) {
+                                match prop {
+                                    CurrentProperty::AppliedFont => {
+                                        if p.font.is_none() {
+                                            p.font = Some(text);
+                                        }
+                                    }
+                                    // Read on character styles only.
+                                    CurrentProperty::MarkFace(_) => {}
+                                    CurrentProperty::BasedOn => {
+                                        if p.based_on.is_none() {
+                                            p.based_on =
+                                                Some(qualify_parent("ParagraphStyle", text));
+                                        }
+                                    }
+                                    CurrentProperty::Leading => {
+                                        if p.leading.is_none() {
+                                            p.leading = style_leading(&text);
+                                        }
+                                    }
+                                    CurrentProperty::NumberingExpression => {
+                                        if p.numbering_expression.is_none() {
+                                            p.numbering_expression = Some(text);
+                                        }
+                                    }
+                                    CurrentProperty::NumberingFormat => {
+                                        p.numbering_format = Some(text);
+                                    }
+                                    CurrentProperty::SpanSplitColumnCount => {
+                                        p.span_columns.count =
+                                            paged_model::SpanSplitColumnCount::from_idml(&text);
+                                    }
+                                    CurrentProperty::BalanceRaggedLines => {
+                                        p.line_setting.balance =
+                                            paged_model::BalanceRaggedLines::from_idml(&text);
+                                    }
+                                    CurrentProperty::KinsokuSet => {
+                                        p.kinsoku_set = Some(text);
+                                    }
+                                    // The child beats an attribute of
+                                    // ours: InDesign ignores the latter.
+                                    CurrentProperty::BulletsCharacterStyle => {
+                                        p.bullets_character_style = Some(text);
+                                    }
+                                    CurrentProperty::NumberingCharacterStyle => {
+                                        p.bullets_and_numbering_digits_character_style = Some(text);
+                                    }
+                                    CurrentProperty::BulletsTextAfter => {
+                                        if p.bullets_text_after.is_none() {
+                                            p.bullets_text_after = Some(text);
+                                        }
+                                    }
+                                    CurrentProperty::AppliedNumberingList => {
+                                        p.applied_numbering_list = match text.as_str() {
+                                            "n" | "NumberingList/n" | "" => None,
+                                            v if v.ends_with("[No numbering list]") => None,
+                                            _ => Some(text),
+                                        };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (Some(CurrentStyle::Character), Some(prop)) => {
+                        if let Some(id) = current_character_style.as_deref() {
+                            if let Some(c) = out.character_styles.get_mut(id) {
+                                match prop {
+                                    CurrentProperty::AppliedFont => {
+                                        if c.font.is_none() {
+                                            c.font = Some(text);
+                                        }
+                                    }
+                                    CurrentProperty::MarkFace(face) => {
+                                        let m = &mut c.marks;
+                                        let slot = match face {
+                                            MarkFace::RubyFont => &mut m.ruby_font,
+                                            MarkFace::RubyFontStyle => &mut m.ruby_font_style,
+                                            MarkFace::KentenFont => &mut m.kenten_font,
+                                            MarkFace::KentenFontStyle => &mut m.kenten_font_style,
+                                        };
+                                        if slot.is_none() {
+                                            *slot = Some(text);
+                                        }
+                                    }
+                                    CurrentProperty::BasedOn => {
+                                        if c.based_on.is_none() {
+                                            c.based_on =
+                                                Some(qualify_parent("CharacterStyle", text));
+                                        }
+                                    }
+                                    CurrentProperty::Leading => {
+                                        if c.leading.is_none() {
+                                            c.leading = style_leading(&text);
+                                        }
+                                    }
+                                    // NumberingExpression is paragraph-only.
+                                    CurrentProperty::NumberingExpression
+                                    | CurrentProperty::NumberingFormat
+                                    | CurrentProperty::AppliedNumberingList
+                                    | CurrentProperty::SpanSplitColumnCount
+                                    | CurrentProperty::BalanceRaggedLines
+                                    | CurrentProperty::KinsokuSet
+                                    | CurrentProperty::BulletsCharacterStyle
+                                    | CurrentProperty::NumberingCharacterStyle
+                                    | CurrentProperty::BulletsTextAfter => {}
+                                }
+                            }
+                        }
+                    }
+                    (Some(CurrentStyle::Object), Some(CurrentProperty::BasedOn)) => {
+                        if let Some(id) = current_object_style.as_deref() {
+                            if let Some(o) = out.object_styles.get_mut(id) {
+                                if o.based_on.is_none() {
+                                    o.based_on = Some(qualify_parent("ObjectStyle", text));
+                                }
+                            }
+                        }
+                    }
+                    (Some(CurrentStyle::Cell), Some(CurrentProperty::BasedOn)) => {
+                        if let Some(id) = current_cell_style.as_deref() {
+                            if let Some(c) = out.cell_styles.get_mut(id) {
+                                if c.based_on.is_none() {
+                                    c.based_on = Some(qualify_parent("CellStyle", text));
+                                }
+                            }
+                        }
+                    }
+                    (Some(CurrentStyle::Table), Some(CurrentProperty::BasedOn)) => {
+                        if let Some(id) = current_table_style.as_deref() {
+                            if let Some(t) = out.table_styles.get_mut(id) {
+                                if t.based_on.is_none() {
+                                    t.based_on = Some(qualify_parent("TableStyle", text));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                pending_property = None;
+            }
+        }
+        match event {
             Event::Start(e) => match e.name().as_ref() {
                 b"CharacterStyle" => {
                     if let Some(s) = parse_character_style(&e) {
@@ -569,161 +751,6 @@ pub fn parse_stylesheet(xml: &[u8]) -> Result<StyleSheet, ParseError> {
                     if slot.is_none() {
                         *slot = Some(text);
                     }
-                }
-            }
-            Event::Text(t) if pending_property.is_some() => {
-                let text = t
-                    .xml_content(quick_xml::XmlVersion::Implicit1_0)
-                    .map(|c| c.into_owned())
-                    .unwrap_or_default();
-                if text.is_empty() {
-                    pending_property = None;
-                } else {
-                    match (current_style, pending_property) {
-                        (Some(CurrentStyle::Paragraph), Some(prop)) => {
-                            if let Some(id) = current_paragraph_style.as_deref() {
-                                if let Some(p) = out.paragraph_styles.get_mut(id) {
-                                    match prop {
-                                        CurrentProperty::AppliedFont => {
-                                            if p.font.is_none() {
-                                                p.font = Some(text);
-                                            }
-                                        }
-                                        // Read on character styles only.
-                                        CurrentProperty::MarkFace(_) => {}
-                                        CurrentProperty::BasedOn => {
-                                            if p.based_on.is_none() {
-                                                p.based_on =
-                                                    Some(qualify_parent("ParagraphStyle", text));
-                                            }
-                                        }
-                                        CurrentProperty::Leading => {
-                                            if p.leading.is_none() {
-                                                p.leading = style_leading(&text);
-                                            }
-                                        }
-                                        CurrentProperty::NumberingExpression => {
-                                            if p.numbering_expression.is_none() {
-                                                p.numbering_expression = Some(text);
-                                            }
-                                        }
-                                        CurrentProperty::NumberingFormat => {
-                                            p.numbering_format = Some(text);
-                                        }
-                                        CurrentProperty::SpanSplitColumnCount => {
-                                            p.span_columns.count =
-                                                paged_model::SpanSplitColumnCount::from_idml(&text);
-                                        }
-                                        CurrentProperty::BalanceRaggedLines => {
-                                            p.line_setting.balance =
-                                                paged_model::BalanceRaggedLines::from_idml(&text);
-                                        }
-                                        CurrentProperty::KinsokuSet => {
-                                            p.kinsoku_set = Some(text);
-                                        }
-                                        // The child beats an attribute of
-                                        // ours: InDesign ignores the latter.
-                                        CurrentProperty::BulletsCharacterStyle => {
-                                            p.bullets_character_style = Some(text);
-                                        }
-                                        CurrentProperty::NumberingCharacterStyle => {
-                                            p.bullets_and_numbering_digits_character_style =
-                                                Some(text);
-                                        }
-                                        CurrentProperty::BulletsTextAfter => {
-                                            if p.bullets_text_after.is_none() {
-                                                p.bullets_text_after = Some(text);
-                                            }
-                                        }
-                                        CurrentProperty::AppliedNumberingList => {
-                                            p.applied_numbering_list = match text.as_str() {
-                                                "n" | "NumberingList/n" | "" => None,
-                                                v if v.ends_with("[No numbering list]") => None,
-                                                _ => Some(text),
-                                            };
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        (Some(CurrentStyle::Character), Some(prop)) => {
-                            if let Some(id) = current_character_style.as_deref() {
-                                if let Some(c) = out.character_styles.get_mut(id) {
-                                    match prop {
-                                        CurrentProperty::AppliedFont => {
-                                            if c.font.is_none() {
-                                                c.font = Some(text);
-                                            }
-                                        }
-                                        CurrentProperty::MarkFace(face) => {
-                                            let m = &mut c.marks;
-                                            let slot = match face {
-                                                MarkFace::RubyFont => &mut m.ruby_font,
-                                                MarkFace::RubyFontStyle => &mut m.ruby_font_style,
-                                                MarkFace::KentenFont => &mut m.kenten_font,
-                                                MarkFace::KentenFontStyle => {
-                                                    &mut m.kenten_font_style
-                                                }
-                                            };
-                                            if slot.is_none() {
-                                                *slot = Some(text);
-                                            }
-                                        }
-                                        CurrentProperty::BasedOn => {
-                                            if c.based_on.is_none() {
-                                                c.based_on =
-                                                    Some(qualify_parent("CharacterStyle", text));
-                                            }
-                                        }
-                                        CurrentProperty::Leading => {
-                                            if c.leading.is_none() {
-                                                c.leading = style_leading(&text);
-                                            }
-                                        }
-                                        // NumberingExpression is paragraph-only.
-                                        CurrentProperty::NumberingExpression
-                                        | CurrentProperty::NumberingFormat
-                                        | CurrentProperty::AppliedNumberingList
-                                        | CurrentProperty::SpanSplitColumnCount
-                                        | CurrentProperty::BalanceRaggedLines
-                                        | CurrentProperty::KinsokuSet
-                                        | CurrentProperty::BulletsCharacterStyle
-                                        | CurrentProperty::NumberingCharacterStyle
-                                        | CurrentProperty::BulletsTextAfter => {}
-                                    }
-                                }
-                            }
-                        }
-                        (Some(CurrentStyle::Object), Some(CurrentProperty::BasedOn)) => {
-                            if let Some(id) = current_object_style.as_deref() {
-                                if let Some(o) = out.object_styles.get_mut(id) {
-                                    if o.based_on.is_none() {
-                                        o.based_on = Some(qualify_parent("ObjectStyle", text));
-                                    }
-                                }
-                            }
-                        }
-                        (Some(CurrentStyle::Cell), Some(CurrentProperty::BasedOn)) => {
-                            if let Some(id) = current_cell_style.as_deref() {
-                                if let Some(c) = out.cell_styles.get_mut(id) {
-                                    if c.based_on.is_none() {
-                                        c.based_on = Some(qualify_parent("CellStyle", text));
-                                    }
-                                }
-                            }
-                        }
-                        (Some(CurrentStyle::Table), Some(CurrentProperty::BasedOn)) => {
-                            if let Some(id) = current_table_style.as_deref() {
-                                if let Some(t) = out.table_styles.get_mut(id) {
-                                    if t.based_on.is_none() {
-                                        t.based_on = Some(qualify_parent("TableStyle", text));
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                    pending_property = None;
                 }
             }
             Event::Empty(e) => match e.name().as_ref() {
@@ -3450,5 +3477,20 @@ mod object_style_text_frame_tests {
         assert_eq!(a.anchored_position.as_deref(), Some("Anchored"));
         assert_eq!(a.anchor_point.as_deref(), Some("TopRightAnchor"));
         assert_eq!((a.anchor_x_offset, a.anchor_y_offset), (0.0, 6.0));
+    }
+    /// A typed property's text is read whole. The reader reports an
+    /// entity reference as its own event, so a font or a parent style
+    /// whose name holds `&` arrives in pieces.
+    #[test]
+    fn a_typed_property_with_an_entity_is_read_whole() {
+        let xml = br#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup Self="g"><ParagraphStyle Self="ParagraphStyle/A &amp; B" Name="A &amp; B"/><ParagraphStyle Self="ParagraphStyle/Child" Name="Child"><Properties><BasedOn type="object">ParagraphStyle/A &amp; B</BasedOn><AppliedFont type="string">Font &amp; Sons &lt;Pro&gt; &quot;A&quot; &apos;a&apos;</AppliedFont><Leading type="unit">13</Leading></Properties></ParagraphStyle><ParagraphStyle Self="ParagraphStyle/Plain" Name="Plain"><Properties><BasedOn type="string">$ID/[No paragraph style]</BasedOn><AppliedFont type="string">Minion Pro</AppliedFont></Properties></ParagraphStyle></RootParagraphStyleGroup></idPkg:Styles>"#;
+        let sheet = parse_stylesheet(xml).expect("parse");
+        assert!(sheet.paragraph_styles.contains_key("ParagraphStyle/A & B"));
+        let child = &sheet.paragraph_styles["ParagraphStyle/Child"];
+        assert_eq!(child.based_on.as_deref(), Some("ParagraphStyle/A & B"));
+        assert_eq!(child.font.as_deref(), Some("Font & Sons <Pro> \"A\" 'a'"));
+        assert_eq!(child.leading, Some(13.0));
+        let plain = &sheet.paragraph_styles["ParagraphStyle/Plain"];
+        assert_eq!(plain.font.as_deref(), Some("Minion Pro"));
     }
 }
