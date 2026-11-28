@@ -43,8 +43,13 @@ operation failed, nothing changed".
    "problem"`). A quiet success shows nothing; a prominent one (Save, Export, Import;
    `UXI-FBK-003`) is a toast. At most three toasts; a report with the key of a live toast
    updates it and counts (`4×`) instead of stacking another, so a repeated drag failure is one
-   toast. A failure stays 8 s, a success 4 s, one with further actions 12 s, a fatal one until
-   closed. A success with the key of a Problems entry resolves it.
+   toast. A refusal (blocked, unsupported, invalid input, conflict) stays 8 s, a success 4 s,
+   one with further actions 12 s; an error (a recoverable or fatal failure) stays until closed.
+   A toast's time stands still while the pointer is over it or focus is inside it
+   (`holdToast` / `releaseToast`) and runs on with what was left. The toast region and its two
+   announcers (a polite `status`, an assertive `alert`) are in the DOM from the first render,
+   and a toast's sentence is added to one of them; the visible toast is no live region itself.
+   A success with the key of a Problems entry resolves it.
 4. **Technical detail stays behind Details** (`UXI-ASY-011`): the engine's words, a correlation
    id. The toast's words carry no stack and no internal id.
 5. **The shell's flows report here.** The warnings list under the header is gone: a flow's

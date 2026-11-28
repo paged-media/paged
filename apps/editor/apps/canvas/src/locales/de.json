@@ -1471,6 +1471,7 @@
   "app.historyPanel.shown": "Die neuesten {shown} von {total} Schritten",
   "app.historyPanel.snapshotName": "Schnappschuss {n}",
   "app.historyPanel.snapshots": "Schnappschüsse",
+  "app.historyPanel.steps": "Protokollschritte",
   "app.historyPanel.unreachable": "Nicht mehr im Protokoll dieser Sitzung",
   "app.historySteps.arrange": "Anordnen",
   "app.historySteps.changeFill": "Fläche ändern",

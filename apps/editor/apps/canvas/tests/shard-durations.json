@@ -1,0 +1,1792 @@
+{
+  "note": "Seconds of test time per (project, spec file), on one worker, from a merged CI report of editor / tests. Read by scripts/playwright-shards.mjs to balance the Playwright shards; refresh with `bun scripts/playwright-shards.mjs --update <playwright-results.json>`. It only balances: a file missing here is estimated from its test count.",
+  "source": "editor / tests run 45003104669 (main, 2026-11-22), the playwright-results artifact: Vite dev server, one worker, ubuntu-latest; plugin-surface/menus-image.spec.ts (799.3 s, 243 tests in that run) is apportioned by test count over the four files it was split into, and the specs deleted since are dropped",
+  "projects": {
+    "chromium": {
+      "actions.spec.ts": {
+        "seconds": 40.6,
+        "tests": 14
+      },
+      "active-page.spec.ts": {
+        "seconds": 10.3,
+        "tests": 2
+      },
+      "ai-assistant.spec.ts": {
+        "seconds": 10.3,
+        "tests": 2
+      },
+      "ai-new-from-brief.spec.ts": {
+        "seconds": 5.7,
+        "tests": 1
+      },
+      "ai-script.spec.ts": {
+        "seconds": 23.1,
+        "tests": 5
+      },
+      "anchored-panel.spec.ts": {
+        "seconds": 18.5,
+        "tests": 4
+      },
+      "attributes-panel.spec.ts": {
+        "seconds": 17.1,
+        "tests": 4
+      },
+      "batch-minted-pages.spec.ts": {
+        "seconds": 32.9,
+        "tests": 7
+      },
+      "bullets-panel.spec.ts": {
+        "seconds": 35.1,
+        "tests": 8
+      },
+      "canvas-chrome-ed17.spec.ts": {
+        "seconds": 21.3,
+        "tests": 4
+      },
+      "caret-type-size.spec.ts": {
+        "seconds": 8.7,
+        "tests": 2
+      },
+      "cell-fill-tint.spec.ts": {
+        "seconds": 10.6,
+        "tests": 2
+      },
+      "cell-styles-panel.spec.ts": {
+        "seconds": 4.2,
+        "tests": 1
+      },
+      "character-panel.spec.ts": {
+        "seconds": 21,
+        "tests": 5
+      },
+      "character-styles-panel.spec.ts": {
+        "seconds": 8.3,
+        "tests": 2
+      },
+      "chrome-navigation.spec.ts": {
+        "seconds": 36.1,
+        "tests": 7
+      },
+      "cockpit-panels.spec.ts": {
+        "seconds": 19.6,
+        "tests": 4
+      },
+      "color-concept2.spec.ts": {
+        "seconds": 32.8,
+        "tests": 7
+      },
+      "color-groups-panel.spec.ts": {
+        "seconds": 8.9,
+        "tests": 2
+      },
+      "color-panel.spec.ts": {
+        "seconds": 17.1,
+        "tests": 4
+      },
+      "color-wheel.spec.ts": {
+        "seconds": 24.4,
+        "tests": 5
+      },
+      "command-authoring.spec.ts": {
+        "seconds": 65,
+        "tests": 11
+      },
+      "command-palette-ranking.spec.ts": {
+        "seconds": 5.9,
+        "tests": 2
+      },
+      "comments-panel.spec.ts": {
+        "seconds": 3.6,
+        "tests": 1
+      },
+      "component-library-panel.spec.ts": {
+        "seconds": 3.7,
+        "tests": 1
+      },
+      "concept-panels.spec.ts": {
+        "seconds": 16.1,
+        "tests": 4
+      },
+      "content-grabber.spec.ts": {
+        "seconds": 12.8,
+        "tests": 3
+      },
+      "cross-spread-duplicate.spec.ts": {
+        "seconds": 14.4,
+        "tests": 3
+      },
+      "data-suite-panel.spec.ts": {
+        "seconds": 3.9,
+        "tests": 1
+      },
+      "default-font-invariant.spec.ts": {
+        "seconds": 15.5,
+        "tests": 3
+      },
+      "default-italic-face.spec.ts": {
+        "seconds": 12.4,
+        "tests": 2
+      },
+      "demo-guide.spec.ts": {
+        "seconds": 8.3,
+        "tests": 1
+      },
+      "document-map-panel.spec.ts": {
+        "seconds": 25.1,
+        "tests": 5
+      },
+      "e2e/actions-automation.spec.ts": {
+        "seconds": 30.7,
+        "tests": 5
+      },
+      "e2e/actions-batch-colour.spec.ts": {
+        "seconds": 24.8,
+        "tests": 4
+      },
+      "e2e/align-transform-each.spec.ts": {
+        "seconds": 13,
+        "tests": 2
+      },
+      "e2e/anchored-ops.spec.ts": {
+        "seconds": 14,
+        "tests": 3
+      },
+      "e2e/artboards.spec.ts": {
+        "seconds": 20.1,
+        "tests": 3
+      },
+      "e2e/asset-export.spec.ts": {
+        "seconds": 29,
+        "tests": 4
+      },
+      "e2e/assistant-proposals.spec.ts": {
+        "seconds": 18.4,
+        "tests": 3
+      },
+      "e2e/blend-modes-27.spec.ts": {
+        "seconds": 5.8,
+        "tests": 1
+      },
+      "e2e/bullets-ops.spec.ts": {
+        "seconds": 9.9,
+        "tests": 2
+      },
+      "e2e/capability-matrix.spec.ts": {
+        "seconds": 15.6,
+        "tests": 2
+      },
+      "e2e/caret-nav.spec.ts": {
+        "seconds": 51.5,
+        "tests": 9
+      },
+      "e2e/character-ops.spec.ts": {
+        "seconds": 58.2,
+        "tests": 15
+      },
+      "e2e/chrome-surface.spec.ts": {
+        "seconds": 32.3,
+        "tests": 6
+      },
+      "e2e/color-ops.spec.ts": {
+        "seconds": 18.9,
+        "tests": 4
+      },
+      "e2e/data-merge-undo.spec.ts": {
+        "seconds": 15.7,
+        "tests": 2
+      },
+      "e2e/doc-breaks.spec.ts": {
+        "seconds": 6.3,
+        "tests": 1
+      },
+      "e2e/doc-caret.spec.ts": {
+        "seconds": 6.5,
+        "tests": 1
+      },
+      "e2e/doc-columns.spec.ts": {
+        "seconds": 14.7,
+        "tests": 2
+      },
+      "e2e/doc-file-entry.spec.ts": {
+        "seconds": 16.8,
+        "tests": 3
+      },
+      "e2e/doc-line-breaks.spec.ts": {
+        "seconds": 11.7,
+        "tests": 2
+      },
+      "e2e/doc-standalone-open.spec.ts": {
+        "seconds": 42.3,
+        "tests": 1
+      },
+      "e2e/doc-story-view.spec.ts": {
+        "seconds": 17,
+        "tests": 2
+      },
+      "e2e/doc-verbatim-export.spec.ts": {
+        "seconds": 11.8,
+        "tests": 2
+      },
+      "e2e/documents-door.spec.ts": {
+        "seconds": 31.1,
+        "tests": 4
+      },
+      "e2e/draw-image-trace-worker.spec.ts": {
+        "seconds": 12.3,
+        "tests": 1
+      },
+      "e2e/draw-plugin.spec.ts": {
+        "seconds": 42,
+        "tests": 5
+      },
+      "e2e/draw-precision.spec.ts": {
+        "seconds": 48.6,
+        "tests": 5
+      },
+      "e2e/draw-schema-panel.spec.ts": {
+        "seconds": 11,
+        "tests": 2
+      },
+      "e2e/edit-context-chrome.spec.ts": {
+        "seconds": 26.2,
+        "tests": 3
+      },
+      "e2e/edit-context-spring-loaded.spec.ts": {
+        "seconds": 15.3,
+        "tests": 2
+      },
+      "e2e/edit-context.spec.ts": {
+        "seconds": 32.8,
+        "tests": 4
+      },
+      "e2e/editing-aids.spec.ts": {
+        "seconds": 53.3,
+        "tests": 4
+      },
+      "e2e/effects-ops.spec.ts": {
+        "seconds": 48.1,
+        "tests": 8
+      },
+      "e2e/eyedropper-host.spec.ts": {
+        "seconds": 11.8,
+        "tests": 1
+      },
+      "e2e/fill-rule.spec.ts": {
+        "seconds": 6.8,
+        "tests": 1
+      },
+      "e2e/frame-ops.spec.ts": {
+        "seconds": 23.9,
+        "tests": 4
+      },
+      "e2e/frame-tool-shortcuts.spec.ts": {
+        "seconds": 14.7,
+        "tests": 2
+      },
+      "e2e/free-transform.spec.ts": {
+        "seconds": 26.5,
+        "tests": 3
+      },
+      "e2e/gesture-atomicity.spec.ts": {
+        "seconds": 29,
+        "tests": 5
+      },
+      "e2e/gesture-cancel.spec.ts": {
+        "seconds": 50.1,
+        "tests": 8
+      },
+      "e2e/gesture-content.spec.ts": {
+        "seconds": 22.9,
+        "tests": 4
+      },
+      "e2e/gesture-cross-cutting.spec.ts": {
+        "seconds": 51.7,
+        "tests": 6
+      },
+      "e2e/gesture-determinism.spec.ts": {
+        "seconds": 10.5,
+        "tests": 1
+      },
+      "e2e/gesture-dsl.spec.ts": {
+        "seconds": 88.2,
+        "tests": 12
+      },
+      "e2e/gesture-ellipse.spec.ts": {
+        "seconds": 50.1,
+        "tests": 6
+      },
+      "e2e/gesture-families.spec.ts": {
+        "seconds": 22.3,
+        "tests": 2
+      },
+      "e2e/gesture-fuzz.spec.ts": {
+        "seconds": 45.8,
+        "tests": 3
+      },
+      "e2e/gesture-gradient.spec.ts": {
+        "seconds": 15.6,
+        "tests": 2
+      },
+      "e2e/gesture-gridify.spec.ts": {
+        "seconds": 42.3,
+        "tests": 5
+      },
+      "e2e/gesture-guides.spec.ts": {
+        "seconds": 68.4,
+        "tests": 9
+      },
+      "e2e/gesture-matrix.spec.ts": {
+        "seconds": 842.1,
+        "tests": 27
+      },
+      "e2e/gesture-modifiers.spec.ts": {
+        "seconds": 39.5,
+        "tests": 7
+      },
+      "e2e/gesture-page-tool.spec.ts": {
+        "seconds": 7.6,
+        "tests": 1
+      },
+      "e2e/gesture-pen.spec.ts": {
+        "seconds": 50.5,
+        "tests": 6
+      },
+      "e2e/gesture-polygon.spec.ts": {
+        "seconds": 42.7,
+        "tests": 5
+      },
+      "e2e/gesture-threading.spec.ts": {
+        "seconds": 62.7,
+        "tests": 8
+      },
+      "e2e/gesture-width.spec.ts": {
+        "seconds": 9.6,
+        "tests": 1
+      },
+      "e2e/group-box.spec.ts": {
+        "seconds": 17.7,
+        "tests": 2
+      },
+      "e2e/handle-scale.spec.ts": {
+        "seconds": 73.5,
+        "tests": 9
+      },
+      "e2e/hidden-panels.spec.ts": {
+        "seconds": 24.9,
+        "tests": 4
+      },
+      "e2e/history-panel.spec.ts": {
+        "seconds": 6.4,
+        "tests": 1
+      },
+      "e2e/image-ux.spec.ts": {
+        "seconds": 27.2,
+        "tests": 3
+      },
+      "e2e/info-navigator-layers.spec.ts": {
+        "seconds": 26.1,
+        "tests": 4
+      },
+      "e2e/insert-menu.spec.ts": {
+        "seconds": 19.6,
+        "tests": 3
+      },
+      "e2e/item-layer.spec.ts": {
+        "seconds": 29.2,
+        "tests": 5
+      },
+      "e2e/journal-panel.spec.ts": {
+        "seconds": 18.9,
+        "tests": 4
+      },
+      "e2e/keyboard-focus.spec.ts": {
+        "seconds": 71.7,
+        "tests": 11
+      },
+      "e2e/layer-ops.spec.ts": {
+        "seconds": 18.1,
+        "tests": 3
+      },
+      "e2e/layers-retarget.spec.ts": {
+        "seconds": 56.2,
+        "tests": 7
+      },
+      "e2e/learnability.spec.ts": {
+        "seconds": 53.8,
+        "tests": 3
+      },
+      "e2e/library-panel.spec.ts": {
+        "seconds": 21.4,
+        "tests": 1
+      },
+      "e2e/live-shapes.spec.ts": {
+        "seconds": 34.7,
+        "tests": 4
+      },
+      "e2e/mesh-tool.spec.ts": {
+        "seconds": 15,
+        "tests": 2
+      },
+      "e2e/ml-models.spec.ts": {
+        "seconds": 29.9,
+        "tests": 3
+      },
+      "e2e/network-consent.spec.ts": {
+        "seconds": 13.7,
+        "tests": 3
+      },
+      "e2e/new-document-dialog.spec.ts": {
+        "seconds": 20.8,
+        "tests": 3
+      },
+      "e2e/numbering-list-ops.spec.ts": {
+        "seconds": 17.1,
+        "tests": 3
+      },
+      "e2e/object-commands.spec.ts": {
+        "seconds": 336.1,
+        "tests": 51
+      },
+      "e2e/overlay-multi-preview.spec.ts": {
+        "seconds": 21.7,
+        "tests": 3
+      },
+      "e2e/overlay-path-preview.spec.ts": {
+        "seconds": 21.7,
+        "tests": 3
+      },
+      "e2e/overlay-text-preview.spec.ts": {
+        "seconds": 14.5,
+        "tests": 2
+      },
+      "e2e/page-lenses.spec.ts": {
+        "seconds": 16.2,
+        "tests": 2
+      },
+      "e2e/page-ops.spec.ts": {
+        "seconds": 22.9,
+        "tests": 4
+      },
+      "e2e/page-space-geometry.spec.ts": {
+        "seconds": 25.3,
+        "tests": 3
+      },
+      "e2e/paint-v2.spec.ts": {
+        "seconds": 6.3,
+        "tests": 1
+      },
+      "e2e/panel-rail-door.spec.ts": {
+        "seconds": 5,
+        "tests": 1
+      },
+      "e2e/panels-browser.spec.ts": {
+        "seconds": 44.8,
+        "tests": 7
+      },
+      "e2e/paragraph-flow-ops.spec.ts": {
+        "seconds": 107.9,
+        "tests": 16
+      },
+      "e2e/paragraph-ops.spec.ts": {
+        "seconds": 29.7,
+        "tests": 6
+      },
+      "e2e/pasteboard-chrome.spec.ts": {
+        "seconds": 14.2,
+        "tests": 2
+      },
+      "e2e/path-editing.spec.ts": {
+        "seconds": 150.3,
+        "tests": 22
+      },
+      "e2e/path-pathfinder-ops.spec.ts": {
+        "seconds": 12.1,
+        "tests": 2
+      },
+      "e2e/pattern-editing.spec.ts": {
+        "seconds": 8.8,
+        "tests": 1
+      },
+      "e2e/pdf-vectors.spec.ts": {
+        "seconds": 14.2,
+        "tests": 2
+      },
+      "e2e/performance.spec.ts": {
+        "seconds": 15.1,
+        "tests": 1
+      },
+      "e2e/picture-adjustments.spec.ts": {
+        "seconds": 12.6,
+        "tests": 1
+      },
+      "e2e/place-and-table.spec.ts": {
+        "seconds": 76.3,
+        "tests": 7
+      },
+      "e2e/plugin-menu-door.spec.ts": {
+        "seconds": 17.2,
+        "tests": 3
+      },
+      "e2e/properties-selection-label.spec.ts": {
+        "seconds": 17.9,
+        "tests": 2
+      },
+      "e2e/property-fuzz.spec.ts": {
+        "seconds": 6.6,
+        "tests": 1
+      },
+      "e2e/property-roundtrip.spec.ts": {
+        "seconds": 23.7,
+        "tests": 4
+      },
+      "e2e/proving.spec.ts": {
+        "seconds": 18.5,
+        "tests": 3
+      },
+      "e2e/px-checkpoints.spec.ts": {
+        "seconds": 16.2,
+        "tests": 1
+      },
+      "e2e/px-constraints.spec.ts": {
+        "seconds": 26.1,
+        "tests": 3
+      },
+      "e2e/px-contract.spec.ts": {
+        "seconds": 6.6,
+        "tests": 1
+      },
+      "e2e/px-variants.spec.ts": {
+        "seconds": 19.9,
+        "tests": 1
+      },
+      "e2e/real-doc-smoke.spec.ts": {
+        "seconds": 45.8,
+        "tests": 2
+      },
+      "e2e/reference-inserts.spec.ts": {
+        "seconds": 8.5,
+        "tests": 1
+      },
+      "e2e/registry-invariants.spec.ts": {
+        "seconds": 23.3,
+        "tests": 5
+      },
+      "e2e/save-as-idml.spec.ts": {
+        "seconds": 12.1,
+        "tests": 2
+      },
+      "e2e/schema-list-panel.spec.ts": {
+        "seconds": 27.4,
+        "tests": 5
+      },
+      "e2e/schema-tree-panel.spec.ts": {
+        "seconds": 42.2,
+        "tests": 8
+      },
+      "e2e/script-parity.spec.ts": {
+        "seconds": 17.1,
+        "tests": 3
+      },
+      "e2e/selection-geometry.spec.ts": {
+        "seconds": 25.9,
+        "tests": 3
+      },
+      "e2e/session-continuity.spec.ts": {
+        "seconds": 25.3,
+        "tests": 2
+      },
+      "e2e/sheet-context-keys.spec.ts": {
+        "seconds": 118.7,
+        "tests": 11
+      },
+      "e2e/sheet-modal-session.spec.ts": {
+        "seconds": 44,
+        "tests": 4
+      },
+      "e2e/shell-commands.spec.ts": {
+        "seconds": 244.4,
+        "tests": 22
+      },
+      "e2e/shell-findings.spec.ts": {
+        "seconds": 124.4,
+        "tests": 15
+      },
+      "e2e/shell-keybindings.spec.ts": {
+        "seconds": 60.3,
+        "tests": 6
+      },
+      "e2e/shell-menu-matrix.spec.ts": {
+        "seconds": 1034.5,
+        "tests": 44
+      },
+      "e2e/shell-save-file.spec.ts": {
+        "seconds": 11.6,
+        "tests": 2
+      },
+      "e2e/stroke-ops.spec.ts": {
+        "seconds": 46.3,
+        "tests": 6
+      },
+      "e2e/style-ops.spec.ts": {
+        "seconds": 15,
+        "tests": 2
+      },
+      "e2e/svg-import-export.spec.ts": {
+        "seconds": 21.7,
+        "tests": 2
+      },
+      "e2e/swatches-retarget.spec.ts": {
+        "seconds": 38.6,
+        "tests": 3
+      },
+      "e2e/table-cell-entry.spec.ts": {
+        "seconds": 20,
+        "tests": 2
+      },
+      "e2e/table-ops.spec.ts": {
+        "seconds": 40.9,
+        "tests": 4
+      },
+      "e2e/tables-v2.spec.ts": {
+        "seconds": 43.3,
+        "tests": 4
+      },
+      "e2e/tabs-ops.spec.ts": {
+        "seconds": 7.5,
+        "tests": 1
+      },
+      "e2e/text-caret-door.spec.ts": {
+        "seconds": 15.5,
+        "tests": 2
+      },
+      "e2e/text-editing-keys.spec.ts": {
+        "seconds": 61.2,
+        "tests": 7
+      },
+      "e2e/text-measure.spec.ts": {
+        "seconds": 14.7,
+        "tests": 2
+      },
+      "e2e/text-ops.spec.ts": {
+        "seconds": 37.5,
+        "tests": 5
+      },
+      "e2e/text-retarget.spec.ts": {
+        "seconds": 56.4,
+        "tests": 4
+      },
+      "e2e/tool-rail-surface.spec.ts": {
+        "seconds": 84.3,
+        "tests": 9
+      },
+      "e2e/tools-ui.spec.ts": {
+        "seconds": 19.8,
+        "tests": 2
+      },
+      "e2e/transform-gestures.spec.ts": {
+        "seconds": 7.2,
+        "tests": 1
+      },
+      "e2e/transform-readout.spec.ts": {
+        "seconds": 50.7,
+        "tests": 6
+      },
+      "e2e/trusted-types.spec.ts": {
+        "seconds": 15.6,
+        "tests": 2
+      },
+      "e2e/undo-stack.spec.ts": {
+        "seconds": 15.5,
+        "tests": 2
+      },
+      "e2e/unsaved-work.spec.ts": {
+        "seconds": 51.8,
+        "tests": 6
+      },
+      "e2e/ux-audit-gestures.spec.ts": {
+        "seconds": 123.9,
+        "tests": 12
+      },
+      "e2e/ux-audit-open.spec.ts": {
+        "seconds": 15.8,
+        "tests": 2
+      },
+      "e2e/uxi-accessibility.spec.ts": {
+        "seconds": 134.2,
+        "tests": 9
+      },
+      "e2e/uxi-adapters.spec.ts": {
+        "seconds": 55.4,
+        "tests": 6
+      },
+      "e2e/uxi-async.spec.ts": {
+        "seconds": 48.6,
+        "tests": 5
+      },
+      "e2e/uxi-baseline.spec.ts": {
+        "seconds": 110.1,
+        "tests": 12
+      },
+      "e2e/uxi-clipboard.spec.ts": {
+        "seconds": 35,
+        "tests": 4
+      },
+      "e2e/uxi-commands.spec.ts": {
+        "seconds": 34.6,
+        "tests": 4
+      },
+      "e2e/uxi-coordinator.spec.ts": {
+        "seconds": 84.7,
+        "tests": 9
+      },
+      "e2e/uxi-cursor.spec.ts": {
+        "seconds": 65.4,
+        "tests": 2
+      },
+      "e2e/uxi-documents.spec.ts": {
+        "seconds": 98.3,
+        "tests": 6
+      },
+      "e2e/uxi-drop-intent.spec.ts": {
+        "seconds": 33,
+        "tests": 4
+      },
+      "e2e/uxi-export.spec.ts": {
+        "seconds": 19.2,
+        "tests": 2
+      },
+      "e2e/uxi-fields.spec.ts": {
+        "seconds": 61.2,
+        "tests": 7
+      },
+      "e2e/uxi-geometry.spec.ts": {
+        "seconds": 64.4,
+        "tests": 6
+      },
+      "e2e/uxi-harness.spec.ts": {
+        "seconds": 44.4,
+        "tests": 5
+      },
+      "e2e/uxi-hints.spec.ts": {
+        "seconds": 23.3,
+        "tests": 2
+      },
+      "e2e/uxi-import-report.spec.ts": {
+        "seconds": 17.6,
+        "tests": 2
+      },
+      "e2e/uxi-issues.spec.ts": {
+        "seconds": 19.7,
+        "tests": 2
+      },
+      "e2e/uxi-keyboard-focus.spec.ts": {
+        "seconds": 130.5,
+        "tests": 15
+      },
+      "e2e/uxi-legacy-tapes.spec.ts": {
+        "seconds": 72.1,
+        "tests": 8
+      },
+      "e2e/uxi-module-conformance.spec.ts": {
+        "seconds": 200.9,
+        "tests": 23
+      },
+      "e2e/uxi-navigation.spec.ts": {
+        "seconds": 74.7,
+        "tests": 5
+      },
+      "e2e/uxi-path.spec.ts": {
+        "seconds": 18,
+        "tests": 2
+      },
+      "e2e/uxi-selection.spec.ts": {
+        "seconds": 80.4,
+        "tests": 9
+      },
+      "e2e/uxi-snap.spec.ts": {
+        "seconds": 12.4,
+        "tests": 1
+      },
+      "e2e/uxi-touch-pen.spec.ts": {
+        "seconds": 29.8,
+        "tests": 3
+      },
+      "e2e/uxi-workspace.spec.ts": {
+        "seconds": 91.7,
+        "tests": 8
+      },
+      "e2e/vector-clipboard.spec.ts": {
+        "seconds": 16.9,
+        "tests": 2
+      },
+      "e2e/view-menu.spec.ts": {
+        "seconds": 55.2,
+        "tests": 5
+      },
+      "e2e/view-transitions.spec.ts": {
+        "seconds": 15.7,
+        "tests": 2
+      },
+      "e2e/web-inspect.spec.ts": {
+        "seconds": 28.2,
+        "tests": 3
+      },
+      "e2e/web-plugin.spec.ts": {
+        "seconds": 63.3,
+        "tests": 6
+      },
+      "e2e/xray.spec.ts": {
+        "seconds": 39.3,
+        "tests": 4
+      },
+      "editor-ops.spec.ts": {
+        "seconds": 72.7,
+        "tests": 9
+      },
+      "effect-stack.spec.ts": {
+        "seconds": 16.6,
+        "tests": 2
+      },
+      "effects-panel.spec.ts": {
+        "seconds": 13.5,
+        "tests": 2
+      },
+      "effects-targets.spec.ts": {
+        "seconds": 136,
+        "tests": 17
+      },
+      "element-scope-panels.spec.ts": {
+        "seconds": 56,
+        "tests": 8
+      },
+      "engine-ahead-rows.spec.ts": {
+        "seconds": 77.6,
+        "tests": 10
+      },
+      "export-center-panel.spec.ts": {
+        "seconds": 8.1,
+        "tests": 1
+      },
+      "export-family.spec.ts": {
+        "seconds": 83.2,
+        "tests": 12
+      },
+      "export-pdf.spec.ts": {
+        "seconds": 71.4,
+        "tests": 8
+      },
+      "font-register-repaint.spec.ts": {
+        "seconds": 15.2,
+        "tests": 1
+      },
+      "frame-fitting-panel.spec.ts": {
+        "seconds": 29.6,
+        "tests": 4
+      },
+      "fx-panels.spec.ts": {
+        "seconds": 144.3,
+        "tests": 9
+      },
+      "gesture-sab-snap.spec.ts": {
+        "seconds": 24.5,
+        "tests": 3
+      },
+      "glyphs-panel.spec.ts": {
+        "seconds": 58.3,
+        "tests": 2
+      },
+      "gradients-panel.spec.ts": {
+        "seconds": 14.8,
+        "tests": 2
+      },
+      "group-transform.spec.ts": {
+        "seconds": 32.1,
+        "tests": 5
+      },
+      "heading-anchors.spec.ts": {
+        "seconds": 15.1,
+        "tests": 2
+      },
+      "host-panels-every-context.spec.ts": {
+        "seconds": 276.6,
+        "tests": 16
+      },
+      "index-panel.spec.ts": {
+        "seconds": 13.7,
+        "tests": 2
+      },
+      "info-panel.spec.ts": {
+        "seconds": 17.2,
+        "tests": 2
+      },
+      "ink-manager-panel.spec.ts": {
+        "seconds": 6.4,
+        "tests": 1
+      },
+      "inspector.spec.ts": {
+        "seconds": 32.3,
+        "tests": 5
+      },
+      "interaction.spec.ts": {
+        "seconds": 25.9,
+        "tests": 4
+      },
+      "layers-panel.spec.ts": {
+        "seconds": 18.7,
+        "tests": 3
+      },
+      "layers.spec.ts": {
+        "seconds": 6.3,
+        "tests": 1
+      },
+      "links-panel.spec.ts": {
+        "seconds": 31.9,
+        "tests": 5
+      },
+      "live-scripts.spec.ts": {
+        "seconds": 33.3,
+        "tests": 1
+      },
+      "menu.spec.ts": {
+        "seconds": 67.7,
+        "tests": 9
+      },
+      "multi-select-handles.spec.ts": {
+        "seconds": 12.8,
+        "tests": 2
+      },
+      "multi-select-snap.spec.ts": {
+        "seconds": 31.9,
+        "tests": 5
+      },
+      "navigator-panel.spec.ts": {
+        "seconds": 15.8,
+        "tests": 2
+      },
+      "object-model-core-ui.spec.ts": {
+        "seconds": 89.9,
+        "tests": 11
+      },
+      "object-model-frame-panels.spec.ts": {
+        "seconds": 39.3,
+        "tests": 5
+      },
+      "object-model-options.spec.ts": {
+        "seconds": 105.6,
+        "tests": 14
+      },
+      "object-model-plugin-panels.spec.ts": {
+        "seconds": 129.8,
+        "tests": 14
+      },
+      "object-model-structure-panels.spec.ts": {
+        "seconds": 33.4,
+        "tests": 4
+      },
+      "object-model-text-panels.spec.ts": {
+        "seconds": 32.2,
+        "tests": 4
+      },
+      "object-model-values.spec.ts": {
+        "seconds": 24.8,
+        "tests": 3
+      },
+      "object-model.spec.ts": {
+        "seconds": 30.1,
+        "tests": 4
+      },
+      "object-styles-panel.spec.ts": {
+        "seconds": 12.9,
+        "tests": 2
+      },
+      "outline-panel.spec.ts": {
+        "seconds": 6.9,
+        "tests": 1
+      },
+      "output-readiness-panel.spec.ts": {
+        "seconds": 15.4,
+        "tests": 2
+      },
+      "overlay-tokens.spec.ts": {
+        "seconds": 33.1,
+        "tests": 6
+      },
+      "paragraph-panel.spec.ts": {
+        "seconds": 26,
+        "tests": 4
+      },
+      "paragraph-styles-panel.spec.ts": {
+        "seconds": 26.6,
+        "tests": 4
+      },
+      "path-topology.spec.ts": {
+        "seconds": 52.1,
+        "tests": 8
+      },
+      "pathfinder-panel.spec.ts": {
+        "seconds": 52.6,
+        "tests": 7
+      },
+      "playground-restart.spec.ts": {
+        "seconds": 20.7,
+        "tests": 2
+      },
+      "plugin-surface/data-doc-publish.spec.ts": {
+        "seconds": 118,
+        "tests": 16
+      },
+      "plugin-surface/draw.spec.ts": {
+        "seconds": 245.4,
+        "tests": 16
+      },
+      "plugin-surface/image-filter-selection.spec.ts": {
+        "seconds": 16.4,
+        "tests": 1
+      },
+      "plugin-surface/image-free-transform.spec.ts": {
+        "seconds": 12.2,
+        "tests": 1
+      },
+      "plugin-surface/image-warps.spec.ts": {
+        "seconds": 60.5,
+        "tests": 5
+      },
+      "plugin-surface/image.spec.ts": {
+        "seconds": 59.5,
+        "tests": 8
+      },
+      "plugin-surface/menus-data.spec.ts": {
+        "seconds": 14.4,
+        "tests": 7
+      },
+      "plugin-surface/menus-doc.spec.ts": {
+        "seconds": 1.6,
+        "tests": 1
+      },
+      "plugin-surface/menus-draw.spec.ts": {
+        "seconds": 268.5,
+        "tests": 97
+      },
+      "plugin-surface/menus-image-masking.spec.ts": {
+        "seconds": 32.6,
+        "tests": 11
+      },
+      "plugin-surface/menus-image-ml.spec.ts": {
+        "seconds": 31,
+        "tests": 10
+      },
+      "plugin-surface/menus-image-sweep-filter.spec.ts": {
+        "seconds": 345.1,
+        "tests": 105
+      },
+      "plugin-surface/menus-image-sweep-layer.spec.ts": {
+        "seconds": 233.3,
+        "tests": 71
+      },
+      "plugin-surface/menus-image-sweep-rest.spec.ts": {
+        "seconds": 144.6,
+        "tests": 44
+      },
+      "plugin-surface/menus-image-vectors.spec.ts": {
+        "seconds": 36,
+        "tests": 10
+      },
+      "plugin-surface/menus-image-workspace.spec.ts": {
+        "seconds": 46.6,
+        "tests": 11
+      },
+      "plugin-surface/menus-image.spec.ts": {
+        "seconds": 75.6,
+        "tests": 23
+      },
+      "plugin-surface/menus-sheet-context.spec.ts": {
+        "seconds": 11.4,
+        "tests": 20
+      },
+      "plugin-surface/menus-sheet.spec.ts": {
+        "seconds": 45.6,
+        "tests": 21
+      },
+      "plugin-surface/menus-slide.spec.ts": {
+        "seconds": 75.4,
+        "tests": 13
+      },
+      "plugin-surface/menus-web.spec.ts": {
+        "seconds": 18.4,
+        "tests": 8
+      },
+      "plugin-surface/sheet.spec.ts": {
+        "seconds": 130.3,
+        "tests": 12
+      },
+      "plugin-surface/slide.spec.ts": {
+        "seconds": 109.1,
+        "tests": 10
+      },
+      "plugin-surface/web.spec.ts": {
+        "seconds": 84.8,
+        "tests": 8
+      },
+      "pointer-pressure.spec.ts": {
+        "seconds": 18.7,
+        "tests": 3
+      },
+      "preflight-panel.spec.ts": {
+        "seconds": 14.6,
+        "tests": 2
+      },
+      "print-output-facts.spec.ts": {
+        "seconds": 7.7,
+        "tests": 1
+      },
+      "properties-panel.spec.ts": {
+        "seconds": 14.3,
+        "tests": 2
+      },
+      "publication-health-panel.spec.ts": {
+        "seconds": 26.1,
+        "tests": 3
+      },
+      "repl.spec.ts": {
+        "seconds": 35,
+        "tests": 5
+      },
+      "resize.spec.ts": {
+        "seconds": 42.1,
+        "tests": 6
+      },
+      "rotate-scale.spec.ts": {
+        "seconds": 42.5,
+        "tests": 6
+      },
+      "ruler-guides.spec.ts": {
+        "seconds": 7.2,
+        "tests": 1
+      },
+      "save-paged.spec.ts": {
+        "seconds": 21,
+        "tests": 3
+      },
+      "script-budgets.spec.ts": {
+        "seconds": 26.1,
+        "tests": 3
+      },
+      "script-collections.spec.ts": {
+        "seconds": 76.5,
+        "tests": 10
+      },
+      "script-console.spec.ts": {
+        "seconds": 20.4,
+        "tests": 3
+      },
+      "script-editor.spec.ts": {
+        "seconds": 48.1,
+        "tests": 7
+      },
+      "script-inspection.spec.ts": {
+        "seconds": 33.9,
+        "tests": 5
+      },
+      "script-plugin-objects.spec.ts": {
+        "seconds": 35.7,
+        "tests": 5
+      },
+      "script-selection.spec.ts": {
+        "seconds": 17.2,
+        "tests": 2
+      },
+      "script-undo-redo.spec.ts": {
+        "seconds": 21,
+        "tests": 3
+      },
+      "separations-panel.spec.ts": {
+        "seconds": 29.3,
+        "tests": 5
+      },
+      "stories-panel.spec.ts": {
+        "seconds": 53.2,
+        "tests": 7
+      },
+      "structural-list-panels.spec.ts": {
+        "seconds": 57.8,
+        "tests": 8
+      },
+      "styleguide-chrome.spec.ts": {
+        "seconds": 24,
+        "tests": 4
+      },
+      "styleguide-icons.spec.ts": {
+        "seconds": 12.1,
+        "tests": 4
+      },
+      "styleguide-panels.spec.ts": {
+        "seconds": 37.5,
+        "tests": 6
+      },
+      "styleguide-theme.spec.ts": {
+        "seconds": 24.1,
+        "tests": 3
+      },
+      "swatches-panel.spec.ts": {
+        "seconds": 14,
+        "tests": 2
+      },
+      "table-row-keep-options.spec.ts": {
+        "seconds": 11,
+        "tests": 1
+      },
+      "table-styles-panel.spec.ts": {
+        "seconds": 7,
+        "tests": 1
+      },
+      "tabs-panel.spec.ts": {
+        "seconds": 21.9,
+        "tests": 3
+      },
+      "text-frame-options-panel.spec.ts": {
+        "seconds": 27.5,
+        "tests": 4
+      },
+      "text-wrap-panel.spec.ts": {
+        "seconds": 28.1,
+        "tests": 4
+      },
+      "theme.spec.ts": {
+        "seconds": 24.4,
+        "tests": 3
+      },
+      "toggle-group.spec.ts": {
+        "seconds": 14.7,
+        "tests": 2
+      },
+      "tool-graphic-default.spec.ts": {
+        "seconds": 103.2,
+        "tests": 11
+      },
+      "tool-rail.spec.ts": {
+        "seconds": 83.5,
+        "tests": 12
+      },
+      "translate.spec.ts": {
+        "seconds": 28,
+        "tests": 4
+      },
+      "tree-panel.spec.ts": {
+        "seconds": 31.5,
+        "tests": 1
+      },
+      "v2-collection-panels.spec.ts": {
+        "seconds": 20.8,
+        "tests": 5
+      },
+      "worker-boot.spec.ts": {
+        "seconds": 17.2,
+        "tests": 5
+      },
+      "workflow-mode.spec.ts": {
+        "seconds": 51.3,
+        "tests": 13
+      }
+    },
+    "integration": {
+      "../../../../../tests/integration/persistence/data-persist-reload.journey.spec.ts": {
+        "seconds": 7.4,
+        "tests": 1
+      },
+      "../../../../../tests/integration/persistence/sheet-edit-persist.journey.spec.ts": {
+        "seconds": 30.8,
+        "tests": 2
+      },
+      "../../../../../tests/integration/persistence/sheet-persistence.journey.spec.ts": {
+        "seconds": 7.6,
+        "tests": 1
+      },
+      "../../../../../tests/integration/persistence/web-edit-persist.journey.spec.ts": {
+        "seconds": 13.3,
+        "tests": 1
+      }
+    },
+    "journeys": {
+      "journey/binary-doors.journey.spec.ts": {
+        "seconds": 7,
+        "tests": 1
+      },
+      "journey/document-font-lifetime.journey.spec.ts": {
+        "seconds": 9.3,
+        "tests": 2
+      },
+      "journey/focused/color.journey.spec.ts": {
+        "seconds": 5.2,
+        "tests": 1
+      },
+      "journey/focused/command-palette.journey.spec.ts": {
+        "seconds": 4.8,
+        "tests": 1
+      },
+      "journey/focused/cpu-fallback.journey.spec.ts": {
+        "seconds": 4.3,
+        "tests": 1
+      },
+      "journey/focused/demos.journey.spec.ts": {
+        "seconds": 55.1,
+        "tests": 11
+      },
+      "journey/focused/effects.journey.spec.ts": {
+        "seconds": 5.5,
+        "tests": 1
+      },
+      "journey/focused/export.journey.spec.ts": {
+        "seconds": 5.5,
+        "tests": 1
+      },
+      "journey/focused/format-depth.journey.spec.ts": {
+        "seconds": 9.3,
+        "tests": 1
+      },
+      "journey/focused/gradient.journey.spec.ts": {
+        "seconds": 5.3,
+        "tests": 1
+      },
+      "journey/focused/group.journey.spec.ts": {
+        "seconds": 6.2,
+        "tests": 1
+      },
+      "journey/focused/image.journey.spec.ts": {
+        "seconds": 5.6,
+        "tests": 1
+      },
+      "journey/focused/ink-overset.journey.spec.ts": {
+        "seconds": 7.8,
+        "tests": 1
+      },
+      "journey/focused/layers.journey.spec.ts": {
+        "seconds": 4.4,
+        "tests": 1
+      },
+      "journey/focused/line-tool.journey.spec.ts": {
+        "seconds": 5,
+        "tests": 1
+      },
+      "journey/focused/mobile-fill.journey.spec.ts": {
+        "seconds": 11.5,
+        "tests": 2
+      },
+      "journey/focused/multi-select.journey.spec.ts": {
+        "seconds": 6,
+        "tests": 1
+      },
+      "journey/focused/new-document.journey.spec.ts": {
+        "seconds": 4.2,
+        "tests": 1
+      },
+      "journey/focused/pages.journey.spec.ts": {
+        "seconds": 4.4,
+        "tests": 1
+      },
+      "journey/focused/panel-sweep.journey.spec.ts": {
+        "seconds": 6.1,
+        "tests": 1
+      },
+      "journey/focused/pen.journey.spec.ts": {
+        "seconds": 5.2,
+        "tests": 1
+      },
+      "journey/focused/plugin-menus.journey.spec.ts": {
+        "seconds": 4.4,
+        "tests": 1
+      },
+      "journey/focused/scripting.journey.spec.ts": {
+        "seconds": 6.9,
+        "tests": 1
+      },
+      "journey/focused/sections.journey.spec.ts": {
+        "seconds": 4.6,
+        "tests": 1
+      },
+      "journey/focused/shell.journey.spec.ts": {
+        "seconds": 5.1,
+        "tests": 1
+      },
+      "journey/focused/solo-mode.journey.spec.ts": {
+        "seconds": 24.9,
+        "tests": 8
+      },
+      "journey/focused/stroke-depth.journey.spec.ts": {
+        "seconds": 5.5,
+        "tests": 1
+      },
+      "journey/focused/styles-crud.journey.spec.ts": {
+        "seconds": 5.6,
+        "tests": 1
+      },
+      "journey/focused/styles.journey.spec.ts": {
+        "seconds": 5.5,
+        "tests": 1
+      },
+      "journey/focused/tables.journey.spec.ts": {
+        "seconds": 4.6,
+        "tests": 1
+      },
+      "journey/focused/template-fill.journey.spec.ts": {
+        "seconds": 6.9,
+        "tests": 2
+      },
+      "journey/focused/template-styled.journey.spec.ts": {
+        "seconds": 4.5,
+        "tests": 1
+      },
+      "journey/focused/text-flow.journey.spec.ts": {
+        "seconds": 5.2,
+        "tests": 1
+      },
+      "journey/focused/thread-lines.journey.spec.ts": {
+        "seconds": 10.2,
+        "tests": 2
+      },
+      "journey/focused/tools-edit.journey.spec.ts": {
+        "seconds": 5.9,
+        "tests": 1
+      },
+      "journey/focused/tools-rail-wired.journey.spec.ts": {
+        "seconds": 10.6,
+        "tests": 1
+      },
+      "journey/focused/tools-rail.journey.spec.ts": {
+        "seconds": 7.2,
+        "tests": 1
+      },
+      "journey/focused/tools.journey.spec.ts": {
+        "seconds": 11.3,
+        "tests": 1
+      },
+      "journey/focused/transform-pivot.journey.spec.ts": {
+        "seconds": 5.9,
+        "tests": 1
+      },
+      "journey/focused/transform.journey.spec.ts": {
+        "seconds": 5.2,
+        "tests": 1
+      },
+      "journey/focused/typography-depth.journey.spec.ts": {
+        "seconds": 6.5,
+        "tests": 1
+      },
+      "journey/focused/vector.journey.spec.ts": {
+        "seconds": 5.3,
+        "tests": 1
+      },
+      "journey/master/flyer.journey.spec.ts": {
+        "seconds": 6.7,
+        "tests": 1
+      },
+      "journey/plugin-doors-69.journey.spec.ts": {
+        "seconds": 24.6,
+        "tests": 5
+      },
+      "journey/plugin-pages-70.journey.spec.ts": {
+        "seconds": 11.1,
+        "tests": 2
+      },
+      "journey/plugins/data-barcode.journey.spec.ts": {
+        "seconds": 7.6,
+        "tests": 1
+      },
+      "journey/plugins/data-binding.journey.spec.ts": {
+        "seconds": 6.9,
+        "tests": 1
+      },
+      "journey/plugins/data-dataset.journey.spec.ts": {
+        "seconds": 4.9,
+        "tests": 1
+      },
+      "journey/plugins/data-fieldmap.journey.spec.ts": {
+        "seconds": 5,
+        "tests": 1
+      },
+      "journey/plugins/data-import-formats.journey.spec.ts": {
+        "seconds": 5.3,
+        "tests": 1
+      },
+      "journey/plugins/data-merge-indesign.journey.spec.ts": {
+        "seconds": 8,
+        "tests": 1
+      },
+      "journey/plugins/data-merge-new-document.journey.spec.ts": {
+        "seconds": 8,
+        "tests": 1
+      },
+      "journey/plugins/data-preview.journey.spec.ts": {
+        "seconds": 6.2,
+        "tests": 1
+      },
+      "journey/plugins/data-refresh-undo.journey.spec.ts": {
+        "seconds": 5.9,
+        "tests": 1
+      },
+      "journey/plugins/data-render.journey.spec.ts": {
+        "seconds": 5.9,
+        "tests": 1
+      },
+      "journey/plugins/data.journey.spec.ts": {
+        "seconds": 4.7,
+        "tests": 1
+      },
+      "journey/plugins/doc-comments.journey.spec.ts": {
+        "seconds": 7.1,
+        "tests": 1
+      },
+      "journey/plugins/doc-footnotes.journey.spec.ts": {
+        "seconds": 6.1,
+        "tests": 1
+      },
+      "journey/plugins/doc-headers-footers.journey.spec.ts": {
+        "seconds": 6.2,
+        "tests": 1
+      },
+      "journey/plugins/doc-toc-fields.journey.spec.ts": {
+        "seconds": 6.2,
+        "tests": 1
+      },
+      "journey/plugins/doc-track-changes.journey.spec.ts": {
+        "seconds": 7.3,
+        "tests": 1
+      },
+      "journey/plugins/doc-word-editing.journey.spec.ts": {
+        "seconds": 12.3,
+        "tests": 2
+      },
+      "journey/plugins/doc.journey.spec.ts": {
+        "seconds": 6.1,
+        "tests": 1
+      },
+      "journey/plugins/draw-appearance.journey.spec.ts": {
+        "seconds": 6.5,
+        "tests": 1
+      },
+      "journey/plugins/draw-corners.journey.spec.ts": {
+        "seconds": 6.8,
+        "tests": 1
+      },
+      "journey/plugins/draw-dash.journey.spec.ts": {
+        "seconds": 13.6,
+        "tests": 2
+      },
+      "journey/plugins/draw-editcontext.journey.spec.ts": {
+        "seconds": 6,
+        "tests": 1
+      },
+      "journey/plugins/draw-outlines.journey.spec.ts": {
+        "seconds": 7,
+        "tests": 1
+      },
+      "journey/plugins/draw-panels.journey.spec.ts": {
+        "seconds": 24.6,
+        "tests": 4
+      },
+      "journey/plugins/draw-pathops.journey.spec.ts": {
+        "seconds": 16.2,
+        "tests": 1
+      },
+      "journey/plugins/draw-render.journey.spec.ts": {
+        "seconds": 8.5,
+        "tests": 1
+      },
+      "journey/plugins/draw-selectsame.journey.spec.ts": {
+        "seconds": 8.2,
+        "tests": 1
+      },
+      "journey/plugins/draw-shapebuilder.journey.spec.ts": {
+        "seconds": 8.5,
+        "tests": 1
+      },
+      "journey/plugins/draw-svg.journey.spec.ts": {
+        "seconds": 5.8,
+        "tests": 1
+      },
+      "journey/plugins/draw-tools.journey.spec.ts": {
+        "seconds": 18.6,
+        "tests": 2
+      },
+      "journey/plugins/draw-transform.journey.spec.ts": {
+        "seconds": 15,
+        "tests": 2
+      },
+      "journey/plugins/draw.journey.spec.ts": {
+        "seconds": 6.2,
+        "tests": 1
+      },
+      "journey/plugins/image-commands.journey.spec.ts": {
+        "seconds": 39.9,
+        "tests": 6
+      },
+      "journey/plugins/image-layers.journey.spec.ts": {
+        "seconds": 19.8,
+        "tests": 3
+      },
+      "journey/plugins/image-paint.journey.spec.ts": {
+        "seconds": 25.8,
+        "tests": 4
+      },
+      "journey/plugins/image-panels.journey.spec.ts": {
+        "seconds": 20.1,
+        "tests": 3
+      },
+      "journey/plugins/image-retouch.journey.spec.ts": {
+        "seconds": 13.6,
+        "tests": 2
+      },
+      "journey/plugins/image-selection.journey.spec.ts": {
+        "seconds": 13.2,
+        "tests": 2
+      },
+      "journey/plugins/image-taskbar.journey.spec.ts": {
+        "seconds": 9.4,
+        "tests": 1
+      },
+      "journey/plugins/image-tiles.journey.spec.ts": {
+        "seconds": 7.2,
+        "tests": 1
+      },
+      "journey/plugins/image-type.journey.spec.ts": {
+        "seconds": 14.9,
+        "tests": 2
+      },
+      "journey/plugins/image.journey.spec.ts": {
+        "seconds": 6.7,
+        "tests": 1
+      },
+      "journey/plugins/pdf.journey.spec.ts": {
+        "seconds": 6.3,
+        "tests": 1
+      },
+      "journey/plugins/publish.journey.spec.ts": {
+        "seconds": 6.9,
+        "tests": 1
+      },
+      "journey/plugins/sheet-chart.journey.spec.ts": {
+        "seconds": 7.3,
+        "tests": 1
+      },
+      "journey/plugins/sheet-dataset.journey.spec.ts": {
+        "seconds": 4.5,
+        "tests": 1
+      },
+      "journey/plugins/sheet-edit.journey.spec.ts": {
+        "seconds": 6.2,
+        "tests": 1
+      },
+      "journey/plugins/sheet-fill-paste.journey.spec.ts": {
+        "seconds": 8.7,
+        "tests": 1
+      },
+      "journey/plugins/sheet-format.journey.spec.ts": {
+        "seconds": 9.2,
+        "tests": 1
+      },
+      "journey/plugins/sheet-grid-formula.journey.spec.ts": {
+        "seconds": 10.2,
+        "tests": 1
+      },
+      "journey/plugins/sheet-inframe-excel.journey.spec.ts": {
+        "seconds": 8.3,
+        "tests": 1
+      },
+      "journey/plugins/sheet-paginate.journey.spec.ts": {
+        "seconds": 7,
+        "tests": 1
+      },
+      "journey/plugins/sheet-render.journey.spec.ts": {
+        "seconds": 11,
+        "tests": 1
+      },
+      "journey/plugins/sheet-screen-vs-page.journey.spec.ts": {
+        "seconds": 10.9,
+        "tests": 1
+      },
+      "journey/plugins/sheet-xlsx.journey.spec.ts": {
+        "seconds": 9,
+        "tests": 1
+      },
+      "journey/plugins/sheet.journey.spec.ts": {
+        "seconds": 9.3,
+        "tests": 1
+      },
+      "journey/plugins/slide-animations.journey.spec.ts": {
+        "seconds": 18.1,
+        "tests": 2
+      },
+      "journey/plugins/slide-chart-data.journey.spec.ts": {
+        "seconds": 9.6,
+        "tests": 1
+      },
+      "journey/plugins/slide-effects.journey.spec.ts": {
+        "seconds": 27.7,
+        "tests": 3
+      },
+      "journey/plugins/slide-media.journey.spec.ts": {
+        "seconds": 8.1,
+        "tests": 1
+      },
+      "journey/plugins/slide-motion-path.journey.spec.ts": {
+        "seconds": 9,
+        "tests": 1
+      },
+      "journey/plugins/slide-normal-view.journey.spec.ts": {
+        "seconds": 13.4,
+        "tests": 2
+      },
+      "journey/plugins/slide-presenter.journey.spec.ts": {
+        "seconds": 14.3,
+        "tests": 2
+      },
+      "journey/plugins/slide-presets.journey.spec.ts": {
+        "seconds": 13.5,
+        "tests": 2
+      },
+      "journey/plugins/slide-show.journey.spec.ts": {
+        "seconds": 34.7,
+        "tests": 4
+      },
+      "journey/plugins/slide-video-export.journey.spec.ts": {
+        "seconds": 28.4,
+        "tests": 3
+      },
+      "journey/plugins/slide.journey.spec.ts": {
+        "seconds": 15,
+        "tests": 2
+      },
+      "journey/plugins/web-bake.journey.spec.ts": {
+        "seconds": 7.2,
+        "tests": 1
+      },
+      "journey/plugins/web-baked-faces.journey.spec.ts": {
+        "seconds": 7.1,
+        "tests": 1
+      },
+      "journey/plugins/web-flow-resize.journey.spec.ts": {
+        "seconds": 8.2,
+        "tests": 1
+      },
+      "journey/plugins/web-in-frame-edit.journey.spec.ts": {
+        "seconds": 7.9,
+        "tests": 1
+      },
+      "journey/plugins/web-preview-screencast.journey.spec.ts": {
+        "seconds": 18,
+        "tests": 1
+      },
+      "journey/plugins/web-render.journey.spec.ts": {
+        "seconds": 13,
+        "tests": 2
+      },
+      "journey/plugins/web.journey.spec.ts": {
+        "seconds": 6.1,
+        "tests": 1
+      },
+      "journey/scene-layer-faces.journey.spec.ts": {
+        "seconds": 7.9,
+        "tests": 1
+      }
+    }
+  }
+}

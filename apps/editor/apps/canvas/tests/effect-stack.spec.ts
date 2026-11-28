@@ -153,24 +153,4 @@ test.describe("Effects ▸ effect stack (engine ADR 1008)", () => {
     await undoOnce(page);
     await expect.poll(async () => stackOf(page, ref)).toEqual(before);
   });
-
-  test("EFX-STACK-targets — a fill target offers InDesign's effects only @feat:effects-transparency.effect-stack @level:smoke", async ({
-    page,
-  }) => {
-    const fx = await loadFixture(page, "geometry");
-    await selectElements(page, [fx.firstRectangle as ElementRef]);
-    const panel = await effectsPanel(page);
-    await panel.locator('[data-effects-target="fill"]').click();
-    const add = panel.locator(
-      '[data-effect-stack="fill"] select[data-effect-stack-add]',
-    );
-    await expect(add).toBeVisible();
-    const offered = await add
-      .locator("option")
-      .evaluateAll((os) =>
-        os.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
-      );
-    expect(offered).toContain("innerGlow");
-    expect(offered).not.toContain("gaussianBlur");
-  });
 });

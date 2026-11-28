@@ -34,6 +34,7 @@ import {
 
 import { publishDevHandles } from "./app/dev-handles";
 import { chooseLocale, needsCatalogue } from "./app/locale";
+import { DEV_TOOLS, TEST_AFFORDANCES } from "./build-flags";
 import {
   exposeJournalForTests,
   installGlobalErrorCapture,
@@ -45,8 +46,7 @@ import { mountEditor } from "./main";
 // nothing to attribute it to, nothing to put in a bug report. Installed
 // before the first render so a crash DURING it is caught.
 installGlobalErrorCapture();
-const devBuild = !import.meta.env.PROD || import.meta.env.MODE === "demo";
-if (!import.meta.env.PROD) {
+if (TEST_AFFORDANCES) {
   // Test affordance, same shape as `__overlaySignals` / `__pagedCrash`.
   exposeJournalForTests();
 }
@@ -91,7 +91,7 @@ function mount(strings?: Strings): void {
     storage: pageStorage(),
     ...(strings ? { strings } : {}),
   });
-  if (devBuild) publishDevHandles(mounted.instance);
+  if (DEV_TOOLS) publishDevHandles(mounted.instance);
   mirrorTheme(root);
 }
 

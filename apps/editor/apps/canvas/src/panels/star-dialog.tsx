@@ -27,7 +27,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   scoped,
   useRegistries,
   useScoped,
@@ -110,106 +111,85 @@ function StarForm({ close }: { close: () => void }) {
   });
 
   return (
-    <div
-      data-star-backdrop=""
+    <ModalDialog
+      onClose={close}
+      data-star-dialog=""
+      data-panel-host=""
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.5)",
+        width: "min(340px, 92vw)",
+        padding: 16,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="star-title"
-        data-star-dialog=""
-        data-panel-host=""
-        style={{
-          width: "min(340px, 92vw)",
-          padding: 16,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
-        }}
+      <ModalDialogTitle
+        id="star-title"
+        style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="star-title"
-            style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
-          >
-            {strings.t(M.title)}
-          </h2>
-          <div className="flex flex-col gap-1.5">
-            <Row label={strings.t(M.radius1)}>
-              <LengthInput
-                aria-label={strings.t(M.radius1)}
-                valuePt={options.radius1}
-                onChangePt={(v) => set("radius1", Math.abs(v))}
-              />
-            </Row>
-            <Row label={strings.t(M.radius2)}>
-              <LengthInput
-                aria-label={strings.t(M.radius2)}
-                valuePt={options.radius2}
-                onChangePt={(v) => set("radius2", Math.abs(v))}
-              />
-            </Row>
-            <Row label={strings.t(M.points)}>
-              <NumberInput
-                aria-label={strings.t(M.points)}
-                value={options.points}
-                min={STAR_MIN_POINTS}
-                max={STAR_MAX_POINTS}
-                step={1}
-                onChange={(v) => set("points", Math.round(v))}
-              />
-            </Row>
-            <Row label={strings.t(M.rotation)}>
-              <NumberInput
-                aria-label={strings.t(M.rotation)}
-                value={options.rotationDeg}
-                suffix="°"
-                onChange={(v) => set("rotationDeg", v)}
-              />
-            </Row>
-            <div
-              className="text-xs"
-              style={{ color: "var(--pg-muted-fg)" }}
-              data-star-note=""
-            >
-              {strings.t(M.note)}
-            </div>
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <button
-              type="button"
-              data-star-cancel=""
-              onClick={close}
-              style={{
-                ...buttonStyle,
-                background: "transparent",
-                color: color.fg,
-              }}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-star-ok=""
-              onClick={ok}
-              style={buttonStyle}
-            >
-              {strings.t(M.ok)}
-            </button>
-          </div>
-        </FocusScope>
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <div className="flex flex-col gap-1.5">
+        <Row label={strings.t(M.radius1)}>
+          <LengthInput
+            aria-label={strings.t(M.radius1)}
+            valuePt={options.radius1}
+            onChangePt={(v) => set("radius1", Math.abs(v))}
+          />
+        </Row>
+        <Row label={strings.t(M.radius2)}>
+          <LengthInput
+            aria-label={strings.t(M.radius2)}
+            valuePt={options.radius2}
+            onChangePt={(v) => set("radius2", Math.abs(v))}
+          />
+        </Row>
+        <Row label={strings.t(M.points)}>
+          <NumberInput
+            aria-label={strings.t(M.points)}
+            value={options.points}
+            min={STAR_MIN_POINTS}
+            max={STAR_MAX_POINTS}
+            step={1}
+            onChange={(v) => set("points", Math.round(v))}
+          />
+        </Row>
+        <Row label={strings.t(M.rotation)}>
+          <NumberInput
+            aria-label={strings.t(M.rotation)}
+            value={options.rotationDeg}
+            suffix="°"
+            onChange={(v) => set("rotationDeg", v)}
+          />
+        </Row>
+        <div
+          className="text-xs"
+          style={{ color: "var(--pg-muted-fg)" }}
+          data-star-note=""
+        >
+          {strings.t(M.note)}
+        </div>
       </div>
-    </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          data-star-cancel=""
+          onClick={close}
+          style={{
+            ...buttonStyle,
+            background: "transparent",
+            color: color.fg,
+          }}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button type="button" data-star-ok="" onClick={ok} style={buttonStyle}>
+          {strings.t(M.ok)}
+        </button>
+      </div>
+    </ModalDialog>
   );
 }
 

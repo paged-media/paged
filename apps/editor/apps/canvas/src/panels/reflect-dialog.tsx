@@ -28,7 +28,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   scoped,
   scopeOf,
   useRegistries,
@@ -149,110 +150,94 @@ function ReflectForm({
   });
 
   return (
-    <div
-      data-reflect-backdrop=""
+    <ModalDialog
+      onClose={close}
+      data-reflect-dialog=""
+      data-panel-host=""
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.5)",
+        width: "min(340px, 92vw)",
+        padding: 16,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="reflect-title"
-        data-reflect-dialog=""
-        data-panel-host=""
-        style={{
-          width: "min(340px, 92vw)",
-          padding: 16,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
-        }}
+      <ModalDialogTitle
+        id="reflect-title"
+        style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="reflect-title"
-            style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
-          >
-            {strings.t(M.title)}
-          </h2>
-          <div className="flex flex-col gap-1.5">
-            <Row label={strings.t(M.angle)}>
-              <NumberInput
-                aria-label={strings.t(M.angle)}
-                value={options.angleDeg}
-                suffix="°"
-                onChange={(v) => set("angleDeg", v)}
-              />
-            </Row>
-            <Check
-              label={strings.t(M.aboutPoint)}
-              checked={options.aboutPoint}
-              onChange={(v) => set("aboutPoint", v)}
-              data="about-point"
-            />
-            <Row label={strings.t(M.pointX)}>
-              <LengthInput
-                aria-label={strings.t(M.pointX)}
-                valuePt={options.x}
-                disabled={!options.aboutPoint}
-                onChangePt={(v) => set("x", v)}
-              />
-            </Row>
-            <Row label={strings.t(M.pointY)}>
-              <LengthInput
-                aria-label={strings.t(M.pointY)}
-                valuePt={options.y}
-                disabled={!options.aboutPoint}
-                onChangePt={(v) => set("y", v)}
-              />
-            </Row>
-            <Check
-              label={strings.t(M.copy)}
-              checked={options.copy}
-              onChange={(v) => set("copy", v)}
-              data="copy"
-            />
-            <div
-              className="text-xs"
-              style={{ color: "var(--pg-muted-fg)" }}
-              data-reflect-note=""
-            >
-              {strings.t(M.note)}
-            </div>
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <button
-              type="button"
-              data-reflect-cancel=""
-              onClick={close}
-              style={{
-                ...buttonStyle,
-                background: "transparent",
-                color: color.fg,
-              }}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-reflect-ok=""
-              onClick={ok}
-              style={buttonStyle}
-            >
-              {strings.t(M.ok)}
-            </button>
-          </div>
-        </FocusScope>
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <div className="flex flex-col gap-1.5">
+        <Row label={strings.t(M.angle)}>
+          <NumberInput
+            aria-label={strings.t(M.angle)}
+            value={options.angleDeg}
+            suffix="°"
+            onChange={(v) => set("angleDeg", v)}
+          />
+        </Row>
+        <Check
+          label={strings.t(M.aboutPoint)}
+          checked={options.aboutPoint}
+          onChange={(v) => set("aboutPoint", v)}
+          data="about-point"
+        />
+        <Row label={strings.t(M.pointX)}>
+          <LengthInput
+            aria-label={strings.t(M.pointX)}
+            valuePt={options.x}
+            disabled={!options.aboutPoint}
+            onChangePt={(v) => set("x", v)}
+          />
+        </Row>
+        <Row label={strings.t(M.pointY)}>
+          <LengthInput
+            aria-label={strings.t(M.pointY)}
+            valuePt={options.y}
+            disabled={!options.aboutPoint}
+            onChangePt={(v) => set("y", v)}
+          />
+        </Row>
+        <Check
+          label={strings.t(M.copy)}
+          checked={options.copy}
+          onChange={(v) => set("copy", v)}
+          data="copy"
+        />
+        <div
+          className="text-xs"
+          style={{ color: "var(--pg-muted-fg)" }}
+          data-reflect-note=""
+        >
+          {strings.t(M.note)}
+        </div>
       </div>
-    </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          data-reflect-cancel=""
+          onClick={close}
+          style={{
+            ...buttonStyle,
+            background: "transparent",
+            color: color.fg,
+          }}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-reflect-ok=""
+          onClick={ok}
+          style={buttonStyle}
+        >
+          {strings.t(M.ok)}
+        </button>
+      </div>
+    </ModalDialog>
   );
 }
 

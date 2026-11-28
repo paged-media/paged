@@ -24,11 +24,13 @@
 // included. "export" ranked Blend: Expand first (e·x·p from "Expand",
 // o·r·t from the id), and "table" / "style" listed only Blend commands,
 // whose long ids happen to contain those letters in order.
+//
+// The score itself (AC-PALETTE-RANK-2) is a unit test of the shell:
+// `packages/shell/test/registries/palette-score.test.ts`.
 
 import { expect, test, type Page } from "@playwright/test";
 
 import { Designer } from "./journey/driver/designer";
-import { paletteScore } from "../../../packages/shell/src/chrome/palette-score";
 
 /** The titles of the first `n` rows the palette shows for `query`. */
 async function topTitles(page: Page, query: string, n = 6): Promise<string[]> {
@@ -76,40 +78,5 @@ test.describe("ED-15 — command palette ranking", () => {
 
     // Typing on through a title still finds it.
     expect((await topTitles(page, "text frame"))[0]).toMatch(/text frame/i);
-  });
-
-  test("AC-PALETTE-RANK-2 — the score: a title word beats the id, scattered letters match nothing @feat:editor-shell.command-palette @level:edge", () => {
-    const blendExpand = paletteScore(
-      "media.paged.draw.command.blendExpand",
-      "export",
-      ["Blend: Expand", "Draw"],
-    );
-    expect(blendExpand, "a scattered subsequence is no match").toBe(0);
-
-    const exportPdf = paletteScore("paged.file.exportPdf", "export", [
-      "Export PDF…",
-      "File",
-    ]);
-    const exportInId = paletteScore(
-      "media.paged.x.command.exportThing",
-      "export",
-      ["Write a thing", "X"],
-    );
-    expect(exportPdf).toBeGreaterThan(exportInId);
-    expect(exportInId).toBeGreaterThan(0);
-
-    // Every word of the query must land somewhere.
-    expect(
-      paletteScore("paged.insert.textFrame", "text frame", [
-        "Insert text frame",
-        "Insert",
-      ]),
-    ).toBeGreaterThan(0);
-    expect(
-      paletteScore("paged.insert.textFrame", "text banana", [
-        "Insert text frame",
-        "Insert",
-      ]),
-    ).toBe(0);
   });
 });

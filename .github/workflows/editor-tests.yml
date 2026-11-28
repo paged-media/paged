@@ -37,17 +37,39 @@ concurrency:
 # the harness loads — those come from a sparse LFS checkout of the
 # private `paged-media/corpus` repo (≈25 MB, not the 4.4 GB envato tier).
 #
-# Sharding: playwright.config pins workers:1 (snapshot determinism), so
-# the surface is split across 5 shards (3 until 2026-10-20 and 4 until
-# 2026-10-25: each time a loaded runner put shard 1 past the 55-minute
-# global timeout with every test green)
-# via `--shard`, each emitting a `blob` report. A final job merges the
+# Sharding and speed (2026-11-28; the suite's median run was 60 minutes on
+# ten shards that ran between 2 and 47 minutes each):
+#   - The suite runs against the PRODUCTION build (`bun run build:e2e`,
+#     served by `vite preview`; playwright.config PAGED_E2E_SERVER=preview),
+#     not the dev server: every test loads the page, and the dev server
+#     answers a load with a few thousand unbundled modules.
+#   - Two workers a shard (PAGED_E2E_WORKERS=2): spec files side by side, a
+#     file's tests in order. playwright.config says what keeps it at two.
+#   - The shards are split by measured duration, not by test count
+#     (scripts/playwright-shards.mjs over apps/canvas/tests/
+#     shard-durations.json): Playwright lists what it would run, the script
+#     deals whole files to the lightest shard and writes shard i's
+#     `--test-list`. The job summary carries the split.
+#   - The sweeps that repeat one assertion over a table run on the SCHEDULE
+#     only (below, "the nightly sweeps"); a push runs one pass of each.
+# Each shard emits a `blob` report. A final job merges the
 # blobs into one Playwright JSON and uploads it as the `playwright-results`
 # artifact. The private `paged-media/state` repo PULLS that artifact
 # (siblings-pull.yml), converts it to contract-v1, applies
 # `ingest/test-map.yaml` plus the journeys' inline `@feat:` tags, and
 # gates feature ids against the registry. See the step comment at the
 # hand-off for why the direction is inverted.
+#
+# The nightly sweeps. The scheduled run (and a dispatch with `full`) runs
+# everything a push runs plus:
+#   - every zoom of the gesture matrix (a push: 100% only,
+#     PAGED_GESTURE_MATRIX_ZOOMS=1; 25% and 400% repeat the same cells);
+#   - the specs tagged @nightly: the 220 paged.image menu entries that all
+#     raise the Image panel (tests/plugin-surface/menus-image-sweep-*.spec.ts;
+#     a push runs menus-image.spec.ts, one such entry and the 22 that do
+#     something else);
+#   - the journeys' visual checkpoints, once Linux baselines are committed.
+# A failing scheduled run opens an issue (the `notify` job).
 #
 # MONOREPO (step A3): ported from paged-media/editor .github/workflows/
 # tests.yml. The repository is checked out at the workspace root, so the
@@ -153,7 +175,16 @@ on:
       - "package.json"
       # Module prose (B3a made every module an editor input).
       - "!modules/*/docs/**/*.md"
+  schedule:
+    # 01:23 UTC: the nightly sweeps (above), before the perf and showcase
+    # nightlies (02:41, 03:17).
+    - cron: "23 1 * * *"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "Run the nightly sweeps too (every gesture-matrix zoom, the @nightly specs)."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -174,7 +205,14 @@ env:
   # journeys, the module conformance and the Phase 3 panels) took shards
   # 2, 3 and 7 to the 55-minute --global-timeout, leaving 79 and 83 tests
   # unrun, while shard 6 finished in 18 minutes.
-  SHARDS: 10
+  # Six since 2026-11-28, with two workers each and the split by duration:
+  # the suite measured 272 test minutes on one worker against the dev
+  # server, so a shard holds about 45 of them and its two workers about 23
+  # each, before what the production build saves. The matrix below lists the
+  # same six: change both.
+  SHARDS: 6
+  # The scheduled run, or a dispatch that asks for it: the nightly sweeps.
+  FULL: ${{ github.event_name == 'schedule' || inputs.full == true }}
 
 jobs:
   # Static guards that need only the editor repo itself — no plugin
@@ -309,22 +347,14 @@ jobs:
       - name: diagnostics journal (sanitiser, recorder, export)
         run: bun run test:journal
 
-      # The object model's field model, automation demo and the app's shared
-      # registry. Unrun until 2026-11-28 like the journal; five of its cases
-      # had gone stale by then (`editorObjectModel` is no longer an export of
-      # apps/canvas/src/object-model.ts; `objects.shared@1`; the data
-      # binding badge's query id). ADVISORY until they are brought back in
-      # line: the step reports and annotates, and does not fail the job.
-      # Remove `continue-on-error` with that fix.
-      - name: object model (ADVISORY, 5 stale cases — not a pass)
-        id: object-model
-        continue-on-error: true
+      # The object model's field model, the data binding probe, the
+      # automation demo and the editor's object registry. First run in CI on
+      # 2026-11-28, advisory for a day: five of its cases had gone stale (the
+      # registry is per editor, `editorObjectsOf(scope)`, no longer a module
+      # export; the binding probe asks the data service). They are repaired,
+      # and the step gates.
+      - name: object model (field model, bindings, registry)
         run: bun run test:object-model
-      - name: object model — say that it is red
-        if: ${{ !cancelled() && steps.object-model.outcome == 'failure' }}
-        run: |
-          echo "::warning title=object model tests are failing::scripts/object-model.test.mjs fails and does not gate (advisory since it was first run in CI). Fix the stale cases and drop continue-on-error."
-          echo "### object model: FAILING (advisory, not gating)" >> "$GITHUB_STEP_SUMMARY"
 
       # Where the bun test lanes below write their JUnit (bun does not
       # create the directory); collected at the end of the job.
@@ -409,6 +439,24 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      # The JS budget: the entry chunks of index.html and embed.html (what a
+      # first load fetches before anything is asked for), raw and gzip,
+      # against scripts/js-budget.json. An entry more than 1% over its record
+      # fails; it grows only through an edit of that file (`--write`). Reads
+      # the production build of the step above.
+      - name: js-budget script tests
+        run: bun run test:js-budget
+      - name: JS entry size ratchet (scripts/js-budget.json)
+        run: bun run js-budget --json-out "$RUNNER_TEMP/paged-measurements-js.json"
+      - name: upload JS measurement
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: paged-measurements-js
+          path: ${{ runner.temp }}/paged-measurements-js.json
+          if-no-files-found: warn
+          retention-days: 90
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
@@ -487,6 +535,11 @@ jobs:
       # tags in either direction (the Playwright listing reads the specs).
       - name: quarantine (owner, expiry, list = tags)
         run: bun run test:quarantine
+      # The scripts the Playwright job leans on: the split of the suite into
+      # shards by duration (every file in exactly one shard) and the summary
+      # of skipped tests.
+      - name: the shard split and the skip summary (their own tests)
+        run: bun run test:ci-scripts
       # `packages/client` is the programmable SDK — the write surface the
       # read-only viewer SDK deliberately is not. Its api-catalog.json is
       # GENERATED from the source, so this step is two assertions at once:
@@ -507,6 +560,22 @@ jobs:
       # too; the table is generated from theme.css and must be current.
       - name: theme-token contract is current
         run: bun run test:theme-tokens
+
+      # What the bun test lanes above SKIPPED (test.skip, skipIf, todo), in
+      # the job summary: a lane reports a skipped case as neither red nor
+      # green (packages/repository's server tests without PAGED_SERVER_URL,
+      # for one).
+      - name: skipped bun tests → job summary
+        if: ${{ !cancelled() }}
+        run: |
+          shopt -s nullglob
+          reports=("$RUNNER_TEMP"/editor-junit/*.bun.xml)
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "::warning title=no bun test reports::no lane wrote a JUnit report, so the skipped tests cannot be listed"
+            exit 0
+          fi
+          bun scripts/skip-summary.mjs --title "bun test lanes (checks)" \
+            --junit "${reports[@]}" --md-out "$GITHUB_STEP_SUMMARY"
 
       # The bun test lanes above as evidence: bun's reports, rewritten into
       # the vitest shape (tooling/js/bun-junit.mjs) with each spec path made
@@ -618,7 +687,7 @@ jobs:
           retention-days: 90
 
   playwright:
-    name: playwright (shard ${{ matrix.shard }}/10)
+    name: playwright (shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
     # 50, not 30: the COLD (uncached) paged-gen fixture-generator build
     # consumed most of a 30-min budget, leaving no room for the sharded
@@ -640,7 +709,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6]
+    env:
+      PAGED_CI_LEAN: "1"
+      # The production build under `vite preview`, two workers (the header).
+      PAGED_E2E_SERVER: preview
+      PAGED_E2E_WORKERS: "2"
+      # This lane builds the data and web engines (module-wasm, below), so it
+      # has promised them: a journey whose engine does not boot FAILS here
+      # instead of skipping (tests/journey/plugins/data-engine-gate.ts,
+      # web-render.journey.spec.ts). Unset until 2026-11-28: until then a
+      # missing engine was a skip in a green run.
+      REQUIRE_REAL_ENGINE: "1"
+      # The nightly sweeps (the header): a push leaves out the @nightly specs
+      # and runs the gesture matrix at 100% only; FULL runs both in full (an
+      # empty PAGED_GESTURE_MATRIX_ZOOMS is every zoom).
+      PW_EXCLUDE: ${{ (github.event_name == 'schedule' || inputs.full == true) && '@quarantine' || '@quarantine|@nightly' }}
+      PAGED_GESTURE_MATRIX_ZOOMS: ${{ (github.event_name == 'schedule' || inputs.full == true) && '' || '1' }}
     steps:
       # The whole repository at the workspace root: the editor is
       # apps/editor, core's paged-gen is engine/core, and the doc/slide link
@@ -807,10 +892,9 @@ jobs:
 
       # The engine and the bundles' engine wasm, as in `checks` (restored
       # from the cache that job, or an earlier run, saved). The Playwright
-      # surface runs against the vite DEV server (playwright.config
-      # `webServer`: Vite on Node), whose import analysis resolves the bundles'
-      # relative wasm glue (sheet, web, doc, draw, image, pdf) at transform
-      # time. The typecheck runs in `checks`.
+      # surface runs against the production build made below, which bundles
+      # the engine's and the bundles' wasm (sheet, web, doc, draw, image,
+      # pdf). The typecheck runs in `checks`.
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
         with: { artifact: "false" }
@@ -868,6 +952,61 @@ jobs:
         working-directory: apps/editor/apps/canvas
         run: bunx --no-install playwright install chromium
 
+      # The build the suite runs against (`vite build --mode e2e` into
+      # dist-e2e: a production build that keeps the page's test handles,
+      # apps/canvas/src/build-flags.ts). Its own step, so a build failure is
+      # one, and so its time is visible: it measured under a minute locally.
+      # Each shard builds its own copy; a shared build job would cost every
+      # shard that job's set-up before it could start.
+      - name: build the editor (e2e mode)
+        timeout-minutes: 15
+        working-directory: apps/editor/apps/canvas
+        run: bun run build:e2e
+
+      # What this shard runs. Playwright lists the run (the same projects and
+      # the same exclusions as the step below, so the split can neither name
+      # a file the run does not collect nor miss one), and
+      # scripts/playwright-shards.mjs deals the files out by measured
+      # duration. The table of all shards goes to the job summary.
+      - name: split the suite by duration (shard ${{ matrix.shard }} of ${{ env.SHARDS }})
+        working-directory: apps/editor/apps/canvas
+        env:
+          CI: "1"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-list.json
+        run: |
+          set -euo pipefail
+          npx playwright test --list \
+            --project=chromium \
+            --project=journeys \
+            --project=integration \
+            --grep-invert "$PW_EXCLUDE" \
+            --reporter=json > /dev/null
+          bun ../../scripts/playwright-shards.mjs \
+            --list "$RUNNER_TEMP/playwright-list.json" \
+            --shards "$SHARDS" --shard "${{ matrix.shard }}" \
+            --workers "$PAGED_E2E_WORKERS" \
+            --out "$RUNNER_TEMP/playwright-shard.txt" \
+            --md-out "$GITHUB_STEP_SUMMARY"
+
+      # The journeys' VISUAL checkpoints (contentCheckpoint, chromeCheckpoint
+      # in tests/journey/driver/designer.ts) return early in CI unless
+      # JOURNEY_VISUAL=1. They are a nightly check, and only once Linux
+      # baselines are committed (tests/journey/__screenshots__/**/*-linux.png;
+      # seeded by the dispatch-only step below): with none, every checkpoint
+      # would fail for want of its image. The step after the run says in the
+      # job summary which of the two this run was.
+      - name: journey visual checkpoints (nightly, when Linux baselines exist)
+        working-directory: apps/editor/apps/canvas
+        run: |
+          BASELINES=$(find tests/journey/__screenshots__ -name '*-journeys-linux.png' 2>/dev/null | wc -l | tr -d ' ')
+          echo "JOURNEY_BASELINES=$BASELINES" >> "$GITHUB_ENV"
+          if [ "$FULL" = "true" ] && [ "$BASELINES" -gt 0 ]; then
+            echo "JOURNEY_VISUAL=1" >> "$GITHUB_ENV"
+            echo "journey visual checkpoints: ON ($BASELINES Linux baselines)"
+          else
+            echo "journey visual checkpoints: off (FULL=$FULL, $BASELINES Linux baselines)"
+          fi
+
       # --project is REQUIRED here, not tidiness. Without it Playwright
       # runs EVERY project in the config, which on a Linux runner means
       # `journeys-gpu` and `showcase` — both of which need real Chrome
@@ -894,12 +1033,14 @@ jobs:
       # --global-timeout (55 minutes: it stops, marks the rest "did not run"
       # and still writes the blob, which the upload below keeps), and this
       # step's timeout-minutes as the last resort if Playwright itself wedges.
+      #
+      # `--test-list` is this shard's files (the step above); Playwright's own
+      # `--shard` is not used.
       - name: playwright (lean surface, shard ${{ matrix.shard }})
         working-directory: apps/editor/apps/canvas
         timeout-minutes: 65
         env:
           CI: "1"
-          PAGED_CI_LEAN: "1"
         # Three shards lost their runner to a shutdown signal on 2026-10-20,
         # each after a minute of silence mid-suite: the signature of a runner
         # out of memory. Every 30 s the step logs the memory left and the
@@ -928,37 +1069,41 @@ jobs:
             --project=chromium \
             --project=journeys \
             --project=integration \
-            --grep-invert @quarantine \
-            --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
+            --grep-invert "$PW_EXCLUDE" \
+            --test-list "$RUNNER_TEMP/playwright-shard.txt" \
             --global-timeout=3300000 \
             --reporter=blob,list
           status=$?
           kill "$logger"
           exit "$status"
 
-      # The journeys' VISUAL checkpoints (contentCheckpoint, chromeCheckpoint
-      # in tests/journey/driver/designer.ts) return early in CI unless
-      # JOURNEY_VISUAL=1: there are no Linux baselines to compare against.
-      # The journeys above therefore check behaviour, not pixels. That is
-      # said here, in the job summary, so that a green run is not read as
-      # "the screenshots matched". Enabling them needs the Linux baselines
-      # seeded (the advisory step below) and committed first.
-      - name: journey visual checkpoints were SKIPPED — say so
+      # Whether the journeys' screenshots were compared, said in the job
+      # summary, so that a green run is not read as "the screenshots matched"
+      # when the checkpoints returned early (see the step before the run).
+      - name: journey visual checkpoints — say whether they were compared
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: apps/editor/apps/canvas
         run: |
           CONTENT=$(grep -rho --include='*.spec.ts' 'contentCheckpoint(' tests/journey | wc -l | tr -d ' ')
           CHROME=$(grep -rho --include='*.spec.ts' 'chromeCheckpoint(' tests/journey | wc -l | tr -d ' ')
-          BASELINES=$(find tests/journey/__screenshots__ -name '*-linux.png' 2>/dev/null | wc -l | tr -d ' ')
-          {
-            echo "### Journey visual checkpoints: SKIPPED (not compared)"
-            echo ""
-            echo "The journey specs call \`contentCheckpoint\` $CONTENT times and \`chromeCheckpoint\` $CHROME times."
-            echo "In this run every one of them returned without comparing a pixel (JOURNEY_VISUAL is not set;"
-            echo "$BASELINES Linux baseline image(s) are committed). The journeys' behaviour assertions ran; their"
-            echo "screenshots were not checked."
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice title=journey visual checkpoints skipped::$CONTENT content and $CHROME chrome checkpoints were not compared in this run (no Linux baselines; JOURNEY_VISUAL unset). See the job summary."
+          if [ "${JOURNEY_VISUAL:-}" = "1" ]; then
+            {
+              echo "### Journey visual checkpoints: COMPARED"
+              echo ""
+              echo "The journey specs call \`contentCheckpoint\` $CONTENT times and \`chromeCheckpoint\` $CHROME times;"
+              echo "this run compared them against the $JOURNEY_BASELINES committed Linux baseline image(s)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Journey visual checkpoints: SKIPPED (not compared)"
+              echo ""
+              echo "The journey specs call \`contentCheckpoint\` $CONTENT times and \`chromeCheckpoint\` $CHROME times."
+              echo "In this run every one of them returned without comparing a pixel: they are compared on the"
+              echo "scheduled run only, and only once Linux baselines are committed ($JOURNEY_BASELINES are; this run: FULL=$FULL)."
+              echo "The journeys' behaviour assertions ran; their screenshots were not checked."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=journey visual checkpoints skipped::$CONTENT content and $CHROME chrome checkpoints were not compared in this run ($JOURNEY_BASELINES Linux baselines; FULL=$FULL). See the job summary."
+          fi
 
       # The quarantined tests (apps/canvas/tests/quarantine.json, ADR 228)
       # still run, apart and advisory: with retries, so their flake rate
@@ -972,7 +1117,6 @@ jobs:
         working-directory: apps/editor/apps/canvas
         env:
           CI: "1"
-          PAGED_CI_LEAN: "1"
           PLAYWRIGHT_BLOB_OUTPUT_DIR: blob-quarantine
         run: |
           npx playwright test \
@@ -1026,7 +1170,6 @@ jobs:
         working-directory: apps/editor/apps/canvas
         env:
           CI: "1"
-          PAGED_CI_LEAN: "1"
           JOURNEY_VISUAL: "1"
         run: |
           npx playwright test \
@@ -1100,6 +1243,18 @@ jobs:
             > /dev/null
           test -s "${{ github.workspace }}/playwright-results.json"
 
+      # What the suite SKIPPED, with the reason each test gave
+      # (docs/development/testing.md: a skip says so). A skipped test is
+      # neither red nor green, and the shards' logs are the only other place
+      # that names one.
+      - name: skipped tests → job summary
+        if: ${{ !cancelled() && hashFiles('playwright-results.json') != '' }}
+        run: >-
+          bun scripts/skip-summary.mjs --title "Playwright (all shards)"
+          --playwright "$GITHUB_WORKSPACE/playwright-results.json"
+          --md-out "$GITHUB_STEP_SUMMARY"
+          --json-out "$GITHUB_WORKSPACE/playwright-skips.json"
+
       # The flake rate per run (ADR 228): flaky / tests that ran, from the
       # merged report, plus the quarantined tests' own outcome. Its own
       # artifact, never inside playwright-results (cockpit parses every
@@ -1141,6 +1296,7 @@ jobs:
           path: |
             flake-rate.json
             playwright-quarantine.json
+            playwright-skips.json
           if-no-files-found: warn
           retention-days: 90
 
@@ -1164,3 +1320,16 @@ jobs:
           path: playwright-results.json
           if-no-files-found: error
           retention-days: 14
+
+  # A failing scheduled run has no author looking at it: it opens (or
+  # updates) an issue instead, and the first green night closes it
+  # (.github/workflows/scheduled-failure-issue.yml). Scheduled runs only.
+  notify:
+    name: issue on a failing scheduled run
+    needs: [checks, surface, playwright, publish]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/scheduled-failure-issue.yml
+    with:
+      failed: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

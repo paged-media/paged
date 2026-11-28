@@ -29,8 +29,23 @@
 // back over stay recoverable. When the editor keeps its document in the
 // local library (ADR 180), a snapshot is also saved there as a version, so
 // it outlives the session.
+//
+// WINDOWED. A timeline is as long as its depth (10,000 steps; an edit
+// context's own history has no bound), so only the rows in view are in
+// the DOM, by the fixed-row arithmetic the object tree windows with
+// (`OBJECT_TREE_ROW_PX`, `scrollToShow`): each row is a list item that
+// says its place (`aria-posinset` of `aria-setsize`), the current step's
+// row is always in the DOM and is scrolled into view when the current
+// step changes, and Up / Down / Home / End move focus along the rows.
 
-import { useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import {
   PanelToolbar,
@@ -47,6 +62,7 @@ import type { UndoLogEntryWire } from "@paged-media/client";
 import { color, font, status } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
+import { OBJECT_TREE_ROW_PX, scrollToShow } from "../ui/A11yObjectTree";
 import {
   HISTORY_DEPTHS,
   historyStoreOf,
@@ -76,6 +92,7 @@ const M = defineMessages("app.historyPanel", {
   depth: "History depth",
   depthValue: "{count, plural, one {# step} other {# steps}}",
   shown: "Showing the newest {shown} of {total} steps",
+  steps: "History steps",
 });
 
 // The engine's default labels, by the key it derived them from: the
@@ -330,6 +347,198 @@ const rowStyle = (state: "done" | "current" | "undone") => ({
   cursor: state === "current" ? "default" : "pointer",
 });
 
+/** One row's height, px: fixed, so the window is arithmetic (the object
+ *  tree's row, whose `scrollToShow` the list scrolls with). */
+export const HISTORY_ROW_PX = OBJECT_TREE_ROW_PX;
+/** Rows drawn above and below the window. */
+const OVERSCAN = 8;
+/** Rows drawn where nothing has a height (a DOM without layout). */
+const FALLBACK_ROWS = 40;
+/** The list's tallest: a slot that lets a panel grow with its content
+ *  (the form column) would otherwise show, and so draw, every row. */
+const LIST_MAX_HEIGHT = "60vh";
+
+/** One row of the timeline, in list order. */
+interface StepRow {
+  key: string;
+  text: string;
+  state: "done" | "current" | "undone";
+  /** The row before every step (the opened document). */
+  origin?: boolean;
+  /** The engine's sequence number of a document step. */
+  seq?: number;
+  title?: string;
+  disabled?: boolean;
+  onGo?: () => void;
+}
+
+/** The timeline's rows, windowed: the rows in view, a margin, and the
+ *  current step's row. `header` stays above the scrolling list. */
+function StepList({
+  rows,
+  header,
+}: {
+  rows: readonly StepRow[];
+  header?: React.ReactNode;
+}) {
+  const strings = useStrings();
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportPx, setViewportPx] = useState(0);
+  // The row a key press moved to: focused once it is drawn (a new object
+  // per press, so the same row can be asked for again).
+  const [focusTo, setFocusTo] = useState<{ index: number } | null>(null);
+  const windowPx = viewportPx > 0 ? viewportPx : FALLBACK_ROWS * HISTORY_ROW_PX;
+
+  // The current step, scrolled into view when it changes (an undo, a
+  // click, a new step) and once more when the list learns its height —
+  // adjusted during render, the way React adjusts state to a changed
+  // input.
+  const currentIndex = rows.findIndex((r) => r.state === "current");
+  const currentKey =
+    currentIndex >= 0
+      ? `${rows[currentIndex]!.key}|${viewportPx > 0 ? "measured" : ""}`
+      : null;
+  const [seenCurrent, setSeenCurrent] = useState<string | null>(null);
+  if (currentKey !== seenCurrent) {
+    setSeenCurrent(currentKey);
+    if (currentIndex >= 0)
+      setScrollTop(scrollToShow(currentIndex, scrollTop, windowPx));
+  }
+
+  // The window: the rows in view and a margin; the current row and the
+  // row focus is moving to stay in the DOM wherever the wheel went.
+  const first = Math.max(0, Math.floor(scrollTop / HISTORY_ROW_PX) - OVERSCAN);
+  const last = Math.min(
+    rows.length,
+    Math.ceil((scrollTop + windowPx) / HISTORY_ROW_PX) + OVERSCAN,
+  );
+  const drawn = new Set<number>();
+  for (let i = first; i < last; i++) drawn.add(i);
+  for (const i of [currentIndex, focusTo?.index ?? -1])
+    if (i >= 0 && i < rows.length) drawn.add(i);
+  const indices = [...drawn].sort((x, y) => x - y);
+
+  // The DOM scroll follows the state (the current step moved, a key).
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (el && Math.abs(el.scrollTop - scrollTop) > 1) el.scrollTop = scrollTop;
+  }, [scrollTop]);
+
+  // The window's height, from layout.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setViewportPx(el.clientHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (focusTo === null) return;
+    listRef.current
+      ?.querySelector<HTMLElement>(
+        `[data-history-index="${focusTo.index}"] button`,
+      )
+      ?.focus({ preventScroll: true });
+  }, [focusTo]);
+
+  // Up / Down / Home / End move focus along the rows (a row that cannot
+  // be gone to is stepped over); Tab still walks the rows in view.
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step =
+      e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowUp"
+          ? -1
+          : e.key === "Home"
+            ? 1
+            : e.key === "End"
+              ? -1
+              : 0;
+    if (step === 0 || e.altKey || e.ctrlKey || e.metaKey) return;
+    const from = (e.target as HTMLElement).closest<HTMLElement>(
+      "[data-history-index]",
+    );
+    let i =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? rows.length - 1
+          : Number(from?.dataset.historyIndex ?? currentIndex) + step;
+    while (i >= 0 && i < rows.length && rows[i]!.disabled) i += step;
+    if (i < 0 || i >= rows.length) return;
+    e.preventDefault();
+    setFocusTo({ index: i });
+    setScrollTop((top) => scrollToShow(i, top, windowPx));
+  };
+
+  return (
+    <div
+      data-history-steps
+      style={{ display: "flex", flexDirection: "column", minHeight: 0 }}
+    >
+      {header}
+      <div
+        ref={listRef}
+        role="list"
+        aria-label={strings.t(M.steps)}
+        data-history-list
+        data-history-count={rows.length}
+        style={{ overflow: "auto", minHeight: 0, maxHeight: LIST_MAX_HEIGHT }}
+        onKeyDown={onKeyDown}
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      >
+        <div
+          role="none"
+          style={{ height: rows.length * HISTORY_ROW_PX, position: "relative" }}
+        >
+          {indices.map((index) => {
+            const row = rows[index]!;
+            return (
+              <div
+                key={row.key}
+                role="listitem"
+                aria-posinset={index + 1}
+                aria-setsize={rows.length}
+                data-history-index={index}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: index * HISTORY_ROW_PX,
+                  height: HISTORY_ROW_PX,
+                }}
+              >
+                <button
+                  type="button"
+                  data-history-origin={row.origin ? "" : undefined}
+                  data-history-step={row.origin ? undefined : ""}
+                  data-history-seq={row.seq}
+                  data-history-state={row.state}
+                  aria-current={row.state === "current" ? "step" : undefined}
+                  disabled={row.disabled}
+                  title={row.title}
+                  style={{
+                    ...rowStyle(row.state),
+                    height: "100%",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                  }}
+                  onClick={row.onGo}
+                >
+                  {row.text}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DocumentSteps() {
   const strings = useStrings();
   const editor = usePaged();
@@ -354,68 +563,55 @@ function DocumentSteps() {
       </div>
     );
   }
+  const rows: StepRow[] = [
+    {
+      key: "origin",
+      origin: true,
+      text: strings.t(originReachable ? M.opened : M.openedEvicted),
+      state: atOrigin ? "current" : "done",
+      disabled: atOrigin || !originReachable,
+      title: originReachable ? undefined : strings.t(M.openedEvicted),
+      onGo: () => void store.goToUndo(-1),
+    },
+  ];
+  log.undo.forEach((step, i) => {
+    const isCurrent = i === log.undo.length - 1;
+    const text = stepText(step, t);
+    rows.push({
+      key: `s${step.appliedSeq}`,
+      seq: step.appliedSeq,
+      text,
+      state: isCurrent ? "current" : "done",
+      title: isCurrent
+        ? strings.t(M.current)
+        : strings.t(M.goTo, { label: text }),
+      onGo: isCurrent ? undefined : () => void store.goToUndo(i),
+    });
+  });
+  log.redo.forEach((step, i) => {
+    const text = stepText(step, t);
+    rows.push({
+      key: `s${step.appliedSeq}`,
+      seq: step.appliedSeq,
+      text,
+      state: "undone",
+      title: strings.t(M.goForward, { label: text }),
+      onGo: () => void store.goToRedo(i),
+    });
+  });
   return (
-    <div data-history-steps style={{ overflow: "auto" }}>
-      {listedAll ? null : (
-        <div
-          style={{ padding: "3px 12px", fontSize: 11, color: color.mutedFg }}
-        >
-          {strings.t(M.shown, { shown: log.undo.length, total: log.undoLen })}
-        </div>
-      )}
-      <button
-        type="button"
-        data-history-origin
-        data-history-state={atOrigin ? "current" : "done"}
-        aria-current={atOrigin ? "step" : undefined}
-        disabled={atOrigin || !originReachable}
-        title={originReachable ? undefined : strings.t(M.openedEvicted)}
-        style={rowStyle(atOrigin ? "current" : "done")}
-        onClick={() => void store.goToUndo(-1)}
-      >
-        {strings.t(originReachable ? M.opened : M.openedEvicted)}
-      </button>
-      {log.undo.map((step, i) => {
-        const isCurrent = i === log.undo.length - 1;
-        const text = stepText(step, t);
-        return (
-          <button
-            key={step.appliedSeq}
-            type="button"
-            data-history-step
-            data-history-seq={step.appliedSeq}
-            data-history-state={isCurrent ? "current" : "done"}
-            aria-current={isCurrent ? "step" : undefined}
-            title={
-              isCurrent
-                ? strings.t(M.current)
-                : strings.t(M.goTo, { label: text })
-            }
-            style={rowStyle(isCurrent ? "current" : "done")}
-            onClick={isCurrent ? undefined : () => void store.goToUndo(i)}
+    <StepList
+      rows={rows}
+      header={
+        listedAll ? null : (
+          <div
+            style={{ padding: "3px 12px", fontSize: 11, color: color.mutedFg }}
           >
-            {text}
-          </button>
-        );
-      })}
-      {log.redo.map((step, i) => {
-        const text = stepText(step, t);
-        return (
-          <button
-            key={step.appliedSeq}
-            type="button"
-            data-history-step
-            data-history-seq={step.appliedSeq}
-            data-history-state="undone"
-            title={strings.t(M.goForward, { label: text })}
-            style={rowStyle("undone")}
-            onClick={() => void store.goToRedo(i)}
-          >
-            {text}
-          </button>
-        );
-      })}
-    </div>
+            {strings.t(M.shown, { shown: log.undo.length, total: log.undoLen })}
+          </div>
+        )
+      }
+    />
   );
 }
 
@@ -485,53 +681,44 @@ function SnapshotList({
 function ContextSteps({ history }: { history: EditContextHistory }) {
   const strings = useStrings();
   const n = history.undo.length;
+  const rows: StepRow[] = [
+    {
+      key: "origin",
+      origin: true,
+      text: strings.t(M.contextOrigin),
+      state: n === 0 ? "current" : "done",
+      disabled: n === 0,
+      onGo: () => void history.step(-n),
+    },
+  ];
+  history.undo.forEach((label, i) => {
+    const isCurrent = i === n - 1;
+    rows.push({
+      key: `u${i}`,
+      text: label,
+      state: isCurrent ? "current" : "done",
+      onGo: isCurrent ? undefined : () => void history.step(-(n - 1 - i)),
+    });
+  });
+  history.redo.forEach((label, i) => {
+    rows.push({
+      key: `r${i}`,
+      text: label,
+      state: "undone",
+      onGo: () => void history.step(i + 1),
+    });
+  });
   return (
-    <div data-history-steps style={{ overflow: "auto" }}>
-      <div style={{ padding: "4px 12px", fontSize: 11, color: color.mutedFg }}>
-        {strings.t(M.contextTitle)}
-      </div>
-      <button
-        type="button"
-        data-history-origin
-        data-history-state={n === 0 ? "current" : "done"}
-        aria-current={n === 0 ? "step" : undefined}
-        disabled={n === 0}
-        style={rowStyle(n === 0 ? "current" : "done")}
-        onClick={() => void history.step(-n)}
-      >
-        {strings.t(M.contextOrigin)}
-      </button>
-      {history.undo.map((label, i) => {
-        const isCurrent = i === n - 1;
-        return (
-          <button
-            key={`u${i}`}
-            type="button"
-            data-history-step
-            data-history-state={isCurrent ? "current" : "done"}
-            aria-current={isCurrent ? "step" : undefined}
-            style={rowStyle(isCurrent ? "current" : "done")}
-            onClick={
-              isCurrent ? undefined : () => void history.step(-(n - 1 - i))
-            }
-          >
-            {label}
-          </button>
-        );
-      })}
-      {history.redo.map((label, i) => (
-        <button
-          key={`r${i}`}
-          type="button"
-          data-history-step
-          data-history-state="undone"
-          style={rowStyle("undone")}
-          onClick={() => void history.step(i + 1)}
+    <StepList
+      rows={rows}
+      header={
+        <div
+          style={{ padding: "4px 12px", fontSize: 11, color: color.mutedFg }}
         >
-          {label}
-        </button>
-      ))}
-    </div>
+          {strings.t(M.contextTitle)}
+        </div>
+      }
+    />
   );
 }
 

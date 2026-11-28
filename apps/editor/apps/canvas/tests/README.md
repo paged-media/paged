@@ -49,10 +49,46 @@ under the corpus checkout at `apps/editor/corpus` (`fidelity/thresholds.ts`,
 | `FIDELITY_MODE`  | `gate`                       | `gate` fails gated packs on threshold violation; `capture` writes baseline JSON; `advisory` logs only.                                                                                      |
 | `BACKEND`        | `cpu`                        | `gpu` routes per-page renders through the Vello WebGPU readback path. Forces headed Chromium + `--enable-unsafe-webgpu --use-vulkan` flags. Falls back to CPU if the adapter request fails. |
 
+## How CI runs the suite
+
+Locally the suite runs against the Vite dev server with one worker. CI
+(`.github/workflows/editor-tests.yml`) changes three things:
+
+| Var                          | CI      | Meaning                                                                                                                                                                                                                            |
+| ---------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAGED_E2E_SERVER`           | preview | `preview` serves the production build of `bun run build:e2e` (`dist-e2e`, `vite build --mode e2e`) with `vite preview`; the default, `dev`, is the dev server. The e2e build keeps the page's test handles (`src/build-flags.ts`). |
+| `PAGED_E2E_WORKERS`          | 2       | Playwright workers. Spec files run side by side; a file's tests run in order.                                                                                                                                                      |
+| `REQUIRE_REAL_ENGINE`        | 1       | A journey whose data or web engine does not boot fails instead of skipping.                                                                                                                                                        |
+| `PAGED_GESTURE_MATRIX_ZOOMS` | 1       | The gesture matrix at 100% only; the scheduled run leaves it unset (every zoom).                                                                                                                                                   |
+
+To reproduce a CI failure that the dev server does not show:
+
+```sh
+bun run build:e2e
+PAGED_E2E_SERVER=preview npx playwright test --project=chromium tests/<spec>
+```
+
+A spec must not import a source module through the server (`/src/…`,
+`/@fs/…/x.ts`): the build has none. Read editor state through a `__*`
+handle (`src/app/dev-handles.ts`); fetch fixture BYTES through `/@fs/`,
+which the e2e preview server answers too.
+
+The shards are split by measured duration: `scripts/playwright-shards.mjs`
+deals the files Playwright lists over the shards by their seconds in
+`tests/shard-durations.json` and writes each shard's `--test-list`. Refresh
+the map from a merged report (the `playwright-results` artifact):
+`bun scripts/playwright-shards.mjs --update playwright-results.json` in
+`apps/editor`. A spec the map does not know is estimated from its test count.
+
+A spec tagged `@nightly` (`test.describe("…", { tag: "@nightly" }, …)`)
+runs on the workflow's schedule only, not per push: use it for a sweep that
+repeats one assertion over a table, and keep one representative pass
+untagged.
+
 ## Architecture
 
-- `playwright.config.ts` — single-worker chromium project, Vite as
-  `webServer` on port 5180.
+- `playwright.config.ts` — the chromium project (one worker locally), Vite
+  as `webServer` on port 5180.
 - `/tests/fidelity/editor-packs.spec.ts` (the repository's root tests,
   Playwright project `fidelity`) — one `test()` per pack; generates the
   tests at module load from the manifest.

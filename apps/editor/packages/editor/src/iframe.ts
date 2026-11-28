@@ -42,7 +42,15 @@ export type {
   RemoteEditorHandle,
 } from "./types.js";
 
-/** Drive the editor in `iframe`: resolves once it is ready. */
+/**
+ * Drive the editor in `iframe`: resolves once it is ready.
+ *
+ * Bytes cross the frame boundary by copy: what the host passes (the
+ * config's `document`, `load`) stays the host's, whole and reusable, unless
+ * `transferBuffers` asks for a move. What the handle answers (`save`,
+ * `exportPdf`) and what a host action receives (`actions.save`) are the
+ * host's own arrays, shared with nothing in the frame.
+ */
 export function connectEditor(
   iframe: HTMLIFrameElement,
   config: ConnectConfig = {},

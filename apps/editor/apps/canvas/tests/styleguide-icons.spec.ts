@@ -26,19 +26,18 @@
 // geometry — never a hardcoded hue, never a raster. Rather than open
 // 59 panels, this asserts the REGISTRY on three axes:
 //
-//   1. SOURCE scan — read the three glyph `.tsx` registries as text and
-//      assert every authored `fill=`/`stroke=` is currentColor / none /
-//      white / a token var() / the shared LINE spread. A glyph with a
-//      hardcoded hue breaks theme inheritance; it fails here once.
+//   1. SOURCE scan — the three glyph `.tsx` registries read as text:
+//      names prefix-clean and unique, no hardcoded hue. A unit test of
+//      the shell: `packages/shell/test/icons/glyph-registries.test.ts`.
 //   2. WRAPPER scan — every `<svg>` the app's `Icon` actually mounts in
 //      the live chrome is `viewBox="0 0 24 24"` + `fill="currentColor"`.
 //   3. RESOLVE — every icon name the shipped tool rail / panel tabs
 //      reference is a registered glyph (a typo silently renders the
 //      dashed fallback).
 //
-// Reading sources as TEXT (not importing the `.tsx` modules) keeps this
-// independent of any JSX runtime and synchronous — no app boot for the
-// source axis.
+// Axes 2 and 3 are here. The glyph names are read from the sources as
+// TEXT (not by importing the `.tsx` modules), which keeps this
+// independent of any JSX runtime.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -79,74 +78,11 @@ function glyphNames(src: string): string[] {
   return names;
 }
 
-/** Literal (non-token, non-currentColor) `fill=`/`stroke=` paints a
- *  glyph source authors. `white` is the intentional paper fill (hollow
- *  threading port / loadable affordance). */
-function literalPaints(src: string): string[] {
-  const out: string[] = [];
-  const re = /(fill|stroke)=(?:"([^"]*)"|\{([^}]*)\})/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
-    const attr = m[1];
-    const value = (m[2] ?? m[3] ?? "").trim();
-    const ok =
-      value === "currentColor" ||
-      value === '"currentColor"' ||
-      value === "none" ||
-      value === '"none"' ||
-      value === "white" ||
-      value === '"white"' ||
-      value.startsWith("var(") ||
-      value.includes("var(") ||
-      // computed-from-token JSX ({fill || active ? "white" : ink}) where
-      // every branch is a token/currentColor/white — those are caught at
-      // the overlay level, not the static glyph registries; glyphs use
-      // literal attribute strings only, so a bare identifier here is a
-      // spread/ref, never a colour.
-      /^[A-Za-z_$][\w$.]*$/.test(value);
-    if (!ok) out.push(`${attr}=${value}`);
-  }
-  return out;
-}
-
 const ALL_NAMES = REGISTRIES.flatMap((r) =>
   glyphNames(readGlyphSource(r.file)),
 );
 
 test.describe("Styleguide — icon conformance", () => {
-  test("the three glyph registries are populated and prefix-clean @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.tool-rail @level:happy", () => {
-    for (const { file, konst, prefix } of REGISTRIES) {
-      const src = readGlyphSource(file);
-      expect(src, `${file} must export ${konst}`).toContain(
-        `export const ${konst}`,
-      );
-      const names = glyphNames(src);
-      expect(names.length, `${file} glyph count`).toBeGreaterThan(10);
-      const offPrefix = names.filter((n) => !n.startsWith(prefix));
-      expect(
-        offPrefix,
-        `${file}: names must use the "${prefix}" prefix: ${offPrefix.join(", ")}`,
-      ).toEqual([]);
-    }
-    // No name collides across registries (the resolver merges all three;
-    // a dup would silently shadow).
-    const seen = new Set<string>();
-    const dups = ALL_NAMES.filter((n) =>
-      seen.has(n) ? true : (seen.add(n), false),
-    );
-    expect(dups, `duplicate glyph names: ${dups.join(", ")}`).toEqual([]);
-  });
-
-  test("no glyph authors a hardcoded colour (currentColor / token only) @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.tool-rail @level:happy", () => {
-    const offenders: string[] = [];
-    for (const { file } of REGISTRIES) {
-      const src = readGlyphSource(file);
-      const literals = literalPaints(src);
-      if (literals.length) offenders.push(`${file}: ${literals.join(", ")}`);
-    }
-    expect(offenders, "\n" + offenders.join("\n")).toEqual([]);
-  });
-
   test("every Icon the app renders is a 24×24 currentColor SVG @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.tool-rail @level:happy", async ({
     page,
   }) => {

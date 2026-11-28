@@ -28,7 +28,8 @@ import type { CSSProperties } from "react";
 
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   operationFeedbackOf,
   scoped,
   useEditorScope,
@@ -123,75 +124,55 @@ function OpenRecentList() {
         })
       : "";
   return (
-    <div
-      data-open-recent-backdrop=""
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
-      style={backdropStyle}
+    <ModalDialog
+      onClose={close}
+      dismissOnOutside
+      data-open-recent-dialog=""
+      style={dialogStyle}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="open-recent-title"
-        data-open-recent-dialog=""
-        style={dialogStyle}
-      >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2 id="open-recent-title" style={titleStyle}>
-            {strings.t(M.title)}
-          </h2>
-          {rows === null ? (
-            <p style={mutedStyle}>{strings.t(M.loading)}</p>
-          ) : rows.length === 0 ? (
-            <p data-open-recent-empty="" style={mutedStyle}>
-              {strings.t(M.empty)}
-            </p>
-          ) : (
-            <ul style={listStyle}>
-              {rows.map((row) => (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    data-open-recent-row={row.id}
-                    data-open-recent-kind={row.kind}
-                    onClick={() => choose(row)}
-                    style={rowStyle}
-                  >
-                    <span style={{ flex: 1, minWidth: 0 }}>{row.name}</span>
-                    <span style={mutedStyle}>
-                      {strings.t(row.kind === "library" ? M.library : M.file)}
-                      {row.at > 0 ? ` · ${time(row.at)}` : ""}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              data-open-recent-cancel=""
-              onClick={close}
-              style={buttonStyle}
-            >
-              {strings.t(M.cancel)}
-            </button>
-          </div>
-        </FocusScope>
+      <ModalDialogTitle id="open-recent-title" style={titleStyle}>
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      {rows === null ? (
+        <p style={mutedStyle}>{strings.t(M.loading)}</p>
+      ) : rows.length === 0 ? (
+        <p data-open-recent-empty="" style={mutedStyle}>
+          {strings.t(M.empty)}
+        </p>
+      ) : (
+        <ul style={listStyle}>
+          {rows.map((row) => (
+            <li key={row.id}>
+              <button
+                type="button"
+                data-open-recent-row={row.id}
+                data-open-recent-kind={row.kind}
+                onClick={() => choose(row)}
+                style={rowStyle}
+              >
+                <span style={{ flex: 1, minWidth: 0 }}>{row.name}</span>
+                <span style={mutedStyle}>
+                  {strings.t(row.kind === "library" ? M.library : M.file)}
+                  {row.at > 0 ? ` · ${time(row.at)}` : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          data-open-recent-cancel=""
+          onClick={close}
+          style={buttonStyle}
+        >
+          {strings.t(M.cancel)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
-
-const backdropStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1000,
-  display: "grid",
-  placeItems: "center",
-  background: "rgba(0,0,0,0.5)",
-};
 
 const dialogStyle: CSSProperties = {
   width: "min(440px, 92vw)",

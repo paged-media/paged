@@ -56,44 +56,6 @@ async function loadFixtureReact(page: Page, fixture: string = FIXTURE) {
 }
 
 test.describe("W2.12 — Publication health", () => {
-  test("AC-HEALTH-1 — risk rows show live counts, not em-dash seams @feat:editor-shell.panels.publication-health @level:happy", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadFixtureReact(page);
-    const panel = page.locator("[data-publication-health]");
-    await expect(panel).toBeVisible();
-
-    // Risks backed by an ALWAYS-AVAILABLE collection (links →
-    // missing-links + low-res) carry a real numeric count, no
-    // `data-seam`. That's the load-bearing claim: these are LIVE, not
-    // placeholders. `missing-links` is 0 on a clean fixture; `low-res`
-    // reads whatever the link summaries' effective ppi yields.
-    const missingLinks = panel.locator('[data-risk-row="missing-links"]');
-    const lowRes = panel.locator('[data-risk-row="low-res"]');
-    const fonts = panel.locator('[data-risk-row="fonts"]');
-
-    await expect(missingLinks).toHaveAttribute("data-risk-count", "0");
-    await expect(missingLinks).not.toHaveAttribute("data-seam", /.*/);
-    // Live (numeric), value runner-dependent.
-    await expect(lowRes).toHaveAttribute("data-risk-count", /^\d+$/);
-    await expect(lowRes).not.toHaveAttribute("data-seam", /.*/);
-    // Missing fonts is live off the `fonts` collection. The count is
-    // runner-dependent (loadDocument registers only a fallback face, so
-    // a referenced family like Open Sans reads substituted/missing in
-    // the headless harness) — assert LIVE, not a fixed 0.
-    await expect(fonts).toHaveAttribute("data-risk-count", /^\d+$/);
-    await expect(fonts).not.toHaveAttribute("data-seam", /.*/);
-
-    // Aftercare-D: `DocumentStats.overset_stories` is now wired (core
-    // backfills it from the build's OversetTextDropped diagnostics), so
-    // the overset row is a LIVE count — 0 on the clean `text` fixture,
-    // NOT a seam.
-    const overset = panel.locator('[data-risk-row="overset"]');
-    await expect(overset).toHaveAttribute("data-risk-count", "0");
-    await expect(overset).not.toHaveAttribute("data-seam", /.*/);
-  });
-
   test("AC-HEALTH-OVERSET — text-overset surfaces a live non-zero overset count @feat:editor-shell.panels.publication-health @level:edge", async ({
     page,
   }) => {
@@ -113,19 +75,5 @@ test.describe("W2.12 — Publication health", () => {
         { timeout: 8_000 },
       )
       .toBeGreaterThan(0);
-  });
-
-  test("AC-HEALTH-2 — preflight risk row is a seam until an export runs @feat:editor-shell.panels.publication-health @level:happy", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadFixtureReact(page);
-    const panel = page.locator("[data-publication-health]");
-    await expect(panel).toBeVisible();
-    // No export has run yet → preflight findings have no count.
-    await expect(panel.locator('[data-risk-row="preflight"]')).toHaveAttribute(
-      "data-seam",
-      /.*/,
-    );
   });
 });

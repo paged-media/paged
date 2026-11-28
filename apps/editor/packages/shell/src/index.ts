@@ -786,6 +786,13 @@ export {
   DialogErrorBoundary,
   PanelErrorBoundary,
 } from "./chrome/ContainedError";
+// The application's modal dialogs: the shell dialog's focus handling
+// (ADR 234, ADR 1206) under a surface of the caller's own.
+export {
+  ModalDialog,
+  ModalDialogTitle,
+  type ModalDialogProps,
+} from "./components/ui/modal-dialog";
 // Editor ADR 1223 — the publication's issues on the page.
 export {
   activateIssue,

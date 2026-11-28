@@ -448,4 +448,13 @@ export interface ConnectConfig extends Omit<
   origin?: string;
   /** How long to wait for the frame, in ms (default 60 s). */
   timeout?: number;
+  /**
+   * Move the bytes the host passes (`document`, `load`) into the frame
+   * instead of copying them. Off by default: the bridge copies, and the
+   * host's arrays stay whole. When on, a `Uint8Array` that spans its whole
+   * buffer is empty (`byteLength` 0) once it has been passed, as is every
+   * other view on that buffer: for a host that hands over a large document
+   * and does not read it again.
+   */
+  transferBuffers?: boolean;
 }

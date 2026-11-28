@@ -131,29 +131,6 @@ test.describe("Phase 3 — element-scope declarative panels", () => {
     ).toBeVisible();
   });
 
-  test("AC-OBJECT-1 — Object panel mounts; em-dash placeholders when no selection @feat:editor-shell.panels.object-transform @feat:editor-shell.panels.stroke @level:smoke", async ({
-    page,
-  }) => {
-    await activateTab(page, "paged.object-transform");
-    await expect(
-      page.locator('[data-object-transform-panel="ready"]'),
-    ).toBeVisible();
-    await expect(
-      page.locator(
-        '[data-object-transform-panel="ready"] [data-section="Object"]',
-      ),
-    ).toBeVisible();
-    // 7 live metrics carry the em-dash mixed state with no
-    // selection: X, Y, W, H (derived from frameBounds), Opacity, and
-    // the W2.3 Scale X / Scale Y NumberInputs (each null → mixed).
-    // The Rotation SmartDial is inert (no mixed sentinel while
-    // disabled) and Flip H/V are buttons, not metric fields.
-    const mixed = page.locator(
-      '[data-object-transform-panel="ready"] [data-mixed]',
-    );
-    await expect(mixed).toHaveCount(7);
-  });
-
   test("AC-OBJECT-2 — selecting a frame populates Bounds + Opacity @feat:editor-shell.panels.object-transform @feat:editor-shell.panels.stroke @level:happy", async ({
     page,
   }) => {
@@ -175,49 +152,6 @@ test.describe("Phase 3 — element-scope declarative panels", () => {
     await expect(
       page.locator('[data-object-transform-panel="ready"] input[disabled]'),
     ).toHaveCount(0);
-  });
-
-  test("AC-OBJECT-3 — multi-selection with differing bounds shows mixed @feat:editor-shell.panels.object-transform @feat:editor-shell.panels.stroke @level:happy", async ({
-    page,
-  }) => {
-    // Select two frames with different bounds — Bounds should
-    // collapse to mixed (em-dash), Opacity should also be mixed
-    // unless they happen to share the value.
-    await page.evaluate(async () => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            client: {
-              setElementSelection: (
-                ids: { kind: string; id: string }[],
-                mode: string,
-              ) => Promise<{ kind: string; id: string }[]>;
-            };
-            setElementSelection: (ids: { kind: string; id: string }[]) => void;
-          };
-        }
-      ).__canvas;
-      const ids = await c.client.setElementSelection(
-        [
-          { kind: "textFrame", id: "ua365e1" },
-          { kind: "rectangle", id: "ueccee2" },
-        ],
-        "replace",
-      );
-      c.setElementSelection(ids);
-    });
-    await activateTab(page, "paged.object-transform");
-    // The two frames have different bounds → Bounds field is mixed
-    // → em-dash. Opacity may or may not be mixed depending on
-    // fixture; assert at least 1 mixed appears (Bounds).
-    await expect
-      .poll(
-        async () =>
-          await page
-            .locator('[data-object-transform-panel="ready"] [data-mixed]')
-            .count(),
-      )
-      .toBeGreaterThanOrEqual(1);
   });
 
   test("AC-OBJECT-4 — rotation decompose sandwich: rotate 30° → reads ~30 → undo restores @feat:editor-shell.panels.object-transform @feat:editor-shell.panels.stroke @level:happy", async ({

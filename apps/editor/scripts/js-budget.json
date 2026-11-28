@@ -1,0 +1,16 @@
+{
+  "about": "The JavaScript size ratchet of the editor build (scripts/js-budget.mjs). Per entry page, the bytes of every script its HTML names (the entry script and its modulepreloads), raw and gzip, as measured from a production build. A build more than `tolerance` over a number fails: raise it here, in the change that grows the entry, and say why in the commit. `bun scripts/js-budget.mjs --write` records the current build.",
+  "tolerance": 0.01,
+  "entries": {
+    "main": {
+      "html": "index.html",
+      "raw": 4542469,
+      "gzip": 1345402
+    },
+    "embed": {
+      "html": "embed.html",
+      "raw": 7132,
+      "gzip": 3687
+    }
+  }
+}

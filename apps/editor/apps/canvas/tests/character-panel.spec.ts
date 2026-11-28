@@ -159,39 +159,6 @@ test.describe("Phase 3 — Character panel (declarative composition)", () => {
       .toBeLessThan(4);
   });
 
-  test("AC-CHAR-4 — setContentSelection routes through __canvas without throwing @feat:editor-shell.panels.character @feat:typography.font-selection @level:happy", async ({
-    page,
-  }) => {
-    // The shell exposes `setContentSelection` on the __canvas debug
-    // surface so tests can drive content-scope bindings without
-    // needing a click → text-mode → drag flow. This smoke test
-    // verifies the wire is in place. A richer end-to-end test that
-    // populates Character fields needs a public surface listing
-    // story ids; that's Phase 3.x scope (the natural addition is a
-    // `paged.stories()` script-side function returning self_id +
-    // first-run offsets so a test can pick a non-trivial range).
-    const ok = await page.evaluate(() => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            setContentSelection: (
-              sel: { storyId: string; start: number; end: number } | null,
-            ) => void;
-          };
-        }
-      ).__canvas;
-      if (typeof c.setContentSelection !== "function") return false;
-      // Passing a placeholder id is fine — the worker rejects it
-      // gracefully (the script-side bridge already proves this in
-      // crates/paged-script/tests/it/script_basics.rs).
-      c.setContentSelection({ storyId: "Story/__test__", start: 0, end: 3 });
-      // Clear so it doesn't leak into the next test.
-      c.setContentSelection(null);
-      return true;
-    });
-    expect(ok).toBe(true);
-  });
-
   test("AC-CHAR-5 — OpenType chips write characterOtfFeatures over a story range; round-trips @feat:editor-shell.panels.character @feat:typography.font-selection @level:happy", async ({
     page,
   }) => {

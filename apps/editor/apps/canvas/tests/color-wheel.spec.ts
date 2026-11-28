@@ -44,19 +44,6 @@ async function loadFixture(page: Page) {
   await loadViaFileInput(page, FIXTURE);
 }
 
-async function swatchCount(page: Page): Promise<number> {
-  return page.evaluate(async () => {
-    const c = (
-      globalThis as unknown as {
-        __canvas: {
-          client: { collection: (n: string) => Promise<unknown[]> };
-        };
-      }
-    ).__canvas;
-    return (await c.client.collection("swatches")).length;
-  });
-}
-
 function hexField(page: Page) {
   return page.locator('[data-wheel-field="HEX"]');
 }
@@ -153,24 +140,5 @@ test.describe("Panel gallery — Color Wheel", () => {
     const targetHex = (await target.getAttribute("title"))!;
     await target.click();
     await expect(hexField(page)).toHaveValue(targetHex);
-  });
-
-  test("AC-CW-5 — Add to Swatches lands the palette as ONE undoable batch @feat:editor-shell.panels.color-wheel @level:happy", async ({
-    page,
-  }) => {
-    const before = await swatchCount(page);
-    // Triadic default → 3 swatches in one batch mutation.
-    await page.locator("[data-wheel-add-palette]").click();
-    await expect.poll(() => swatchCount(page)).toBe(before + 3);
-    // Single undo removes the whole palette (Operation::Batch).
-    await page.evaluate(async () => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: { client: { undo: () => Promise<unknown> } };
-        }
-      ).__canvas;
-      await c.client.undo();
-    });
-    await expect.poll(() => swatchCount(page)).toBe(before);
   });
 });

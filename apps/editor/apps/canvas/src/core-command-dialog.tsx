@@ -47,7 +47,8 @@ import {
 } from "@paged-media/panel-kit";
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   scoped,
   useEditorScope,
   useScoped,
@@ -414,119 +415,103 @@ function CommandForm({ pending: p }: { pending: Pending }) {
   };
 
   return (
-    <div
-      data-core-command-backdrop=""
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
-      style={backdrop}
+    <ModalDialog
+      onClose={close}
+      dismissOnOutside
+      data-core-command-dialog={op ?? ""}
+      data-ready={info ? "true" : "false"}
+      style={card}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="core-command-title"
-        data-core-command-dialog={op ?? ""}
-        data-ready={info ? "true" : "false"}
-        style={card}
+      <ModalDialogTitle
+        id="core-command-title"
+        style={{ margin: "0 0 4px", fontSize: 15 }}
       >
-        {/* ADR 234 — focus moves in on open, Tab stays inside, and
-            focus returns to the opener on close. */}
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="core-command-title"
-            style={{ margin: "0 0 4px", fontSize: 15 }}
+        {p.title ?? info?.title ?? strings.t(M.runCommand)}
+      </ModalDialogTitle>
+      <p
+        style={{
+          margin: "0 0 12px",
+          fontSize: 12,
+          color: color.mutedFg,
+        }}
+      >
+        {op ? (
+          <code data-core-command-id="" style={mono}>
+            {CORE_COMMAND_PREFIX}
+            {op}
+          </code>
+        ) : (
+          strings.t(M.pick)
+        )}
+      </p>
+      {p.op === null && (
+        <label style={labelStyle}>
+          {strings.t(M.command)}
+          <select
+            data-core-command-picker=""
+            value={op ?? ""}
+            onChange={(e) => setOp(e.target.value || null)}
+            style={input}
           >
-            {p.title ?? info?.title ?? strings.t(M.runCommand)}
-          </h2>
-          <p
-            style={{
-              margin: "0 0 12px",
-              fontSize: 12,
-              color: color.mutedFg,
-            }}
-          >
-            {op ? (
-              <code data-core-command-id="" style={mono}>
-                {CORE_COMMAND_PREFIX}
-                {op}
-              </code>
-            ) : (
-              strings.t(M.pick)
-            )}
-          </p>
-          {p.op === null && (
-            <label style={labelStyle}>
-              {strings.t(M.command)}
-              <select
-                data-core-command-picker=""
-                value={op ?? ""}
-                onChange={(e) => setOp(e.target.value || null)}
-                style={input}
-              >
-                <option value="">—</option>
-                {(commands ?? []).map((c) => (
-                  <option
-                    key={c.id}
-                    value={c.id.slice(CORE_COMMAND_PREFIX.length)}
-                  >
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {fields.map(([name, t]) => (
-            <ArgField
-              key={name}
-              name={name}
-              type={t}
-              text={texts[name] ?? ""}
-              options={options[name]}
-              onChange={(v) => setTexts((prev) => ({ ...prev, [name]: v }))}
-            />
-          ))}
-          {error && (
-            <p
-              data-core-command-error=""
-              role="alert"
-              style={{
-                margin: "8px 0",
-                fontSize: 12,
-                color: status.error,
-              }}
-            >
-              {error}
-            </p>
-          )}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 12,
-            }}
-          >
-            <button
-              type="button"
-              data-core-command-cancel=""
-              onClick={close}
-              style={btn(false)}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-core-command-run=""
-              disabled={!info || busy}
-              onClick={() => void run()}
-              style={btn(true, !info || busy)}
-            >
-              {strings.t(M.run)}
-            </button>
-          </div>
-        </FocusScope>
+            <option value="">—</option>
+            {(commands ?? []).map((c) => (
+              <option key={c.id} value={c.id.slice(CORE_COMMAND_PREFIX.length)}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {fields.map(([name, t]) => (
+        <ArgField
+          key={name}
+          name={name}
+          type={t}
+          text={texts[name] ?? ""}
+          options={options[name]}
+          onChange={(v) => setTexts((prev) => ({ ...prev, [name]: v }))}
+        />
+      ))}
+      {error && (
+        <p
+          data-core-command-error=""
+          role="alert"
+          style={{
+            margin: "8px 0",
+            fontSize: 12,
+            color: status.error,
+          }}
+        >
+          {error}
+        </p>
+      )}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          marginTop: 12,
+        }}
+      >
+        <button
+          type="button"
+          data-core-command-cancel=""
+          onClick={close}
+          style={btn(false)}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-core-command-run=""
+          disabled={!info || busy}
+          onClick={() => void run()}
+          style={btn(true, !info || busy)}
+        >
+          {strings.t(M.run)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -626,16 +611,8 @@ function ArgField({
   );
 }
 
-const backdrop: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1000,
-  display: "grid",
-  placeItems: "center",
-  background: "rgba(0,0,0,0.6)",
-  font: `13px/1.5 ${font.sans}`,
-};
 const card: CSSProperties = {
+  font: `13px/1.5 ${font.sans}`,
   width: "min(480px, 92vw)",
   maxHeight: "82vh",
   overflow: "auto",

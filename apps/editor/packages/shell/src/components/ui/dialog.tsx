@@ -30,6 +30,7 @@ import {
   usePortalContainer,
 } from "../../state/editor-root";
 import { useFocusReturn } from "../../focus/focus-return";
+import { tabbableElements } from "../../focus/tabbable";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -60,8 +61,14 @@ function DialogContent({
   onOpenAutoFocus,
   onCloseAutoFocus,
   onEscapeKeyDown,
+  onKeyDownCapture,
+  closeButton = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** The corner's close button. A dialog whose own buttons say how it
+   *  ends (OK and Cancel) goes without. */
+  closeButton?: boolean;
+}) {
   // An Escape typed in another editor on the page is not this dialog's.
   const escapeGuard = useEditorEscapeGuard(onEscapeKeyDown);
   // ADR 234, ADR 1206 — focus returns to whatever opened the dialog, and to
@@ -77,6 +84,10 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         onEscapeKeyDown={escapeGuard}
+        onKeyDownCapture={(event) => {
+          onKeyDownCapture?.(event);
+          wrapTab(event);
+        }}
         onOpenAutoFocus={(event) => {
           focusReturn.open(surface);
           onOpenAutoFocus?.(event);
@@ -94,12 +105,40 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-          <Icon name="ui-x" className="h-4 w-4" />
-          <span className="sr-only">{strings.t(DIALOG.close)}</span>
-        </DialogPrimitive.Close>
+        {closeButton && <CornerClose label={strings.t(DIALOG.close)} />}
       </DialogPrimitive.Content>
     </DialogPortal>
+  );
+}
+
+/**
+ * Tab at the dialog's last control goes to its first, and Shift+Tab at the
+ * first to the last. Radix does this from a bubbling key handler, which a
+ * field that keeps its keys to itself never reaches (a numeric field stops
+ * them, so no tool shortcut fires while typing): focus then stayed on the
+ * field instead of wrapping. In the capture phase the dialog sees the key
+ * before the field does.
+ */
+function wrapTab(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey)
+    return;
+  const stops = tabbableElements(event.currentTarget);
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  const edge = event.shiftKey ? first : last;
+  if (active !== edge) return;
+  event.preventDefault();
+  (event.shiftKey ? last : first).focus({ preventScroll: true });
+}
+
+function CornerClose({ label }: { label: string }) {
+  return (
+    <DialogPrimitive.Close className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+      <Icon name="ui-x" className="h-4 w-4" />
+      <span className="sr-only">{label}</span>
+    </DialogPrimitive.Close>
   );
 }
 

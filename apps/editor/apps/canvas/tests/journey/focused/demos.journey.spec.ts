@@ -36,6 +36,13 @@ const status = (page: Page) =>
 const ready = (page: Page) =>
   expect(status(page)).toContainText("ready", { timeout: 60_000 });
 
+// The iframe client as a module the page can import: the dev server answers
+// the source, the e2e build ships it under a fixed name (vite.config.ts).
+const CONNECT_MODULE =
+  process.env.PAGED_E2E_SERVER === "preview"
+    ? "/e2e/connect.js"
+    : "/src/embed/connect.ts";
+
 test.describe("journey · embedding demos", () => {
   test("the gallery links every demo @feat:editor-shell.solo-mode @level:happy", async ({
     page,
@@ -160,10 +167,9 @@ test.describe("journey · embedding demos", () => {
       }),
     );
     await page.goto("/__lab/host.html");
-    const lab = await page.evaluate(async () => {
-      // A variable, so the spec's own compiler does not resolve the module
-      // the dev server answers.
-      const url = "/src/embed/connect.ts";
+    const lab = await page.evaluate(async (url) => {
+      // An argument, so the spec's own compiler does not resolve the module
+      // the server answers.
       const { connectEditor } = await import(/* @vite-ignore */ url);
       const open = (config: Record<string, unknown>) => {
         const frame = document.createElement("iframe");
@@ -194,7 +200,7 @@ test.describe("journey · embedding demos", () => {
         (e: { code?: string }) => e.code ?? String(e),
       );
       return { before, error: wrote.error, after, refused };
-    });
+    }, CONNECT_MODULE);
     expect(lab.before).not.toContain("Color/Red");
     expect(lab.error).toBeNull();
     expect(lab.after).toContain("Color/Red");

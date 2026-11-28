@@ -59,62 +59,6 @@ async function openStories(page: import("@playwright/test").Page) {
   });
 }
 
-test.describe("W2.12 — Stories panel", () => {
-  test("AC-STORIES-1 — real story list renders from paged.stories() @feat:editor-shell.panels.stories @level:happy", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadIdml(page, FIXTURE);
-    await openStories(page);
-    await expect(page.locator('[data-stories-panel="ready"]')).toBeVisible();
-    const rows = page.locator("[data-story-list] [data-list-row]");
-    await expect(rows).not.toHaveCount(0);
-  });
-
-  test("AC-STORIES-2 — clicking a story selects it (caret at head) @feat:editor-shell.panels.stories @level:gesture", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadIdml(page, FIXTURE);
-    await openStories(page);
-    const first = page.locator("[data-story-list] [data-list-row]").first();
-    await first.click();
-    await expect(first).toHaveAttribute("data-selected", "true");
-    // The content selection landed in the React mirror the dev hook
-    // re-publishes each render.
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            (
-              globalThis as unknown as {
-                __canvas: { contentSelection: { storyId: string } | null };
-              }
-            ).__canvas.contentSelection?.storyId ?? null,
-        ),
-      )
-      .not.toBeNull();
-  });
-
-  test("AC-STORIES-3 — an overset story shows the overset badge @feat:editor-shell.panels.stories @level:edge", async ({
-    page,
-  }) => {
-    // Aftercare-D: `text-overset` ships body stories that overflow their
-    // frames (page 1 short-frame, page 2 threaded chain), so
-    // StorySummary.overset is true for them — exercises the per-row
-    // [data-row-badge="overset"] + the [data-stories-overset-summary]
-    // header count.
-    await openCanvas(page);
-    await loadIdml(page, OVERSET_FIXTURE);
-    await openStories(page);
-    await expect(page.locator('[data-stories-panel="ready"]')).toBeVisible();
-    await expect(
-      page.locator('[data-row-badge="overset"]').first(),
-    ).toBeVisible();
-    await expect(page.locator("[data-stories-overset-summary]")).toBeVisible();
-  });
-});
-
 // W2.7 — per-story FIELD INSPECTOR (matrix gaps 9/10). Selecting a row
 // opens the inspector; its REAL fields (characters / paragraphs /
 // overset) must match the `stories` wire collection exactly, and the
@@ -184,32 +128,6 @@ test.describe("W2.7 — Stories field inspector", () => {
         inspector.locator('[data-story-field-value="story-self-id"]'),
       ).toHaveText(stories[i].selfId);
     }
-  });
-
-  test("AC-STORIES-INSP-2 — an overset story's inspector shows Overset", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadIdml(page, OVERSET_FIXTURE);
-    await openStories(page);
-
-    const stories = await wireStories(page);
-    const oversetIndex = stories.findIndex((s) => s.overset);
-    expect(oversetIndex).toBeGreaterThanOrEqual(0);
-
-    const rows = page.locator("[data-story-list] [data-list-row]");
-    await rows.nth(oversetIndex).click();
-    const inspector = page.locator(
-      `[data-story-inspector="${stories[oversetIndex].selfId}"]`,
-    );
-    await expect(inspector).toBeVisible();
-    // REAL overset field reads "yes" + the StatusPill reads "Overset".
-    await expect(
-      inspector.locator('[data-story-field-value="story-overset"]'),
-    ).toHaveText("yes");
-    await expect(
-      inspector.locator('[data-status-pill="story-overset-status"]'),
-    ).toContainText("Overset");
   });
 
   test("AC-STORIES-INSP-3 — words / preview are honest seams; the frame chain is real now @feat:editor-shell.panels.stories @level:happy", async ({

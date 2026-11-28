@@ -22,7 +22,15 @@
 // calls the handle's methods (`paged:call`, answered by `paged:reply`); the
 // editor sends `paged:ready`, events (`paged:event`) and the host actions it
 // needs the host for (`paged:action`, answered by `paged:action-reply`).
-// Bytes travel as transferred ArrayBuffers.
+//
+// Whose bytes: a transfer list moves an ArrayBuffer to the other window and
+// leaves the sender's array empty, so a side lists only buffers it alone
+// holds. That is what a handle's method answered in the frame (`save`,
+// `exportPdf`: `paged:reply`). Everything a caller handed in is copied by
+// the structured clone and stays the caller's: the host's `load` bytes and
+// config document, and the bytes the editor passes to the host's `save`
+// action. A host that wants its own bytes moved instead says so
+// (`ConnectConfig.transferBuffers`).
 
 import type { EditorConfig, EditorEvent, EditorHandle } from "./create-editor";
 import type { EditorErrorCode } from "./errors";
@@ -94,7 +102,9 @@ export type FrameToHost =
       name?: string;
     };
 
-/** The ArrayBuffers in `value`, to transfer rather than copy. */
+/** The ArrayBuffers in `value`, to transfer rather than copy: the sender's
+ *  arrays over them are empty afterwards, so only for a value the sender
+ *  owns and no longer needs (see the note on ownership above). */
 export function transferables(value: unknown): Transferable[] {
   const out: Transferable[] = [];
   const walk = (v: unknown) => {

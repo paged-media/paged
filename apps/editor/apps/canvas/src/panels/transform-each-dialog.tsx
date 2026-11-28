@@ -44,7 +44,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   ReferencePointGrid,
   scoped,
   scopeOf,
@@ -245,146 +246,130 @@ function TransformEachForm({
   const ref = REFERENCE_POINTS.indexOf(params.reference);
 
   return (
-    <div
-      data-transform-each-backdrop=""
+    <ModalDialog
+      onClose={cancel}
+      data-transform-each-dialog=""
+      data-panel-host=""
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.5)",
+        width: "min(360px, 92vw)",
+        padding: 16,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="transform-each-title"
-        data-transform-each-dialog=""
-        data-panel-host=""
-        style={{
-          width: "min(360px, 92vw)",
-          padding: 16,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
-        }}
+      <ModalDialogTitle
+        id="transform-each-title"
+        style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="transform-each-title"
-            style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
-          >
-            {strings.t(M.title)}
-          </h2>
-          <Section title={strings.t(M.scale)}>
-            <Row label={strings.t(M.horizontal)}>
-              <NumberInput
-                aria-label={`${strings.t(M.scale)} ${strings.t(M.horizontal)}`}
-                value={params.scaleH}
-                suffix="%"
-                onChange={(v) => set("scaleH", v)}
-              />
-            </Row>
-            <Row label={strings.t(M.vertical)}>
-              <NumberInput
-                aria-label={`${strings.t(M.scale)} ${strings.t(M.vertical)}`}
-                value={params.scaleV}
-                suffix="%"
-                onChange={(v) => set("scaleV", v)}
-              />
-            </Row>
-          </Section>
-          <Section title={strings.t(M.move)}>
-            <Row label={strings.t(M.horizontal)}>
-              <LengthInput
-                aria-label={`${strings.t(M.move)} ${strings.t(M.horizontal)}`}
-                valuePt={params.moveH}
-                onChangePt={(v) => set("moveH", v)}
-              />
-            </Row>
-            <Row label={strings.t(M.vertical)}>
-              <LengthInput
-                aria-label={`${strings.t(M.move)} ${strings.t(M.vertical)}`}
-                valuePt={params.moveV}
-                onChangePt={(v) => set("moveV", v)}
-              />
-            </Row>
-          </Section>
-          <Section title={strings.t(M.rotate)}>
-            <Row label={strings.t(M.angle)}>
-              <NumberInput
-                aria-label={strings.t(M.angle)}
-                value={params.angle}
-                suffix="°"
-                onChange={(v) => set("angle", v)}
-              />
-            </Row>
-          </Section>
-          <div className="mt-2 flex items-center gap-4">
-            <ReferencePointGrid
-              value={ref}
-              onChange={(i) => set("reference", REFERENCE_POINTS[i]!)}
-            />
-            <div className="flex flex-col gap-1 text-xs">
-              <Check
-                label={strings.t(M.reflectX)}
-                checked={params.reflectX}
-                onChange={(v) => set("reflectX", v)}
-                data="reflect-x"
-              />
-              <Check
-                label={strings.t(M.reflectY)}
-                checked={params.reflectY}
-                onChange={(v) => set("reflectY", v)}
-                data="reflect-y"
-              />
-              <Check
-                label={strings.t(M.random)}
-                checked={params.random}
-                onChange={(v) => set("random", v)}
-                data="random"
-              />
-            </div>
-          </div>
-          <div
-            className="mt-3 flex items-center gap-2"
-            style={{ justifyContent: "space-between" }}
-          >
-            <Check
-              label={strings.t(M.preview)}
-              checked={preview}
-              onChange={setPreview}
-              data="preview"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                data-transform-each-cancel=""
-                onClick={cancel}
-                style={{
-                  ...buttonStyle,
-                  background: "transparent",
-                  color: color.fg,
-                }}
-              >
-                {strings.t(M.cancel)}
-              </button>
-              <button
-                type="button"
-                data-transform-each-ok=""
-                onClick={ok}
-                style={buttonStyle}
-              >
-                {strings.t(M.ok)}
-              </button>
-            </div>
-          </div>
-        </FocusScope>
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <Section title={strings.t(M.scale)}>
+        <Row label={strings.t(M.horizontal)}>
+          <NumberInput
+            aria-label={`${strings.t(M.scale)} ${strings.t(M.horizontal)}`}
+            value={params.scaleH}
+            suffix="%"
+            onChange={(v) => set("scaleH", v)}
+          />
+        </Row>
+        <Row label={strings.t(M.vertical)}>
+          <NumberInput
+            aria-label={`${strings.t(M.scale)} ${strings.t(M.vertical)}`}
+            value={params.scaleV}
+            suffix="%"
+            onChange={(v) => set("scaleV", v)}
+          />
+        </Row>
+      </Section>
+      <Section title={strings.t(M.move)}>
+        <Row label={strings.t(M.horizontal)}>
+          <LengthInput
+            aria-label={`${strings.t(M.move)} ${strings.t(M.horizontal)}`}
+            valuePt={params.moveH}
+            onChangePt={(v) => set("moveH", v)}
+          />
+        </Row>
+        <Row label={strings.t(M.vertical)}>
+          <LengthInput
+            aria-label={`${strings.t(M.move)} ${strings.t(M.vertical)}`}
+            valuePt={params.moveV}
+            onChangePt={(v) => set("moveV", v)}
+          />
+        </Row>
+      </Section>
+      <Section title={strings.t(M.rotate)}>
+        <Row label={strings.t(M.angle)}>
+          <NumberInput
+            aria-label={strings.t(M.angle)}
+            value={params.angle}
+            suffix="°"
+            onChange={(v) => set("angle", v)}
+          />
+        </Row>
+      </Section>
+      <div className="mt-2 flex items-center gap-4">
+        <ReferencePointGrid
+          value={ref}
+          onChange={(i) => set("reference", REFERENCE_POINTS[i]!)}
+        />
+        <div className="flex flex-col gap-1 text-xs">
+          <Check
+            label={strings.t(M.reflectX)}
+            checked={params.reflectX}
+            onChange={(v) => set("reflectX", v)}
+            data="reflect-x"
+          />
+          <Check
+            label={strings.t(M.reflectY)}
+            checked={params.reflectY}
+            onChange={(v) => set("reflectY", v)}
+            data="reflect-y"
+          />
+          <Check
+            label={strings.t(M.random)}
+            checked={params.random}
+            onChange={(v) => set("random", v)}
+            data="random"
+          />
+        </div>
       </div>
-    </div>
+      <div
+        className="mt-3 flex items-center gap-2"
+        style={{ justifyContent: "space-between" }}
+      >
+        <Check
+          label={strings.t(M.preview)}
+          checked={preview}
+          onChange={setPreview}
+          data="preview"
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-transform-each-cancel=""
+            onClick={cancel}
+            style={{
+              ...buttonStyle,
+              background: "transparent",
+              color: color.fg,
+            }}
+          >
+            {strings.t(M.cancel)}
+          </button>
+          <button
+            type="button"
+            data-transform-each-ok=""
+            onClick={ok}
+            style={buttonStyle}
+          >
+            {strings.t(M.ok)}
+          </button>
+        </div>
+      </div>
+    </ModalDialog>
   );
 }
 

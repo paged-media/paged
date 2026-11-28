@@ -3800,12 +3800,15 @@ export class CanvasClient {
       const reply = event.data as {
         kind: "velloPngReply";
         seq: number;
-        pngBytes: number[] | null;
+        pngBytes: Uint8Array | number[] | null;
       };
       const cb = this.velloPending.get(reply.seq);
       if (cb) {
         this.velloPending.delete(reply.seq);
-        cb(reply.pngBytes ? Uint8Array.from(reply.pngBytes) : null);
+        // The worker transfers the PNG as a `Uint8Array`; a `number[]`
+        // (a worker that predates the transfer) is still read.
+        const png = reply.pngBytes;
+        cb(png instanceof Uint8Array ? png : png ? Uint8Array.from(png) : null);
       }
       return;
     }

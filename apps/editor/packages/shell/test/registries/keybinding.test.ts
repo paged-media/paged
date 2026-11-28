@@ -778,3 +778,44 @@ describe("targetOwnsKey: a frame surface (extensions ADR 334)", () => {
     expect(chord(false)).toBe(false);
   });
 });
+
+// The host half of in-frame grid editing (the canvas app's
+// tests/e2e/sheet-context-keys.spec.ts drives the rest in the browser).
+describe("sheet frame — keys and wheel reach the active edit context", () => {
+  test("AC-KEYS-4 — an enabled guarded binding beats an unguarded one on the same combo @feat:editor-shell.tool-rail @level:edge", () => {
+    const place = { key: "cmd+d", command: "host.place" };
+    let inGrid = true;
+    const fill = {
+      key: "cmd+d",
+      command: "plugin.fillDown",
+      when: () => inGrid,
+    };
+    const chord = {
+      key: "d",
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+    };
+    // Registered after the unguarded one, and still wins while it holds.
+    expect(resolveBinding([place, fill], chord)?.command).toBe(
+      "plugin.fillDown",
+    );
+    expect(resolveBinding([fill, place], chord)?.command).toBe(
+      "plugin.fillDown",
+    );
+    // Its guard false → the global binding applies again.
+    inGrid = false;
+    expect(resolveBinding([place, fill], chord)?.command).toBe("host.place");
+    // Two unguarded / two guarded: registration order, as before.
+    const other = { key: "cmd+d", command: "host.other" };
+    expect(resolveBinding([place, other], chord)?.command).toBe("host.place");
+    inGrid = true;
+    const fill2 = { key: "cmd+d", command: "plugin.fill2", when: () => true };
+    expect(resolveBinding([fill, fill2], chord)?.command).toBe(
+      "plugin.fillDown",
+    );
+    // A different chord never matches.
+    expect(resolveBinding([fill], { ...chord, shiftKey: true })).toBeNull();
+  });
+});

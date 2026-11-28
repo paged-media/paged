@@ -21,9 +21,17 @@
 // feedback", UXI-FBK-001, UXI-ASY-010): brief results at the editor's
 // foot, at most three, each with its remedy and its further actions, its
 // technical detail behind "Details" (UXI-ASY-011), and a count when the
-// same thing was reported again while it showed. A failure is announced
-// assertively, anything else politely. Each toast closes on its ✕, when
-// one of its actions ran, or when its time is up (a fatal failure stays).
+// same thing was reported again while it showed. Each toast closes on its
+// ✕, when one of its actions ran, or when its time is up; an error stays
+// until it is closed, and a toast's time stands still while the pointer is
+// over it or focus is inside it (WCAG 2.2.1).
+//
+// ANNOUNCED THROUGH TWO STANDING LIVE REGIONS. A screen reader announces
+// what is ADDED to a live region it already knows, so the region and its
+// two announcers (a polite `status`, an assertive `alert`) are in the DOM
+// from the first render, toasts or none; a toast's sentence is added to
+// the one its outcome calls for. The visible toast carries no live role of
+// its own (it would be announced twice).
 
 import { useEffect, useState } from "react";
 import { useStrings } from "@paged-media/strings";
@@ -77,13 +85,36 @@ export function FeedbackToasts() {
     return () => clearTimeout(timer);
   }, [feedback, next]);
 
-  if (toasts.length === 0) return null;
+  const failures = toasts.filter((x) => isFailure(x.report.outcome));
+  const others = toasts.filter((x) => !isFailure(x.report.outcome));
   return (
     <section
       aria-label={strings.t(M.region)}
       data-feedback-toasts
       style={regionStyle}
     >
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        data-feedback-announcer="polite"
+        className="sr-only"
+      >
+        {others.map((x) => (
+          <p key={x.id}>{x.text.sentence}</p>
+        ))}
+      </div>
+      <div
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="false"
+        data-feedback-announcer="assertive"
+        className="sr-only"
+      >
+        {failures.map((x) => (
+          <p key={x.id}>{x.text.sentence}</p>
+        ))}
+      </div>
       {toasts.map((toast) => (
         <Toast key={toast.id} toast={toast} />
       ))}
@@ -95,7 +126,18 @@ function Toast({ toast }: { toast: FeedbackToast }) {
   const strings = useStrings();
   const feedback = useOperationFeedback();
   const [details, setDetails] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const { report, text } = toast;
+  // Its time stands still while it is pointed at or holds focus, and runs
+  // again with what was left when both are gone.
+  const held = hovered || focused;
+  const id = toast.id;
+  useEffect(() => {
+    if (!held) return;
+    feedback.holdToast(id);
+    return () => feedback.releaseToast(id);
+  }, [feedback, held, id]);
   const severity = severityOf(report.outcome);
   const run = (action: FeedbackAction) => {
     feedback.runAction(action);
@@ -107,12 +149,20 @@ function Toast({ toast }: { toast: FeedbackToast }) {
   ];
   return (
     <div
-      role={isFailure(report.outcome) ? "alert" : "status"}
+      role="group"
+      aria-label={text.headline}
       data-feedback-toast
       data-outcome={report.outcome}
       data-feedback-key={toast.key}
       data-feedback-count={toast.count}
+      data-feedback-held={held ? "" : undefined}
       style={toastStyle}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false);
+      }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <span

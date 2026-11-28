@@ -26,7 +26,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   scoped,
   useRegistries,
   useScoped,
@@ -106,105 +107,89 @@ function BarcodeForm({ close }: { close: () => void }) {
   });
 
   return (
-    <div
-      data-barcode-backdrop=""
+    <ModalDialog
+      onClose={close}
+      data-barcode-dialog=""
+      data-panel-host=""
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.5)",
+        width: "min(360px, 92vw)",
+        padding: 16,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="barcode-title"
-        data-barcode-dialog=""
-        data-panel-host=""
-        style={{
-          width: "min(360px, 92vw)",
-          padding: 16,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
-        }}
+      <ModalDialogTitle
+        id="barcode-title"
+        style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="barcode-title"
-            style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <div className="flex flex-col gap-1.5">
+        <Row label={strings.t(M.symbology)}>
+          <select
+            aria-label={strings.t(M.symbology)}
+            data-barcode-symbology=""
+            value={options.symbology}
+            onChange={(e) =>
+              set("symbology", e.target.value as BarcodeSymbology)
+            }
+            style={fieldStyle}
           >
-            {strings.t(M.title)}
-          </h2>
-          <div className="flex flex-col gap-1.5">
-            <Row label={strings.t(M.symbology)}>
-              <select
-                aria-label={strings.t(M.symbology)}
-                data-barcode-symbology=""
-                value={options.symbology}
-                onChange={(e) =>
-                  set("symbology", e.target.value as BarcodeSymbology)
-                }
-                style={fieldStyle}
-              >
-                {BARCODE_SYMBOLOGIES.map((s) => (
-                  <option key={s} value={s}>
-                    {label(s)}
-                  </option>
-                ))}
-              </select>
-            </Row>
-            <Row label={strings.t(M.data)}>
-              <input
-                type="text"
-                aria-label={strings.t(M.data)}
-                data-barcode-data=""
-                value={options.data}
-                onChange={(e) => set("data", e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") ok();
-                }}
-                style={fieldStyle}
-              />
-            </Row>
-            <div
-              className="text-xs"
-              style={{ color: "var(--pg-muted-fg)" }}
-              data-barcode-note=""
-            >
-              {strings.t(M.note)}
-            </div>
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <button
-              type="button"
-              data-barcode-cancel=""
-              onClick={close}
-              style={{
-                ...buttonStyle,
-                background: "transparent",
-                color: color.fg,
-              }}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-barcode-ok=""
-              disabled={!ready}
-              onClick={ok}
-              style={{ ...buttonStyle, opacity: ready ? 1 : 0.5 }}
-            >
-              {strings.t(M.ok)}
-            </button>
-          </div>
-        </FocusScope>
+            {BARCODE_SYMBOLOGIES.map((s) => (
+              <option key={s} value={s}>
+                {label(s)}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row label={strings.t(M.data)}>
+          <input
+            type="text"
+            aria-label={strings.t(M.data)}
+            data-barcode-data=""
+            value={options.data}
+            onChange={(e) => set("data", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") ok();
+            }}
+            style={fieldStyle}
+          />
+        </Row>
+        <div
+          className="text-xs"
+          style={{ color: "var(--pg-muted-fg)" }}
+          data-barcode-note=""
+        >
+          {strings.t(M.note)}
+        </div>
       </div>
-    </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          data-barcode-cancel=""
+          onClick={close}
+          style={{
+            ...buttonStyle,
+            background: "transparent",
+            color: color.fg,
+          }}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-barcode-ok=""
+          disabled={!ready}
+          onClick={ok}
+          style={{ ...buttonStyle, opacity: ready ? 1 : 0.5 }}
+        >
+          {strings.t(M.ok)}
+        </button>
+      </div>
+    </ModalDialog>
   );
 }
 

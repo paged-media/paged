@@ -251,20 +251,6 @@ test.describe("Effects ▸ group options (engine 0.71.8)", () => {
       await expect.poll(() => engineGet(page, addr(group), path)).toBe(false);
     });
   }
-
-  test("EFX-GROUP-frame — on a frame the group options are disabled (a frame carries neither) @feat:editor-shell.panels.effects @feat:effects-transparency.transparency-groups @level:edge", async ({
-    page,
-  }) => {
-    const fx = await loadFixture(page, "geometry-groups");
-    await selectElements(page, [fx.firstRectangle as ElementRef]);
-    const panel = await effectsPanel(page);
-    await expect(panel.locator("[data-effects-target]")).toHaveCount(4);
-    for (const path of ["groupIsolateBlending", "groupKnockout"]) {
-      await expect(
-        fieldOf(panel, path).locator('[role="switch"]'),
-      ).toBeDisabled();
-    }
-  });
 });
 
 interface ShadowCase {

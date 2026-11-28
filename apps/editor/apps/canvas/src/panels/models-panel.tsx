@@ -36,7 +36,11 @@ import { useEffect, useRef, useState } from "react";
 import type { MlImage } from "@paged-media/plugin-api";
 import { defineMessages, useStrings } from "@paged-media/strings";
 import { color, font, radius } from "@paged-media/panel-kit";
-import { FocusScope, useEscapeHandler } from "@paged-media/shell";
+import {
+  ModalDialog,
+  ModalDialogTitle,
+  useEscapeHandler,
+} from "@paged-media/shell";
 
 import { reachableOrigin } from "../plugin-consent";
 import { useMlService, useMlSnapshot } from "../ml/scope";
@@ -239,119 +243,99 @@ function ConsentPrompt({
       .catch(() => undefined);
   };
   return (
-    <div
-      data-testid="model-consent-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <ModalDialog
+      onClose={onClose}
+      dismissOnOutside
+      data-testid="model-consent-dialog"
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.6)",
         font: `13px/1.5 ${font.sans}`,
+        width: "min(440px, 92vw)",
+        padding: 20,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="model-consent-title"
-        data-testid="model-consent-dialog"
-        style={{
-          width: "min(440px, 92vw)",
-          padding: 20,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-        }}
+      <ModalDialogTitle
+        id="model-consent-title"
+        style={{ margin: "0 0 8px", fontSize: 15 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="model-consent-title"
-            style={{ margin: "0 0 8px", fontSize: 15 }}
-          >
-            {strings.t(M.consentTitle, { model: model.entry.title })}
-          </h2>
-          <p style={{ margin: "0 0 8px" }} data-testid="model-consent-size">
-            {strings.t(M.consentSize, {
-              size: formatBytes(variantBytes(variant) ?? 0),
-            })}
-          </p>
-          <p style={{ margin: "0 0 4px", color: color.mutedFg }}>
-            {strings.t(M.consentOrigins)}
-          </p>
-          <ul style={{ margin: "0 0 8px", paddingLeft: 16 }}>
-            {origins.map((o) => (
-              <li key={o} data-testid="model-consent-origin">
-                <code style={{ font: `12px ${font.mono}` }}>{o}</code>
-                {!reachableOrigin(o) && (
-                  <p
-                    data-testid="model-consent-blocked"
-                    style={{ margin: 0, fontSize: 12, color: color.mutedFg }}
-                  >
-                    {strings.t(M.consentBlocked)}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p style={{ margin: "0 0 8px" }}>
-            <a
-              href={model.entry.licence.url}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              {strings.t(M.consentLicence, {
-                title: model.entry.licence.title,
-              })}
-            </a>
-            {model.entry.licence.summary
-              ? ` — ${model.entry.licence.summary}`
-              : ""}
-          </p>
-          {needsAck && (
-            <label
-              style={{
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-                margin: "0 0 12px",
-              }}
-            >
-              <input
-                type="checkbox"
-                data-testid="model-consent-ack"
-                checked={ack}
-                onChange={(e) => setAck(e.target.checked)}
-              />
-              {strings.t(M.acknowledge, { title: model.entry.licence.title })}
-            </label>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button
-              type="button"
-              className={button}
-              data-testid="model-consent-cancel"
-              onClick={onClose}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              className={button}
-              data-testid="model-consent-install"
-              disabled={needsAck && !ack}
-              onClick={install}
-            >
-              {strings.t(M.confirmInstall)}
-            </button>
-          </div>
-        </FocusScope>
+        {strings.t(M.consentTitle, { model: model.entry.title })}
+      </ModalDialogTitle>
+      <p style={{ margin: "0 0 8px" }} data-testid="model-consent-size">
+        {strings.t(M.consentSize, {
+          size: formatBytes(variantBytes(variant) ?? 0),
+        })}
+      </p>
+      <p style={{ margin: "0 0 4px", color: color.mutedFg }}>
+        {strings.t(M.consentOrigins)}
+      </p>
+      <ul style={{ margin: "0 0 8px", paddingLeft: 16 }}>
+        {origins.map((o) => (
+          <li key={o} data-testid="model-consent-origin">
+            <code style={{ font: `12px ${font.mono}` }}>{o}</code>
+            {!reachableOrigin(o) && (
+              <p
+                data-testid="model-consent-blocked"
+                style={{ margin: 0, fontSize: 12, color: color.mutedFg }}
+              >
+                {strings.t(M.consentBlocked)}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p style={{ margin: "0 0 8px" }}>
+        <a
+          href={model.entry.licence.url}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          {strings.t(M.consentLicence, {
+            title: model.entry.licence.title,
+          })}
+        </a>
+        {model.entry.licence.summary ? ` — ${model.entry.licence.summary}` : ""}
+      </p>
+      {needsAck && (
+        <label
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            margin: "0 0 12px",
+          }}
+        >
+          <input
+            type="checkbox"
+            data-testid="model-consent-ack"
+            checked={ack}
+            onChange={(e) => setAck(e.target.checked)}
+          />
+          {strings.t(M.acknowledge, { title: model.entry.licence.title })}
+        </label>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          type="button"
+          className={button}
+          data-testid="model-consent-cancel"
+          onClick={onClose}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          className={button}
+          data-testid="model-consent-install"
+          disabled={needsAck && !ack}
+          onClick={install}
+        >
+          {strings.t(M.confirmInstall)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 

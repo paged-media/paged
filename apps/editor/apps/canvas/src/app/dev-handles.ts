@@ -22,7 +22,7 @@
 // automation handle (`__canvas`), the consent and secret prompts, the
 // documents door, the binding providers, the bundle lane, the plugin host's
 // doors. Each reads the instance it was published for, at the moment it is
-// read. Only the page entry publishes them (entry.tsx, dev and demo builds);
+// read. Only the page entry publishes them (entry.tsx: dev, e2e and demo builds);
 // `mountEditor` never does, so an embedding host's page gets none.
 
 import moduleManifest from "virtual:paged-modules";
@@ -31,11 +31,14 @@ import type { CanvasClient } from "@paged-media/client";
 import {
   debugHandlesOf,
   getOpenFileHandle,
+  getViewToggle,
   interactionCoordinatorOf,
   interactionDebugView,
   replacePrompts,
   saveStateOf,
   setOpenFileHandle,
+  viewModeOf,
+  type ViewToggle,
   type WritableFileHandle,
 } from "@paged-media/shell";
 
@@ -115,6 +118,12 @@ export function publishDevHandles(instance: EditorInstance): () => void {
       active: () => bundles.activator()?.active() ?? [],
       ensure: async (id: string) =>
         (await bundles.activator()?.ensure(id)) != null,
+    },
+    // The view toggles and the view mode of this editor (the view-menu
+    // specs): a production build has no source module to import them from.
+    __view: {
+      toggle: (which: ViewToggle) => getViewToggle(instance.scope, which),
+      mode: () => viewModeOf(instance.scope),
     },
     // v66 — Save waits for a listener a spec registers as a bundle would.
     __willSave: willSave,

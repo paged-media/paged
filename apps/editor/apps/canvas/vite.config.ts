@@ -276,6 +276,12 @@ const embedFrameAncestors = {
   },
 };
 
+type Middleware = (
+  req: import("node:http").IncomingMessage,
+  res: import("node:http").ServerResponse,
+  next: (err?: unknown) => void,
+) => void;
+
 /**
  * Dev only: the Claude proxy at /api/ai (ADR 221), the same handler the
  * Pages Function mounts in production (functions/api/ai). Active when the
@@ -339,6 +345,25 @@ function aiProxyDev(): import("vite").Plugin {
         }
       });
     },
+    // `vite preview` has no module loader for the handler: /api/ai answers
+    // 503 as an unconfigured deployment does (and as the dev server does
+    // without a key), not the SPA fallback's index.html.
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url || !req.url.startsWith("/api/ai/")) return next();
+        res.statusCode = 503;
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "ai_unavailable",
+              message: "The preview server has no Claude proxy.",
+            },
+          }),
+        );
+      });
+    },
   };
 }
 
@@ -352,11 +377,6 @@ function aiProxyDev(): import("vite").Plugin {
  */
 function mlHostProxy(): import("vite").Plugin {
   const target = mlHostTarget(process.env.PAGED_ML_HOST_URL);
-  type Middleware = (
-    req: import("node:http").IncomingMessage,
-    res: import("node:http").ServerResponse,
-    next: (err?: unknown) => void,
-  ) => void;
   const middleware: Middleware = (req, res, next) => {
     if (!req.url || !req.url.startsWith("/api/ml/")) return next();
     void (async () => {
@@ -409,49 +429,54 @@ function mlHostProxy(): import("vite").Plugin {
  * by a flat name check.
  */
 function fontsRoute(): import("vite").Plugin {
+  const middleware: Middleware = (req, res, next) => {
+    if (!req.url || !req.url.startsWith("/fonts/")) return next();
+    const rel = decodeURIComponent(
+      req.url.slice("/fonts/".length).split("?")[0],
+    );
+    if (rel.includes("/") || rel.includes("..") || rel === "") {
+      res.statusCode = 400;
+      return res.end("bad path");
+    }
+    const abs = resolve(CORPUS_FONTS, rel);
+    try {
+      if (!statSync(abs).isFile()) {
+        return next();
+      }
+    } catch {
+      return next();
+    }
+    const ext = abs.split(".").pop()?.toLowerCase() ?? "";
+    const mime =
+      ext === "ttf"
+        ? "font/ttf"
+        : ext === "otf"
+          ? "font/otf"
+          : "application/octet-stream";
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "no-cache");
+    createReadStream(abs).pipe(res);
+  };
   return {
     name: "static-prefix:/fonts/",
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url || !req.url.startsWith("/fonts/")) return next();
-        const rel = decodeURIComponent(
-          req.url.slice("/fonts/".length).split("?")[0],
-        );
-        if (rel.includes("/") || rel.includes("..") || rel === "") {
-          res.statusCode = 400;
-          return res.end("bad path");
-        }
-        const abs = resolve(CORPUS_FONTS, rel);
-        try {
-          if (!statSync(abs).isFile()) {
-            return next();
-          }
-        } catch {
-          return next();
-        }
-        const ext = abs.split(".").pop()?.toLowerCase() ?? "";
-        const mime =
-          ext === "ttf"
-            ? "font/ttf"
-            : ext === "otf"
-              ? "font/otf"
-              : "application/octet-stream";
-        res.setHeader("Content-Type", mime);
-        res.setHeader("Cache-Control", "no-cache");
-        createReadStream(abs).pipe(res);
-      });
+      server.middlewares.use(middleware);
+    },
+    // The e2e build is served by `vite preview` (playwright.config.ts).
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
     },
   };
 }
 
 /**
- * Dev-only: browse + load the staged Envato fidelity corpus from the
+ * Dev and preview: browse + load the staged Envato fidelity corpus from the
  * running editor. The loadable IDML for each pack is
  * `corpus/idml/packs/<name>/template.idml` — note the *raw* Envato
  * `.zip` bundles often ship only an `.indd`, which the engine can't
  * parse, so we deliberately serve the staged `template.idml` that the
  * Playwright fidelity suite already relies on (manifest.json). Mirrors
- * `fontsRoute`'s flat-name guard. Not wired in production (no corpus
+ * `fontsRoute`'s flat-name guard. Not part of a build's output (no corpus
  * there) — the `CorpusPicker` control self-hides when /list is empty.
  *
  * Three fixture groups are exposed so the whole corpus is loadable from
@@ -496,120 +521,219 @@ function corpusIdmlRoute(): import("vite").Plugin {
       return [];
     }
   };
+  const middleware: Middleware = (req, res, next) => {
+    if (!req.url || !req.url.startsWith("/corpus/idml/")) return next();
+    const rest = decodeURIComponent(
+      req.url.slice("/corpus/idml/".length).split("?")[0],
+    );
+
+    if (rest === "list") {
+      const entries: Array<{
+        id: string;
+        label: string;
+        group: string;
+        stage?: string;
+      }> = [];
+      // generated/* + samples/* — flat dirs of <base>.idml
+      for (const base of listIdml(GENERATED_DIR)) {
+        entries.push({
+          id: `generated/${base}`,
+          label: base,
+          group: "generated",
+        });
+      }
+      for (const base of listIdml(SAMPLES_DIR)) {
+        entries.push({
+          id: `samples/${base}`,
+          label: base,
+          group: "sample",
+        });
+      }
+      // packs/* — <name>/template.idml, stage from the fidelity manifest
+      const stageByName = new Map<string, string>();
+      try {
+        const manifest = JSON.parse(readFileSync(MANIFEST, "utf8")) as {
+          packs?: Array<{ name?: string; stage?: string }>;
+        };
+        for (const p of manifest.packs ?? []) {
+          if (p.name) stageByName.set(p.name, p.stage ?? "gated");
+        }
+      } catch {
+        // manifest is optional — fall back to scanning the dir
+      }
+      try {
+        for (const name of readdirSync(PACKS_DIR)) {
+          try {
+            if (!statSync(resolve(PACKS_DIR, name, "template.idml")).isFile())
+              continue;
+          } catch {
+            continue; // not a pack dir / no staged idml
+          }
+          entries.push({
+            id: `packs/${name}`,
+            label: name,
+            group: "pack",
+            stage: stageByName.get(name) ?? "gated",
+          });
+        }
+      } catch {
+        // no packs dir
+      }
+      entries.sort(
+        (a, b) =>
+          (GROUP_RANK[a.group] ?? 3) - (GROUP_RANK[b.group] ?? 3) ||
+          (STAGE_RANK[a.stage ?? ""] ?? 1) - (STAGE_RANK[b.stage ?? ""] ?? 1) ||
+          a.label.localeCompare(b.label),
+      );
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.end(JSON.stringify(entries));
+    }
+
+    if (rest.startsWith("file/")) {
+      const id = rest.slice("file/".length);
+      const parts = id.split("/");
+      // Accept "<group>/<name>" or legacy "<name>" (defaults to a pack).
+      const [group, name] = parts.length === 2 ? parts : ["packs", parts[0]];
+      const bad = (s: string) =>
+        s === "" || s.includes("..") || s.includes("\\");
+      let abs: string | null = null;
+      if (bad(name)) {
+        res.statusCode = 400;
+        return res.end("bad name");
+      }
+      if (group === "generated") abs = resolve(GENERATED_DIR, `${name}.idml`);
+      else if (group === "samples" || group === "sample")
+        abs = resolve(SAMPLES_DIR, `${name}.idml`);
+      else if (group === "packs" || group === "pack")
+        abs = resolve(PACKS_DIR, name, "template.idml");
+      if (!abs) {
+        res.statusCode = 400;
+        return res.end("bad group");
+      }
+      try {
+        if (!statSync(abs).isFile()) {
+          res.statusCode = 404;
+          return res.end("no such fixture");
+        }
+      } catch {
+        res.statusCode = 404;
+        return res.end("no such fixture");
+      }
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      return createReadStream(abs).pipe(res);
+    }
+
+    return next();
+  };
   return {
     name: "static-prefix:/corpus/idml/",
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url || !req.url.startsWith("/corpus/idml/")) return next();
-        const rest = decodeURIComponent(
-          req.url.slice("/corpus/idml/".length).split("?")[0],
-        );
+      server.middlewares.use(middleware);
+    },
+    // The e2e build is served by `vite preview` (playwright.config.ts).
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
 
-        if (rest === "list") {
-          const entries: Array<{
-            id: string;
-            label: string;
-            group: string;
-            stage?: string;
-          }> = [];
-          // generated/* + samples/* — flat dirs of <base>.idml
-          for (const base of listIdml(GENERATED_DIR)) {
-            entries.push({
-              id: `generated/${base}`,
-              label: base,
-              group: "generated",
-            });
-          }
-          for (const base of listIdml(SAMPLES_DIR)) {
-            entries.push({
-              id: `samples/${base}`,
-              label: base,
-              group: "sample",
-            });
-          }
-          // packs/* — <name>/template.idml, stage from the fidelity manifest
-          const stageByName = new Map<string, string>();
-          try {
-            const manifest = JSON.parse(readFileSync(MANIFEST, "utf8")) as {
-              packs?: Array<{ name?: string; stage?: string }>;
-            };
-            for (const p of manifest.packs ?? []) {
-              if (p.name) stageByName.set(p.name, p.stage ?? "gated");
-            }
-          } catch {
-            // manifest is optional — fall back to scanning the dir
-          }
-          try {
-            for (const name of readdirSync(PACKS_DIR)) {
-              try {
-                if (
-                  !statSync(resolve(PACKS_DIR, name, "template.idml")).isFile()
-                )
-                  continue;
-              } catch {
-                continue; // not a pack dir / no staged idml
-              }
-              entries.push({
-                id: `packs/${name}`,
-                label: name,
-                group: "pack",
-                stage: stageByName.get(name) ?? "gated",
-              });
-            }
-          } catch {
-            // no packs dir
-          }
-          entries.sort(
-            (a, b) =>
-              (GROUP_RANK[a.group] ?? 3) - (GROUP_RANK[b.group] ?? 3) ||
-              (STAGE_RANK[a.stage ?? ""] ?? 1) -
-                (STAGE_RANK[b.stage ?? ""] ?? 1) ||
-              a.label.localeCompare(b.label),
-          );
-          res.setHeader("Content-Type", "application/json");
-          res.setHeader("Cache-Control", "no-cache");
-          return res.end(JSON.stringify(entries));
-        }
+// What the dev server may read under `/@fs/`, and what the e2e preview
+// server's `/@fs/` route (below) may: one list, so the two cannot differ.
+const FS_ALLOW = [
+  resolve(__dirname),
+  resolve(__dirname, "..", ".."),
+  // Corpus root (resolved to `<repo root>/corpus`, or
+  // `apps/editor/corpus` if colocated) so the
+  // fidelity driver + ad-hoc `/@fs/` loads can fetch fixtures
+  // under corpus/idml/generated/* and corpus/idml/samples/*, not just the
+  // envato packs the /corpus/idml/ route serves.
+  resolve(CORPUS_ENVATO, ".."),
+  // ...and where that symlink points: Vite checks a /@fs/ request
+  // against the file's real path, so a corpus linked in from outside
+  // the repository 403s on every font and fixture without it.
+  ...realCorpusRoot(),
+  // The workspace packages outside apps/editor (`<repo root>/modules`,
+  // `platform/extensions`, `engine/core/packages`): their wasm
+  // artifacts (canvas-wasm, sheet-js, image-js, data-js) are served via
+  // /@fs/ — without this the engine boot 403s (the K-1
+  // live-validation e2e surfaced it).
+  MONOREPO_ROOT,
+  "/tmp",
+  // System CMYK ICC profile dir — the fidelity suite fetches
+  // CoatedFOGRA39.icc via /@fs/ to match `pdftoppm`'s output.
+  "/Library/Application Support/Adobe/Color/Profiles",
+  ...INDESIGN_FONT_DIRS,
+];
 
-        if (rest.startsWith("file/")) {
-          const id = rest.slice("file/".length);
-          const parts = id.split("/");
-          // Accept "<group>/<name>" or legacy "<name>" (defaults to a pack).
-          const [group, name] =
-            parts.length === 2 ? parts : ["packs", parts[0]];
-          const bad = (s: string) =>
-            s === "" || s.includes("..") || s.includes("\\");
-          let abs: string | null = null;
-          if (bad(name)) {
-            res.statusCode = 400;
-            return res.end("bad name");
-          }
-          if (group === "generated")
-            abs = resolve(GENERATED_DIR, `${name}.idml`);
-          else if (group === "samples" || group === "sample")
-            abs = resolve(SAMPLES_DIR, `${name}.idml`);
-          else if (group === "packs" || group === "pack")
-            abs = resolve(PACKS_DIR, name, "template.idml");
-          if (!abs) {
-            res.statusCode = 400;
-            return res.end("bad group");
-          }
-          try {
-            if (!statSync(abs).isFile()) {
-              res.statusCode = 404;
-              return res.end("no such fixture");
-            }
-          } catch {
-            res.statusCode = 404;
-            return res.end("no such fixture");
-          }
-          res.setHeader("Content-Type", "application/octet-stream");
-          res.setHeader("Cache-Control", "no-cache");
-          return createReadStream(abs).pipe(res);
-        }
+/** The build the Playwright suite runs against in CI: `vite build --mode
+ *  e2e`, served by `vite preview --mode e2e` (playwright.config.ts,
+ *  PAGED_E2E_SERVER=preview). A production build with the page's test
+ *  handles left in (src/build-flags.ts). */
+const E2E_MODE = "e2e";
 
-        return next();
-      });
+const FS_MIME: Record<string, string> = {
+  wasm: "application/wasm",
+  js: "text/javascript",
+  mjs: "text/javascript",
+  json: "application/json",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  svg: "image/svg+xml",
+  pdf: "application/pdf",
+};
+
+/**
+ * The e2e preview server only: `/@fs/<absolute path>` answers a file's BYTES
+ * from the directories the dev server's `/@fs/` may read (FS_ALLOW). The
+ * specs fetch their fixtures and fonts that way (tests/fidelity/
+ * canvas-driver.ts), and a production build has no such route. Bytes only:
+ * nothing is transformed, so a source module cannot be imported through it.
+ * A plain `vite preview` (any other mode) does not get the route.
+ */
+function e2eFsRoute(): import("vite").Plugin {
+  let e2e = false;
+  const within = (file: string, dir: string) =>
+    file === dir || file.startsWith(dir.endsWith(sep) ? dir : dir + sep);
+  const middleware: Middleware = (req, res, next) => {
+    if (!e2e || !req.url || !req.url.startsWith("/@fs/")) return next();
+    let abs: string;
+    try {
+      abs = resolve(
+        decodeURIComponent(req.url.slice("/@fs".length).split("?")[0]),
+      );
+    } catch {
+      res.statusCode = 400;
+      return res.end("bad path");
+    }
+    let real: string;
+    try {
+      real = realpathSync(abs);
+      if (!statSync(real).isFile()) throw new Error("not a file");
+    } catch {
+      res.statusCode = 404;
+      return res.end("no such file");
+    }
+    if (!FS_ALLOW.some((dir) => within(abs, dir) || within(real, dir))) {
+      res.statusCode = 403;
+      return res.end("outside the allowed directories");
+    }
+    const ext = real.split(".").pop()?.toLowerCase() ?? "";
+    res.setHeader("Content-Type", FS_MIME[ext] ?? "application/octet-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    createReadStream(real).pipe(res);
+  };
+  return {
+    name: "paged-e2e-fs-route",
+    configResolved(config) {
+      e2e = config.mode === E2E_MODE;
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
     },
   };
 }
@@ -694,7 +818,7 @@ function pagedModules(): import("vite").Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // The page learns which data origins its wall admits, so the consent
   // dialog can say when a consented origin stays unreachable (ADR 218).
   define: {
@@ -717,6 +841,7 @@ export default defineConfig({
     mlHostProxy(),
     fontsRoute(),
     corpusIdmlRoute(),
+    e2eFsRoute(),
     dataBundleBin(),
     pagedModules(),
   ],
@@ -726,31 +851,7 @@ export default defineConfig({
     // Vite's default "localhost" bind misses 127.0.0.1.
     host: "127.0.0.1",
     fs: {
-      allow: [
-        resolve(__dirname),
-        resolve(__dirname, "..", ".."),
-        // Corpus root (resolved to `<repo root>/corpus`, or
-        // `apps/editor/corpus` if colocated) so the
-        // fidelity driver + ad-hoc `/@fs/` loads can fetch fixtures
-        // under corpus/idml/generated/* and corpus/idml/samples/*, not just the
-        // envato packs the /corpus/idml/ route serves.
-        resolve(CORPUS_ENVATO, ".."),
-        // ...and where that symlink points: Vite checks a /@fs/ request
-        // against the file's real path, so a corpus linked in from outside
-        // the repository 403s on every font and fixture without it.
-        ...realCorpusRoot(),
-        // The workspace packages outside apps/editor (`<repo root>/modules`,
-        // `platform/extensions`, `engine/core/packages`): their wasm
-        // artifacts (canvas-wasm, sheet-js, image-js, data-js) are served via
-        // /@fs/ — without this the engine boot 403s (the K-1
-        // live-validation e2e surfaced it).
-        MONOREPO_ROOT,
-        "/tmp",
-        // System CMYK ICC profile dir — the fidelity suite fetches
-        // CoatedFOGRA39.icc via /@fs/ to match `pdftoppm`'s output.
-        "/Library/Application Support/Adobe/Color/Profiles",
-        ...INDESIGN_FONT_DIRS,
-      ],
+      allow: FS_ALLOW,
     },
   },
   resolve: {
@@ -792,7 +893,27 @@ export default defineConfig({
             `demos/${n.slice(0, -5)}`,
             resolve(__dirname, "demos", n),
           ]),
+        // The e2e build only: the iframe client under a fixed name, for the
+        // spec that drives embed.html from a host page of its own
+        // (tests/journey/focused/demos.journey.spec.ts imports
+        // /src/embed/connect.ts from the dev server).
+        ...(mode === E2E_MODE
+          ? [["e2e-connect", resolve(__dirname, "src", "embed", "connect.ts")]]
+          : []),
       ]),
+      ...(mode === E2E_MODE
+        ? {
+            // An app build drops an entry's exports (nothing imports an
+            // HTML page's script); this entry is imported by the spec.
+            preserveEntrySignatures: "allow-extension" as const,
+            output: {
+              entryFileNames: (chunk: { name: string }) =>
+                chunk.name === "e2e-connect"
+                  ? "e2e/connect.js"
+                  : "assets/[name]-[hash].js",
+            },
+          }
+        : {}),
     },
   },
-});
+}));

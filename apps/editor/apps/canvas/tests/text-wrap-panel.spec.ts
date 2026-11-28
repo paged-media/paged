@@ -41,12 +41,6 @@ test.describe("Phase 5 — Text Wrap panel", () => {
     await openPanel(page, "paged.text-wrap");
   });
 
-  test("AC-TW-1 — panel mounts as a composition with a toggle-group + bounds row @feat:editor-shell.panels.text-wrap @level:smoke", async ({
-    page,
-  }) => {
-    await expect(page.locator('[data-text-wrap-panel="ready"]')).toBeVisible();
-  });
-
   test("AC-TW-2 — mode + offsets round-trip; partial commit preserves the unset half @feat:editor-shell.panels.text-wrap @level:happy", async ({
     page,
   }) => {

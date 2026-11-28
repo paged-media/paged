@@ -110,13 +110,14 @@ describe("Journal panel", () => {
     const h = await mount();
     await record(h);
     await h.click(h.root.querySelector("[data-journal-export]")!);
-    const dialog = h.root.querySelector("[data-journal-export-dialog]");
+    // The dialog is the editor's, not the panel's: it portals out of it.
+    const dialog = document.querySelector("[data-journal-export-dialog]");
     expect(dialog).not.toBeNull();
     const preview =
-      h.root.querySelector("[data-journal-preview]")?.textContent ?? "";
+      document.querySelector("[data-journal-preview]")?.textContent ?? "";
     expect(preview).toContain("worker.dispatch.error");
-    await h.click(h.root.querySelector("[data-journal-export-cancel]")!);
-    expect(h.root.querySelector("[data-journal-export-dialog]")).toBeNull();
+    await h.click(document.querySelector("[data-journal-export-cancel]")!);
+    expect(document.querySelector("[data-journal-export-dialog]")).toBeNull();
   });
 
   test("what would leave holds no document text: a path in an entry's data is dropped and counted", async () => {
@@ -132,7 +133,7 @@ describe("Journal panel", () => {
     });
     await h.click(h.root.querySelector("[data-journal-export]")!);
     const preview =
-      h.root.querySelector("[data-journal-preview]")?.textContent ?? "";
+      document.querySelector("[data-journal-preview]")?.textContent ?? "";
     expect(preview).toContain("plugin.log");
     expect(preview).not.toContain("brochure");
     expect(preview).not.toContain("/home/");

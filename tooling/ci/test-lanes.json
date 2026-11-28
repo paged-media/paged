@@ -69,6 +69,21 @@
       ]
     },
     {
+      "name": "editor / scripts: the Playwright shard split and the skip summary",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:ci-scripts",
+      "files": [
+        "apps/editor/scripts/playwright-shards.test.mjs",
+        "apps/editor/scripts/skip-summary.test.mjs"
+      ]
+    },
+    {
+      "name": "editor / scripts: js-budget",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:js-budget",
+      "files": ["apps/editor/scripts/js-budget.test.mjs"]
+    },
+    {
       "name": "editor / local library",
       "workflow": "editor-tests.yml",
       "evidence": "bun run test:repository",

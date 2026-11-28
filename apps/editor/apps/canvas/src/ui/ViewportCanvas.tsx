@@ -103,6 +103,7 @@ import {
   measuredGesture,
   sceneItemKeys,
 } from "./gesture-intent";
+import { TEST_AFFORDANCES } from "../build-flags";
 import { debugFlag } from "../debug-flags";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
@@ -487,9 +488,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // Dev/test hook (B-08 spec). Headless Chromium can't synthesize a
     // physical-stylus pressure, so the Playwright spec asserts the
     // PLUMBING: it reads the last tool pointer the canvas built and
-    // checks the new fields are present + typed. Dev builds only; the
+    // checks the new fields are present + typed. Dev and e2e builds only; the
     // page entry publishes it as `__canvasPointer`, as it does `__canvas`.
-    if (!import.meta.env.PROD) setDebugHandle(scope, "pointer", built);
+    if (TEST_AFFORDANCES) setDebugHandle(scope, "pointer", built);
     return built;
   };
 

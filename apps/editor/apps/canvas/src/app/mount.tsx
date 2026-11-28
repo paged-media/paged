@@ -141,6 +141,7 @@ import { startRecovery } from "./recovery-start";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import { loadBundle, mlObjectModel } from "@paged-media/plugin-sdk";
 
+import { DEV_TOOLS } from "../build-flags";
 import { createEditorMlService } from "../ml/create-editor-ml";
 import { generateImageHandler } from "../ml/generate-image";
 import { browserPngCodec } from "../ml/png-codec";
@@ -2273,16 +2274,10 @@ function CanvasAppRoot() {
       <GoToDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
-          the dev and `demo` builds, only when the URL asks (they render
+          the dev, e2e and `demo` builds, only when the URL asks (they render
           null otherwise). */}
-      {instance.devTools &&
-        (import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
-          <PlaygroundController />
-        )}
-      {instance.devTools &&
-        (import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
-          <IframeScriptBridge />
-        )}
+      {instance.devTools && DEV_TOOLS && <PlaygroundController />}
+      {instance.devTools && DEV_TOOLS && <IframeScriptBridge />}
       {/* Editor ADR 1243 — `?sample=<id>` opens a sample document. */}
       {instance.devTools && <SampleLink />}
     </PagedShell>

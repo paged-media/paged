@@ -82,8 +82,6 @@ import { TablePanel } from "./table-panel";
 import { TabsPanel } from "./concept/tabs-panel";
 import { GlyphsPanel } from "./concept/glyphs-panel";
 import { BulletsPanel } from "./concept/bullets-panel";
-import { AnchoredPanel } from "./concept/anchored-panel";
-import { AssetExportPanel } from "./asset-export-panel";
 import { ExportTaggingPanel } from "./concept/export-tagging-panel";
 import { MasterPagesPanel } from "./master-pages-panel";
 import { ArtboardsPanel } from "./artboards-panel";
@@ -105,21 +103,26 @@ import { FIND_RESULTS_PANEL, FindResultsPanel } from "../find/find-ui";
 import { OutlinePanel } from "./outline-panel";
 import { ActionsPanel } from "./actions-panel";
 import { ReplPanel } from "./repl-panel";
-import { ScriptEditorPanel } from "./script-editor";
+// Loaded when first shown, each a chunk of its own (./lazy-panels.tsx).
+import {
+  AnchoredPanel,
+  AssetExportPanel,
+  GenerateImagePanel,
+  ImportReportPanel,
+  JournalPanel,
+  LibraryPanel,
+  ModelsPanel,
+  ScriptEditorPanel,
+  TypographyPanel,
+  VariantsPanel,
+  XRayPanel,
+} from "./lazy-panels";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
-import { ImportReportPanel } from "./import-report-panel";
-import { XRayPanel } from "./xray-panel";
-import { TypographyPanel } from "./typography-panel";
-import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
 import { HistoryPanel } from "./history-panel";
-import { GenerateImagePanel } from "./generate-image-panel";
-import { ModelsPanel } from "./models-panel";
-import { LibraryPanel } from "./library-panel";
 import { ConstraintsPanel } from "./constraints-panel";
 import { ContractPanel } from "./contract-panel";
-import { VariantsPanel } from "./variants-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
 import { PreflightPanel } from "./cockpit/preflight-panel";

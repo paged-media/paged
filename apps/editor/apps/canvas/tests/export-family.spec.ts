@@ -120,28 +120,6 @@ test.describe("Export family — Export Center", () => {
 
     await setMode(page, "design");
   });
-
-  // TODO(ADR-022 Phase 5): IDML is now the paged.publish plugin exporter, not a
-  // built-in export-center row. Rewrite against the plugin-export flow (click
-  // `[data-plugin-export="media.paged.publish.exporter.idml"]` in the Outputs
-  // panel's "Plugin exports" section, assert the `.idml` download) — needs the
-  // plugin bundle loaded at runtime.
-  test.skip("LIVE — the IDML row downloads a real .idml package @feat:editor-shell.panels.outputs @feat:plugin-platform.importer-exporter @feat:the-renderer.export-diagnostics @feat:the-renderer.pdf-export-marks @level:happy", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadDoc(page, CLEAN);
-    await setMode(page, "export");
-
-    const downloadPromise = page.waitForEvent("download");
-    await page
-      .locator('[data-plugin-export="media.paged.publish.exporter.idml"]')
-      .click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.idml$/);
-
-    await setMode(page, "design");
-  });
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -185,6 +163,36 @@ test.describe("Export family — Outputs nav", () => {
     await expect(
       page.locator('[data-output-nav="image"][data-selected]'),
     ).toBeVisible();
+  });
+
+  // IDML is the publish module's exporter, not a built-in target: it is
+  // listed in the nav's "Plugin exports" section, and its row runs the
+  // exporter and downloads the package it wrote.
+  test("LIVE — the IDML plugin export downloads a real .idml package @feat:editor-shell.panels.outputs @feat:plugin-platform.importer-exporter @feat:the-renderer.export-diagnostics @feat:the-renderer.pdf-export-marks @level:happy", async ({
+    page,
+  }) => {
+    await openCanvas(page);
+    await loadDoc(page, CLEAN);
+    await setMode(page, "export");
+
+    const row = page.locator(
+      '[data-plugin-exports] [data-plugin-export="media.paged.publish.exporter.idml"]',
+    );
+    await expect(row).toBeVisible();
+    const downloadPromise = page.waitForEvent("download");
+    await row.click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/\.idml$/);
+    // An IDML package is a zip: the bytes carry the local-file magic.
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
+    const bytes = Buffer.concat(chunks);
+    expect([...bytes.subarray(0, 4)], "zip local-file header").toEqual([
+      0x50, 0x4b, 0x03, 0x04,
+    ]);
+
+    await setMode(page, "design");
   });
 });
 
@@ -325,27 +333,6 @@ test.describe("Export family — Export inspector", () => {
     // pick PNG over JPEG for a page. Whoever adds that option: the JPEG
     // lane will silently render transparent regions BLACK without the
     // flatten, and THAT is when this becomes testable.
-    await setMode(page, "design");
-  });
-
-  // TODO(ADR-022 Phase 5): IDML is now the paged.publish plugin exporter. Rewrite
-  // against the "Plugin exports" section (click
-  // `[data-plugin-export="media.paged.publish.exporter.idml"]`, assert the `.idml`
-  // download) — needs the plugin bundle loaded at runtime.
-  test.skip("LIVE IDML target — the run button downloads the package @feat:editor-shell.panels.outputs @feat:plugin-platform.importer-exporter @feat:the-renderer.export-diagnostics @feat:the-renderer.pdf-export-marks @level:happy", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadDoc(page, CLEAN);
-    await setMode(page, "export");
-
-    const downloadPromise = page.waitForEvent("download");
-    await page
-      .locator('[data-plugin-export="media.paged.publish.exporter.idml"]')
-      .click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.idml$/);
-
     await setMode(page, "design");
   });
 

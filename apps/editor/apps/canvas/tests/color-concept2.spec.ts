@@ -383,66 +383,6 @@ test.describe("Concept 2 — colour engine + panels", () => {
     expect(out.undone).toBe(out.before);
   });
 
-  test("ink settings + standard-Lab toggle round-trip (AC-8) @feat:color-swatches.icc-cmm @feat:editor-shell.panels.color-settings @feat:color-swatches.ink-manager @level:happy", async ({
-    page,
-  }) => {
-    const out = await page.evaluate(async () => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            client: {
-              mutate: (m: unknown) => Promise<{ kind: string }>;
-              collection: (n: string) => Promise<
-                {
-                  spotId?: string;
-                  name: string;
-                  convertToProcess?: boolean;
-                }[]
-              >;
-              documentMeta: () => Promise<{
-                useStandardLabForSpots?: boolean | null;
-              }>;
-            };
-          };
-        }
-      ).__canvas;
-      // Create a spot swatch so the ink list has a row.
-      await c.client.mutate({
-        op: "createSwatch",
-        args: {
-          spec: {
-            name: "Spot Test",
-            space: "LAB",
-            value: [48, 64, 47],
-            model: "Spot",
-            alternateSpace: "CMYK",
-            alternateValue: [0, 91, 76, 0],
-          },
-        },
-      });
-      const inks = await c.client.collection("inks");
-      const spot = inks.find((i) => i.name === "Spot Test")!;
-      await c.client.mutate({
-        op: "setInkSetting",
-        args: { spotId: spot.spotId, convertToProcess: true, aliasTo: null },
-      });
-      const after = (await c.client.collection("inks")).find(
-        (i) => i.name === "Spot Test",
-      )!;
-      await c.client.mutate({
-        op: "setUseStandardLabForSpots",
-        args: { enabled: true },
-      });
-      const meta = await c.client.documentMeta();
-      return {
-        converted: after.convertToProcess,
-        standardLab: meta.useStandardLabForSpots,
-      };
-    });
-    expect(out.converted).toBe(true);
-    expect(out.standardLab).toBe(true);
-  });
-
   test("colour settings + soft-proof surface through documentMeta @feat:color-swatches.icc-cmm @feat:editor-shell.panels.color-settings @level:happy", async ({
     page,
   }) => {

@@ -35,7 +35,8 @@ import type {
 } from "@paged-media/client";
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   scoped,
   scopeOf,
   useScoped,
@@ -219,175 +220,152 @@ function OpenAsTemplateForm(): ReactElement {
   };
 
   return (
-    <div
-      data-open-as-template-backdrop=""
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
+    <ModalDialog
+      onClose={close}
+      dismissOnOutside
+      data-open-as-template-dialog=""
+      data-panel-host=""
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.5)",
+        width: "min(440px, 92vw)",
+        padding: 16,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
+      <ModalDialogTitle
+        id="open-as-template-title"
+        style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600 }}
+      >
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <p style={{ margin: "0 0 10px", fontSize: 11.5 }}>{strings.t(M.intro)}</p>
+      {derivation === null ? (
+        <div data-open-as-template-loading="" style={{ fontSize: 11.5 }}>
+          {strings.t(M.loading)}
+        </div>
+      ) : fields.length === 0 ? (
+        <div data-open-as-template-empty="" style={{ fontSize: 11.5 }}>
+          {strings.t(M.empty)}
+        </div>
+      ) : (
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "grid",
+            gap: 4,
+            fontSize: 11.5,
+          }}
+        >
+          {fields.map((f) => (
+            <li key={f.field.name} data-open-as-template-field={f.field.name}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!skipped.includes(f.field.name)}
+                  onChange={(e) =>
+                    setSkipped(
+                      e.currentTarget.checked
+                        ? skipped.filter((n) => n !== f.field.name)
+                        : [...skipped, f.field.name],
+                    )
+                  }
+                />{" "}
+                <strong>{f.field.label ?? f.field.name}</strong>{" "}
+                <span style={{ color: color.mutedFg }}>
+                  {KIND_NAMES[f.field.kind]
+                    ? strings.t(KIND_NAMES[f.field.kind]!)
+                    : f.field.kind}{" "}
+                  — {targetText(f, strings.t)}
+                </span>{" "}
+                <span
+                  data-open-as-template-status={f.field.name}
+                  style={{ color: color.mutedFg, fontStyle: "italic" }}
+                >
+                  ({status(f)})
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {untagged.length ? (
+        <div
+          data-open-as-template-untagged=""
+          style={{ margin: "8px 0 0", fontSize: 11 }}
+        >
+          {strings.t(M.untagged, { count: untagged.length })}{" "}
+          {untagged.map((r) => r.field.label ?? r.field.name).join(", ")}
+        </div>
+      ) : null}
+      {derivation?.skipped.length ? (
+        <ul
+          data-open-as-template-skipped=""
+          style={{
+            margin: "8px 0 0",
+            paddingLeft: 16,
+            fontSize: 11,
+            color: color.mutedFg,
+          }}
+        >
+          {derivation.skipped.map((s) => (
+            <li key={s.elementId}>
+              {strings.t(M.skipped, { tag: s.tag, reason: s.reason })}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {role !== "author" ? (
+        <div
+          data-open-as-template-role=""
+          style={{ marginTop: 10, fontSize: 11.5 }}
+        >
+          {strings.t(M.authorOnly)}{" "}
+          {setRole ? (
+            <button
+              type="button"
+              data-open-as-template-author=""
+              onClick={() => setRole("author")}
+            >
+              {strings.t(M.author)}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      <StatusLine tone="error" attr="data-open-as-template-problem">
+        {message}
+      </StatusLine>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="open-as-template-title"
-        data-open-as-template-dialog=""
-        data-panel-host=""
         style={{
-          width: "min(440px, 92vw)",
-          padding: 16,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          marginTop: 14,
         }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="open-as-template-title"
-            style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600 }}
-          >
-            {strings.t(M.title)}
-          </h2>
-          <p style={{ margin: "0 0 10px", fontSize: 11.5 }}>
-            {strings.t(M.intro)}
-          </p>
-          {derivation === null ? (
-            <div data-open-as-template-loading="" style={{ fontSize: 11.5 }}>
-              {strings.t(M.loading)}
-            </div>
-          ) : fields.length === 0 ? (
-            <div data-open-as-template-empty="" style={{ fontSize: 11.5 }}>
-              {strings.t(M.empty)}
-            </div>
-          ) : (
-            <ul
-              style={{
-                margin: 0,
-                padding: 0,
-                listStyle: "none",
-                display: "grid",
-                gap: 4,
-                fontSize: 11.5,
-              }}
-            >
-              {fields.map((f) => (
-                <li
-                  key={f.field.name}
-                  data-open-as-template-field={f.field.name}
-                >
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!skipped.includes(f.field.name)}
-                      onChange={(e) =>
-                        setSkipped(
-                          e.currentTarget.checked
-                            ? skipped.filter((n) => n !== f.field.name)
-                            : [...skipped, f.field.name],
-                        )
-                      }
-                    />{" "}
-                    <strong>{f.field.label ?? f.field.name}</strong>{" "}
-                    <span style={{ color: color.mutedFg }}>
-                      {KIND_NAMES[f.field.kind]
-                        ? strings.t(KIND_NAMES[f.field.kind]!)
-                        : f.field.kind}{" "}
-                      — {targetText(f, strings.t)}
-                    </span>{" "}
-                    <span
-                      data-open-as-template-status={f.field.name}
-                      style={{ color: color.mutedFg, fontStyle: "italic" }}
-                    >
-                      ({status(f)})
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-          {untagged.length ? (
-            <div
-              data-open-as-template-untagged=""
-              style={{ margin: "8px 0 0", fontSize: 11 }}
-            >
-              {strings.t(M.untagged, { count: untagged.length })}{" "}
-              {untagged.map((r) => r.field.label ?? r.field.name).join(", ")}
-            </div>
-          ) : null}
-          {derivation?.skipped.length ? (
-            <ul
-              data-open-as-template-skipped=""
-              style={{
-                margin: "8px 0 0",
-                paddingLeft: 16,
-                fontSize: 11,
-                color: color.mutedFg,
-              }}
-            >
-              {derivation.skipped.map((s) => (
-                <li key={s.elementId}>
-                  {strings.t(M.skipped, { tag: s.tag, reason: s.reason })}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {role !== "author" ? (
-            <div
-              data-open-as-template-role=""
-              style={{ marginTop: 10, fontSize: 11.5 }}
-            >
-              {strings.t(M.authorOnly)}{" "}
-              {setRole ? (
-                <button
-                  type="button"
-                  data-open-as-template-author=""
-                  onClick={() => setRole("author")}
-                >
-                  {strings.t(M.author)}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <StatusLine tone="error" attr="data-open-as-template-problem">
-            {message}
-          </StatusLine>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 14,
-            }}
-          >
-            <button
-              type="button"
-              data-open-as-template-cancel=""
-              onClick={close}
-              style={secondaryStyle}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-open-as-template-apply=""
-              disabled={chosen.length === 0 || role !== "author"}
-              onClick={() => void apply()}
-              style={buttonStyle}
-            >
-              {strings.t(M.apply, { count: chosen.length })}
-            </button>
-          </div>
-        </FocusScope>
+        <button
+          type="button"
+          data-open-as-template-cancel=""
+          onClick={close}
+          style={secondaryStyle}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-open-as-template-apply=""
+          disabled={chosen.length === 0 || role !== "author"}
+          onClick={() => void apply()}
+          style={buttonStyle}
+        >
+          {strings.t(M.apply, { count: chosen.length })}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 

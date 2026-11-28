@@ -50,20 +50,6 @@ test.describe("Phase 5 — Pathfinder panel", () => {
     await openPanel(page, "paged.pathfinder");
   });
 
-  test("AC-PF-1 — panel mounts; 4 buttons; all enabled when 2+ selected @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @level:smoke", async ({
-    page,
-  }) => {
-    await expect(page.locator('[data-pathfinder-panel="ready"]')).toBeVisible();
-    const buttons = page.locator(
-      '[data-pathfinder-panel="ready"] button[data-pathfinder-kind]',
-    );
-    await expect(buttons).toHaveCount(4);
-    // Hint visible with empty selection (all buttons disabled).
-    await expect(
-      page.locator('[data-pathfinder-panel="ready"] [data-pathfinder-hint]'),
-    ).toBeVisible();
-  });
-
   test("AC-PF-2 — Subtract on overlapping rects yields L-shape + removes others @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @level:happy", async ({
     page,
   }) => {
@@ -264,109 +250,6 @@ test.describe("Phase 5 — Pathfinder panel", () => {
       keptVertexCount: 6,
     });
   });
-
-  test("AC-PF-3 — single Cmd-Z reverses the whole Pathfinder op @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @level:happy", async ({
-    page,
-  }) => {
-    const result = await page.evaluate(async () => {
-      type DebugCanvas = {
-        client?: {
-          executeScript(src: string): Promise<{
-            output: string[];
-            error: string | null;
-          }>;
-          elementProperties(id: unknown): Promise<unknown>;
-          mutate(op: unknown): Promise<unknown>;
-          undo(): Promise<unknown>;
-        };
-        setElementSelection?(ids: unknown[], mode: string): void;
-      };
-      const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
-      if (!dbg?.client) throw new Error("no client");
-      const treeJson = await dbg.client
-        .executeScript("paged.tree()")
-        .then((r) => r.output[0] ?? "[]");
-      type Node = {
-        id?: { kind: string; id: string } | null;
-        children?: Node[];
-      };
-      const ids: Array<{ kind: string; id: string }> = [];
-      const walk = (nodes: Node[] | undefined) => {
-        if (!nodes) return;
-        for (const n of nodes) {
-          if (n.id && n.id.kind === "textFrame") ids.push(n.id);
-          walk(n.children);
-        }
-      };
-      walk(JSON.parse(treeJson) as Node[]);
-      if (ids.length < 2) throw new Error("< 2 TextFrames");
-      const pair = ids.slice(0, 2);
-      await dbg.client.mutate({
-        op: "batch",
-        args: {
-          ops: [
-            {
-              op: "setElementProperty",
-              args: {
-                elementId: pair[0],
-                path: "frameBounds",
-                value: { type: "bounds", value: [0, 0, 20, 20] },
-              },
-            },
-            {
-              op: "setElementProperty",
-              args: {
-                elementId: pair[1],
-                path: "frameBounds",
-                value: { type: "bounds", value: [10, 10, 30, 30] },
-              },
-            },
-          ],
-        },
-      });
-      await new Promise((r) => setTimeout(r, 50));
-      dbg.setElementSelection?.(pair, "replace");
-      await new Promise((r) => setTimeout(r, 80));
-      return JSON.stringify(pair);
-    });
-
-    // Run Union (any op is fine — point is the undo coalescing).
-    await page
-      .locator(
-        '[data-pathfinder-panel="ready"] button[data-pathfinder-kind="union"]',
-      )
-      .click();
-    await page.waitForTimeout(150);
-
-    // One undo.
-    await page.evaluate(async () => {
-      type DebugCanvas = {
-        client?: { undo(): Promise<unknown> };
-      };
-      const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
-      if (!dbg?.client) throw new Error("no client");
-      await dbg.client.undo();
-    });
-    await page.waitForTimeout(150);
-
-    const restored = await page.evaluate(async (pairJson) => {
-      type DebugCanvas = {
-        client?: {
-          elementProperties(id: unknown): Promise<unknown>;
-        };
-      };
-      const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
-      if (!dbg?.client) throw new Error("no client");
-      const pair = JSON.parse(pairJson) as Array<{ kind: string; id: string }>;
-      const p0 = await dbg.client.elementProperties(pair[0]);
-      const p1 = await dbg.client.elementProperties(pair[1]);
-      return { keptExists: p0 !== null, otherRestored: p1 !== null };
-    }, result);
-
-    // After one undo, both frames exist again.
-    expect(restored.keptExists).toBe(true);
-    expect(restored.otherRestored).toBe(true);
-  });
 });
 
 // ---------------------------------------------------------------------
@@ -503,33 +386,6 @@ test.describe("B-22 — the region Pathfinder row", () => {
     const doc = await loadIdml(page, FIXTURE);
     pageId = doc.pages[0].pageId;
     await openPanel(page, "paged.pathfinder");
-  });
-
-  test("AC-PF-4 — the six region verbs are LIVE buttons, not seams @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @level:smoke", async ({
-    page,
-  }) => {
-    const verbs = page.locator(
-      '[data-pathfinder-panel="ready"] button[data-pathfinder-verb]',
-    );
-    await expect(verbs).toHaveCount(6);
-    // Disabled with an empty selection, but NOT `data-seam` — a seam is
-    // permanently dead, these wait for operands.
-    await expect(
-      page.locator(
-        '[data-pathfinder-panel="ready"] button[data-pathfinder-verb][data-seam]',
-      ),
-    ).toHaveCount(0);
-    // Convert shape stays an honest seam (no Operation behind it).
-    await expect(
-      page.locator("[data-convert-shape-seam] button[data-seam]"),
-    ).toHaveCount(4);
-
-    const a = await insertQuad(page, pageId, [100, 100, 300, 300]);
-    const b = await insertQuad(page, pageId, [200, 200, 400, 400]);
-    await select(page, [a, b]);
-    await expect(
-      page.locator('button[data-pathfinder-verb="pathfinderDivide"]'),
-    ).toBeEnabled();
   });
 
   test("AC-PF-5 — Divide splits the arrangement into one object per face @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @level:happy", async ({

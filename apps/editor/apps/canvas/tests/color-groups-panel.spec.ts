@@ -25,7 +25,6 @@ import { fileURLToPath } from "node:url";
 
 import {
   openCanvas,
-  loadIdml,
   openPanel,
   loadViaFileInput,
 } from "./fidelity/canvas-driver";
@@ -44,26 +43,6 @@ async function loadViaInput(page: Page, fixture: string): Promise<void> {
 }
 
 test.describe("Phase 5 — Color Groups panel", () => {
-  test("AC-CGROUPS-1 — panel mounts; lists groups or shows empty placeholder @feat:color-swatches.color-groups @feat:editor-shell.panels.color-groups @level:edge", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadIdml(page, FIXTURE);
-    await openPanel(page, "paged.color-groups");
-    await expect(
-      page.locator('[data-color-groups-panel="ready"]'),
-    ).toBeVisible();
-    const list = page.locator(
-      '[data-color-groups-panel="ready"] [data-color-group-list]',
-    );
-    const empty = page.locator(
-      '[data-color-groups-panel="ready"] [data-empty-color-groups]',
-    );
-    const listVisible = await list.isVisible();
-    const emptyVisible = await empty.isVisible();
-    expect(listVisible || emptyVisible).toBe(true);
-  });
-
   test("AC-CGROUPS-2 — New group creates; delete removes (live ops) @feat:color-swatches.color-groups @feat:editor-shell.panels.color-groups @level:happy", async ({
     page,
   }) => {

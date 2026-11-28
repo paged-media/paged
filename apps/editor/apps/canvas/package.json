@@ -7,6 +7,8 @@
     "dev": "bunx --bun vite",
     "build": "bun check && bunx --bun vite build",
     "build:demo": "bun check && bunx --bun vite build --mode demo --outDir dist-demo",
+    "build:e2e": "bunx --bun vite build --mode e2e --outDir dist-e2e",
+    "preview:e2e": "node node_modules/vite/bin/vite.js preview --mode e2e --outDir dist-e2e",
     "preview": "bunx --bun vite preview",
     "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json && bun check -p test/tsconfig.json && bun check -p tests/headless/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",

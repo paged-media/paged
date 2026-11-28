@@ -33,6 +33,32 @@ const ROOT_TESTS = resolve(__dirname, "..", "..", "..", "..", "tests");
 const PORT = Number(process.env.IDML_CANVAS_TEST_PORT ?? 5180);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
+// Which server the suite runs against. `dev` (the default, local runs): the
+// Vite dev server, so a spec sees the sources as they are. `preview` (CI,
+// editor-tests.yml): the production build of `bun run build:e2e`, served by
+// `vite preview`. The suite loads the page once per test, and the dev server
+// answers each load with a few thousand unbundled modules; the build answers
+// it with a handful of chunks. The e2e build keeps the page's test handles
+// (src/build-flags.ts) and the preview server answers the fixture routes the
+// dev server does (vite.config.ts: /fonts, /corpus/idml, /@fs bytes).
+const E2E_SERVER =
+  process.env.PAGED_E2E_SERVER === "preview" ? "preview" : "dev";
+
+// Workers. One locally: the fidelity sweep and the snapshot tier were
+// measured against a single worker (two raced the layout cache across
+// packs), and a laptop has other work. CI sets PAGED_E2E_WORKERS=2: every
+// test opens its own page in its own browser context and the specs share no
+// state in the server, so two spec files can run side by side (a file's
+// tests still run in order, in one worker: `fullyParallel` stays off). What
+// keeps it at two: a hosted runner has four cores and 16 GB, and one worker
+// is already a Chromium renderer, its GPU process and the editor's engine
+// worker rasterising on the CPU; the per-test timeout and the gesture
+// specs' timing were set against one worker, and a shard's Playwright
+// worker has grown by gigabytes before (editor-tests.yml, the memory log).
+// Three has not been measured on a runner. The lanes that are single-worker
+// by design (fidelity, showcase, films, perf) say so on their project.
+const WORKERS = Math.max(1, Number(process.env.PAGED_E2E_WORKERS ?? 1) || 1);
+
 // Default Node heap (~2 GB) trips on a 61-pack sweep — the
 // page.evaluate boundary briefly holds a copy of each IDML +
 // PNG-per-page. Bump unless the caller already set NODE_OPTIONS.
@@ -72,10 +98,9 @@ const HEADLESS = "headless/**";
 export default defineConfig({
   testDir: "./tests",
   testIgnore: [...LEAN_DROP, HEADLESS],
-  // Single worker keeps the snapshot tier deterministic (worker pool
-  // contention can race the layout cache across packs). Re-enable
-  // parallelism once we've confirmed perf isn't bottlenecked by it.
-  workers: 1,
+  // See WORKERS above: one locally, two in CI. Files run in parallel, the
+  // tests of a file in order.
+  workers: WORKERS,
   fullyParallel: false,
   reporter: [
     ["list"],
@@ -113,27 +138,42 @@ export default defineConfig({
     screenshot: "only-on-failure",
     viewport: { width: 1600, height: 1000 },
   },
-  webServer: {
-    // Vite on Node, not Bun. Under `bunx --bun vite` (2026-10-18 to
-    // 2026-10-31) about one CI shard in seven lost its runner: from a random
-    // test on, the dev server (Bun, though `ps` names it `node`: Bun runs the
-    // bin through a `node` shim) grew ~1 GB every 30 s to 14 GB, through
-    // passing and failing tests and worker restarts alike, until the runner
-    // ran out of memory. The suite on Node holds ~1 GB. `bun run dev` stays
-    // on Bun. Bound to the same IPv4 loopback the health check polls
-    // (BASE_URL): left to its default, Vite can listen on `localhost`
-    // resolved to ::1 only, and the 127.0.0.1 probe then never answers.
-    command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`,
-    cwd: __dirname,
-    url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    stdout: "pipe",
-    stderr: "pipe",
-    // A cold start (config bundle, dependency scan, the module manifest's
-    // wasm hashes) measured 36 s on a warm disk and ran past 60 s on a
-    // first run after a fresh build.
-    timeout: 180_000,
-  },
+  webServer:
+    E2E_SERVER === "preview"
+      ? {
+          // The production build, built out of band (`bun run build:e2e`;
+          // a missing dist-e2e stops `vite preview` with its own message).
+          // On Node, like the dev server below.
+          command: `node node_modules/vite/bin/vite.js preview --mode e2e --outDir dist-e2e --host 127.0.0.1 --port ${PORT} --strictPort`,
+          cwd: __dirname,
+          url: BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 60_000,
+        }
+      : {
+          // Vite on Node, not Bun. Under `bunx --bun vite` (2026-10-18 to
+          // 2026-10-31) about one CI shard in seven lost its runner: from a
+          // random test on, the dev server (Bun, though `ps` names it
+          // `node`: Bun runs the bin through a `node` shim) grew ~1 GB every
+          // 30 s to 14 GB, through passing and failing tests and worker
+          // restarts alike, until the runner ran out of memory. The suite on
+          // Node holds ~1 GB. `bun run dev` stays on Bun. Bound to the same
+          // IPv4 loopback the health check polls (BASE_URL): left to its
+          // default, Vite can listen on `localhost` resolved to ::1 only,
+          // and the 127.0.0.1 probe then never answers.
+          command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`,
+          cwd: __dirname,
+          url: BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          stdout: "pipe",
+          stderr: "pipe",
+          // A cold start (config bundle, dependency scan, the module
+          // manifest's wasm hashes) measured 36 s on a warm disk and ran
+          // past 60 s on a first run after a fresh build.
+          timeout: 180_000,
+        },
   projects: [
     {
       name: "chromium",
@@ -311,6 +351,7 @@ export default defineConfig({
       //
       //   bunx playwright test --project=fidelity
       name: "fidelity",
+      workers: 1,
       testDir: resolve(ROOT_TESTS, "fidelity"),
       testMatch: "**/*.spec.ts",
       // The settings it had as a spec of the `chromium` project.
@@ -344,6 +385,7 @@ export default defineConfig({
       // the core checkout beside the editor for the base fixture, and it
       // is a build step for an artifact, not a gate.
       name: "showcase",
+      workers: 1,
       testDir: "./tests/showcase",
       // Both the document build and the driver's own tests. The driver
       // is load-bearing for sixteen page modules, so it gets checked
@@ -375,6 +417,7 @@ export default defineConfig({
       // --mode demo`, served by `vite preview` (docs/migration/
       // react-compiler.md has the commands). Numbers, not assertions.
       name: "perf",
+      workers: 1,
       testDir: "./tests/perf",
       testMatch: "**/*.perf.spec.ts",
       retries: 0,
@@ -388,6 +431,7 @@ export default defineConfig({
       // PAGED_MEDIA_ROOT points at the website's media/ package, which
       // owns the storyboards, narration plans and the composition.
       name: "films",
+      workers: 1,
       testDir: "./tests/films",
       testMatch: "**/*.film.ts",
       retries: 0,

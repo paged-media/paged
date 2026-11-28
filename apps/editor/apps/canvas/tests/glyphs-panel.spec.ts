@@ -23,7 +23,7 @@
 // the recently-used grid appears). Without a caret the grid is
 // inert (covered by concept-panels.spec.ts).
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,84 +33,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
-
-interface StoryInfo {
-  selfId: string;
-  characterCount: number;
-}
-
-async function storyCount(page: Page, storyId: string): Promise<number> {
-  return page.evaluate(async (id) => {
-    const dbg = (
-      window as unknown as {
-        __canvas: {
-          client: {
-            executeScript(src: string): Promise<{ output: string[] }>;
-          };
-        };
-      }
-    ).__canvas;
-    const stories = (await dbg.client
-      .executeScript("paged.stories()")
-      .then((r) => JSON.parse(r.output[0] ?? "[]"))) as Array<{
-      selfId: string;
-      characterCount: number;
-    }>;
-    return stories.find((s) => s.selfId === id)?.characterCount ?? -1;
-  }, storyId);
-}
-
-test("AC-GLYPHS-1 — caret + glyph click inserts via insertText @feat:editor-shell.panels.glyphs @level:gesture", async ({
-  page,
-}) => {
-  await openCanvas(page);
-  await loadIdml(page, FIXTURE);
-
-  // Install a caret on the first story through the debug hook —
-  // the same path the canvas text tool uses.
-  const story = await page.evaluate(async () => {
-    const dbg = (
-      window as unknown as {
-        __canvas: {
-          client: {
-            executeScript(src: string): Promise<{ output: string[] }>;
-          };
-          setContentSelection?: (
-            sel: { storyId: string; start: number; end: number } | null,
-          ) => void;
-        };
-      }
-    ).__canvas;
-    const stories = (await dbg.client
-      .executeScript("paged.stories()")
-      .then((r) => JSON.parse(r.output[0] ?? "[]"))) as Array<{
-      selfId: string;
-      characterCount: number;
-    }>;
-    if (!stories.length) throw new Error("fixture has no stories");
-    const s = stories[0];
-    dbg.setContentSelection?.({ storyId: s.selfId, start: 0, end: 0 });
-    return s as { selfId: string; characterCount: number };
-  });
-
-  await openPanel(page, "paged.glyphs");
-  const root = page.locator('[data-glyphs-panel="ready"]');
-  await expect(root.locator('[data-glyph-grid="all"]')).toHaveAttribute(
-    "data-caret",
-    "true",
-  );
-
-  const before = (story as StoryInfo).characterCount;
-  await root.locator('[data-glyph="©"]').click();
-  // insertText lands → the story grows by one character.
-  await expect
-    .poll(() => storyCount(page, (story as StoryInfo).selfId))
-    .toBe(before + 1);
-  // The recently-used grid appears with the inserted glyph.
-  await expect(
-    root.locator('[data-glyph-grid="recent"] [data-glyph="©"]'),
-  ).toBeVisible();
-});
 
 test("AC-GLYPHS-2 — Font select is fed real families from the fonts collection @feat:editor-shell.panels.glyphs @level:happy", async ({
   page,

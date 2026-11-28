@@ -27,10 +27,6 @@
 // The three derived command families run here too, member by member from
 // the live registry: only the browser has every panel and plugin tool.
 
-import { realpathSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { expect, test, type Page } from "@playwright/test";
 
 import { covers } from "@paged-media/test-kit";
@@ -81,26 +77,17 @@ const scale = (page: Page) =>
     () => (globalThis as unknown as G).__canvas.client.camera.read().scale,
   );
 
-/** The view toggles live in a module-scope store; read the app's own
- *  instance of it through the dev server (the same URL the app loaded). */
-const VIEW_TOGGLES = realpathSync(
-  resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../../../../packages/shell/src/state/view-toggles.ts",
-  ),
-);
+/** The editor's view toggles, read through the page's `__view` handle
+ *  (src/app/dev-handles.ts). */
 const viewToggle = (page: Page, which: string) =>
   page.evaluate(
-    async ([path, w]) => {
-      const m = (await import(/* @vite-ignore */ `/@fs${path}`)) as {
-        getViewToggle(scope: unknown, x: string): boolean;
-      };
-      // The toggles are the editor's (its scope, on the editor handle).
-      const paged = (globalThis as unknown as { __paged: { scope: unknown } })
-        .__paged;
-      return m.getViewToggle(paged.scope, w);
-    },
-    [VIEW_TOGGLES, which] as const,
+    (w) =>
+      (
+        globalThis as unknown as {
+          __view: { toggle(which: string): boolean };
+        }
+      ).__view.toggle(w),
+    which,
   );
 
 test.describe("view commands", () => {

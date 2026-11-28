@@ -162,7 +162,7 @@ describe("one place per kind (UXI-FBK-001, UXI-ASY-010)", () => {
     ]);
   });
 
-  test("a fatal failure stays until closed; others expire", () => {
+  test("an error stays until closed; others expire", () => {
     const fb = createOperationFeedback(() => 100);
     fb.report({ action: "a", outcome: "fatal-failure" });
     fb.report({ action: "b", outcome: "blocked" });
@@ -173,6 +173,48 @@ describe("one place per kind (UXI-FBK-001, UXI-ASY-010)", () => {
     expect(success!.expiresAt).toBe(4100);
     fb.dismissToast(fatal!.id);
     expect(fb.snapshot().toasts).toHaveLength(2);
+    fb.report({ action: "d", outcome: "recoverable-failure" });
+    expect(fb.snapshot().toasts.at(-1)!.expiresAt).toBeNull();
+  });
+
+  test("a held toast's time stands still; released, it runs with what was left", () => {
+    let at = 1000;
+    const fb = createOperationFeedback(() => at);
+    fb.report({ action: "c", outcome: "success", prominent: true });
+    const id = fb.snapshot().toasts[0]!.id;
+    expect(fb.snapshot().toasts[0]!.expiresAt).toBe(5000);
+    at = 4000;
+    fb.holdToast(id);
+    expect(fb.snapshot().toasts[0]).toMatchObject({
+      expiresAt: null,
+      held: true,
+    });
+    // A second hold changes nothing (hover and focus are one hold).
+    fb.holdToast(id);
+    at = 90_000;
+    fb.releaseToast(id);
+    expect(fb.snapshot().toasts[0]!.expiresAt).toBe(91_000);
+    expect(fb.snapshot().toasts[0]!.held).toBeUndefined();
+    // Reported again while held: it stays held, with a whole new time.
+    fb.holdToast(id);
+    fb.report({ action: "c", outcome: "success", prominent: true });
+    expect(fb.snapshot().toasts[0]).toMatchObject({
+      expiresAt: null,
+      count: 2,
+    });
+    at = 100_000;
+    fb.releaseToast(id);
+    expect(fb.snapshot().toasts[0]!.expiresAt).toBe(104_000);
+    // An error held and released still stays.
+    fb.report({ action: "x", outcome: "fatal-failure" });
+    const fatal = fb.snapshot().toasts.at(-1)!.id;
+    fb.holdToast(fatal);
+    fb.releaseToast(fatal);
+    expect(fb.snapshot().toasts.at(-1)!.expiresAt).toBeNull();
+    // Releasing a toast that is gone is nothing.
+    fb.dismissToast(id);
+    fb.releaseToast(id);
+    expect(fb.snapshot().toasts).toHaveLength(1);
   });
 
   test("a problem stays until resolved; a success with its key resolves it", () => {

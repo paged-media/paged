@@ -46,7 +46,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import {
   BATCH_FORMATS,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   confirmDiscard,
   createValueStore,
   mintBlankDocument,
@@ -268,225 +269,209 @@ function BatchForm({ close }: { close: () => void }) {
   };
 
   return (
-    <div
-      data-batch-backdrop=""
+    <ModalDialog
+      onClose={close}
+      data-batch-dialog=""
+      data-panel-host=""
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.5)",
+        width: "min(440px, 92vw)",
+        maxHeight: "86vh",
+        overflowY: "auto",
+        padding: 16,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="batch-title"
-        data-batch-dialog=""
-        data-panel-host=""
-        style={{
-          width: "min(440px, 92vw)",
-          maxHeight: "86vh",
-          overflowY: "auto",
-          padding: 16,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
-        }}
+      <ModalDialogTitle
+        id="batch-title"
+        style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="batch-title"
-            style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <Row label={strings.t(M.action)}>
+        {actions.actions.length === 0 ? (
+          <span data-batch-no-actions="" style={{ color: color.mutedFg }}>
+            {strings.t(M.noActions)}
+          </span>
+        ) : (
+          <select
+            aria-label={strings.t(M.action)}
+            data-batch-action=""
+            value={actionId}
+            onChange={(e) => setActionId(e.target.value)}
+            style={fieldStyle}
           >
-            {strings.t(M.title)}
-          </h2>
-          <Row label={strings.t(M.action)}>
-            {actions.actions.length === 0 ? (
-              <span data-batch-no-actions="" style={{ color: color.mutedFg }}>
-                {strings.t(M.noActions)}
-              </span>
-            ) : (
-              <select
-                aria-label={strings.t(M.action)}
-                data-batch-action=""
-                value={actionId}
-                onChange={(e) => setActionId(e.target.value)}
-                style={fieldStyle}
-              >
-                {actions.actions.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Row>
-          <Row label={strings.t(M.files)}>
-            <span className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                data-batch-choose-files=""
-                disabled={running}
-                onClick={() => filesRef.current?.click()}
-                style={secondaryButton}
-              >
-                {strings.t(M.chooseFiles)}
-              </button>
-              <button
-                type="button"
-                data-batch-choose-folder=""
-                disabled={running}
-                onClick={() => folderRef.current?.click()}
-                style={secondaryButton}
-              >
-                {strings.t(M.chooseFolder)}
-              </button>
-              <span data-batch-file-count="">
-                {strings.t(M.fileCount, { count: files.length })}
-              </span>
-            </span>
-            <input
-              ref={filesRef}
-              type="file"
-              multiple
-              hidden
-              data-batch-files=""
-              style={{ display: "none" }}
-              onChange={(e) => {
-                pick(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <input
-              ref={(el) => {
-                folderRef.current = el;
-                el?.setAttribute("webkitdirectory", "");
-              }}
-              type="file"
-              multiple
-              hidden
-              data-batch-folder=""
-              style={{ display: "none" }}
-              onChange={(e) => {
-                pick(e.target.files);
-                e.target.value = "";
-              }}
-            />
-          </Row>
-          <Row label={strings.t(M.saveAs)}>
-            <select
-              aria-label={strings.t(M.saveAs)}
-              data-batch-format=""
-              value={format}
-              disabled={running}
-              onChange={(e) => setFormat(e.target.value as BatchFormat)}
-              style={fieldStyle}
+            {actions.actions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </Row>
+      <Row label={strings.t(M.files)}>
+        <span className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-batch-choose-files=""
+            disabled={running}
+            onClick={() => filesRef.current?.click()}
+            style={secondaryButton}
+          >
+            {strings.t(M.chooseFiles)}
+          </button>
+          <button
+            type="button"
+            data-batch-choose-folder=""
+            disabled={running}
+            onClick={() => folderRef.current?.click()}
+            style={secondaryButton}
+          >
+            {strings.t(M.chooseFolder)}
+          </button>
+          <span data-batch-file-count="">
+            {strings.t(M.fileCount, { count: files.length })}
+          </span>
+        </span>
+        <input
+          ref={filesRef}
+          type="file"
+          multiple
+          hidden
+          data-batch-files=""
+          style={{ display: "none" }}
+          onChange={(e) => {
+            pick(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={(el) => {
+            folderRef.current = el;
+            el?.setAttribute("webkitdirectory", "");
+          }}
+          type="file"
+          multiple
+          hidden
+          data-batch-folder=""
+          style={{ display: "none" }}
+          onChange={(e) => {
+            pick(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </Row>
+      <Row label={strings.t(M.saveAs)}>
+        <select
+          aria-label={strings.t(M.saveAs)}
+          data-batch-format=""
+          value={format}
+          disabled={running}
+          onChange={(e) => setFormat(e.target.value as BatchFormat)}
+          style={fieldStyle}
+        >
+          {BATCH_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {strings.t(
+                f === "paged"
+                  ? M.formatPaged
+                  : f === "idml"
+                    ? M.formatIdml
+                    : M.formatPdf,
+              )}
+            </option>
+          ))}
+        </select>
+      </Row>
+      <p
+        className="text-[11px]"
+        style={{ color: color.mutedFg, margin: "8px 0" }}
+      >
+        {strings.t(M.note)}
+      </p>
+      {progress && (
+        <div data-batch-progress="" className="text-xs mb-1">
+          {strings.t(M.progress, {
+            done: progress.done,
+            total: progress.total,
+          })}
+          {progress.current
+            ? ` · ${strings.t(M.current, { name: progress.current })}`
+            : ""}
+        </div>
+      )}
+      {log.length > 0 && (
+        <ul
+          data-batch-log=""
+          className="text-[11px] mb-2"
+          style={{ listStyle: "none", padding: 0, margin: 0 }}
+        >
+          {log.map((e, i) => (
+            <li
+              key={`${i}:${e.file}`}
+              data-batch-log-entry={e.ok ? "ok" : "failed"}
+              style={{ color: e.ok ? color.fg : "var(--status-error)" }}
             >
-              {BATCH_FORMATS.map((f) => (
-                <option key={f} value={f}>
-                  {strings.t(
-                    f === "paged"
-                      ? M.formatPaged
-                      : f === "idml"
-                        ? M.formatIdml
-                        : M.formatPdf,
-                  )}
-                </option>
-              ))}
-            </select>
-          </Row>
-          <p
-            className="text-[11px]"
-            style={{ color: color.mutedFg, margin: "8px 0" }}
-          >
-            {strings.t(M.note)}
-          </p>
-          {progress && (
-            <div data-batch-progress="" className="text-xs mb-1">
-              {strings.t(M.progress, {
-                done: progress.done,
-                total: progress.total,
-              })}
-              {progress.current
-                ? ` · ${strings.t(M.current, { name: progress.current })}`
+              {e.ok
+                ? strings.t(M.ok, { file: e.file, output: e.output ?? "" })
+                : strings.t(M.failedAt, {
+                    file: e.file,
+                    stage: stageWord(e.stage),
+                    error: e.error ?? "",
+                  })}
+              {e.failedSteps > 0
+                ? ` — ${strings.t(M.stepsFailed, { count: e.failedSteps })}`
                 : ""}
-            </div>
-          )}
-          {log.length > 0 && (
-            <ul
-              data-batch-log=""
-              className="text-[11px] mb-2"
-              style={{ listStyle: "none", padding: 0, margin: 0 }}
-            >
-              {log.map((e, i) => (
-                <li
-                  key={`${i}:${e.file}`}
-                  data-batch-log-entry={e.ok ? "ok" : "failed"}
-                  style={{ color: e.ok ? color.fg : "var(--status-error)" }}
-                >
-                  {e.ok
-                    ? strings.t(M.ok, { file: e.file, output: e.output ?? "" })
-                    : strings.t(M.failedAt, {
-                        file: e.file,
-                        stage: stageWord(e.stage),
-                        error: e.error ?? "",
-                      })}
-                  {e.failedSteps > 0
-                    ? ` — ${strings.t(M.stepsFailed, { count: e.failedSteps })}`
-                    : ""}
-                  {e.passedStops.map((m) => (
-                    <div key={m} style={{ color: color.mutedFg }}>
-                      {strings.t(M.passedStop, { message: m })}
-                    </div>
-                  ))}
-                </li>
+              {e.passedStops.map((m) => (
+                <div key={m} style={{ color: color.mutedFg }}>
+                  {strings.t(M.passedStop, { message: m })}
+                </div>
               ))}
-            </ul>
-          )}
-          {summary && (
-            <div data-batch-summary="" className="text-xs mb-2">
-              {summary}
-            </div>
-          )}
-          <div className="flex justify-end gap-2 mt-2">
-            {running ? (
-              <button
-                type="button"
-                data-batch-cancel=""
-                onClick={() => {
-                  abort.current.aborted = true;
-                }}
-                style={secondaryButton}
-              >
-                {strings.t(M.cancel)}
-              </button>
-            ) : (
-              <button
-                type="button"
-                data-batch-close=""
-                onClick={close}
-                style={secondaryButton}
-              >
-                {strings.t(M.close)}
-              </button>
-            )}
-            <button
-              type="button"
-              data-batch-run=""
-              disabled={!canRun}
-              onClick={() => void run()}
-              style={{ ...buttonStyle, opacity: canRun ? 1 : 0.5 }}
-            >
-              {strings.t(M.run)}
-            </button>
-          </div>
-        </FocusScope>
+            </li>
+          ))}
+        </ul>
+      )}
+      {summary && (
+        <div data-batch-summary="" className="text-xs mb-2">
+          {summary}
+        </div>
+      )}
+      <div className="flex justify-end gap-2 mt-2">
+        {running ? (
+          <button
+            type="button"
+            data-batch-cancel=""
+            onClick={() => {
+              abort.current.aborted = true;
+            }}
+            style={secondaryButton}
+          >
+            {strings.t(M.cancel)}
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-batch-close=""
+            onClick={close}
+            style={secondaryButton}
+          >
+            {strings.t(M.close)}
+          </button>
+        )}
+        <button
+          type="button"
+          data-batch-run=""
+          disabled={!canRun}
+          onClick={() => void run()}
+          style={{ ...buttonStyle, opacity: canRun ? 1 : 0.5 }}
+        >
+          {strings.t(M.run)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 

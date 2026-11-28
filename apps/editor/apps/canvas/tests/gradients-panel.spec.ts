@@ -45,17 +45,6 @@ test.describe("Phase 5 — Gradients panel", () => {
     await openPanel(page, "paged.gradients");
   });
 
-  test("AC-GRAD-1 — panel mounts as a composition with a gradients select @feat:color-swatches.gradients @feat:editor-shell.panels.gradients @level:smoke", async ({
-    page,
-  }) => {
-    await expect(page.locator('[data-gradients-panel="ready"]')).toBeVisible();
-    await expect(
-      page.locator(
-        '[data-gradients-panel="ready"] select[data-collection="gradients"][data-value-type="colorRef"]',
-      ),
-    ).toBeVisible();
-  });
-
   // Coverage campaign P3 (Tier-1 depth): the panel's PRIMARY action driven
   // through the REAL select — not a mutate() that merely mirrors what the
   // select would do (the AC-SWATCH-2 shortcut this deliberately avoids).

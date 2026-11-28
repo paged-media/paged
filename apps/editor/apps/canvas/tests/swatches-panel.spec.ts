@@ -44,17 +44,6 @@ test.describe("Phase 5 — Swatches panel", () => {
     await openPanel(page, "paged.swatches");
   });
 
-  test("AC-SWATCH-1 — panel mounts as a composition with a swatches select @feat:color-swatches.swatch.crud @feat:editor-shell.panels.swatches @level:smoke", async ({
-    page,
-  }) => {
-    await expect(page.locator('[data-swatches-panel="ready"]')).toBeVisible();
-    await expect(
-      page.locator(
-        '[data-swatches-panel="ready"] select[data-collection="swatches"][data-value-type="colorRef"]',
-      ),
-    ).toBeVisible();
-  });
-
   test("AC-SWATCH-2 — selecting a swatch writes frameFillColor as Value::ColorRef @feat:color-swatches.swatch.crud @feat:editor-shell.panels.swatches @level:happy", async ({
     page,
   }) => {

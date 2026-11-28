@@ -57,7 +57,8 @@ import {
 import { color, Disclosure, font, radius, space } from "@paged-media/panel-kit";
 import {
   debugHandlesOf,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   useEditorScope,
   type EditorScope,
 } from "@paged-media/shell";
@@ -496,128 +497,104 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
   const bundle = buildBundleNow(options);
 
   return (
-    <div
-      data-journal-export-backdrop
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <ModalDialog
+      onClose={onClose}
+      dismissOnOutside
+      data-journal-export-dialog
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.6)",
         font: `13px/1.5 ${font.sans}`,
+        width: "min(720px, 94vw)",
+        maxHeight: "86vh",
+        display: "flex",
+        flexDirection: "column",
+        padding: 20,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="journal-export-title"
-        data-journal-export-dialog
+      <ModalDialogTitle
+        id="journal-export-title"
+        style={{ margin: "0 0 4px", fontSize: 15 }}
+      >
+        {strings.t(M.exportTitle)}
+      </ModalDialogTitle>
+      <p style={{ margin: "0 0 12px", color: color.mutedFg }}>
+        {strings.t(M.exportIntro, { count: bundle.counters.recorded })}
+      </p>
+
+      <div style={{ display: "grid", gap: 6, margin: "0 0 12px" }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <input
+            type="checkbox"
+            data-journal-include-crash
+            checked={includeCrash}
+            onChange={(e) => setIncludeCrash(e.target.checked)}
+          />
+          <span>
+            {strings.t(M.includeCrash)}
+            <span style={{ color: color.mutedFg }}>
+              {strings.t(M.includeCrashWhy)}
+            </span>
+          </span>
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <input
+            type="checkbox"
+            data-journal-include-shape
+            checked={includeShape}
+            onChange={(e) => setIncludeShape(e.target.checked)}
+          />
+          <span>
+            {strings.t(M.includeShape)}
+            <span style={{ color: color.mutedFg }}>
+              {strings.t(M.includeShapeWhy)}
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <pre
+        data-journal-preview
         style={{
-          width: "min(720px, 94vw)",
-          maxHeight: "86vh",
-          display: "flex",
-          flexDirection: "column",
-          padding: 20,
-          borderRadius: radius.lg,
+          ...mono,
+          flex: 1,
+          minHeight: 160,
+          overflow: "auto",
+          margin: "0 0 12px",
+          padding: 10,
+          background: color.bg,
           border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          borderRadius: radius.sm,
+          whiteSpace: "pre",
         }}
       >
-        {/* ADR 234 — focus moves in on open, Tab stays inside, and
-            focus returns to the opener on close. */}
-        <FocusScope trap autoFocus restoreFocus>
-          <h2
-            id="journal-export-title"
-            style={{ margin: "0 0 4px", fontSize: 15 }}
-          >
-            {strings.t(M.exportTitle)}
-          </h2>
-          <p style={{ margin: "0 0 12px", color: color.mutedFg }}>
-            {strings.t(M.exportIntro, { count: bundle.counters.recorded })}
-          </p>
+        {text}
+      </pre>
 
-          <div style={{ display: "grid", gap: 6, margin: "0 0 12px" }}>
-            <label
-              style={{ display: "flex", gap: 8, alignItems: "flex-start" }}
-            >
-              <input
-                type="checkbox"
-                data-journal-include-crash
-                checked={includeCrash}
-                onChange={(e) => setIncludeCrash(e.target.checked)}
-              />
-              <span>
-                {strings.t(M.includeCrash)}
-                <span style={{ color: color.mutedFg }}>
-                  {strings.t(M.includeCrashWhy)}
-                </span>
-              </span>
-            </label>
-            <label
-              style={{ display: "flex", gap: 8, alignItems: "flex-start" }}
-            >
-              <input
-                type="checkbox"
-                data-journal-include-shape
-                checked={includeShape}
-                onChange={(e) => setIncludeShape(e.target.checked)}
-              />
-              <span>
-                {strings.t(M.includeShape)}
-                <span style={{ color: color.mutedFg }}>
-                  {strings.t(M.includeShapeWhy)}
-                </span>
-              </span>
-            </label>
-          </div>
-
-          <pre
-            data-journal-preview
-            style={{
-              ...mono,
-              flex: 1,
-              minHeight: 160,
-              overflow: "auto",
-              margin: "0 0 12px",
-              padding: 10,
-              background: color.bg,
-              border: `1px solid ${color.border}`,
-              borderRadius: radius.sm,
-              whiteSpace: "pre",
-            }}
-          >
-            {text}
-          </pre>
-
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              data-journal-export-cancel
-              onClick={onClose}
-              style={buttonStyle}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-journal-export-confirm
-              onClick={() => {
-                void exportJournalBundleAsync(options).then(onClose);
-              }}
-              style={{ ...buttonStyle, borderColor: color.primary }}
-            >
-              {strings.t(M.saveFile)}
-            </button>
-          </div>
-        </FocusScope>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          data-journal-export-cancel
+          onClick={onClose}
+          style={buttonStyle}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-journal-export-confirm
+          onClick={() => {
+            void exportJournalBundleAsync(options).then(onClose);
+          }}
+          style={{ ...buttonStyle, borderColor: color.primary }}
+        >
+          {strings.t(M.saveFile)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 

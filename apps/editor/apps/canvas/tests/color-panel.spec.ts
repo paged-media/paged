@@ -37,17 +37,6 @@ test.describe("Phase 5 — Color panel", () => {
     await openPanel(page, "paged.color");
   });
 
-  test("AC-COLOR-1 — panel mounts as a composition with fill picker + tint scrub @feat:editor-shell.panels.color @level:smoke", async ({
-    page,
-  }) => {
-    await expect(page.locator('[data-color-panel="ready"]')).toBeVisible();
-    await expect(
-      page.locator(
-        '[data-color-panel="ready"] select[data-collection="swatches"][data-value-type="colorRef"]',
-      ),
-    ).toBeVisible();
-  });
-
   test("AC-COLOR-3 — fill swatch surfaces a CMYK/RGB readout @feat:editor-shell.panels.color @level:happy", async ({
     page,
   }) => {

@@ -18,13 +18,13 @@
  */
 
 // The readout behind Transform ▸ X / Y and Properties ▸ Bounds, tested in
-// the open (Node — `page-box.ts` and `object-commands.ts` import only
-// types). The browser tier (`e2e/transform-readout.spec.ts`) proves the
+// the open (no browser — `page-box.ts` and `object-commands.ts` import only
+// types). The browser tier (`tests/e2e/transform-readout.spec.ts`) proves the
 // numbers against the real engine; this tier pins the rules: what a
 // footprint is, when an edge may be written, and that a typed position
 // rides the nudge's own write.
 
-import { expect, test } from "@playwright/test";
+import { describe, expect, test } from "bun:test";
 
 import type { ElementId } from "@paged-media/client";
 
@@ -34,16 +34,16 @@ import {
   innerBoundsFor,
   unionBox,
   type PlacedLeaf,
-} from "../src/panels/page-box";
+} from "../../../src/panels/page-box";
 import {
   translationPlan,
   type TranslationClient,
-} from "../src/object-commands";
+} from "../../../src/object-commands";
 
 const C30 = Math.cos(Math.PI / 6);
 const S30 = Math.sin(Math.PI / 6);
 
-test.describe("page position — the footprint and the edge rule", () => {
+describe("page position — the footprint and the edge rule", () => {
   test("AC-XY-PURE-1 — the footprint is the bounds through the transform, boxed @feat:editor-shell.panels.object-transform @level:happy", () => {
     // No transform: the inner box.
     expect(composedBox([100, 100, 200, 300], null)).toEqual({

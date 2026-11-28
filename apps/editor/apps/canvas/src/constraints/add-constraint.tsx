@@ -31,7 +31,8 @@ import type { ElementId } from "@paged-media/client";
 import {
   commandNeeds,
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   operationFeedbackOf,
   scoped,
   scopeOf,
@@ -262,158 +263,136 @@ function AddConstraintForm({ draft }: { draft: Draft }) {
     });
   };
   return (
-    <div
-      data-add-constraint-backdrop=""
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
-      style={backdropStyle}
+    <ModalDialog
+      onClose={close}
+      dismissOnOutside
+      data-add-constraint-dialog=""
+      style={dialogStyle}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-constraint-title"
-        data-add-constraint-dialog=""
-        style={dialogStyle}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        style={{ display: "grid", gap: 10 }}
       >
-        <FocusScope trap autoFocus restoreFocus>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-            style={{ display: "grid", gap: 10 }}
+        <ModalDialogTitle id="add-constraint-title" style={titleStyle}>
+          {strings.t(M.title)}
+        </ModalDialogTitle>
+        <p style={mutedStyle}>
+          {strings.t(M.forItems, { count: draft.members.length })}
+        </p>
+        <label style={rowStyle}>
+          <span>{strings.t(M.kind)}</span>
+          <KitSelect
+            data-add-constraint-kind=""
+            value={kind}
+            onChange={(e) => setKind(e.target.value as ConstraintKind)}
           >
-            <h2 id="add-constraint-title" style={titleStyle}>
-              {strings.t(M.title)}
-            </h2>
-            <p style={mutedStyle}>
-              {strings.t(M.forItems, { count: draft.members.length })}
-            </p>
-            <label style={rowStyle}>
-              <span>{strings.t(M.kind)}</span>
-              <KitSelect
-                data-add-constraint-kind=""
-                value={kind}
-                onChange={(e) => setKind(e.target.value as ConstraintKind)}
-              >
-                {kinds.map((k) => (
-                  <option key={k} value={k}>
-                    {kindLabel(k)}
-                  </option>
-                ))}
-              </KitSelect>
-            </label>
-            {kind === "align" && (
-              <label style={rowStyle}>
-                <span>{strings.t(M.edge)}</span>
-                <KitSelect
-                  data-add-constraint-edge=""
-                  value={edge}
-                  onChange={(e) => setEdge(e.target.value as AlignEdge)}
-                >
-                  {ALIGN_EDGES.filter((x) => x !== "baseline" || allText).map(
-                    (x) => (
-                      <option key={x} value={x}>
-                        {edgeLabel(x)}
-                      </option>
-                    ),
-                  )}
-                </KitSelect>
-              </label>
-            )}
-            {kind === "margin" && (
-              <label style={rowStyle}>
-                <span>{strings.t(M.margin)}</span>
-                <KitSelect
-                  data-add-constraint-margin=""
-                  value={margin}
-                  onChange={(e) => setMargin(e.target.value as MarginEdge)}
-                >
-                  {MARGIN_EDGES.map((x) => (
-                    <option key={x} value={x}>
-                      {marginLabel(x)}
-                    </option>
-                  ))}
-                </KitSelect>
-              </label>
-            )}
-            {kind === "equal-spacing" && (
-              <label style={rowStyle}>
-                <span>{strings.t(M.axis)}</span>
-                <KitSelect
-                  data-add-constraint-axis=""
-                  value={axis}
-                  onChange={(e) =>
-                    setAxis(e.target.value as "horizontal" | "vertical")
-                  }
-                >
-                  <option value="horizontal">{strings.t(M.across)}</option>
-                  <option value="vertical">{strings.t(M.down)}</option>
-                </KitSelect>
-              </label>
-            )}
-            {kind === "max-lines" && (
-              <div style={rowStyle} data-add-constraint-lines="">
-                <span>{strings.t(M.lines)}</span>
-                <NumericField
-                  value={lines}
-                  min={1}
-                  max={999}
-                  precision={0}
-                  onCommit={(v) => setLines(Math.max(1, Math.round(v)))}
-                />
-              </div>
-            )}
-            {kind === "min-gap" && (
-              <div style={rowStyle} data-add-constraint-gap="">
-                <span>{strings.t(M.gap)}</span>
-                <NumericField
-                  value={gap}
-                  length
-                  min={0}
-                  onCommit={(v) => setGap(Math.max(0, v))}
-                />
-              </div>
-            )}
-            <p data-add-constraint-note="" style={mutedStyle}>
-              {strings.t(M.note)}
-            </p>
-            <div
-              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {kindLabel(k)}
+              </option>
+            ))}
+          </KitSelect>
+        </label>
+        {kind === "align" && (
+          <label style={rowStyle}>
+            <span>{strings.t(M.edge)}</span>
+            <KitSelect
+              data-add-constraint-edge=""
+              value={edge}
+              onChange={(e) => setEdge(e.target.value as AlignEdge)}
             >
-              <button
-                type="button"
-                data-add-constraint-cancel=""
-                onClick={close}
-                style={buttonStyle}
-              >
-                {strings.t(M.cancel)}
-              </button>
-              <button
-                type="submit"
-                data-add-constraint-confirm=""
-                disabled={busy || kinds.length === 0}
-                style={{ ...buttonStyle, ...primaryStyle }}
-              >
-                {strings.t(M.add)}
-              </button>
-            </div>
-          </form>
-        </FocusScope>
-      </div>
-    </div>
+              {ALIGN_EDGES.filter((x) => x !== "baseline" || allText).map(
+                (x) => (
+                  <option key={x} value={x}>
+                    {edgeLabel(x)}
+                  </option>
+                ),
+              )}
+            </KitSelect>
+          </label>
+        )}
+        {kind === "margin" && (
+          <label style={rowStyle}>
+            <span>{strings.t(M.margin)}</span>
+            <KitSelect
+              data-add-constraint-margin=""
+              value={margin}
+              onChange={(e) => setMargin(e.target.value as MarginEdge)}
+            >
+              {MARGIN_EDGES.map((x) => (
+                <option key={x} value={x}>
+                  {marginLabel(x)}
+                </option>
+              ))}
+            </KitSelect>
+          </label>
+        )}
+        {kind === "equal-spacing" && (
+          <label style={rowStyle}>
+            <span>{strings.t(M.axis)}</span>
+            <KitSelect
+              data-add-constraint-axis=""
+              value={axis}
+              onChange={(e) =>
+                setAxis(e.target.value as "horizontal" | "vertical")
+              }
+            >
+              <option value="horizontal">{strings.t(M.across)}</option>
+              <option value="vertical">{strings.t(M.down)}</option>
+            </KitSelect>
+          </label>
+        )}
+        {kind === "max-lines" && (
+          <div style={rowStyle} data-add-constraint-lines="">
+            <span>{strings.t(M.lines)}</span>
+            <NumericField
+              value={lines}
+              min={1}
+              max={999}
+              precision={0}
+              onCommit={(v) => setLines(Math.max(1, Math.round(v)))}
+            />
+          </div>
+        )}
+        {kind === "min-gap" && (
+          <div style={rowStyle} data-add-constraint-gap="">
+            <span>{strings.t(M.gap)}</span>
+            <NumericField
+              value={gap}
+              length
+              min={0}
+              onCommit={(v) => setGap(Math.max(0, v))}
+            />
+          </div>
+        )}
+        <p data-add-constraint-note="" style={mutedStyle}>
+          {strings.t(M.note)}
+        </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button
+            type="button"
+            data-add-constraint-cancel=""
+            onClick={close}
+            style={buttonStyle}
+          >
+            {strings.t(M.cancel)}
+          </button>
+          <button
+            type="submit"
+            data-add-constraint-confirm=""
+            disabled={busy || kinds.length === 0}
+            style={{ ...buttonStyle, ...primaryStyle }}
+          >
+            {strings.t(M.add)}
+          </button>
+        </div>
+      </form>
+    </ModalDialog>
   );
 }
-
-const backdropStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1000,
-  display: "grid",
-  placeItems: "center",
-  background: "rgba(0,0,0,0.5)",
-};
 
 const dialogStyle: CSSProperties = {
   width: "min(400px, 92vw)",

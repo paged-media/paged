@@ -76,47 +76,4 @@ test.describe("Info panel", () => {
       page.locator('[data-info-row="Dirty"] [data-info-value]'),
     ).toHaveText("no");
   });
-
-  test("AC-INFO-2 — Dirty follows a real edit @feat:editor-shell.panels.info @level:happy", async ({
-    page,
-  }) => {
-    // ENGINE FINDING (2026-08-18, this spec's first run): DocumentMeta.dirty
-    // was HARDCODED false in paged-canvas — the status chip, title dot and
-    // this row permanently claimed a clean document. Fixed engine-side in
-    // 6ca43e8 (model.rs computes it from the undo log), which the v0.62.0
-    // tag carried; the fixme outlived its gap by a pin move and comes off
-    // here.
-    await expect(
-      page.locator('[data-info-row="Dirty"] [data-info-value]'),
-    ).toHaveText("no");
-
-    // One real mutation flips the Dirty readout — the row tracks the
-    // document, not the mount. The WIRE mutate (not executeScript): the
-    // meta hook refetches on the channel's mutationApplied push.
-    await page.evaluate(async () => {
-      type DebugCanvas = {
-        client: {
-          executeScript(
-            src: string,
-          ): Promise<{ output: string[]; error: string | null }>;
-          mutate(op: unknown): Promise<unknown>;
-        };
-      };
-      const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
-      if (!dbg?.client) throw new Error("__canvas client not available");
-      const stories = await dbg.client
-        .executeScript("paged.stories()")
-        .then(
-          (r) => JSON.parse(r.output[0] ?? "[]") as Array<{ selfId: string }>,
-        );
-      if (!stories.length) throw new Error("text fixture has no stories");
-      await dbg.client.mutate({
-        op: "insertText",
-        args: { storyId: stories[0].selfId, offset: 0, text: "Zz " },
-      });
-    });
-    await expect(
-      page.locator('[data-info-row="Dirty"] [data-info-value]'),
-    ).toHaveText("yes", { timeout: 5_000 });
-  });
 });

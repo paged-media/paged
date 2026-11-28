@@ -29,7 +29,8 @@
 //   AC-KEYS-3  a chord the context does not claim still reaches the host
 //              (Cmd+K opens the palette inside the sheet);
 //   AC-KEYS-4  the dispatch rule itself: an enabled GUARDED binding beats an
-//              unguarded one on the same combo, whatever the order;
+//              unguarded one on the same combo, whatever the order (a unit
+//              test: packages/shell/test/registries/keybinding.test.ts);
 //   AC-UNDO-1  Cmd-Z inside the sheet goes to the sheet's journal ONLY — the
 //              document under it (the placed table) is not undone too;
 //   AC-WHEEL-1 a wheel over the active frame goes to the context's
@@ -44,7 +45,6 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { resolveBinding } from "../../../../packages/shell/src/registries/keybinding";
 import { fitFirstPage, openCanvas, openPanel } from "../fidelity/canvas-driver";
 import { fixturePath } from "./harness/fixtures";
 import { placedValues } from "../journey/plugins/sheet-kit";
@@ -177,43 +177,6 @@ const cellRef = (page: Page) => page.locator("[data-formula-cellref]");
 const formula = (page: Page) => page.locator("[data-formula-input]");
 
 test.describe("sheet frame — keys and wheel reach the active edit context", () => {
-  test("AC-KEYS-4 — an enabled guarded binding beats an unguarded one on the same combo @feat:editor-shell.tool-rail @level:edge", () => {
-    const place = { key: "cmd+d", command: "host.place" };
-    let inGrid = true;
-    const fill = {
-      key: "cmd+d",
-      command: "plugin.fillDown",
-      when: () => inGrid,
-    };
-    const press = {
-      key: "d",
-      metaKey: true,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-    };
-    // Registered after the unguarded one, and still wins while it holds.
-    expect(resolveBinding([place, fill], press)?.command).toBe(
-      "plugin.fillDown",
-    );
-    expect(resolveBinding([fill, place], press)?.command).toBe(
-      "plugin.fillDown",
-    );
-    // Its guard false → the global binding applies again.
-    inGrid = false;
-    expect(resolveBinding([place, fill], press)?.command).toBe("host.place");
-    // Two unguarded / two guarded: registration order, as before.
-    const other = { key: "cmd+d", command: "host.other" };
-    expect(resolveBinding([place, other], press)?.command).toBe("host.place");
-    inGrid = true;
-    const fill2 = { key: "cmd+d", command: "plugin.fill2", when: () => true };
-    expect(resolveBinding([fill, fill2], press)?.command).toBe(
-      "plugin.fillDown",
-    );
-    // A different chord never matches.
-    expect(resolveBinding([fill], { ...press, shiftKey: true })).toBeNull();
-  });
-
   test.describe("in the editor", () => {
     test.beforeEach(async ({ page }) => {
       await openCanvas(page);

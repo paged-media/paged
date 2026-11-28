@@ -32,6 +32,7 @@ import {
   openCanvas,
   loadIdml,
   openPanel,
+  preloadFonts,
   snapshotPagePng,
 } from "./fidelity/canvas-driver";
 import { elementPageRectPt } from "./e2e/harness/fixtures";
@@ -41,6 +42,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
+// A face that is in the tree (the app serves it), so the rendered-text
+// test below does not depend on the corpus fonts.
+const APP_FONT = pathResolve(__dirname, "..", "public", "fonts", "Inter.ttf");
 
 test.describe("Phase 5 — Text Frame Options panel", () => {
   test.beforeEach(async ({ page }) => {
@@ -236,25 +240,11 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
   test("AC-TFO-4 — two columns open a gutter inside the frame @feat:layout-model.text-columns @feat:editor-shell.panels.text-frame-options @level:happy", async ({
     page,
   }) => {
-    // ENGINE, NOT TEST. The editor consumes PUBLISHED canvas-wasm, and
-    // 0.63.0 (core 08fb4b1) predates the column wave (core 4c1b5d7):
-    // its composer still lays every frame out at full inner width, so
-    // the gutter this asserts cannot appear no matter what the panel
-    // writes. Measured on the pinned engine: 6 px of gutter against the
-    // ~22 px a 24 pt gutter should give.
-    //
-    // Verified green against core's own renderer — the same layout code
-    // the canvas will run once it ships — on four InDesign-referenced
-    // corpus pages (layout 7-10) plus the pre-existing 2col page, whose
-    // mean deltaE halved.
-    //
-    // UNFIXME when the editor's canvas-wasm pin carries 4c1b5d7. The
-    // three exemptions this file's neighbours carried (dirty, itemLayer,
-    // directional feather) all came off exactly that way at 0.63.0.
-    test.fixme(
-      true,
-      "column layout ships in the wasm AFTER 0.63.0; the pinned engine cannot render a gutter",
-    );
+    // The gutter is measured in the text's ink, so the text must render:
+    // the fixture's one family is registered from the app's own font, and
+    // the document is loaded again, because the registry is read at load.
+    await preloadFonts(page, [{ family: "Open Sans", ttfPath: APP_FONT }]);
+    await loadIdml(page, FIXTURE);
     const setup = await page.evaluate(async () => {
       const dbg = (
         window as unknown as {
@@ -322,12 +312,15 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     });
     expect(pageWidthPt).toBeGreaterThan(0);
 
+    // The snapshot's own width gives the scale: at a fixed dpi the engine
+    // sizes the page by the dpi, not by the width asked for.
     const SNAP_W = 900;
-    const scale = SNAP_W / pageWidthPt;
+    let scale = SNAP_W / pageWidthPt;
 
     /** Widest ink-free run of pixel columns inside the frame's rect. */
     const gutterPx = (bytes: Uint8Array): number => {
       const png = PNG.sync.read(Buffer.from(bytes));
+      scale = png.width / pageWidthPt;
       const x0 = Math.max(0, Math.round(rect!.left * scale));
       const x1 = Math.min(png.width, Math.round(rect!.right * scale));
       const y0 = Math.max(0, Math.round(rect!.top * scale));
@@ -404,6 +397,7 @@ test.describe("Phase 5 — Text Frame Options panel", () => {
     // A 24pt gutter at this scale is ~24 * scale px; require most of it
     // so the assertion is about the gutter and not about noise.
     const expected = Math.round(24 * scale * 0.6);
+    await setColumns(2);
     await expect
       .poll(
         async () =>

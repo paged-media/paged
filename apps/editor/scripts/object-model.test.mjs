@@ -428,42 +428,91 @@ test("setOps writes every selected address in ONE batch", () => {
   );
 });
 
-test("the binding badge asks paged.data's typed propertyBindings query, never parses labels", async () => {
-  const calls = [];
-  const objects = (offered, hits) => ({
-    commands: async () =>
-      offered ? [{ id: M.PROPERTY_BINDINGS_COMMAND }] : [],
-    invoke: async (id, args) => {
-      calls.push([id, args]);
-      return hits[args.address] ?? [];
+test("the binding badge asks the data door for its bindings, never parses labels", async () => {
+  const queried = [];
+  // The object surface resolves a selector target to the addresses it selects.
+  const objects = (answers) => ({
+    query: async (selector) => {
+      queried.push(selector);
+      if (selector === "broken[") throw new Error("bad selector");
+      return answers[selector] ?? [];
     },
   });
+  const service = (bindings) => ({ bindings: async () => bindings });
+  const weight = "frameStrokeWeight";
+
+  // No data door, or one that lists no bindings: nothing is asked.
   assert.equal(
-    M.PROPERTY_BINDINGS_COMMAND,
-    "media.paged.data.propertyBindings",
-  );
-  assert.equal(
-    await M.probeBound(
-      objects(false, {}),
-      ["rectangle:u1"],
-      "frameStrokeWeight",
-    ),
+    await M.probeBound(null, objects({}), ["rectangle:u1"], weight),
     false,
   );
-  assert.equal(calls.length, 0, "no data plugin: nothing asked");
+  assert.equal(
+    await M.probeBound({}, objects({}), ["rectangle:u1"], weight),
+    false,
+  );
+  assert.equal(queried.length, 0, "no data service: nothing asked");
+
+  // A binding whose target IS one of the addresses counts without a query.
   assert.equal(
     await M.probeBound(
-      objects(true, { "rectangle:u2": [{ binding: "b1" }] }),
+      service([{ target: "rectangle:u2", path: weight }]),
+      objects({}),
       ["rectangle:u1", "rectangle:u2"],
-      "frameStrokeWeight",
+      weight,
     ),
     true,
   );
-  assert.deepEqual(calls[0], [
-    M.PROPERTY_BINDINGS_COMMAND,
-    { address: "rectangle:u1", path: "frameStrokeWeight" },
-  ]);
-  assert.equal(await M.probeBound(objects(true, {}), [], "x"), false);
+  assert.equal(queried.length, 0, "a direct address needs no selector query");
+
+  // A selector target counts when it selects one of the addresses.
+  assert.equal(
+    await M.probeBound(
+      service([{ target: 'frame[name="Hero"]', path: weight }]),
+      objects({ 'frame[name="Hero"]': ["rectangle:u1"] }),
+      ["rectangle:u1"],
+      weight,
+    ),
+    true,
+  );
+  assert.deepEqual(queried, ['frame[name="Hero"]']);
+
+  // Another path, another object, or a selector that does not resolve: unbound.
+  assert.equal(
+    await M.probeBound(
+      service([
+        { target: "rectangle:u1", path: "frameFillColor" },
+        { target: "rectangle:u9", path: weight },
+        { target: "broken[", path: weight },
+      ]),
+      objects({}),
+      ["rectangle:u1"],
+      weight,
+    ),
+    false,
+  );
+  // A data door that fails reads as unbound; no selection is unbound.
+  assert.equal(
+    await M.probeBound(
+      {
+        bindings: async () => {
+          throw new Error("down");
+        },
+      },
+      objects({}),
+      ["rectangle:u1"],
+      weight,
+    ),
+    false,
+  );
+  assert.equal(
+    await M.probeBound(
+      service([{ target: "rectangle:u1", path: weight }]),
+      objects({}),
+      [],
+      weight,
+    ),
+    false,
+  );
 });
 
 // ───────────────────────────────────────────── Bind to data… target
@@ -763,15 +812,20 @@ test("asPropertyFields rewrites selection-bound leaves into schema-driven fields
 
 // ───────────────────────────────────────────── the shared registry
 
-// The app's module-scope registry (`apps/canvas/src/object-model.ts`) is
-// what `main.tsx` injects into every bundle host. Prove it routes: a
-// bundle host built with it reports `objects.shared@1`, a kind the bundle
-// contributes is visible through the APP's registry (and so to every
-// panel field), and its command is invokable from there.
+// The app keeps ONE object registry per editor, in the editor's scope
+// (`apps/canvas/src/object-model.ts`, `EDITOR_OBJECTS`); it is what the
+// app injects into every bundle host. Prove it routes: a bundle host built
+// with it reports `objects.shared@1`, a kind the bundle contributes is
+// visible through the APP's registry (and so to every panel field), and
+// its command is invokable from there.
 const APP = pathToFileURL(
   resolvePath(here, "..", "apps", "canvas", "src", "object-model.ts"),
 ).href;
-const { objectRegistry, editorObjectModel } = await import(APP);
+const { editorObjectsOf } = await import(APP);
+const { createEditorScope } = await import(shell("state/editor-scope.tsx"));
+const editorScope = createEditorScope();
+const { registry: objectRegistry, model: editorObjectModel } =
+  editorObjectsOf(editorScope);
 const { createBundleHost } = await import(
   pathToFileURL(
     resolvePath(
@@ -860,7 +914,7 @@ test("the app registry is shared: a bundle's kinds and commands appear in it", a
   handle.dispose();
 });
 
-test("the app model maps selections to canonical addresses and flags inferred core rows", () => {
+test("the app model maps selections to canonical addresses; no catalog row is inferred", () => {
   assert.equal(
     editorObjectModel.addressOf({ kind: "rectangle", id: "u12" }),
     "rectangle:u12",
@@ -872,8 +926,8 @@ test("the app model maps selections to canonical addresses and flags inferred co
     }),
     "storyRange:u9@0..4",
   );
-  // Protocol 71: core publishes the schema rows, so the layer paths are
-  // typed by the engine now; only the table counts stay inferred.
+  // Core's catalog types every path now, the read-only table counts
+  // included, so no core row is flagged as inferred any more.
   assert.equal(
     editorObjectModel.isInferred({
       path: "layerVisible",
@@ -886,7 +940,7 @@ test("the app model maps selections to canonical addresses and flags inferred co
       path: "tableRowCount",
       type: { kind: "number" },
     }),
-    true,
+    false,
   );
   assert.equal(
     editorObjectModel.isInferred({

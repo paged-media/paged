@@ -22,6 +22,7 @@
 // host's calls. Only a parent on an allowed origin is heard; the first
 // init fixes the origin every later message must come from.
 
+import { DEV_TOOLS } from "../build-flags";
 import type { EditorConfig, EditorHandle } from "./create-editor";
 import { isEditorError, notCrossOriginIsolated } from "./errors";
 import {
@@ -62,8 +63,12 @@ export function serveBridge(
     number,
     (r: { ok: boolean; error?: string }) => void
   >();
-  const post = (msg: FrameToHost) => {
-    if (origin) options.peer.postMessage(msg, origin, transferables(msg));
+  // `owned`: the message's bytes are the bridge's alone (what a handle's
+  // method answered), so their buffers move to the host. Anything else is
+  // copied: the bytes the editor hands to a host action stay the editor's.
+  const post = (msg: FrameToHost, owned = false) => {
+    if (origin)
+      options.peer.postMessage(msg, origin, owned ? transferables(msg) : []);
   };
   const ask = (
     action: "save" | "submit" | "close" | "back" | "restart",
@@ -156,12 +161,12 @@ export function serveBridge(
       }
       if (msg.type === "paged:call") {
         const reply = (r: { ok: boolean; value?: unknown; error?: string }) =>
-          post({ type: "paged:reply", id: msg.id, ...r });
+          post({ type: "paged:reply", id: msg.id, ...r }, true);
         if (!handle)
           return reply({ ok: false, error: "the editor is not ready" });
         if (msg.method === SCRIPT_METHOD) {
-          // The docs' scripting playground: dev and demo builds only.
-          if (import.meta.env.PROD && import.meta.env.MODE !== "demo")
+          // The docs' scripting playground: dev, e2e and demo builds only.
+          if (!DEV_TOOLS)
             return reply({
               ok: false,
               error: "scripts run in dev and demo builds only",

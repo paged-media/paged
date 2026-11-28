@@ -78,6 +78,7 @@ import { WorkerRenderer, type RendererWasm } from "./render";
 // `default(wasmUrl)` below.
 import canvasWasmUrl from "@paged-media/canvas-wasm/paged_canvas_wasm_bg.wasm?url";
 import { drainWorkerJournal, workerJournal } from "./journal";
+import { velloPngReply } from "./bytes-reply";
 import { ENGINE_TRAPPED, isEngineTrap } from "./trap";
 
 interface CanvasWorkerInstance {
@@ -1122,11 +1123,13 @@ async function dispatch(data: IncomingMessage): Promise<void> {
         console.warn("renderPageVelloPng threw:", err);
       }
     }
-    (self as unknown as DedicatedWorkerGlobalScope).postMessage({
-      kind: "velloPngReply",
-      seq: data.seq,
-      pngBytes: pngBytes ? Array.from(pngBytes) : null,
-    });
+    // The PNG is a fresh `Uint8Array` of the glue's: it goes as bytes on
+    // a transferred buffer, never as a `number[]`.
+    const reply = velloPngReply(data.seq, pngBytes);
+    (self as unknown as DedicatedWorkerGlobalScope).postMessage(
+      reply.message,
+      reply.transfer,
+    );
     return;
   }
   if (data.kind === "resizeCanvas") {

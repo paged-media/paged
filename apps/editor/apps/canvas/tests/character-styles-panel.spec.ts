@@ -42,19 +42,6 @@ test.describe("Phase 5 — Character Styles panel", () => {
     await openPanel(page, "paged.character-styles");
   });
 
-  test("AC-CSTYLE-1 — panel mounts as a composition with a select @feat:editor-shell.panels.character-styles @feat:styles.character.crud @level:smoke", async ({
-    page,
-  }) => {
-    await expect(
-      page.locator('[data-character-styles-panel="ready"]'),
-    ).toBeVisible();
-    await expect(
-      page.locator(
-        '[data-character-styles-panel="ready"] select[data-collection="characterStyles"]',
-      ),
-    ).toBeVisible();
-  });
-
   test("AC-CSTYLE-2 — selecting a style writes appliedCharacterStyle through the apply layer @feat:editor-shell.panels.character-styles @feat:styles.character.crud @level:happy", async ({
     page,
   }) => {

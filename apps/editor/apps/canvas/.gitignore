@@ -30,3 +30,4 @@ showcase/preview/
 showcase/indesign/
 # IDML export link folder (copied/handed-back image files) — 900-assemble.spec.ts
 showcase/Links/
+dist-e2e/

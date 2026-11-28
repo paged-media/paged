@@ -132,8 +132,12 @@ export interface FeedbackToast {
   text: WordedFeedback;
   /** How many times it was reported while shown. */
   count: number;
-  /** When it goes (ms since the epoch); null: until closed. */
+  /** When it goes (ms since the epoch); null: until closed, or while
+   *  its time is held (`held`). */
   expiresAt: number | null;
+  /** The pointer is over it or focus is inside it: its time stands still
+   *  (WCAG 2.2.1, timing adjustable). */
+  held?: boolean;
 }
 
 /** A persistent entry (the Problems panel's). */
@@ -280,9 +284,11 @@ export function routeOf(report: OperationReport): {
   };
 }
 
-/** How long a toast stays, by outcome (ms); null: until it is closed. */
+/** How long a toast stays, by outcome (ms); null: until it is closed. An
+ *  error (a failure of the operation itself, recoverable or fatal) stays:
+ *  it is read and closed, never missed. */
 export function toastLifetime(report: OperationReport): number | null {
-  if (report.outcome === "fatal-failure") return null;
+  if (severityOf(report.outcome) === "error") return null;
   if (report.actions?.length) return 12_000;
   return isFailure(report.outcome) ? 8_000 : 4_000;
 }
@@ -310,6 +316,11 @@ export interface OperationFeedback {
   report(report: OperationReport): WordedFeedback;
   /** Close a toast (its ✕, its action ran, its time ran out). */
   dismissToast(id: number): void;
+  /** Hold a toast's time (the pointer is over it, focus is inside it):
+   *  it does not leave until `releaseToast`. */
+  holdToast(id: number): void;
+  /** Let a held toast's time run again, with what was left of it. */
+  releaseToast(id: number): void;
   /** Take an entry out of Problems (resolved or dismissed). */
   resolve(key: string): void;
   snapshot(): FeedbackSnapshot;
@@ -337,6 +348,8 @@ export function createOperationFeedback(
   let log: OperationReport[] = [];
   let snap: FeedbackSnapshot = { toasts, problems, log };
   let nextId = 1;
+  // What is left of a held toast's time (ms); null: it stays anyway.
+  const heldRemaining = new Map<number, number | null>();
   const listeners = new Set<() => void>();
   let runCommand: ((command: string, args?: unknown) => void) | null = null;
   let t: (
@@ -361,6 +374,8 @@ export function createOperationFeedback(
         const live = toasts.find((x) => x.key === key);
         if (live) {
           // UXI-ASY-010: the same failure again updates its toast.
+          const held = heldRemaining.has(live.id);
+          if (held) heldRemaining.set(live.id, life);
           toasts = toasts.map((x) =>
             x === live
               ? {
@@ -368,7 +383,7 @@ export function createOperationFeedback(
                   report,
                   text,
                   count: x.count + 1,
-                  expiresAt: life === null ? null : at + life,
+                  expiresAt: held || life === null ? null : at + life,
                 }
               : x,
           );
@@ -384,6 +399,8 @@ export function createOperationFeedback(
               expiresAt: life === null ? null : at + life,
             },
           ].slice(-MAX_TOASTS);
+          for (const id of [...heldRemaining.keys()])
+            if (!toasts.some((x) => x.id === id)) heldRemaining.delete(id);
         }
       }
       if (route.problem) {
@@ -402,6 +419,30 @@ export function createOperationFeedback(
       const next = toasts.filter((x) => x.id !== id);
       if (next.length === toasts.length) return;
       toasts = next;
+      heldRemaining.delete(id);
+      emit();
+    },
+    holdToast(id) {
+      const toast = toasts.find((x) => x.id === id);
+      if (!toast || heldRemaining.has(id)) return;
+      heldRemaining.set(
+        id,
+        toast.expiresAt === null ? null : Math.max(0, toast.expiresAt - now()),
+      );
+      toasts = toasts.map((x) =>
+        x === toast ? { ...x, expiresAt: null, held: true } : x,
+      );
+      emit();
+    },
+    releaseToast(id) {
+      if (!heldRemaining.has(id)) return;
+      const left = heldRemaining.get(id) ?? null;
+      heldRemaining.delete(id);
+      toasts = toasts.map((x) => {
+        if (x.id !== id) return x;
+        const { held: _held, ...rest } = x;
+        return { ...rest, expiresAt: left === null ? null : now() + left };
+      });
       emit();
     },
     resolve(key) {

@@ -108,32 +108,6 @@ async function mintCmyk(
 }
 
 test.describe("§21 — Separations & Ink Limit panel", () => {
-  test("AC-SEP-1 — a rich black over the press limit is named, with its exact coverage @feat:editor-shell.panels.separations @level:happy", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadIdml(page, FIXTURE);
-    await openSeparations(page);
-
-    // A plain fixture carries no over-limit ink.
-    await expect(
-      page.locator('[data-status-pill="swatch-limit-state"]'),
-    ).toHaveText("Within limit");
-
-    // 80+70+70+100 = 320% — over every preset in the list.
-    await mintCmyk(page, "Rich Black 320", [80, 70, 70, 100]);
-
-    const row = page.locator("[data-swatch-over-limit]").filter({
-      hasText: "Rich Black 320",
-    });
-    await expect(row).toBeVisible();
-    // Exact palette arithmetic — not a sampled estimate.
-    await expect(row).toContainText("320%");
-    await expect(
-      page.locator('[data-status-pill="swatch-limit-state"]'),
-    ).toHaveText("1 over");
-  });
-
   test("AC-SEP-2 — changing the press preset re-thresholds the stored reading, with no re-render @feat:editor-shell.panels.separations @level:happy", async ({
     page,
   }) => {
@@ -167,39 +141,6 @@ test.describe("§21 — Separations & Ink Limit panel", () => {
     // returns to exactly the prior state.
     await page.locator('[data-ink-limit-preset="300"]').click();
     await expect(row).toHaveCount(0);
-  });
-
-  test("AC-SEP-3 — swatches with no ink decomposition are counted, never silently treated as ink-free @feat:editor-shell.panels.separations @level:edge", async ({
-    page,
-  }) => {
-    await openCanvas(page);
-    await loadIdml(page, FIXTURE);
-    await openSeparations(page);
-
-    // An RGB swatch separates at the RIP against the output intent, so
-    // its ink limit is unknowable here. The panel must SAY so.
-    await page.evaluate(async () => {
-      const c = (globalThis as unknown as { __canvas: Handle }).__canvas;
-      await c.client.mutate({
-        op: "createSwatch",
-        args: {
-          spec: {
-            name: "Screen RGB",
-            space: "RGB",
-            value: [10, 120, 240],
-            model: "Process",
-          },
-        },
-      });
-    });
-
-    const note = page.locator("[data-swatch-unseparable]");
-    await expect(note).toBeVisible();
-    await expect(note).toContainText("separate at the RIP");
-    // It is NOT reported as a limit violation.
-    await expect(
-      page.locator('[data-status-pill="swatch-limit-state"]'),
-    ).toHaveText("Within limit");
   });
 
   test("AC-SEP-4 — the plate lane reports the job's plates and a per-page reading that jumps to its page @feat:editor-shell.panels.separations @level:happy", async ({

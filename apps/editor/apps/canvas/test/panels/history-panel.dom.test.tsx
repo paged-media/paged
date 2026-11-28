@@ -21,7 +21,9 @@
 // timeline (engine ADR 1030) listed oldest first with the current step
 // marked; a click goes back (one `undoTo`) or forward (one `redoTo`);
 // snapshots restore as ONE new undo step; the depth preference reaches the
-// engine; and an active edit context's own steps replace the list.
+// engine; and an active edit context's own steps replace the list. The
+// list is windowed: a long timeline costs a screenful of rows, the current
+// step's among them.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { useEffect } from "react";
@@ -33,7 +35,10 @@ import {
   type EditContextStackValue,
 } from "@paged-media/shell";
 
-import { HistoryPanel } from "../../src/panels/history-panel";
+import type { UndoLog } from "@paged-media/client";
+
+import { HISTORY_ROW_PX, HistoryPanel } from "../../src/panels/history-panel";
+import { historyStoreOf } from "../../src/panels/history-store";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
 afterEach(unmountAll);
@@ -229,5 +234,142 @@ describe("History panel", () => {
     await h.click(stepButtons(h)[0]!);
     expect(moves).toEqual([-1]);
     expect(rows(h).map((r) => r.state)).toEqual(["current", "undone"]);
+  });
+
+  // A timeline of `undo` done steps (seq 1..undo) and `redo` undone ones,
+  // answered in place of the engine's (the panel only reads it).
+  const longLog = (undo: number, redo: number): UndoLog =>
+    ({
+      undo: Array.from({ length: undo }, (_, i) => ({
+        appliedSeq: i + 1,
+        label: `Step ${i + 1}`,
+        key: null,
+      })),
+      redo: Array.from({ length: redo }, (_, i) => ({
+        appliedSeq: undo + i + 1,
+        label: `Step ${undo + i + 1}`,
+        key: null,
+      })),
+      undoLen: undo,
+      redoLen: redo,
+      evicted: 0,
+      depth: 10000,
+    }) as unknown as UndoLog;
+
+  async function withLog(h: PanelHarness<unknown>, log: UndoLog) {
+    (h.client as { undoLog: unknown }).undoLog = async () => log;
+    await h.act(() => historyStoreOf(h.client).refresh());
+  }
+
+  const listItems = (h: PanelHarness<unknown>) => [
+    ...h.root.querySelectorAll<HTMLElement>('[role="listitem"]'),
+  ];
+
+  test("[editor-shell.panels.history] windowed: 5,000 steps draw a screenful of rows, the current one among them, each saying its place", async () => {
+    covers("panel:paged.history");
+    const h = await mount();
+    await h.settle();
+    // 4,000 done, 1,000 undone: the current step is row 4,001 of 5,001
+    // (the opened document is row 1).
+    await withLog(h, longLog(4000, 1000));
+    const list = h.root.querySelector<HTMLElement>("[data-history-list]")!;
+    expect(list.getAttribute("role")).toBe("list");
+    expect(list.getAttribute("aria-label")).toBe("History steps");
+    expect(list.getAttribute("data-history-count")).toBe("5001");
+    // A bounded number of rows, not five thousand.
+    expect(listItems(h).length).toBeLessThan(80);
+    expect(stepButtons(h).length).toBeLessThan(80);
+    // The spacer still has the whole timeline's height (the scrollbar).
+    expect((list.firstElementChild as HTMLElement).style.height).toBe(
+      `${5001 * HISTORY_ROW_PX}px`,
+    );
+    // The current step is drawn, marked, and in the scrolled-to window.
+    const current = h.root.querySelector<HTMLButtonElement>(
+      '[data-history-step][data-history-state="current"]',
+    )!;
+    expect(current.textContent).toBe("Step 4000");
+    expect(current.getAttribute("aria-current")).toBe("step");
+    expect(current.disabled).toBe(false);
+    const item = current.closest<HTMLElement>('[role="listitem"]')!;
+    expect(item.getAttribute("aria-posinset")).toBe("4001");
+    expect(item.getAttribute("aria-setsize")).toBe("5001");
+    expect(item.style.top).toBe(`${4000 * HISTORY_ROW_PX}px`);
+    const top = list.scrollTop;
+    expect(top).toBeGreaterThan(0);
+    expect(4000 * HISTORY_ROW_PX).toBeGreaterThanOrEqual(top);
+    // Its neighbours on both sides are there; the far ends are not.
+    const texts = stepButtons(h).map((b) => b.textContent);
+    expect(texts).toContain("Step 3999");
+    expect(texts).toContain("Step 4001");
+    expect(texts).not.toContain("Step 1");
+    expect(texts).not.toContain("Step 5000");
+    expect(h.root.querySelector("[data-history-origin]")).toBeNull();
+  });
+
+  test("[editor-shell.panels.history] windowed: a click on a drawn row sends the same jump; the list follows the current step", async () => {
+    covers("panel:paged.history");
+    const h = await mount();
+    await h.settle();
+    await withLog(h, longLog(4000, 1000));
+    const byText = (text: string) =>
+      stepButtons(h).find((b) => b.textContent === text)!;
+
+    // Back to the state after step 3,990: ONE undoTo, of the step after it.
+    let mark = h.mark();
+    await h.click(byText("Step 3990"));
+    expect(h.sent("undoTo", mark)).toHaveLength(1);
+    expect(h.sent("undoTo", mark)[0]).toMatchObject({
+      payload: { appliedSeq: 3991 },
+    });
+    expect(h.sent("undo", mark)).toHaveLength(0);
+
+    // Forward: ONE redoTo, of the clicked step.
+    mark = h.mark();
+    await h.click(byText("Step 4005"));
+    expect(h.sent("redoTo", mark)).toHaveLength(1);
+    expect(h.sent("redoTo", mark)[0]).toMatchObject({
+      payload: { appliedSeq: 4005 },
+    });
+
+    // The current step moves far away (an undo to step 10): the list
+    // scrolls to it and draws it, still a screenful.
+    await withLog(h, longLog(10, 4990));
+    const current = h.root.querySelector<HTMLButtonElement>(
+      '[data-history-step][data-history-state="current"]',
+    )!;
+    expect(current.textContent).toBe("Step 10");
+    const list = h.root.querySelector<HTMLElement>("[data-history-list]")!;
+    expect(list.scrollTop).toBeLessThanOrEqual(10 * HISTORY_ROW_PX);
+    expect(listItems(h).length).toBeLessThan(80);
+    const texts = stepButtons(h).map((x) => x.textContent);
+    expect(texts).toContain("Step 9");
+    expect(texts).toContain("Step 11");
+    expect(texts).not.toContain("Step 4000");
+  });
+
+  test("windowed: Down, Up, Home and End move focus along the rows, drawing the row they reach", async () => {
+    covers("panel:paged.history");
+    const h = await mount();
+    await h.settle();
+    await withLog(h, longLog(4000, 1000));
+    const current = h.root.querySelector<HTMLButtonElement>(
+      '[data-history-state="current"]',
+    )!;
+    await h.act(() => current.focus());
+    const focused = () => document.activeElement?.textContent;
+    await h.user.keyboard("{ArrowDown}");
+    await h.settle();
+    expect(focused()).toBe("Step 4001");
+    await h.user.keyboard("{ArrowUp}{ArrowUp}");
+    await h.settle();
+    expect(focused()).toBe("Step 3999");
+    await h.user.keyboard("{End}");
+    await h.settle();
+    expect(focused()).toBe("Step 5000");
+    expect(listItems(h).length).toBeLessThan(80);
+    await h.user.keyboard("{Home}");
+    await h.settle();
+    expect(focused()).toBe("Opened document");
+    expect(listItems(h).length).toBeLessThan(80);
   });
 });

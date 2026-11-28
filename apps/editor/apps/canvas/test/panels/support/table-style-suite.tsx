@@ -170,7 +170,8 @@ export function tableStyleSuite(c: TableStyleCase): void {
       await h.click(
         h.root.querySelector(`[data-core-command-button="${c.createOp}"]`)!,
       );
-      const form = h.root.querySelector("[data-core-command-dialog]");
+      // The form is a dialog of the editor's: it portals out of the panel.
+      const form = document.querySelector("[data-core-command-dialog]");
       expect(form?.textContent).toContain(`core.${c.createOp}`);
       const from = h.mark();
       await runCoreCommand(h);
@@ -186,7 +187,7 @@ export function tableStyleSuite(c: TableStyleCase): void {
       const created = (await rowsByName(h, c.collection)).get(c.newName)!;
       expect(created).toBeTruthy();
       expect(row(h, created)?.textContent).toContain(c.newName);
-      expect(h.root.querySelector("[data-core-command-dialog]")).toBeNull();
+      expect(document.querySelector("[data-core-command-dialog]")).toBeNull();
     });
 
     test("Options… brings up Style Options on that style", async () => {
@@ -222,9 +223,10 @@ export function tableStyleSuite(c: TableStyleCase): void {
       await h.click(
         h.root.querySelector(`[data-core-command-button="${c.createOp}"]`)!,
       );
-      const args = [...h.root.querySelectorAll("[data-core-command-arg]")].map(
-        (f) => f.getAttribute("data-core-command-arg"),
-      );
+      const args = [
+        ...document.querySelectorAll("[data-core-command-arg]"),
+      ].map((f) => f.getAttribute("data-core-command-arg"));
+      expect(args.length).toBeGreaterThan(0);
       expect(args).not.toContain("selfId");
     });
   });

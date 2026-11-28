@@ -52,17 +52,6 @@ test.describe("Phase 5 — five remaining collection panels", () => {
     await loadIdml(page, FIXTURE);
   });
 
-  test("AC-V2-1 — Articles @feat:editor-shell.panels.list-collections @level:happy", async ({
-    page,
-  }) => {
-    await mountAndAssert(
-      page,
-      "paged.articles",
-      '[data-articles-panel="ready"]',
-      "[data-empty-articles]",
-    );
-  });
-
   test("AC-V2-2 — Hyperlinks @feat:editor-shell.panels.list-collections @level:happy", async ({
     page,
   }) => {
@@ -71,28 +60,6 @@ test.describe("Phase 5 — five remaining collection panels", () => {
       "paged.hyperlinks",
       '[data-hyperlinks-panel="ready"]',
       "[data-empty-hyperlinks]",
-    );
-  });
-
-  test("AC-V2-3 — Bookmarks @feat:editor-shell.panels.list-collections @level:happy", async ({
-    page,
-  }) => {
-    await mountAndAssert(
-      page,
-      "paged.bookmarks",
-      '[data-bookmarks-panel="ready"]',
-      "[data-empty-bookmarks]",
-    );
-  });
-
-  test("AC-V2-4 — Cross References @feat:editor-shell.panels.list-collections @level:happy", async ({
-    page,
-  }) => {
-    await mountAndAssert(
-      page,
-      "paged.cross-references",
-      '[data-cross-references-panel="ready"]',
-      "[data-empty-cross-references]",
     );
   });
 

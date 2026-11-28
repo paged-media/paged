@@ -19,10 +19,10 @@
 
 // `paged.object.*` — the ORDERING ALGEBRA, tested in the open.
 //
-// These run in Node, not the browser: `object-commands.ts` imports only
+// These need no browser: `object-commands.ts` imports only
 // TYPES, so its pure half (`zSlots`, `arrangePlan`, `parentGroupOf`,
 // `groupMembersOf`) is directly importable here. The engine half is
-// proven against the real wasm in `e2e/object-commands.spec.ts`; this
+// proven against the real wasm in `tests/e2e/object-commands.spec.ts`; this
 // tier proves the thing an e2e test can only sample — that a
 // multi-selection Arrange comes out in the SAME relative order it went
 // in, for every verb and at both boundaries.
@@ -33,7 +33,7 @@
 // verb semantics ever change, the e2e tier catches it and this tier's
 // model has to follow — the model is a convenience, never the source.
 
-import { expect, test } from "@playwright/test";
+import { describe, expect, test } from "bun:test";
 
 import type {
   ElementId,
@@ -77,8 +77,8 @@ import {
   zSlots,
   type ArrangeTarget,
   type ObjectCommandDeps,
-} from "../src/object-commands";
-import { targetOwnsKey } from "../../../packages/shell/src/registries/keybinding";
+} from "../../../src/object-commands";
+import { targetOwnsKey } from "../../../../../packages/shell/src/registries/keybinding";
 
 const rect = (id: string): ElementId => ({ kind: "rectangle", id });
 
@@ -146,7 +146,7 @@ function arrange(
   ).map((k) => k.slice("rectangle:".length));
 }
 
-test.describe("paged.object — the arrange ordering algebra", () => {
+describe("paged.object — the arrange ordering algebra", () => {
   test("AC-OBJ-PURE-1 — zSlots reads the engine's stacking model off the tree @feat:layers.z-ordering @level:happy", () => {
     const roots = spreadOf([
       leaf("a"),
@@ -313,7 +313,7 @@ test.describe("paged.object — the arrange ordering algebra", () => {
   });
 });
 
-test.describe("paged.object — the parentage + membership reads", () => {
+describe("paged.object — the parentage + membership reads", () => {
   const roots = spreadOf([
     group("gOuter", [group("gInner", [leaf("deep")]), leaf("shallow")]),
     leaf("free"),
@@ -442,7 +442,7 @@ const VERBS: Array<
   ["release clipping mask", releaseClippingMask, [rect("d")]],
 ];
 
-test.describe("paged.object — the edit-context guard", () => {
+describe("paged.object — the edit-context guard", () => {
   test("AC-OBJ-CTX-1 — at the document root the verbs reach the engine @feat:editor-tools.select.group-descent @level:happy", async () => {
     // The CONTROL. Without it the guard tests below would pass just as
     // well against a function that never mutates at all.
@@ -484,7 +484,7 @@ test.describe("paged.object — the edit-context guard", () => {
 
 const g = (id: string): ElementId => ({ kind: "group", id });
 
-test.describe("paged.object — the delete plan", () => {
+describe("paged.object — the delete plan", () => {
   const roots = spreadOf([
     leaf("free"),
     group("gOuter", [
@@ -620,7 +620,7 @@ test.describe("paged.object — the delete plan", () => {
   });
 });
 
-test.describe("paged.object — delete, against a recorded client", () => {
+describe("paged.object — delete, against a recorded client", () => {
   /** A client that records every mutation and serves two trees: the
    *  one before the delete and the one "the engine" holds after. */
   function recordingDeps(
@@ -758,7 +758,7 @@ test.describe("paged.object — delete, against a recorded client", () => {
 
 // ── Nudge ────────────────────────────────────────────────────────────
 
-test.describe("paged.object — nudge", () => {
+describe("paged.object — nudge", () => {
   test("AC-OBJ-PURE-21 — the step is 1 pt, ×10 when large, and up is NEGATIVE y @feat:editor-tools.move.translate @level:happy", () => {
     expect(nudgeDelta("left", false)).toEqual([-1, 0]);
     expect(nudgeDelta("right", false)).toEqual([1, 0]);
@@ -1021,7 +1021,7 @@ test.describe("paged.object — nudge", () => {
 // Backspace means something else? The registry is handed the EVENT: is
 // the focused widget going to consume this key itself?
 
-test.describe("paged.object — the keyboard guards", () => {
+describe("paged.object — the keyboard guards", () => {
   const root = {
     editContext: null,
     contentSelection: { contentSelection: null },
@@ -1242,7 +1242,7 @@ function replay(list: string[], ops: unknown[]): string[] {
   return out;
 }
 
-test.describe("paged.object — the clipping-mask plan", () => {
+describe("paged.object — the clipping-mask plan", () => {
   test("AC-OBJ-PURE-30 — the TOPMOST clips: ONE clip group of the selection, back to front @feat:frames-paths.clip-groups @feat:frames-paths.path-clipping @level:happy", () => {
     const roots = spreadOf([
       node(r("a")),
@@ -1414,7 +1414,7 @@ test.describe("paged.object — the clipping-mask plan", () => {
   });
 });
 
-test.describe("paged.object — clipping masks, against a recorded client", () => {
+describe("paged.object — clipping masks, against a recorded client", () => {
   /** A client over a fixed tree and a per-element property table. */
   function clipDeps(options: {
     selection: ElementId[];

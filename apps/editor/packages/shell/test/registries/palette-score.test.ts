@@ -128,4 +128,41 @@ describe("paletteScore", () => {
       }
     }
   });
+
+  // ED-15: the fuzzy scorer this replaced ranked Blend: Expand first for
+  // "export" (a scattered subsequence through the title and the id).
+  test("AC-PALETTE-RANK-2 — the score: a title word beats the id, scattered letters match nothing @feat:editor-shell.command-palette @level:edge", () => {
+    const blendExpand = paletteScore(
+      "media.paged.draw.command.blendExpand",
+      "export",
+      ["Blend: Expand", "Draw"],
+    );
+    expect(blendExpand, "a scattered subsequence is no match").toBe(0);
+
+    const exportPdf = paletteScore("paged.file.exportPdf", "export", [
+      "Export PDF…",
+      "File",
+    ]);
+    const exportInId = paletteScore(
+      "media.paged.x.command.exportThing",
+      "export",
+      ["Write a thing", "X"],
+    );
+    expect(exportPdf).toBeGreaterThan(exportInId);
+    expect(exportInId).toBeGreaterThan(0);
+
+    // Every word of the query must land somewhere.
+    expect(
+      paletteScore("paged.insert.textFrame", "text frame", [
+        "Insert text frame",
+        "Insert",
+      ]),
+    ).toBeGreaterThan(0);
+    expect(
+      paletteScore("paged.insert.textFrame", "text banana", [
+        "Insert text frame",
+        "Insert",
+      ]),
+    ).toBe(0);
+  });
 });

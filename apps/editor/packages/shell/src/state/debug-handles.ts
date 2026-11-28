@@ -59,11 +59,13 @@ export function setDebugHandle<K extends keyof DebugHandles>(
   else handles[name] = value;
 }
 
-/** Dev and demo builds keep the handles; a production build fills none.
- *  Typed loosely: the shell's tsconfig has no Vite ambient types. */
+/** Dev, e2e and demo builds keep the handles; a production build fills
+ *  none. `e2e` is the production build the Playwright suite runs against
+ *  (apps/canvas/src/build-flags.ts). Typed loosely: the shell's tsconfig
+ *  has no Vite ambient types. */
 export function debugHandlesEnabled(): boolean {
   const env = (
     import.meta as unknown as { env?: { PROD?: boolean; MODE?: string } }
   ).env;
-  return env?.PROD !== true || env?.MODE === "demo";
+  return env?.PROD !== true || env?.MODE === "demo" || env?.MODE === "e2e";
 }

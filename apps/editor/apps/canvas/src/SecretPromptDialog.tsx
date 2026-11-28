@@ -35,7 +35,11 @@ import type {
   SecretPromptController,
 } from "./plugin-secret-store";
 import { color, font, radius } from "@paged-media/panel-kit";
-import { FocusScope, useEscapeHandler } from "@paged-media/shell";
+import {
+  ModalDialog,
+  ModalDialogTitle,
+  useEscapeHandler,
+} from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.secretPromptDialog", {
@@ -91,123 +95,105 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
       : strings.t(M.tierSession);
 
   return (
-    <div
-      data-testid="secret-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) cancel();
-      }}
+    <ModalDialog
+      onClose={cancel}
+      dismissOnOutside
+      data-testid="secret-dialog"
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.6)",
         font: `13px/1.5 ${font.sans}`,
+        width: "min(460px, 92vw)",
+        maxHeight: "82vh",
+        overflow: "auto",
+        padding: 20,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="secret-title"
-        data-testid="secret-dialog"
+      <ModalDialogTitle
+        id="secret-title"
+        style={{ margin: "0 0 4px", fontSize: 15 }}
+      >
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
+        {strings.t(M.refBefore)}{" "}
+        <code
+          data-testid="secret-ref"
+          style={{
+            font: `12px ${font.mono}`,
+            color: color.fg,
+          }}
+        >
+          {pending.ref}
+        </code>
+        {strings.t(M.refAfter)}
+      </p>
+
+      <label
         style={{
-          width: "min(460px, 92vw)",
-          maxHeight: "82vh",
-          overflow: "auto",
-          padding: 20,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          display: "block",
+          margin: "0 0 6px",
+          color: color.mutedFg,
         }}
       >
-        {/* ADR 234 — focus moves in on open, Tab stays inside, and
-            focus returns to the opener on close. */}
-        <FocusScope trap autoFocus restoreFocus>
-          <h2 id="secret-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-            {strings.t(M.title)}
-          </h2>
-          <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
-            {strings.t(M.refBefore)}{" "}
-            <code
-              data-testid="secret-ref"
-              style={{
-                font: `12px ${font.mono}`,
-                color: color.fg,
-              }}
-            >
-              {pending.ref}
-            </code>
-            {strings.t(M.refAfter)}
-          </p>
+        {strings.t(M.credential)}
+        <input
+          type="password"
+          data-testid="secret-input"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && value.length > 0) save();
+          }}
+          style={{
+            display: "block",
+            width: "100%",
+            marginTop: 6,
+            padding: "8px 10px",
+            borderRadius: 7,
+            border: `1px solid ${color.border}`,
+            background: color.bg,
+            color: color.fg,
+            font: `12px ${font.mono}`,
+            boxSizing: "border-box",
+          }}
+        />
+      </label>
 
-          <label
-            style={{
-              display: "block",
-              margin: "0 0 6px",
-              color: color.mutedFg,
-            }}
-          >
-            {strings.t(M.credential)}
-            <input
-              type="password"
-              data-testid="secret-input"
-              value={value}
-              autoFocus
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && value.length > 0) save();
-              }}
-              style={{
-                display: "block",
-                width: "100%",
-                marginTop: 6,
-                padding: "8px 10px",
-                borderRadius: 7,
-                border: `1px solid ${color.border}`,
-                background: color.bg,
-                color: color.fg,
-                font: `12px ${font.mono}`,
-                boxSizing: "border-box",
-              }}
-            />
-          </label>
+      <p
+        data-testid="secret-tier-note"
+        style={{
+          margin: "8px 0 16px",
+          fontSize: 12,
+          color: color.mutedFg,
+        }}
+      >
+        {tierNote}
+      </p>
 
-          <p
-            data-testid="secret-tier-note"
-            style={{
-              margin: "8px 0 16px",
-              fontSize: 12,
-              color: color.mutedFg,
-            }}
-          >
-            {tierNote}
-          </p>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button
-              type="button"
-              data-testid="secret-cancel"
-              onClick={cancel}
-              style={btnStyle(false)}
-            >
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-testid="secret-save"
-              onClick={save}
-              disabled={value.length === 0}
-              style={btnStyle(true, value.length === 0)}
-            >
-              {strings.t(M.store)}
-            </button>
-          </div>
-        </FocusScope>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          type="button"
+          data-testid="secret-cancel"
+          onClick={cancel}
+          style={btnStyle(false)}
+        >
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-testid="secret-save"
+          onClick={save}
+          disabled={value.length === 0}
+          style={btnStyle(true, value.length === 0)}
+        >
+          {strings.t(M.store)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 

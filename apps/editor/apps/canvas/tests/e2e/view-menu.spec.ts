@@ -27,10 +27,6 @@
 //
 // @feat:editor-shell.view-menu @feat:the-renderer.view-modes
 
-import { realpathSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { expect, test, type Page } from "@playwright/test";
 
 import { covers } from "@paged-media/test-kit";
@@ -72,29 +68,18 @@ const invoke = (page: Page, id: string) =>
     id,
   );
 
-const VIEW_TOGGLES = realpathSync(
-  resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../../../../packages/shell/src/state/view-toggles.ts",
-  ),
-);
+// The editor's view mode and toggles, read through the page's `__view`
+// handle (src/app/dev-handles.ts).
+type ViewHandle = {
+  __view: { toggle(which: string): boolean; mode(): string };
+};
 const viewMode = (page: Page) =>
-  page.evaluate(async (path) => {
-    const m = (await import(/* @vite-ignore */ `/@fs${path}`)) as {
-      viewModeOf(scope: unknown): string;
-    };
-    return m.viewModeOf((globalThis as unknown as G).__paged.scope);
-  }, VIEW_TOGGLES);
+  page.evaluate(() => (globalThis as unknown as ViewHandle).__view.mode());
 
 const viewToggle = (page: Page, which: string) =>
   page.evaluate(
-    async ([path, w]) => {
-      const m = (await import(/* @vite-ignore */ `/@fs${path}`)) as {
-        getViewToggle(scope: unknown, x: string): boolean;
-      };
-      return m.getViewToggle((globalThis as unknown as G).__paged.scope, w);
-    },
-    [VIEW_TOGGLES, which] as const,
+    (w) => (globalThis as unknown as ViewHandle).__view.toggle(w),
+    which,
   );
 
 const canvasShot = async (page: Page) => {

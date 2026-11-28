@@ -66,6 +66,18 @@ editor.on((event) => {
 - **React 19.3 or later** (a peer dependency): the editor renders with yours.
 - **The engine**, `@paged-media/paged`, is a dependency at the same version; npm installs it.
 
+## Bytes and who owns them
+
+The editor never keeps or empties an array you pass it. `createEditor`'s `document` and
+`handle.load` copy the bytes; `handle.save()`, `handle.exportPdf()` and the file your `save`
+action receives are arrays of your own. Through `@paged-media/editor/iframe` the same holds
+across the frame: the bridge copies what you pass and your `Uint8Array` keeps its length and
+contents, so you can load the same bytes again. A host that hands over a large document and does
+not read it again can ask for a move instead of a copy with
+`connectEditor(iframe, { transferBuffers: true })`: an array that spans its whole buffer is then
+empty (`byteLength` 0) after the call, as is every other view on that buffer. What the framed
+editor answers is always moved to your page, never copied twice.
+
 ## Phones and tablets
 
 The `template-fill` and `form` presets work on phones and tablets (editor ADR 294). Below 720 px

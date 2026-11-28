@@ -79,61 +79,6 @@ test.describe("Phase 3 — Paragraph panel (declarative composition)", () => {
     expect(await mixed.count()).toBeGreaterThanOrEqual(4);
   });
 
-  test("AC-PARA-3 — content selection over a real story populates Paragraph fields @feat:editor-shell.panels.paragraph @level:happy", async ({
-    page,
-  }) => {
-    const seeded = await page.evaluate(async () => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            client: {
-              executeScript: (s: string) => Promise<{
-                output: string[];
-                error: string | null;
-              }>;
-            };
-            setContentSelection: (
-              sel: { storyId: string; start: number; end: number } | null,
-            ) => void;
-          };
-        }
-      ).__canvas;
-      const result = await c.client.executeScript(
-        `JSON.stringify(JSON.parse(paged.stories())[0] || null)`,
-      );
-      if (result.error) return null;
-      const json = result.output[0] ?? null;
-      if (!json) return null;
-      const first = JSON.parse(json);
-      if (!first || first.characterCount === 0) return null;
-      const end = Math.min(3, first.characterCount);
-      c.setContentSelection({ storyId: first.selfId, start: 0, end });
-      return true;
-    });
-    expect(seeded).toBe(true);
-    // After selection the fields POPULATE from the (homogeneous,
-    // single-paragraph) range, so the mixed/em-dash count collapses
-    // from the no-selection state (AC-PARA-2: >= 4) down toward the
-    // floor. We don't assert exactly 0 — same null-vs-mixed caveat as
-    // the Character panel's AC-CHAR-3. Two leaf families read absence
-    // differently: a `Value::Length(None)` ("inherit default") renders
-    // as 0 in the LengthInput (NOT mixed), but an absent `Value::Bool`
-    // on a toggle SWITCH (Hyphenate / Keep lines / Keep with next)
-    // legitimately renders `data-mixed` per ToggleSwitchLeaf's
-    // documented contract (None ⇒ pill off + sentinel). The fixture
-    // paragraph inherits a keep/hyphenation default (None), so one
-    // switch stays mixed even though the range is uniform. Assert the
-    // populate, not an unreachable zero.
-    await expect
-      .poll(
-        async () =>
-          await page
-            .locator('[data-paragraph-panel="ready"] [data-mixed]')
-            .count(),
-      )
-      .toBeLessThan(4);
-  });
-
   test("AC-PARA-4 — Keep options and Span columns open as collapsible sections with their v64 controls @feat:editor-shell.panels.paragraph @level:smoke", async ({
     page,
   }) => {

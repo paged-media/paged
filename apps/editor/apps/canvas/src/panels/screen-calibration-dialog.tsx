@@ -35,7 +35,8 @@ import {
   createValueStore,
   CSS_PX_PER_INCH,
   densityFromMeasurement,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   scoped,
   setScreenCalibration,
   useCamera,
@@ -145,112 +146,88 @@ function CalibrationForm({ apply }: { apply: boolean }) {
   };
 
   return (
-    <div
-      data-screen-calibration-backdrop=""
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
-      style={backdropStyle}
+    <ModalDialog
+      onClose={close}
+      dismissOnOutside
+      data-screen-calibration-dialog=""
+      data-panel-host=""
+      style={dialogStyle}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="screen-calibration-title"
-        data-screen-calibration-dialog=""
-        data-panel-host=""
-        style={dialogStyle}
-      >
-        <FocusScope trap autoFocus restoreFocus>
-          <h2 id="screen-calibration-title" style={titleStyle}>
-            {strings.t(M.title)}
-          </h2>
-          <p style={textStyle}>
-            {strings.t(M.instructions, { length: LENGTHS[unit].label })}
-          </p>
-          <div
-            role="radiogroup"
-            aria-label={strings.t(M.length)}
-            style={rowStyle}
+      <ModalDialogTitle id="screen-calibration-title" style={titleStyle}>
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <p style={textStyle}>
+        {strings.t(M.instructions, { length: LENGTHS[unit].label })}
+      </p>
+      <div role="radiogroup" aria-label={strings.t(M.length)} style={rowStyle}>
+        {(Object.keys(LENGTHS) as LengthKey[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={unit === k}
+            data-calibration-length={k}
+            onClick={() => switchUnit(k)}
+            style={{
+              ...segmentStyle,
+              background: unit === k ? color.primary : "transparent",
+              color: unit === k ? color.primaryFg : color.fg,
+            }}
           >
-            {(Object.keys(LENGTHS) as LengthKey[]).map((k) => (
-              <button
-                key={k}
-                type="button"
-                role="radio"
-                aria-checked={unit === k}
-                data-calibration-length={k}
-                onClick={() => switchUnit(k)}
-                style={{
-                  ...segmentStyle,
-                  background: unit === k ? color.primary : "transparent",
-                  color: unit === k ? color.primaryFg : color.fg,
-                }}
-              >
-                {LENGTHS[k].label}
-              </button>
-            ))}
-          </div>
-          <div style={barTrackStyle}>
-            <div data-calibration-bar="" style={{ ...barStyle, width: bar }} />
-          </div>
-          <input
-            type="range"
-            data-calibration-slider=""
-            aria-label={strings.t(M.bar)}
-            min={BAR_MIN_PX}
-            max={BAR_MAX_PX}
-            step={1}
-            value={bar}
-            onChange={(e) => setBar(Number(e.target.value))}
-            style={{ width: "100%" }}
-          />
-          <p data-calibration-density="" style={metaStyle}>
-            {density !== null
-              ? strings.t(M.density, { dpi: Math.round(density) })
-              : strings.t(M.notCalibrated)}
-          </p>
-          <div style={footerStyle}>
-            {stored !== null && (
-              <button
-                type="button"
-                data-calibration-forget=""
-                onClick={() => {
-                  setScreenCalibration(scope, null);
-                  close();
-                }}
-                style={secondaryStyle}
-              >
-                {strings.t(M.forget)}
-              </button>
-            )}
-            <span style={{ flex: 1 }} />
-            <button type="button" onClick={close} style={secondaryStyle}>
-              {strings.t(M.cancel)}
-            </button>
-            <button
-              type="button"
-              data-calibration-save=""
-              disabled={density === null}
-              onClick={save}
-              style={primaryStyle}
-            >
-              {strings.t(M.save)}
-            </button>
-          </div>
-        </FocusScope>
+            {LENGTHS[k].label}
+          </button>
+        ))}
       </div>
-    </div>
+      <div style={barTrackStyle}>
+        <div data-calibration-bar="" style={{ ...barStyle, width: bar }} />
+      </div>
+      <input
+        type="range"
+        data-calibration-slider=""
+        aria-label={strings.t(M.bar)}
+        min={BAR_MIN_PX}
+        max={BAR_MAX_PX}
+        step={1}
+        value={bar}
+        onChange={(e) => setBar(Number(e.target.value))}
+        style={{ width: "100%" }}
+      />
+      <p data-calibration-density="" style={metaStyle}>
+        {density !== null
+          ? strings.t(M.density, { dpi: Math.round(density) })
+          : strings.t(M.notCalibrated)}
+      </p>
+      <div style={footerStyle}>
+        {stored !== null && (
+          <button
+            type="button"
+            data-calibration-forget=""
+            onClick={() => {
+              setScreenCalibration(scope, null);
+              close();
+            }}
+            style={secondaryStyle}
+          >
+            {strings.t(M.forget)}
+          </button>
+        )}
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={close} style={secondaryStyle}>
+          {strings.t(M.cancel)}
+        </button>
+        <button
+          type="button"
+          data-calibration-save=""
+          disabled={density === null}
+          onClick={save}
+          style={primaryStyle}
+        >
+          {strings.t(M.save)}
+        </button>
+      </div>
+    </ModalDialog>
   );
 }
-
-const backdropStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1000,
-  display: "grid",
-  placeItems: "center",
-  background: "rgba(0,0,0,0.5)",
-};
 
 const dialogStyle: CSSProperties = {
   width: `min(${BAR_MAX_PX + 32}px, 94vw)`,

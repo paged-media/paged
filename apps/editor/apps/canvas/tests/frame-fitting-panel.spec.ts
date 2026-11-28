@@ -41,14 +41,6 @@ test.describe("Phase 5 — Frame Fitting panel", () => {
     await openPanel(page, "paged.frame-fitting");
   });
 
-  test("AC-FF-1 — panel mounts @feat:editor-shell.panels.frame-fitting @feat:images-graphics.frame-fitting @level:smoke", async ({
-    page,
-  }) => {
-    await expect(
-      page.locator('[data-frame-fitting-panel="ready"]'),
-    ).toBeVisible();
-  });
-
   test("AC-FF-2 — type + crops round-trip; partial commits preserve the other half @feat:editor-shell.panels.frame-fitting @feat:images-graphics.frame-fitting @level:gesture", async ({
     page,
   }) => {

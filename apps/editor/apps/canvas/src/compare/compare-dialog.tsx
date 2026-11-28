@@ -31,7 +31,8 @@ import type { CSSProperties } from "react";
 
 import {
   createValueStore,
-  FocusScope,
+  ModalDialog,
+  ModalDialogTitle,
   getLibrary,
   scoped,
   useEditorScope,
@@ -255,103 +256,92 @@ function CompareView({ request }: { request: CompareRequest }) {
       : 0;
   const at = Math.min(page, Math.max(count - 1, 0));
   return (
-    <div
-      data-compare-backdrop=""
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
-      style={backdropStyle}
+    <ModalDialog
+      onClose={close}
+      dismissOnOutside
+      data-compare-dialog={request.mode}
+      data-compare-status={loaded.status}
+      style={dialogStyle}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="compare-title"
-        data-compare-dialog={request.mode}
-        data-compare-status={loaded.status}
-        style={dialogStyle}
-      >
-        <FocusScope trap autoFocus restoreFocus>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <h2 id="compare-title" style={titleStyle}>
-              {title}
-            </h2>
-            <span style={mutedStyle}>{strings.t(M.readOnly)}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <ModalDialogTitle id="compare-title" style={titleStyle}>
+          {title}
+        </ModalDialogTitle>
+        <span style={mutedStyle}>{strings.t(M.readOnly)}</span>
+        <button
+          type="button"
+          data-compare-close=""
+          onClick={close}
+          style={{ ...buttonStyle, marginLeft: "auto" }}
+        >
+          {strings.t(M.close)}
+        </button>
+      </div>
+      {loaded.status === "loading" && (
+        <p style={mutedStyle}>{strings.t(M.loading)}</p>
+      )}
+      {loaded.status === "failed" && (
+        <p data-compare-failed="" style={{ color: "var(--status-error)" }}>
+          {strings.t(M.failed, { reason: loaded.reason })}
+        </p>
+      )}
+      {loaded.status === "ready" && (
+        <>
+          <div style={navStyle}>
             <button
               type="button"
-              data-compare-close=""
-              onClick={close}
-              style={{ ...buttonStyle, marginLeft: "auto" }}
+              aria-label={strings.t(M.previous)}
+              disabled={at <= 0}
+              onClick={() => setPage(at - 1)}
+              style={buttonStyle}
             >
-              {strings.t(M.close)}
+              ‹
             </button>
+            <span data-compare-page={at}>
+              {strings.t(M.page, { n: at + 1, count })}
+            </span>
+            <button
+              type="button"
+              aria-label={strings.t(M.next)}
+              disabled={at >= count - 1}
+              onClick={() => setPage(at + 1)}
+              style={buttonStyle}
+            >
+              ›
+            </button>
+            {loaded.b && (
+              <span
+                data-compare-regions={loaded.boxes[at]?.length ?? 0}
+                style={mutedStyle}
+              >
+                {strings.t(M.differs, {
+                  count: loaded.boxes[at]?.length ?? 0,
+                })}
+              </span>
+            )}
           </div>
-          {loaded.status === "loading" && (
-            <p style={mutedStyle}>{strings.t(M.loading)}</p>
-          )}
-          {loaded.status === "failed" && (
-            <p data-compare-failed="" style={{ color: "var(--status-error)" }}>
-              {strings.t(M.failed, { reason: loaded.reason })}
-            </p>
-          )}
-          {loaded.status === "ready" && (
-            <>
-              <div style={navStyle}>
-                <button
-                  type="button"
-                  aria-label={strings.t(M.previous)}
-                  disabled={at <= 0}
-                  onClick={() => setPage(at - 1)}
-                  style={buttonStyle}
-                >
-                  ‹
-                </button>
-                <span data-compare-page={at}>
-                  {strings.t(M.page, { n: at + 1, count })}
-                </span>
-                <button
-                  type="button"
-                  aria-label={strings.t(M.next)}
-                  disabled={at >= count - 1}
-                  onClick={() => setPage(at + 1)}
-                  style={buttonStyle}
-                >
-                  ›
-                </button>
-                {loaded.b && (
-                  <span
-                    data-compare-regions={loaded.boxes[at]?.length ?? 0}
-                    style={mutedStyle}
-                  >
-                    {strings.t(M.differs, {
-                      count: loaded.boxes[at]?.length ?? 0,
-                    })}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 16, overflow: "auto" }}>
-                <PageView
-                  label={request.a.label}
-                  side="a"
-                  page={loaded.a.pages[at]}
-                  n={at + 1}
-                  boxes={loaded.b ? (loaded.boxes[at] ?? []) : []}
-                />
-                {loaded.b && request.b && (
-                  <PageView
-                    label={request.b.label}
-                    side="b"
-                    page={loaded.b.pages[at]}
-                    n={at + 1}
-                    boxes={loaded.boxes[at] ?? []}
-                  />
-                )}
-              </div>
-              {loaded.diff && <Changes diff={loaded.diff} />}
-            </>
-          )}
-        </FocusScope>
-      </div>
-    </div>
+          <div style={{ display: "flex", gap: 16, overflow: "auto" }}>
+            <PageView
+              label={request.a.label}
+              side="a"
+              page={loaded.a.pages[at]}
+              n={at + 1}
+              boxes={loaded.b ? (loaded.boxes[at] ?? []) : []}
+            />
+            {loaded.b && request.b && (
+              <PageView
+                label={request.b.label}
+                side="b"
+                page={loaded.b.pages[at]}
+                n={at + 1}
+                boxes={loaded.boxes[at] ?? []}
+              />
+            )}
+          </div>
+          {loaded.diff && <Changes diff={loaded.diff} />}
+        </>
+      )}
+    </ModalDialog>
   );
 }
 
@@ -517,15 +507,6 @@ function Group({
     </div>
   );
 }
-
-const backdropStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1000,
-  display: "grid",
-  placeItems: "center",
-  background: "rgba(0,0,0,0.5)",
-};
 
 const dialogStyle: CSSProperties = {
   width: "min(960px, 96vw)",

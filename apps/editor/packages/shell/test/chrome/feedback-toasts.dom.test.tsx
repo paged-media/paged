@@ -19,10 +19,12 @@
 
 // The one toast channel (editor ADR "Operation feedback"): the worded
 // failure with its remedy, a count instead of a storm, technical detail
-// only behind Details (UXI-ASY-011), and Close.
+// only behind Details (UXI-ASY-011), and Close. Its time stands still
+// under the pointer and under focus, an error stays until it is closed,
+// and two standing live regions announce what arrives.
 
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "bun:test";
 
 import { FeedbackToasts } from "../../src/chrome/FeedbackToasts";
 import {
@@ -31,7 +33,20 @@ import {
 } from "../../src/state/editor-scope";
 import { operationFeedbackOf } from "../../src/state/operation-feedback";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+const toastsIn = (root: Element) => [
+  ...root.querySelectorAll<HTMLElement>("[data-feedback-toast]"),
+];
+const announcer = (root: Element, kind: "polite" | "assertive") =>
+  root.querySelector<HTMLElement>(`[data-feedback-announcer="${kind}"]`)!;
+const advance = (ms: number) =>
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
 
 function mount() {
   const scope = createEditorScope();
@@ -61,7 +76,12 @@ describe("FeedbackToasts", () => {
     });
     const toast = view.container.querySelector("[data-feedback-toast]")!;
     expect(toast.getAttribute("data-outcome")).toBe("blocked");
-    expect(toast.getAttribute("role")).toBe("alert");
+    // The toast itself is no live region; the assertive announcer says it.
+    expect(toast.getAttribute("role")).toBe("group");
+    expect(announcer(view.container, "assertive").textContent).toBe(
+      "Could not paste: the clipboard holds nothing to paste. Nothing changed. Copy something first.",
+    );
+    expect(announcer(view.container, "polite").textContent).toBe("");
     expect(toast.querySelector("[data-feedback-headline]")!.textContent).toBe(
       "Could not paste: the clipboard holds nothing to paste.",
     );
@@ -110,8 +130,133 @@ describe("FeedbackToasts", () => {
       });
     });
     const toast = view.container.querySelector("[data-feedback-toast]")!;
-    expect(toast.getAttribute("role")).toBe("status");
+    expect(toast.getAttribute("role")).toBe("group");
+    expect(announcer(view.container, "polite").textContent).toBe(
+      "Exported Annual.pdf · 12 pages",
+    );
+    expect(announcer(view.container, "assertive").textContent).toBe("");
     fireEvent.click(toast.querySelector("[data-feedback-close]")!);
     expect(view.container.querySelector("[data-feedback-toast]")).toBeNull();
+  });
+
+  test("the live regions stand before any toast: a polite status and an assertive alert", () => {
+    const { view, feedback } = mount();
+    // In the DOM with nothing to say, so what arrives is an addition.
+    const polite = announcer(view.container, "polite");
+    const assertive = announcer(view.container, "assertive");
+    expect(polite.getAttribute("role")).toBe("status");
+    expect(polite.getAttribute("aria-live")).toBe("polite");
+    expect(assertive.getAttribute("role")).toBe("alert");
+    expect(assertive.getAttribute("aria-live")).toBe("assertive");
+    expect(polite.textContent).toBe("");
+    expect(assertive.textContent).toBe("");
+    expect(
+      view.container
+        .querySelector("[data-feedback-toasts]")!
+        .getAttribute("aria-label"),
+    ).toBe("Notifications");
+
+    act(() => {
+      feedback.report({ action: "save", outcome: "success", prominent: true });
+      feedback.report({
+        action: "export",
+        outcome: "recoverable-failure",
+        reason: "the disk is full",
+      });
+    });
+    // The same elements took the words: nothing was remounted.
+    expect(announcer(view.container, "polite")).toBe(polite);
+    expect(announcer(view.container, "assertive")).toBe(assertive);
+    expect(polite.textContent).toBe("Save: done.");
+    expect(assertive.textContent).toBe("Could not export: the disk is full.");
+    // No toast is a live region of its own (it would be said twice).
+    for (const t of toastsIn(view.container)) {
+      expect(t.getAttribute("role")).toBe("group");
+      expect(t.hasAttribute("aria-live")).toBe(false);
+    }
+  });
+
+  test("a toast's time stands still under the pointer and runs on with what was left", () => {
+    vi.useFakeTimers();
+    const { view, feedback } = mount();
+    act(() => {
+      feedback.report({ action: "save", outcome: "success", prominent: true });
+    });
+    const toast = toastsIn(view.container)[0]!;
+    advance(3000);
+    fireEvent.pointerEnter(toast);
+    expect(toast.hasAttribute("data-feedback-held")).toBe(true);
+    // Far past its four seconds: still there.
+    advance(60_000);
+    expect(toastsIn(view.container)).toHaveLength(1);
+    fireEvent.pointerLeave(toast);
+    expect(toast.hasAttribute("data-feedback-held")).toBe(false);
+    // One second was left.
+    advance(900);
+    expect(toastsIn(view.container)).toHaveLength(1);
+    advance(200);
+    expect(toastsIn(view.container)).toHaveLength(0);
+  });
+
+  test("a toast's time stands still while focus is inside it and runs on after", () => {
+    vi.useFakeTimers();
+    const { view, feedback } = mount();
+    act(() => {
+      feedback.report({
+        action: "export",
+        outcome: "success",
+        prominent: true,
+        detail: "12 pages",
+      });
+    });
+    const toast = toastsIn(view.container)[0]!;
+    const details = toast.querySelector<HTMLElement>(
+      "[data-feedback-details-toggle]",
+    )!;
+    const close = toast.querySelector<HTMLElement>("[data-feedback-close]")!;
+    advance(1000);
+    act(() => details.focus());
+    expect(toast.hasAttribute("data-feedback-held")).toBe(true);
+    advance(60_000);
+    expect(toastsIn(view.container)).toHaveLength(1);
+    // Focus moving inside the toast keeps it held.
+    act(() => close.focus());
+    expect(toast.hasAttribute("data-feedback-held")).toBe(true);
+    advance(60_000);
+    expect(toastsIn(view.container)).toHaveLength(1);
+    act(() => close.blur());
+    expect(toast.hasAttribute("data-feedback-held")).toBe(false);
+    // Three of its four seconds were left.
+    advance(2900);
+    expect(toastsIn(view.container)).toHaveLength(1);
+    advance(200);
+    expect(toastsIn(view.container)).toHaveLength(0);
+  });
+
+  test("an error stays past every timeout and leaves on its labelled Close", () => {
+    vi.useFakeTimers();
+    const { view, feedback } = mount();
+    act(() => {
+      feedback.report({
+        action: "export",
+        outcome: "recoverable-failure",
+        reason: "the disk is full",
+      });
+      feedback.report({ action: "save", outcome: "success", prominent: true });
+    });
+    expect(toastsIn(view.container)).toHaveLength(2);
+    advance(10 * 60_000);
+    // The success went; the error is still there.
+    const left = toastsIn(view.container);
+    expect(left).toHaveLength(1);
+    expect(left[0]!.getAttribute("data-outcome")).toBe("recoverable-failure");
+    const close = left[0]!.querySelector<HTMLButtonElement>(
+      "[data-feedback-close]",
+    )!;
+    expect(close.tagName).toBe("BUTTON");
+    expect(close.getAttribute("aria-label")).toBe("Close");
+    fireEvent.click(close);
+    expect(toastsIn(view.container)).toHaveLength(0);
+    expect(announcer(view.container, "assertive").textContent).toBe("");
   });
 });

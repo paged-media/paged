@@ -31,9 +31,11 @@
 // through here, so gating once is what makes the declaration mean the
 // same thing everywhere instead of in whichever caller remembered.
 
-import { expect, test } from "@playwright/test";
+import { describe, expect, test } from "bun:test";
 
-import { createCommandRegistry } from "@paged-media/shell";
+import { contextSegmentModel } from "../../src/chrome/ContextToolbar";
+import { createCommandRegistry } from "../../src/registries/command";
+import { panelBelongsHere } from "../../src/registries/types";
 
 /** A registry over a mutable fake editor — the shape a `when`
  *  predicate really receives (`PagedEditor`, of which the active edit
@@ -42,7 +44,7 @@ function registryOver(state: { editContext: { type: string } | null }) {
   return createCommandRegistry(() => state);
 }
 
-test.describe("CommandRegistry — the `when` gate", () => {
+describe("CommandRegistry — the `when` gate", () => {
   test("AC-CMD-WHEN-1 — a command with no predicate runs @level:happy", async () => {
     // The CONTROL. Without it every assertion below would pass against
     // a registry that simply never invokes anything.
@@ -150,14 +152,14 @@ test.describe("CommandRegistry — the `when` gate", () => {
 //
 // The frame now carries `readonly string[] | null`, and the rail reads
 // the distinction directly. Pure assertions over that reading — the
-// React wiring is exercised by tool-rail.spec.ts.
+// React wiring is exercised by the canvas app's tests/tool-rail.spec.ts.
 
 /** The rail's rule, extracted verbatim from `ToolRail.tsx`. */
 const restrictionOf = (
   toolIds: readonly string[] | null,
 ): Set<string> | null => (toolIds ? new Set(toolIds) : null);
 
-test.describe("edit context — toolIds semantics", () => {
+describe("edit context — toolIds semantics", () => {
   test("AC-CTX-TOOLS-1 — ABSENT leaves the rail untouched @level:happy", () => {
     // The permissive default: a context that has not thought about
     // tools does not take any away.
@@ -197,9 +199,6 @@ test.describe("edit context — toolIds semantics", () => {
 // selection-driven plugin panels that work without entering anything),
 // and only somebody ELSE'S content surface is hidden.
 
-import { panelBelongsHere } from "@paged-media/shell";
-import { contextSegmentModel } from "../../../packages/shell/src/chrome/ContextToolbar";
-
 const CONTEXTS = [
   { type: "vectorGraphic", panelIds: ["draw.stroke"] },
   { type: "sheet", panelIds: ["sheet.workbook"] },
@@ -210,7 +209,7 @@ const stateIn = (activeType: string | null) => ({
   registries: { editContexts: { list: () => CONTEXTS } },
 });
 
-test.describe("Window menu — panel applicability", () => {
+describe("Window menu — panel applicability", () => {
   test("AC-WIN-1 — an unclaimed panel is always offered @level:happy", () => {
     // The CONTROL, and the half that keeps this narrow. Host panels and
     // selection-driven plugin panels are legitimately usable anywhere.
@@ -267,7 +266,7 @@ const TOOLS: Record<string, { title: string; icon: string }> = {
 };
 const lookup = (id: string) => TOOLS[id];
 
-test.describe("context toolbar — the segment", () => {
+describe("context toolbar — the segment", () => {
   test("AC-BAR-1 — names the content type and offers its tools @level:happy", () => {
     const m = contextSegmentModel(
       {

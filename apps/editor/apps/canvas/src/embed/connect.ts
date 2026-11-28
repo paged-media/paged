@@ -62,13 +62,37 @@ export interface ConnectConfig extends Omit<FrameConfig, "actions"> {
   origin?: string;
   /** How long to wait for the frame, in ms (default 60 s). */
   timeout?: number;
+  /**
+   * Move the bytes the host passes (`document`, `load`) into the frame
+   * instead of copying them. Off by default: the bridge copies, and the
+   * host's arrays stay whole. When on, a `Uint8Array` that spans its whole
+   * buffer is empty (`byteLength` 0) once it has been passed, as is every
+   * other view on that buffer: for a host that hands over a large document
+   * and does not read it again.
+   */
+  transferBuffers?: boolean;
 }
 
+/**
+ * Drive the editor in `iframe`; resolves once it is ready.
+ *
+ * Bytes cross the frame boundary by copy: what the host passes (the
+ * config's `document`, `load`) stays the host's, whole and reusable, unless
+ * `transferBuffers` asks for a move. What the handle answers (`save`,
+ * `exportPdf`) and what a host action receives (`actions.save`) are the
+ * host's own arrays, shared with nothing in the frame.
+ */
 export function connectEditor(
   iframe: HTMLIFrameElement,
   config: ConnectConfig = {},
 ): Promise<RemoteEditorHandle> {
-  const { actions = {}, origin: given, timeout = 60_000, ...rest } = config;
+  const {
+    actions = {},
+    origin: given,
+    timeout = 60_000,
+    transferBuffers = false,
+    ...rest
+  } = config;
   const origin = given ?? new URL(iframe.src, location.href).origin;
   const allow = new Set(
     (iframe.getAttribute("allow") ?? "")
@@ -82,8 +106,14 @@ export function connectEditor(
     iframe.setAttribute("allow", [...allow].join("; "));
   }
   const frame = () => iframe.contentWindow;
+  // The host's bytes are the host's: copied by the structured clone,
+  // moved only when the host asked (`transferBuffers`).
   const send = (msg: HostToFrame) =>
-    frame()?.postMessage(msg, origin, transferables(msg));
+    frame()?.postMessage(
+      msg,
+      origin,
+      transferBuffers ? transferables(msg) : [],
+    );
   let nextCall = 1;
   const calls = new Map<
     number,

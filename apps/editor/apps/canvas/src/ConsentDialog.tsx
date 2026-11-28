@@ -34,7 +34,11 @@ import {
   type PendingConsent,
 } from "./plugin-consent";
 import { color, font, radius } from "@paged-media/panel-kit";
-import { FocusScope, useEscapeHandler } from "@paged-media/shell";
+import {
+  ModalDialog,
+  ModalDialogTitle,
+  useEscapeHandler,
+} from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.consentDialog", {
@@ -94,156 +98,139 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
     });
 
   return (
-    <div
-      data-testid="consent-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) deny();
-      }}
+    <ModalDialog
+      onClose={deny}
+      dismissOnOutside
+      data-testid="consent-dialog"
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.6)",
         font: `13px/1.5 ${font.sans}`,
+        width: "min(440px, 92vw)",
+        maxHeight: "82vh",
+        overflow: "auto",
+        padding: 20,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+        background: color.elevated,
+        color: color.fg,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="consent-title"
-        data-testid="consent-dialog"
+      <ModalDialogTitle
+        id="consent-title"
+        style={{ margin: "0 0 4px", fontSize: 15 }}
+      >
+        {strings.t(M.title)}
+      </ModalDialogTitle>
+      <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
+        {strings.t(M.intro)}{" "}
+        <strong style={{ color: color.fg }}>{pending.purpose}</strong>
+      </p>
+
+      <ul
+        data-testid="consent-origins"
         style={{
-          width: "min(440px, 92vw)",
-          maxHeight: "82vh",
-          overflow: "auto",
-          padding: 20,
-          borderRadius: radius.lg,
-          border: `1px solid ${color.border}`,
-          background: color.elevated,
-          color: color.fg,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          listStyle: "none",
+          margin: "0 0 14px",
+          padding: 0,
+          display: "grid",
+          gap: 6,
         }}
       >
-        {/* ADR 234 — focus moves in on open, Tab stays inside, and
-            focus returns to the opener on close. */}
-        <FocusScope trap autoFocus restoreFocus>
-          <h2 id="consent-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-            {strings.t(M.title)}
-          </h2>
-          <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
-            {strings.t(M.intro)}{" "}
-            <strong style={{ color: color.fg }}>{pending.purpose}</strong>
-          </p>
-
-          <ul
-            data-testid="consent-origins"
-            style={{
-              listStyle: "none",
-              margin: "0 0 14px",
-              padding: 0,
-              display: "grid",
-              gap: 6,
-            }}
-          >
-            {pending.origins.map((origin) => (
-              <li key={origin}>
-                <label
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "6px 8px",
-                    borderRadius: 6,
-                    border: `1px solid ${color.border}`,
-                    background: color.bg,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    data-testid="consent-origin"
-                    data-origin={origin}
-                    checked={checked.has(origin)}
-                    onChange={() => toggle(origin)}
-                  />
-                  <code style={{ font: `12px ${font.mono}` }}>{origin}</code>
-                </label>
-                {reachableOrigin(origin) ? null : (
-                  <p
-                    data-testid="consent-origin-blocked"
-                    data-origin={origin}
-                    style={{
-                      margin: "4px 0 0 8px",
-                      fontSize: 12,
-                      color: color.mutedFg,
-                    }}
-                  >
-                    {strings.t(M.blocked)}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          <label
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              margin: "0 0 16px",
-              color: color.mutedFg,
-            }}
-          >
-            <input
-              type="checkbox"
-              data-testid="consent-remember"
-              checked={remember && pending.rememberable}
-              disabled={!pending.rememberable}
-              aria-describedby={
-                pending.rememberable ? undefined : "consent-remember-why"
-              }
-              onChange={(e) => setRemember(e.target.checked)}
-            />
-            {strings.t(M.remember)}
-          </label>
-          {pending.rememberable ? null : (
-            // Editor ADR 264: a grant is remembered under the identity the
-            // editor gives a document it can recognise again.
-            <p
-              id="consent-remember-why"
-              data-testid="consent-remember-why"
-              style={{ margin: "-8px 0 16px", color: color.mutedFg }}
+        {pending.origins.map((origin) => (
+          <li key={origin}>
+            <label
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                padding: "6px 8px",
+                borderRadius: 6,
+                border: `1px solid ${color.border}`,
+                background: color.bg,
+                cursor: "pointer",
+              }}
             >
-              {strings.t(M.rememberWhy)}
-            </p>
-          )}
+              <input
+                type="checkbox"
+                data-testid="consent-origin"
+                data-origin={origin}
+                checked={checked.has(origin)}
+                onChange={() => toggle(origin)}
+              />
+              <code style={{ font: `12px ${font.mono}` }}>{origin}</code>
+            </label>
+            {reachableOrigin(origin) ? null : (
+              <p
+                data-testid="consent-origin-blocked"
+                data-origin={origin}
+                style={{
+                  margin: "4px 0 0 8px",
+                  fontSize: 12,
+                  color: color.mutedFg,
+                }}
+              >
+                {strings.t(M.blocked)}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button
-              type="button"
-              data-testid="consent-deny"
-              onClick={deny}
-              style={btnStyle(false)}
-            >
-              {strings.t(M.deny)}
-            </button>
-            <button
-              type="button"
-              data-testid="consent-allow"
-              onClick={allow}
-              disabled={checked.size === 0}
-              style={btnStyle(true, checked.size === 0)}
-            >
-              {checked.size > 0
-                ? strings.t(M.allowCount, { count: checked.size })
-                : strings.t(M.allow)}
-            </button>
-          </div>
-        </FocusScope>
+      <label
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          margin: "0 0 16px",
+          color: color.mutedFg,
+        }}
+      >
+        <input
+          type="checkbox"
+          data-testid="consent-remember"
+          checked={remember && pending.rememberable}
+          disabled={!pending.rememberable}
+          aria-describedby={
+            pending.rememberable ? undefined : "consent-remember-why"
+          }
+          onChange={(e) => setRemember(e.target.checked)}
+        />
+        {strings.t(M.remember)}
+      </label>
+      {pending.rememberable ? null : (
+        // Editor ADR 264: a grant is remembered under the identity the
+        // editor gives a document it can recognise again.
+        <p
+          id="consent-remember-why"
+          data-testid="consent-remember-why"
+          style={{ margin: "-8px 0 16px", color: color.mutedFg }}
+        >
+          {strings.t(M.rememberWhy)}
+        </p>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          type="button"
+          data-testid="consent-deny"
+          onClick={deny}
+          style={btnStyle(false)}
+        >
+          {strings.t(M.deny)}
+        </button>
+        <button
+          type="button"
+          data-testid="consent-allow"
+          onClick={allow}
+          disabled={checked.size === 0}
+          style={btnStyle(true, checked.size === 0)}
+        >
+          {checked.size > 0
+            ? strings.t(M.allowCount, { count: checked.size })
+            : strings.t(M.allow)}
+        </button>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 

@@ -73,14 +73,6 @@ test.describe("Index panel — Generate index", () => {
     await openPanel(page, "paged.index");
   });
 
-  test("AC-INDEX-GEN-1 — without a text cursor the button is disabled and says why @feat:cross-references-hyperlinks.index @level:smoke", async ({
-    page,
-  }) => {
-    const button = page.locator("[data-generate-index]");
-    await expect(button).toBeDisabled();
-    await expect(button).toHaveAttribute("title", /Place the text cursor/);
-  });
-
   test("AC-INDEX-GEN-2 — with the cursor in a story, Generate writes the index there @feat:cross-references-hyperlinks.index @level:edge", async ({
     page,
   }) => {

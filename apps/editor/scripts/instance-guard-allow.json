@@ -90,6 +90,9 @@
     "packages/shell/src/state/view-preferences.ts": {
       "current": "The Guides & Grid preferences (editor ADR 287) are the user's, kept in localStorage like the unit preference: every editor on the page shows the same grid and snaps to it.",
       "listeners": "Subscribers to the page's Guides & Grid preferences (see `current`)."
+    },
+    "packages/shell/src/state/mutate-reported.ts": {
+      "SINKS": "Where an editor's refused writes are reported, a WeakMap keyed by that editor's CanvasClient: per editor by construction, and an entry goes with its client."
     }
   }
 }
