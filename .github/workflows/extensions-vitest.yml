@@ -322,6 +322,29 @@ jobs:
         uses: ./.github/actions/module-wasm
         with: { module: publish }
 
+      # cli-open-import reads the gitignored engine/core/corpus/generated/*.idml
+      # fixtures, which paged-gen writes (as core / ci does before its tests).
+      - name: rust toolchain (for paged-gen)
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
+        with:
+          toolchain: stable
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - name: cache cargo + paged-gen build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            engine/core/target
+          key: paged-rust-${{ runner.os }}-${{ hashFiles('engine/core/Cargo.lock') }}
+          restore-keys: paged-rust-${{ runner.os }}-
+      - name: generate the engine's fixtures
+        working-directory: engine/core
+        run: bash scripts/regen-fixtures.sh
+
       - name: typecheck
         run: bun run typecheck
 

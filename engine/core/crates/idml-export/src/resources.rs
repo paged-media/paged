@@ -482,7 +482,7 @@ pub fn patch_graphic_with(
                             // The model's stops stand where the source's
                             // first one stood; the source's are dropped.
                             if !*written {
-                                write_gradient_stops(&mut writer, *g)?;
+                                write_gradient_stops(&mut writer, g)?;
                                 *written = true;
                             }
                             if !is_empty {
