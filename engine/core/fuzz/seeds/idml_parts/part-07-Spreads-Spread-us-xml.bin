@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<Spread Self="us" PageCount="1" ItemTransform="1 0 0 1 0 0">
+<Page Self="usp" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0" AppliedMaster="um"/>
+
+<Polygon Self="u1" AppliedObjectStyle="ObjectStyle/$ID/[None]" ItemTransform="1 0 0 1 0 0" FillColor="Swatch/None" StrokeColor="Color/Black" StrokeWeight="3"><Properties><PathGeometry><GeometryPathType PathOpen="true"><PathPointArray><PathPointType Anchor="100 200" LeftDirection="50 250" RightDirection="150 150"/><PathPointType Anchor="250 200" LeftDirection="250 200" RightDirection="250 200"/><PathPointType Anchor="400 200" LeftDirection="350 150" RightDirection="450 250"/></PathPointArray></GeometryPathType></PathGeometry></Properties></Polygon></Spread>
+</idPkg:Spread>

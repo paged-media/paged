@@ -252,6 +252,7 @@ a mutated zip mostly fails its checksums first.
 ```bash
 cd engine/core/fuzz
 cargo test                                         # stable: every target over seeds/ and regressions/
+ENGINE_FUZZ_TARGET=psd cargo test                  # one target
 cargo +nightly fuzz run --fuzz-dir . psd           # needs nightly and cargo-fuzz
 cargo +nightly fuzz run --fuzz-dir . psd -- -max_total_time=60 -rss_limit_mb=2048
 cargo test -- --ignored write_hostile_seeds        # write the built seeds again
@@ -272,11 +273,16 @@ cargo test -- --ignored write_hostile_seeds        # write the built seeds again
   (`scheduled-failure-issue.yml`). Minimise it (`cargo +nightly fuzz tmin`),
   commit it as `regressions/<target>-<what>.bin` and fix the parser; the
   reproducer stays and is run on every smoke run and seeded every night. One
-  that is committed before its fix is listed in `regressions/KNOWN`, which
-  makes the smoke run report it instead of failing and keeps it out of the
-  nightly corpus; the fix removes the line.
+  that is committed before its fix is listed in `regressions/KNOWN` with what
+  it shows: the smoke run reports it as open instead of running it
+  (`ENGINE_FUZZ_KNOWN=1 cargo test` runs it), and the nightly run keeps it
+  out of the corpus; the fix removes the line.
 - **Budget.** Nightly, ten minutes a target, a 60 s timeout for one input,
   2 GB of memory, inputs up to 1 MiB. Never on a push.
+- **Build.** Release semantics: no debug assertions (a dependency's
+  `debug_assert!` on a malformed file is not a crash a user meets), overflow
+  checks on. `cargo fuzz run --release` in the workflow, `[profile.dev]` of
+  the fuzz workspace for the smoke run.
 
 Not reached by a target: `paged-renderer`'s `container::open_document` itself
 (the crate links the rasterizers; `paged_container` runs its steps through

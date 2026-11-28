@@ -1,0 +1,195 @@
+# Engine fuzz targets (cargo-fuzz) over the file parsers: IDML, the native
+# `.paged` model part and container, PSD/PSB, PostScript/EPS, OOXML (the OPC
+# reader, the XML tree, docx, pptx), data expressions, DXF, SVG, the raster
+# decoders and PDF. NOT a member of the engine workspace: the `[workspace]`
+# table below makes this its own root, so `cargo build --workspace` and
+# nextest never compile it. Needs nightly:
+#
+#   cargo +nightly fuzz run --fuzz-dir . psd
+#   cargo +nightly fuzz run --fuzz-dir . idml_import -- -max_total_time=60
+#
+# Every target's body is a function of `src/lib.rs`; `tests/smoke.rs` runs
+# the same functions over `seeds/` and `regressions/` on the pinned stable
+# toolchain (`cargo test`), so a target that stops compiling or a seed that
+# starts to panic shows without nightly.
+#
+# CI runs the targets nightly only (.github/workflows/engine-fuzz.yml), never
+# on a push. docs/development/testing.md, "Fuzzing the parsers".
+[package]
+name = "engine-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+libfuzzer-sys = "0.4"
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2"] }
+idml-import = { path = "../crates/idml-import" }
+paged-store = { path = "../crates/paged-store" }
+paged-psd = { path = "../crates/paged-psd" }
+paged-ps = { path = "../crates/paged-ps" }
+paged-raster = { path = "../crates/paged-raster" }
+paged-data-core = { path = "../crates/paged-data-core" }
+paged-data-expr = { path = "../crates/paged-data-expr" }
+paged-svg = { path = "../crates/paged-svg", default-features = false, features = ["import"] }
+paged-wire = { path = "../crates/paged-wire" }
+paged-ooxml = { path = "../../../platform/shared/ooxml" }
+docx-import = { path = "../../../modules/doc/docx-import" }
+pptx-import = { path = "../../../modules/slide/pptx-import" }
+draw-dxf = { path = "../../../modules/draw/crates/draw-dxf" }
+pdf-import = { path = "../../../modules/publish/crates/pdf-import" }
+
+[[bin]]
+name = "idml_import"
+path = "fuzz_targets/idml_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "idml_parts"
+path = "fuzz_targets/idml_parts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "paged_model"
+path = "fuzz_targets/paged_model.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "paged_container"
+path = "fuzz_targets/paged_container.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "psd"
+path = "fuzz_targets/psd.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "postscript"
+path = "fuzz_targets/postscript.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ooxml_opc"
+path = "fuzz_targets/ooxml_opc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ooxml_xml"
+path = "fuzz_targets/ooxml_xml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docx_import"
+path = "fuzz_targets/docx_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docx_parts"
+path = "fuzz_targets/docx_parts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pptx_import"
+path = "fuzz_targets/pptx_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pptx_parts"
+path = "fuzz_targets/pptx_parts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "data_expr"
+path = "fuzz_targets/data_expr.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dxf"
+path = "fuzz_targets/dxf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "svg_import"
+path = "fuzz_targets/svg_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "raster"
+path = "fuzz_targets/raster.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_import"
+path = "fuzz_targets/pdf_import.rs"
+test = false
+doc = false
+bench = false
+
+[[test]]
+name = "smoke"
+path = "tests/smoke.rs"
+
+# The engine workspace's patch of this crate (engine/core/Cargo.toml): a
+# `[patch]` belongs to a workspace root, so this root repeats it to build
+# the path crates against the same source.
+[patch.crates-io]
+flo_curves = { git = "https://github.com/drietsch/flo_curves", rev = "b351df8" }
+
+# What ships is a release build: no debug assertions. A dependency's
+# `debug_assert!` on a malformed file (avif-parse has them) is not a crash a
+# user meets, and it would stop a target at its first input. Overflow checks
+# stay on: arithmetic on a size read from a file that wraps is a finding.
+# The workflow builds the targets with `cargo fuzz run --release` for the
+# same reason (cargo-fuzz turns debug assertions on otherwise).
+[profile.dev]
+debug-assertions = false
+overflow-checks = true
+
+[profile.release]
+debug = 1
+overflow-checks = true

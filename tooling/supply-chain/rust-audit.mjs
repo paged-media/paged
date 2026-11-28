@@ -34,6 +34,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  * run on them: each is a satellite of a workspace that is fully checked.
  */
 const EXEMPT = {
+  "engine/core/fuzz": {
+    advisoriesFrom: "engine/core/deny.toml",
+    reason:
+      "cargo-fuzz harness (nightly, never shipped) over the engine's and the modules' parsers, which engine/core checks",
+  },
   "modules/sheet/fuzz": {
     advisoriesFrom: "engine/core/deny.toml",
     reason:

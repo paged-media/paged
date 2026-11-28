@@ -608,6 +608,16 @@ impl<'a> Reader<'a> {
                         .then(&Affine::scale(sx, sy))
                         .then(&base);
                 let world = m.then(&place);
+                // A copy costs one even when its block is empty, so nested
+                // arrays over an empty block are cut short too.
+                if self.insert_budget == 0 {
+                    self.report.dropped(
+                        "insert.budget",
+                        "block references that place more than 500 000 entities in all are cut short",
+                    );
+                    return;
+                }
+                self.insert_budget -= 1;
                 for child in &block.entities {
                     if self.insert_budget == 0 {
                         self.report.dropped(

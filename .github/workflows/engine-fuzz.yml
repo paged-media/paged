@@ -1,0 +1,133 @@
+name: engine / fuzz
+# Nightly only — never on a push. cargo-fuzz targets over the file parsers
+# live in engine/core/fuzz (its own workspace, so the engine build and
+# nextest never compile them). One property for all of them: arbitrary bytes
+# are a value or a typed error — never a panic (the wasm builds abort on
+# one), a hang or an allocation past the parser's limits:
+#   idml_import, idml_parts          the IDML package, and its parts
+#   paged_model, paged_container     the native model part, the container
+#   psd, postscript, raster          PSD/PSB, PostScript/EPS, the decoders
+#   ooxml_opc, ooxml_xml             the OPC reader, the XML readers
+#   docx_import, docx_parts          Word
+#   pptx_import, pptx_parts          PowerPoint
+#   data_expr, dxf, svg_import, pdf_import
+# Seeds: engine/core/fuzz/seeds/<target>/ (small real files and the hostile
+# inputs of the limit tests), plus every reproducer committed under
+# engine/core/fuzz/regressions/. A crash uploads its artifact and fails the
+# run. docs/development/testing.md, "Fuzzing the parsers".
+on:
+  schedule:
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: engine/core/fuzz
+
+jobs:
+  # The targets' bodies on the pinned stable toolchain, over the seeds and
+  # the reproducers: a target that no longer compiles, or a seed that
+  # panics, fails here in minutes and by name.
+  smoke:
+    name: seeds and reproducers (stable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # The engine's pinned toolchain (engine/core/rust-toolchain.toml).
+      - id: pin
+        working-directory: engine/core
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
+        with:
+          toolchain: ${{ steps.pin.outputs.channel }}
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - run: cargo test --locked
+
+  fuzz:
+    runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - idml_import
+          - idml_parts
+          - paged_model
+          - paged_container
+          - psd
+          - postscript
+          - ooxml_opc
+          - ooxml_xml
+          - docx_import
+          - docx_parts
+          - pptx_import
+          - pptx_parts
+          - data_expr
+          - dxf
+          - svg_import
+          - raster
+          - pdf_import
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
+        with:
+          toolchain: nightly
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - run: cargo install cargo-fuzz --locked
+      - name: seed corpus
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p "corpus/$TARGET"
+          cp "seeds/$TARGET"/* "corpus/$TARGET/"
+          for f in regressions/"$TARGET"-*; do
+            if [ -e "$f" ]; then cp "$f" "corpus/$TARGET/"; fi
+          done
+          ls "corpus/$TARGET" | wc -l
+      # A reproducer listed in regressions/KNOWN is an open finding: it
+      # stays out of the corpus (libFuzzer stops at the first crash, and
+      # would find nothing new) until the parser is fixed. The fuzzer may
+      # still reach it again on its own; the run then fails, as it should.
+      - name: leave the open findings out of the corpus
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' regressions/KNOWN |
+            while read -r name; do rm -f "corpus/$TARGET/$name"; done
+      - name: fuzz ${{ matrix.target }} (10 min)
+        env:
+          TARGET: ${{ matrix.target }}
+        # --release: no debug assertions, as in what ships (cargo-fuzz turns
+        # them on otherwise, and a dependency's debug_assert on a malformed
+        # file stops the target at once). Overflow checks stay on
+        # (engine/core/fuzz/Cargo.toml).
+        run: >
+          cargo +nightly fuzz run --release --fuzz-dir . "$TARGET" --
+          -max_total_time=600 -timeout=60 -rss_limit_mb=2048 -max_len=1048576
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: engine/core/fuzz/artifacts/
+
+  # A scheduled run that fails has no commit to turn red: it opens (or
+  # updates) an issue instead, and the first green night closes it
+  # (.github/workflows/scheduled-failure-issue.yml). Scheduled runs only.
+  notify:
+    name: issue on a failing scheduled run
+    needs: [smoke, fuzz]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/scheduled-failure-issue.yml
+    with:
+      failed: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

@@ -1,0 +1,11 @@
+# Reproducers in this directory that still crash or stall their target: one
+# file name per line, `#` starts a comment. tests/smoke.rs does not run a
+# listed file (it reports it as open; ENGINE_FUZZ_KNOWN=1 runs it), and the
+# nightly run leaves it out of the corpus. Remove the line in the commit
+# that fixes the parser: the file stays, and from then on it must pass.
+
+# A panic in a dependency (sqzer-rav1d 0.1.0, src/decode.rs:4901,
+# `Option::unwrap()` on a `None` value): an AVIF with one damaged byte in its
+# AV1 stream (seeds/raster/bars-420-10bit.avif, byte 441 ^ 0xff) reaches
+# `frame_hdr.as_ref().unwrap()` on the decoder's error path.
+raster-avif-rav1d-unwrap.avif

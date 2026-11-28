@@ -1,0 +1,1 @@
+IF(in_stock, UPPER(name) & ": " & ROUND(price * qty * (1 + rate), 2), "-")

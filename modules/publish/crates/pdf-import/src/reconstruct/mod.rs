@@ -166,10 +166,18 @@ pub fn reconstruct(
 ) -> Result<Reconstruction, Error> {
     let info = vectors::inspect(bytes).map_err(|e| Error::Build(format!("{}: {e}", e.code())))?;
     let n = info.pages.len();
+    if n == 0 {
+        return Err(Error::Build("the PDF has no pages".into()));
+    }
     let (from, to) = match recipe.pages {
         Some([a, b]) => (a.max(1) - 1, b.min(n).max(1) - 1),
-        None => (0, n.saturating_sub(1)),
+        None => (0, n - 1),
     };
+    if from > to {
+        return Err(Error::Build(format!(
+            "the page range starts after page {n}, the PDF's last"
+        )));
+    }
     let sizes: Vec<(usize, f32, f32)> = (from..=to)
         .map(|i| (i, info.pages[i].width_pt, info.pages[i].height_pt))
         .collect();

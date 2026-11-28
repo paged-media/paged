@@ -1,0 +1,1 @@
+TEXT(date, "yyyy-mm-dd") & " " & YEAR(TODAY())
