@@ -1,0 +1,22 @@
+{
+  "about": "The size ratchet of the shipped engine wasm (tooling/ci/wasm-size-ratchet.mjs). `measured` is the release build's size in bytes on CI at `measuredAt`; `max` is what the file may be. A build over `max` fails: raise it here, in the change that grows the artifact, and say why in the commit.",
+  "measuredAt": "6347aa9b1",
+  "artifacts": {
+    "engine/core/packages/canvas-wasm/paged_canvas_wasm_bg.wasm": {
+      "measured": 47467553,
+      "max": 47950000
+    },
+    "engine/core/packages/canvas-wasm/introspect/paged_introspect_wasm_bg.wasm": {
+      "measured": 23702270,
+      "max": 23940000
+    },
+    "engine/core/packages/canvas-wasm/repo/paged_repo_wasm_bg.wasm": {
+      "measured": 737373,
+      "max": 745000
+    },
+    "engine/core/web/idml-viewer/wasm/paged_sdk_bg.wasm": {
+      "measured": 19431750,
+      "max": 19630000
+    }
+  }
+}

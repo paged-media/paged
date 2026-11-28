@@ -119,7 +119,7 @@ The `../corpus/...` paths in `modules/sheet` point at the module's own committed
 | File:line | Old | New |
 | --- | --- | --- |
 | `crates/paged-scene/tests/grid_matrix_corpus.rs:34-36,56-58` | `PAGED_GRID_CORPUS=1` → `../../../corpus` (was `~/paged/corpus`; in the monorepo `engine/corpus`) | `../../../../corpus` = `<repo root>/corpus` |
-| `crates/paged-gen/src/samples/images.rs:96-99,339-346` | `PHOTO_URI = "file:/Users/drietsch/idml/corpus/samples/media/photo.webp"` (an absolute path into a pre-split checkout; resolved on no machine) | `"file:photo.webp"`, resolved by basename under `--links-dir` like `LINK_URI` |
+| `crates/paged-gen/src/samples/images.rs:96-99,339-346` | `PHOTO_URI = "file:/Users/<user>/idml/corpus/samples/media/photo.webp"` (an absolute path into a pre-split checkout; resolved on no machine) | `"file:photo.webp"`, resolved by basename under `--links-dir` like `LINK_URI` |
 | `crates/paged-cli/tests/package_folder.rs:43` | comment: "an absolute `photo.webp` that is on no machine" | "`file:photo.webp`, which is not beside it" |
 | `web/idml-viewer/package.json:8-9` | `repository.url` `paged-media/core.git`, `directory: web/idml-viewer` | `paged-media/paged`, `engine/core/web/idml-viewer` |
 
@@ -155,8 +155,8 @@ at `b612da5d`) are left for step A6.
 | `apps/editor` test suite reading `${REPO_ROOT}/corpus/...` with `REPO_ROOT` = `apps/editor` (≈99 spec files, `tests/e2e/harness/fixtures.ts`, `tests/fidelity/fixtures.ts`, `perf-probe.mjs`) | the editor's own `apps/editor/corpus` symlink convention; rewriting 99 specs would change behaviour. `ln -s ../../corpus apps/editor/corpus` points it at the root corpus. |
 | `~/paged/sync-wasm.sh` (`apps/editor/CLAUDE.md:74,79`), `~/paged/brand/editor` (`apps/editor/CLAUDE.md:116`), `~/paged/cockpit` (`modules/{data,doc,image,sheet,slide}/CLAUDE.md`), `~/paged/thoughts/…` (`modules/sheet/CLAUDE.md:20`) | local tools and private repositories outside this repository; no in-repo equivalent to point at yet. |
 | Rendered showcase prose `apps/editor/apps/canvas/tests/showcase/pages/03-editorial.ts:284`, `12-layers.ts:122` (`~/paged/sync-wasm.sh`) | text printed into the showcase document (output, not instructions). |
-| `apps/editor/apps/canvas/showcase/showcase.coverage.json:2` (`"generatedFrom": "/Users/drietsch/paged/state/registry/features"`) | generated artifact; the next showcase build rewrites it (`"unavailable"` without `PAGED_FEATURE_REGISTRY`). |
-| `apps/editor/apps/canvas/src/worker/render.ts:33`, `engine/core/crates/paged-renderer/src/module/mod.rs:36` (`/Users/drietsch/.claude/plans/…`); `apps/editor/apps/canvas/perf-probe.mjs:13`, `apps/editor/apps/canvas/tests/fidelity/google-fonts.ts:235` (`/Users/drietsch/idml/…`) | code comments, not paths the code uses (the last two describe the pre-split history). Candidates for a publication pass. |
+| `apps/editor/apps/canvas/showcase/showcase.coverage.json:2` (`"generatedFrom": "/Users/<user>/paged/state/registry/features"`) | generated artifact; the next showcase build rewrites it (`"unavailable"` without `PAGED_FEATURE_REGISTRY`). |
+| `apps/editor/apps/canvas/src/worker/render.ts:33`, `engine/core/crates/paged-renderer/src/module/mod.rs:36` (an absolute path to a local plan file); `apps/editor/apps/canvas/perf-probe.mjs:13`, `apps/editor/apps/canvas/tests/fidelity/google-fonts.ts:235` (`/Users/<user>/idml/…`) | code comments, not paths the code uses (the last two describe the pre-split history). Candidates for a publication pass. |
 | `apps/editor/apps/canvas/src/app-commands.ts:88` (`https://github.com/paged-media/editor/issues/new`) | a runtime URL (product behaviour), not a path; switch to `paged-media/paged/issues` when the old repository stops taking issues. |
 | GitHub links to the old repositories' documents: `engine/core/docs/{README.md:51-54, architecture.md:24-25, design/canvas.md:35, design/plugin-metadata-and-baking.md:22,150,152, reference/composition-format.md:127, reference/deferred-scope.md:15, reference/paged-file-format.md:13}`, `modules/doc/docs/concept.md:10,12,77,190,460`, `apps/editor/docs/README.md:58`, `modules/{draw/docs/status.md:94, sheet/docs/status.md:108}` | documentation links; they still resolve while the old repositories exist (read-only). Rewrite to in-repo relative links in a docs pass. |
 | ADRs and status logs (`*/docs/adr/*`, `*/docs/status.md`, `engine/core/crates/paged-sdk/WEBGPU.md:133`, `apps/editor/packages/ai/README.md` "Source: plugin-sdk `df58d0e`") | historical records. |
@@ -167,7 +167,7 @@ at `b612da5d`) are left for step A6.
 ## Leftover grep hits
 
 ```sh
-git grep -nIP '~/paged|\$HOME/paged|/Users/drietsch|\.\./plugin-[a-z]+/|plugins/plugin-|\.\./\.\./editor|\.\./editor/|\.\./core/|\.\./\.\./core/|(?<!@)paged-media/(plugin-[a-z]+|core|editor|editor-server|corpus|state|cockpit|thoughts|brand|viewer|docs|website)\b' \
+git grep -nIP '~/paged|\$HOME/paged|/Users/[a-z]+|\.\./plugin-[a-z]+/|plugins/plugin-|\.\./\.\./editor|\.\./editor/|\.\./core/|\.\./\.\./core/|(?<!@)paged-media/(plugin-[a-z]+|core|editor|editor-server|corpus|state|cockpit|thoughts|brand|viewer|docs|website)\b' \
   -- ':!*pnpm-lock.yaml' ':!*.lock' ':!docs/migration/*' \
   | grep -vE '"\.\./\.\./plugin-(api|sdk|cli)/|\.\./plugin-support|\.\./\.\./\.\./plugin-sdk/test'
 ```
@@ -262,6 +262,6 @@ All in this worktree; exit codes as observed.
 | `PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test corpus` (modules/slide) | 0 — the default found `<repo root>/corpus` |
 | `docker build --check -f apps/server/server/engine/Dockerfile .` | timed out — the daemon could not load base-image metadata ("only one connection allowed") |
 
-Cargo targets were under `/Volumes/Dietz/paged-import/targets/<workspace>`. The
+Cargo targets were under `<scratch volume>/targets/<workspace>`. The
 temporary root `corpus` symlink used for the corpus runs is gitignored and was
 removed afterwards.

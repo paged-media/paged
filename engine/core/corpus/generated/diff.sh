@@ -230,8 +230,8 @@ fi
 if [ -n "$(find "$GATE_OUT" -name .no-cmyk-profile -print -quit 2>/dev/null)" ]; then
     echo
     echo "======================================================================"
-    echo "unavailable: FOGRA39 profile: the pixel gate measured nothing"
-    echo "INCONCLUSIVE — not a regression."
+    echo "NOT MEASURED — unavailable: FOGRA39 profile: the pixel gate measured nothing"
+    echo "INCONCLUSIVE — neither a pass nor a regression."
     echo
     echo "The reference PDFs were exported by InDesign in Coated FOGRA39. This"
     echo "run had no FOGRA39 profile, so pdftoppm rasterised them with"

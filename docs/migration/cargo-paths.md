@@ -254,7 +254,7 @@ read `engine/core/docs/reference/idml-coverage.json`.
 
 ## Verification
 
-Run on the final tree. Each target dir is under `/Volumes/Dietz/paged-import/targets/a6-*`.
+Run on the final tree. Each target dir is under `<scratch volume>/targets/a6-*`.
 
 | Where | Command | Exit | Result |
 | --- | --- | --- | --- |

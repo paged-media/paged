@@ -86,17 +86,19 @@ defaults:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: 1.99.1
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-slide
@@ -104,27 +106,31 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output --check
       - run: cargo clippy -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output --all-targets -- -D warnings
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@bb119f768ea239e765aeaef5769558d4f21213aa # v2.1.5
         with:
           manifest-path: engine/core/Cargo.toml
 
   test:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: 1.99.1
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-slide
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
+        with:
+          tool: nextest
       # Red results must still upload (the cockpit wants the failure), so the
       # run does not abort here; the last step fails the job.
       - name: nextest (junit; red results still upload)
@@ -141,7 +147,7 @@ jobs:
             || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
       - name: upload nextest JUnit artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nextest-junit
           path: engine/core/target/nextest/ci/junit.xml

@@ -1,0 +1,73 @@
+name: scheduled run / issue
+
+# A scheduled workflow fails where nobody is looking: no push, no author, no
+# red mark on a commit (`supply chain` failed every night for nine days in
+# November 2026 before anyone saw it). Every workflow with a `schedule`
+# trigger ends in a job that calls this one, for scheduled runs only:
+#
+#   notify:
+#     needs: [<every other job>]
+#     if: ${{ always() && github.event_name == 'schedule' }}
+#     permissions:
+#       issues: write
+#     uses: ./.github/workflows/scheduled-failure-issue.yml
+#     with:
+#       failed: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+#
+# Failed: it opens the issue "Scheduled workflow failing: <workflow>", or adds
+# a comment to the open one (one issue per workflow, however many nights).
+# Green again: it comments and closes that issue. Only GITHUB_TOKEN, with
+# `issues: write` and nothing else; no label is assumed to exist.
+on:
+  workflow_call:
+    inputs:
+      failed:
+        description: "Whether a job of the scheduled run failed (or was cancelled, as a timeout is)."
+        required: true
+        type: boolean
+
+permissions: {}
+
+jobs:
+  issue:
+    name: open, update or close the issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: open, update or close "Scheduled workflow failing"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ inputs.failed }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="Scheduled workflow failing: ${WORKFLOW}"
+          # The open issue with exactly this title, if there is one.
+          NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,title \
+            | jq -r --arg t "$TITLE" '[.[] | select(.title == $t)][0].number // empty')
+          NOW=$(date -u +%Y-%m-%dT%H:%MZ)
+          if [ "$FAILED" = "true" ]; then
+            if [ -n "$NUMBER" ]; then
+              gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" \
+                --body "Failed again at ${NOW} (commit ${GITHUB_SHA}): ${RUN_URL}"
+              echo "commented on #$NUMBER"
+            else
+              BODY=$(printf '%s\n' \
+                "The scheduled run of **${WORKFLOW}** failed at ${NOW} on commit ${GITHUB_SHA}." \
+                "" \
+                "Run: ${RUN_URL}" \
+                "" \
+                "Nothing was pushed, so no commit shows this failure. This issue is opened by the workflow itself (.github/workflows/scheduled-failure-issue.yml); each further failing night adds a comment, and the first green scheduled run closes it.")
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+            fi
+          elif [ -n "$NUMBER" ]; then
+            gh issue close "$NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --comment "The scheduled run is green again at ${NOW}: ${RUN_URL}"
+            echo "closed #$NUMBER"
+          else
+            echo "green, and no open issue"
+          fi

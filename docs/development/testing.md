@@ -82,7 +82,7 @@ helper in `paged-gpu` (engine/core). Both honour `PAGED_FORCE_NO_GPU`.
 | `PAGED_REQUIRE_ICC`      | A colour test without a CMYK profile fails.                                                                                                                                                    | core `check + test`, after `scripts/fetch-profiles.sh` succeeds                       |
 | `PAGED_REQUIRE_FIXTURES` | A test without its generated fixture or build output fails.                                                                                                                                    | core `check + test`, after `scripts/regen-fixtures.sh`                                |
 | `PAGED_REQUIRE_FONTS`    | A test without its (uncommitted) font fails; so does a corpus pack whose declared licensed font is missing (below).                                                                            | you                                                                                   |
-| `PAGED_REQUIRE_TOOLS`    | A test without its external program fails.                                                                                                                                                     | you                                                                                   |
+| `PAGED_REQUIRE_TOOLS`    | A test without its external program fails.                                                                                                                                                     | core `check + test`, after it installs poppler; you                                   |
 | `PAGED_REQUIRE_SERVER`   | A server lane without `PAGED_SERVER_URL` fails.                                                                                                                                                | you, when running the server lane                                                     |
 | `PAGED_REQUIRE_FOGRA39`  | The core fidelity pixel gate (`engine/core/corpus/generated/diff.sh`) fails instead of exiting 3 (unavailable) when it has no Coated FOGRA39 profile.                                          | a runner that has the profile (none today)                                            |
 | `PAGED_SKIP_LOG`         | File every skip is appended to: `binary id`, `test name`, `resource`, `message`, tab-separated.                                                                                                | every Rust test lane                                                                  |
@@ -118,26 +118,33 @@ whose `default-filter` lists exactly those tests. A plain run reports them as
 skipped (ignored); the lane runs them:
 
 ```sh
-cd engine/core   # or modules/image, modules/doc, modules/sheet, modules/slide
+cd engine/core   # the workspace of the engine and the joined modules (PM-0017)
 PAGED_CORPUS_DIR=~/path/to/corpus PAGED_REQUIRE_CORPUS=1 \
   cargo nextest run --profile corpus --run-ignored only
+# one module's lane: add its packages
+#   -p image-conformance | -p docx-conformance | -p sheet-conformance
+#   -p pptx-import -p pptx-export -p slide-resolve -p slide-sheet
 ```
+
+The profiles live in the workspace's one configuration,
+`engine/core/.config/nextest.toml`: a module that joined the workspace has no
+configuration of its own.
 
 Without `--run-ignored only` the profile selects nothing and nextest fails
 ("no tests to run"). Without the corpus, each test prints
 `unavailable: private corpus: …` and returns; with `PAGED_REQUIRE_CORPUS=1`
 it fails.
 
-| Workspace          | Profile  | Tests | Ignore reason                                                                                                                  | Needs                                                                                               |
-| ------------------ | -------- | ----- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| engine/core        | `corpus` | 13    | `corpus: idml`, `corpus: idml/samples`                                                                                         | `<corpus>/idml` (idml-export round-trips, the grid matrix, ruler guides, the repository round-trip) |
-| engine/core        | `lanes`  | 3     | `lane: annual (PAGED_DIGEST_GATE_ANNUAL)`, `lane: annual (PAGED_LATE_FONTS_ANNUAL)`, `lane: package diff (PAGED_DIFF_PACKAGE)` | the file the variable names                                                                         |
-| modules/image      | `corpus` | 13    | `corpus: psd`, `corpus: jpeg (…)`, `corpus: png (…)`, `corpus: raster`                                                         | `<corpus>/psd`, the packs and `raster/`                                                             |
-| modules/image      | `abr`    | 4     | `clean-room: abr (…)`                                                                                                          | the clean-room ABR mount (`PAGED_ABR_CORPUS=1`, `PAGED_ABR_CORPUS_DIR`)                             |
-| modules/doc        | `corpus` | 5     | `corpus: docx`                                                                                                                 | `<corpus>/docx`                                                                                     |
-| modules/sheet      | `corpus` | 5     | `corpus: xlsx`                                                                                                                 | `<corpus>/xlsx`                                                                                     |
-| modules/slide      | `corpus` | 5     | `corpus: pptx`                                                                                                                 | `<corpus>/pptx`                                                                                     |
-| apps/server/server | `server` | 14    | `server: a running paged.server (PAGED_SERVER_URL)`                                                                            | a running server (README.md); `PAGED_REQUIRE_SERVER=1`                                              |
+| Workspace           | Profile  | Tests | Ignore reason                                                                                                                  | Needs                                                                                               |
+| ------------------- | -------- | ----- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| engine/core         | `corpus` | 13    | `corpus: idml`, `corpus: idml/samples`                                                                                         | `<corpus>/idml` (idml-export round-trips, the grid matrix, ruler guides, the repository round-trip) |
+| engine/core         | `lanes`  | 3     | `lane: annual (PAGED_DIGEST_GATE_ANNUAL)`, `lane: annual (PAGED_LATE_FONTS_ANNUAL)`, `lane: package diff (PAGED_DIFF_PACKAGE)` | the file the variable names                                                                         |
+| engine/core (image) | `corpus` | 13    | `corpus: psd`, `corpus: jpeg (…)`, `corpus: png (…)`, `corpus: raster`                                                         | `<corpus>/psd`, the packs and `raster/` (`-p image-conformance`)                                    |
+| engine/core (image) | `abr`    | 4     | `clean-room: abr (…)`                                                                                                          | the clean-room ABR mount (`PAGED_ABR_CORPUS=1`, `PAGED_ABR_CORPUS_DIR`)                             |
+| engine/core (doc)   | `corpus` | 5     | `corpus: docx`                                                                                                                 | `<corpus>/docx` (`-p docx-conformance`)                                                             |
+| engine/core (sheet) | `corpus` | 9     | `corpus: xlsx`                                                                                                                 | `<corpus>/xlsx` (`-p sheet-conformance`)                                                            |
+| engine/core (slide) | `corpus` | 7     | `corpus: pptx`                                                                                                                 | `<corpus>/pptx` (`-p pptx-import -p pptx-export -p slide-resolve -p slide-sheet`)                   |
+| apps/server/server  | `server` | 14    | `server: a running paged.server (PAGED_SERVER_URL)`                                                                            | a running server (README.md); `PAGED_REQUIRE_SERVER=1`                                              |
 
 A new lane test joins its profile's filter in the same change.
 
@@ -200,17 +207,17 @@ Add `PAGED_SKIP_LOG=/tmp/skips.tsv` to see what reported unavailable, and
 
 ## CI
 
-| Lane                                                  | Claims                                 | What it sets                                                                                                                                                                                            |
-| ----------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core `check + test` (Linux nextest, macOS cargo test) | a CMYK profile, the generated fixtures | `PAGED_REQUIRE_ICC=1` when the profile fetch worked, `PAGED_REQUIRE_FIXTURES=1` after the regeneration; `PAGED_SKIP_LOG`; lane report                                                                   |
-| core `vello on lavapipe`                              | a GPU adapter (Mesa lavapipe)          | `PAGED_REQUIRE_GPU=1` (and the vulkaninfo check); lane report                                                                                                                                           |
-| core `corpus diff` (fidelity)                         | Coated FOGRA39 for the pixel gate      | nothing: no runner has the profile, so the gate reports `unavailable: FOGRA39 profile` in its step name, log, annotation and job summary; the golden snapshot and the text-layer gate still gate        |
-| image `rust engine`                                   | **no GPU**                             | named "test (CPU only; device tests are unavailable here)"; the lane report lists the device tests as unavailable                                                                                       |
-| image `nextest evidence` (publish-state)              | **no GPU**                             | the lane report marks the device tests `<skipped>` in the JUnit before the upload                                                                                                                       |
-| image `rust GPU tests (lavapipe)`, `(Metal)`          | a GPU adapter                          | `PAGED_REQUIRE_GPU=1`; lane report. Measured on main: 1,192 executed, 0 unavailable on both; the no-GPU `rust engine` lane and the publish-state evidence report 282 unavailable and 910 executed       |
-| slide, doc, sheet nextest                             | nothing optional                       | `PAGED_SKIP_LOG`, `--no-tests=fail`, lane report                                                                                                                                                        |
-| data, publish, web nextest                            | nothing optional                       | `--no-tests=fail`                                                                                                                                                                                       |
-| editor Playwright (`editor / tests`)                  | **no GPU**                             | the bundled Chromium has no WebGPU adapter, so the journeys run the CPU fallback; no step claims GPU coverage (the WebGPU path runs in the local `journeys-gpu` project and the macOS showcase nightly) |
+| Lane                                                  | Claims                                 | What it sets                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| core `check + test` (Linux nextest, macOS cargo test) | a CMYK profile, the generated fixtures | `PAGED_REQUIRE_ICC=1` when the profile fetch worked, `PAGED_REQUIRE_FIXTURES=1` after the regeneration; `PAGED_SKIP_LOG`; lane report                                                                                                                               |
+| core `vello on lavapipe`                              | a GPU adapter (Mesa lavapipe)          | `PAGED_REQUIRE_GPU=1` (and the vulkaninfo check); lane report                                                                                                                                                                                                       |
+| core `corpus diff` (fidelity)                         | Coated FOGRA39 for the pixel gate      | nothing: no runner has the profile, so the gate reports `NOT MEASURED` (`unavailable: FOGRA39 profile`) in its step name, log, warning annotation and job summary, and as a neutral check run on the commit; the golden snapshot and the text-layer gate still gate |
+| image `rust engine`                                   | **no GPU**                             | named "test (CPU only; device tests are unavailable here)"; the lane report lists the device tests as unavailable                                                                                                                                                   |
+| image `nextest evidence` (publish-state)              | **no GPU**                             | the lane report marks the device tests `<skipped>` in the JUnit before the upload                                                                                                                                                                                   |
+| image `rust GPU tests (lavapipe)`, `(Metal)`          | a GPU adapter                          | `PAGED_REQUIRE_GPU=1`; lane report. Measured on main: 1,192 executed, 0 unavailable on both; the no-GPU `rust engine` lane and the publish-state evidence report 282 unavailable and 910 executed                                                                   |
+| slide, doc, sheet nextest                             | nothing optional                       | `PAGED_SKIP_LOG`, `--no-tests=fail`, lane report                                                                                                                                                                                                                    |
+| data, publish, web nextest                            | nothing optional                       | `--no-tests=fail`                                                                                                                                                                                                                                                   |
+| editor Playwright (`editor / tests`)                  | **no GPU**                             | the bundled Chromium has no WebGPU adapter, so the journeys run the CPU fallback; no step claims GPU coverage (the WebGPU path runs in the local `journeys-gpu` project and the macOS showcase nightly)                                                             |
 
 **The lane report** is `tooling/rust/skip-report.py`. Given nextest's JUnit
 (`--junit`) it adds a `<skipped message="unavailable: …">` to every logged test
@@ -236,3 +243,37 @@ output` reason when the image-js wasm is not built and runs under `REQUIRE_REAL_
   ([`platform/extensions/docs/testing-plugins.md`](../../platform/extensions/docs/testing-plugins.md)).
 - **Corpus lanes in CI:** the corpus is private, so no CI lane runs them.
   Run them locally (above).
+
+## Checks that hold the lanes themselves
+
+These run in `fmt / bun fmt` (job `repository hygiene`) on every push; each has
+its tests beside it in `tooling/ci/`.
+
+- **Every test file is in a lane** (`tooling/ci/test-lanes.mjs`,
+  `test-lanes.json`). The map names, for each group of JavaScript/TypeScript
+  test files, the workflow and the command text of the step that runs them.
+  A test file outside every lane fails the check, and so does a lane whose
+  step is no longer in its workflow. A file no CI step can run (it needs a
+  WebGPU adapter, the private corpus, a local Office install) is listed under
+  `unlaned` with that reason: listed is not run.
+- **No private path** (`tooling/ci/private-paths.mjs`,
+  `private-paths-allow.json`): no home directory, named local volume, per-user
+  tool state or private-repository citation in a tracked file. The pre-commit
+  hook runs it on the staged files.
+
+Three more hold what CI does with its results:
+
+- **A deploy needs the commit's checks.** `release.yml`'s `deploy` job needs
+  its `checks` job, which waits for every workflow the push started for the
+  commit and fails unless all of them succeeded
+  (`tooling/ci/await-commit-checks.mjs`).
+- **The engine wasm is built once per commit.** `engine / wasm`
+  (`.github/workflows/engine-wasm.yml`) builds it on every push to main;
+  `.github/actions/engine-wasm` in every other workflow restores that build,
+  waiting for it on a miss. The same workflow holds the shipped wasm files to
+  the sizes in `tooling/ci/engine-wasm-sizes.json`
+  (`tooling/ci/wasm-size-ratchet.mjs`): an artifact may only grow with an edit
+  of that file.
+- **A failing scheduled run opens an issue**
+  (`.github/workflows/scheduled-failure-issue.yml`), and the first green night
+  closes it.

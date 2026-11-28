@@ -20,6 +20,12 @@ on:
     - cron: "41 2 * * *"
   workflow_dispatch:
 
+# The token reads the repository, and the previous run's results artifact
+# (`gh run list` / `gh run download` in the bench job); nothing else.
+permissions:
+  contents: read
+  actions: read
+
 defaults:
   run:
     working-directory: engine/core
@@ -31,10 +37,12 @@ jobs:
   toolchain:
     name: resolve pinned toolchain
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 10
     outputs:
       channel: ${{ steps.pin.outputs.channel }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
 
@@ -44,11 +52,11 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ needs.toolchain.outputs.channel }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -70,8 +78,21 @@ jobs:
           python3 scripts/perf/criterion-summary.py perf-results.json previous/perf-results.json >> "$GITHUB_STEP_SUMMARY"
           cat "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: perf-results
           path: engine/core/perf-results.json
           retention-days: 90
+
+  # A scheduled run that fails has no commit to turn red: it opens (or
+  # updates) an issue instead, and the first green night closes it
+  # (.github/workflows/scheduled-failure-issue.yml). Scheduled runs only.
+  notify:
+    name: issue on a failing scheduled run
+    needs: [toolchain, bench]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/scheduled-failure-issue.yml
+    with:
+      failed: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

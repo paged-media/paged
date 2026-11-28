@@ -1,0 +1,391 @@
+{
+  "lanes": [
+    {
+      "name": "editor / scripts: cross-origin-isolation-check",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:boot-coi",
+      "files": ["apps/editor/scripts/cross-origin-isolation-check.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: network-policy",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:network-policy",
+      "files": ["apps/editor/scripts/network-policy.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: trusted-types",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:trusted-types",
+      "files": ["apps/editor/scripts/trusted-types.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: modules",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:modules",
+      "files": ["apps/editor/scripts/modules.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: spread-pages",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:spread-pages",
+      "files": ["apps/editor/scripts/spread-pages.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: fidelity-thresholds-schema",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:thresholds",
+      "files": ["apps/editor/scripts/fidelity-thresholds-schema.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: quarantine-guard",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:quarantine",
+      "files": ["apps/editor/scripts/quarantine-guard.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: journal",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:journal",
+      "files": ["apps/editor/scripts/journal.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: object-model",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:object-model",
+      "files": ["apps/editor/scripts/object-model.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: surface-coverage",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun test ./scripts/surface-coverage.test.mjs",
+      "files": ["apps/editor/scripts/surface-coverage.test.mjs"]
+    },
+    {
+      "name": "editor / scripts: interaction contract",
+      "workflow": "editor-tests.yml",
+      "evidence": "./scripts/interaction-inventory.test.mjs ./scripts/uxi-coverage.test.mjs",
+      "files": [
+        "apps/editor/scripts/{interaction-inventory,uxi-coverage}.test.mjs"
+      ]
+    },
+    {
+      "name": "editor / local library",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:repository",
+      "files": ["apps/editor/packages/repository/**"]
+    },
+    {
+      "name": "editor / tool gesture handlers",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:tools",
+      "files": ["apps/editor/packages/tools/**"]
+    },
+    {
+      "name": "editor / shell",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:shell --reporter",
+      "files": ["apps/editor/packages/shell/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "editor / shell, DOM",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:shell-dom",
+      "files": ["apps/editor/packages/shell/**/*.dom.test.*"]
+    },
+    {
+      "name": "editor / canvas unit",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:canvas-unit",
+      "files": ["apps/editor/apps/canvas/test/unit/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "editor / canvas plain specs outside test/unit",
+      "workflow": "editor-tests.yml",
+      "evidence": "--path-ignore-patterns 'test/unit/**' --path-ignore-patterns 'test/measure/**'",
+      "files": ["apps/editor/apps/canvas/test/**"],
+      "except": [
+        "**/*.dom.test.*",
+        "apps/editor/apps/canvas/test/unit/**",
+        "apps/editor/apps/canvas/test/measure/**"
+      ]
+    },
+    {
+      "name": "editor / canvas DOM",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:dom --reporter",
+      "files": ["apps/editor/apps/canvas/**/*.dom.test.*"]
+    },
+    {
+      "name": "editor / headless editor",
+      "workflow": "editor-tests.yml",
+      "evidence": "bun run test:headless",
+      "files": ["apps/editor/apps/canvas/tests/headless/**"]
+    },
+    {
+      "name": "editor / playwright chromium",
+      "workflow": "editor-tests.yml",
+      "evidence": "--project=chromium",
+      "files": ["apps/editor/apps/canvas/tests/**/*.spec.ts"],
+      "except": [
+        "apps/editor/apps/canvas/tests/journey/**",
+        "apps/editor/apps/canvas/tests/showcase/**",
+        "apps/editor/apps/canvas/tests/films/**",
+        "apps/editor/apps/canvas/tests/perf/**",
+        "apps/editor/apps/canvas/tests/headless/**",
+        "apps/editor/apps/canvas/tests/e2e/extensive-corpus.spec.ts"
+      ]
+    },
+    {
+      "name": "editor / playwright journeys",
+      "workflow": "editor-tests.yml",
+      "evidence": "--project=journeys",
+      "files": ["apps/editor/apps/canvas/tests/journey/**/*.journey.spec.ts"],
+      "except": [
+        "**/{gpu-backend,gpu-reentrancy,snapshot-backends,gpu-device-loss}.journey.spec.ts"
+      ]
+    },
+    {
+      "name": "editor / playwright integration",
+      "workflow": "editor-tests.yml",
+      "evidence": "--project=integration",
+      "files": ["tests/integration/**/*.spec.ts"]
+    },
+    {
+      "name": "editor / showcase (nightly)",
+      "workflow": "editor-showcase-nightly.yml",
+      "evidence": "--project=showcase",
+      "files": ["apps/editor/apps/canvas/tests/showcase/**/*.spec.ts"]
+    },
+    {
+      "name": "editor / perf budgets (nightly)",
+      "workflow": "editor-perf-nightly.yml",
+      "evidence": "tests/perf/budgets.perf.spec.ts",
+      "files": ["apps/editor/apps/canvas/tests/perf/budgets.perf.spec.ts"]
+    },
+    {
+      "name": "tests / contracts",
+      "workflow": "tests.yml",
+      "evidence": "bun run test:contracts",
+      "files": ["tests/contracts/**"]
+    },
+    {
+      "name": "tests / system",
+      "workflow": "tests.yml",
+      "evidence": "bun run test:system",
+      "files": ["tests/system/**"]
+    },
+    {
+      "name": "core / idml-viewer",
+      "workflow": "core-ci.yml",
+      "evidence": "working-directory: engine/core/web/idml-viewer",
+      "files": ["engine/core/web/idml-viewer/**"]
+    },
+    {
+      "name": "core / fidelity measurements script",
+      "workflow": "core-fidelity.yml",
+      "evidence": "bun test scripts/measurements-from-fidelity.test.mjs",
+      "files": ["engine/core/scripts/measurements-from-fidelity.test.mjs"]
+    },
+    {
+      "name": "extensions / plugin-sdk",
+      "workflow": "extensions-vitest.yml",
+      "evidence": "cd packages/plugin-sdk && bun run test",
+      "files": ["platform/extensions/packages/plugin-sdk/**"]
+    },
+    {
+      "name": "extensions / ai",
+      "workflow": "extensions-vitest.yml",
+      "evidence": "cd ../shared/ai && bun run test",
+      "files": ["platform/shared/ai/**"]
+    },
+    {
+      "name": "extensions / test-kit",
+      "workflow": "extensions-vitest.yml",
+      "evidence": "cd ../shared/test-kit && bun run test",
+      "files": ["platform/shared/test-kit/**"]
+    },
+    {
+      "name": "extensions / paged-node",
+      "workflow": "extensions-vitest.yml",
+      "evidence": "name: paged-node (typecheck + the whole suite)",
+      "files": ["apps/cli/test/**"]
+    },
+    {
+      "name": "shared / helpers",
+      "workflow": "shared-test.yml",
+      "evidence": "--filter './platform/shared/helpers'",
+      "files": ["platform/shared/helpers/**"]
+    },
+    {
+      "name": "shared / panel-kit",
+      "workflow": "shared-test.yml",
+      "evidence": "--filter './platform/shared/panel-kit'",
+      "files": ["platform/shared/panel-kit/**"]
+    },
+    {
+      "name": "shared / strings",
+      "workflow": "shared-test.yml",
+      "evidence": "--filter './platform/shared/strings'",
+      "files": ["platform/shared/strings/**"]
+    },
+    {
+      "name": "shared / wasm-boot",
+      "workflow": "shared-test.yml",
+      "evidence": "--filter './platform/shared/wasm-boot'",
+      "files": ["platform/shared/wasm-boot/**"]
+    },
+    {
+      "name": "shared / vector-geometry",
+      "workflow": "shared-test.yml",
+      "evidence": "--filter './platform/shared/vector-geometry'",
+      "files": ["platform/shared/vector-geometry/**"]
+    },
+    {
+      "name": "shared / vector-tools",
+      "workflow": "shared-test.yml",
+      "evidence": "--filter './platform/shared/vector-tools'",
+      "files": ["platform/shared/vector-tools/**"]
+    },
+    {
+      "name": "shared / react-live",
+      "workflow": "editor-tests.yml",
+      "evidence": "working-directory: platform/shared/react-live",
+      "files": ["platform/shared/react-live/**"]
+    },
+    {
+      "name": "data / bun test",
+      "workflow": "data-vitest.yml",
+      "evidence": "bun run --filter './packages/*' test",
+      "files": ["modules/data/packages/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "data / bun test:dom",
+      "workflow": "data-vitest.yml",
+      "evidence": "bun run --filter './packages/data-bundle' test:dom",
+      "files": ["modules/data/packages/data-bundle/**/*.dom.test.*"]
+    },
+    {
+      "name": "doc / bun test",
+      "workflow": "doc-vitest.yml",
+      "evidence": "bun run --filter './packages/*' test",
+      "files": ["modules/doc/packages/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "doc / bun test:dom",
+      "workflow": "doc-vitest.yml",
+      "evidence": "cd packages/doc-bundle && bun run test:dom",
+      "files": ["modules/doc/packages/doc-bundle/**/*.dom.test.*"]
+    },
+    {
+      "name": "draw / bun test",
+      "workflow": "draw-vitest.yml",
+      "evidence": "bun run --filter './packages/*' test",
+      "files": ["modules/draw/packages/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "draw / bun test:dom",
+      "workflow": "draw-vitest.yml",
+      "evidence": "cd packages/draw-bundle && bun run test:dom",
+      "files": ["modules/draw/packages/draw-bundle/**/*.dom.test.*"]
+    },
+    {
+      "name": "sheet / bun test",
+      "workflow": "sheet-vitest.yml",
+      "evidence": "bun run --filter './packages/*' test",
+      "files": ["modules/sheet/packages/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "sheet / bun test:dom",
+      "workflow": "sheet-vitest.yml",
+      "evidence": "bun run --filter './packages/sheet-bundle' test:dom",
+      "files": ["modules/sheet/packages/sheet-bundle/**/*.dom.test.*"]
+    },
+    {
+      "name": "web / bun test",
+      "workflow": "web-vitest.yml",
+      "evidence": "bun run --filter './packages/*' test",
+      "files": ["modules/web/packages/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "web / bun test:dom",
+      "workflow": "web-vitest.yml",
+      "evidence": "bun run test:dom",
+      "files": ["modules/web/packages/web-bundle/**/*.dom.test.*"]
+    },
+    {
+      "name": "slide / bun test",
+      "workflow": "slide-bundle.yml",
+      "evidence": "bun run --filter './packages/*' test",
+      "files": ["modules/slide/packages/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "slide / bun test:dom",
+      "workflow": "slide-bundle.yml",
+      "evidence": "cd packages/slide-bundle && bun run test:dom",
+      "files": ["modules/slide/packages/slide-bundle/**/*.dom.test.*"]
+    },
+    {
+      "name": "image / bun test",
+      "workflow": "image-ci.yml",
+      "evidence": "bun run --filter './glue' --filter './manifest' test",
+      "files": ["modules/image/{glue,manifest}/**"],
+      "except": ["**/*.dom.test.*"]
+    },
+    {
+      "name": "image / bun test:dom",
+      "workflow": "image-ci.yml",
+      "evidence": "bun run test:dom",
+      "files": ["modules/image/glue/**/*.dom.test.*"]
+    },
+    {
+      "name": "publish / bun test",
+      "workflow": "publish-ci.yml",
+      "evidence": "(cd \"$d\" && bun run test",
+      "files": ["modules/publish/packages/**"]
+    },
+    {
+      "name": "tooling / ci scripts",
+      "workflow": "fmt.yml",
+      "evidence": "bun test tooling/ci",
+      "files": ["tooling/ci/**"]
+    }
+  ],
+  "unlaned": [
+    {
+      "file": "apps/editor/apps/canvas/test/measure/panels.measure.test.tsx",
+      "reason": "the React Compiler re-render measurement (bun run test:render-counts runs it twice and prints both); a measurement, not a pass/fail lane, and no CI step runs it"
+    },
+    {
+      "file": "apps/editor/apps/canvas/tests/journey/**/{gpu-backend,gpu-reentrancy,snapshot-backends,gpu-device-loss}.journey.spec.ts",
+      "reason": "the journeys-gpu Playwright project: needs real Chrome with a WebGPU adapter, which no hosted runner has; run locally (bun run test:journeys:gpu). NOT RUN IN CI"
+    },
+    {
+      "file": "apps/editor/apps/canvas/tests/perf/{features,panels}.perf.spec.ts",
+      "reason": "local performance probes; the nightly perf lane runs budgets.perf.spec.ts only. NOT RUN IN CI"
+    },
+    {
+      "file": "apps/editor/apps/canvas/tests/e2e/extensive-corpus.spec.ts",
+      "reason": "reads the private corpus manifest and reference PDFs at import time (PAGED_CI_LEAN drops it); local only. NOT RUN IN CI"
+    },
+    {
+      "file": "tests/fidelity/editor-packs.spec.ts",
+      "reason": "the per-pack pixel sweep over the private corpus (Playwright project `fidelity`); local only. NOT RUN IN CI"
+    },
+    {
+      "file": "tests/gpu/**",
+      "reason": "needs a WebGPU adapter (bun run test:gpu in tests/); no CI step runs it. NOT RUN IN CI"
+    },
+    {
+      "file": "tooling/oracle/office/word/real-docx/measure.spec.ts",
+      "reason": "an oracle measurement that drives a local Word install; not a test lane"
+    }
+  ]
+}

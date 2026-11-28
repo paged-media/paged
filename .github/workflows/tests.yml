@@ -45,6 +45,8 @@ on:
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/tests.yml"
       - "tsconfig.base.json"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -76,6 +78,8 @@ on:
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/tests.yml"
       - "tsconfig.base.json"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -84,6 +88,9 @@ on:
 
 permissions:
   contents: read
+  # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit
+  # (it waits for that build instead of building the engine a second time).
+  actions: read
 
 jobs:
   tests:
@@ -91,14 +98,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -159,25 +166,6 @@ jobs:
           PAGED_REQUIRE_BROWSER: "1"
         run: bun run test:system --reporter=junit --reporter-outfile=junit.system.bun.xml
 
-      # The T7 trial, advisory: five runs of the wasm boot checks per driver
-      # (the Playwright library, the lane's, and Bun.WebView's Chrome
-      # backend), so the comparison keeps collecting CI runs
-      # (docs/migration/bun-webview.md). Never gating.
-      - name: T7 trial, Playwright library vs Bun.WebView (advisory)
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        working-directory: tests
-        run: bun system/wasm-boot/trial.ts --runs 5 --json "$RUNNER_TEMP/t7-trial.json"
-      - name: upload the trial
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: t7-trial
-          path: ${{ runner.temp }}/t7-trial.json
-          if-no-files-found: warn
-          retention-days: 30
-
       - name: JUnit in the shape the evidence reads
         if: always()
         working-directory: tests
@@ -187,7 +175,7 @@ jobs:
           bun ../tooling/js/bun-junit.mjs --out junit-all.xml junit.*.bun.xml
       - name: upload the JUnit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tests-junit
           path: tests/junit-all.xml

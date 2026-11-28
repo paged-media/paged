@@ -16,6 +16,8 @@ permissions:
 jobs:
   dns:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 15
     steps:
       - name: create/update CNAMEs for the Pages custom domains
         env:

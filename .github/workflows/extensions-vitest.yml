@@ -44,6 +44,14 @@ on:
       - "apps/cli/**"
       # paged-node's merge goldens read paged.data's InDesign Data Merge lane.
       - "modules/data/conformance/indesign-merge/**"
+      # paged-node's suite (the `cli` job) loads every built-in from source
+      # and boots its engine wasm (.github/actions/module-wasm).
+      - "modules/*/packages/*/src/**"
+      - "modules/image/glue/src/**"
+      - "modules/*/scripts/build-wasm.sh"
+      - ".github/actions/module-wasm/**"
+      # The tool versions (Bun, Node, moon).
+      - ".prototools"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -78,6 +86,14 @@ on:
       - "apps/cli/**"
       # paged-node's merge goldens read paged.data's InDesign Data Merge lane.
       - "modules/data/conformance/indesign-merge/**"
+      # paged-node's suite (the `cli` job) loads every built-in from source
+      # and boots its engine wasm (.github/actions/module-wasm).
+      - "modules/*/packages/*/src/**"
+      - "modules/image/glue/src/**"
+      - "modules/*/scripts/build-wasm.sh"
+      - ".github/actions/module-wasm/**"
+      # The tool versions (Bun, Node, moon).
+      - ".prototools"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -100,6 +116,9 @@ on:
 
 permissions:
   contents: read
+  # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit
+  # (it waits for that build instead of building the engine a second time).
+  actions: read
 
 defaults:
   run:
@@ -112,14 +131,14 @@ jobs:
     # A cold engine wasm build (a cache miss) takes most of this.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -145,6 +164,11 @@ jobs:
           bun scripts/sync-wire.mjs --check
           bun scripts/sync-catalog.mjs --check
           bun scripts/gen-core-commands.mjs --check
+
+      # The contract and the SDK with its tests (plugin-sdk's tsconfig
+      # includes test/), against the engine's wire types built above.
+      - name: typecheck (plugin-api, plugin-sdk and its tests)
+        run: bun run --filter './packages/plugin-*' typecheck
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),
@@ -184,21 +208,6 @@ jobs:
           ( cd ../shared/ai && bun run test --reporter=junit --reporter-outfile=junit.bun.xml ) \
             || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
-      # paged-node (apps/cli): its golden transcripts, every verb against
-      # the engine built above (the model of `ai` is a local fake). The data
-      # verbs' successes need the paged.data engine wasm, which this job does
-      # not build: they report `unavailable` and are skipped. The package's
-      # other specs need it too, so only the goldens run here, with those
-      # that need only the engine: `paged mcp` against the Rust CLI's tool
-      # list (mcp-parity), the npm bundle of the CLI under Node (npm-bundle,
-      # the `paged` bin of @paged-media/paged), and `preflight` / `package`
-      # with the workspace's paged.publish (cli-publish).
-      - name: paged-node golden tests, paged mcp parity, the npm bundle, preflight and package
-        run: |
-          ( cd ../../apps/cli && bun run test test/cli-golden.spec.ts test/mcp-parity.spec.ts test/npm-bundle.spec.ts test/cli-publish.spec.ts \
-              --reporter=junit --reporter-outfile=junit.bun.xml ) \
-            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
-
       # The shared test kit (platform/shared/test-kit): the gesture kit's
       # editor half, the engine's transform maths as properties, the gesture
       # invariants per kind and the gesture fuzzer (25 seeded sequences a
@@ -209,38 +218,30 @@ jobs:
           ( cd ../shared/test-kit && bun run test --reporter=junit --reporter-outfile=junit.bun.xml ) \
             || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
-      # The three suites above as evidence, one artifact each (ai-junit,
-      # cli-junit, test-kit-junit), in the vitest shape the plugin-sdk
-      # report has (tooling/js/bun-junit.mjs). A suite that wrote no report
-      # fails the job.
-      - name: ai, cli and test-kit JUnit
+      # The two suites above as evidence, one artifact each (ai-junit,
+      # test-kit-junit), in the vitest shape the plugin-sdk report has
+      # (tooling/js/bun-junit.mjs). A suite that wrote no report fails the
+      # job. paged-node's (cli-junit) comes from the `cli` job below.
+      - name: ai and test-kit JUnit
         if: ${{ !cancelled() }}
         working-directory: .
         run: |
           set -uo pipefail
-          for dir in platform/shared/ai apps/cli platform/shared/test-kit; do
+          for dir in platform/shared/ai platform/shared/test-kit; do
             bun tooling/js/bun-junit.mjs --out "$dir/junit.xml" "$dir/junit.bun.xml" \
               || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
           done
       - name: upload ai JUnit
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ai-junit
           path: platform/shared/ai/junit.xml
           if-no-files-found: error
           retention-days: 14
-      - name: upload cli JUnit
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: cli-junit
-          path: apps/cli/junit.xml
-          if-no-files-found: error
-          retention-days: 14
       - name: upload test-kit JUnit
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-kit-junit
           path: platform/shared/test-kit/junit.xml
@@ -249,10 +250,123 @@ jobs:
 
       - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vitest-junit
           path: platform/extensions/packages/plugin-sdk/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: tests failed
+        if: ${{ env.TESTS_FAILED == '1' }}
+        run: exit 1
+
+  # paged-node (apps/cli): the WHOLE suite and its typecheck. Until
+  # 2026-11-28 the job above ran four of its specs, because the others load
+  # the built-ins from source and boot their engine wasm, which that job does
+  # not build; they reported `unavailable` there and nothing else ran them.
+  # This job restores (or builds) the engine's packages and every module's
+  # wasm, as `tests / contracts + system` does, so no spec has a reason to
+  # skip for a missing wasm (REQUIRE_REAL_DOCX holds the doc specs to that);
+  # what still skips is listed in the job summary.
+  cli:
+    name: paged-node (typecheck + the whole suite)
+    runs-on: ubuntu-latest
+    # Cache hits make this minutes; a cold engine or module build takes the rest.
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: apps/cli
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+
+      - name: typecheck
+        run: bun run typecheck
+
+      # bin.spec.ts runs the built bin and skips itself without dist/.
+      - name: build the bin
+        run: bun run build
+
+      # Every spec under test/. Red results still upload: the gate is the
+      # last step.
+      - name: bun test → JUnit
+        env:
+          REQUIRE_REAL_DOCX: "1"
+        run: |
+          set -uo pipefail
+          bun run test --reporter=junit --reporter-outfile=junit.bun.xml \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+          bun ../../tooling/js/bun-junit.mjs --out junit.xml junit.bun.xml \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+          test -s junit.xml
+
+      # Skipped is not passed: the job summary names every skipped case.
+      # With every wasm built, the expected ones are the lane that needs a
+      # packed @paged-media/publish (PAGED_PUBLISH_BUNDLE) and the cases that
+      # need a running ML host; anything else is a build output the specs
+      # did not find.
+      - name: skipped cases, in the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          test -s junit.bun.xml || exit 0
+          SKIPPED=$(grep -c '<skipped' junit.bun.xml || true)
+          {
+            echo "### paged-node: $SKIPPED skipped test case(s)"
+            grep -B1 '<skipped' junit.bun.xml | grep -o 'name="[^"]*"' | sort -u | sed 's/^/- /' | head -100
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SKIPPED" != "0" ]; then
+            echo "::warning::$SKIPPED paged-node test case(s) were skipped (not run, not passed); the job summary lists them."
+          fi
+
+      - name: upload cli JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cli-junit
+          path: apps/cli/junit.xml
           if-no-files-found: error
           retention-days: 14
 

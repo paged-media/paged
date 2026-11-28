@@ -1,7 +1,7 @@
 name: release
 
 # The repository's one release workflow (docs/adr/PM-0008). Two jobs, chosen
-# by what triggered the run:
+# by what triggered the run (`deploy` behind its gate job, `checks`):
 #
 #   npm     A tag v0.<protocol>.<patch>[-prerelease] (pushed, or a dispatch
 #           on the tag's ref): the four public npm packages at the tag's
@@ -17,6 +17,8 @@ name: release
 #           on main, or the engine-updated repository_dispatch: the editor
 #           playground (apps/canvas `demo` build) to Cloudflare Pages
 #           (play.paged.media), its wasm hosted on modules.paged.media.
+#           It runs only after `checks`: every check workflow of the commit
+#           succeeded (tooling/ci/await-commit-checks.mjs).
 #
 # TRUSTED PUBLISHING is keyed on this file's NAME: npm matches the OIDC claims
 # (repository paged-media/paged, workflow release.yml, no environment) against
@@ -49,6 +51,9 @@ on:
       - "apps/editor/**"
       - "modules/**"
       - "platform/extensions/packages/**"
+      # The shared packages of the built-ins and the editor (PM-0002), and
+      # the shared Rust crates compiled into the module wasm.
+      - "platform/shared/**"
       - "engine/core/crates/**"
       # The shared formatting crate (engine/core/crates/paged-fmt), compiled into the engine.
       - "engine/core/crates/paged-fmt/**"
@@ -60,10 +65,15 @@ on:
       # The shared module wasm build every scripts/build-wasm.sh calls.
       - "tooling/rust/**"
       - "tooling/bootstrap.sh"
+      # The deploy gate and the pinned wrangler.
+      - "tooling/ci/await-commit-checks.mjs"
+      - "tooling/release/wrangler/**"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/release.yml"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -71,6 +81,7 @@ on:
       - "!apps/editor/docs/**/*.md"
       # Module prose (B3a made every module an editor input).
       - "!modules/*/docs/**/*.md"
+      - "!platform/shared/**/*.md"
   workflow_dispatch:
   repository_dispatch:
     types: [engine-updated]
@@ -85,6 +96,9 @@ jobs:
     name: npm (the four public packages)
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    # A cold build of the engine and every module wasm, the checks, the
+    # packing and the clean-room test: about an hour. Two is a hang.
+    timeout-minutes: 150
     permissions:
       contents: read
       id-token: write # the OIDC token trusted publishing exchanges, and provenance
@@ -93,7 +107,7 @@ jobs:
       group: release-npm
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The version is the tag. A dispatch accepts any ref; from a branch it
       # would version a release "main", so only a tag ref passes.
@@ -117,8 +131,29 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "release $V under the npm dist-tag $TAG"
 
+      # A release is cut from main's history: the tagged commit is main's
+      # tip or one of its ancestors. A tag on a commit that never reached
+      # main (a work branch, a rewritten history) would publish code no
+      # check workflow of main ever ran, with this job's publish rights.
+      # Asked of GitHub (compare main...tag), so the shallow checkout needs
+      # no history: "identical" and "behind" mean the tag is on main.
+      - name: the tagged commit is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${GITHUB_SHA}" --jq .status)
+          echo "main...${GITHUB_SHA}: ${STATUS}"
+          case "$STATUS" in
+            identical|behind) echo "tag ${GITHUB_REF_NAME} (${GITHUB_SHA}) is on main" ;;
+            *)
+              echo "::error::tag ${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not an ancestor of origin/main (compare status: ${STATUS}). Releases are cut from main."
+              exit 1
+              ;;
+          esac
+
       # Node and Bun at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -289,6 +324,12 @@ jobs:
           cache: "false"
           artifact: "false"
 
+      # What is about to be published, against its recorded maximum
+      # (tooling/ci/engine-wasm-sizes.json).
+      - name: size ratchet of the shipped engine wasm
+        if: steps.have.outputs.missing != '0'
+        run: node tooling/ci/wasm-size-ratchet.mjs
+
       # "Sibling, not a shrunk app": paged-sdk's crate graph links no editor
       # crate. verify-tarballs repeats the file half on the packed viewer.
       - name: viewer subset audit (crate graph and the built session)
@@ -409,7 +450,7 @@ jobs:
 
       - name: keep the tarballs
         if: steps.have.outputs.missing != '0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-tarballs-${{ steps.ver.outputs.version }}
           path: ${{ runner.temp }}/npm/*.tgz
@@ -449,12 +490,53 @@ jobs:
       - name: dist-tags of the four packages
         run: node tooling/release/assert-dist-tags.mjs "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.tag }}"
 
-  deploy:
-    name: deploy (editor playground)
+  # THE DEPLOY GATE. A deploy publishes only a commit whose checks succeeded:
+  # this job waits for every workflow GitHub started for the commit by its
+  # push (the check workflows are path-filtered, so "what ran for this
+  # commit" is the list). All green: `ok` is true and `deploy` runs. One
+  # failed, or still running after two hours: this job fails, and `deploy`
+  # with it. Only cancelled ones (a commit superseded by a newer push, whose
+  # waiting runs main's concurrency groups cancel): `ok` is false and `deploy`
+  # is skipped; the newer commit deploys. So a red or superseded commit never
+  # reaches play.paged.media. After fixing a flaky check by re-running it,
+  # re-run this workflow.
+  checks:
+    name: the commit's checks succeeded
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 135
     permissions:
       contents: read
+      actions: read # the commit's workflow runs
+    outputs:
+      ok: ${{ steps.wait.outputs.ok }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: tooling/ci
+          sparse-checkout-cone-mode: false
+      - name: wait for the commit's check workflows
+        id: wait
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node tooling/ci/await-commit-checks.mjs
+          --repo "${{ github.repository }}"
+          --sha "${{ github.sha }}"
+          --self "${{ github.run_id }}"
+          --timeout 7200
+
+  deploy:
+    name: deploy (editor playground)
+    if: github.ref == 'refs/heads/main' && needs.checks.outputs.ok == 'true'
+    needs: checks
+    runs-on: ubuntu-latest
+    # Wasm from the cache, the demo build, the uploads: well under an hour.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit.
+      actions: read
     # Deploys run one at a time and are never cancelled; a newer deploy that
     # arrives while one runs waits, and replaces any older one still waiting.
     concurrency:
@@ -464,15 +546,15 @@ jobs:
       run:
         working-directory: apps/editor
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -546,8 +628,21 @@ jobs:
           big=$(find . -type f -size +25M)
           if [ -n "$big" ]; then echo "::error::over Cloudflare Pages' 25 MiB limit: $big"; exit 1; fi
 
+      # wrangler at ONE exact version with its whole dependency tree pinned
+      # by integrity hash: tooling/release/wrangler/package-lock.json,
+      # installed with `npm ci` (which refuses a lockfile that does not match
+      # the manifest). Until 2026-11-28 this was `npx -y wrangler@4`: whatever
+      # the newest 4.x and its newest dependencies were at that minute ran
+      # with the Cloudflare token. Installed without the token in the
+      # environment; Renovate moves the pin. It is not a workspace package
+      # (wrangler-action would add it to the workspace).
+      - name: wrangler at the locked version
+        working-directory: tooling/release/wrangler
+        run: |
+          npm ci --no-audit --no-fund
+          ./node_modules/.bin/wrangler --version
+
       - name: deploy to Cloudflare Pages (play.paged.media)
-        # npx (not wrangler-action, which adds wrangler to the workspace).
         # Deployed from apps/canvas so wrangler picks up apps/canvas/functions:
         # the same-origin Claude proxy at /api/ai (ADR 221). Its secret and
         # KV binding live on the Pages project, not here.
@@ -555,4 +650,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx -y wrangler@4 pages deploy dist-demo --project-name=paged-playground --branch=main
+        run: >-
+          "$GITHUB_WORKSPACE/tooling/release/wrangler/node_modules/.bin/wrangler"
+          pages deploy dist-demo --project-name=paged-playground --branch=main

@@ -317,10 +317,11 @@ workflows already run on `main`.
 | Footprint of `main`'s caches | 5.8 GB of module caches, no core | about 11 GB when every Rust job has one (core ≈ 4.7 GB over 8 jobs, after lever 4 drops one): still above 10 GB, so the least recently used entries (the rarely run lanes) will be evicted | sizes from the cache list |
 
 **sccache, measured on one job.** `.github/workflows/ci-sccache-trial.yml`
-builds core's test binaries (the build of core-ci's Linux `check + test` job)
-twice through sccache with the GitHub backend: cold, in a namespace of its own,
-then warm after deleting `target/`. It runs only when its own file changes or
-on dispatch. The comparison is with rust-cache's numbers for the same build: a
+(removed 2026-11-28, after the measurement recorded here; it last ran
+2026-10-18) built core's test binaries (the build of core-ci's Linux
+`check + test` job) twice through sccache with the GitHub backend: cold, in a
+namespace of its own, then warm after deleting `target/`. It ran only when its
+own file changed or on dispatch. The comparison is with rust-cache's numbers for the same build: a
 miss compiles in 7m42s–10m23s, a hit in about 6 min (old runs: 6m04s–6m13s).
 sccache cannot cache what links (test harnesses, build scripts, proc macros),
 which is most of a test build. The result is in [This pull request's CI

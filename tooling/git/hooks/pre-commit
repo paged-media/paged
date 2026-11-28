@@ -24,3 +24,8 @@ root=$(git rev-parse --show-toplevel)
 # Format the staged JS/TS, JSON, CSS, HTML, Markdown and YAML files
 # (bunfig.toml [fmt], /.prettierignore).
 "$root/tooling/js/fmt.sh" --staged
+
+# No private path (a home directory, a named local volume, per-user tool
+# state, the private repositories) in a staged file: tooling/ci/private-paths.mjs
+# and its allowlist. The repository is public.
+node "$root/tooling/ci/private-paths.mjs" --staged

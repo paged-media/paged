@@ -55,6 +55,8 @@ on:
       - "platform/extensions/packages/plugin-sdk/bin/**"
       - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/image-ci.yml"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -101,6 +103,8 @@ on:
       - "platform/extensions/packages/plugin-sdk/bin/**"
       - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/image-ci.yml"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -119,6 +123,9 @@ env:
 
 permissions:
   contents: read
+  # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit
+  # (it waits for that build instead of building the engine a second time).
+  actions: read
 
 # The image crates are members of the engine's Cargo workspace (one Cargo
 # workspace, docs/development/one-workspace.md): cargo runs in engine/core and
@@ -137,11 +144,13 @@ jobs:
   rust:
     name: rust engine
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
       # `toolchain:` is REQUIRED. This step used to omit it, on the belief
       # that dtolnay/rust-toolchain resolves the channel from
       # rust-toolchain.toml — it does not (the action has no such lookup;
@@ -152,12 +161,12 @@ jobs:
       # literal that had to mirror the file, and stopped mirroring it).
       - id: pin
         run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-image
@@ -308,17 +317,17 @@ jobs:
       WGPU_FALLBACK: "1"
       PAGED_REQUIRE_GPU: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The pin, read from rust-toolchain.toml (see the rust job).
       - id: pin
         run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-image
@@ -361,14 +370,14 @@ jobs:
       WGPU_BACKEND: metal
       PAGED_REQUIRE_GPU: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The pin, read from rust-toolchain.toml (see the rust job).
       - id: pin
         run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-image
@@ -395,13 +404,15 @@ jobs:
   ts:
     name: ts bundle
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 75
     defaults:
       run:
         working-directory: modules/image
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"

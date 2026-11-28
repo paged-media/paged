@@ -1,0 +1,10 @@
+{
+  "name": "paged-release-wrangler",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "The exact wrangler the release and publish workflows deploy with, pinned with its whole dependency tree by package-lock.json (npm ci). Not a workspace package: nothing in the repository imports it.",
+  "dependencies": {
+    "wrangler": "4.168.0"
+  }
+}

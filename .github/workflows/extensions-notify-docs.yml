@@ -24,6 +24,8 @@ permissions:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 5
     steps:
       - name: ping docs to rebuild (manifest schema changed)
         env:

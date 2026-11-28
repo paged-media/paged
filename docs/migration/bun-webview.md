@@ -82,8 +82,10 @@ process, and `Bun.WebView` is native.
 
 ### In CI
 
-The `tests / contracts + system` workflow runs five runs per driver as an advisory step on every
-push (Ubuntu runner, its preinstalled Google Chrome as `PAGED_CHROMIUM`, artifact `t7-trial`).
+The `tests / contracts + system` workflow ran five runs per driver as an advisory step on every
+push (Ubuntu runner, its preinstalled Google Chrome as `PAGED_CHROMIUM`, artifact `t7-trial`)
+until 2026-11-28, when the step was removed: the decision below was made, nothing read the
+artifact, and the trial stays runnable by hand (`bun system/wasm-boot/trial.ts`, below).
 The first two pushes (`0d05666e1`, `3c97631f6`):
 
 | Push | Driver | Green runs | Wall time min / median / max |
@@ -132,8 +134,8 @@ Playwright already has, tested.
   isolation, WebGPU, stability across 50 CI runs, comparable wall time) it meets isolation and
   wall time, meets WebGPU only with SwiftShader flags, and has 50 local runs and, so far, 10
   CI runs.
-  The trial runs in CI as an advisory step (`tests / contracts + system`, five runs per driver
-  per push, artifact `t7-trial`), so the CI count accumulates.
+  The trial ran in CI as an advisory step (`tests / contracts + system`, five runs per driver
+  per push, artifact `t7-trial`) until 2026-11-28; run it again by hand when revisiting.
 - **Revisit** when `Bun.WebView` leaves experimental: if its Chrome backend then logs what the
   browser logs and offers a GPU without flags, the speed under load is worth switching the lane
   (one environment variable) and running the trial again.

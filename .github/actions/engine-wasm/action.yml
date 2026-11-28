@@ -26,6 +26,19 @@ description: >-
 # seconds; a miss builds all four parts (the `wasm-release` profile with fat
 # LTO, then `wasm-bindgen --target web` and `wasm-opt -Oz`). release.yml
 # builds with `cache: "false"`: a release never takes wasm from the cache.
+#
+# BUILD ONCE. A push that changes the engine starts a dozen workflows at the
+# same minute; each one missed the cache and built the same four parts (three
+# identical `engine-wasm-packages` artifacts within three minutes on
+# 2026-11-24). Now ONE workflow builds: `engine / wasm`
+# (.github/workflows/engine-wasm.yml) runs on every push to main and calls
+# this action with `wait: "false"`. Every other caller, on a miss during a
+# push, looks for that workflow's run of the same commit, waits for it to
+# finish, and restores what it saved; it builds only if there is no such run,
+# the run failed, or the wait runs out. The wait asks the Actions API, which
+# needs `actions: read` on the calling job's token; without it the caller
+# builds as before. Dispatched and scheduled runs do not wait (no builder run
+# belongs to them) and build on a miss.
 
 inputs:
   artifact:
@@ -41,11 +54,22 @@ inputs:
       "false" always builds and leaves the cache alone (release.yml).
     required: false
     default: "true"
+  wait:
+    description: >-
+      On a cache miss during a push, wait for the `engine / wasm` workflow's
+      run of this commit and restore its build instead of building here.
+      "false" builds at once (the builder itself).
+    required: false
+    default: "true"
+  wait-minutes:
+    description: How long to wait for the builder before building here.
+    required: false
+    default: "40"
 
 outputs:
   cache-hit:
-    description: '"true" when the packages came from the cache.'
-    value: ${{ steps.restore.outputs.cache-hit }}
+    description: '"true" when the packages came from the cache (at once, or after waiting for the builder).'
+    value: ${{ steps.restore.outputs.cache-hit == 'true' || steps.restore-built.outputs.cache-hit == 'true' }}
 
 runs:
   using: composite
@@ -68,7 +92,7 @@ runs:
     - name: engine wasm — restore
       id: restore
       if: inputs.cache == 'true'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           engine/core/packages/canvas-wasm/paged_*
@@ -81,24 +105,81 @@ runs:
           'engine/core/rust-toolchain.toml', 'engine/core/scripts/build-wasm-packages.sh',
           'engine/core/packages/*/package.json', '.cargo/config.toml') }}
 
+    # ---- a miss during a push: let the builder build -------------------------
+    # The run of `engine / wasm` for this commit: queued or running → wait for
+    # it; completed → restore below; none after two minutes (the workflow file
+    # is not on this branch, or the run was never created) → build here. Any
+    # API failure also builds here: waiting is an optimisation, never a gate.
+    - name: engine wasm — wait for the builder (engine / wasm) of this commit
+      id: wait
+      if: >-
+        inputs.cache == 'true' && inputs.wait == 'true'
+        && steps.restore.outputs.cache-hit != 'true'
+        && github.event_name == 'push'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        WAIT_MINUTES: ${{ inputs.wait-minutes }}
+      run: |
+        set -uo pipefail
+        deadline=$((SECONDS + WAIT_MINUTES * 60))
+        while [ "$SECONDS" -lt "$deadline" ]; do
+          if ! json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/engine-wasm.yml/runs?head_sha=${GITHUB_SHA}&per_page=10" 2>&1); then
+            echo "::notice title=engine wasm: building here::cannot read the builder's runs (the job's token needs actions: read): ${json}"
+            exit 0
+          fi
+          state=$(jq -r '[.workflow_runs[] | select(.event == "push")] | sort_by(.run_number) | last | if . == null then "none" else "\(.status) \(.conclusion // "-")" end' <<<"$json")
+          case "$state" in
+            none)
+              if [ "$SECONDS" -gt 120 ]; then
+                echo "no engine / wasm run for ${GITHUB_SHA} after two minutes: building here"
+                exit 0
+              fi
+              sleep 20
+              ;;
+            completed*)
+              echo "the builder finished (${state#completed }): restoring its build"
+              echo "restore=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+            *)
+              echo "${SECONDS}s: the builder is ${state% -}; waiting"
+              sleep 45
+              ;;
+          esac
+        done
+        echo "::notice title=engine wasm: building here::the builder did not finish within ${WAIT_MINUTES} minutes"
+
+    - name: engine wasm — restore the builder's build
+      id: restore-built
+      if: steps.wait.outputs.restore == 'true'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: |
+          engine/core/packages/canvas-wasm/paged_*
+          engine/core/packages/canvas-wasm/introspect
+          engine/core/packages/canvas-wasm/repo
+          engine/core/web/idml-viewer/wasm
+        key: ${{ steps.restore.outputs.cache-primary-key }}
+
     # ---- a miss: build ------------------------------------------------------
     - name: engine wasm — Rust toolchain (rust-toolchain.toml pin)
-      if: steps.restore.outputs.cache-hit != 'true'
-      uses: dtolnay/rust-toolchain@master
+      if: steps.restore.outputs.cache-hit != 'true' && steps.restore-built.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
       with:
         toolchain: ${{ steps.pins.outputs.channel }}
         targets: wasm32-unknown-unknown
 
     - name: engine wasm — mold (the Rust linker on Linux, .cargo/config.toml)
-      if: steps.restore.outputs.cache-hit != 'true' && runner.os == 'Linux'
-      uses: rui314/setup-mold@v1
+      if: steps.restore.outputs.cache-hit != 'true' && steps.restore-built.outputs.cache-hit != 'true' && runner.os == 'Linux'
+      uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
 
     # One dependency cache for every job that builds the packages, so an
     # engine change rebuilds the engine's crates, not its dependencies. A
     # release (cache: "false") builds its dependencies too.
     - name: engine wasm — Rust dependency cache
-      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
-      uses: Swatinem/rust-cache@v2
+      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true' && steps.restore-built.outputs.cache-hit != 'true'
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       with:
         workspaces: engine/core -> target
         prefix-key: v0-rust-core-wasm
@@ -107,7 +188,7 @@ runs:
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: engine wasm — wasm-bindgen-cli and binaryen (pinned)
-      if: steps.restore.outputs.cache-hit != 'true'
+      if: steps.restore.outputs.cache-hit != 'true' && steps.restore-built.outputs.cache-hit != 'true'
       uses: ./.github/actions/wasm-tools
 
     # Checks the CLI against Cargo.lock, and under CI refuses to run without
@@ -116,7 +197,7 @@ runs:
     # workflow-level RUSTFLAGS (image-ci and publish-ci set -Dwarnings)
     # would otherwise make the build depend on which job ran it.
     - name: engine wasm — build the four parts
-      if: steps.restore.outputs.cache-hit != 'true'
+      if: steps.restore.outputs.cache-hit != 'true' && steps.restore-built.outputs.cache-hit != 'true'
       shell: bash
       working-directory: engine/core
       env:
@@ -128,8 +209,8 @@ runs:
         bash scripts/build-wasm-packages.sh --workspace
 
     - name: engine wasm — save
-      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true' && steps.restore-built.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           engine/core/packages/canvas-wasm/paged_*
@@ -148,7 +229,7 @@ runs:
 
     - name: engine wasm — upload the engine-wasm-packages artifact
       if: inputs.artifact == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: engine-wasm-packages
         path: |

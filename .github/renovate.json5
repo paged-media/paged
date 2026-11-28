@@ -367,8 +367,9 @@
       groupName: "ci cargo tools",
     },
     {
-      description: "GitHub Actions: one PR a month, pinned as today (major tags).",
+      description: "GitHub Actions: one PR a month. Every action is pinned to a full commit SHA with its version in a comment (`uses: owner/repo@<sha> # v1.2.3`); Renovate moves the SHA and the comment together.",
       matchManagers: ["github-actions"],
+      pinDigests: true,
       groupName: "github actions",
       schedule: ["before 7am on the first day of the month"],
     },

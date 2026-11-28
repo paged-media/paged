@@ -53,6 +53,8 @@ on:
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/sheet-vitest.yml"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -97,6 +99,8 @@ on:
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/sheet-vitest.yml"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -106,6 +110,9 @@ on:
 
 permissions:
   contents: read
+  # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit
+  # (it waits for that build instead of building the engine a second time).
+  actions: read
 
 defaults:
   run:
@@ -115,10 +122,12 @@ jobs:
   vitest:
     name: bun test
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -130,14 +139,14 @@ jobs:
       # rust.yml's `wasm` job: pinned toolchain, Cargo.lock-pinned
       # wasm-bindgen-cli, pinned binaryen) so the real boot actually runs;
       # REQUIRE_REAL_ENGINE=1 below makes a missing artifact FAIL, not skip.
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: 1.99.1
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-sheet
@@ -161,6 +170,10 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
+      # The bundle and the host model with their tests, against the built
+      # engine glue's types (no job typechecked them on push until 2026-11-28).
+      - name: typecheck
+        run: bun run --filter './packages/*' typecheck
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # TS lane could never go red: a failing spec merged green. Evidence
@@ -200,7 +213,7 @@ jobs:
       # suite=vitest, format=nextest-junit).
       - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vitest-junit
           path: modules/sheet/junit-all.xml

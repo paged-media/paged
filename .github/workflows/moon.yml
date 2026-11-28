@@ -32,6 +32,16 @@ concurrency:
 # repeated is shared instead: .github/actions/wasm-tools for wasm-bindgen and
 # binaryen, tooling/rust/build-wasm.sh for the wasm build, and
 # .moon/tasks/*.yml for the task definitions `moon run` uses locally.
+#
+# TRIGGERS (decided 2026-11-28). People push straight to main, so the
+# `pull_request` trigger never fires for their changes — but it is not dead:
+# Renovate works through pull requests, and its automerge waits for this
+# check (the job is binding for `renovate/*` branches, below). It stays for
+# that. `push` to main is deliberately NOT added: on a push this job would
+# repeat, without gating and without the module wasm, what the per-component
+# workflows already run and gate, on every commit. If CI ever switches over
+# to Moon, add `push: branches: [main]` and pass
+# `--base ${{ github.event.before }}` then.
 on:
   pull_request:
   workflow_dispatch:
@@ -53,7 +63,7 @@ jobs:
     # this is the check that runs what the update affects.
     continue-on-error: ${{ !startsWith(github.head_ref, 'renovate/') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # `moon ci` diffs the pull request against its base branch.
           fetch-depth: 0
@@ -62,7 +72,7 @@ jobs:
       # pinned versions; Moon installs the root Bun workspace (bun.lock)
       # once, before the first JS task. Rust comes from rustup and each
       # workspace's rust-toolchain.toml.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -83,7 +93,7 @@ jobs:
       # compares against the per-component workflows.
       - name: upload moon ci report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: moon-ci-report
           path: .moon/cache/ciReport.json

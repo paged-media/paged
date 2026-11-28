@@ -69,6 +69,11 @@ on:
       - "platform/shared/test-resources/**"
   workflow_dispatch:
 
+# The token reads the repository and nothing else; a job that needs more
+# says so itself.
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: engine/core
@@ -82,6 +87,8 @@ jobs:
   vello-lavapipe:
     name: vello on lavapipe
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 120
     # No `continue-on-error` — failures are a VISIBLE red check. Not
     # branch-protection-required yet; see the header (audit 17082026
     # §1.10).
@@ -99,18 +106,18 @@ jobs:
       # sanity step below checks the driver; this checks every test.
       PAGED_REQUIRE_GPU: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The pinned toolchain from rust-toolchain.toml (audit B21), read here
       # rather than in a job of its own that this one had to wait for.
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -169,7 +176,9 @@ jobs:
           fi
 
       - name: install cargo-nextest
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
+        with:
+          tool: nextest
 
       - name: cargo nextest -p paged-gpu --features vello-backend → JUnit
         id: gpu_tests
@@ -189,6 +198,49 @@ jobs:
       - name: lane report
         if: ${{ !cancelled() && steps.gpu_tests.outcome != 'skipped' }}
         run: python3 ../../tooling/rust/skip-report.py --lane "core vello on lavapipe" --junit target/nextest/ci/junit.xml
+
+      # paged-renderer's own GPU↔CPU parity tests (stroke styles, vector
+      # effects, mesh fills, mapped strokes) sit behind the crate's `gpu`
+      # feature, which no test build turned on: until 2026-11-28 they were
+      # never compiled as tests, anywhere. This lane has an adapter
+      # (lavapipe) and claims it (PAGED_REQUIRE_GPU=1 above), so here they
+      # run; a lane without one would report `unavailable: GPU adapter`.
+      # The guard first: every test behind the feature must carry
+      # `both_lanes` in its name, which is what the filter selects, so a new
+      # one cannot stay out by its name.
+      #
+      # ADVISORY for now: the four tests had never been compiled when this
+      # step was added and it was not run before landing, so a first failure
+      # here says "these tests need attention", not "this push broke
+      # something". It annotates and reports in the summary; drop
+      # `continue-on-error` once it has been green.
+      - name: paged-renderer GPU↔CPU parity tests (--features gpu; ADVISORY until first green)
+        id: renderer_gpu
+        continue-on-error: true
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          NAMES=$(grep -rA4 --include='*.rs' '#\[cfg(feature = "gpu")\]' crates/paged-renderer/tests \
+            | grep -oE 'fn [A-Za-z0-9_]+' | sed 's/^fn //' || true)
+          test -n "$NAMES" || { echo "::error::no test behind paged-renderer's gpu feature was found: the guard reads nothing"; exit 1; }
+          for name in $NAMES; do
+            case "$name" in
+              *both_lanes*) ;;
+              *) echo "::error::$name is behind the gpu feature but has no 'both_lanes' in its name, so this lane would not run it"; exit 1 ;;
+            esac
+          done
+          echo "gpu-feature tests: $(echo "$NAMES" | wc -w)"
+          cargo nextest run -p paged-renderer --features gpu --test it \
+            --no-fail-fast --no-tests=fail -E 'test(/both_lanes/)'
+      - name: paged-renderer GPU parity — say what happened
+        if: ${{ !cancelled() }}
+        run: |
+          if [ "${{ steps.renderer_gpu.outcome }}" = "success" ]; then
+            echo "### paged-renderer GPU↔CPU parity tests: passed on lavapipe" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=paged-renderer GPU parity tests did not pass::outcome ${{ steps.renderer_gpu.outcome }} (advisory step; see its log). They do not gate yet."
+            echo "### paged-renderer GPU↔CPU parity tests: ${{ steps.renderer_gpu.outcome }} (ADVISORY — not a pass)" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: CPU ↔ Vello parity over the generated corpus
         id: parity
@@ -214,7 +266,7 @@ jobs:
 
       - name: upload parity report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vello-parity
           # parity.json + per-fixture pages.json, and heatmaps for any
@@ -228,7 +280,7 @@ jobs:
 
       - name: upload JUnit artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vello-junit
           path: engine/core/target/nextest/ci/junit.xml

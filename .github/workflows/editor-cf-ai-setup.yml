@@ -34,6 +34,8 @@ permissions:
 jobs:
   setup:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 15
     steps:
       - name: KV namespace, bindings, variables, secret
         env:

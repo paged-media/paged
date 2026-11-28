@@ -101,6 +101,8 @@ on:
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
       - "tests/integration/**"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -144,6 +146,8 @@ on:
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
       - "tests/integration/**"
+      # The tool versions (Bun, Node, moon) every job installs.
+      - ".prototools"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -153,6 +157,9 @@ on:
 
 permissions:
   contents: read
+  # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit
+  # (it waits for that build instead of building the engine a second time).
+  actions: read
 
 defaults:
   run:
@@ -187,15 +194,15 @@ jobs:
     # takes the rest.
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -296,6 +303,29 @@ jobs:
       - name: pasteboard placement (spread pages)
         run: bun run test:spread-pages
 
+      # The diagnostics journal (the recorder, its sanitiser and the export):
+      # no path, document text or secret leaves through it. The script
+      # existed and no job ran it until 2026-11-28.
+      - name: diagnostics journal (sanitiser, recorder, export)
+        run: bun run test:journal
+
+      # The object model's field model, automation demo and the app's shared
+      # registry. Unrun until 2026-11-28 like the journal; five of its cases
+      # had gone stale by then (`editorObjectModel` is no longer an export of
+      # apps/canvas/src/object-model.ts; `objects.shared@1`; the data
+      # binding badge's query id). ADVISORY until they are brought back in
+      # line: the step reports and annotates, and does not fail the job.
+      # Remove `continue-on-error` with that fix.
+      - name: object model (ADVISORY, 5 stale cases — not a pass)
+        id: object-model
+        continue-on-error: true
+        run: bun run test:object-model
+      - name: object model — say that it is red
+        if: ${{ !cancelled() && steps.object-model.outcome == 'failure' }}
+        run: |
+          echo "::warning title=object model tests are failing::scripts/object-model.test.mjs fails and does not gate (advisory since it was first run in CI). Fix the stale cases and drop continue-on-error."
+          echo "### object model: FAILING (advisory, not gating)" >> "$GITHUB_STEP_SUMMARY"
+
       # Where the bun test lanes below write their JUnit (bun does not
       # create the directory); collected at the end of the job.
       - name: JUnit report directory
@@ -323,6 +353,21 @@ jobs:
         run: bun run test:shell-dom --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/shell-dom.bun.xml"
       - name: built-in command handlers (apps/canvas unit)
         run: bun run test:canvas-unit --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/canvas-unit.bun.xml"
+      # Every other non-DOM spec under apps/canvas/test (test:unit reads
+      # test/unit only and the DOM lane takes *.dom.test.*, so a plain
+      # *.test.ts beside the panels ran nowhere: the comments model and the
+      # template progress model, found 2026-11-28). test/measure is the
+      # render-count measurement (bun run test:render-counts), not a lane.
+      - name: plain specs outside test/unit (apps/canvas)
+        working-directory: apps/editor/apps/canvas
+        run: >-
+          bun test --parallel --timeout 30000
+          --preload ../../../../tooling/js/bun-test-setup.ts
+          --path-ignore-patterns '**/*.dom.test.*'
+          --path-ignore-patterns 'test/unit/**'
+          --path-ignore-patterns 'test/measure/**'
+          --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/canvas-plain.bun.xml"
+          ./test
 
       # The canvas app's DOM lane (every *.dom.test.tsx under apps/canvas):
       # each built-in panel rendered in happy-dom over the real engine wasm
@@ -357,7 +402,7 @@ jobs:
         run: bunx --bun vite build
       - name: upload the React Compiler build report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: react-compiler-build
           path: ${{ runner.temp }}/react-compiler-build.json
@@ -388,7 +433,7 @@ jobs:
       # worth having in the trend.
       - name: upload wasm measurement
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: paged-measurements-wasm
           path: ${{ runner.temp }}/paged-measurements-wasm.json
@@ -493,7 +538,7 @@ jobs:
           convert compiled/canvas-dom apps/editor/apps/canvas "$out/compiled"
       - name: upload the bun test JUnit
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: editor-checks-junit
           path: ${{ runner.temp }}/editor-junit-out/plain/*.xml
@@ -501,7 +546,7 @@ jobs:
           retention-days: 14
       - name: upload the compiled DOM lanes' JUnit
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: editor-checks-compiled-junit
           path: ${{ runner.temp }}/editor-junit-out/compiled/*.xml
@@ -519,13 +564,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -562,7 +607,7 @@ jobs:
           --json "$RUNNER_TEMP/uxi-coverage.json"
       - name: upload the surface-conformance report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: surface-conformance
           path: |
@@ -601,7 +646,7 @@ jobs:
       # apps/editor, core's paged-gen is engine/core, and the doc/slide link
       # targets are modules/doc + modules/slide — no sibling checkouts.
       - name: checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # License-clear fixtures the harness loads (corpus/idml/generated/*.idml
       # + corpus/fonts). Sparse + LFS so we pull ~25 MB, not the 4.4 GB
@@ -634,7 +679,7 @@ jobs:
       # Zip: Could not find EOCD"). Letting checkout do the smudge against
       # the sparse tree is the reliable path.
       - name: checkout corpus fixtures (sparse + LFS)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: paged-media/corpus
           path: apps/editor/corpus
@@ -680,15 +725,17 @@ jobs:
       # revision as the editor, so that coupling is gone.
 
       - name: rust toolchain (for paged-gen)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
+        with:
+          toolchain: stable
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
 
       # paged-gen's build. The engine and module wasm builds have caches of
       # their own (the engine-wasm and module-wasm actions).
       - name: cache cargo + paged-gen build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -742,12 +789,12 @@ jobs:
           echo "corpus fixtures materialized OK"
 
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -889,6 +936,30 @@ jobs:
           kill "$logger"
           exit "$status"
 
+      # The journeys' VISUAL checkpoints (contentCheckpoint, chromeCheckpoint
+      # in tests/journey/driver/designer.ts) return early in CI unless
+      # JOURNEY_VISUAL=1: there are no Linux baselines to compare against.
+      # The journeys above therefore check behaviour, not pixels. That is
+      # said here, in the job summary, so that a green run is not read as
+      # "the screenshots matched". Enabling them needs the Linux baselines
+      # seeded (the advisory step below) and committed first.
+      - name: journey visual checkpoints were SKIPPED — say so
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        working-directory: apps/editor/apps/canvas
+        run: |
+          CONTENT=$(grep -rho --include='*.spec.ts' 'contentCheckpoint(' tests/journey | wc -l | tr -d ' ')
+          CHROME=$(grep -rho --include='*.spec.ts' 'chromeCheckpoint(' tests/journey | wc -l | tr -d ' ')
+          BASELINES=$(find tests/journey/__screenshots__ -name '*-linux.png' 2>/dev/null | wc -l | tr -d ' ')
+          {
+            echo "### Journey visual checkpoints: SKIPPED (not compared)"
+            echo ""
+            echo "The journey specs call \`contentCheckpoint\` $CONTENT times and \`chromeCheckpoint\` $CHROME times."
+            echo "In this run every one of them returned without comparing a pixel (JOURNEY_VISUAL is not set;"
+            echo "$BASELINES Linux baseline image(s) are committed). The journeys' behaviour assertions ran; their"
+            echo "screenshots were not checked."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=journey visual checkpoints skipped::$CONTENT content and $CHROME chrome checkpoints were not compared in this run (no Linux baselines; JOURNEY_VISUAL unset). See the job summary."
+
       # The quarantined tests (apps/canvas/tests/quarantine.json, ADR 228)
       # still run, apart and advisory: with retries, so their flake rate
       # keeps being measured (the publish job reports it), and so a fix
@@ -915,7 +986,7 @@ jobs:
 
       - name: upload quarantine blob report
         if: ${{ !cancelled() && matrix.shard == 1 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blob-quarantine
           path: apps/editor/apps/canvas/blob-quarantine
@@ -965,7 +1036,7 @@ jobs:
 
       - name: upload regenerated baselines
         if: ${{ always() && github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/wip/') && matrix.shard == 1 }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journey-baselines-linux
           path: "apps/editor/apps/canvas/tests/journey/__screenshots__/**/*-linux.png"
@@ -974,7 +1045,7 @@ jobs:
 
       - name: upload blob report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blob-report-${{ matrix.shard }}
           path: apps/editor/apps/canvas/blob-report
@@ -985,19 +1056,21 @@ jobs:
     needs: playwright
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 30
     steps:
       # merge-reports only needs apps/canvas's @playwright/test; the
       # repository checkout carries it under apps/editor.
       - name: checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
       - name: cache Bun's package cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -1012,7 +1085,7 @@ jobs:
       # all-blobs/ and playwright-results.json stay at the WORKSPACE root:
       # the merge step addresses both through ${{ github.workspace }}.
       - name: download shard blobs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: all-blobs
           pattern: blob-report-*
@@ -1035,7 +1108,7 @@ jobs:
       - name: download quarantine blobs
         id: quarantine-blobs
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: blob-quarantine
           path: quarantine-blobs
@@ -1062,7 +1135,7 @@ jobs:
             --md-out "$GITHUB_STEP_SUMMARY"
       - name: upload the flake rate
         if: ${{ !cancelled() && hashFiles('flake-rate.json') != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-flake-rate
           path: |
@@ -1085,7 +1158,7 @@ jobs:
       # suite=playwright-e2e, format=playwright-json).
       - name: upload playwright-e2e results artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-results
           path: playwright-results.json

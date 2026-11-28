@@ -1,0 +1,103 @@
+# Git attributes for the whole repository.
+#
+# Line endings: source and prose are LF in the repository and in every
+# checkout. Only the listed kinds are normalised; test data keeps its bytes
+# (some fixtures are CRLF on purpose), so there is no `* text=auto`.
+*.rs            text eol=lf
+*.toml          text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.mts           text eol=lf
+*.js            text eol=lf
+*.jsx           text eol=lf
+*.mjs           text eol=lf
+*.cjs           text eol=lf
+*.json          text eol=lf
+*.jsonc         text eol=lf
+*.json5         text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sh            text eol=lf
+*.py            text eol=lf
+*.css           text eol=lf
+*.html          text eol=lf
+*.wgsl          text eol=lf
+*.svg           text eol=lf
+*.lock          text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+.prettierignore text eol=lf
+.prototools     text eol=lf
+
+# Test data whose bytes are the test: never converted.
+*.csv           -text
+*.tsv           -text
+
+# Binary: no text conversion, no textual diff.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.avif  binary
+*.jxl   binary
+*.tif   binary
+*.tiff  binary
+*.exr   binary
+*.hdr   binary
+*.psd   binary
+*.psb   binary
+*.ai    binary
+*.eps   binary
+*.ase   binary
+*.abr   binary
+*.icc   binary
+*.v     binary
+*.pdf   binary
+*.idml  binary
+*.paged binary
+*.docx  binary
+*.docm  binary
+*.dotx  binary
+*.odt   binary
+*.xlsx  binary
+*.pptx  binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.wasm  binary
+*.zip   binary
+*.parquet binary
+*.onnx  binary
+*.bin   binary
+
+# Generated files (collapsed in diffs, left out of the language statistics).
+# Each is written by a generator and compared with it in CI; /.prettierignore
+# names the generators.
+bun.lock                                                              linguist-generated
+**/Cargo.lock                                                         linguist-generated
+.protolock                                                            linguist-generated
+eslint-suppressions.json                                              linguist-generated
+**/compiler-coverage.json                                             linguist-generated
+**/catalog.provenance.json                                            linguist-generated
+**/*.generated.ts                                                     linguist-generated
+platform/extensions/packages/plugin-api/src/wire.d.ts                 linguist-generated
+platform/extensions/packages/plugin-api/src/catalog.json              linguist-generated
+apps/editor/packages/client/api-catalog.json                          linguist-generated
+apps/editor/docs/theme-tokens.json                                    linguist-generated
+apps/editor/apps/canvas/showcase/**                                   linguist-generated
+engine/core/crates/paged-cli/cli.json                                 linguist-generated
+engine/core/crates/paged-introspect/catalog.json                      linguist-generated
+engine/core/crates/paged-wire/schema/mutation.schema.json             linguist-generated
+engine/core/corpus/generated/**                                       linguist-generated
+engine/core/corpus/generated-fixtures/**                              linguist-generated
+modules/image/glue/src/object-model/generated/**                      linguist-generated
+modules/image/glue/object-model/**                                    linguist-generated
+modules/image/manifest/object-model/**                                linguist-generated
+docs/development/surface-parity-matrix.json                           linguist-generated
+docs/development/surface-parity-matrix.md                             linguist-generated
+
+# Third-party code carried in the tree.
+modules/publish/packages/pdf-bundle/bin/pdfium.esm.js                 linguist-vendored

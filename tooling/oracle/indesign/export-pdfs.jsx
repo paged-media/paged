@@ -51,12 +51,12 @@
 
     // Where the generated fixtures live. Derived from the script's own
     // location so the tool follows the repo (it pointed at the
-    // pre-split `~/idml` checkout for months, which made every run a
+    // pre-split checkout for months, which made every run a
     // silent no-op); `PAGED_EXPORT_DIR` overrides for an out-of-tree
     // corpus.
     // Where the generated fixtures live. Derived from the script's own
     // location so the tool follows the repo — it pointed at the
-    // pre-split `~/idml` checkout for months, which made every run a
+    // pre-split checkout for months, which made every run a
     // silent no-op. `run-export.sh` overrides it by setting the global
     // before it evaluates this file; InDesign is a separate, already
     // running process, so a shell variable never reaches `$.getenv`.

@@ -26,7 +26,9 @@
 // Base of the range:
 //   * CONTRACT_BASE env (CI passes the PR base sha or `github.event.before`)
 //   * else HEAD~1 (the previous trunk tip — this repo is push-to-main)
-// A missing/zero base (first push of a branch) → skip (nothing to diff).
+// A missing/zero base (first push of a branch) → HEAD~1. A base git cannot
+// read FAILS the guard (see "FAIL CLOSED" below); only a one-commit history
+// has nothing to diff.
 //
 // Runs in CI (extensions-contract-guard.yml) and locally:
 //   node scripts/assert-contract-bumped.mjs            # HEAD~1..HEAD
@@ -51,33 +53,66 @@ function git(args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
+// FAIL CLOSED. Until 2026-11-28 a base that git could not read made this
+// guard pass: an unresolvable HEAD~1 was "nothing to diff", and a failed
+// `git show <base>:…/package.json` was "a brand-new package, counts as
+// bumped". A shallow clone, or a base that is not in the clone (a
+// force-push's `before`), therefore let any contract change through. Now
+// only two things skip or exempt, and both are checked rather than assumed:
+// a repository whose history really is one commit, and a package.json that
+// really does not exist at a base git CAN read. Everything else is an error.
+function fail(message) {
+  console.error(`\ncontract-guard FAILED — ${message}\n`);
+  process.exit(1);
+}
+
+function quiet(args) {
+  try {
+    execFileSync("git", args, { cwd: root, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveBase() {
   const fromArg = process.argv[2];
   const fromEnv = process.env.CONTRACT_BASE;
   const candidate = (fromArg || fromEnv || "").trim();
   if (candidate && candidate !== ZERO_SHA) return candidate;
-  // Default: previous commit. If HEAD has no parent, there is nothing to
-  // diff against — signal "skip".
-  try {
+  // Default: previous commit.
+  if (quiet(["rev-parse", "--verify", "--quiet", "HEAD~1^{commit}"]))
     return git(["rev-parse", "HEAD~1"]);
-  } catch {
-    return null;
-  }
+  // No parent. That is "nothing to diff" only when HEAD is the history's
+  // one commit; in a shallow clone the parent exists and was not fetched.
+  const shallow = git(["rev-parse", "--is-shallow-repository"]) === "true";
+  const parents = git(["rev-list", "--parents", "-n", "1", "HEAD"]).split(" ");
+  if (!shallow && parents.length === 1) return null;
+  fail(
+    "HEAD's parent is not in this clone (a shallow checkout), so the range cannot be read. " +
+      "Fetch the history (actions/checkout fetch-depth: 0) or pass the base: CONTRACT_BASE=<sha>.",
+  );
 }
 
 // version of a package.json at a given ref, or null if the file did not
-// exist there (a brand-new package counts as "bumped").
+// exist there (a brand-new package counts as "bumped"). The ref itself must
+// be readable (checked once, below); an unreadable or unparsable file that
+// DOES exist is an error, never "new".
 function versionAt(ref, pkgDir) {
+  // `./` makes the path relative to git's cwd (this package's root). A bare
+  // `<ref>:<path>` resolves from the REPOSITORY root, which in the monorepo
+  // is two levels up: the show failed, this returned null, and every
+  // package counted as "bumped" — the guard could never fire.
+  const spec = `${ref}:./${pkgDir}/package.json`;
+  if (!quiet(["cat-file", "-e", spec])) return null;
+  let version;
   try {
-    // `./` makes the path relative to git's cwd (this package's root). A bare
-    // `<ref>:<path>` resolves from the REPOSITORY root, which in the monorepo
-    // is two levels up: the show failed, this returned null, and every
-    // package counted as "bumped" — the guard could never fire.
-    const json = git(["show", `${ref}:./${pkgDir}/package.json`]);
-    return JSON.parse(json).version ?? null;
-  } catch {
-    return null;
+    version = JSON.parse(git(["show", spec])).version;
+  } catch (error) {
+    fail(`cannot read ${spec}: ${error.message}`);
   }
+  if (typeof version !== "string" || !version) fail(`${spec} has no version`);
+  return version;
 }
 
 function versionAtHead(pkgDir) {
@@ -88,9 +123,19 @@ function versionAtHead(pkgDir) {
 
 const base = resolveBase();
 if (!base) {
-  console.log("contract-guard: no base commit to diff against — skipping.");
+  console.log(
+    "contract-guard: HEAD is the history's only commit — nothing to diff against.",
+  );
   process.exit(0);
 }
+// The base must be a commit this clone has: otherwise every question below
+// ("what changed", "what was the version") has no answer, and no answer is
+// not a pass.
+if (!quiet(["cat-file", "-e", `${base}^{commit}`]))
+  fail(
+    `the base ${base} is not a commit in this clone (a force-push, or a shallow checkout), so the range cannot be read. ` +
+      "Fetch the history (fetch-depth: 0), or pass a base that exists: CONTRACT_BASE=<sha>.",
+  );
 
 // The reformat commits (see the rule above), by full hash.
 const FORMAT_SUBJECT = /^fmt: \S+ \(bun fmt, no other change\)$/;
@@ -150,7 +195,12 @@ if (changed.length > 0) {
 
 const sdk = versionAtHead(PUBLIC);
 const api = versionAtHead(LOCKSTEP);
-if (sdk !== null && api !== null && sdk !== api) {
+// Both packages exist at HEAD; a guard that cannot find them guards nothing.
+if (sdk === null || api === null)
+  fail(
+    `${sdk === null ? PUBLIC : LOCKSTEP}/package.json is not at HEAD: the guard's package paths are out of date`,
+  );
+if (sdk !== api) {
   violations.push(
     `${LOCKSTEP} @ ${api} is not in lockstep with ${PUBLIC} @ ${sdk}: set both to the same version`,
   );

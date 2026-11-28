@@ -29,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -113,8 +113,21 @@ jobs:
 
       - name: upload the numbers
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: editor-perf
           path: ${{ runner.temp }}/editor-perf.json
           if-no-files-found: ignore
+
+  # A scheduled run that fails has no commit to turn red: it opens (or
+  # updates) an issue instead, and the first green night closes it
+  # (.github/workflows/scheduled-failure-issue.yml). Scheduled runs only.
+  notify:
+    name: issue on a failing scheduled run
+    needs: [budgets]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/scheduled-failure-issue.yml
+    with:
+      failed: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

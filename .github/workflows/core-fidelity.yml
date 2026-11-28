@@ -16,6 +16,8 @@ on:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-fidelity.yml"
+      # The tool versions (Bun, Node, moon) a job installs.
+      - ".prototools"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -37,11 +39,18 @@ on:
       - "engine/core/Cargo.toml"
       - "engine/core/Cargo.lock"
       - ".github/workflows/core-fidelity.yml"
+      # The tool versions (Bun, Node, moon) a job installs.
+      - ".prototools"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+
+# The token reads the repository and nothing else; a job that needs more
+# says so itself.
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -54,6 +63,12 @@ jobs:
   corpus:
     name: corpus diff (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      # The neutral "NOT MEASURED" check run of the pixel gate.
+      checks: write
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +77,7 @@ jobs:
         # native macOS build on every push.
         os: ${{ github.ref == 'refs/heads/main' && fromJSON('["ubuntu-latest", "macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The vendor-pack lane (scripts/pack-fidelity.py) runs only where the
       # private corpus is; its licensed-font contract (a pack missing a
       # declared licensed face is `unavailable`, PAGED_REQUIRE_FONTS=1 fails
@@ -73,13 +88,13 @@ jobs:
       # rather than in a job of its own that this one had to wait for.
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -138,7 +153,8 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/golden.log"
           python3 ../../tooling/rust/skip-report.py --lane "golden snapshot" --cargo-log "$RUNNER_TEMP/golden.log"
 
-      - name: generated-corpus fidelity gate (hard; needs Coated FOGRA39, unavailable without it)
+      - name: generated-corpus fidelity gate (hard with Coated FOGRA39; NOT MEASURED without it)
+        id: pixel-gate
         # Hard regression gate over corpus/generated/*.idml + *.pdf.
         # diff.sh regenerates each IDML, renders it, rasterises the
         # paired InDesign PDF via pdftoppm, runs paged-diff, and
@@ -157,25 +173,55 @@ jobs:
         # swallowed, which is precisely what this step did for months
         # (it skipped itself entirely and went green).
         #
-        # So: 0 passes, 1 blocks, 3 reports the gate unavailable (a named
-        # skip, in the step name, the log, the annotation and the job
-        # summary) and continues. Give a runner a FOGRA39 profile via
-        # PAGED_CMYK_PROFILE and set PAGED_REQUIRE_FOGRA39=1 on it: then 3
-        # cannot happen, and diff.sh fails instead (docs/development/testing.md).
+        # So: 0 passes, 1 blocks, 3 means NOT MEASURED. A step cannot end
+        # neutral, so it ends 0 — and says, everywhere a reader looks, that
+        # this is not a pass: the log, a warning annotation, the job summary,
+        # and a NEUTRAL check run on the commit named "fidelity pixel gate —
+        # NOT MEASURED" (the next step; a green tick next to this job's name
+        # is the text-layer gate's and the snapshots', not the pixel gate's).
+        # Give a runner a FOGRA39 profile via PAGED_CMYK_PROFILE and set
+        # PAGED_REQUIRE_FOGRA39=1 on it: then 3 cannot happen, and diff.sh
+        # fails instead (docs/development/testing.md).
         run: |
           set +e
           ./corpus/generated/diff.sh
           rc=$?
           set -e
           if [ "$rc" -eq 3 ]; then
-            msg="unavailable: FOGRA39 profile: no Coated FOGRA39 on this runner, so the pixel gate measured nothing (every fixture skipped; not a regression). The text-layer gate below still gates."
+            msg="NOT MEASURED — unavailable: FOGRA39 profile: no Coated FOGRA39 on this runner, so the pixel gate compared nothing (every fixture skipped). This is neither a pass nor a regression. The text-layer gate below still gates."
             echo "$msg"
-            echo "::warning title=fidelity gate unavailable (FOGRA39)::$msg"
-            echo "### Fidelity pixel gate: unavailable (FOGRA39)" >> "$GITHUB_STEP_SUMMARY"
-            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=fidelity pixel gate NOT MEASURED (no FOGRA39 profile)::$msg"
+            {
+              echo "### Fidelity pixel gate: NOT MEASURED"
+              echo "$msg"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "measured=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          if [ "$rc" -eq 0 ]; then
+            echo "### Fidelity pixel gate: measured, within tolerance" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "measured=true" >> "$GITHUB_OUTPUT"
           exit "$rc"
+
+      # The neutral check run: on the commit's list of checks the pixel gate
+      # then reads "NOT MEASURED" (grey), not as part of a green job. Best
+      # effort: a token without `checks: write` (a fork's pull request)
+      # leaves the warning and the summary above.
+      - name: fidelity pixel gate — NOT MEASURED (neutral check on the commit)
+        if: ${{ !cancelled() && steps.pixel-gate.outputs.measured == 'false' }}
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/check-runs" -X POST \
+            -f name="core / fidelity pixel gate — NOT MEASURED (${{ matrix.os }})" \
+            -f head_sha="${{ github.sha }}" \
+            -f status=completed -f conclusion=neutral \
+            -f "output[title]=NOT MEASURED: no Coated FOGRA39 profile on the runner" \
+            -f "output[summary]=The generated-corpus pixel gate compared nothing in this run (engine/core/corpus/generated/diff.sh exit 3). It is neither a pass nor a regression. A runner with the profile sets PAGED_CMYK_PROFILE and PAGED_REQUIRE_FOGRA39=1." \
+            >/dev/null \
+            || echo "::notice::could not create the neutral check run (no checks: write for this token)"
 
       - name: text-layer gate (hard for opted-in fixtures)
         # The pixel gate above cannot see missing words: twelve glyphs on
@@ -188,7 +234,7 @@ jobs:
 
       - name: upload generated-corpus heatmaps on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: generated-corpus-diff-${{ matrix.os }}
           # cand-NNN.png + ref-NNN.png + heat-NNN.png + report.json +
@@ -198,7 +244,7 @@ jobs:
           retention-days: 14
 
       # Bun at the version in /.prototools (the repo scripts run on Bun).
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -209,6 +255,10 @@ jobs:
       # the `core/fidelity-*` lanes it declares stayed empty. This writes
       # the verdicts as contract-v1 evidence and the numbers as
       # measurements (worst page per fixture), JSON only.
+      # The derivation's own tests (scripts/measurements-from-fidelity.test.mjs
+      # ran in no job until 2026-11-28).
+      - name: measurements-from-fidelity tests
+        run: bun test scripts/measurements-from-fidelity.test.mjs
       - name: derive fidelity evidence + measurements
         if: always()
         run: |
@@ -222,7 +272,7 @@ jobs:
 
       - name: upload fidelity evidence + measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: paged-fidelity-${{ matrix.os }}
           path: |

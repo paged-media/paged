@@ -20,6 +20,8 @@ on:
       # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
       - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/core-ci.yml"
+      # The tool versions (Bun, Node, moon) a job installs.
+      - ".prototools"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -35,6 +37,8 @@ on:
       # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
       - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/core-ci.yml"
+      # The tool versions (Bun, Node, moon) a job installs.
+      - ".prototools"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -44,6 +48,14 @@ on:
       - "modules/data/conformance/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
+
+# The token reads the repository and nothing else; a job that needs more
+# says so itself.
+permissions:
+  contents: read
+  # .github/actions/engine-wasm asks for the `engine / wasm` run of the commit
+  # (it waits for that build instead of building the engine a second time).
+  actions: read
 
 defaults:
   run:
@@ -70,6 +82,8 @@ jobs:
   check:
     name: check + test
     runs-on: ${{ matrix.os }}
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -78,7 +92,7 @@ jobs:
         # native macOS build on every push.
         os: ${{ github.ref == 'refs/heads/main' && fromJSON('["ubuntu-latest", "macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The workspace's debug test binaries outgrew the hosted Linux
       # runner's free disk ("No space left on device" in the test step,
       # 2026-10-16). The preinstalled SDKs nothing here uses free ~25 GB.
@@ -91,15 +105,15 @@ jobs:
       # B21) rather than in a job of its own that every job had to wait for.
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -107,7 +121,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install cargo-nextest
         if: runner.os == 'Linux'
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
+        with:
+          tool: nextest
 
       - name: fmt
         run: cargo fmt --all --check
@@ -207,6 +223,31 @@ jobs:
             echo "::warning title=unavailable: CMYK profile::profile fetch failed — the colour tests report unavailable (skipped) this run"
           fi
 
+      # poppler (pdftoppm, pdftocairo): paged-export-pdf's raster tests
+      # (mesh_fill, paint_v2, effects_export, pattern_paint) rasterise the
+      # exported PDF with it and compare. This job had no poppler, so on
+      # every run they reported `unavailable: external program` and tested
+      # nothing (found 2026-11-28). With both programs present the lane
+      # claims them: PAGED_REQUIRE_TOOLS=1 makes a test that still finds
+      # none fail instead of skipping. apt is bounded and only runs when the
+      # tool is absent (the 2026-08-19 mirror hangs, see `export-diff`).
+      - name: install poppler (pdftoppm, pdftocairo) for the PDF raster tests
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          if command -v pdftoppm >/dev/null 2>&1 && command -v pdftocairo >/dev/null 2>&1; then
+            echo "poppler already present ($(command -v pdftoppm))"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew list poppler >/dev/null 2>&1 || brew install poppler
+          else
+            sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list \
+                /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+          fi
+          command -v pdftoppm && command -v pdftocairo
+          echo "PAGED_REQUIRE_TOOLS=1" >> "$GITHUB_ENV"
+
       # idml-coverage's tests run `cargo metadata --offline`, which needs
       # every crate of the graph on disk; rust-cache prunes the ones the
       # build never compiles, so fetch the whole graph first. `--locked`
@@ -286,7 +327,7 @@ jobs:
       # pushing results to it.
       - name: upload JUnit artifact
         if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nextest-junit
           path: engine/core/target/nextest/ci/junit.xml
@@ -318,19 +359,21 @@ jobs:
   test-wasm:
     name: wasm test lane (stub, pending W0.8)
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
           components: clippy
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -360,7 +403,7 @@ jobs:
           WB=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = "|"/,""); print; exit}' Cargo.lock)
           echo "wasm-bindgen pin: $WB"
           cargo install wasm-bindgen-cli --version "$WB" --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: make test-wasm
@@ -373,13 +416,17 @@ jobs:
   # (the-renderer.viewer-wrapper, the-renderer.gpu-backend) stayed
   # "no evidence". The tests need no wasm (a fake session stands in).
   viewer-vitest:
+    # The job keeps its name (it is a check name and an evidence lane); it
+    # typechecks too since 2026-11-28.
     name: idml-viewer bun test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Minutes on a cache hit; the typecheck reads the session's generated
+    # .d.ts, so a miss waits for (or builds) the engine wasm packages.
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Bun and Node at the versions in /.prototools, installed by proto.
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -388,6 +435,15 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
+      # The viewer's sources and tests against the session's types
+      # (wasm/paged_sdk.d.ts, a build output): the published package was
+      # typechecked only by the release until 2026-11-28.
+      - name: engine wasm packages (the session's generated types)
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: typecheck
+        working-directory: engine/core/web/idml-viewer
+        run: bun run typecheck
       # bun's report, rewritten into the vitest shape the evidence has
       # always had (tooling/js/bun-junit.mjs), so the artifact keeps its
       # name and its test ids.
@@ -401,25 +457,30 @@ jobs:
           exit $status
       - name: upload JUnit artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: idml-viewer-vitest-junit
           path: engine/core/web/idml-viewer/junit.xml
           if-no-files-found: warn
           retention-days: 14
 
+  # NOTE: this measures a SPIKE crate (spikes/wasm-size), not an artifact that
+  # ships. The shipped engine wasm is held by the size ratchet in
+  # engine-wasm.yml (tooling/ci/wasm-size-ratchet.mjs).
   wasm-size:
     name: wasm-size gate (Spike C)
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -485,8 +546,10 @@ jobs:
     name: tag-on-bump nudge
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # need tags for `git tag -l`
       - name: warn if PROTOCOL_VERSION is unpublished (no matching tag)
@@ -525,14 +588,16 @@ jobs:
   protocol-tag-guard:
     name: protocol-tag-guard
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Full history for the push-range diff + tags; a pull request runs
           # only the version check, which needs the tree.
           fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
       # Bun at the version in /.prototools (the repo scripts run on Bun).
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"
@@ -631,14 +696,16 @@ jobs:
   export-diff:
     name: pdf export-diff gate
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: pin
         run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
         with:
           toolchain: ${{ steps.pin.outputs.channel }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
@@ -747,7 +814,7 @@ jobs:
 
       - name: upload diff output on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: export-diff-output
           # Per-fixture exported PDF + poppler + native rasters — enough

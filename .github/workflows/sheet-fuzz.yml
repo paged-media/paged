@@ -25,16 +25,20 @@ defaults:
 jobs:
   fuzz:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         target: [parse_formula, xlsx_open, xlsx_load_recalc]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
+        with:
+          toolchain: nightly
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
-        uses: rui314/setup-mold@v1
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
       - run: cargo install cargo-fuzz --locked
       - name: seed corpus
         run: |
@@ -53,7 +57,20 @@ jobs:
           cargo +nightly fuzz run --fuzz-dir . ${{ matrix.target }} --
           -max_total_time=1200 -rss_limit_mb=2048 -max_len=1048576
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: fuzz-${{ matrix.target }}
           path: modules/sheet/fuzz/artifacts/
+
+  # A scheduled run that fails has no commit to turn red: it opens (or
+  # updates) an issue instead, and the first green night closes it
+  # (.github/workflows/scheduled-failure-issue.yml). Scheduled runs only.
+  notify:
+    name: issue on a failing scheduled run
+    needs: [fuzz]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/scheduled-failure-issue.yml
+    with:
+      failed: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}

@@ -50,7 +50,7 @@ jobs:
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: the tag is a release tag
         run: |
@@ -63,7 +63,7 @@ jobs:
       # The tag's tree with the whole history and every tag: the range
       # starts at the previous `v*` tag the release descends from.
       - name: the tag's checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: refs/tags/${{ env.TAG }}
           path: at-tag
@@ -72,7 +72,7 @@ jobs:
 
       # Bun at the version in /.prototools (the feature-id inventory runs on
       # Bun and reads the editor's sources through the workspace).
-      - uses: moonrepo/setup-toolchain@v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
           proto-version: "0.63.1"

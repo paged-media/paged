@@ -1,0 +1,54 @@
+{
+  "allow": [
+    {
+      "file": "docs/migration/path-rewiring.md",
+      "rule": "checkout",
+      "reason": "the migration's record: it quotes the retired side-by-side checkout layout it rewired, and the grep that finds leftovers"
+    },
+    {
+      "file": "engine/core/crates/idml-export/src/images.rs",
+      "rule": "home",
+      "reason": "test input: a Windows link path as InDesign writes it, with a made-up user"
+    },
+    {
+      "file": "engine/core/crates/idml-export/tests/it/linked_image_roundtrip.rs",
+      "rule": "home",
+      "reason": "test input: a Windows link path as InDesign writes it, with a made-up user"
+    },
+    {
+      "file": "platform/extensions/packages/plugin-api/src/manifest.ts",
+      "rule": "private-repo",
+      "reason": "a comment in the extension contract; removing it is a contract edit and waits for the next plugin-sdk version bump"
+    },
+    {
+      "file": "modules/image/image-conformance/fixtures/abr/corpus-profile.json",
+      "rule": "private-repo",
+      "reason": "analyst-published clean-room artifact (fixtures/abr/README.md): only the analyst role regenerates it; the citation goes with the next publication"
+    },
+    {
+      "file": "modules/image/registry/psd-blocks.yaml",
+      "rule": "private-repo",
+      "reason": "registry evidence note citing the format spec in the planning notes; to be reworded by the module's owner"
+    },
+    {
+      "file": "modules/data/registry/features/provider.yaml",
+      "rule": "private-repo",
+      "reason": "registry comment citing an RFC in the planning notes; to be reworded by the module's owner"
+    },
+    {
+      "file": "apps/editor/apps/canvas/tests/showcase/pages/03-editorial.ts",
+      "rule": "checkout",
+      "reason": "prose rendered into the showcase document (names a retired local script); changing it changes the showcase output"
+    },
+    {
+      "file": "apps/editor/apps/canvas/tests/showcase/pages/12-layers.ts",
+      "rule": "checkout",
+      "reason": "prose rendered into the showcase document (names a retired local script); changing it changes the showcase output"
+    },
+    {
+      "file": "apps/editor/apps/canvas/tests/e2e/gesture-content.spec.ts",
+      "rule": "checkout",
+      "reason": "a comment naming the archived pre-split checkout; to be reworded with the spec's next edit"
+    }
+  ]
+}

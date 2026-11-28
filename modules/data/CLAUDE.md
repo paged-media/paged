@@ -19,7 +19,7 @@ ADR 561), every file read in Rust, query rows read straight into a
 `RecordSet` — the swappable seam.
 
 Spec (the authority): [`docs/concept.md`](./docs/concept.md).
-SDK gap tracker: the cross-repo RFI `thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md` (D-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
+SDK gap tracker: the cross-repo RFI `plugin-platform/rfi-core-sdk-gaps.md` (private planning notes) (D-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
 
 Rust crates (spec §4). Since PM-0015 the engine-level ones are
 `engine/core/crates/paged-data-*` in the ENGINE's Cargo workspace (library names
@@ -85,7 +85,7 @@ The ENGINE is far ahead of what a user can reach from the panels:
 ## Project State & Feature Matrix (cockpit)
 
 The feature inventory, test linkage and live status for ALL Paged repos are derived by
-[Cockpit](https://github.com/drietsch/cockpit) from `~/paged/cockpit/` (`cockpit.toml` with
+Cockpit (a private tool) from the private `cockpit` checkout (`cockpit.toml` with
 `root = ".."`; features in `cockpit/docs/features/<chapter>/<id>.md`). There is NO feature
 matrix in this repo; do not create one.
 
@@ -193,7 +193,7 @@ Rules for every code change in this repo:
 
 ## Two-registry split
 
-- `~/paged/cockpit/docs/features/data/<id>.md` (Cockpit, chapter `data`) — the STATUS
+- `cockpit/docs/features/data/<id>.md` (Cockpit, chapter `data`) — the STATUS
   ledger (component `plugin.data`; `claims:` planned/partial/shipped, health from evidence).
 - `registry/` (here) and `engine/core/crates/paged-data-core/functions/*.yaml`
   — build-consumed metadata: the function rows (one per expression function:

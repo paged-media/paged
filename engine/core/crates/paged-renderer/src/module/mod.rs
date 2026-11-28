@@ -33,8 +33,7 @@
 //! [`ResolvedFrame`] IR and emit display commands via the geometry
 //! adapter in [`geometry`].
 //!
-//! See `docs/idea.md` and `/Users/drietsch/.claude/plans/vectorized-humming-lobster.md`
-//! for the full design.
+//! See `docs/idea.md` for the full design.
 
 pub(crate) mod corner_path;
 pub(crate) mod drop_shadow;

@@ -1,0 +1,84 @@
+name: engine / wasm
+
+# THE BUILDER of the engine's wasm packages (canvas-wasm with introspect/ and
+# repo/, and the viewer session): the one workflow that builds them on a push.
+#
+# Every workflow that typechecks, tests or builds against the engine gets the
+# packages through .github/actions/engine-wasm, a cache keyed by the engine's
+# sources. On a push that changes the engine they all start in the same
+# minute, and until 2026-11-28 each of them missed the cache and built the
+# same four parts (about half an hour of fat-LTO build, a dozen times). Now
+# this workflow builds once and saves the cache; the others, on a miss, wait
+# for this run of the same commit and restore its build
+# (.github/actions/engine-wasm, "BUILD ONCE").
+#
+# It runs on EVERY push to main, with no path filter: the others can only
+# wait for a run that exists, and a cache entry can also go missing without
+# an engine change (GitHub evicts the least recently used entries above the
+# repository's cache limit). On a hit it restores and measures, in about a
+# minute.
+#
+# It is also where the SHIPPED wasm is measured: the size ratchet
+# (tooling/ci/wasm-size-ratchet.mjs, tooling/ci/engine-wasm-sizes.json) fails
+# a build whose artifact is larger than its recorded maximum. core-ci's
+# `wasm-size gate` measures a spike crate, not what ships.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per commit and event; a main push is never cancelled (other
+  # workflows are waiting for it). A re-dispatch on a wip/* branch replaces
+  # its older dispatched run.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/wip/') }}
+
+jobs:
+  build:
+    name: build or restore, then the size ratchet
+    runs-on: ubuntu-latest
+    # A cold build takes about half an hour; an hour and a half is a hang.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Bun at the version in /.prototools (the build script checks its
+      # output with `bun -e`).
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+
+      # `wait: "false"`: this is the run the others wait for.
+      - name: engine wasm packages (build on a miss, save the cache)
+        id: wasm
+        uses: ./.github/actions/engine-wasm
+        with:
+          wait: "false"
+          artifact: "false"
+
+      - name: built or restored
+        run: |
+          if [ "${{ steps.wasm.outputs.cache-hit }}" = "true" ]; then
+            echo "### Engine wasm: restored from the cache (the engine's inputs are unchanged)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Engine wasm: built in this run and saved to the cache" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The shipped artifacts against their recorded maxima. Growing one
+      # takes an edit of tooling/ci/engine-wasm-sizes.json in the same change.
+      - name: size ratchet of the shipped engine wasm
+        run: node tooling/ci/wasm-size-ratchet.mjs --json "$RUNNER_TEMP/engine-wasm-sizes.json"
+
+      - name: upload the measured sizes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: engine-wasm-sizes
+          path: ${{ runner.temp }}/engine-wasm-sizes.json
+          if-no-files-found: warn
+          retention-days: 90

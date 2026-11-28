@@ -111,7 +111,7 @@ runs:
 
     - name: module wasm (${{ inputs.module }}) — restore
       id: restore
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.m.outputs.paths }}
         key: ${{ steps.m.outputs.key }}
@@ -119,18 +119,18 @@ runs:
     # ---- a miss: build ------------------------------------------------------
     - name: module wasm (${{ inputs.module }}) — Rust toolchain
       if: steps.restore.outputs.cache-hit != 'true'
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-28
       with:
         toolchain: ${{ steps.m.outputs.toolchain }}
         targets: wasm32-unknown-unknown
 
     - name: module wasm (${{ inputs.module }}) — mold (Linux)
       if: steps.restore.outputs.cache-hit != 'true' && runner.os == 'Linux'
-      uses: rui314/setup-mold@v1
+      uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
 
     - name: module wasm (${{ inputs.module }}) — Rust dependency cache
       if: steps.restore.outputs.cache-hit != 'true'
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       with:
         workspaces: ${{ steps.m.outputs.crate }} -> target
         prefix-key: v0-rust-${{ inputs.module }}-wasm
@@ -157,7 +157,7 @@ runs:
 
     - name: module wasm (${{ inputs.module }}) — save
       if: steps.restore.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.m.outputs.paths }}
         key: ${{ steps.m.outputs.key }}

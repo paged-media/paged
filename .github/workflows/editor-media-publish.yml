@@ -33,10 +33,27 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # A bound on a hang (the default is six hours); generous for a cold cache.
+    timeout-minutes: 60
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
+      # wrangler at one exact version, its dependency tree pinned by
+      # tooling/release/wrangler/package-lock.json (as release.yml deploys
+      # with it); it was `npx -y wrangler@4`, the newest 4.x of the minute,
+      # run with the Cloudflare token and this job's write access.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: tooling/release/wrangler
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: wrangler at the locked version
+        working-directory: tooling/release/wrangler
+        run: |
+          npm ci --no-audit --no-fund
+          ./node_modules/.bin/wrangler --version
+          echo "WRANGLER=$GITHUB_WORKSPACE/tooling/release/wrangler/node_modules/.bin/wrangler" >> "$GITHUB_ENV"
       - name: upload what the host does not have, then check every range
         env:
           GH_TOKEN: ${{ github.token }}
@@ -73,7 +90,7 @@ jobs:
             else
               gh api -H "Accept: application/octet-stream" \
                 "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "media/$name"
-              npx -y wrangler@4 r2 object put "paged-modules/media/$key" --remote \
+              "$WRANGLER" r2 object put "paged-modules/media/$key" --remote \
                 --file "media/$name" --content-type "$type" \
                 --cache-control "public, max-age=31536000, immutable"
               echo "+ $key"; up=$((up + 1))
