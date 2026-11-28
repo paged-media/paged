@@ -17,6 +17,21 @@ always used:
 | 1200–1299 | `apps/editor` (from 2026-11-13, PM-0019; its records 300–315, written in the extensions' range, keep their numbers) |
 | 1300–1399 | `engine/core` (from 2026-11-13, PM-0020) |
 
+## Numbers used twice
+
+25 numbers name a record in two components. They were given out before the ranges above were
+kept apart, the records keep their numbers, and a citation tells them apart by directory
+(`engine/core` ADR 204, `apps/editor` ADR 204):
+
+| Numbers | Components | Record |
+|---|---|---|
+| 200–209 (10) | `apps/editor` and `engine/core` | [PM-0012](PM-0012-engine-adr-range.md) |
+| 300, 301, 303–315 (15) | `apps/editor` and `platform/extensions` | [PM-0019](PM-0019-editor-adr-range.md) |
+
+No number is used twice inside one component. `node tooling/docs/adr-numbers.mjs` lists them
+(`--list`) and fails on any other collision; it found these 25 on 2026-11-28. It runs by hand:
+no workflow calls it yet.
+
 A PM record may supersede or amend a component record; it names it, and the component record
 keeps its text.
 

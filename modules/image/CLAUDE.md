@@ -1,8 +1,9 @@
-# CLAUDE.md — paged-media/plugin-image
+# CLAUDE.md — modules/image (paged.image)
 
-Orientation for Claude sessions in **paged-media/plugin-image** — the
-paged.image raster subsystem, delivered as a Paged plugin (public;
-dual-licensed AGPL-3.0 OR PMEL, And The Next GmbH).
+Orientation for Claude sessions in **`modules/image`** of the monorepo
+`paged-media/paged` (the `paged-media/plugin-image` repository until 2026-10-18) — the
+paged.image raster subsystem, a built-in module (PM-0017; public;
+dual-licensed AGPL-3.0-only OR PMEL, And The Next GmbH).
 
 ## What this is
 
@@ -12,8 +13,9 @@ A Rust/WASM/WebGPU image-processing engine in two shapes — **Engine A**
 plus PSD/PSB round-trip (`image-psd`), GPU-only WGSL kernels
 (`image-kernels`/`image-gpu`), CMS (`image-cms`), codec adapters
 (`image-codecs`), and a TEST-ONLY conformance harness
-(`image-conformance`). Shipped as a plugin bundle (`manifest/` + `glue/`)
-consuming ONLY the published plugin SDK.
+(`image-conformance`). Shipped as a bundle (`manifest/` + `glue/`), a private
+workspace package that takes the contract (`plugin-api`, `plugin-sdk`) and
+`platform/shared/*` from the workspace (PM-0002, PM-0008).
 
 Spec (the authority): `docs/concept.md`.
 A-0 audit + D-11 ruling: an internal audit note (its colour-engine ruling is `docs/adr/457-colour-management.md`).
@@ -157,21 +159,24 @@ references/          READ-ONLY clean-room mounts (gitignored; see §3.1)
 
 ```bash
 moon run image:test     # Rust (nextest + doctests) and the glue tests, from anywhere
-# Rust (the engine) without Moon
-cargo build --workspace && cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+# Rust: this directory has no Cargo.toml. Its crates are members of the
+# engine's Cargo workspace (PM-0017), so every cargo command below runs in
+# engine/core (`cd ../../engine/core`) with this module's crates named by
+# `-p`; `--workspace` there means the whole engine. The Moon tasks carry the
+# module's `-p` list (moon.yml):
+moon run image:rust-check && moon run image:rust-lint && moon run image:rust-test   # and image:rust-fmt
 
 # GPU parity tests run on the local Metal adapter by default;
 # select a backend explicitly with WGPU_BACKEND=metal|vulkan|gl.
 
-# TS (the bundle) — install order: editor → plugin-sdk → plugin-image
+# TS (the bundle) — one root Bun workspace: `bun install` at the repository root
 bun install && bun run test && bun run typecheck
 bun run validate:manifest
 
 # Dependency guards (CI runs these; run before claiming green)
 cargo tree -p image-kernels --edges normal | grep -E 'image-(pipeline|graph|gpu|cms|js)' && echo LEAK
 cargo tree -p image-js --target wasm32-unknown-unknown | grep -E 'image-conformance|proptest' && echo LEAK
-cargo deny check
+(cd ../../engine/core && cargo deny check)   # one deny.toml: the engine's
 
 # wasm artifact (size-tracked against the 100 MB app wasm budget — BREAKAGE I-07)
 cargo build --release --target wasm32-unknown-unknown -p image-js
@@ -200,5 +205,5 @@ PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored 
 # GPU device tests print `unavailable: GPU adapter: …` without an adapter;
 # PAGED_REQUIRE_GPU=1 fails them instead (the GPU lanes set it), and
 # PAGED_FORCE_NO_GPU=1 hides this machine's adapter to prove that path.
-PAGED_FORCE_NO_GPU=1 PAGED_REQUIRE_GPU=1 cargo nextest run --workspace   # must fail
+PAGED_FORCE_NO_GPU=1 PAGED_REQUIRE_GPU=1 moon run image:rust-test   # must fail
 ```

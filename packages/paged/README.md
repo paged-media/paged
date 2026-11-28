@@ -43,9 +43,11 @@ Rust `paged` bundles: `--font <file.ttf>` names another fallback, `--no-default-
 without one (text no font answers for is then not set, and the run says so). For PDF/X,
 `--cmyk-profile <file.icc>` gives the CMYK working space and output intent:
 
-````sh
+```sh
 npx paged export brochure.idml -o print.pdf --pdf-standard pdfx4 --cmyk-profile CoatedFOGRA39.icc
-``` It is the program the repository calls
+```
+
+`paged` is the program the repository calls
 `paged-node` (`apps/cli`), bundled into `dist/paged.js` with its first-party modules and the
 third-party code it uses (`dist/THIRD-PARTY-NOTICES.md`), so it needs nothing but this
 package: Node 22 or later, or Bun. Its engine is this package's wasm.
@@ -61,7 +63,7 @@ Claude Code or any MCP client, with nothing deployed:
     "paged": { "command": "npx", "args": ["-y", "@paged-media/paged", "mcp"] }
   }
 }
-````
+```
 
 It serves the tools of the engine's Rust `paged mcp`, with the same names and schemas: a
 library of documents on disk (`--library <dir>`, default `$PAGED_LIBRARY`, else
@@ -75,9 +77,11 @@ file in the library's `exports/` folder (`export_document`); and `lookup_api` ov
 capability catalog. An agent's writes land on `agent/<run>/…` branches with provenance, for the
 library's owner to merge.
 
-Plugin bundles are found where the command runs: `--plugins <a,b>` loads those, otherwise
-every installed dependency of the current directory's `package.json` that declares a paged
-manifest. The built-in modules (sheet, draw, image, data, …) are part of the editor and are
+Plugin bundles load only on request, because a bundle is code that runs with the command's
+rights: `--plugins <a,b>` loads exactly those (package names or paths), and `--plugins auto`
+discovers the ones installed in the current directory. `PAGED_PLUGINS` in the environment
+takes the same values. Without either, no bundle is loaded; use `auto` only in a directory
+whose packages you trust. The built-in modules (sheet, draw, image, data, …) are part of the editor and are
 not on npm, so `apply`, `merge` and `generate`, which need the paged.data module, and
 `preflight`, which needs paged.publish's typed preflight, report
 that it is not loaded. `package` needs no module: `npx paged package brochure.idml -o
@@ -101,7 +105,8 @@ The engine's files are built into the workspace package `engine/core/packages/ca
 (private; about a hundred files in the repository import it under that name), and the CLI
 lives in `apps/cli`. This directory holds the published package's `package.json`, this
 README and the licence files; `bun run build` (`scripts/assemble.mjs`) copies the engine's
-built files here and bundles the CLI into `dist/`. Build the engine first:
+built files here, bundles the CLI into `dist/` and writes `THIRD-PARTY-NOTICES.md` (which
+needs cargo). Build the engine first:
 
 ```sh
 moon run core:wasm-pkg
@@ -113,5 +118,8 @@ Why one package carries the engine and the command line, and why the viewer stay
 
 ## Licence
 
-`AGPL-3.0-only OR LicenseRef-PMEL`; see [LICENSE.md](./LICENSE.md). The third-party code
-bundled into `dist/paged.js` keeps its own licences (`dist/THIRD-PARTY-NOTICES.md`).
+`AGPL-3.0-only OR LicenseRef-PMEL`; see [LICENSE.md](./LICENSE.md). Third-party code keeps
+its own licences: `THIRD-PARTY-NOTICES.md` lists the Rust crates in the three wasm modules
+with their licence texts (generated from the engine's `Cargo.lock` by
+`scripts/third-party-notices.mjs`), and `dist/THIRD-PARTY-NOTICES.md` the JavaScript bundled
+into `dist/paged.js`.

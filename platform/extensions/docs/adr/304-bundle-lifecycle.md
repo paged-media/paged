@@ -1,6 +1,8 @@
 # ADR 304 — Bundle lifecycle: one synchronous activate, structural teardown, guarded activation
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`.
+  Amended 2026-11-28: `API_VERSION` is `0.<generation>.<revision>` and moves with the contract
+  (the amendment at the end).
 - **Scope:** `packages/plugin-api/src/bundle.ts`; `load.ts`, `version.ts`, `disposables.ts` and
   `define-bundle.ts` in `packages/plugin-sdk/src`
 
@@ -88,3 +90,32 @@ packages are published and the grammar is still the minimal one.
   the host object `activate` receives and where it is built
 - [ADR 319](319-trust-line.md) — the first-party assertion in step 1
 - ADR 025 — the journal; the record under which guarded activation was introduced
+
+## Amendment — 2026-11-28: `API_VERSION` moves with the contract
+
+Step 3 compared a manifest's `apiVersion` with a constant that had been `"0.2.0"` through 556
+commits to the contract's sources, so it refused nothing (the gap recorded above). The
+smallest policy that makes the check say something:
+
+- **`API_VERSION` is `0.<generation>.<revision>`,** in `packages/plugin-sdk/src/version.ts`.
+  It is not the package version: that one follows the engine's protocol and the release tag
+  ([PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md), amendment 1).
+- **The revision rises with every change to the contract's sources** (`plugin-api/src`,
+  `plugin-sdk/src`), in the commit that moves plugin-sdk's package version. It started at 557.
+- **The generation rises, and the revision returns to 0, with a change that breaks an
+  extension written against the generation:** a member removed or renamed, a signature
+  narrowed, a meaning changed. The wire types in `plugin-api/src/wire.d.ts` count.
+- **The guard holds it.** `scripts/assert-contract-bumped.mjs` fails a range that changes the
+  contract's sources and leaves `API_VERSION` not greater than it was. It cannot tell an
+  addition from a break: which number moves is the author's call, and the review's.
+- **What a manifest says.** `"^0.2"` accepts every host of generation 0.2, as before, so no
+  existing manifest changes. `"^0.2.<n>"` also refuses a host older than revision `n`: an
+  extension that uses surface added at revision `n` declares it, and an older host refuses
+  the bundle at load with a message that says which side is behind
+  (`explainApiMismatch`). A host of another generation refuses both forms.
+- **`host.supports()` stays** the way to probe one door ([ADR 305](305-doors-always-present.md));
+  the revision is the coarse floor, for a bundle that cannot run without what it uses.
+
+Not done: the range grammar is still `*`, exact and caret; `paged-plugin init` still writes
+`"^0.2"` (the CLI has no build step and does not read `version.ts`), so an author raises the
+floor by hand. The reference is [`../reference/api-version.md`](../reference/api-version.md).

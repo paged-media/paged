@@ -3,7 +3,8 @@
 - **Status:** Accepted. Recorded retroactively on 2026-10-15 from the code at `0dab296`. The
   package is `packages/cli` at 0.1.0-canary.0; it is not on npm yet (see Consequences). The
   design notes are [`DESIGN.md`](../../DESIGN.md) §22. Amended 2026-10-16: the bin is
-  `paged-node` (see the amendment below; it supersedes §5).
+  `paged-node` (see the amendment below; it supersedes §5). Amended 2026-11-28: plugin bundles
+  load only on request (the last amendment; it supersedes the discovery rule of §2).
 - **Moved (wave C, 2026-10-19):** the package is `apps/cli` now, outside the community-facing
   tree; the paths below are as recorded.
 - **Scope:** `packages/cli` (`src/session.ts`, `src/plugins.ts`, `src/verbs.ts`,
@@ -253,3 +254,19 @@ the data verbs reaching into paged.data's session object and the PDF of `merge` 
   row (ADR 558). A binding with a `field` instead stays the CLI's shorthand (the record's text
   for the field, typed as `set` types a value, all such bindings in one `host.objects.batch`);
   giving both is a usage error. The "needs Wave 5" refusal is gone.
+
+## Amendment — 2026-11-28: plugin bundles load only on request
+
+§2's discovery rule is superseded. It loaded, by default, every first-party bundle resolvable
+from the working directory and every dependency whose `package.json` carries a
+`"paged": { "manifest": … }` entry. A bundle is code that runs with the caller's rights, so
+that default let the directory a command happened to run in decide what code ran.
+
+- **Default, and `--no-plugins`:** no bundle is loaded (core objects only).
+- **`--plugins a,b`:** exactly these, by package name or path; a miss is an error.
+- **`--plugins auto`:** the discovery §2 describes, now asked for by name; a miss is silent.
+- **`PAGED_PLUGINS`** in the environment takes the same values and is the default when
+  neither flag is given.
+
+The rule is in `apps/cli/src/plugins.ts`, and `paged --help` states it. The published
+`@paged-media/paged` describes it in its README.

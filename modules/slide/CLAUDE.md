@@ -1,6 +1,7 @@
-# CLAUDE.md — paged-media/plugin-slide
+# CLAUDE.md — modules/slide (paged.slide)
 
-paged.slide: presentations on the paged engine, a `.pptx` reader and writer, and an editor
+paged.slide (`modules/slide` of the monorepo `paged-media/paged`; the
+`paged-media/plugin-slide` repository until 2026-10-18): presentations on the paged engine, a `.pptx` reader and writer, and an editor
 slideshow. Dual-licensed AGPL-3.0-only OR PMEL (And The Next GmbH).
 
 Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/architecture.md),
@@ -12,7 +13,7 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
   packages are glue: bundle lifecycle, panels, file input, slideshow UI.
 - **BUILT-IN, PART OF THE CORE (PM-0017).** The Rust crates may path-depend on the engine
   (`engine/core/crates`), on `platform/shared/*` and on other built-ins, at the same commit and
-  without cycles (declared in `moon.yml`); there is no git dependency (`deny.toml` denies git
+  without cycles (declared in `moon.yml`); there is no git dependency (`engine/core/deny.toml` denies git
   sources). Today `slide-native` writes the deck with the engine's model crates (`paged-model`,
   `paged-scene`, `paged-store`; ADR 708), `pptx-export` reads the document back (ADR 711), and
   paged.sheet is reached by path for its number formats (chart labels, ADR 710) and its workbook
@@ -38,8 +39,11 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 
 ```bash
 moon run slide:test     # Rust (nextest + doctests), then wasm + bun test, from anywhere
-cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace  # the Rust tests without Moon
+# The crates are members of the engine's Cargo workspace (PM-0017; this directory
+# has no Cargo.toml): cargo runs in engine/core with the module's crates named by
+# -p, which the Moon tasks do (moon.yml).
+moon run slide:rust-fmt && moon run slide:rust-lint && moon run slide:rust-test
+# The corpus lane, in engine/core, with the module's -p list:
 PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 cargo nextest run --profile corpus --run-ignored only
 ```
 

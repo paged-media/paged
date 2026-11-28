@@ -32,11 +32,14 @@ export type {
   SessionPageRect,
   SessionPagesLayout,
   SessionRaster,
+  ViewerSessionApi,
   ViewerSessionLike,
 } from "./session.js";
+export { adaptSession } from "./session.js";
 export {
   clampScroll,
   clampZoom,
+  contentBounds,
   contentExtent,
   currentPageAt,
   fitPage,

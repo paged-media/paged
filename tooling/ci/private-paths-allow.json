@@ -16,11 +16,6 @@
       "reason": "test input: a Windows link path as InDesign writes it, with a made-up user"
     },
     {
-      "file": "platform/extensions/packages/plugin-api/src/manifest.ts",
-      "rule": "private-repo",
-      "reason": "a comment in the extension contract; removing it is a contract edit and waits for the next plugin-sdk version bump"
-    },
-    {
       "file": "modules/image/image-conformance/fixtures/abr/corpus-profile.json",
       "rule": "private-repo",
       "reason": "analyst-published clean-room artifact (fixtures/abr/README.md): only the analyst role regenerates it; the citation goes with the next publication"

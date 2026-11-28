@@ -326,10 +326,11 @@ fetchWasm(host, "engine", new URL("../bin/x_bg.wasm", import.meta.url)) })`
 **Uploading.** `paged-plugin modules-upload <bundle-dir>` puts each
 declared artifact at `paged-modules/<package>/<version>/<path in package>`
 (R2, via `npx wrangler@4 r2 object put --remote`), brotli quality 10, with the
-headers above. It HEADs first and skips what is hosted; without
-`CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID`) it reports what is
-missing and exits 0, so a publish workflow can carry the step before the
-repo has the secret. `--dry-run` uploads nothing. `PAGED_MODULE_HOST` /
+headers above. It HEADs first and skips what is hosted, which needs no
+token. Without `CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID`) it
+uploads nothing: when an artifact is not hosted it says so and exits 1, so
+a publish step that hosted nothing does not pass. `--dry-run` uploads
+nothing, lists what an upload would do, and exits 0. `PAGED_MODULE_HOST` /
 `PAGED_MODULE_BUCKET` override the host and bucket. A version is
 immutable: upload after `npm publish` succeeded, never for a version that
 is not on npm.

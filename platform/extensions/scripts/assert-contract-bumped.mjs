@@ -30,6 +30,15 @@
 // read FAILS the guard (see "FAIL CLOSED" below); only a one-commit history
 // has nothing to diff.
 //
+// The API version moves too (ADR 304, amendment 2026-11-28). `API_VERSION`
+// in `packages/plugin-sdk/src/version.ts` is what `loadBundle` compares a
+// manifest's `apiVersion` with. It stayed at 0.2.0 through several hundred
+// contract changes, so that check refused nothing. The same range that must
+// move plugin-sdk's package version must therefore RAISE `API_VERSION`: the
+// revision (third number) with any change, the generation (second number,
+// revision back to 0) with a breaking one. The guard cannot tell which of
+// the two a change is; it holds the number to "greater than before".
+//
 // Runs in CI (extensions-contract-guard.yml) and locally:
 //   node scripts/assert-contract-bumped.mjs            # HEAD~1..HEAD
 //   node scripts/assert-contract-bumped.mjs <baseRef>  # <baseRef>..HEAD
@@ -193,6 +202,41 @@ if (changed.length > 0) {
   }
 }
 
+// API_VERSION at a ref: [major, generation, revision], or null where
+// version.ts does not exist at that (readable) ref.
+const VERSION_FILE = "packages/plugin-sdk/src/version.ts";
+function apiVersionAt(ref) {
+  const spec = `${ref}:./${VERSION_FILE}`;
+  if (!quiet(["cat-file", "-e", spec])) return null;
+  const match = /export const API_VERSION = "(\d+)\.(\d+)\.(\d+)";/.exec(
+    git(["show", spec]),
+  );
+  if (!match)
+    fail(
+      `${spec} has no \`export const API_VERSION = "<major>.<generation>.<revision>";\` line the guard can read`,
+    );
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+const apiVersionHead = apiVersionAt("HEAD");
+if (apiVersionHead === null)
+  fail(`${VERSION_FILE} is not at HEAD: the guard's path is out of date`);
+if (changed.length > 0) {
+  const before = apiVersionAt(base);
+  if (before !== null) {
+    const order =
+      apiVersionHead[0] - before[0] ||
+      apiVersionHead[1] - before[1] ||
+      apiVersionHead[2] - before[2];
+    if (order <= 0) {
+      violations.push(
+        `API_VERSION ${apiVersionHead.join(".")} (${VERSION_FILE}) is not greater than ${before.join(".")} at ${base}:\n` +
+          `      raise the revision (third number) with every contract change; for a change that\n` +
+          `      breaks an extension raise the generation (second number) and set the revision to 0`,
+      );
+    }
+  }
+}
+
 const sdk = versionAtHead(PUBLIC);
 const api = versionAtHead(LOCKSTEP);
 // Both packages exist at HEAD; a guard that cannot find them guards nothing.
@@ -211,7 +255,8 @@ if (violations.length > 0) {
     `\ncontract-guard FAILED — the contract changed without its version.\n` +
       `A change under packages/plugin-api/src or packages/plugin-sdk/src moves\n` +
       `plugin-sdk's version (the contract's one public number, PM-0008\n` +
-      `amendment 3), and plugin-api's private version moves with it.\n`,
+      `amendment 3), plugin-api's private version moves with it, and\n` +
+      `API_VERSION rises (ADR 304, amendment 2026-11-28).\n`,
   );
   for (const v of violations) console.error(`  ${v}`);
   console.error("");
@@ -219,5 +264,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `contract-guard OK — ${changed.length ? `the contract changed in ${base}..HEAD and plugin-sdk moved to ${sdk}` : `no contract change in ${base}..HEAD`}; plugin-api is in lockstep (${api}).`,
+  `contract-guard OK — ${changed.length ? `the contract changed in ${base}..HEAD and plugin-sdk moved to ${sdk}` : `no contract change in ${base}..HEAD`}; plugin-api is in lockstep (${api}); API_VERSION ${apiVersionHead.join(".")}.`,
 );

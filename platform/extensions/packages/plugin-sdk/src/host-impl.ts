@@ -1596,7 +1596,7 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
 
 /**
  * Trust posture the HOST asserts for a bundle at the load path
- * (`plugin-trust-line.md`). Same-realm execution — full `BundleHost`
+ * (`docs/adr/319-trust-line.md`). Same-realm execution — full `BundleHost`
  * + the raw `PagedEditor` via `host.editor` — is FIRST-PARTY-ONLY
  * during incubation. There is no sound *cryptographic* identity signal
  * yet (package signing is the last unchecked gate box), and the
@@ -1677,7 +1677,7 @@ export interface ToolSettingsBackend {
 
 export interface CreateBundleHostOptions {
   /**
-   * The host's trust assertion for this bundle (`plugin-trust-line.md`).
+   * The host's trust assertion for this bundle (`docs/adr/319-trust-line.md`).
    * Defaults to `'first-party'` — the only value the loader accepts
    * today. Passing any other value (e.g. via a future dynamic-import
    * experiment) is refused loudly at the load path, gated on the

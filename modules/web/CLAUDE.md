@@ -1,17 +1,20 @@
-# CLAUDE.md
+# CLAUDE.md — modules/web (paged.web)
 
-Orientation for Claude sessions in **paged-media/plugin-web** — the
-paged.web plugin (public; dual-licensed AGPL-3.0 OR PMEL, And The Next
-GmbH; license headers on every source file).
+Orientation for Claude sessions in **`modules/web`** of the monorepo
+`paged-media/paged` (the `paged-media/plugin-web` repository until 2026-10-18) — the
+paged.web module, a built-in (PM-0017; public; dual-licensed AGPL-3.0-only OR
+PMEL, And The Next GmbH; license headers on every source file).
 
 ## What this is
 
 HTML/CSS as a content type for the Paged editor (concept:
 `docs/concept.md`; architecture, status, decisions and the latest analysis are in
-`docs/`). Three packages: `web-model` (pure source model, storage envelope,
+`docs/`). Three packages, with their conformance suite in
+`packages/web-conformance`: `web-model` (pure source model, storage envelope,
 linter), `web-bundle` (manifest + `activate(host)`: commands, panel, importer,
 render/flow/bake) and `web-render` (Rust: Blitz capture, lowering, flow
-fragmentation → the bundle's engine wasm).
+fragmentation → the bundle's engine wasm; its own Cargo workspace, the one
+module crate outside `engine/core`'s, PM-0017).
 
 ## Hard rules
 

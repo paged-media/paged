@@ -71,7 +71,7 @@ manifest.json ── paged-plugin validate ──> errors, or "valid"           
 host app:  loadBundle(getEditor, bundle, options)          packages/plugin-sdk/src/load.ts
    1. options.trust must be "first-party" (the default)
    2. manifest.id must be reverse-DNS
-   3. manifest.apiVersion must accept API_VERSION ("0.2.0")
+   3. manifest.apiVersion must accept API_VERSION (0.<generation>.<revision>)
    4. createBundleHost(getEditor, manifest, options) -> { host, dispose }
    5. bundle.activate(host), inside try/catch
    6. returns { id, active, activationError?, dispose }

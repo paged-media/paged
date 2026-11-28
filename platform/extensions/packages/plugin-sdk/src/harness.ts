@@ -153,7 +153,7 @@ import {
   createWorkbookEditorRegistry,
   type WorkbookEditorBackend,
 } from "./doors-workbooks.js";
-import { satisfiesApiVersion, API_VERSION } from "./version.js";
+import { API_GENERATION_RANGE, explainApiMismatch } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
 import { documentChangeOf } from "./document-change.js";
@@ -1406,7 +1406,7 @@ export async function createHeadlessHost(
     id: "media.paged.harness",
     name: "harness",
     version: "0.0.0",
-    apiVersion: `^${API_VERSION.slice(0, 3)}`,
+    apiVersion: API_GENERATION_RANGE,
     capabilities: {
       document: { read: "broad", write: "broad" },
       rendering: ["overlay", "hitTest", "sceneLayer"],
@@ -1677,10 +1677,11 @@ export async function createHeadlessHost(
     },
     loadBundle(bundle: PagedBundle): Disposable {
       const { manifest } = bundle;
-      if (!satisfiesApiVersion(manifest.apiVersion)) {
+      const mismatch = explainApiMismatch(manifest.apiVersion);
+      if (mismatch !== null) {
         throw new Error(
           `headless host: ${manifest.id}@${manifest.version} requires ` +
-            `plugin-api "${manifest.apiVersion}", host implements ${API_VERSION}`,
+            `plugin-api "${manifest.apiVersion}": ${mismatch}`,
         );
       }
       if (loaded.some((b) => b.id === manifest.id)) {

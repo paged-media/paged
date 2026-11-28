@@ -29,11 +29,13 @@ import {
 } from "./camera.js";
 import { Emitter } from "./events.js";
 import { attachInput, type InputOptions } from "./input.js";
-import type {
-  SessionDiagnostics,
-  SessionPagesLayout,
-  SessionRaster,
-  ViewerSessionLike,
+import {
+  adaptSession,
+  type SessionDiagnostics,
+  type SessionPagesLayout,
+  type SessionRaster,
+  type ViewerSessionApi,
+  type ViewerSessionLike,
 } from "./session.js";
 
 /** Structured load/init failure. */
@@ -69,10 +71,14 @@ export interface CreateViewerOptions {
   canvas: HTMLCanvasElement;
   /**
    * The wasm session (or a factory). Embedders typically pass
-   * `await ViewerSession.new()` from `@paged-media/sdk` after
-   * `init(wasmUrl)`; tests pass a fake.
+   * `createSessionFromBundledWasm`, or `await ViewerSession.new()` from
+   * `@paged-media/viewer/session` after `init(wasmUrl)`; tests pass a fake.
+   * Either naming of the session's methods is accepted (`adaptSession`).
    */
-  session: ViewerSessionLike | (() => Promise<ViewerSessionLike>);
+  session:
+    | ViewerSessionLike
+    | ViewerSessionApi
+    | (() => Promise<ViewerSessionLike | ViewerSessionApi>);
   /** Zoom clamps in CSS px per pt. Default `{ min: 0.1, max: 8 }`. */
   zoomLimits?: Partial<ZoomLimits>;
   /** Input lanes; each defaults to enabled. */
@@ -84,12 +90,36 @@ export interface CreateViewerOptions {
    * `requestAnimationFrame` (microtask fallback off-DOM).
    */
   schedule?: (frame: () => void) => void;
-  /** Device pixel ratio override (defaults to `window.devicePixelRatio`). */
+  /**
+   * A fixed device pixel ratio. Without it the viewer reads
+   * `window.devicePixelRatio` and follows its changes (a browser zoom, a
+   * move to another screen).
+   */
   devicePixelRatio?: number;
 }
 
 export interface Viewer {
+  /**
+   * Load a document. A load still pending when the viewer is disposed, or
+   * when a later `load` starts, settles without touching the session and
+   * without an event: the later call owns the viewer.
+   */
   load(source: ArrayBuffer | Uint8Array | Blob | string): Promise<void>;
+  /**
+   * Register a font face for the documents loaded after this call
+   * (the session's `register_font`).
+   */
+  registerFont(
+    family: string,
+    style: string | undefined,
+    bytes: Uint8Array,
+  ): void;
+  /**
+   * Re-measure the canvas and the device pixel ratio and present again.
+   * The viewer does this by itself where the browser has `ResizeObserver`
+   * and `matchMedia`; call it after a size change it cannot see.
+   */
+  resize(): void;
 
   readonly zoom: number;
   setZoom(zoom: number, opts?: { anchor?: { x: number; y: number } }): void;
@@ -157,12 +187,13 @@ export async function createViewer(
   options: CreateViewerOptions,
 ): Promise<Viewer> {
   const { canvas } = options;
-  let session: ViewerSessionLike;
+  let session: ViewerSessionApi;
   try {
-    session =
+    session = adaptSession(
       typeof options.session === "function"
         ? await options.session()
-        : options.session;
+        : options.session,
+    );
   } catch (e) {
     throw new ViewerError(
       "GPU_UNAVAILABLE",
@@ -174,9 +205,12 @@ export async function createViewer(
     min: options.zoomLimits?.min ?? 0.1,
     max: options.zoomLimits?.max ?? 8,
   };
-  const dpr =
+  const readDpr = (): number =>
     options.devicePixelRatio ??
-    (typeof window !== "undefined" ? window.devicePixelRatio : 1);
+    (typeof window !== "undefined" && window.devicePixelRatio > 0
+      ? window.devicePixelRatio
+      : 1);
+  let dpr = readDpr();
   const schedule =
     options.schedule ??
     (typeof requestAnimationFrame === "function"
@@ -192,6 +226,12 @@ export async function createViewer(
   let bound = false;
   let disposed = false;
   let frameQueued = false;
+  /** The canvas size the session's surface was last given (CSS px). */
+  let surface: Viewport = { width: 0, height: 0 };
+  let surfaceDpr = dpr;
+  /** Counts `load` calls: a load acts only while it is the latest one. */
+  let generation = 0;
+  let binding: Promise<SessionDiagnostics> | null = null;
 
   function viewport(): Viewport {
     return {
@@ -205,7 +245,7 @@ export async function createViewer(
     if (mode === "continuous") return layout;
     const p = layout.pages[page];
     return p
-      ? { gapPt: layout.gapPt, pages: [{ ...p, yPt: 0, index: 0 }] }
+      ? { gapPt: layout.gapPt, pages: [{ ...p, xPt: 0, yPt: 0, index: 0 }] }
       : { gapPt: layout.gapPt, pages: [] };
   }
 
@@ -215,6 +255,18 @@ export async function createViewer(
     schedule(() => {
       frameQueued = false;
       if (disposed) return;
+      // The surface is resized in the frame that draws into it, so a
+      // resize never leaves a cleared canvas on screen for a frame.
+      const view = viewport();
+      if (
+        view.width !== surface.width ||
+        view.height !== surface.height ||
+        dpr !== surfaceDpr
+      ) {
+        surface = view;
+        surfaceDpr = dpr;
+        session.resize(view.width, view.height, dpr);
+      }
       const diags = session.present(
         camera.zoom,
         camera.x,
@@ -251,6 +303,7 @@ export async function createViewer(
   }
 
   function applyCamera(next: Camera, force = false): void {
+    if (disposed) return;
     const clamped = clampScroll(next, activeLayout(), viewport());
     const zoomChanged = clamped.zoom !== camera.zoom;
     const scrollChanged = clamped.x !== camera.x || clamped.y !== camera.y;
@@ -263,7 +316,7 @@ export async function createViewer(
       const now = currentPageAt(camera, layout, viewport());
       if (now !== page) {
         page = now;
-        session.set_page(page);
+        session.setPage(page);
         events.emit("pageChanged", { page });
       }
     }
@@ -271,10 +324,11 @@ export async function createViewer(
   }
 
   function setPage(index: number): void {
+    if (disposed) return;
     const clamped = Math.max(0, Math.min(layout.pages.length - 1, index));
     if (clamped === page && layout.pages.length > 0) return;
     page = clamped;
-    session.set_page(page);
+    session.setPage(page);
     events.emit("pageChanged", { page });
     if (mode === "continuous") {
       applyCamera(scrollToPage(camera, layout, page, viewport()), true);
@@ -306,9 +360,68 @@ export async function createViewer(
     end: () => setPage(layout.pages.length - 1),
   });
 
+  /**
+   * The canvas or the device pixel ratio changed: keep the document point
+   * at the viewport centre where it is and present at the new size.
+   */
+  let measured: Viewport = viewport();
+  function syncSize(): void {
+    if (disposed) return;
+    const view = viewport();
+    const nextDpr = readDpr();
+    if (
+      view.width === measured.width &&
+      view.height === measured.height &&
+      nextDpr === dpr
+    ) {
+      return;
+    }
+    const dx = (view.width - measured.width) / 2;
+    const dy = (view.height - measured.height) / 2;
+    measured = view;
+    dpr = nextDpr;
+    applyCamera(
+      { zoom: camera.zoom, x: camera.x + dx, y: camera.y + dy },
+      true,
+    );
+  }
+
+  const stopObserving: Array<() => void> = [];
+  if (typeof ResizeObserver === "function") {
+    const observer = new ResizeObserver(() => syncSize());
+    observer.observe(canvas);
+    stopObserving.push(() => observer.disconnect());
+  }
+  // A `resolution` media query matches one ratio, so it is asked again
+  // after each change.
+  if (
+    options.devicePixelRatio === undefined &&
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function"
+  ) {
+    let unwatch = (): void => {};
+    const watch = (): void => {
+      const query = window.matchMedia(`(resolution: ${readDpr()}dppx)`);
+      const changed = (): void => {
+        unwatch();
+        if (disposed) return;
+        watch();
+        syncSize();
+      };
+      query.addEventListener("change", changed);
+      unwatch = () => query.removeEventListener("change", changed);
+    };
+    watch();
+    stopObserving.push(() => unwatch());
+  }
+
   const viewer: Viewer = {
     async load(source) {
+      if (disposed) return;
+      const mine = ++generation;
+      const stale = (): boolean => disposed || mine !== generation;
       const bytes = await sourceBytes(source);
+      if (stale()) return;
       const diags = session.load(bytes);
       if (!diags.ok) {
         const error = mapDiagnostics(diags);
@@ -316,20 +429,38 @@ export async function createViewer(
         throw error;
       }
       if (!bound) {
-        const bind = await session.render_to_canvas_main(canvas);
+        // One bind, shared by the loads that overlap it.
+        binding ??= session.renderToCanvasMain(canvas);
+        let bind: SessionDiagnostics;
+        try {
+          bind = await binding;
+        } finally {
+          binding = null;
+        }
+        if (disposed) return;
         if (!bind.ok) {
+          if (stale()) return;
           const error = mapDiagnostics(bind);
           events.emit("error", error);
           throw error;
         }
         bound = true;
-        session.resize(viewport().width, viewport().height, dpr);
+        if (stale()) return;
       }
-      layout = session.page_layout();
+      measured = viewport();
+      dpr = readDpr();
+      layout = session.pageLayout();
       page = 0;
-      session.set_page(0);
+      session.setPage(0);
       events.emit("loaded", { pageCount: layout.pages.length });
       applyCamera(fitPage(activeLayout(), 0, "page", viewport(), limits), true);
+    },
+    registerFont(family, style, bytes) {
+      if (disposed) return;
+      session.registerFont(family, style, bytes);
+    },
+    resize() {
+      syncSize();
     },
 
     get zoom() {
@@ -402,7 +533,7 @@ export async function createViewer(
       return mode;
     },
     renderPageThumbnail(index, opts) {
-      return session.render_page_to_bytes(index, opts?.width ?? 160);
+      return session.renderPageToBytes(index, opts?.width ?? 160);
     },
 
     on(event, listener) {
@@ -413,6 +544,7 @@ export async function createViewer(
       if (disposed) return;
       disposed = true;
       detachInput();
+      for (const stop of stopObserving) stop();
       events.clear();
       session.free?.();
     },

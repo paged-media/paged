@@ -19,10 +19,71 @@
 // API version negotiation. `plugin-api` is type-only and therefore
 // cannot carry a runtime constant — the SDK owns the version value
 // and the range check. Deliberately minimal range grammar (`*`,
-// exact, caret); full semver arrives with publishing (Decision B).
+// exact, caret).
+//
+// THE POLICY (docs/adr/304-bundle-lifecycle.md, amendment 2026-11-28;
+// docs/reference/api-version.md):
+//
+//   API_VERSION = 0.<generation>.<revision>
+//
+//   * revision — moves with EVERY change to the contract's sources
+//     (`plugin-api/src`, `plugin-sdk/src`), in the same commit as
+//     plugin-sdk's package version. `scripts/assert-contract-bumped.mjs`
+//     refuses a contract change that leaves API_VERSION where it was.
+//     A manifest that names a revision (`"^0.2.557"`) is refused by a
+//     host older than it: the floor of the surface the extension uses.
+//   * generation — moves, with the revision back at 0, when a change
+//     BREAKS an extension written against the generation: a member
+//     removed or renamed, a signature narrowed, a meaning changed. A
+//     caret range on 0.x locks the generation, so every manifest of the
+//     old one is refused until its author has moved it.
+//
+// It is not the package version (PM-0008, amendment 1): that one follows
+// the engine's protocol and the release tag, and says nothing about
+// whether an extension still loads.
 
-/** The plugin API version this SDK implements. */
-export const API_VERSION = "0.2.0";
+/**
+ * The plugin API version this SDK implements, `0.<generation>.<revision>`.
+ * The revision started at 557, the number of commits that had changed the
+ * contract's sources when the counter was introduced.
+ */
+export const API_VERSION = "0.2.557";
+
+/**
+ * The caret range that accepts every revision of this SDK's generation
+ * (`"^0.2"`): what a host's own neutral manifest declares.
+ */
+export const API_GENERATION_RANGE = `^${API_VERSION.split(".").slice(0, 2).join(".")}`;
+
+/**
+ * Why `range` does not accept `version`, in words an extension author can
+ * act on; `null` when it does. `loadBundle` and the headless host put it
+ * in the error they throw.
+ */
+export function explainApiMismatch(
+  range: string,
+  version: string = API_VERSION,
+): string | null {
+  if (satisfiesApiVersion(range, version)) return null;
+  const r = range.trim();
+  const v = parse(version);
+  const base = parse(r.startsWith("^") ? r.slice(1) : r);
+  if (!v || !base) {
+    return `"${range}" is not a range this host reads (use "*", an exact version or a caret range such as "^${version}")`;
+  }
+  const sameGeneration =
+    base[0] > 0 ? v[0] === base[0] : v[0] === 0 && v[1] === base[1];
+  if (!sameGeneration) {
+    const newer = base[0] !== v[0] ? base[0] > v[0] : base[1] > v[1];
+    return newer
+      ? `the extension was built for a newer plugin API generation than this host implements (${version}): update the host`
+      : `the extension was built for an older plugin API generation than this host implements (${version}): rebuild it against the current SDK and move its "apiVersion"`;
+  }
+  if (r.startsWith("^")) {
+    return `the extension needs plugin API ${r.slice(1)} or later and this host implements ${version}: update the host`;
+  }
+  return `the extension names exactly plugin API ${r} and this host implements ${version}: use a caret range ("^${r}")`;
+}
 
 function parse(v: string): [number, number, number] | null {
   const m = /^(\d+)\.(\d+)(?:\.(\d+))?$/.exec(v.trim());

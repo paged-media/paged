@@ -1,7 +1,7 @@
 $ paged-plugin modules-upload <TMP>/upload
-# exit 0
+# exit 1
 # stdout
 http://127.0.0.1:9/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)
 modules: 1 declared, 1 not hosted (no token)
 # stderr
-(empty)
+::error::1 of 1 wasm artifact(s) are not hosted and nothing was uploaded: CLOUDFLARE_API_TOKEN is not set. Set it (with CLOUDFLARE_ACCOUNT_ID) and run again, or pass --dry-run to list what an upload would do.

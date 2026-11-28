@@ -4224,6 +4224,17 @@ export interface BundleHost {
    * v0-only. Any use not reachable through a facade is a
    * BREAKAGE_LOG entry — and this member does not survive the isolate
    * boundary.
+   *
+   * NOT part of the stable contract an extension can build on: it is the
+   * host application's own object, it bypasses the capability gate and the
+   * one write door, its shape follows the editor and not `API_VERSION`,
+   * and it is removed when bundles move into an isolate
+   * (docs/adr/315-isolation-contract.md, docs/adr/319-trust-line.md). The
+   * built-in modules use it where a door is still missing; an extension
+   * that needs it has found a gap in the contract to report.
+   *
+   * @deprecated Born deprecated (DESIGN.md §7): use the doors of this
+   * surface.
    */
   readonly editor: PagedEditor;
 }

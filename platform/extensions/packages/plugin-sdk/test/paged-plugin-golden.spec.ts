@@ -371,9 +371,9 @@ const CASES: Record<string, Case[]> = {
       exit: 1,
     },
     {
-      name: "ok-no-token",
+      name: "refused-no-token",
       argv: () => ["modules-upload", T("upload")],
-      exit: 0,
+      exit: 1,
     },
     {
       name: "ok-dry-run",

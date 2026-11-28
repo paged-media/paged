@@ -31,7 +31,7 @@
 // (a bundle holding the raw `host.editor` handle still bypasses the
 // facade). The gate is at the same chokepoint as the namespace rule
 // (DESIGN.md §2.7/§11); the host option `capabilityMode: 'warn'` is the
-// migration escape hatch. See thoughts/docs/paged/plugin-trust-line.md.
+// migration escape hatch. See docs/adr/319-trust-line.md.
 
 import type { AssetKind } from "./assets.js";
 import type { MlCapability } from "./ml.js";
@@ -49,7 +49,12 @@ export interface PluginManifest {
   name: string;
   /** Bundle semver. */
   version: string;
-  /** Semver range against the contract's `API_VERSION` (`^0.2`). */
+  /**
+   * Range against the contract's `API_VERSION` (`0.<generation>.<revision>`,
+   * plugin-sdk's `version.ts`). `"^0.2"` accepts every host of generation
+   * 0.2; `"^0.2.557"` also refuses a host older than revision 557, which is
+   * what an extension that uses surface added at that revision declares.
+   */
   apiVersion: string;
   publisher?: string;
   capabilities?: PluginCapabilities;

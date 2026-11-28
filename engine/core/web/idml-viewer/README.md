@@ -24,7 +24,8 @@ await viewer.load("/files/brochure.idml"); // URL | ArrayBuffer | Uint8Array | B
 
 - **Load** — `load(source)`, repeatable; failures throw a `ViewerError`
   with `code: "PARSE_ERROR" | "UNSUPPORTED" | "GPU_UNAVAILABLE"` and the
-  engine's structured diagnostics attached.
+  engine's structured diagnostics attached. A load still pending when the
+  viewer is disposed, or when a later `load` starts, settles without effect.
 - **Camera** — `zoom`, `setZoom(z, { anchor })`, `zoomIn/zoomOut`,
   `fit("page" | "width")`, `minZoom/maxZoom`, `scroll`, `scrollTo`,
   `scrollBy`. Zooming about an anchor keeps the document point under it
@@ -34,15 +35,23 @@ await viewer.load("/files/brochure.idml"); // URL | ArrayBuffer | Uint8Array | B
   `renderPageThumbnail(n, { width })` (RGBA8 readback).
 - **Events** — `on("loaded" | "pageChanged" | "zoomChanged" |
 "scrollChanged" | "error", cb)` → unsubscribe function.
-- **Input** — wheel/pinch zoom-to-cursor, drag-pan, double-click zoom,
-  keyboard (`+`/`-`/`0`, arrows, PgUp/PgDn, Home/End); each lane
-  disableable via `input: {...}`.
+- **Input** — wheel and trackpad-pinch zoom-to-cursor, drag-pan (mouse,
+  pen, one finger), two-finger pinch zoom on touch screens, double-click
+  zoom, keyboard (`+`/`-`/`0`, arrows, PgUp/PgDn, Home/End); each lane
+  disableable via `input: {...}`. While the pointer lanes are on, the
+  canvas has `touch-action: none`.
+- **Size** — the viewer follows the canvas's CSS size (`ResizeObserver`)
+  and `window.devicePixelRatio` and presents again; `resize()` does the
+  same on request. A `devicePixelRatio` option fixes the ratio.
 - **Teardown** — `dispose()` detaches all listeners and frees the wasm
   session.
 
-Fonts: register faces on the session before `load`
-(`session.register_font(family, style, bytes)`) — same contract as
+Fonts: register faces before `load` with
+`viewer.registerFont(family, style, bytes)` — same contract as
 `paged-inspect --font-family`.
+
+Pages are drawn where the document places them: a vertical stack by
+default, the pages of a spread side by side (`SessionPageRect.xPt`).
 
 ## Embedding your own session
 
@@ -50,6 +59,13 @@ Fonts: register faces on the session before `load`
 typed contract of the wasm session), so you can init the wasm yourself
 — e.g. from a custom URL or a worker — and hand it in. Tests do exactly
 this with a fake.
+
+The wasm exports most session methods under their Rust names
+(`register_font`, `page_layout`, …). `ViewerSessionApi` is the same surface
+in camelCase and `adaptSession(session)` returns it for either naming;
+`createViewer` accepts both. The snake_case members of `ViewerSessionLike`
+are marked `@deprecated` for direct calls and stay for as long as the wasm
+exports them.
 
 The session itself is the `./session` entry: the wasm-bindgen module of
 the engine's `paged-sdk` crate, with its wasm at

@@ -32,7 +32,8 @@ Tailwind.
   CPU fallback — one rendering model on both). Owns `src/panels/*`, the REPL (`src/repl/`), the
   script editor, and the Playwright suite (`tests/`).
 - `apps/devtools` (`paged-devtools`) — standalone scene-graph
-  inspector over `paged-introspect-wasm` (its own `build-wasm.sh`).
+  inspector over the engine's introspection wasm (`@paged-media/canvas-wasm/introspect`,
+  from the workspace).
 - `packages/client` (`@paged-media/client`) — **the only wasm/engine
   boundary.** `CanvasClient`, tsify wire types (`protocol.ts`), SAB
   primitives (`sab/camera`, `sab/gesture`). No React, no DOM beyond

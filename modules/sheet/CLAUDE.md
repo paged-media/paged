@@ -1,8 +1,9 @@
-# CLAUDE.md — paged-media/plugin-sheets
+# CLAUDE.md — modules/sheet (paged.sheet)
 
-Orientation for Claude sessions in **paged-media/plugin-sheets** — the
-paged.sheet spreadsheet subsystem, delivered as a Paged plugin (public;
-dual-licensed AGPL-3.0 OR PMEL, And The Next GmbH).
+Orientation for Claude sessions in **`modules/sheet`** of the monorepo
+`paged-media/paged` (the `paged-media/plugin-sheets` repository until 2026-10-18) — the
+paged.sheet spreadsheet subsystem, a built-in module (PM-0017; public;
+dual-licensed AGPL-3.0-only OR PMEL, And The Next GmbH).
 
 ## What this is
 
@@ -17,13 +18,13 @@ lane); the sheets-mode grid (T1+) renders vector on an SDK surface
 launch property.
 
 Spec (the authority): `docs/concept.md` (architecture, status and decisions are in `docs/` too;
-the original planning paper is archived at `archive/plugin-sheets/base-idea.md` (private planning notes)).
+the original planning paper is not in this repository).
 Where code and spec differ, `docs/status.md` and `docs/design/analysis-2026-10-04.md` say how.
 SDK gap tracker: the cross-repo RFI (the internal gap register) (S-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
 
 **STATUS: M0–M3 shipped** (11 Rust crates, ~1272 nextest; the registry
-rows below are the live ledger). Rust crates (Cargo workspace, top level
-per spec §4): `sheet-core` (frozen types + AST), `sheet-parser`,
+rows below are the live ledger). Rust crates (members of `engine/core`'s Cargo workspace
+since PM-0017, in directories at this module's top level per spec §4): `sheet-core` (frozen types + AST), `sheet-parser`,
 `sheet-calc`, `sheet-fn`, `sheet-format`, `sheet-xlsx`, `sheet-lower`,
 `sheet-grid` (windowed GridScene — the in-frame surface), `sheet-chart`
 (plotters + a custom paged.draw `DrawingBackend` → a frozen ChartGeometry
@@ -206,20 +207,23 @@ Rules for every code change in this repo:
 
 ```bash
 moon run sheet:test     # Rust (nextest + doctests), then wasm + bun test, from anywhere
-# Rust (the engine) without Moon
-cargo build --workspace && cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+# Rust: this directory has no Cargo.toml. Its crates are members of the
+# engine's Cargo workspace (PM-0017), so every cargo command below runs in
+# engine/core (`cd ../../engine/core`) with this module's crates named by
+# `-p`; `--workspace` there means the whole engine. The Moon tasks carry the
+# module's `-p` list (moon.yml):
+moon run sheet:rust-check && moon run sheet:rust-lint && moon run sheet:rust-test   # and sheet:rust-fmt
 cargo run -p sheet-conformance --bin coverage-gate    # the §12.2 gate
 
 # Dependency guards (CI runs these; run before claiming green)
 cargo tree -p sheet-fn --edges normal | grep -E 'sheet-(calc|parser|xlsx|lower|js)' && echo LEAK
 cargo tree -p sheet-js --target wasm32-unknown-unknown | grep -E 'sheet-conformance|proptest' && echo LEAK
-cargo deny check
+(cd ../../engine/core && cargo deny check)   # one deny.toml: the engine's
 
 # wasm artifact (100 MB app wasm budget; lands in packages/sheet-bundle/bin/)
 bash scripts/build-wasm.sh
 
-# TS (the bundle) — install order: editor → plugin-sdk → plugin-sheets
+# TS (the bundle) — one root Bun workspace: `bun install` at the repository root
 bun install && bun run test && bun run typecheck
 bun run validate:manifest
 

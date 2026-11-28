@@ -20,6 +20,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   clampScroll,
+  contentBounds,
   contentExtent,
   currentPageAt,
   fitPage,
@@ -150,5 +151,71 @@ describe("scrollToPage", () => {
     expect(topCss).toBeGreaterThanOrEqual(0);
     expect(topCss).toBeLessThanOrEqual(24);
     expect(cam.x).toBeCloseTo((VIEWPORT.width - 612 * cam.zoom) / 2, 6);
+  });
+});
+
+describe("pages with an x origin", () => {
+  // A spread whose left page sits left of the doc origin.
+  const spread = {
+    gapPt: 24,
+    pages: [
+      { index: 0, xPt: -612, yPt: 0, widthPt: 612, heightPt: 792 },
+      { index: 1, xPt: 0, yPt: 0, widthPt: 612, heightPt: 792 },
+    ],
+  };
+
+  it("contentBounds spans both pages of a spread", () => {
+    expect(contentBounds(spread)).toEqual({
+      x: -612,
+      y: 0,
+      width: 1224,
+      height: 792,
+    });
+    expect(contentExtent(spread)).toEqual({ width: 1224, height: 792 });
+    expect(contentBounds({ gapPt: 0, pages: [] })).toEqual({
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+    });
+  });
+
+  it("fitPage centres the page where it lies", () => {
+    for (const index of [0, 1]) {
+      const cam = fitPage(spread, index, "page", VIEWPORT, LIMITS);
+      const page = spread.pages[index]!;
+      const centre = cam.x + (page.xPt + page.widthPt / 2) * cam.zoom;
+      expect(centre).toBeCloseTo(VIEWPORT.width / 2, 6);
+    }
+  });
+
+  it("clampScroll centres a spread narrower than the viewport", () => {
+    const cam = clampScroll({ zoom: 0.5, x: 0, y: 0 }, spread, VIEWPORT);
+    // 1224 * 0.5 = 612 wide: its left edge (doc x -612) sits at 94.
+    expect(cam.x + -612 * 0.5).toBeCloseTo((800 - 612) / 2, 6);
+  });
+
+  it("clampScroll lets a wide spread scroll to both edges", () => {
+    const left = clampScroll({ zoom: 2, x: 99999, y: 0 }, spread, VIEWPORT);
+    expect(left.x + -612 * 2).toBe(0);
+    const right = clampScroll({ zoom: 2, x: -99999, y: 0 }, spread, VIEWPORT);
+    expect(right.x + 612 * 2).toBe(VIEWPORT.width);
+  });
+
+  it("currentPageAt tells the pages of a spread apart", () => {
+    const zoom = 1;
+    const y = VIEWPORT.height / 2 - 396;
+    const over = (docX: number): Camera => ({
+      zoom,
+      x: VIEWPORT.width / 2 - docX * zoom,
+      y,
+    });
+    expect(currentPageAt(over(-300), spread, VIEWPORT)).toBe(0);
+    expect(currentPageAt(over(300), spread, VIEWPORT)).toBe(1);
+  });
+
+  it("scrollToPage centres the page horizontally where it lies", () => {
+    const cam = scrollToPage({ zoom: 1, x: 0, y: 0 }, spread, 0, VIEWPORT);
+    expect(cam.x + (-612 + 306)).toBeCloseTo(VIEWPORT.width / 2, 6);
   });
 });

@@ -226,6 +226,62 @@ given `cargo test` output (`--cargo-log`) it counts what ran. Either way it
 writes the job summary and fails the lane when fewer than `--min-executed`
 (default 1) tests executed.
 
+## Fuzzing the parsers
+
+A parser reads a file somebody else wrote. Its property is the same for every
+format: arbitrary bytes are a value or a typed error, never a panic (the wasm
+builds abort on one), never a hang, never an allocation past the parser's
+limits. Two cargo-fuzz workspaces hold the targets, each outside the engine
+workspace so the ordinary build and nextest never compile them:
+
+- `engine/core/fuzz` (`engine / fuzz`, `.github/workflows/engine-fuzz.yml`):
+  IDML (`idml_import`, `idml_parts`), the native model part and the `.paged`
+  container (`paged_model`, `paged_container`), PSD/PSB (`psd`),
+  PostScript/EPS within small limits (`postscript`), the OPC reader and the
+  OOXML XML readers (`ooxml_opc`, `ooxml_xml`), Word (`docx_import`,
+  `docx_parts`), PowerPoint (`pptx_import`, `pptx_parts`), data expressions
+  (`data_expr`), DXF (`dxf`), SVG import (`svg_import`), the raster decoders
+  (`raster`) and PDF import (`pdf_import`).
+- `modules/sheet/fuzz` (`sheet / fuzz`): the formula parser and the XLSX
+  reader.
+
+A `*_parts` target rebuilds a sound package with one part replaced by the
+input (its first byte picks the part), so a mutation reaches the part readers;
+a mutated zip mostly fails its checksums first.
+
+```bash
+cd engine/core/fuzz
+cargo test                                         # stable: every target over seeds/ and regressions/
+cargo +nightly fuzz run --fuzz-dir . psd           # needs nightly and cargo-fuzz
+cargo +nightly fuzz run --fuzz-dir . psd -- -max_total_time=60 -rss_limit_mb=2048
+cargo test -- --ignored write_hostile_seeds        # write the built seeds again
+```
+
+- **Bodies.** Each target is a function of `src/lib.rs`; `fuzz_targets/<name>.rs`
+  only hands libFuzzer's bytes to it. `tests/smoke.rs` runs the same functions
+  on the pinned stable toolchain over every seed, every reproducer and a fixed
+  set of truncations and byte flips of each seed, and names the input that
+  panics. It is the first job of the nightly workflow.
+- **Seeds** are `seeds/<target>/`: small real files copied from the
+  repository's fixtures, and the hostile inputs of the parsers' limit tests
+  (`src/hostile.rs` builds them; a test holds the committed files to it).
+  libFuzzer's working corpus (`corpus/`) and its findings (`artifacts/`) are
+  not tracked.
+- **A crash** is uploaded by the nightly run as the artifact
+  `fuzz-<target>` and fails it; a failing scheduled run opens an issue
+  (`scheduled-failure-issue.yml`). Minimise it (`cargo +nightly fuzz tmin`),
+  commit it as `regressions/<target>-<what>.bin` and fix the parser; the
+  reproducer stays and is run on every smoke run and seeded every night. One
+  that is committed before its fix is listed in `regressions/KNOWN`, which
+  makes the smoke run report it instead of failing and keeps it out of the
+  nightly corpus; the fix removes the line.
+- **Budget.** Nightly, ten minutes a target, a 60 s timeout for one input,
+  2 GB of memory, inputs up to 1 MiB. Never on a push.
+
+Not reached by a target: `paged-renderer`'s `container::open_document` itself
+(the crate links the rasterizers; `paged_container` runs its steps through
+`idml-import` and `paged-store`).
+
 ## Not yet converted
 
 - **TypeScript tests** keep their own switches (`REQUIRE_REAL_ENGINE`,

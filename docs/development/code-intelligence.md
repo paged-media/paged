@@ -81,9 +81,9 @@ proto install                                 # node 24.22.0 (and npm) for the T
 ## rust-analyzer and the Cargo workspaces
 
 There is no root `Cargo.toml`. The repository has eleven Cargo workspaces with
-members, plus two that are deliberately left out (`engine/core/spikes/blitz-wasm`,
-excluded from the engine workspace, and `modules/sheet/fuzz`, the cargo-fuzz
-workspace). Every other crate is a member of one of the eleven; checked with
+members, plus three that are deliberately left out (`engine/core/spikes/blitz-wasm`,
+excluded from the engine workspace, and `modules/sheet/fuzz` and `engine/core/fuzz`,
+the cargo-fuzz workspaces). Every other crate is a member of one of the eleven; checked with
 `cargo metadata --no-deps` against every tracked `Cargo.toml`.
 
 ```

@@ -24,14 +24,15 @@ next to the code you change. This file holds only what crosses components.
 - `packages/paged` — the published `@paged-media/paged`, assembled from the engine's
   `canvas-wasm` and the bundled CLI (its `paged` bin); see npm packages below.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
-  `ai`, `fmt`, `helpers`, `panel-kit`, `react-live`, `test-kit`, `test-resources`,
+  `ai`, `helpers`, `panel-kit`, `react-live`, `strings`, `test-kit`,
   `vector-geometry`, `vector-tools`, `wasm-boot`, and the Rust crates `ooxml` (`paged-ooxml`, the OOXML foundation of
   doc, slide and sheet, with the DrawingML paint reader and the units), `dml-chart`
   (the DrawingML chart reader of sheet and slide), `dml-geom` (DrawingML preset
   geometry, handles and connection sites of slide and doc's shapes) and
-  `dml-native` (the DrawingML paint mapper onto the engine model), with `fmt` and
+  `dml-native` (the DrawingML paint mapper onto the engine model), with
   `test-resources`: members of `engine/core`'s Cargo workspace (PM-0017) and path
-  dependencies of the modules not yet moved.
+  dependencies of the modules not yet moved. (The shared formatting crate is the engine's
+  `engine/core/crates/paged-fmt`.)
 - `tooling/import` — how this repository was assembled; do not edit history-related files by hand.
 
 ## Tasks (Moon)
@@ -40,8 +41,8 @@ Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
 from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
 `slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `ml-host`, `cli`, and the
-shared packages (`ai`, `dml-chart`, `dml-geom`, `dml-native`, `fmt`, `helpers`, `ooxml`, `panel-kit`,
-`react-live`, `test-kit`, `test-resources`, `vector-geometry`, `vector-tools`, `wasm-boot`).
+shared packages (`ai`, `dml-chart`, `dml-geom`, `dml-native`, `helpers`, `ooxml`, `panel-kit`,
+`react-live`, `strings`, `test-kit`, `test-resources`, `vector-geometry`, `vector-tools`, `wasm-boot`).
 
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and
   `:wasm` where the component ships a wasm artifact. `moon run :lint` runs it

@@ -1,7 +1,8 @@
-# CLAUDE.md — paged-media/plugin-doc
+# CLAUDE.md — modules/doc (paged.doc)
 
-Orientation for Claude sessions in **paged-media/plugin-doc** — the paged.doc
-Word/DOCX subsystem, delivered as a Paged plugin (dual-licensed AGPL-3.0-only OR
+Orientation for Claude sessions in **`modules/doc`** of the monorepo
+`paged-media/paged` (the `paged-media/plugin-doc` repository until 2026-10-18) — the paged.doc
+Word/DOCX subsystem, a built-in module (PM-0017; dual-licensed AGPL-3.0-only OR
 PMEL, And The Next GmbH, as is the shared `paged-ooxml` crate).
 
 ## What this is
@@ -20,7 +21,8 @@ this repo — it is self-documenting). Architecture: [`docs/architecture.md`](do
 Status/milestones: [`docs/status.md`](docs/status.md).
 
 **STATUS: M0 foundation + M1 Tier-0 read path shipped** (green). Rust crates
-(Cargo workspace, top level; the OOXML foundation `paged-ooxml` — OPC with its memory
+(members of `engine/core`'s Cargo workspace since PM-0017, in directories at this module's
+top level; the OOXML foundation `paged-ooxml` — OPC with its memory
 budget + carry-through + ooxmlsdk typed DOM — is `platform/shared/ooxml`, shared with
 slide and sheet, ADR 607): `docx-core` (frozen semantic WML view), `docx-import` (WML → docx-core),
 `docx-lower` (docx-core → Lowered IR), `docx-js` (wasm-bindgen surface),
@@ -95,16 +97,19 @@ Rules for every code change in this repo:
 
 ```bash
 moon run doc:test     # Rust (nextest + doctests) and the bundle glue, from anywhere
-# Rust (the engine) without Moon
-cargo build --workspace && cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all --check
-cargo deny check
+# Rust: this directory has no Cargo.toml. Its crates are members of the
+# engine's Cargo workspace (PM-0017), so every cargo command below runs in
+# engine/core (`cd ../../engine/core`) with this module's crates named by
+# `-p`; `--workspace` there means the whole engine. The Moon tasks carry the
+# module's `-p` list (moon.yml):
+moon run doc:rust-check && moon run doc:rust-lint && moon run doc:rust-test   # and doc:rust-fmt
+(cd ../../engine/core && cargo deny check)   # one deny.toml: the engine's
 
 # wasm artifact (100 MB app wasm budget; lands in packages/doc-bundle/bin/)
 bash scripts/build-wasm.sh
 
-# TS (the bundle) — consumes the PUBLISHED @paged-media canaries (no link chain)
+# TS (the bundle) — the contract and the shared packages come from the root Bun
+# workspace (`workspace:*`); `bun install` runs at the repository root
 bun install && bun run typecheck && bun run test
 bun run validate:manifest
 ```

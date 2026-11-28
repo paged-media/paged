@@ -34,6 +34,9 @@
 //      (fonts/Inter.ttf, SIL Open Font License 1.1 in fonts/OFL-inter.txt),
 //      the face the Rust CLI bundles, from engine/core/corpus/fonts (ADR 324,
 //      amendment 2026-10-20). Without it a PDF's text pages come out blank.
+//   4. the notices of the Rust crates in the engine wasm:
+//      THIRD-PARTY-NOTICES.md, written by scripts/third-party-notices.mjs
+//      from the engine's Cargo.lock (it needs cargo).
 //
 //   bun scripts/assemble.mjs        (the package's `build` script)
 //
@@ -90,6 +93,10 @@ execFileSync(
     stdio: "inherit",
   },
 );
+
+execFileSync("bun", [join(pkg, "scripts/third-party-notices.mjs")], {
+  stdio: "inherit",
+});
 
 // The published files are all here (package.json `files`).
 const files = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8")).files;

@@ -28,7 +28,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { createBundleHost, type CreateBundleHostOptions } from "./host-impl.js";
-import { API_VERSION, satisfiesApiVersion } from "./version.js";
+import { explainApiMismatch } from "./version.js";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
 
@@ -48,7 +48,7 @@ export function loadBundle(
   options?: CreateBundleHostOptions,
 ): LoadedBundle {
   const { manifest } = bundle;
-  // Trust-line load-path assertion (plugin-trust-line.md): same-realm
+  // Trust-line load-path assertion (docs/adr/319-trust-line.md): same-realm
   // execution is FIRST-PARTY-ONLY during incubation, and that constraint
   // is asserted HERE — not left to the convention of "we only static-
   // import our own bundles in main.tsx." The host vouches via
@@ -67,7 +67,7 @@ export function loadBundle(
         `same-realm bundle execution is first-party-only during ` +
         `incubation. Loading non-first-party bundles is gated on the ` +
         `isolate/RPC host, enforced capabilities, and package signing ` +
-        `(see plugin-trust-line.md "Gate checklist").`,
+        `(see docs/reference/trust-gate.md, the gate checklist).`,
     );
   }
   if (!ID_PATTERN.test(manifest.id)) {
@@ -76,10 +76,11 @@ export function loadBundle(
         `(expected e.g. "media.paged.draw")`,
     );
   }
-  if (!satisfiesApiVersion(manifest.apiVersion)) {
+  const mismatch = explainApiMismatch(manifest.apiVersion);
+  if (mismatch !== null) {
     throw new Error(
       `loadBundle: ${manifest.id}@${manifest.version} requires plugin-api ` +
-        `"${manifest.apiVersion}", host implements ${API_VERSION}`,
+        `"${manifest.apiVersion}": ${mismatch}`,
     );
   }
   const { host, dispose: disposeHost } = createBundleHost(

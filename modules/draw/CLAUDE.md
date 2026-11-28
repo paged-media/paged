@@ -1,20 +1,22 @@
-# CLAUDE.md
+# CLAUDE.md — modules/draw (paged.draw)
 
-Orientation for Claude sessions in **paged-media/plugin-draw** — the
-paged.draw vector plugin (public; dual-licensed AGPL-3.0 OR PMEL, And The
-Next GmbH; license headers on every source file).
+Orientation for Claude sessions in **`modules/draw`** of the monorepo
+`paged-media/paged` (the `paged-media/plugin-draw` repository until 2026-10-18) — the
+paged.draw vector module, a built-in (PM-0017; public; dual-licensed
+AGPL-3.0-only OR PMEL, And The Next GmbH; license headers on every source file).
 
 ## What this is
 
 The distillation repo for draw capability during the
-incubate-then-extract window (strategy:
-`plugin-draw/reality-check.md` (private planning notes)). One package here, `draw-bundle` (manifest + `activate(host)`). The generic
+incubate-then-extract window (the strategy paper is not in this repository). One package here, `draw-bundle` (manifest + `activate(host)`). The generic
 geometry and tool machines moved to `platform/shared/vector-geometry` (pure
 math) and `platform/shared/vector-tools` (host-agnostic state machines): draw,
 image and the editor's `tools` package all import those, and the editor wraps
 the machines in thin `GestureHandler` shims.
 
-Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`:
+Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`
+(members of `engine/core`'s Cargo workspace since PM-0017; this directory has
+no `Cargo.toml`):
 `draw-trace` (the tracer kernel over the `visioncortex` crate — colour
 clustering, boundary walking, spline fitting), `draw-dxf` (DXF ↔ SVG over
 the `dxf` crate and `paged-svg`'s walker, ADR 364) and `trace-js` (the
@@ -562,7 +564,7 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
   machine seems to need host state, the missing piece is an event/option
   on the machine API or an RFI gap (the BREAKAGE_LOG was retired 2026-06-12, fully drained).
 - **`@paged-media/plugin-api` is the only sanctioned contract import.**
-  A need it can't meet goes to the cross-repo RFI (`plugin-platform/rfi-core-sdk-gaps.md` (private planning notes)); the
+  A need it can't meet goes to the internal gap register (not in this repository); the
   log is the API-v1 punch list — keep it current, mark entries RESOLVED
   with a pointer when host/core work lands.
 - **Machines stay pure + unit-tested.** Page-local pt in, snapshots/plans
@@ -576,7 +578,8 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
 - **`panels/*.panel.json` are design prototypes.** Not interpreted by any
   host; keep them honest against the catalog's binding ceiling (no
   invented conditionals).
-- **Install order:** editor → plugin-sdk → plugin-draw (`link:` chain).
+- **One install:** `bun install` at the repository root; the contract and the
+  shared packages come from the workspace (`workspace:*`).
 - **The Rust half is the EXCEPTION, not the new normal.** `crates/` exists
   because Image Trace's kernel is computer vision, not path algebra, and
   `visioncortex` already is that kernel — and, since ADR 364, because DXF
@@ -600,7 +603,7 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
   under driftsort. visioncortex touches flo_curves only for
   `Coordinate`/`Coordinate2D` trait impls and `bezier::Curve::fit_from_points`
   — it never constructs a `GraphPath` — and 0.3.1 does not contain that
-  comparator at all. Recorded in the workspace `Cargo.toml`; re-check it
+  comparator at all. Recorded in `engine/core/Cargo.toml`; re-check it
   if the dependency is ever bumped.
 
 ## Commands
@@ -611,7 +614,8 @@ bun ../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate 
 
 # The Rust half (the wasm is build output: run build-wasm.sh before specs that boot it)
 moon run draw:test        # Rust (nextest + doctests) and the TS tests, from anywhere
-cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace     # the Rust tests without Moon
+# The crates are members of the engine's Cargo workspace (PM-0017): cargo runs
+# in engine/core with `-p draw-trace -p draw-dxf -p trace-js`, as the Moon tasks do.
+moon run draw:rust-fmt && moon run draw:rust-lint && moon run draw:rust-test
 ./scripts/build-wasm.sh   # → packages/draw-bundle/wasm/, enforces the size budget
 ```

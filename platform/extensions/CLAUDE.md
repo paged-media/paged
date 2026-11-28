@@ -1,7 +1,8 @@
 # CLAUDE.md
 
-Orientation for Claude sessions in **paged-media/sdk** — the plugin
-contract + tooling workspace. Public; dual-licensed AGPL-3.0-only OR PMEL,
+Orientation for Claude sessions in **`platform/extensions`** of the monorepo
+`paged-media/paged` (the `paged-media/sdk` repository until 2026-10-18) — the
+plugin contract + tooling. Public; dual-licensed AGPL-3.0-only OR PMEL,
 like the rest of the repository (ADR PM-0001; it was MPL-2.0 OR PMEL before).
 
 ## What this is
@@ -27,7 +28,10 @@ cites its proposal number, "ADR 323".
   bumps plugin-sdk's version, and plugin-api's private version moves to the
   same value (`scripts/assert-contract-bumped.mjs`, the `extensions /
 contract-guard` workflow). Check origin/main right before bumping and take
-  the next free canary.
+  the next free canary. The same change raises `API_VERSION` in
+  `plugin-sdk/src/version.ts` (`0.<generation>.<revision>`: the revision with
+  every change, the generation with a breaking one; ADR 304, amendment
+  2026-11-28). The guard checks that too.
 - **The published plugin-sdk depends on nothing private.** Its `./api` is
   plugin-api's declarations, copied in by `scripts/inline-api.mjs`; the build
   fails if any file in `dist/` still imports `@paged-media/plugin-api`.
@@ -45,17 +49,17 @@ contract-guard` workflow). Check origin/main right before bumping and take
   the engine wire types VENDORED in `src/wire.d.ts` — synced from the
   **published `@paged-media/canvas-wasm` `.d.ts`** (Decision B,
   repointed 2026-06-07) via `scripts/sync-wire.mjs`. The script resolves
-  that package from the editor's `packages/client` node_modules (or
+  that package from `apps/editor/packages/client` (the workspace's
+  `canvas-wasm`; or
   `--source <path>` / `PAGED_CANVAS_WASM_FROM`), and EXITS NONZERO if
   neither resolves — no warn-skip. `wire.d.ts` carries a
   `// Synced from @paged-media/canvas-wasm@<version>` stamp; `--check`
-  (a hard gate in CI, see `publish.yml`) fails on content drift OR a
+  (a hard gate in CI: `extensions-vitest.yml` and `release.yml`) fails on content drift OR a
   stale stamp. The EDITOR asserts compat through its dev link
   (`apps/canvas/src/plugin-api-compat.ts`) — widen a handle type only
   with API review. Its shell extends the contribution types instead of
   copying them (editor ADR 226), so an editor-only field never needs to
-  enter this package. The workspace builds STANDALONE; sibling checkouts
-  are a dev-time luxury.
+  enter this package.
 - **Naming:** the plugin runtime is `@paged-media/plugin-sdk`. The
   engine's WebGPU `ViewerSession` was `@paged-media/sdk` (deprecated) and
   is now `@paged-media/viewer/session` (PM-0008); neither is claimed
@@ -86,6 +90,8 @@ contract-guard` workflow). Check origin/main right before bumping and take
 ## Commands
 
 ```bash
-bun install && bun run typecheck
+bun install                      # at the repository root: one Bun workspace
+moon run extensions:test         # also :check, :lint; or `bun run typecheck` / `bun run test` in a package
 node packages/plugin-sdk/bin/paged-plugin.mjs validate <manifest.json>
+node scripts/assert-contract-bumped.mjs [baseRef]   # the contract guard, over committed history
 ```

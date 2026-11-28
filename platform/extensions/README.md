@@ -55,7 +55,9 @@ deliberately.
 
 From 0.2.79 the contract is typed against React 19 ([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md),
 amendment 2): `plugin-api` depends on `@types/react` ^19.3, and `plugin-sdk`'s optional React
-peer, like every built-in bundle's, is `react >=19.3`. The editor provides React 19.3.1. For an
+peer, like every built-in bundle's, is `react >=19.3`. `@types/react` is an optional peer of
+`plugin-sdk` too (`>=19.3`, since 2026-11-28; it was a dependency): the contract's types name
+React's, so a TypeScript project installs it, at the version its own React types use. The editor provides React 19.3.1. For an
 extension with React panels:
 
 - Declare `react` (and `react-dom`, if you use it) as a peer `>=19.3`, and develop against

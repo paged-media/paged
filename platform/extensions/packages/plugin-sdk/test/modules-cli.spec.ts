@@ -18,7 +18,7 @@
 
 // plugin-cli and the module door (ADR 326): `validate` accepts and checks a
 // wasm artifact's `integrity`, `integrity` stamps/verifies it, and
-// `modules-upload` runs dry and without a token (never uploading here).
+// `modules-upload` runs dry, and without a token it fails (never uploading here).
 // Drives the real dependency-free CLI as a subprocess.
 
 import { spawnSync } from "node:child_process";
@@ -134,14 +134,18 @@ describe("plugin-cli — wasm integrity (ADR 326)", () => {
     expect(r.err).toMatch(/is stale/);
   });
 
-  it("modules-upload skips cleanly without a token, and --dry-run names the keys", () => {
+  it("modules-upload fails without a token when an artifact is not hosted, and --dry-run names the keys", () => {
     // An unroutable host: HEAD fails, so the artifact counts as not hosted.
     const env = { PAGED_MODULE_HOST: "http://127.0.0.1:9" };
     const dir = bundle();
     const skip = run(["modules-upload", dir], env);
-    expect(skip.code).toBe(0);
+    // Nothing was uploaded and the artifact is not hosted: not a success.
+    expect(skip.code).toBe(1);
     expect(skip.out).toContain(
       "http://127.0.0.1:9/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)",
+    );
+    expect(skip.err).toContain(
+      "1 of 1 wasm artifact(s) are not hosted and nothing was uploaded: CLOUDFLARE_API_TOKEN is not set",
     );
     const dry = run(["modules-upload", dir, "--dry-run"], {
       ...env,

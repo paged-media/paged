@@ -7,8 +7,12 @@ engine**, at `engine/core` in the monorepo `paged-media/paged` (it was the
 
 ## What this is
 
-Pixel-faithful Adobe IDML renderer in Rust. A 32-crate workspace (plus three
-spikes; `Cargo.toml` lists the members) that parses
+Pixel-faithful Adobe IDML renderer in Rust. One Cargo workspace of 121 members
+(2026-11-28; `Cargo.toml` lists them): 68 engine crates under `crates/`, three
+spikes, and, since PM-0017, the 45 crates of the built-in modules
+(`modules/{publish,draw,data,image,doc,slide,sheet}`) and the five Rust crates of
+`platform/shared`; `spikes/blitz-wasm` is excluded. `cargo … --workspace` here
+therefore builds the modules too; select the engine's own crates with `-p`. It parses
 IDML packages, lays out text with InDesign-calibrated Knuth-Plass, emits a
 versioned display list, rasterises through Vello: `vello_cpu` on the CPU
 (default) or Vello on wgpu (GPU), from one mapping. Public APIs target both native and WASM.
@@ -61,7 +65,7 @@ cargo deny check                          # licenses + advisories + sources
 ```
 
 `cargo fmt --all` **is** clean across the workspace — keep it that way. CI
-gates it (`ci.yml`'s `fmt` step), so an unformatted file fails the build.
+gates it (the `fmt` step of `.github/workflows/core-ci.yml`), so an unformatted file fails the build.
 
 This rule used to say the opposite ("do not run it, it drifts ~1000 lines on
 unrelated files"), and everyone hand-formatted single files to work around it.
@@ -180,7 +184,11 @@ crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
 - `tooling/oracle/indesign/` — drives InDesign to export the reference PDFs
   the fidelity harness consumes (Python/ExtendScript; outside the Cargo
   workspace, so core is polyglot — CI must not assume everything is Cargo).
-- `spikes/` — Vello eval, composer calibration, WASM size.
+- `spikes/` — Vello eval, composer calibration, WASM size (workspace members), and
+  `blitz-wasm` (excluded from the workspace).
+- `packages/canvas-wasm/` — the private workspace package the wasm builds into
+  (`moon run core:wasm-pkg`), with `introspect/` and `repo/`; `web/idml-viewer/` is
+  the public `@paged-media/viewer`.
 
 ## Conventions worth remembering
 

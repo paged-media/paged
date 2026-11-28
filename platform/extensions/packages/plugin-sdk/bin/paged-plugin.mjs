@@ -1083,6 +1083,9 @@ function scaffold({ id, name, packageName, sdkVersion }) {
         devDependencies: {
           "@paged-media/plugin-sdk": `^${sdkVersion}`,
           "@types/node": "^24.0.0",
+          // The contract's types name React's (a panel's component); React
+          // itself is needed only by a plugin that renders with it.
+          "@types/react": "^19.3.0",
           typescript: "^7.0.2",
         },
       },
@@ -1316,9 +1319,11 @@ if (command === "modules-upload") {
   // Put a package's declared wasm on the module host (ADR 326), so a host can
   // resolve it as `<host>/<package>/<version>/<path in package>`: brotli
   // (`Content-Encoding: br`), `application/wasm`, immutable for a year.
-  // Idempotent (HEAD first). Without CLOUDFLARE_API_TOKEN it reports what is
-  // missing and exits 0, so a publish workflow can run it before the repo
-  // has the secret.
+  // Idempotent (HEAD first): artifacts that are already hosted need no
+  // token and exit 0. An artifact that is NOT hosted and cannot be uploaded
+  // because CLOUDFLARE_API_TOKEN is missing is a failure (exit 1): a publish
+  // step that uploaded nothing must not look like one that did. `--dry-run`
+  // lists what would be uploaded and exits 0.
   const dry = argv.includes("--dry-run");
   const target = argv.slice(1).find((a) => !a.startsWith("--"));
   if (!target) usage();
@@ -1432,6 +1437,14 @@ if (command === "modules-upload") {
         ? `, ${missing} not hosted${dry ? "" : " (no token)"}`
         : ", all hosted"),
   );
+  if (missing > 0 && !dry) {
+    console.error(
+      `::error::${missing} of ${items.length} wasm artifact(s) are not hosted and nothing was uploaded: ` +
+        `CLOUDFLARE_API_TOKEN is not set. Set it (with CLOUDFLARE_ACCOUNT_ID) and run again, ` +
+        `or pass --dry-run to list what an upload would do.`,
+    );
+    process.exit(1);
+  }
   process.exit(0);
 }
 

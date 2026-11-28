@@ -140,7 +140,12 @@ export {
   type DataBackend,
   type ActionBackend,
 } from "./doors-data-actions.js";
-export { API_VERSION, satisfiesApiVersion } from "./version.js";
+export {
+  API_GENERATION_RANGE,
+  API_VERSION,
+  explainApiMismatch,
+  satisfiesApiVersion,
+} from "./version.js";
 export {
   createBundleHost,
   createDataProviderRegistry,

@@ -17,12 +17,16 @@
  */
 
 /**
- * The typed contract of the wasm `ViewerSession`
- * (`core/crates/paged-sdk/src/lib.rs`). The viewer programs against
- * this interface so tests can inject a fake session and embedders can
- * wrap their own init flow. Method names mirror the wasm-bindgen
- * exports (snake_case); the viewer surface re-exposes everything in
- * idiomatic camelCase.
+ * The typed contract of the wasm `ViewerSession` (the engine's `paged-sdk`
+ * crate, `engine/core/crates/paged-sdk/src/lib.rs`). The viewer programs
+ * against it so tests can inject a fake session and embedders can wrap
+ * their own init flow.
+ *
+ * Two shapes describe the same session. `ViewerSessionLike` carries the
+ * names the wasm exports today, most of them snake_case; `ViewerSessionApi`
+ * is the same surface in camelCase, the names to write new code against.
+ * `adaptSession` turns either into a `ViewerSessionApi`, and `createViewer`
+ * accepts both.
  */
 
 /** One diagnostic from `load` / `render_*`. */
@@ -41,9 +45,14 @@ export interface SessionDiagnostics {
   messages: SessionDiagnostic[];
 }
 
-/** Continuous-layout geometry from `page_layout()`. */
+/** One page's place in doc space (pt), from `page_layout()`. */
 export interface SessionPageRect {
   index: number;
+  /**
+   * The page's left edge. 0 in the default vertical stack; the pages of a
+   * spread sit side by side. Sessions older than protocol 77 omit it.
+   */
+  xPt?: number;
   yPt: number;
   widthPt: number;
   heightPt: number;
@@ -60,20 +69,21 @@ export interface SessionRaster {
   rgba: Uint8Array;
 }
 
-export interface ViewerSessionLike {
+/** The session surface in camelCase. See `adaptSession`. */
+export interface ViewerSessionApi {
   load(idml: Uint8Array, font?: Uint8Array): SessionDiagnostics;
-  register_font(
+  registerFont(
     family: string,
     style: string | undefined,
     bytes: Uint8Array,
   ): void;
-  page_count(): number;
-  set_page(index: number): void;
-  page_layout(): SessionPagesLayout;
+  pageCount(): number;
+  setPage(index: number): void;
+  pageLayout(): SessionPagesLayout;
   /**
-   * Camera-transformed present of the continuous page stack. `zoom`
-   * is CSS px per pt; `scrollX`/`scrollY` place the doc origin in CSS
-   * px; `onlyPage` restricts to one page laid out at y = 0.
+   * Camera-transformed present of the page layout. `zoom` is CSS px per
+   * pt; `scrollX`/`scrollY` place the doc origin in CSS px; `onlyPage`
+   * restricts to one page laid out at the origin.
    */
   present(
     zoom: number,
@@ -83,7 +93,61 @@ export interface ViewerSessionLike {
     onlyPage?: number | null,
   ): SessionDiagnostics;
   /** Binds the presenter to `canvas` on first call (fit-page paint). */
+  renderToCanvasMain(canvas: HTMLCanvasElement): Promise<SessionDiagnostics>;
+  renderPageToBytes(
+    index: number,
+    targetWidthPx: number,
+  ): Promise<SessionRaster>;
+  /** `width`/`height` are CSS px; the surface gets them times the ratio. */
+  resize(width: number, height: number, devicePixelRatio: number): void;
+  /**
+   * After a present reported `gpu_lost` (the GPU process crashed, the
+   * driver reset): request a new device and rebind the same canvas.
+   * `true` when presents work again. Optional: older builds lack it.
+   */
+  recoverGpu?(): Promise<boolean>;
+  /** wasm-bindgen finalizer. */
+  free?(): void;
+}
+
+/**
+ * The session under the names the wasm exports (wasm-bindgen keeps the
+ * Rust method names). The snake_case members stay for as long as the wasm
+ * exports them; call the camelCase names of `ViewerSessionApi` through
+ * `adaptSession` instead.
+ */
+export interface ViewerSessionLike {
+  load(idml: Uint8Array, font?: Uint8Array): SessionDiagnostics;
+  /** @deprecated Call `registerFont` on `adaptSession(session)` or the viewer. */
+  register_font(
+    family: string,
+    style: string | undefined,
+    bytes: Uint8Array,
+  ): void;
+  /** @deprecated Call `pageCount` on `adaptSession(session)`. */
+  page_count(): number;
+  /** @deprecated Call `setPage` on `adaptSession(session)`. */
+  set_page(index: number): void;
+  /** @deprecated Call `pageLayout` on `adaptSession(session)`. */
+  page_layout(): SessionPagesLayout;
+  /**
+   * Camera-transformed present of the page layout. `zoom` is CSS px per
+   * pt; `scrollX`/`scrollY` place the doc origin in CSS px; `onlyPage`
+   * restricts to one page laid out at the origin.
+   */
+  present(
+    zoom: number,
+    scrollX: number,
+    scrollY: number,
+    dpr: number,
+    onlyPage?: number | null,
+  ): SessionDiagnostics;
+  /**
+   * Binds the presenter to `canvas` on first call (fit-page paint).
+   * @deprecated Call `renderToCanvasMain` on `adaptSession(session)`.
+   */
   render_to_canvas_main(canvas: HTMLCanvasElement): Promise<SessionDiagnostics>;
+  /** @deprecated Call `renderPageToBytes` on `adaptSession(session)`. */
   render_page_to_bytes(
     index: number,
     targetWidthPx: number,
@@ -97,4 +161,45 @@ export interface ViewerSessionLike {
   recoverGpu?(): Promise<boolean>;
   /** wasm-bindgen finalizer. */
   free?(): void;
+}
+
+function isCamelSession(
+  session: ViewerSessionLike | ViewerSessionApi,
+): session is ViewerSessionApi {
+  return (
+    typeof (session as Partial<ViewerSessionApi>).renderToCanvasMain ===
+    "function"
+  );
+}
+
+/**
+ * The camelCase view of a session. A session that already has the
+ * camelCase names is returned as it is; one with the wasm's names is
+ * wrapped, each call forwarded to the session (so it stays the owner of
+ * its state and of `free`).
+ */
+export function adaptSession(
+  session: ViewerSessionLike | ViewerSessionApi,
+): ViewerSessionApi {
+  if (isCamelSession(session)) return session;
+  const api: ViewerSessionApi = {
+    load: (idml, font) => session.load(idml, font),
+    registerFont: (family, style, bytes) =>
+      session.register_font(family, style, bytes),
+    pageCount: () => session.page_count(),
+    setPage: (index) => session.set_page(index),
+    pageLayout: () => session.page_layout(),
+    present: (zoom, scrollX, scrollY, dpr, onlyPage) =>
+      session.present(zoom, scrollX, scrollY, dpr, onlyPage),
+    renderToCanvasMain: (canvas) => session.render_to_canvas_main(canvas),
+    renderPageToBytes: (index, targetWidthPx) =>
+      session.render_page_to_bytes(index, targetWidthPx),
+    resize: (width, height, devicePixelRatio) =>
+      session.resize(width, height, devicePixelRatio),
+    free: () => session.free?.(),
+  };
+  if (typeof session.recoverGpu === "function") {
+    api.recoverGpu = () => session.recoverGpu!();
+  }
+  return api;
 }

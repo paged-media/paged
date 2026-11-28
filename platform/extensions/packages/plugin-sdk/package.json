@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.74.3-canary.111",
+  "version": "0.74.3-canary.112",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,13 +15,14 @@
     "build": "bun scripts/build.mjs && tsc -p tsconfig.build.json && bun scripts/inline-api.mjs",
     "prepublishOnly": "bun run build"
   },
-  "dependencies": {
-    "@types/react": "catalog:"
-  },
   "peerDependencies": {
+    "@types/react": ">=19.3",
     "react": ">=19.3"
   },
   "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
     "react": {
       "optional": true
     }
@@ -32,6 +33,7 @@
     "@paged-media/plugin-api": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
     "fast-check": "^4.10.2",
     "react": "catalog:",
@@ -58,7 +60,8 @@
   "files": [
     "dist",
     "bin",
-    "untyped-commands.baseline.json"
+    "untyped-commands.baseline.json",
+    "README.md"
   ],
   "repository": {
     "type": "git",

@@ -721,7 +721,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.74.3-canary.111",
+      "version": "0.74.3-canary.112",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -731,12 +731,9 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.74.3-canary.111",
+      "version": "0.74.3-canary.112",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
-      },
-      "dependencies": {
-        "@types/react": "catalog:",
       },
       "devDependencies": {
         "@babel/core": "catalog:",
@@ -744,15 +741,18 @@
         "@paged-media/plugin-api": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+        "@types/react": "catalog:",
         "babel-plugin-react-compiler": "catalog:",
         "fast-check": "^4.10.2",
         "react": "catalog:",
         "typescript": "catalog:",
       },
       "peerDependencies": {
+        "@types/react": ">=19.3",
         "react": ">=19.3",
       },
       "optionalPeers": [
+        "@types/react",
         "react",
       ],
     },

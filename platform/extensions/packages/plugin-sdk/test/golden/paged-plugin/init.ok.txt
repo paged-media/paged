@@ -37,6 +37,7 @@ tsconfig.json
   "devDependencies": {
     "@paged-media/plugin-sdk": "^<SDK_VERSION>",
     "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
     "typescript": "^7.0.2"
   }
 }

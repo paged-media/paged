@@ -49,6 +49,10 @@ export class FakeSession implements ViewerSessionLike {
   loads = 0;
   pageSets: number[] = [];
   freed = false;
+  /** Calls made on the session after `free()`. */
+  callsAfterFree: string[] = [];
+  /** When set, `render_to_canvas_main` waits for this before it settles. */
+  bindGate: Promise<void> | null = null;
   thumbnails: Array<{ index: number; width: number }> = [];
   layout: SessionPagesLayout;
   loadResult: SessionDiagnostics = OK;
@@ -64,17 +68,22 @@ export class FakeSession implements ViewerSessionLike {
   }
 
   load(): SessionDiagnostics {
+    if (this.freed) this.callsAfterFree.push("load");
     this.loads += 1;
     return this.loadResult;
   }
 
-  register_font(): void {}
+  fonts: string[] = [];
+  register_font(family: string): void {
+    this.fonts.push(family);
+  }
 
   page_count(): number {
     return this.layout.pages.length;
   }
 
   set_page(index: number): void {
+    if (this.freed) this.callsAfterFree.push("set_page");
     this.pageSets.push(index);
   }
 
@@ -111,7 +120,10 @@ export class FakeSession implements ViewerSessionLike {
     return Promise.resolve(this.recoverResult);
   }
 
+  binds = 0;
   render_to_canvas_main(): Promise<SessionDiagnostics> {
+    this.binds += 1;
+    if (this.bindGate) return this.bindGate.then(() => this.bindResult);
     return Promise.resolve(this.bindResult);
   }
 
@@ -128,7 +140,10 @@ export class FakeSession implements ViewerSessionLike {
     });
   }
 
-  resize(): void {}
+  resizes: Array<{ width: number; height: number; dpr: number }> = [];
+  resize(width: number, height: number, dpr: number): void {
+    this.resizes.push({ width, height, dpr });
+  }
 
   free(): void {
     this.freed = true;
@@ -139,6 +154,7 @@ export class FakeSession implements ViewerSessionLike {
 export function fakeCanvas(): HTMLCanvasElement {
   const listeners = new Map<string, Set<EventListener>>();
   const canvas = {
+    style: { touchAction: "" },
     width: 800,
     height: 600,
     clientWidth: 800,

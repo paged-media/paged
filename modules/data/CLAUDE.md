@@ -1,8 +1,9 @@
-# CLAUDE.md — paged-media/plugin-data
+# CLAUDE.md — modules/data (paged.data)
 
-Orientation for Claude sessions in **paged-media/plugin-data** — the
-paged.data external-data + automation subsystem, delivered as a Paged plugin
-(public; dual-licensed AGPL-3.0 OR PMEL, And The Next GmbH).
+Orientation for Claude sessions in **`modules/data`** of the monorepo
+`paged-media/paged` (the `paged-media/plugin-data` repository until 2026-10-18) — the
+paged.data external-data + automation subsystem, a built-in module (PM-0017;
+public; dual-licensed AGPL-3.0-only OR PMEL, And The Next GmbH).
 
 ## What this is
 
@@ -19,13 +20,14 @@ ADR 561), every file read in Rust, query rows read straight into a
 `RecordSet` — the swappable seam.
 
 Spec (the authority): [`docs/concept.md`](./docs/concept.md).
-SDK gap tracker: the cross-repo RFI `plugin-platform/rfi-core-sdk-gaps.md` (private planning notes) (D-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
+SDK gap tracker: the internal gap register, not in this repository (D-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
 
 Rust crates (spec §4). Since PM-0015 the engine-level ones are
 `engine/core/crates/paged-data-*` in the ENGINE's Cargo workspace (library names
-unchanged: `data_core`, …); this workspace keeps `data-js` (a wasm shim over
+unchanged: `data_core`, …); this module keeps `data-js` (a wasm shim over
 `paged-data-session`'s `DataSession`) and
-`data-conformance`, which reach them by path: `data-core` (frozen
+`data-conformance`, members of that same workspace since PM-0017 (the module has
+no `Cargo.toml`), which reach them by path: `data-core` (frozen
 types + Expr AST), `data-expr` (the binding DSL), `data-sources`, `data-query`,
 `data-bind` (resolution/sync engine), `data-lower`, `data-store` (the query
 store and the file readers), `data-xlsx`, `data-js` (wasm-bindgen surface),
@@ -207,19 +209,21 @@ Rules for every code change in this repo:
 ```bash
 # Everything (Rust nextest + doctests, then wasm + bun test), from anywhere:
 moon run data:test
-# Rust (the engine) without Moon. CARGO_INCREMENTAL=0 keeps target/ small.
-cargo build --workspace
-cargo nextest run --workspace --profile ci --no-fail-fast   # writes target/nextest/ci/junit.xml
-cargo clippy --workspace --all-targets -- -D warnings
-# The engine-level crates test in the engine's workspace; the gate takes both reports:
-(cd ../../engine/core && cargo nextest run --profile ci -p 'paged-data-*')
-cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml \
-  --junit ../../engine/core/target/nextest/ci/junit.xml   # the §12.2 gate
+# Rust: this directory has no Cargo.toml. Its crates are members of the
+# engine's Cargo workspace (PM-0017), so every cargo command below runs in
+# engine/core (`cd ../../engine/core`) with this module's crates named by
+# `-p`; `--workspace` there means the whole engine. The Moon tasks carry the
+# module's `-p` list (moon.yml):
+moon run data:rust-check && moon run data:rust-lint && moon run data:rust-test   # and data:rust-fmt
+# The suites the §12.2 gate reads, and the gate (in engine/core; CARGO_INCREMENTAL=0
+# keeps target/ small):
+cargo nextest run --profile ci --no-fail-fast -p data-js -p data-conformance -p 'paged-data-*'   # writes target/nextest/ci/junit.xml
+cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml
 
 # Dependency guards (CI runs these; run before claiming green)
-(cd ../../engine/core && cargo tree -p paged-data-expr --edges normal | grep -E 'paged-data-(sources|query|bind|lower|store)' && echo LEAK)
+cargo tree -p paged-data-expr --edges normal | grep -E 'paged-data-(sources|query|bind|lower|store)' && echo LEAK
 cargo tree -p data-js --target wasm32-unknown-unknown | grep -E 'data-conformance|proptest' && echo LEAK
-cargo deny check
+(cd ../../engine/core && cargo deny check)   # one deny.toml: the engine's
 
 # wasm artifact (100 MB app wasm budget; lands in packages/data-bundle/bin/).
 # Rebuild after ANY Rust change: test/wasm-fresh.spec.ts fails on a wasm built
@@ -229,7 +233,7 @@ bash scripts/build-wasm.sh
 # TS (the bundle). The contract comes from the workspace (workspace:*, checked
 # repo-wide by tooling/js/check-workspace-deps.mjs); CI runs with
 # REQUIRE_REAL_ENGINE=1 (REQUIRE_REAL_BROWSER=1 for the browser lane).
-bun install && bun run typecheck && bun run test
+bun install && bun run typecheck && bun run test   # bun install at the repository root
 bun run validate:manifest
 
 # The bundle is a private workspace package, built into the editor and never

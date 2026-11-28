@@ -17,14 +17,15 @@
  */
 
 /**
- * Pure camera math over the continuous page stack. Doc space is pt
- * (pages stacked vertically per `page_layout()`); the camera maps a
+ * Pure camera math over the page layout. Doc space is pt (each page at
+ * its canvas place per `page_layout()`: by default a vertical stack, with
+ * the pages of a spread side by side); the camera maps a
  * doc point `p` to viewport CSS px as `scroll + p * zoom`. Everything
  * here is side-effect-free so the invariants (zoom-to-anchor, fit,
  * clamps, current-page) are unit-testable without a canvas.
  */
 
-import type { SessionPagesLayout } from "./session.js";
+import type { SessionPageRect, SessionPagesLayout } from "./session.js";
 
 export interface Camera {
   /** CSS px per pt. */
@@ -52,17 +53,43 @@ export function clampZoom(zoom: number, limits: ZoomLimits): number {
   return Math.min(limits.max, Math.max(limits.min, zoom));
 }
 
-/** Total doc-space extents of the continuous stack (pt). */
+/** A page's left edge in doc space (pt); 0 when the session omits it. */
+function pageX(page: SessionPageRect): number {
+  return page.xPt ?? 0;
+}
+
+/**
+ * The doc-space rectangle (pt) that holds every page. Pages sit at their
+ * canvas place, so a spread's pages lie side by side and the origin may be
+ * left of or above zero.
+ */
+export function contentBounds(layout: SessionPagesLayout): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const p of layout.pages) {
+    const x = pageX(p);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, p.yPt);
+    maxX = Math.max(maxX, x + p.widthPt);
+    maxY = Math.max(maxY, p.yPt + p.heightPt);
+  }
+  if (layout.pages.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** Total doc-space extents of the page layout (pt): `contentBounds`' size. */
 export function contentExtent(layout: SessionPagesLayout): {
   width: number;
   height: number;
 } {
-  let width = 0;
-  let height = 0;
-  for (const p of layout.pages) {
-    width = Math.max(width, p.widthPt);
-    height = Math.max(height, p.yPt + p.heightPt);
-  }
+  const { width, height } = contentBounds(layout);
   return { width, height };
 }
 
@@ -95,17 +122,31 @@ export function clampScroll(
   layout: SessionPagesLayout,
   viewport: Viewport,
 ): Camera {
-  const { width, height } = contentExtent(layout);
-  const w = width * camera.zoom;
-  const h = height * camera.zoom;
-  const clampAxis = (pos: number, content: number, view: number): number =>
+  const bounds = contentBounds(layout);
+  // `pos` places the doc origin; the content starts `start` px after it.
+  const clampAxis = (
+    pos: number,
+    start: number,
+    content: number,
+    view: number,
+  ): number =>
     content <= view
-      ? (view - content) / 2
-      : Math.min(0, Math.max(view - content, pos));
+      ? (view - content) / 2 - start
+      : Math.min(0 - start, Math.max(view - content - start, pos));
   return {
     zoom: camera.zoom,
-    x: clampAxis(camera.x, w, viewport.width),
-    y: clampAxis(camera.y, h, viewport.height),
+    x: clampAxis(
+      camera.x,
+      bounds.x * camera.zoom,
+      bounds.width * camera.zoom,
+      viewport.width,
+    ),
+    y: clampAxis(
+      camera.y,
+      bounds.y * camera.zoom,
+      bounds.height * camera.zoom,
+      viewport.height,
+    ),
   };
 }
 
@@ -132,7 +173,7 @@ export function fitPage(
       : (viewport.width / pw) * FIT_MARGIN,
     limits,
   );
-  const x = (viewport.width - pw * zoom) / 2;
+  const x = (viewport.width - pw * zoom) / 2 - pageX(page) * zoom;
   const y =
     mode === "page"
       ? (viewport.height - ph * zoom) / 2 - page.yPt * zoom
@@ -143,8 +184,10 @@ export function fitPage(
 }
 
 /**
- * The page whose band contains the viewport-centre line (continuous
- * mode). Falls back to the nearest band when the centre sits in a gap.
+ * The page under the viewport centre. Pages are compared by their distance
+ * from the centre, vertical first (the page stack), then horizontal (the
+ * pages of one spread): the page that contains the centre wins, otherwise
+ * the nearest one.
  */
 export function currentPageAt(
   camera: Camera,
@@ -152,15 +195,19 @@ export function currentPageAt(
   viewport: Viewport,
 ): number {
   if (layout.pages.length === 0) return 0;
-  const centreDocY = (viewport.height / 2 - camera.y) / camera.zoom;
+  const centreX = (viewport.width / 2 - camera.x) / camera.zoom;
+  const centreY = (viewport.height / 2 - camera.y) / camera.zoom;
+  const outside = (at: number, start: number, size: number): number =>
+    at < start ? start - at : at > start + size ? at - start - size : 0;
   let best = 0;
-  let bestDist = Number.POSITIVE_INFINITY;
+  let bestY = Number.POSITIVE_INFINITY;
+  let bestX = Number.POSITIVE_INFINITY;
   for (const p of layout.pages) {
-    if (centreDocY >= p.yPt && centreDocY <= p.yPt + p.heightPt) return p.index;
-    const mid = p.yPt + p.heightPt / 2;
-    const dist = Math.abs(mid - centreDocY);
-    if (dist < bestDist) {
-      bestDist = dist;
+    const dy = outside(centreY, p.yPt, p.heightPt);
+    const dx = outside(centreX, pageX(p), p.widthPt);
+    if (dy < bestY || (dy === bestY && dx < bestX)) {
+      bestY = dy;
+      bestX = dx;
       best = p.index;
     }
   }
@@ -176,7 +223,9 @@ export function scrollToPage(
 ): Camera {
   const page = layout.pages[pageIndex];
   if (!page) return camera;
-  const x = (viewport.width - page.widthPt * camera.zoom) / 2;
+  const x =
+    (viewport.width - page.widthPt * camera.zoom) / 2 -
+    pageX(page) * camera.zoom;
   // Small breathing room above the page top, mirroring the gap.
   const y = -page.yPt * camera.zoom + Math.min(12, layout.gapPt * camera.zoom);
   return { zoom: camera.zoom, x, y };

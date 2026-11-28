@@ -15,6 +15,8 @@ here: it is [`../DESIGN.md`](../DESIGN.md) at the repository root.
   300–329. [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md) is the object model,
   which the code cites as "ADR 323", and [ADR 324](adr/324-node-cli-over-the-headless-host.md)
   is the Node CLI.
+- [`reference/api-version.md`](reference/api-version.md): the plugin API version, how it
+  moves, and what a manifest's `apiVersion` should say.
 - [`design/credential-store.md`](design/credential-store.md): design note for the
   credential store behind `host.secrets`.
 - [`design/data-provider.md`](design/data-provider.md): design note for the cross-plugin

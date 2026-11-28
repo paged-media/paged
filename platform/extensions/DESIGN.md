@@ -1141,7 +1141,11 @@ the entire isolate debt.
   fully bundle-registered, (b) paged.web W1 ships against it, (c) the
   breakage logs have drained.
 - Editor releases declare a supported range; bundles declare
-  `apiVersion`; `loadBundle` refuses mismatches loudly.
+  `apiVersion`; `loadBundle` refuses mismatches loudly. `API_VERSION` is
+  `0.<generation>.<revision>`: the revision rises with every contract
+  change, the generation with a breaking one, and the contract guard
+  refuses a change that leaves it where it was (ADR 304, amendment
+  2026-11-28; `docs/reference/api-version.md`).
 - Deprecation: a member leaves the surface only at a major, with a
   `@deprecated` release in between. (`host.editor` is born deprecated.)
 
@@ -3078,8 +3082,10 @@ null`; `url(name)`, `fetch(name)` (with `{ integrity }`). `null` is the
   floor predates them inlines the probe (`supports("modules@1")` + the
   member's presence).
 - **Uploading** is `paged-plugin modules-upload <bundle-dir>` in the
-  plugin's publish workflow, after `npm publish`; it skips cleanly without
-  `CLOUDFLARE_API_TOKEN`.
+  plugin's publish workflow, after `npm publish`. Without
+  `CLOUDFLARE_API_TOKEN` it uploads nothing, and exits 1 when an artifact
+  is not hosted (it exited 0 until 2026-11-28, which made a publish that
+  hosted nothing look like one that did).
 - **Not in this door:** `loadBundleWasm`'s `assetSource` does not consult
   it; the editor's same-origin 302s (ADR 220) remain the path for bundles
   that do not adopt it; lazy loading of bundle JavaScript is separate.

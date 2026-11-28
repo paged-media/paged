@@ -63,7 +63,8 @@ two contract packages, nor what happens to the canary lane. Carrying it out need
   `plugin-sdk` depends on exactly that `plugin-api`. `plugin-api` and `plugin-sdk` therefore move
   from their `0.2.N-canary.0` line to the engine's line at the first release (0.2.x to 0.74.x is
   allowed under 0.x semver). The plugin contract's own version, `API_VERSION` and a manifest's
-  `apiVersion` (`^0.2`), is separate and unchanged.
+  `apiVersion` (`^0.2`), is separate and unchanged. (It has moved with the contract since
+  2026-11-28: extensions ADR 304, its amendment of that date.)
 - **The in-tree versions are not release versions.** `canvas-wasm` and `idml-viewer` commit
   `0.<protocol>.0-dev`, held to `PROTOCOL_VERSION`; `plugin-api` and `plugin-sdk` keep their
   `0.2.N-canary.0` counter, which the contract guard still requires to move with every change

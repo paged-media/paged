@@ -20,7 +20,8 @@
  * Input lanes for the viewer — each independently disableable:
  * - wheel: Ctrl/⌘-wheel and pinch (`ctrlKey` wheel) zoom to cursor,
  *   plain wheel pans.
- * - drag: pointer-drag pans.
+ * - drag: one pointer pans (mouse, pen or one finger).
+ * - pinch: two touch pointers zoom about their midpoint and pan with it.
  * - double-click: zoom step at the cursor.
  * - keyboard: `+`/`-`/`0`, arrows, PgUp/PgDn, Home/End.
  */
@@ -28,6 +29,8 @@
 export interface InputOptions {
   wheelZoom?: boolean;
   dragPan?: boolean;
+  /** Two-finger pinch zoom on touch screens. */
+  pinchZoom?: boolean;
   doubleClickZoom?: boolean;
   keyboard?: boolean;
 }
@@ -84,25 +87,68 @@ export function attachInput(
     );
   }
 
-  if (options.dragPan !== false) {
-    let dragging = false;
-    let lastX = 0;
-    let lastY = 0;
+  const dragPan = options.dragPan !== false;
+  const pinchZoom = options.pinchZoom !== false;
+  if (dragPan || pinchZoom) {
+    // Every pointer that is down, by id, at its last position (client px).
+    const pointers = new Map<number, { x: number; y: number }>();
+    const pinchState = (): { x: number; y: number; span: number } | null => {
+      if (pointers.size !== 2) return null;
+      const [a, b] = [...pointers.values()] as [
+        { x: number; y: number },
+        { x: number; y: number },
+      ];
+      return {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+        span: Math.hypot(a.x - b.x, a.y - b.y),
+      };
+    };
+
+    // The browser's own touch panning and zooming would cancel the
+    // pointer stream after the first few moves; the canvas handles both.
+    const style = canvas.style as CSSStyleDeclaration | undefined;
+    if (style) {
+      const before = style.touchAction;
+      style.touchAction = "none";
+      teardown.push(() => {
+        style.touchAction = before;
+      });
+    }
+
     listen("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
+      // A mouse pans with its primary button only; touch and pen have one.
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (pointers.size >= 2) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       canvas.setPointerCapture?.(e.pointerId);
     });
     listen("pointermove", (e) => {
-      if (!dragging) return;
-      sink.panBy(e.clientX - lastX, e.clientY - lastY);
-      lastX = e.clientX;
-      lastY = e.clientY;
+      const last = pointers.get(e.pointerId);
+      if (!last) return;
+      const before = pinchState();
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const after = pinchState();
+      if (before && after) {
+        if (!pinchZoom) return;
+        // Pan with the midpoint first, then zoom about where it now is,
+        // so the document point between the fingers stays between them.
+        sink.panBy(after.x - before.x, after.y - before.y);
+        if (before.span > 0 && after.span > 0) {
+          sink.zoomAt(
+            after.span / before.span,
+            anchorOf({
+              clientX: after.x,
+              clientY: after.y,
+            }),
+          );
+        }
+        return;
+      }
+      if (dragPan) sink.panBy(e.clientX - last.x, e.clientY - last.y);
     });
     const stop = (e: PointerEvent) => {
-      dragging = false;
+      if (!pointers.delete(e.pointerId)) return;
       canvas.releasePointerCapture?.(e.pointerId);
     };
     listen("pointerup", stop);

@@ -19,7 +19,13 @@
 import { describe, expect, it } from "bun:test";
 
 import { createViewer, ViewerError } from "../src/viewer.js";
-import { fakeCanvas, FakeSession, syncSchedule } from "./fake-session.js";
+import { adaptSession } from "../src/session.js";
+import {
+  fakeCanvas,
+  FakeSession,
+  letterLayout,
+  syncSchedule,
+} from "./fake-session.js";
 
 async function makeViewer(session = new FakeSession()) {
   const canvas = fakeCanvas();
@@ -255,5 +261,328 @@ describe("dispose", () => {
     expect(fired).toBe(0);
     expect(session.presents.length).toBe(before);
     viewer.dispose(); // idempotent
+  });
+});
+
+/** Resize the stub canvas the way a layout change does. */
+function setCanvasSize(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+): void {
+  const box = canvas as unknown as {
+    clientWidth: number;
+    clientHeight: number;
+  };
+  box.clientWidth = width;
+  box.clientHeight = height;
+}
+
+describe("resize", () => {
+  it("resize() gives the session the new size and presents again", async () => {
+    const { viewer, session, canvas } = await makeViewer();
+    await viewer.load(IDML);
+    expect(session.resizes.at(-1)).toEqual({ width: 800, height: 600, dpr: 2 });
+    const resizes = session.resizes.length;
+    const presents = session.presents.length;
+
+    viewer.resize(); // nothing changed: no resize, no present
+    expect(session.resizes.length).toBe(resizes);
+    expect(session.presents.length).toBe(presents);
+
+    setCanvasSize(canvas, 1000, 700);
+    viewer.resize();
+
+    expect(session.resizes.at(-1)).toEqual({
+      width: 1000,
+      height: 700,
+      dpr: 2,
+    });
+    expect(session.presents.length).toBe(presents + 1);
+  });
+
+  it("keeps the document point at the viewport centre", async () => {
+    const { viewer, canvas } = await makeViewer();
+    await viewer.load(IDML);
+    viewer.setZoom(2); // larger than the viewport on both axes
+    viewer.scrollTo(-100, -500);
+    const before = viewer.scroll;
+
+    setCanvasSize(canvas, 900, 500);
+    viewer.resize();
+
+    expect(viewer.scroll).toEqual({ x: before.x + 50, y: before.y - 50 });
+  });
+
+  it("follows a ResizeObserver where the browser has one", async () => {
+    const scope = globalThis as { ResizeObserver?: unknown };
+    const original = scope.ResizeObserver;
+    const observers: Array<{
+      notify: () => void;
+      targets: unknown[];
+      connected: boolean;
+    }> = [];
+    scope.ResizeObserver = class {
+      private readonly entry;
+      constructor(callback: () => void) {
+        this.entry = {
+          notify: callback,
+          targets: [] as unknown[],
+          connected: true,
+        };
+        observers.push(this.entry);
+      }
+      observe(target: unknown): void {
+        this.entry.targets.push(target);
+      }
+      disconnect(): void {
+        this.entry.connected = false;
+      }
+    };
+    try {
+      const { viewer, session, canvas } = await makeViewer();
+      await viewer.load(IDML);
+      expect(observers).toHaveLength(1);
+      expect(observers[0]?.targets).toEqual([canvas]);
+
+      setCanvasSize(canvas, 400, 300);
+      observers[0]?.notify();
+      expect(session.resizes.at(-1)).toEqual({
+        width: 400,
+        height: 300,
+        dpr: 2,
+      });
+
+      viewer.dispose();
+      expect(observers[0]?.connected).toBe(false);
+    } finally {
+      scope.ResizeObserver = original;
+    }
+  });
+});
+
+describe("device pixel ratio", () => {
+  it("follows a change of window.devicePixelRatio", async () => {
+    const scope = globalThis as { window?: unknown };
+    const original = scope.window;
+    const queries: Array<{
+      media: string;
+      listeners: Set<() => void>;
+    }> = [];
+    const fakeWindow = {
+      devicePixelRatio: 1,
+      matchMedia(media: string) {
+        const query = { media, listeners: new Set<() => void>() };
+        queries.push(query);
+        return {
+          addEventListener: (_: string, fn: () => void) =>
+            query.listeners.add(fn),
+          removeEventListener: (_: string, fn: () => void) =>
+            query.listeners.delete(fn),
+        };
+      },
+    };
+    scope.window = fakeWindow;
+    try {
+      const session = new FakeSession();
+      const viewer = await createViewer({
+        canvas: fakeCanvas(),
+        session,
+        schedule: syncSchedule,
+      });
+      await viewer.load(IDML);
+      expect(session.presents.at(-1)?.dpr).toBe(1);
+      expect(queries.map((q) => q.media)).toEqual(["(resolution: 1dppx)"]);
+
+      // The window moves to a 2x screen: the query for 1x stops matching.
+      fakeWindow.devicePixelRatio = 2;
+      for (const fn of [...(queries[0]?.listeners ?? [])]) fn();
+
+      expect(session.resizes.at(-1)).toEqual({
+        width: 800,
+        height: 600,
+        dpr: 2,
+      });
+      expect(session.presents.at(-1)?.dpr).toBe(2);
+      // The old query is released and the new ratio is watched.
+      expect(queries[0]?.listeners.size).toBe(0);
+      expect(queries.map((q) => q.media)).toEqual([
+        "(resolution: 1dppx)",
+        "(resolution: 2dppx)",
+      ]);
+      expect(queries[1]?.listeners.size).toBe(1);
+
+      viewer.dispose();
+      expect(queries[1]?.listeners.size).toBe(0);
+    } finally {
+      scope.window = original;
+    }
+  });
+
+  it("a fixed devicePixelRatio is not watched", async () => {
+    const scope = globalThis as { window?: unknown };
+    const original = scope.window;
+    let asked = 0;
+    scope.window = {
+      devicePixelRatio: 3,
+      matchMedia() {
+        asked += 1;
+        return { addEventListener() {}, removeEventListener() {} };
+      },
+    };
+    try {
+      const { viewer, session } = await makeViewer(); // devicePixelRatio: 2
+      await viewer.load(IDML);
+      expect(asked).toBe(0);
+      expect(session.presents.at(-1)?.dpr).toBe(2);
+    } finally {
+      scope.window = original;
+    }
+  });
+});
+
+describe("load and dispose", () => {
+  it("a load that resolves after dispose touches nothing", async () => {
+    const { viewer, session } = await makeViewer();
+    let release!: () => void;
+    const blob = {
+      arrayBuffer: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          release = () => resolve(new ArrayBuffer(2));
+        }),
+    } as unknown as Blob;
+    const events: string[] = [];
+    viewer.on("loaded", () => events.push("loaded"));
+    viewer.on("error", () => events.push("error"));
+
+    const pending = viewer.load(blob);
+    viewer.dispose();
+    release();
+    await pending;
+
+    expect(session.loads).toBe(0);
+    expect(session.callsAfterFree).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it("a dispose while the canvas binds leaves the freed session alone", async () => {
+    const session = new FakeSession();
+    let release!: () => void;
+    session.bindGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { viewer } = await makeViewer(session);
+
+    const pending = viewer.load(IDML);
+    await Promise.resolve(); // past the bytes, waiting for the bind
+    expect(session.binds).toBe(1);
+    viewer.dispose();
+    release();
+    await pending;
+
+    expect(session.callsAfterFree).toEqual([]);
+    expect(session.presents).toHaveLength(0);
+  });
+
+  it("a load after dispose is refused quietly", async () => {
+    const { viewer, session } = await makeViewer();
+    viewer.dispose();
+    await viewer.load(IDML);
+    expect(session.loads).toBe(0);
+  });
+
+  it("the later of two overlapping loads owns the viewer", async () => {
+    const { viewer, session } = await makeViewer();
+    let releaseFirst!: () => void;
+    const slow = {
+      arrayBuffer: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          releaseFirst = () => resolve(new ArrayBuffer(2));
+        }),
+    } as unknown as Blob;
+    const loaded: number[] = [];
+    viewer.on("loaded", (e) => loaded.push(e.pageCount));
+
+    const first = viewer.load(slow);
+    await viewer.load(IDML);
+    releaseFirst();
+    await first;
+
+    expect(session.loads).toBe(1);
+    expect(loaded).toEqual([3]);
+  });
+
+  it("overlapping loads bind the canvas once", async () => {
+    const session = new FakeSession();
+    let release!: () => void;
+    session.bindGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { viewer } = await makeViewer(session);
+    const loaded: number[] = [];
+    viewer.on("loaded", (e) => loaded.push(e.pageCount));
+
+    const first = viewer.load(IDML);
+    const second = viewer.load(IDML);
+    await Promise.resolve();
+    release();
+    await Promise.all([first, second]);
+
+    expect(session.binds).toBe(1);
+    expect(loaded).toEqual([3]);
+  });
+});
+
+describe("page x origin", () => {
+  /** A cover page, then a spread of two pages side by side. */
+  function spreadLayout() {
+    const layout = letterLayout(1);
+    layout.pages.push(
+      { index: 1, xPt: 0, yPt: 816, widthPt: 612, heightPt: 792 },
+      { index: 2, xPt: 612, yPt: 816, widthPt: 612, heightPt: 792 },
+    );
+    return layout;
+  }
+
+  it("goToPage centres the right-hand page of a spread", async () => {
+    const { viewer } = await makeViewer(new FakeSession(spreadLayout()));
+    await viewer.load(IDML);
+    viewer.setZoom(2);
+
+    viewer.goToPage(2);
+
+    // The right-hand page's centre (doc x 918) sits at the viewport centre.
+    expect(viewer.scroll.x + 918 * viewer.zoom).toBeCloseTo(400, 6);
+    expect(viewer.currentPage).toBe(2);
+  });
+
+  it("scrolling across a spread derives the page under the centre", async () => {
+    const { viewer } = await makeViewer(new FakeSession(spreadLayout()));
+    await viewer.load(IDML);
+    viewer.setZoom(2);
+    viewer.goToPage(1);
+    expect(viewer.currentPage).toBe(1);
+
+    viewer.scrollBy(-612 * viewer.zoom, 0);
+    expect(viewer.currentPage).toBe(2);
+  });
+});
+
+describe("session names", () => {
+  it("accepts a session under the camelCase names", async () => {
+    const fake = new FakeSession();
+    const { viewer } = await makeViewer(
+      adaptSession(fake) as unknown as FakeSession,
+    );
+    await viewer.load(IDML);
+    expect(fake.loads).toBe(1);
+    expect(viewer.pageCount).toBe(3);
+  });
+
+  it("registerFont reaches the session's register_font", async () => {
+    const fake = new FakeSession();
+    const { viewer } = await makeViewer(fake);
+    viewer.registerFont("Inter", undefined, new Uint8Array(1));
+    expect(fake.fonts).toEqual(["Inter"]);
   });
 });
