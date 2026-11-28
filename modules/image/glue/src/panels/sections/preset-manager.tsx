@@ -5,6 +5,7 @@
 // reorders them, applies one, saves the current settings as a new one,
 // and imports or exports a kind's file. PURE: props in, callbacks out.
 
+import { DialogFrame } from "./dialog-frame";
 import { useState } from "react";
 
 import { defineMessages, t } from "@paged-media/strings";
@@ -149,9 +150,9 @@ export function PresetManagerDialog({
   const [newName, setNewName] = useState("");
   const detailOf = (id: string) => details?.find((d) => d.id === id);
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.title)}
+    <DialogFrame
+      label={t(M.title)}
+      onCancel={onClose}
       data-image-preset-manager={tab}
       style={dialogStyle}
     >
@@ -338,7 +339,7 @@ export function PresetManagerDialog({
       <div style={note}>
         {t(M.formats, { formats: FORMATS[tab] })} {t(M.stored)}
       </div>
-    </section>
+    </DialogFrame>
   );
 }
 
@@ -361,9 +362,9 @@ export function HistoryOptionsDialog({
   const [memoryMb, setMemoryMb] = useState(prefs.memoryMb);
   const [autoSnapshot, setAutoSnapshot] = useState(prefs.autoSnapshot);
   return (
-    <section
-      role="dialog"
-      aria-label={t(H.title)}
+    <DialogFrame
+      label={t(H.title)}
+      onCancel={onCancel}
       data-image-history-options
       style={dialogStyle}
     >
@@ -428,6 +429,6 @@ export function HistoryOptionsDialog({
           {t(H.ok)}
         </button>
       </div>
-    </section>
+    </DialogFrame>
   );
 }

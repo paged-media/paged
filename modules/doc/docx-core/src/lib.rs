@@ -150,6 +150,16 @@ pub struct BodyHeld {
     /// Content controls (`w:sdt`, run, block, row and cell level) whose
     /// content is shown as plain content.
     pub content_controls: u32,
+    /// Smart tags and custom XML elements around runs (`w:smartTag`,
+    /// `w:customXml`): their content is shown; the element stays in the
+    /// source and the runs inside are not on the save-back path.
+    #[serde(default)]
+    pub tag_wrappers: u32,
+    /// Direction wrappers around runs (`w:dir`, `w:bdo`): their content is
+    /// shown in the paragraph's own direction; the embedding or override
+    /// they ask for is not held.
+    #[serde(default)]
+    pub direction_wrappers: u32,
 }
 
 /// A top-level body block.

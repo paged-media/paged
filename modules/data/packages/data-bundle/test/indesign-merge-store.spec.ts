@@ -16,7 +16,7 @@ import { describe, expect, it } from "bun:test";
 import { loadIntoStore } from "../src/query/import";
 import { storeHandle } from "../src/query/store";
 import { bootEngine } from "./pipeline-parts.mjs";
-import { HAVE_ENGINE } from "./real-engine";
+import { HAVE_ENGINE, REQUIRE_REAL_ENGINE } from "./real-engine";
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LANE = join(PKG, "..", "..", "conformance", "indesign-merge");
@@ -58,7 +58,7 @@ function indesignTexts(id: string): Array<{ text: string; overset: boolean }> {
   );
 }
 
-describe.skipIf(!HAVE_ENGINE)(
+describe.skipIf(!HAVE_ENGINE && !REQUIRE_REAL_ENGINE)(
   "InDesign Data Merge texts over the shipped store path [data.lower.content]",
   () => {
     for (const fx of spec.fixtures as any[]) {
@@ -76,7 +76,7 @@ describe.skipIf(!HAVE_ENGINE)(
  *  writer closes on its own lane. */
 const AS_WRITTEN_PINS = PINS;
 
-describe.skipIf(!HAVE_ENGINE)(
+describe.skipIf(!HAVE_ENGINE && !REQUIRE_REAL_ENGINE)(
   "InDesign Data Merge texts over the merge's as-written read (DM-8 closed) [data.lower.content]",
   () => {
     for (const fx of spec.fixtures as any[]) {

@@ -29,9 +29,16 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { webBundle } from "../../src";
 import { loadWebSource } from "../../src/source-part";
-import { blitzPresent, primeBlitz, recordScene } from "../conformance/blitz";
+import {
+  blitzPresent,
+  primeBlitz,
+  recordScene,
+  requireBlitz,
+} from "../conformance/blitz";
 import { openHost } from "../conformance/host";
 import { W1_EMPTY_PAGE } from "../fixtures/corpus";
+
+requireBlitz("web headless — template field kinds");
 
 let h: HeadlessHost;
 let host: BundleHost;

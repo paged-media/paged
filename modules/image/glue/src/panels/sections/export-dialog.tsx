@@ -6,6 +6,7 @@
 // engine's `export_image*` doors do the work (`paged-raster`); this is
 // only the form.
 
+import { DialogFrame } from "./dialog-frame";
 import { useState } from "react";
 
 import type { ExportOptions, RasterFormat } from "../../engine";
@@ -207,9 +208,9 @@ export function ExportAsDialog({
   });
 
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.title)}
+    <DialogFrame
+      label={t(M.title)}
+      onCancel={onCancel}
       data-image-export-dialog
       style={dialogStyle}
     >
@@ -407,6 +408,6 @@ export function ExportAsDialog({
       <div style={note} data-export-note>
         {t(noteFor(format, mode))}
       </div>
-    </section>
+    </DialogFrame>
   );
 }

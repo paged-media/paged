@@ -4,6 +4,7 @@
 // switches, opacity, order and filter mask; and, while a smart object's
 // contents are open, the banner that saves or discards them.
 
+import { DialogFrame } from "./dialog-frame";
 import { useState } from "react";
 
 import type { ImageSession } from "../../session";
@@ -390,9 +391,9 @@ export function SmartTransformDialog({
   const ok =
     Object.values(f).every(Number.isFinite) && f.scaleX !== 0 && f.scaleY !== 0;
   return (
-    <section
-      role="dialog"
-      aria-label={t(D.title)}
+    <DialogFrame
+      label={t(D.title)}
+      onCancel={onCancel}
       data-image-smart-transform-dialog
       style={box}
     >
@@ -436,6 +437,6 @@ export function SmartTransformDialog({
           {t(D.ok)}
         </button>
       </div>
-    </section>
+    </DialogFrame>
   );
 }

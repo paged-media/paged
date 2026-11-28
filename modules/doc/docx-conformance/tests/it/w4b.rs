@@ -279,12 +279,18 @@ fn control_values_are_saved_into_their_sdt__feat__doc_content_controls() {
 
 /// Word's answer for the W4b documents (`fixtures/w4b-*.word.json`,
 /// `tooling/oracle/office/word/word-objects-probe.sh <out> w4b-scripts w4b-controls`), or
-/// `None` where the recording is absent.
+/// `None` after reporting the recording unavailable.
 fn word(name: &str) -> Option<serde_json::Value> {
     let path = format!("{}/fixtures/{name}.word.json", env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(path)
-        .ok()
-        .map(|s| serde_json::from_str(&s).unwrap())
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        // Reported, never a silent pass (docs/development/testing.md).
+        paged_test_resources::unavailable(
+            paged_test_resources::Resource::Fixtures,
+            format_args!("no Word recording {name}.word.json"),
+        );
+        return None;
+    };
+    Some(serde_json::from_str(&text).unwrap())
 }
 
 /// The text boxes Word draws on the first page, as (left, right, text).

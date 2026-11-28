@@ -107,6 +107,7 @@ import {
   type DistortParams,
 } from "./sections/distort-section";
 import { Section } from "./sections/disclosure";
+import { LayerName } from "./sections/layer-name";
 import { FilterDialog } from "./sections/filter-dialog";
 import { ExportAsDialog } from "./sections/export-dialog";
 import {
@@ -3938,24 +3939,13 @@ export function makeImagePanel(session: ImageSession) {
                   padding: "1px 0",
                 }}
               >
-                <span
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    opacity: l.hidden ? 0.5 : 1,
-                  }}
+                <LayerName
+                  name={l.name}
+                  label={t(P.layerName)}
                   title={l.hidden ? t(P.psdHidden, { name: l.name }) : l.name}
-                  onDoubleClick={() => {
-                    const name = window.prompt(t(P.layerName), l.name);
-                    if (name && name !== l.name)
-                      session.psdRenameLayer(l.index, name);
-                  }}
-                >
-                  {l.name}
-                </span>
+                  dimmed={l.hidden}
+                  onRename={(name) => session.psdRenameLayer(l.index, name)}
+                />
                 <input
                   type="number"
                   min={0}

@@ -2864,6 +2864,28 @@ pub fn hidden_text_docx() -> Vec<u8> {
     w0_package(&document, Some(styles))
 }
 
+/// Runs inside the wrappers whose content is ordinary paragraph content:
+///
+/// - p0 `Meet ` + smart tag `Ada` + ` in ` + custom XML `Paris` + `.`
+/// - p1 `abc ` + `w:dir` (rtl) `def` + ` ` + `w:bdo` (rtl) `ghi` + ` jkl`
+/// - p2 a hyperlink inside a `w:dir` inside a smart tag: `Nested link` + ` end`
+/// - p3 `Other paragraph.`
+pub fn inline_wrappers_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Meet </w:t></w:r><w:smartTag w:uri="urn:schemas-microsoft-com:office:smarttags" w:element="PersonName"><w:r><w:t>Ada</w:t></w:r></w:smartTag><w:r><w:t xml:space="preserve"> in </w:t></w:r><w:customXml w:uri="urn:example:places" w:element="city"><w:r><w:t>Paris</w:t></w:r></w:customXml><w:r><w:t>.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">abc </w:t></w:r><w:dir w:val="rtl"><w:r><w:t>def</w:t></w:r></w:dir><w:r><w:t xml:space="preserve"> </w:t></w:r><w:bdo w:val="rtl"><w:r><w:t>ghi</w:t></w:r></w:bdo><w:r><w:t xml:space="preserve"> jkl</w:t></w:r></w:p>
+    <w:p><w:smartTag w:uri="urn:example:tags" w:element="ref"><w:dir w:val="ltr"><w:hyperlink w:anchor="top"><w:r><w:t>Nested link</w:t></w:r></w:hyperlink></w:dir></w:smartTag><w:r><w:t xml:space="preserve"> end</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Other paragraph.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    w0_package(&document, None)
+}
+
 /// Doc ADR 609 — a theme part (Office 2013–2022 colours, Calibri Light /
 /// Calibri fonts) the theme builders share.
 pub const THEME_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

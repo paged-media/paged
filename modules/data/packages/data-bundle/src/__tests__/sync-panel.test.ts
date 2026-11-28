@@ -1,5 +1,5 @@
 // The Bindings panel's sync and review surfaces (wave 7), rendered without a
-// DOM (the hook store of panels.test.ts): per-binding sync states and the
+// DOM (a hook store in place of React's): per-binding sync states and the
 // pin / unpin / accept-source decisions, the row diff view, the rule editor's
 // check + preview + document-style picker, and the per-field format editor.
 

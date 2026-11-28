@@ -1816,7 +1816,25 @@ pub async fn straighten_crop_rgba8(
     // Rotate by −degrees: the FRAME turned by +degrees, so the content
     // must turn back by the same amount to land upright.
     let params = RotateBilinearParams::new(-degrees, center, center);
-    let win = crate::fill::rgba8_to_f16(&image.rgba.to_rgba8());
+    // The bilinear rotation mixes texels, so it mixes ASSOCIATED colour:
+    // filtered straight, the colour a transparent texel still carries
+    // bleeds into its visible neighbours. An opaque picture is the identity.
+    let src8 = image.rgba.to_rgba8();
+    let associate = src8.as_chunks::<4>().0.iter().any(|p| p[3] != u8::MAX);
+    let win = if associate {
+        let mut win = Vec::with_capacity(src8.len() * 2);
+        for p in src8.as_chunks::<4>().0 {
+            let a = f32::from(p[3]) / 255.0;
+            for (i, &b) in p.iter().enumerate() {
+                let v = f32::from(b) / 255.0;
+                let v = if i < 3 { v * a } else { v };
+                win.extend_from_slice(&half::f16::from_f32(v).to_le_bytes());
+            }
+        }
+        win
+    } else {
+        crate::fill::rgba8_to_f16(&src8)
+    };
     let out = image_gpu::execute_windowed_once_async(
         ctx,
         &GEOM_ROTATE_BILINEAR,
@@ -1830,8 +1848,12 @@ pub async fn straighten_crop_rgba8(
     )
     .await
     .map_err(|e| IngestError::Pipeline(e.to_string()))?;
-    let rotated =
-        DecodedImage::from_rgba8(image.width, image.height, crate::fill::f16_to_rgba8(&out))?;
+    let back = if associate {
+        crate::fill::f16_to_rgba8_unpremul(&out)
+    } else {
+        crate::fill::f16_to_rgba8(&out)
+    };
+    let rotated = DecodedImage::from_rgba8(image.width, image.height, back)?;
     crop_rgba8(&rotated, x, y, w, h)
 }
 

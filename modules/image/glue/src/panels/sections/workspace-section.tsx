@@ -7,6 +7,7 @@
 // the host (extensions ADR 340); this section is where the image's own
 // settings and lists live.
 
+import { DialogFrame } from "./dialog-frame";
 import { useState } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import { defineMessages, t } from "@paged-media/strings";
@@ -357,9 +358,9 @@ export function NewGuideDialog({
   const [vertical, setVertical] = useState(true);
   const [value, setValue] = useState(0);
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.newGuideTitle)}
+    <DialogFrame
+      label={t(M.newGuideTitle)}
+      onCancel={onCancel}
       data-image-new-guide-dialog
       style={{
         border: "1px solid var(--pg-border)",
@@ -424,6 +425,6 @@ export function NewGuideDialog({
           {t(M.ok)}
         </button>
       </div>
-    </section>
+    </DialogFrame>
   );
 }

@@ -9,6 +9,7 @@
 // full result; OK keeps the filter as ONE undo step, Cancel puts the
 // image back.
 
+import { DialogFrame } from "./dialog-frame";
 import { hexToRgb } from "@paged-media/helpers";
 import { ColorInput } from "./color-input";
 import type { FilterDef, FilterValue, ParamSpec } from "../../filters";
@@ -543,9 +544,9 @@ export function FilterDialog({
   effects?: readonly FilterDef[];
 }) {
   return (
-    <section
-      role="dialog"
-      aria-label={t(def.label)}
+    <DialogFrame
+      label={t(def.label)}
+      onCancel={onCancel}
       data-filter-dialog={def.id}
       style={{
         border: `1px solid ${color.border}`,
@@ -659,7 +660,7 @@ export function FilterDialog({
       ) : null}
       <FilterQuality dialog={dialog} />
       <div style={note}>{gpu ? t(M.note) : t(M.gpuOnly)}</div>
-    </section>
+    </DialogFrame>
   );
 }
 

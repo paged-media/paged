@@ -1,6 +1,6 @@
 // Wave 6 panels — the Data query panel and the Sources panel's import /
 // worksheet / refresh-policy controls — rendered without a DOM, the same
-// hook-store harness as panels.test.ts: `useState` is a re-renderable store,
+// hook-store harness as sync-panel.test.ts: `useState` is a re-renderable store,
 // the component is called as a function, the element tree is walked.
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";

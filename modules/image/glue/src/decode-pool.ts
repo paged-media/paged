@@ -120,6 +120,7 @@ export async function createDecodePool(
           width: reply.width,
           height: reply.height,
           rgba: new Uint8Array(reply.rgba),
+          ...(reply.display !== undefined ? { display: reply.display } : {}),
           ...(reply.samples16
             ? { samples16: new Uint16Array(reply.samples16) }
             : {}),

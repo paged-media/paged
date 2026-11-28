@@ -46,6 +46,7 @@
 
 import { escapeXmlText } from "@paged-media/helpers";
 import type { WebDiagnostic } from "./diagnose";
+import { executableScheme, scanTagAttributes } from "./sanitize";
 import type { TemplateVars, WebFrameSource } from "./source";
 
 /** The CLOSED filter whitelist — pure, deterministic, locale-free.
@@ -141,6 +142,16 @@ export function applyTemplate(
   text: string,
   vars: TemplateVars,
 ): TemplateResult {
+  return applyTemplateWith(text, vars, (name, _index, map) => map[name]);
+}
+
+/** `applyTemplate` with the value of each placeholder chosen by its
+ *  position: `pick(name, index, vars)` is asked once per resolved name. */
+function applyTemplateWith(
+  text: string,
+  vars: TemplateVars,
+  pick: (name: string, index: number, vars: TemplateVars) => unknown,
+): TemplateResult {
   if (typeof text !== "string" || text.length === 0) {
     return { output: typeof text === "string" ? text : "", diagnostics: [] };
   }
@@ -170,7 +181,7 @@ export function applyTemplate(
         });
         return whole;
       }
-      let value = String(map[parsed.name]);
+      let value = String(pick(parsed.name, index, map));
       for (const f of parsed.filters) {
         if (!FILTER_SET.has(f.name)) {
           diagnostics.push({
@@ -270,24 +281,41 @@ export function renderWebFrameSource(
   const authored = source.vars ?? {};
   const raw: TemplateVars = { ...(hasBound ? bound : {}), ...authored };
   // Each lane escapes them for its own grammar, so a value stays a value:
-  // text or one attribute value in the HTML, one token in the CSS.
+  // text or one attribute value in the HTML, one token in the CSS — also
+  // the CSS inside the HTML (a `style` attribute, a `<style>` element).
   const forHtml: TemplateVars = { ...raw };
   const forCss: TemplateVars = { ...raw };
+  const outside = new Set<string>();
   if (hasBound && bound) {
     for (const k of Object.keys(bound)) {
       if (!Object.prototype.hasOwnProperty.call(authored, k)) {
+        outside.add(k);
         forHtml[k] = escapeBoundHtml(bound[k]);
         forCss[k] = escapeBoundCss(bound[k]);
       }
     }
   }
-  const html = applyTemplate(source.html, forHtml);
+  const refused: WebDiagnostic[] = [];
+  let html: TemplateResult;
+  if (outside.size === 0) {
+    html = applyTemplate(source.html, forHtml);
+  } else {
+    const contexts = boundContexts(source.html, forHtml, outside, refused);
+    html = applyTemplateWith(source.html, forHtml, (name, index, map) => {
+      if (!outside.has(name)) return map[name];
+      const context = contextAt(contexts, index);
+      if (context === "refused") return "";
+      // A CSS escape holds no character HTML reads as syntax.
+      return context === "css" ? forCss[name] : map[name];
+    });
+  }
   const css = applyTemplate(source.css, forCss);
   return {
     html: html.output,
     css: css.output,
     diagnostics: [
       ...html.diagnostics,
+      ...refused,
       ...css.diagnostics.map((d) => ({
         ...d,
         message: `css: ${d.message}`,
@@ -296,6 +324,146 @@ export function renderWebFrameSource(
     ],
     applied: true,
   };
+}
+
+/** Where a placeholder of the HTML lane stands, for a bound value. */
+type BoundContext = "css" | "refused";
+
+interface ContextRange {
+  start: number;
+  end: number;
+  context: BoundContext;
+}
+
+function contextAt(
+  ranges: readonly ContextRange[],
+  index: number,
+): BoundContext | "html" {
+  let found: BoundContext | "html" = "html";
+  for (const r of ranges) {
+    if (index >= r.start && index < r.end) {
+      if (r.context === "refused") return "refused";
+      found = r.context;
+    }
+  }
+  return found;
+}
+
+/** Attributes whose value is a URL the browser may navigate to or load. */
+const URL_ATTRIBUTES = new Set([
+  "href",
+  "xlink:href",
+  "src",
+  "srcset",
+  "action",
+  "formaction",
+  "poster",
+  "data",
+  "background",
+  "cite",
+  "ping",
+  "manifest",
+  "codebase",
+  "longdesc",
+]);
+
+/** Elements that only ever show a `data:` picture, never run it. */
+const PICTURE_TAGS = new Set(["img", "source", "image", "video", "input"]);
+
+const DATA_PICTURE = /^[\0-\x20]*data:image\/[a-z0-9.+-]+[;,]/i;
+
+/** Whether a substituted URL attribute may stand. `value` is the raw
+ *  attribute value with every placeholder resolved. */
+function refusedScheme(
+  tag: string,
+  name: string,
+  value: string,
+): string | null {
+  if (name === "srcset") {
+    // A candidate list: each URL after a comma starts a scheme of its own.
+    for (const part of value.split(",")) {
+      const scheme = executableScheme(part);
+      if (scheme) return scheme;
+    }
+    return null;
+  }
+  const scheme = executableScheme(value);
+  if (scheme !== "data") return scheme;
+  const picture =
+    PICTURE_TAGS.has(tag) &&
+    (tag === "image" ? name.endsWith("href") : name !== "href") &&
+    DATA_PICTURE.test(value);
+  return picture ? null : scheme;
+}
+
+/** The parts of the HTML source in which a bound value is not plain text
+ *  or a plain attribute value: CSS (a `style` attribute, a `<style>`
+ *  element), where it is escaped as one CSS token, and the places it is
+ *  REFUSED — a URL attribute whose substituted value starts an executable
+ *  scheme (`javascript:`, `vbscript:`, `data:` other than a picture on a
+ *  picture element), an event handler, a `srcdoc`. A refusal empties every
+ *  bound value of that attribute and says so in `diagnostics`. */
+function boundContexts(
+  html: string,
+  vars: TemplateVars,
+  outside: ReadonlySet<string>,
+  diagnostics: WebDiagnostic[],
+): ContextRange[] {
+  // Placeholders hold no markup: mask them so one in a bare attribute
+  // value (`style={{ data.c }}`) stays inside that value.
+  PLACEHOLDER.lastIndex = 0;
+  const masked = html.replace(PLACEHOLDER, (whole) => "x".repeat(whole.length));
+  const ranges: ContextRange[] = [];
+  const holdsBound = (text: string): boolean => {
+    PLACEHOLDER.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PLACEHOLDER.exec(text)) !== null) {
+      const parsed = parsePlaceholder(m[1]);
+      if (parsed && outside.has(parsed.name)) {
+        PLACEHOLDER.lastIndex = 0;
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const a of scanTagAttributes(masked)) {
+    if (a.valueStart === -1) continue;
+    const value = html.slice(a.valueStart, a.valueEnd);
+    if (!holdsBound(value)) continue;
+    const range = { start: a.valueStart, end: a.valueEnd };
+    if (a.name === "style") {
+      ranges.push({ ...range, context: "css" });
+      continue;
+    }
+    let why: string | null = null;
+    if (/^on[a-z]+$/.test(a.name)) why = "an event handler";
+    else if (a.name === "srcdoc") why = "a nested document";
+    else if (URL_ATTRIBUTES.has(a.name)) {
+      const scheme = refusedScheme(
+        a.tag,
+        a.name,
+        applyTemplate(value, vars).output,
+      );
+      if (scheme) why = `a ${scheme}: URL`;
+    }
+    if (why) {
+      ranges.push({ ...range, context: "refused" });
+      diagnostics.push({
+        severity: "warning",
+        message: `bound value left out of ${a.name} on <${a.tag}> — it would be ${why}`,
+        source: "template",
+        line: lineOf(html, a.start),
+      });
+    }
+  }
+  const style = /<style\b[^>]*>([\s\S]*?)(?:<\/style\b|$)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = style.exec(masked)) !== null) {
+    const start = m.index + m[0].indexOf(">") + 1;
+    ranges.push({ start, end: start + m[1].length, context: "css" });
+    if (m[0].length === 0) style.lastIndex++;
+  }
+  return ranges;
 }
 
 /** The reserved namespaces of BOUND data — values the bundle resolves from

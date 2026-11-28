@@ -46,6 +46,58 @@ export function sourceNameOf(fileName: string): string {
   return /^[0-9]/.test(clean) ? `_${clean}` : clean;
 }
 
+/** A delimited text file's bytes as text, and how they were read. */
+export interface DecodedText {
+  text: string;
+  /** The encoding the bytes were read as. */
+  encoding: "utf-8" | "utf-16le" | "utf-16be" | "windows-1252";
+  /** Set when the file did not say or keep its encoding: what was assumed
+   *  or replaced, for a diagnostic. Absent when the text is exactly the
+   *  file's. */
+  note?: string;
+}
+
+/** Read a CSV or TSV file's bytes as text without losing a byte silently.
+ *  A byte-order mark names the encoding (UTF-8, UTF-16LE, UTF-16BE) and is
+ *  dropped. Without one the file is UTF-8 when it is valid UTF-8; otherwise
+ *  it is read as Windows-1252 (what a spreadsheet's "CSV" export writes on
+ *  most systems; every byte maps to a character), and `note` says so. A
+ *  UTF-16 file with a broken pair keeps U+FFFD there, and `note` counts
+ *  them. */
+export function decodeDelimitedText(bytes: Uint8Array): DecodedText {
+  const utf16 =
+    bytes[0] === 0xff && bytes[1] === 0xfe
+      ? "utf-16le"
+      : bytes[0] === 0xfe && bytes[1] === 0xff
+        ? "utf-16be"
+        : null;
+  if (utf16) {
+    try {
+      const text = new TextDecoder(utf16, { fatal: true }).decode(bytes);
+      return { text, encoding: utf16 };
+    } catch {
+      const text = new TextDecoder(utf16).decode(bytes);
+      const replaced = text.split("\ufffd").length - 1;
+      return {
+        text,
+        encoding: utf16,
+        note: `the file is not valid UTF-16: ${replaced} character${replaced === 1 ? "" : "s"} could not be read and show as \ufffd`,
+      };
+    }
+  }
+  try {
+    // The decoder drops a UTF-8 byte-order mark.
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { text, encoding: "utf-8" };
+  } catch {
+    return {
+      text: new TextDecoder("windows-1252").decode(bytes),
+      encoding: "windows-1252",
+      note: "the file is not UTF-8 and has no byte-order mark: it was read as Windows-1252 — save it as UTF-8 if characters are wrong",
+    };
+  }
+}
+
 /** A SQL identifier, double-quoted. */
 export function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;

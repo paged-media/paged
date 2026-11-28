@@ -8,6 +8,7 @@
 // Every component is PURE (props in, elements out); the panel wires them
 // to the session, where each action is one undo step.
 
+import { DialogFrame } from "./dialog-frame";
 import { ColorInput } from "./color-input";
 import { useState } from "react";
 import { defineMessages, t } from "@paged-media/strings";
@@ -1754,10 +1755,11 @@ export function BlendingOptionsDialog({
     </div>
   );
   return (
-    <div
+    <DialogFrame
       data-image-blending-options
-      role="dialog"
-      aria-label={t(M.dialogTitle, { name: layer.name })}
+      as="div"
+      label={t(M.dialogTitle, { name: layer.name })}
+      onCancel={onClose}
       style={{
         border: `1px solid ${color.border}`,
         borderRadius: 4,
@@ -1835,6 +1837,6 @@ export function BlendingOptionsDialog({
         </button>
       </div>
       <div style={note}>{t(M.blendNote)}</div>
-    </div>
+    </DialogFrame>
   );
 }

@@ -91,6 +91,81 @@ describe("sanitizeHtml — event-handler attributes", () => {
   });
 });
 
+describe("sanitizeHtml — handlers behind any attribute separator", () => {
+  const cases: Array<[string, string, string]> = [
+    ["a slash", "<svg/onload=alert(1)>", "<svg/>"],
+    ["a slash, quoted", '<svg/onload="alert(1)"/>', "<svg//>"],
+    ["a tab", "<img\tonerror=x src=a>", "<img src=a>"],
+    ["a newline", "<img\nonerror=x\nsrc=a>", "<img\nsrc=a>"],
+    ["a form feed", "<img\fonerror=x>", "<img>"],
+    [
+      "a closing quote",
+      '<img src="a"onerror="x()" alt="b">',
+      '<img src="a" alt="b">',
+    ],
+    [
+      "an apostrophe",
+      "<img src='a'onerror='x()'alt='b'>",
+      "<img src='a'alt='b'>",
+    ],
+    ["slashes and spaces", "<svg / onload = 'x()' />", "<svg / />"],
+    ["upper case", "<SVG/ONLOAD=alert(1)>", "<SVG/>"],
+  ];
+  for (const [what, input, expected] of cases) {
+    it(`strips a handler after ${what}`, () => {
+      const r = sanitizeHtml(input);
+      expect(r.html).toBe(expected);
+      expect(r.removed).toEqual(["event-handler attribute"]);
+      expect(sanitizeHtml(r.html)).toEqual({ html: r.html, removed: [] });
+    });
+  }
+
+  it("finds the tag a comment or a quoted value hides", () => {
+    for (const input of [
+      '<!-- <a title="--><svg/onload=alert(1)>">',
+      '<a title="<svg/onload=alert(1)>">',
+    ]) {
+      const r = sanitizeHtml(input);
+      expect(r.html).not.toContain("onload");
+      expect(r.removed).toEqual(["event-handler attribute"]);
+    }
+  });
+
+  it("keeps on… inside a bare or quoted value, where it is no attribute", () => {
+    for (const html of [
+      "<img src=a/onload=x>",
+      '<a href="/turn/online=1">x</a>',
+      '<p class="x"data-on="1"one-thing="2">y</p>',
+    ]) {
+      expect(sanitizeHtml(html)).toEqual({ html, removed: [] });
+    }
+  });
+
+  it("empties a javascript: URL behind a slash or a quote", () => {
+    const r = sanitizeHtml(
+      '<a/href="javascript:x()">a</a><a title="t"href=javascript:y()>b</a>',
+    );
+    expect(r.html).toBe('<a/href="">a</a><a title="t"href=>b</a>');
+    expect(r.removed).toEqual(["javascript: URL"]);
+  });
+
+  it("stays linear on tags nested in quoted values", () => {
+    const hostile = '<a x="'.repeat(200_000);
+    const t0 = performance.now();
+    const r = sanitizeHtml(hostile + "<svg/onload=x>");
+    expect(r.html).not.toContain("onload");
+    expect(performance.now() - t0).toBeLessThan(5000);
+  });
+
+  it("the linter flags the same handlers", () => {
+    for (const html of ["<svg/onload=x></svg>", '<img src="a"onerror=x>']) {
+      expect(
+        diagnoseHtml(html).some((d) => d.message.includes("event-handler")),
+      ).toBe(true);
+    }
+  });
+});
+
 describe("sanitizeHtml — javascript: URLs", () => {
   it("neutralizes a javascript: href to an empty value", () => {
     const r = sanitizeHtml('<a href="javascript:alert(1)">click</a>');

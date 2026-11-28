@@ -464,7 +464,7 @@ export async function openSession(
       id: "media.paged.cli",
       name: "paged CLI",
       version: cliVersion(),
-      apiVersion: `^${API_VERSION.slice(0, 3)}`,
+      apiVersion: `^${API_VERSION.split(".").slice(0, 2).join(".")}`,
       capabilities: {
         document: { read: "broad", write: "broad" },
         rendering: ["hitTest"],

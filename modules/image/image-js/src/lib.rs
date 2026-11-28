@@ -3042,11 +3042,23 @@ mod wasm {
             0.0,
             0.0,
         );
-        // RGBA8 → rgba16float window (straight /255 — the I-02 working
-        // values, same as the decode bridge).
-        let mut win = Vec::with_capacity(img.rgba.len() * 2);
-        for &b in img.rgba.to_rgba8().iter() {
-            win.extend_from_slice(&f16::from_f32(b as f32 / 255.0).to_le_bytes());
+        // RGBA8 → rgba16float window (/255 — the I-02 working values, same
+        // as the decode bridge). A filter that mixes texels mixes
+        // ASSOCIATED colour, or the colour a transparent texel still
+        // carries bleeds into its visible neighbours; nearest copies
+        // texels, and an opaque picture is the identity (the same rule as
+        // the layer stack's Image Size).
+        let src8 = img.rgba.to_rgba8();
+        let associate =
+            filter != "nearest" && src8.as_chunks::<4>().0.iter().any(|p| p[3] != u8::MAX);
+        let mut win = Vec::with_capacity(src8.len() * 2);
+        for p in src8.as_chunks::<4>().0 {
+            let a = f32::from(p[3]) / 255.0;
+            for (i, &b) in p.iter().enumerate() {
+                let v = f32::from(b) / 255.0;
+                let v = if associate && i < 3 { v * a } else { v };
+                win.extend_from_slice(&f16::from_f32(v).to_le_bytes());
+            }
         }
         let out = image_gpu::execute_windowed_once_async(
             &ctx,
@@ -3062,9 +3074,17 @@ mod wasm {
         .await
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
         let mut rgba = Vec::with_capacity((out_w as usize) * (out_h as usize) * 4);
-        for pair in out.chunks_exact(2) {
-            let v = f16::from_le_bytes([pair[0], pair[1]]).to_f32();
-            rgba.push((v.clamp(0.0, 1.0) * 255.0).round() as u8);
+        for px in out.as_chunks::<8>().0 {
+            let c = |i: usize| f16::from_le_bytes([px[i * 2], px[i * 2 + 1]]).to_f32();
+            let a = c(3);
+            for i in 0..4 {
+                let v = match (associate && i < 3, a > 0.0) {
+                    (true, true) => c(i) / a,
+                    (true, false) => 0.0,
+                    _ => c(i),
+                };
+                rgba.push((v.clamp(0.0, 1.0) * 255.0).round() as u8);
+            }
         }
         let resized = DecodedImage::from_rgba8(out_w, out_h, rgba)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;

@@ -49,11 +49,19 @@ fn part(bytes: &[u8], name: &str) -> String {
     String::from_utf8_lossy(OpcPackage::read(bytes).unwrap().part(name).unwrap()).into_owned()
 }
 
+/// Word's answer for a fixture (`fixtures/<name>.word.json`), or `None`
+/// after reporting the recording unavailable.
 fn word(name: &str) -> Option<serde_json::Value> {
     let path = format!("{}/fixtures/{name}.word.json", env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(path)
-        .ok()
-        .map(|s| serde_json::from_str(&s).unwrap())
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        // Reported, never a silent pass (docs/development/testing.md).
+        paged_test_resources::unavailable(
+            paged_test_resources::Resource::Fixtures,
+            format_args!("no Word recording {name}.word.json"),
+        );
+        return None;
+    };
+    Some(serde_json::from_str(&text).unwrap())
 }
 
 fn paragraphs(ir: &LoweredDoc) -> Vec<&LoweredParagraph> {

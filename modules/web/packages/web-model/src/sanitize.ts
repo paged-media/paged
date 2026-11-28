@@ -32,7 +32,8 @@
 //   · `<script>…</script>` elements (open tag → matching close, body
 //     and all) — and a stray/orphan `<script>`/`</script>` tag;
 //   · inline event-handler attributes (`on…=` — onclick, onload, …)
-//     on any tag, value stripped;
+//     on any tag, value stripped — found by splitting the tag the way a
+//     browser does, so `<svg/onload=…>` and `src="a"onerror=…` count;
 //   · `javascript:` URLs in `href`/`src`/any attribute value.
 //
 // Everything else passes through BYTE-FOR-BYTE. `removed` names each
@@ -76,10 +77,12 @@ const EVENT_ATTR =
   /\son[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|"[^"]*$|'[^']*$|[^\s"'>]*)/gi;
 
 /** What a browser drops or decodes before it reads a URL's scheme: C0
- *  controls and spaces anywhere, written literally or as a character
- *  reference. */
+ *  controls and spaces, written literally or as a character reference.
+ *  (Only tab, LF and CR are dropped INSIDE a scheme; matching the wider
+ *  set there too only neutralizes more.) */
 const URL_PAD =
-  "(?:[\\0-\\x20]|&#0*(?:9|10|13|32);?|&#x0*(?:9|a|d|20);?|&(?:tab|newline);)*";
+  "(?:[\\0-\\x20]|&#0*(?:[1-9]|[12][0-9]|3[0-2]);?" +
+  "|&#x0*(?:[1-9a-f]|1[0-9a-f]|20);?|&(?:tab|newline);)*";
 
 /** One scheme character, literal or as a character reference (the `i`
  *  flag covers the literal's case; the references name both cases). */
@@ -94,13 +97,21 @@ function schemeChar(c: string): string {
   return `(?:${alts.join("|")})`;
 }
 
-const JS_SCHEME = URL_PAD + [..."javascript:"].map(schemeChar).join(URL_PAD);
+/** A URL scheme as the browser reads it, tolerant of the padding and the
+ *  character references it resolves first (`java\tscript:`,
+ *  `&#106;avascript:`). */
+function schemeSource(scheme: string): string {
+  return URL_PAD + [...`${scheme}:`].map(schemeChar).join(URL_PAD);
+}
+
+const JS_SCHEME = schemeSource("javascript");
 
 /** A `javascript:` scheme inside an attribute VALUE (quoted, bare, or
- *  quoted and never closed), tolerant of the padding and character
- *  references the browser resolves before parsing the scheme (e.g.
- *  `java\tscript:` or `&#106;avascript:`). We match the WHOLE attribute
- *  and neutralize its value rather than guess where the URL ends. */
+ *  quoted and never closed). We match the WHOLE attribute and neutralize
+ *  its value rather than guess where the URL ends. This is the scan for
+ *  text OUTSIDE a tag the input shows whole (a fragment that begins inside
+ *  one); inside a tag `scanTagAttributes` finds the attribute whatever
+ *  separates it from its neighbour. */
 const JS_URL_ATTR = new RegExp(
   "(\\s[a-zA-Z][a-zA-Z0-9-]*\\s*=\\s*)(" +
     `"${JS_SCHEME}[^"]*(?:"|$)` +
@@ -108,6 +119,184 @@ const JS_URL_ATTR = new RegExp(
     `|${JS_SCHEME}[^\\s"'>]*)`,
   "gi",
 );
+
+/** The schemes that run script or carry a document of their own. */
+export type ExecutableScheme = "javascript" | "vbscript" | "data";
+
+const SCHEME_AT_START: Array<[ExecutableScheme, RegExp]> = (
+  ["javascript", "vbscript", "data"] as const
+).map((scheme) => [scheme, new RegExp("^" + schemeSource(scheme), "i")]);
+
+/** The executable scheme a RAW attribute value (character references not
+ *  yet decoded, as it stands in the markup) starts with, or `null`. */
+export function executableScheme(rawValue: string): ExecutableScheme | null {
+  for (const [scheme, re] of SCHEME_AT_START) {
+    if (re.test(rawValue)) return scheme;
+  }
+  return null;
+}
+
+/** One attribute of an open tag, by position in the scanned text. */
+export interface TagAttribute {
+  /** The tag's name, lower-cased. */
+  tag: string;
+  /** The attribute's name, lower-cased. */
+  name: string;
+  /** Start of the name. */
+  start: number;
+  /** End of the attribute: past the name, or past the value and its
+   *  closing quote. */
+  end: number;
+  /** The value without its quotes: `[valueStart, valueEnd)`; both `-1`
+   *  for an attribute without `=`. */
+  valueStart: number;
+  valueEnd: number;
+  /** The quote the value opens with, `""` for a bare value. */
+  quote: '"' | "'" | "";
+}
+
+const WS = new Set([" ", "\t", "\n", "\f", "\r"]);
+
+function isAsciiLetter(c: string | undefined): boolean {
+  return c !== undefined && /^[A-Za-z]$/.test(c);
+}
+
+/**
+ * The attributes of every open tag in `html`, split the way a browser's
+ * tokenizer splits them: whitespace AND `/` separate attributes
+ * (`<svg/onload=…>`), a quoted value ends at its quote whatever follows
+ * (`src="a"onerror=…`), a bare value runs to whitespace or `>`, and a
+ * quote the input never closes takes the rest of the input.
+ *
+ * Still a scanner, not a parser: EVERY `<` followed by a letter is read
+ * as a tag start, also inside a comment, a raw-text element or another
+ * tag's quoted value, because what precedes a fragment decides which of
+ * them the browser honours. Overlapping readings are all returned. An
+ * attribute position is tokenized once, so the scan is linear.
+ */
+export function scanTagAttributes(html: string): TagAttribute[] {
+  const out: TagAttribute[] = [];
+  const n = html.length;
+  const seen = new Uint8Array(n + 1);
+  let lt = html.indexOf("<");
+  for (; lt !== -1; lt = html.indexOf("<", lt + 1)) {
+    if (!isAsciiLetter(html[lt + 1])) continue;
+    let p = lt + 1;
+    while (p < n && !WS.has(html[p]) && html[p] !== "/" && html[p] !== ">") p++;
+    const tag = html.slice(lt + 1, p).toLowerCase();
+    for (;;) {
+      while (p < n && (WS.has(html[p]) || html[p] === "/")) p++;
+      if (p >= n || html[p] === ">" || seen[p] === 1) break;
+      seen[p] = 1;
+      const start = p;
+      p++; // a leading `=` belongs to the name
+      while (
+        p < n &&
+        !WS.has(html[p]) &&
+        html[p] !== "/" &&
+        html[p] !== ">" &&
+        html[p] !== "="
+      )
+        p++;
+      const name = html.slice(start, p).toLowerCase();
+      let q = p;
+      while (q < n && WS.has(html[q])) q++;
+      if (html[q] !== "=") {
+        out.push({
+          tag,
+          name,
+          start,
+          end: p,
+          valueStart: -1,
+          valueEnd: -1,
+          quote: "",
+        });
+        continue;
+      }
+      q++;
+      while (q < n && WS.has(html[q])) q++;
+      const c = html[q];
+      if (c === '"' || c === "'") {
+        const close = html.indexOf(c, q + 1);
+        const valueEnd = close === -1 ? n : close;
+        p = close === -1 ? n : close + 1;
+        out.push({
+          tag,
+          name,
+          start,
+          end: p,
+          valueStart: q + 1,
+          valueEnd,
+          quote: c,
+        });
+      } else {
+        p = q;
+        while (p < n && !WS.has(html[p]) && html[p] !== ">") p++;
+        out.push({
+          tag,
+          name,
+          start,
+          end: p,
+          valueStart: q,
+          valueEnd: p,
+          quote: "",
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** An inline event handler: `on<letters>` with a value. */
+export function isEventHandlerAttribute(a: TagAttribute): boolean {
+  return a.valueStart !== -1 && /^on[a-z]+$/.test(a.name);
+}
+
+/** Step 2 and 3 inside tags: drop handler attributes and empty the value
+ *  of `javascript:` URLs, whatever separates the attributes. */
+function sanitizeTags(html: string, removed: Set<SanitizeRemoval>): string {
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  let handler = false;
+  let url = false;
+  for (const a of scanTagAttributes(html)) {
+    if (isEventHandlerAttribute(a)) {
+      // Take the whitespace before it too, so the tag closes up.
+      let start = a.start;
+      while (start > 0 && WS.has(html[start - 1])) start--;
+      edits.push({ start, end: a.end, text: "" });
+      handler = true;
+    } else if (
+      a.valueStart !== -1 &&
+      JS_AT_START.test(html.slice(a.valueStart, a.valueEnd))
+    ) {
+      edits.push({
+        start: a.valueStart - a.quote.length,
+        end: a.end,
+        text: a.quote + a.quote,
+      });
+      url = true;
+    }
+  }
+  if (edits.length === 0) return html;
+  // The classes in the pass's order, not the markup's.
+  if (handler) removed.add("event-handler attribute");
+  if (url) removed.add("javascript: URL");
+  edits.sort((x, y) => x.start - y.start || y.end - x.end);
+  let out = "";
+  let at = 0;
+  for (const e of edits) {
+    // Overlapping readings: the earlier, longer edit covers the later.
+    if (e.start < at) {
+      if (e.end > at) at = e.end;
+      continue;
+    }
+    out += html.slice(at, e.start) + e.text;
+    at = e.end;
+  }
+  return out + html.slice(at);
+}
+
+const JS_AT_START = new RegExp("^" + JS_SCHEME, "i");
 
 /** Passes after which a removal can still have joined its neighbours into
  *  a new construct. Every pass that changes the text shortens it, so the
@@ -160,7 +349,11 @@ function sanitizePass(html: string, removed: Set<SanitizeRemoval>): string {
     removed.add("<script> element");
   }
 
-  // 2) inline event-handler attributes, anywhere in an open tag.
+  // 2) and 3) inside every tag, split as the browser splits it.
+  out = sanitizeTags(out, removed);
+
+  // 2) inline event-handler attributes at any whitespace boundary: what
+  //    is left outside a whole tag (a fragment that begins inside one).
   EVENT_ATTR.lastIndex = 0;
   if (EVENT_ATTR.test(out)) {
     EVENT_ATTR.lastIndex = 0;

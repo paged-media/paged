@@ -3,6 +3,7 @@
 // the whole layer stack as one undo step (session `resizeTo`, `trim`,
 // `rotateCanvas`).
 
+import { DialogFrame } from "./dialog-frame";
 import { useState } from "react";
 
 import type { ResampleFilter, TrimBy } from "../../engine";
@@ -169,9 +170,9 @@ export function ImageSizeDialog({
   const okDisabled = busy || (resample && changed && !gpu);
 
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.imageSize)}
+    <DialogFrame
+      label={t(M.imageSize)}
+      onCancel={onCancel}
       data-image-size-dialog
       style={dialogStyle}
     >
@@ -310,7 +311,7 @@ export function ImageSizeDialog({
       <div style={note}>
         {resample && !gpu ? t(M.resampleGpuOnly) : t(M.sizeNote)}
       </div>
-    </section>
+    </DialogFrame>
   );
 }
 
@@ -330,9 +331,9 @@ export function TrimDialog({
     ["bottom-right", M.bottomRight],
   ];
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.trim)}
+    <DialogFrame
+      label={t(M.trim)}
+      onCancel={onCancel}
       data-image-trim-dialog
       style={dialogStyle}
     >
@@ -359,7 +360,7 @@ export function TrimDialog({
         onCancel={onCancel}
       />
       <div style={note}>{t(M.trimNote)}</div>
-    </section>
+    </DialogFrame>
   );
 }
 
@@ -378,9 +379,9 @@ export function RotateDialog({
   const [cw, setCw] = useState(true);
   const quarter = Math.abs(angle) % 90 === 0;
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.rotate)}
+    <DialogFrame
+      label={t(M.rotate)}
+      onCancel={onCancel}
       data-image-rotate-dialog
       style={dialogStyle}
     >
@@ -428,7 +429,7 @@ export function RotateDialog({
         onCancel={onCancel}
       />
       <div style={note}>{t(M.rotateNote)}</div>
-    </section>
+    </DialogFrame>
   );
 }
 
@@ -449,9 +450,9 @@ export function IndexedColorDialog({
     ["adaptive", M.paletteAdaptive],
   ];
   return (
-    <section
-      role="dialog"
-      aria-label={t(M.indexedColor)}
+    <DialogFrame
+      label={t(M.indexedColor)}
+      onCancel={onCancel}
       data-image-indexed-dialog
       style={dialogStyle}
     >
@@ -494,6 +495,6 @@ export function IndexedColorDialog({
         onCancel={onCancel}
       />
       <div style={note}>{t(M.indexedNote)}</div>
-    </section>
+    </DialogFrame>
   );
 }

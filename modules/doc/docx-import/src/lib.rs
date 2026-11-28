@@ -1283,7 +1283,52 @@ enum Inline<'a> {
     /// An equation (`m:oMath`, `m:oMathPara`), engine ADR 1090: its tree is
     /// the part's next ([`ImportCtx::take_equation`]).
     Math,
+    /// A wrapper whose content is ordinary paragraph content: a smart tag or
+    /// custom XML element (`w:smartTag`, `w:customXml`), or a direction
+    /// wrapper (`w:dir`, `w:bdo`). Its runs are shown; the wrapper stays in
+    /// the source.
+    Wrapper(Vec<Inline<'a>>, Wrap),
     Other,
+}
+
+/// What an [`Inline::Wrapper`] is.
+#[derive(Clone, Copy)]
+enum Wrap {
+    /// `w:smartTag` / `w:customXml`: a name on its content, nothing to show.
+    Tag,
+    /// `w:dir` (an embedding) / `w:bdo` (an override): the direction it
+    /// gives its content is not held.
+    Direction,
+}
+
+fn custom_xml(c: &wml::CustomXmlRun) -> Inline<'_> {
+    Inline::Wrapper(
+        c.custom_xml_run_choice
+            .iter()
+            .map(inline_of_custom_xml)
+            .collect(),
+        Wrap::Tag,
+    )
+}
+
+fn bidi_override(b: &wml::BidirectionalOverride) -> Inline<'_> {
+    Inline::Wrapper(
+        b.bidirectional_override_choice
+            .iter()
+            .map(inline_of_bidi_override)
+            .collect(),
+        Wrap::Direction,
+    )
+}
+
+fn bidi_embedding(d: &wml::BidirectionalEmbedding) -> Inline<'_> {
+    Inline::Wrapper(
+        d.bidirectional_embedding_choice
+            .iter()
+            .map(inline_of_bidi_embedding)
+            .collect(),
+        Wrap::Direction,
+    )
 }
 
 fn revision(id: &str, author: &str, date: &Option<String>, moved: bool) -> Revision {
@@ -1354,6 +1399,8 @@ fn inline_of_deleted(c: &wml::DeletedRunChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1371,6 +1418,8 @@ fn inline_of_move_from(c: &wml::MoveFromRunChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1390,6 +1439,10 @@ fn inline_of_paragraph(c: &wml::ParagraphChoice) -> Inline<'_> {
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::SmartTagRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1408,6 +1461,9 @@ fn inline_of_hyperlink(c: &wml::HyperlinkChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1426,6 +1482,9 @@ fn inline_of_field(c: &wml::SimpleFieldChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1445,6 +1504,76 @@ fn inline_of_content_control(c: &wml::SdtContentRunChoice) -> Inline<'_> {
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_custom_xml(c: &wml::CustomXmlRunChoice) -> Inline<'_> {
+    use wml::CustomXmlRunChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::SmartTagRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_bidi_override(c: &wml::BidirectionalOverrideChoice) -> Inline<'_> {
+    use wml::BidirectionalOverrideChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_bidi_embedding(c: &wml::BidirectionalEmbeddingChoice) -> Inline<'_> {
+    use wml::BidirectionalEmbeddingChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::CustomXmlRun(c) => custom_xml(c),
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1462,6 +1591,8 @@ fn inline_of_inserted(c: &wml::InsertedRunChoice) -> Inline<'_> {
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1479,6 +1610,8 @@ fn inline_of_move_to(c: &wml::MoveToRunChoice) -> Inline<'_> {
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
+        C::BidirectionalOverride(b) => bidi_override(b),
+        C::BidirectionalEmbedding(d) => bidi_embedding(d),
         _ => Inline::Other,
     }
 }
@@ -1689,6 +1822,16 @@ impl<'a> ParaWalk<'_, 'a> {
                         math: Some(math),
                         ..Run::default()
                     });
+                }
+                // A smart tag, custom XML element or direction wrapper: its
+                // content is paragraph content like any other, on an XML
+                // path the patcher does not walk.
+                Inline::Wrapper(children, wrap) => {
+                    self.ctx.bump(|h| match wrap {
+                        Wrap::Tag => h.tag_wrappers += 1,
+                        Wrap::Direction => h.direction_wrappers += 1,
+                    });
+                    self.items(children, nested(path), stamp);
                 }
                 Inline::Other => {}
             }

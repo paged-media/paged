@@ -27,6 +27,8 @@
 //! between two independent lowerings, so only the inverted `RunProps`/`rStyle`
 //! comparison is stable.
 
+use std::collections::HashMap;
+
 use docx_core::{RunProps, VertAlign};
 use docx_lower::ir::{LoweredBlock, LoweredDoc, PropValue, StyleProp};
 use docx_lower::twips_of_tracking;
@@ -592,40 +594,63 @@ fn block_key(b: &LoweredBlock) -> String {
 /// destroying the very `<w:p>` we want to patch in place. Coalescing keeps an
 /// edit an edit, and leaves a true deletion a deletion.
 pub(crate) fn lcs_align(a: &[String], b: &[String]) -> Vec<Align> {
-    let (n, m) = (a.len(), b.len());
-    let mut lcs = vec![vec![0usize; m + 1]; n + 1];
-    for i in (0..n).rev() {
-        for j in (0..m).rev() {
-            lcs[i][j] = if a[i] == b[j] {
-                lcs[i + 1][j + 1] + 1
-            } else {
-                lcs[i + 1][j].max(lcs[i][j + 1])
-            };
+    lcs_align_within(a, b, LCS_TABLE_CELLS, LCS_GREEDY_EDITS)
+}
+
+/// The largest LCS table [`lcs_align`] fills (cells of four bytes). Past it
+/// the alignment is computed without the table.
+const LCS_TABLE_CELLS: usize = 4_000_000;
+
+/// The most differing blocks the greedy alignment ([`lcs_greedy`]) follows
+/// before the linear-space one takes over; its memory grows with the square
+/// of this.
+const LCS_GREEDY_EDITS: usize = 2048;
+
+/// [`lcs_align`] with its two budgets given. The table is quadratic in the
+/// two lengths, and a document's block count is the file's: the common start
+/// is matched first (the table's walk matches it the same way), so the table
+/// spans only what follows the first difference. When even that is too
+/// large, the common end is matched too and the rest aligned without the
+/// table: by Myers' greedy algorithm while the lists differ in at most
+/// `greedy` blocks (a long document with a few edits far apart: time in
+/// proportion to the edits), else by Hirschberg's linear-space LCS. Both
+/// find as long a match as the table, in bounded memory.
+pub(crate) fn lcs_align_within(
+    a: &[String],
+    b: &[String],
+    budget: usize,
+    greedy: usize,
+) -> Vec<Align> {
+    // Keys as numbers: one string comparison per key, not per table cell.
+    let mut ids: HashMap<&str, u32> = HashMap::new();
+    let a = intern(a, &mut ids);
+    let b = intern(b, &mut ids);
+
+    let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let mut raw: Vec<Align> = (0..prefix).map(|i| Align::Match(i, i)).collect();
+    let (mut am, mut bm) = (&a[prefix..], &b[prefix..]);
+    let cells = |n: usize, m: usize| (n + 1).saturating_mul(m + 1);
+    let mut suffix = 0usize;
+    if cells(am.len(), bm.len()) > budget {
+        suffix = am
+            .iter()
+            .rev()
+            .zip(bm.iter().rev())
+            .take_while(|(x, y)| x == y)
+            .count();
+        am = &am[..am.len() - suffix];
+        bm = &bm[..bm.len() - suffix];
+    }
+    if cells(am.len(), bm.len()) <= budget {
+        lcs_table(am, bm, prefix, &mut raw);
+    } else {
+        let from = raw.len();
+        if !lcs_greedy(am, bm, prefix, greedy, &mut raw) {
+            lcs_linear(am, bm, prefix, prefix, &mut raw);
         }
+        deletions_first(&mut raw[from..]);
     }
-    let mut raw: Vec<Align> = Vec::new();
-    let (mut i, mut j) = (0usize, 0usize);
-    while i < n && j < m {
-        if a[i] == b[j] {
-            raw.push(Align::Match(i, j));
-            i += 1;
-            j += 1;
-        } else if lcs[i + 1][j] >= lcs[i][j + 1] {
-            raw.push(Align::Del(i));
-            i += 1;
-        } else {
-            raw.push(Align::Ins(j));
-            j += 1;
-        }
-    }
-    while i < n {
-        raw.push(Align::Del(i));
-        i += 1;
-    }
-    while j < m {
-        raw.push(Align::Ins(j));
-        j += 1;
-    }
+    raw.extend((0..suffix).map(|k| Align::Match(a.len() - suffix + k, b.len() - suffix + k)));
 
     // Coalesce a stretch of Dels immediately followed by a stretch of Ins
     // into Matches, pairwise in order: editing k ADJACENT paragraphs changes k
@@ -673,6 +698,204 @@ pub(crate) fn lcs_align(a: &[String], b: &[String]) -> Vec<Align> {
         k += 1;
     }
     out
+}
+
+/// Each key as the number of the first key equal to it.
+fn intern<'k>(keys: &'k [String], ids: &mut HashMap<&'k str, u32>) -> Vec<u32> {
+    keys.iter()
+        .map(|k| {
+            let next = ids.len() as u32;
+            *ids.entry(k.as_str()).or_insert(next)
+        })
+        .collect()
+}
+
+/// The LCS table's alignment of `a` against `b` (both `at` blocks into
+/// their lists): a match wherever the two heads are equal, else a deletion
+/// while that keeps the longest match.
+fn lcs_table(a: &[u32], b: &[u32], at: usize, raw: &mut Vec<Align>) {
+    let (n, m) = (a.len(), b.len());
+    let cell = |i: usize, j: usize| i * (m + 1) + j;
+    let mut lcs = vec![0u32; (n + 1) * (m + 1)];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            lcs[cell(i, j)] = if a[i] == b[j] {
+                lcs[cell(i + 1, j + 1)] + 1
+            } else {
+                lcs[cell(i + 1, j)].max(lcs[cell(i, j + 1)])
+            };
+        }
+    }
+    let (mut i, mut j) = (0usize, 0usize);
+    while i < n && j < m {
+        if a[i] == b[j] {
+            raw.push(Align::Match(at + i, at + j));
+            i += 1;
+            j += 1;
+        } else if lcs[cell(i + 1, j)] >= lcs[cell(i, j + 1)] {
+            raw.push(Align::Del(at + i));
+            i += 1;
+        } else {
+            raw.push(Align::Ins(at + j));
+            j += 1;
+        }
+    }
+    raw.extend((i..n).map(|i| Align::Del(at + i)));
+    raw.extend((j..m).map(|j| Align::Ins(at + j)));
+}
+
+/// Between two matches the order of deletions and insertions is free: put
+/// the deletions first, as the table's walk does, so the pass that pairs a
+/// stretch of deletions with the insertions after it sees them.
+fn deletions_first(steps: &mut [Align]) {
+    let mut k = 0usize;
+    while k < steps.len() {
+        let end = steps[k..]
+            .iter()
+            .position(|s| matches!(s, Align::Match(..)))
+            .map_or(steps.len(), |n| k + n);
+        // Stable: each kind keeps its own order.
+        steps[k..end].sort_by_key(|s| matches!(s, Align::Ins(_)));
+        k = end + 1;
+    }
+}
+
+/// Myers' greedy algorithm: the shortest edit script from `a` to `b` (both
+/// `at` blocks into their lists), which leaves an LCS matched, found in time
+/// and memory that grow with the number of edits rather than the lengths.
+/// Gives up (`false`, nothing written) past `max_edits` edits.
+fn lcs_greedy(a: &[u32], b: &[u32], at: usize, max_edits: usize, raw: &mut Vec<Align>) -> bool {
+    let (n, m) = (a.len() as isize, b.len() as isize);
+    let max = max_edits.min(a.len() + b.len()) as isize;
+    // `v[k + max + 1]`: the furthest `x` reached on diagonal `k = x - y`.
+    let mut v = vec![0isize; 2 * max as usize + 3];
+    let at_k = |k: isize| (k + max + 1) as usize;
+    // Per edit count `d`, the diagonals `-d..=d` as they stood before it.
+    let mut trace: Vec<Vec<isize>> = Vec::new();
+    let mut found = None;
+    'search: for d in 0..=max {
+        trace.push(v[at_k(-d)..=at_k(d)].to_vec());
+        let mut k = -d;
+        while k <= d {
+            let mut x = if k == -d || (k != d && v[at_k(k - 1)] < v[at_k(k + 1)]) {
+                v[at_k(k + 1)]
+            } else {
+                v[at_k(k - 1)] + 1
+            };
+            let mut y = x - k;
+            while x < n && y < m && a[x as usize] == b[y as usize] {
+                x += 1;
+                y += 1;
+            }
+            v[at_k(k)] = x;
+            if x >= n && y >= m {
+                found = Some(d);
+                break 'search;
+            }
+            k += 2;
+        }
+    }
+    let Some(edits) = found else {
+        return false;
+    };
+    // Walk back from the end, one edit per step.
+    let mut steps: Vec<Align> = Vec::new();
+    let (mut x, mut y) = (n, m);
+    for d in (0..=edits).rev() {
+        // `trace[d]` holds diagonals `-d..=d`.
+        let before = |k: isize| trace[d as usize][(k + d) as usize];
+        let k = x - y;
+        let down = k == -d || (k != d && before(k - 1) < before(k + 1));
+        let prev_k = if down { k + 1 } else { k - 1 };
+        let (prev_x, prev_y) = if d == 0 {
+            (0, 0)
+        } else {
+            (before(prev_k), before(prev_k) - prev_k)
+        };
+        // The diagonal run after the edit, then the edit itself.
+        let (edit_x, edit_y) = if d == 0 {
+            (0, 0)
+        } else if down {
+            (prev_x, prev_y + 1)
+        } else {
+            (prev_x + 1, prev_y)
+        };
+        while x > edit_x && y > edit_y {
+            x -= 1;
+            y -= 1;
+            steps.push(Align::Match(at + x as usize, at + y as usize));
+        }
+        if d > 0 {
+            steps.push(if down {
+                Align::Ins(at + prev_y as usize)
+            } else {
+                Align::Del(at + prev_x as usize)
+            });
+        }
+        (x, y) = (prev_x, prev_y);
+    }
+    raw.extend(steps.into_iter().rev());
+    true
+}
+
+/// Hirschberg's algorithm: an LCS alignment of `a` (from block `ai`)
+/// against `b` (from block `bj`) in memory linear in the shorter side's
+/// length, by splitting `a` in half and `b` where the two halves' LCS
+/// lengths add up to the most.
+fn lcs_linear(a: &[u32], b: &[u32], ai: usize, bj: usize, raw: &mut Vec<Align>) {
+    let (n, m) = (a.len(), b.len());
+    if n == 0 {
+        raw.extend((0..m).map(|j| Align::Ins(bj + j)));
+        return;
+    }
+    if n == 1 {
+        match b.iter().position(|y| *y == a[0]) {
+            Some(k) => {
+                raw.extend((0..k).map(|j| Align::Ins(bj + j)));
+                raw.push(Align::Match(ai, bj + k));
+                raw.extend((k + 1..m).map(|j| Align::Ins(bj + j)));
+            }
+            None => {
+                raw.push(Align::Del(ai));
+                raw.extend((0..m).map(|j| Align::Ins(bj + j)));
+            }
+        }
+        return;
+    }
+    let mid = n / 2;
+    // LCS lengths of `a[..mid]` against every prefix of `b`, and of
+    // `a[mid..]` against every suffix.
+    let head = lcs_lengths(a[..mid].iter(), b.iter(), m);
+    let tail = lcs_lengths(a[mid..].iter().rev(), b.iter().rev(), m);
+    let split = (0..=m)
+        .max_by_key(|&j| (head[j] + tail[m - j], std::cmp::Reverse(j)))
+        .unwrap_or(0);
+    lcs_linear(&a[..mid], &b[..split], ai, bj, raw);
+    lcs_linear(&a[mid..], &b[split..], ai + mid, bj + split, raw);
+}
+
+/// The last row of the LCS table of `a` against `b` (of `m` keys): entry
+/// `j` is the LCS length of all of `a` and the first `j` keys of `b`.
+fn lcs_lengths<'k>(
+    a: impl Iterator<Item = &'k u32>,
+    b: impl Iterator<Item = &'k u32> + Clone,
+    m: usize,
+) -> Vec<u32> {
+    let mut row = vec![0u32; m + 1];
+    for x in a {
+        // `diagonal` is the previous row's entry left of the one written.
+        let mut diagonal = 0u32;
+        for (j, y) in b.clone().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = if x == y {
+                diagonal + 1
+            } else {
+                above.max(row[j])
+            };
+            diagonal = above;
+        }
+    }
+    row
 }
 
 /// Align a paragraph's baseline runs against its edited runs by (text, style)
@@ -1283,6 +1506,154 @@ mod tests {
                 Align::Ins(y) => format!("+{y}"),
             })
             .collect()
+    }
+
+    /// A deterministic sequence of keys from a small alphabet (so the two
+    /// lists share many, in different orders).
+    fn keys(seed: u64, len: usize, alphabet: u64) -> Vec<String> {
+        let mut x = seed;
+        (0..len)
+            .map(|_| {
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                format!("k{}", (x >> 33) % alphabet)
+            })
+            .collect()
+    }
+
+    /// The LCS length, by the two-row table.
+    fn lcs_len(a: &[String], b: &[String]) -> usize {
+        let mut row = vec![0usize; b.len() + 1];
+        for x in a {
+            let mut diagonal = 0;
+            for (j, y) in b.iter().enumerate() {
+                let above = row[j + 1];
+                row[j + 1] = if x == y {
+                    diagonal + 1
+                } else {
+                    above.max(row[j])
+                };
+                diagonal = above;
+            }
+        }
+        row[b.len()]
+    }
+
+    /// Whether `steps` is an edit script from `a` to `b`: every base and
+    /// every edited block named once, each list in order.
+    fn assert_script(steps: &[Align], a: &[String], b: &[String]) {
+        let (mut i, mut j) = (0usize, 0usize);
+        for s in steps {
+            match *s {
+                Align::Match(x, y) => {
+                    assert_eq!((x, y), (i, j));
+                    i += 1;
+                    j += 1;
+                }
+                Align::Del(x) => {
+                    assert_eq!(x, i);
+                    i += 1;
+                }
+                Align::Ins(y) => {
+                    assert_eq!(y, j);
+                    j += 1;
+                }
+            }
+        }
+        assert_eq!((i, j), (a.len(), b.len()));
+    }
+
+    #[test]
+    fn every_path_aligns_as_long_a_match_as_the_table() {
+        for seed in 0..40u64 {
+            let a = keys(seed, 5 + (seed as usize * 7) % 60, 2 + seed % 9);
+            let b = keys(seed + 1000, 5 + (seed as usize * 11) % 60, 2 + seed % 9);
+            let want = lcs_len(&a, &b);
+            // The matches of equal keys: a coalesced Del + Ins pair is a
+            // match of different ones.
+            let equal = |steps: &[Align]| {
+                steps
+                    .iter()
+                    .filter(|s| matches!(s, Align::Match(x, y) if a[*x] == b[*y]))
+                    .count()
+            };
+            let table = lcs_align_within(&a, &b, usize::MAX, 0);
+            assert_script(&table, &a, &b);
+            assert_eq!(equal(&table), want, "seed {seed}, table");
+            // No table: the greedy path, then (no edits allowed) the
+            // linear-space one.
+            for greedy in [usize::MAX, 0] {
+                let steps = lcs_align_within(&a, &b, 0, greedy);
+                assert_script(&steps, &a, &b);
+                assert_eq!(equal(&steps), want, "seed {seed}, greedy {greedy}");
+            }
+        }
+    }
+
+    #[test]
+    fn without_the_table_an_edit_is_still_an_edit() {
+        // The pairing of a deleted stretch with the inserted one after it
+        // holds on every path.
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let (a, b) = (
+            s(&["a", "b", "c", "d", "e"]),
+            s(&["a", "B", "C", "d", "x", "e"]),
+        );
+        let want = [
+            Align::Match(0, 0),
+            Align::Match(1, 1),
+            Align::Match(2, 2),
+            Align::Match(3, 3),
+            Align::Ins(4),
+            Align::Match(4, 5),
+        ];
+        assert_eq!(lcs_align_within(&a, &b, usize::MAX, 0), want);
+        assert_eq!(lcs_align_within(&a, &b, 0, usize::MAX), want);
+        assert_eq!(lcs_align_within(&a, &b, 0, 0), want);
+    }
+
+    #[test]
+    fn the_start_matched_first_changes_no_alignment() {
+        // The table over everything (the alignment before the common start
+        // was matched ahead of it) and over what follows the start agree.
+        for seed in 0..40u64 {
+            let mut a = keys(seed, 30, 4);
+            let mut b = a.clone();
+            a.extend(keys(seed + 7, 20, 4));
+            b.extend(keys(seed + 9, 25, 4));
+            let (ia, ib): (Vec<u32>, Vec<u32>) = {
+                let id = |k: &String| k[1..].parse::<u32>().unwrap();
+                (a.iter().map(id).collect(), b.iter().map(id).collect())
+            };
+            let mut whole = Vec::new();
+            lcs_table(&ia, &ib, 0, &mut whole);
+            let prefix = ia.iter().zip(&ib).take_while(|(x, y)| x == y).count();
+            let mut split: Vec<Align> = (0..prefix).map(|i| Align::Match(i, i)).collect();
+            lcs_table(&ia[prefix..], &ib[prefix..], prefix, &mut split);
+            assert_eq!(whole, split, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn a_long_document_edited_at_both_ends_aligns_in_bounded_memory() {
+        // 60 000 blocks, one edited near the start and one deleted near the
+        // end: a full table would hold 3.6 billion cells; the greedy
+        // alignment follows the two edits.
+        let a: Vec<String> = (0..60_000).map(|i| format!("p{i}")).collect();
+        let mut b = a.clone();
+        b[10] = "edited".into();
+        b.remove(59_990);
+        let steps = lcs_align(&a, &b);
+        assert_script(&steps, &a, &b);
+        assert_eq!(steps[10], Align::Match(10, 10));
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| !matches!(s, Align::Match(..)))
+                .collect::<Vec<_>>(),
+            [&Align::Del(59_990)]
+        );
     }
 
     #[test]

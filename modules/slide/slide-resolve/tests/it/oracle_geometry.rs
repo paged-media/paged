@@ -79,7 +79,16 @@ fn compare_files(name: &str, deck: &Path, oracle: &Path) -> (usize, Vec<String>)
             continue;
         };
         for it in &slide.items {
-            if !matches!(it.kind, ItemKind::Shape { .. } | ItemKind::Picture { .. }) {
+            // A shape, a picture, a table, or a graphic frame drawn as a
+            // group (a chart, a diagram): what PowerPoint reports a box of
+            // its own for. A plain group's box is its members' union.
+            let framed = matches!(it.kind, ItemKind::Group { .. }) && it.meta.frame.is_some();
+            if !framed
+                && !matches!(
+                    it.kind,
+                    ItemKind::Shape { .. } | ItemKind::Picture { .. } | ItemKind::Table(_)
+                )
+            {
                 continue;
             }
             // By position in the shape tree: PowerPoint's scripting reports
@@ -91,11 +100,23 @@ fn compare_files(name: &str, deck: &Path, oracle: &Path) -> (usize, Vec<String>)
             else {
                 continue;
             };
-            if o["rotation"].as_f64().unwrap_or(0.0) != 0.0 {
-                continue;
-            }
-            // PowerPoint's scripting reports an arc's drawn bounds, not its box.
-            let (l, t, r, b) = if it.meta.preset.as_ref().is_some_and(|(p, _)| p == "arc") {
+            let rotated = o["rotation"].as_f64().unwrap_or(0.0) != 0.0;
+            let (l, t, r, b) = if rotated {
+                // PowerPoint reports a rotated shape's box as it stood
+                // before the rotation: the same size, about the same centre.
+                let m = &it.transform;
+                let (cx, cy) = (
+                    m[0] * it.w / 2.0 + m[2] * it.h / 2.0 + m[4],
+                    m[1] * it.w / 2.0 + m[3] * it.h / 2.0 + m[5],
+                );
+                (
+                    cx - it.w / 2.0,
+                    cy - it.h / 2.0,
+                    cx + it.w / 2.0,
+                    cy + it.h / 2.0,
+                )
+            } else if it.meta.preset.as_ref().is_some_and(|(p, _)| p == "arc") {
+                // PowerPoint's scripting reports an arc's drawn bounds, not its box.
                 path_bbox(it)
             } else {
                 bbox(it)
@@ -117,16 +138,41 @@ fn compare_files(name: &str, deck: &Path, oracle: &Path) -> (usize, Vec<String>)
     (matched, bad)
 }
 
+/// Every deck in `slide-conformance/fixtures` PowerPoint's geometry probe was
+/// recorded for (`<name>.ppt.json` beside `<name>.pptx`), by name.
+fn recorded_decks() -> Vec<String> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../slide-conformance/fixtures");
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let file = e.file_name().to_string_lossy().into_owned();
+            let name = file.strip_suffix(".ppt.json")?;
+            dir.join(format!("{name}.pptx"))
+                .is_file()
+                .then(|| name.to_string())
+        })
+        .collect();
+    names.sort();
+    names
+}
+
 #[test]
 fn fixtures_land_where_powerpoint_puts_them() {
+    let decks = recorded_decks();
+    // The decks recorded when this was written; a recording that goes
+    // missing is a comparison lost, not a shorter list.
+    assert!(decks.len() >= 17, "recorded decks missing: {decks:?}");
     let mut total = 0;
     let mut all_bad = Vec::new();
-    for name in ["geometry", "text", "placeholders", "motion"] {
+    for name in &decks {
         let (m, bad) = compare(name);
         eprintln!(
             "{name}: {m} shapes compared, {} off by more than 1 pt",
             bad.len()
         );
+        // A deck none of whose shapes is compared measures nothing.
+        assert!(m > 0, "{name}: no shape compared with PowerPoint's");
         total += m;
         all_bad.extend(bad);
     }

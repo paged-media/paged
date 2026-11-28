@@ -138,6 +138,7 @@ import {
 import { documentElements, planRelower, type RelowerTarget } from "./relower";
 import { STORE_MISSING, storeHandle, type QueryHandle } from "./query/store";
 import {
+  decodeDelimitedText,
   formatOfFile,
   loadIntoStore,
   sourceNameOf,
@@ -3751,14 +3752,26 @@ export function createSession(
         return { source: name, format: null, error };
       }
       if (format === "csv" || format === "tsv") {
-        const text = new TextDecoder().decode(bytes);
+        // The encoding comes from the file (a byte-order mark, or valid
+        // UTF-8); an assumed one or an unreadable character is reported.
+        const decoded = decodeDelimitedText(bytes);
+        const text = decoded.text;
         const before = diagnostics.length;
         await this.registerCsvSource(name, text);
         if (importedCsv.get(name) !== text) {
           const error =
-            diagnostics.slice(before).find((d) => d.source === "import")
+            diagnostics
+              .slice(before)
+              .find((d) => d.source === "import" && d.level === "error")
               ?.message ?? `Import of "${name}" failed`;
           return { source: name, format, error };
+        }
+        if (decoded.note) {
+          report({
+            level: "warn",
+            source: "import",
+            message: `"${fileName}": ${decoded.note}`,
+          });
         }
         importedFiles.delete(name);
         pendingFiles.delete(name);

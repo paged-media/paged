@@ -188,6 +188,33 @@ describe("refresh policies [data.source.adapters]", () => {
     s.dispose();
   });
 
+  it("an imported CSV that is not UTF-8 is read whole and reported, a UTF-8 one is silent [data.source.adapters]", async () => {
+    const s = createSession(fakeHost(new Set()), 0);
+    const good = await s.importFile(
+      "good.csv",
+      new TextEncoder().encode("name\nMüller\n"),
+    );
+    expect(good).toEqual({ source: "good", format: "csv" });
+    expect(s.getState().diagnostics).toEqual([]);
+    // "name\nMüller\n" in Windows-1252: ü is the single byte FC.
+    const latin = new Uint8Array([
+      0x6e, 0x61, 0x6d, 0x65, 0x0a, 0x4d, 0xfc, 0x6c, 0x6c, 0x65, 0x72, 0x0a,
+    ]);
+    expect(await s.importFile("latin.csv", latin)).toEqual({
+      source: "latin",
+      format: "csv",
+    });
+    expect(s.getState().diagnostics).toEqual([
+      {
+        level: "warn",
+        source: "import",
+        message: expect.stringMatching(/"latin\.csv".*not UTF-8.*Windows-1252/),
+      },
+    ]);
+    await s.flushPersist();
+    s.dispose();
+  });
+
   it("polls a consented remote source, re-runs queries only on a content change, stops without consent [data.security.gates]", async () => {
     const consented = new Set<string>();
     const s = createSession(fakeHost(consented), 0);

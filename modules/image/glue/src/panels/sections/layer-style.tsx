@@ -25,6 +25,7 @@
 // next style to the panel, which sets it through the session — one undo
 // step per layer for a run of edits in the dialog.
 
+import { DialogFrame } from "./dialog-frame";
 import { ColorInput } from "./color-input";
 import { useState } from "react";
 import { defineMessages, t } from "@paged-media/strings";
@@ -1531,10 +1532,11 @@ export function LayerStyleDialog({
     onPane(k);
   };
   return (
-    <div
+    <DialogFrame
       data-image-layer-style
-      role="dialog"
-      aria-label={t(M.title, { name: layer.name })}
+      as="div"
+      label={t(M.title, { name: layer.name })}
+      onCancel={onClose}
       style={{
         border: `1px solid ${color.border}`,
         borderRadius: 4,
@@ -1728,7 +1730,7 @@ export function LayerStyleDialog({
         </button>
       </div>
       <div style={note}>{t(M.styleNote)}</div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1746,10 +1748,11 @@ export function GlobalLightDialog({
   const [angle, setAngle] = useState(light.angle);
   const [altitude, setAltitude] = useState(light.altitude);
   return (
-    <div
+    <DialogFrame
       data-image-global-light
-      role="dialog"
-      aria-label={t(M.globalLight)}
+      as="div"
+      label={t(M.globalLight)}
+      onCancel={onClose}
       style={{
         border: `1px solid ${color.border}`,
         borderRadius: 4,
@@ -1795,7 +1798,7 @@ export function GlobalLightDialog({
           {t(M.cancel)}
         </button>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1810,10 +1813,11 @@ export function ScaleEffectsDialog({
 }) {
   const [percent, setPercent] = useState(100);
   return (
-    <div
+    <DialogFrame
       data-image-scale-effects
-      role="dialog"
-      aria-label={t(M.scaleEffects)}
+      as="div"
+      label={t(M.scaleEffects)}
+      onCancel={onClose}
       style={{
         border: `1px solid ${color.border}`,
         borderRadius: 4,
@@ -1850,7 +1854,7 @@ export function ScaleEffectsDialog({
           {t(M.cancel)}
         </button>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 

@@ -177,8 +177,21 @@ export async function readDocBytes(
   }
 }
 
-/** Lowerings already read, by label value (a label names exactly one). */
-const lowerings = new Map<string, LoweredDoc>();
+/** A content-addressed .docx part (`plannedState`): its name is its bytes'
+ *  hash, so a label naming one names exactly one document. */
+const ADDRESSED = /^sources\/[0-9a-f]{64}\.docx$/;
+
+/** Lowerings already read, by label value, each with the hash of the .docx
+ *  it is the lowering of when the label does not carry one. An import's
+ *  label names `<story>/source.docx`, and two documents (two files opened
+ *  one after the other, two open hosts) can carry the same label over
+ *  different bytes: there the label alone is no identity. */
+const lowerings = new Map<string, { hash: string | null; ir: LoweredDoc }>();
+
+function remember(labelText: string, hash: string | null, ir: LoweredDoc) {
+  if (lowerings.size > 32) lowerings.clear();
+  lowerings.set(labelText, { hash, ir });
+}
 
 /** The lowering of a document's current state: the cache part, else the
  *  engine over the .docx part. Null when neither part can be read. */
@@ -187,18 +200,28 @@ export async function readLowered(
   s: DocState,
 ): Promise<LoweredDoc | null> {
   const memo = lowerings.get(s.labelText);
-  if (memo) return memo;
+  const addressed = ADDRESSED.test(s.data.part);
+  if (memo && addressed) return memo.ir;
+  // Not content-addressed: the bytes decide whether the memo is this
+  // document's.
+  let bytes: Uint8Array | null = null;
+  let hash: string | null = null;
+  if (!addressed) {
+    bytes = await readDocBytes(host, s);
+    hash = bytes ? await sha256Hex(bytes) : null;
+    if (memo && hash !== null && memo.hash === hash) return memo.ir;
+  }
   let ir: LoweredDoc | null = null;
   if (s.data.lowered) {
     try {
-      const bytes = await host.parts.read(s.data.lowered);
-      if (bytes) ir = parseLoweredDoc(new TextDecoder().decode(bytes));
+      const cached = await host.parts.read(s.data.lowered);
+      if (cached) ir = parseLoweredDoc(new TextDecoder().decode(cached));
     } catch {
       ir = null; // a missing or unreadable cache: lower again
     }
   }
   if (!ir) {
-    const bytes = await readDocBytes(host, s);
+    bytes ??= await readDocBytes(host, s);
     if (!bytes) return null;
     const engine = await DocEngine.boot();
     try {
@@ -209,8 +232,9 @@ export async function readLowered(
       engine.dispose();
     }
   }
-  if (lowerings.size > 32) lowerings.clear();
-  lowerings.set(s.labelText, ir);
+  // Without the bytes' hash a not-addressed label is not remembered: the
+  // next read could not tell whose lowering it is.
+  if (addressed || hash !== null) remember(s.labelText, hash, ir);
   return ir;
 }
 
@@ -232,7 +256,7 @@ export async function plannedState(
     blocks: ir.story.blocks.length,
   };
   const labelText = JSON.stringify({ v: 1, data });
-  lowerings.set(labelText, ir);
+  remember(labelText, null, ir);
   return {
     parts: [
       { path: part, bytes },

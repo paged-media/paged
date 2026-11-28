@@ -11,8 +11,10 @@
 // they agree with PostgreSQL's: '…' strings with '' escapes, "…" identifiers
 // with "" escapes, -- line comments and /* */ comments. Anything whose lexing
 // differs between dialects is refused outright: E'…' escape strings, U&'…'
-// strings, $-quoting and $ parameters. (SQLite's `[…]` and `\`…\`` names lex
-// here as punctuation and words, so nothing inside them escapes the checks.)
+// strings, $-quoting and $ parameters, and a comment inside a comment (the
+// store ends it at the first `*/`, PostgreSQL nests). `\`…\`` is a quoted name,
+// as in the store; `[` is a bracket, as in the store's lexer (not SQLite's
+// `[name]`), so what stands inside it is checked as code.
 // Then:
 //   · exactly one statement (no `;`), with balanced brackets;
 //   · it starts with SELECT, WITH, FROM, VALUES or `(`;
@@ -153,6 +155,11 @@ export function positionOf(
   return { line: lines.length, column: lines[lines.length - 1].length + 1 };
 }
 
+/** What the store skips between tokens: ASCII space, tab, line feed, form
+ *  feed and carriage return. Every other space (U+00A0, U+2028, …) is a name
+ *  character to it, and lexes as one here. */
+const SPACE = /[ \t\n\f\r]/;
+
 /** Split SQL into tokens the way SQLite's lexer does, refusing every form
  *  whose lexing is not plain (see the header). */
 function lex(text: string): Token[] {
@@ -185,24 +192,30 @@ function lex(text: string): Token[] {
   };
   while (i < text.length) {
     const c = text[i];
-    if (/\s/.test(c)) {
+    if (SPACE.test(c)) {
       i++;
     } else if (c === "-" && text[i + 1] === "-") {
       while (i < text.length && text[i] !== "\n") i++;
     } else if (c === "/" && text[i + 1] === "*") {
+      // The store ends a comment at the first `*/`; PostgreSQL nests. A
+      // nesting lexer would read `/* /* */ … */` as one comment and hide
+      // the code after the first `*/`, which the store runs.
       const at = i;
-      let depth = 0;
-      do {
+      i += 2;
+      for (;;) {
         if (i >= text.length)
           throw new GuardError("a comment is not terminated", at);
-        if (text[i] === "/" && text[i + 1] === "*") {
-          depth++;
+        if (text[i] === "*" && text[i + 1] === "/") {
           i += 2;
-        } else if (text[i] === "*" && text[i + 1] === "/") {
-          depth--;
-          i += 2;
-        } else i++;
-      } while (depth > 0);
+          break;
+        }
+        if (text[i] === "/" && text[i + 1] === "*")
+          throw new GuardError(
+            "a comment inside a comment cannot be used in a data query",
+            i,
+          );
+        i++;
+      }
     } else if (c === "'") {
       const prev = out[out.length - 1];
       if (
@@ -230,6 +243,10 @@ function lex(text: string): Token[] {
       quoted("'", "string", "a string");
     } else if (c === '"') {
       quoted('"', "qident", "a quoted name");
+    } else if (c === "`") {
+      // The store reads `…` as a quoted name (`` doubles): a quote or a
+      // comment marker inside it is part of the name, not code.
+      quoted("`", "qident", "a quoted name");
     } else if (c === "$") {
       throw new GuardError(
         "dollar-quoted strings and $ parameters cannot be used in a data query",

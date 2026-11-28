@@ -374,83 +374,54 @@ pub fn behaviour(n: &TimeNode, ctx: &Ctx) -> Option<Behaviour> {
     })
 }
 
-/// A DrawingML colour element as RGB: `srgbClr`, `schemeClr` (through the
-/// theme), `prstClr` (the common names), `sysClr` (`lastClr`), with
-/// `lumMod` / `lumOff` / `tint` / `shade` applied.
+/// A DrawingML colour element as RGB, read and resolved by the DrawingML
+/// colour owner (`paged_ooxml::drawingml::color`, slide ADR 722): every base
+/// (`srgbClr`, `schemeClr` through the theme, `prstClr`, `sysClr`, `hslClr`,
+/// `scrgbClr`) and the transform chain in document order. The alpha is not
+/// part of an animated colour.
 pub fn color(c: &AnimColor, ctx: &Ctx) -> Option<[u8; 3]> {
-    let x = c.xml.as_str();
-    let tag_end = x.find([' ', '/', '>'])?;
+    use paged_ooxml::drawingml::color as dml;
+    let x = c.xml.trim();
+    // The fragment is the colour element as the file wrote it, under
+    // whatever prefix the file bound to DrawingML: bind that prefix again.
+    let tag_end = x.find([' ', '/', '>', '\t', '\n', '\r'])?;
     let tag = x.get(1..tag_end)?;
-    let local = tag.rsplit(':').next()?;
-    let attr = |src: &str, k: &str| -> Option<String> {
-        let pat = format!(" {k}=\"");
-        let i = src.find(&pat)? + pat.len();
-        let j = src[i..].find('"')? + i;
-        Some(src[i..j].to_string())
+    let bind = match tag.split_once(':') {
+        Some((prefix, _)) => format!("xmlns:{prefix}"),
+        None => "xmlns".to_string(),
     };
-    let head_end = x.find('>')?;
-    let head = &x[..head_end];
-    let hex = match local {
-        "srgbClr" => attr(head, "val")?,
-        "sysClr" => attr(head, "lastClr").unwrap_or_else(|| "000000".into()),
-        "schemeClr" => {
-            let v = attr(head, "val")?;
-            let alias = match v.as_str() {
-                "tx1" => "dk1",
-                "bg1" => "lt1",
-                "tx2" => "dk2",
-                "bg2" => "lt2",
-                o => o,
-            };
-            ctx.theme
-                .get(&v)
-                .or_else(|| ctx.theme.get(alias))
-                .cloned()
-                .unwrap_or_else(|| default_theme(alias).to_string())
-        }
-        "prstClr" => preset_color(&attr(head, "val")?).to_string(),
-        "scrgbClr" => {
-            let p = |k| {
-                attr(head, k)
-                    .and_then(|v| v.parse::<f64>().ok())
-                    .unwrap_or(0.0)
-                    / 100_000.0
-            };
-            let to = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            format!("{:02X}{:02X}{:02X}", to(p("r")), to(p("g")), to(p("b")))
-        }
-        _ => return None,
-    };
-    let mut rgb = hex_rgb(&hex)?;
-    // Transforms in document order.
-    let mut rest = &x[head_end..];
-    while let Some(i) = rest.find('<') {
-        let t = &rest[i + 1..];
-        let e = t.find('>').unwrap_or(t.len());
-        let el = &t[..e];
-        let name = el
-            .split([' ', '/'])
-            .next()
-            .unwrap_or("")
-            .rsplit(':')
-            .next()
-            .unwrap_or("");
-        let v = attr(&format!(" {el}"), "val")
-            .and_then(|v| v.parse::<f64>().ok())
-            .map(|v| v / 100_000.0);
-        if let Some(v) = v {
-            let (h, s, l) = rgb_hsl(rgb);
-            rgb = match name {
-                "lumMod" => hsl_rgb(h, s, (l * v).clamp(0.0, 1.0)),
-                "lumOff" => hsl_rgb(h, s, (l + v).clamp(0.0, 1.0)),
-                "tint" => rgb.map(|c| (c as f64 + (255.0 - c as f64) * (1.0 - v)).round() as u8),
-                "shade" => rgb.map(|c| (c as f64 * v).round() as u8),
-                _ => rgb,
-            };
-        }
-        rest = &t[e.min(t.len())..];
+    let wrapped =
+        format!(r#"<c {bind}="http://schemas.openxmlformats.org/drawingml/2006/main">{x}</c>"#);
+    let root = paged_ooxml::tree::parse(wrapped.as_bytes()).ok()?;
+    let el = root
+        .children
+        .iter()
+        .find(|e| dml::COLOR_TAGS.contains(&e.local.as_str()))?;
+    let colour = dml::color(el)?;
+    Some(dml::resolve(&colour, &ThemeSlots(&ctx.theme)).bytes())
+}
+
+/// The slide's theme colours as the resolver's scheme: a slot by its own
+/// name or by the name its `tx` / `bg` alias maps to, else Office's default.
+struct ThemeSlots<'a>(&'a BTreeMap<String, String>);
+
+impl paged_ooxml::drawingml::color::SchemeColors for ThemeSlots<'_> {
+    fn scheme(&self, name: &str) -> Option<paged_ooxml::drawingml::color::Rgba> {
+        let alias = match name {
+            "tx1" => "dk1",
+            "bg1" => "lt1",
+            "tx2" => "dk2",
+            "bg2" => "lt2",
+            o => o,
+        };
+        let hex = self
+            .0
+            .get(name)
+            .or_else(|| self.0.get(alias))
+            .map(String::as_str)
+            .unwrap_or_else(|| default_theme(alias));
+        hex_rgb(hex).map(paged_ooxml::drawingml::color::Rgba::from_bytes)
     }
-    Some(rgb)
 }
 
 /// Office's default theme (when the slide's is not given).
@@ -468,23 +439,6 @@ fn default_theme(slot: &str) -> &'static str {
         "accent6" => "4EA72E",
         "hlink" => "467886",
         "folHlink" => "96607D",
-        _ => "000000",
-    }
-}
-
-fn preset_color(name: &str) -> &'static str {
-    match name {
-        "black" => "000000",
-        "white" => "FFFFFF",
-        "red" => "FF0000",
-        "green" => "008000",
-        "blue" => "0000FF",
-        "yellow" => "FFFF00",
-        "orange" => "FFA500",
-        "purple" => "800080",
-        "gray" | "grey" => "808080",
-        "cyan" => "00FFFF",
-        "magenta" => "FF00FF",
         _ => "000000",
     }
 }
@@ -620,6 +574,37 @@ mod tests {
             c(r#"<a:srgbClr val="808080"><a:lumMod val="50000"/></a:srgbClr>"#),
             Some([64, 64, 64])
         );
+        // What the hand-written reader did not know: the full preset
+        // table, a system colour's own default, `hslClr`, and another
+        // prefix for the DrawingML namespace.
+        assert_eq!(
+            c(r#"<a:prstClr val="dkGoldenrod"/>"#),
+            Some([0xB8, 0x86, 0x0B])
+        );
+        assert_eq!(c(r#"<a:sysClr val="window"/>"#), Some([255, 255, 255]));
+        assert_eq!(
+            c(r#"<a:sysClr val="windowText" lastClr="112233"/>"#),
+            Some([0x11, 0x22, 0x33])
+        );
+        assert_eq!(
+            c(r#"<a:hslClr hue="0" sat="100000" lum="50000"/>"#),
+            Some([255, 0, 0])
+        );
+        assert_eq!(c(r#"<d:srgbClr val="00FF00"/>"#), Some([0, 255, 0]));
+        assert_eq!(c(r#"<a:notAColour val="00FF00"/>"#), None);
+        // The transforms are the owner's: a DrawingML shade works in linear
+        // light, so half a mid grey is not half its sRGB value.
+        let owner = paged_ooxml::drawingml::color::transform(
+            paged_ooxml::drawingml::color::Rgba::from_hex(0x808080),
+            "shade",
+            50_000,
+        )
+        .bytes();
+        assert_eq!(
+            c(r#"<a:srgbClr val="808080"><a:shade val="50000"/></a:srgbClr>"#),
+            Some(owner)
+        );
+        assert_ne!(owner, [64, 64, 64]);
         assert_eq!(hsl_rgb(0.0, 1.0, 0.5), [255, 0, 0]);
         let (h, s, l) = rgb_hsl([0, 0, 255]);
         assert!((h - 240.0).abs() < 1e-9 && (s - 1.0).abs() < 1e-9 && (l - 0.5).abs() < 1e-9);

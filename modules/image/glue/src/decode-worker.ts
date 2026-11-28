@@ -80,6 +80,10 @@ export type DecodeReply =
       width: number;
       height: number;
       rgba: ArrayBuffer;
+      /** The display-transform code of the worker's `decode_image` (image-js
+       *  `display_code`): the pixels are already in working space, and the
+       *  main thread labels them with this instead of "sRGB assumed". */
+      display?: number;
       /** A 16-bit source's straight RGBA samples (`width*height*4`
        *  u16), beside its 8-bit view: the main thread registers these, so
        *  the off-thread decode keeps the depth (image ADR 479). */
@@ -139,6 +143,38 @@ async function decode(bytes: Uint8Array): Promise<{
   }
 }
 
+/** The success reply for one decode, with the buffers it transfers. Every
+ *  field of the decode result crosses: the display treatment and the 16-bit
+ *  samples are optional, and a dropped one changes what the document says
+ *  about its colour or its depth. */
+export function decodeReply(
+  id: number,
+  decoded: {
+    width: number;
+    height: number;
+    rgba: Uint8Array;
+    display?: number;
+    samples16?: Uint16Array;
+  },
+): { reply: DecodeReply; transfer: ArrayBuffer[] } {
+  // `rgba` and `samples16` are fresh allocations, so their buffers are
+  // plain (non-shared) ArrayBuffers: assert it for the transfer typing.
+  const buffer = decoded.rgba.buffer as ArrayBuffer;
+  const deep = decoded.samples16?.buffer as ArrayBuffer | undefined;
+  return {
+    reply: {
+      id,
+      ok: true,
+      width: decoded.width,
+      height: decoded.height,
+      rgba: buffer,
+      ...(decoded.display !== undefined ? { display: decoded.display } : {}),
+      ...(deep ? { samples16: deep } : {}),
+    },
+    transfer: deep ? [buffer, deep] : [buffer],
+  };
+}
+
 // The worker message loop. Guarded by `self instanceof WorkerGlobalScope`
 // so importing the module for its TYPES (the pool / a test) never wires a
 // listener on the main thread.
@@ -151,22 +187,9 @@ if (
     const { id, bytes } = ev.data;
     void (async () => {
       try {
-        const { width, height, rgba, samples16 } = await decode(bytes);
-        // `out` was allocated as a fresh `new Uint8Array(len)`, so its
-        // buffer is a plain (non-shared) ArrayBuffer — assert it for the
-        // transfer typing.
-        const buffer = rgba.buffer as ArrayBuffer;
-        const deep = samples16?.buffer as ArrayBuffer | undefined;
-        const reply: DecodeReply = {
-          id,
-          ok: true,
-          width,
-          height,
-          rgba: buffer,
-          ...(deep ? { samples16: deep } : {}),
-        };
+        const { reply, transfer } = decodeReply(id, await decode(bytes));
         // Transfer the buffers (zero-copy hand-back).
-        scope.postMessage(reply, deep ? [buffer, deep] : [buffer]);
+        scope.postMessage(reply, transfer);
       } catch (err) {
         const reply: DecodeReply = {
           id,

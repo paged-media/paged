@@ -29,7 +29,11 @@
 import fc from "fast-check";
 import { describe, expect, it } from "bun:test";
 
-import { sanitizeHtml } from "../src/sanitize";
+import {
+  isEventHandlerAttribute,
+  sanitizeHtml,
+  scanTagAttributes,
+} from "../src/sanitize";
 import {
   envelopeFor,
   sourceFromEnvelope,
@@ -62,6 +66,9 @@ const HTML_PIECES = [
   ' onclick="go()"',
   " onload='x'",
   " onerror=y",
+  "<svg/onload=z",
+  "/onfocus=f ",
+  '"onerror=q ',
   " ON",
   "on",
   "click",
@@ -92,6 +99,9 @@ const htmlish = fc
 const SCRIPT_TAG = /<\s*\/?\s*script\b[^>]*(?:>|$)/i;
 /** A handler, with or without a value. */
 const EVENT_ATTR = /\son[a-z]+\s*=/i;
+/** The same behind any separator a tag allows; wider than the browser's
+ *  reading (it also matches inside a value), so only a precondition. */
+const EVENT_ATTR_ANY = /[\s/"']on[a-z]+\s*=/i;
 const PAD = "[\\0-\\x20]*";
 const JS_URL = new RegExp(
   "\\s[a-z][a-z0-9-]*\\s*=\\s*[\"']?" +
@@ -132,7 +142,7 @@ describe("sanitizeHtml properties", () => {
       fc.property(htmlish, (s) => {
         fc.pre(
           !SCRIPT_TAG.test(s) &&
-            !EVENT_ATTR.test(s) &&
+            !EVENT_ATTR_ANY.test(s) &&
             !JS_URL.test(s) &&
             !CHAR_REF.test(s),
         );
@@ -158,6 +168,11 @@ describe("sanitizeHtml properties", () => {
         );
         expect(out).not.toMatch(SCRIPT_TAG);
         // Attributes live inside tags; text like "onclick=" is just text.
+        // Split as the browser splits a tag: no handler behind a slash
+        // or a closing quote either.
+        expect(scanTagAttributes(out).filter(isEventHandlerAttribute)).toEqual(
+          [],
+        );
         for (const tag of out.match(/<[^>]*>/g) ?? []) {
           expect(tag).not.toMatch(EVENT_ATTR);
           expect(tag).not.toMatch(JS_URL);

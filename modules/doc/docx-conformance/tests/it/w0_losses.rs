@@ -26,7 +26,9 @@
 // Test names end in their cockpit feature (`__feat__<id>`).
 #![allow(non_snake_case)]
 
-use docx_conformance::{content_controls_docx, hidden_text_docx, tracked_changes_docx};
+use docx_conformance::{
+    content_controls_docx, hidden_text_docx, inline_wrappers_docx, tracked_changes_docx,
+};
 use docx_core::{Block, DocxDocument, RunSource};
 use docx_export::{CellRunEdit, EditSet, ParaEdit, RunEdit, StoryContentIn, StructuralEdit};
 use docx_import::import_docx;
@@ -500,5 +502,86 @@ fn hidden_text_survives_save_back__feat__plugin_doc_save_back() {
             .iter()
             .any(|s| s.starts_with("delete-paragraph skipped: block 0 holds")),
         "{skips:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Smart tags, custom XML and direction wrappers
+
+#[test]
+fn text_inside_inline_wrappers_is_shown__feat__plugin_doc_read_path() {
+    let doc = import_docx(&inline_wrappers_docx()).unwrap();
+    assert_eq!(
+        block_texts(&doc),
+        [
+            "Meet Ada in Paris.",
+            "abc def ghi jkl",
+            "Nested link end",
+            "Other paragraph.",
+        ]
+    );
+    assert_eq!(doc.held.tag_wrappers, 3);
+    assert_eq!(doc.held.direction_wrappers, 3);
+    let Block::Paragraph(p0) = &doc.body[0] else {
+        panic!("a paragraph")
+    };
+    let sources: Vec<_> = p0.runs.iter().map(|r| r.source).collect();
+    assert_eq!(
+        sources,
+        [
+            Some(RunSource::DirectRun(0)),
+            None,
+            Some(RunSource::DirectRun(1)),
+            None,
+            Some(RunSource::DirectRun(2)),
+        ],
+        "a wrapped run takes no ordinal: the direct runs keep the XML's"
+    );
+    let Block::Paragraph(p2) = &doc.body[2] else {
+        panic!("a paragraph")
+    };
+    assert_eq!(
+        p2.runs[0].source, None,
+        "a link inside a wrapper is off the path"
+    );
+    assert_eq!(p2.runs[1].source, Some(RunSource::DirectRun(0)));
+    let diags = diagnostics(&inline_wrappers_docx());
+    assert!(
+        diags
+            .iter()
+            .any(|m| m.starts_with("3 smart tag(s) or custom XML element(s) around text")),
+        "{diags:?}"
+    );
+    assert!(
+        diags
+            .iter()
+            .any(|m| m.starts_with("3 text direction wrapper(s) (w:dir, w:bdo) not applied")),
+        "{diags:?}"
+    );
+}
+
+#[test]
+fn inline_wrappers_survive_save_back__feat__plugin_doc_save_back() {
+    let original = inline_wrappers_docx();
+    let session = DocSession::load(&original).unwrap();
+    let (saved, skips) = session.save_edited(&EditSet::default()).unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    assert_parts_identical(&original, &saved);
+
+    // An edit of the last direct run lands on that `<w:r>`; one of the run
+    // inside the smart tag is refused, and the wrappers keep their text.
+    let edits = EditSet {
+        runs: vec![RunEdit::text(0, 4, "!"), RunEdit::text(0, 1, "Bob")],
+        ..Default::default()
+    };
+    let (saved, skips) = session.save_edited(&edits).unwrap();
+    assert_eq!(skips.len(), 1, "{skips:?}");
+    assert!(skips[0].contains("block 0 run 1"), "{skips:?}");
+    let xml = doc_xml(&saved);
+    assert!(xml.contains(r#"w:element="PersonName"><w:r><w:t>Ada</w:t></w:r></w:smartTag>"#));
+    assert!(xml.contains(r#"w:element="city"><w:r><w:t>Paris</w:t></w:r></w:customXml>"#));
+    assert_eq!(
+        block_texts(&import_docx(&saved).unwrap())[0],
+        "Meet Ada in Paris!"
     );
 }

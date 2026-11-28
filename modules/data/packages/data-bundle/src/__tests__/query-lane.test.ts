@@ -6,6 +6,7 @@ import { describe, expect, it } from "bun:test";
 
 import { buildSql, valueLiteral } from "../query/builder";
 import {
+  decodeDelimitedText,
   formatOfFile,
   quoteIdent,
   quoteLiteral,
@@ -15,6 +16,7 @@ import {
   checkQuery,
   diagnoseStoreError,
   positionOf,
+  tablesRead,
   trimSql,
 } from "../query/sql";
 import { ALLOWED, REFUSED } from "../../test/guard-matrix";
@@ -40,6 +42,67 @@ describe("file names and quoting [data.source.adapters]", () => {
   it("quotes identifiers and literals so a name can never become SQL", () => {
     expect(quoteIdent('a"b')).toBe('"a""b"');
     expect(quoteLiteral("it's")).toBe("'it''s'");
+  });
+});
+
+describe("a delimited file's encoding [data.source.adapters]", () => {
+  const utf16 = (text: string, little: boolean) => {
+    const out = new Uint8Array(2 + text.length * 2);
+    const view = new DataView(out.buffer);
+    view.setUint16(0, 0xfeff, little);
+    for (let i = 0; i < text.length; i++)
+      view.setUint16(2 + i * 2, text.charCodeAt(i), little);
+    return out;
+  };
+
+  it("reads UTF-8 with and without a byte-order mark, exactly", () => {
+    const plain = new TextEncoder().encode("name\nMüller €\n");
+    expect(decodeDelimitedText(plain)).toEqual({
+      text: "name\nMüller €\n",
+      encoding: "utf-8",
+    });
+    const marked = new Uint8Array([0xef, 0xbb, 0xbf, ...plain]);
+    expect(decodeDelimitedText(marked)).toEqual({
+      text: "name\nMüller €\n",
+      encoding: "utf-8",
+    });
+    expect(decodeDelimitedText(new Uint8Array())).toEqual({
+      text: "",
+      encoding: "utf-8",
+    });
+  });
+
+  it("reads UTF-16 by its byte-order mark, either byte order", () => {
+    expect(decodeDelimitedText(utf16("a\tb\nMüller\t€\n", true))).toEqual({
+      text: "a\tb\nMüller\t€\n",
+      encoding: "utf-16le",
+    });
+    expect(decodeDelimitedText(utf16("a,b\nMüller,€\n", false))).toEqual({
+      text: "a,b\nMüller,€\n",
+      encoding: "utf-16be",
+    });
+  });
+
+  it("reads bytes that are not UTF-8 as Windows-1252 and says so, replacing nothing", () => {
+    // "Müller;5 €" as a spreadsheet's CSV export writes it: ü = FC, € = 80.
+    const bytes = new Uint8Array([
+      0x4d, 0xfc, 0x6c, 0x6c, 0x65, 0x72, 0x3b, 0x35, 0x20, 0x80, 0x0a,
+    ]);
+    const d = decodeDelimitedText(bytes);
+    expect(d.text).toBe("Müller;5 €\n");
+    expect(d.text).not.toContain("\ufffd");
+    expect(d.encoding).toBe("windows-1252");
+    expect(d.note).toMatch(/not UTF-8.*Windows-1252/);
+  });
+
+  it("counts what a broken UTF-16 file could not give", () => {
+    // A lone high surrogate, little-endian, then "a".
+    const d = decodeDelimitedText(
+      new Uint8Array([0xff, 0xfe, 0x00, 0xd8, 0x61, 0x00]),
+    );
+    expect(d.encoding).toBe("utf-16le");
+    expect(d.text).toBe("\ufffda");
+    expect(d.note).toMatch(/1 character could not be read/);
   });
 });
 
@@ -117,9 +180,14 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
       checkQuery("SELECT 'DROP TABLE x; read_csv(1)' AS s FROM t"),
     ).toBeNull();
     expect(checkQuery('SELECT "update", "set" FROM t')).toBeNull();
+    expect(checkQuery("SELECT 1 /* a ; comment */ FROM t")).toBeNull();
+    expect(checkQuery("SELECT 1 -- DROP TABLE x\nFROM t")).toBeNull();
     expect(
-      checkQuery("SELECT 1 /* outer /* nested ; */ still comment ; */ FROM t"),
+      checkQuery("SELECT `update`, `it``s`, `a'b`, `c--d` FROM t"),
     ).toBeNull();
+    expect(
+      tablesRead("SELECT * FROM `orders` JOIN main.`lines` USING (id)"),
+    ).toEqual(["orders", "lines"]);
     // A bare statement word is refused, with a hint and a position.
     expect(checkQuery("SELECT update FROM t")).toMatchObject({
       kind: "Guard",
@@ -127,6 +195,53 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
       line: 1,
       column: 8,
     });
+  });
+
+  it("ends a comment where the store does, at the first */", () => {
+    // The store does not nest comments: everything after the first `*/` runs.
+    // A nesting lexer read these as one comment and admitted them.
+    for (const sql of [
+      "SELECT 1 /* /* */ ; PRAGMA query_only = 0 -- */ */",
+      "SELECT * FROM /* /* */ read_csv('/etc/passwd') -- */ */",
+      "SELECT 1 /* outer /* nested ; */ still comment ; */ FROM t",
+    ]) {
+      expect(checkQuery(sql), sql).toMatchObject({
+        kind: "Guard",
+        message: expect.stringMatching(/comment inside a comment/),
+      });
+    }
+    // Code after a closed comment is checked.
+    expect(
+      checkQuery("SELECT 1 /* x */ FROM read_csv('y') /* z */")?.message,
+    ).toMatch(/read_csv\(\)/);
+    expect(checkQuery("SELECT 1 /* open")?.message).toMatch(/not terminated/);
+  });
+
+  it("reads a backtick name as a name, so a quote inside it opens no string", () => {
+    // The store reads `'` as a column name; read as code, the two quotes
+    // made one string that hid the table function between them.
+    const hidden = "SELECT `'`, x FROM read_csv('a') WHERE `'` = 1";
+    expect(checkQuery(hidden)?.message).toMatch(/read_csv\(\)/);
+    expect(
+      checkQuery('SELECT `"`, x FROM t; DROP TABLE t -- `"`')?.message,
+    ).toMatch(/exactly one SELECT/);
+    expect(checkQuery("SELECT `--`, x FROM read_csv('a')")?.message).toMatch(
+      /read_csv\(\)/,
+    );
+    // A backtick name in a table position follows the table rules.
+    expect(checkQuery("SELECT * FROM `/etc/passwd`")?.message).toMatch(
+      /not an imported source table/,
+    );
+    expect(checkQuery("SELECT * FROM `read_csv`('a')")?.message).toMatch(
+      /read_csv/,
+    );
+    expect(checkQuery("SELECT `a FROM t")?.message).toMatch(/not terminated/);
+  });
+
+  it("counts only the store's whitespace as space", () => {
+    // U+00A0 is a name character to the store: `FROM\u00a0t` is one word.
+    expect(tablesRead("SELECT 1 FROM\u00a0t")).toEqual([]);
+    expect(checkQuery("SELECT\t1\r\nFROM\ft")).toBeNull();
   });
 
   it("knows FROM inside function arguments and IS DISTINCT FROM is not a table", () => {

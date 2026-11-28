@@ -1968,17 +1968,34 @@ impl LayerStack {
             if !rerendered {
                 let canvas = layer.rgba.canvas();
                 let depth = canvas.depth();
-                let out = if matches!(
-                    op,
-                    CanvasOp::RotateArbitrary { .. } | CanvasOp::Perspective { .. }
-                ) {
-                    // The rotated edge blends with the transparent
-                    // surround: interpolate ASSOCIATED colour, or the
-                    // fringe darkens towards the black of rgb(0,0,0,0).
-                    let win = premultiply_f16(&pixels_to_f16(canvas));
-                    unpremultiply_f16(&gpu_canvas_op(ctx, op, &win, w, h).await?)
+                let straight = pixels_to_f16(canvas);
+                // Every filter that MIXES texels mixes ASSOCIATED colour:
+                // filtered straight, the colour a transparent texel still
+                // carries bleeds into its visible neighbours (a fringe),
+                // and the rotated edge darkens towards the black of
+                // rgb(0,0,0,0). Nearest copies texels and stays exact; an
+                // opaque layer is the identity and skips the bracket,
+                // except where the op itself adds a transparent surround.
+                let (associate, clamp) = match op {
+                    CanvasOp::RotateArbitrary { .. } | CanvasOp::Perspective { .. } => (true, true),
+                    CanvasOp::Resample {
+                        filter: ResampleFilter::Nearest,
+                        ..
+                    } => (false, false),
+                    // A float layer's colour is not bounded by one.
+                    _ => (
+                        !window_is_opaque(&straight),
+                        !matches!(
+                            depth,
+                            image_core::SampleDepth::F16 | image_core::SampleDepth::F32
+                        ),
+                    ),
+                };
+                let out = if associate {
+                    let win = premultiply_f16(&straight);
+                    unpremultiply_f16(&gpu_canvas_op(ctx, op, &win, w, h).await?, clamp)
                 } else {
-                    gpu_canvas_op(ctx, op, &pixels_to_f16(canvas), w, h).await?
+                    gpu_canvas_op(ctx, op, &straight, w, h).await?
                 };
                 layer.rgba = f16_to_pixels(&out, depth).into();
             }
@@ -5092,15 +5109,17 @@ fn premultiply_f16(win: &[u8]) -> Vec<u8> {
 }
 
 /// Associated → straight alpha over an rgba16float window (a zero alpha
-/// leaves zero colour).
-fn unpremultiply_f16(win: &[u8]) -> Vec<u8> {
+/// leaves zero colour). `clamp` bounds the colour by one: a filter with
+/// negative lobes can leave a colour above its alpha.
+fn unpremultiply_f16(win: &[u8], clamp: bool) -> Vec<u8> {
     use half::f16;
     let mut out = Vec::with_capacity(win.len());
     for px in win.as_chunks::<8>().0 {
         let c = |i: usize| f16::from_le_bytes([px[i * 2], px[i * 2 + 1]]).to_f32();
         let a = c(3);
         for i in 0..3 {
-            let v = if a > 0.0 { (c(i) / a).min(1.0) } else { 0.0 };
+            let v = if a > 0.0 { c(i) / a } else { 0.0 };
+            let v = if clamp { v.min(1.0) } else { v };
             out.extend_from_slice(&f16::from_f32(v).to_le_bytes());
         }
         out.extend_from_slice(&px[6..8]);
@@ -5643,6 +5662,67 @@ mod tests {
         assert_eq!(s.undo().as_deref(), Some("Image size"));
         assert_eq!((s.width, s.height), (3, 2));
         assert_eq!(reds_of(&s, 0), reds(&numbered()));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn image_size_filters_associated_colour_so_hidden_colour_does_not_fringe__feat__image_editor_canvas_ops(
+    ) {
+        let Some(ctx) = device() else { return };
+        // Opaque red beside fully transparent texels that still carry GREEN.
+        let build = || {
+            let mut px = Vec::new();
+            for _y in 0..4 {
+                for x in 0..8u8 {
+                    if x < 4 {
+                        px.extend_from_slice(&[255, 0, 0, 255]);
+                    } else {
+                        px.extend_from_slice(&[0, 255, 0, 0]);
+                    }
+                }
+            }
+            LayerStack::from_image(8, 4, Arc::from(px.into_boxed_slice())).expect("valid")
+        };
+        for filter in [ResampleFilter::Mitchell, ResampleFilter::Lanczos3] {
+            let mut s = build();
+            pollster::block_on(s.transform_canvas_gpu(
+                Some(ctx),
+                CanvasOp::Resample {
+                    width: 5,
+                    height: 4,
+                    filter,
+                },
+            ))
+            .expect("resample");
+            let out = s.layers[0].rgba.to_rgba8();
+            let mut mixed = 0;
+            for p in out.as_chunks::<4>().0 {
+                if p[3] == 0 {
+                    continue;
+                }
+                if p[3] < 255 {
+                    mixed += 1;
+                }
+                // What shows is red: the hidden green contributes nothing.
+                assert!(p[1] <= 1, "green fringe {p:?}");
+                assert!(p[0] >= 250, "red kept {p:?}");
+            }
+            assert!(mixed > 0, "the edge was filtered across");
+        }
+        // Nearest copies texels: the transparent ones keep their colour.
+        let mut s = build();
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Resample {
+                width: 16,
+                height: 8,
+                filter: ResampleFilter::Nearest,
+            },
+        ))
+        .expect("nearest");
+        let out = s.layers[0].rgba.to_rgba8();
+        assert_eq!(&out[..4], &[255, 0, 0, 255]);
+        assert_eq!(&out[15 * 4..16 * 4], &[0, 255, 0, 0]);
     }
 
     #[test]

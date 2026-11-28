@@ -26,6 +26,8 @@
 // rendering lane lands; the Diagnostic SHAPE is the plugin-api one,
 // so the panel does not change.
 
+import { isEventHandlerAttribute, scanTagAttributes } from "./sanitize";
+
 export interface WebDiagnostic {
   severity: "error" | "warning" | "info";
   message: string;
@@ -92,7 +94,11 @@ export function diagnoseHtml(html: string): WebDiagnostic[] {
       }
       continue;
     }
-    if (!closing && /\son[a-z]+\s*=/.test(attrs ?? "")) {
+    if (
+      !closing &&
+      (/\son[a-z]+\s*=/.test(attrs ?? "") ||
+        scanTagAttributes(m[0]).some(isEventHandlerAttribute))
+    ) {
       out.push({
         severity: "warning",
         message: `event-handler attribute on <${tag}> is ignored (no page JavaScript)`,

@@ -800,6 +800,28 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             3,
         ));
     }
+    if held.tag_wrappers > 0 {
+        ctx.diagnostics.push(diag::info(
+            format!(
+                "{} smart tag(s) or custom XML element(s) around text: the text shows, \
+                 the elements stay in the .docx on save, and an edit of text inside \
+                 one is refused",
+                held.tag_wrappers
+            ),
+            3,
+        ));
+    }
+    if held.direction_wrappers > 0 {
+        ctx.diagnostics.push(diag::warning(
+            format!(
+                "{} text direction wrapper(s) (w:dir, w:bdo) not applied: the text \
+                 shows in its paragraph's direction; the wrappers stay in the .docx \
+                 on save, and an edit of text inside one is refused",
+                held.direction_wrappers
+            ),
+            3,
+        ));
+    }
 
     if ctx.hyperlinks > 0 {
         let styled_only = ctx.hyperlinks - ctx.clickable_links;
@@ -2408,7 +2430,11 @@ impl Lowering {
         } else {
             t.rows
                 .iter()
-                .map(|r| r.cells.iter().map(|c| c.grid_span.max(1)).sum::<u32>())
+                .map(|r| {
+                    r.cells
+                        .iter()
+                        .fold(0u32, |n, c| n.saturating_add(grid_span(c)))
+                })
                 .max()
                 .unwrap_or(1)
         };
@@ -2423,7 +2449,7 @@ impl Lowering {
         for (r, row) in t.rows.iter().enumerate() {
             let mut col = 0u32;
             for cell in &row.cells {
-                let span = cell.grid_span.max(1);
+                let span = grid_span(cell);
                 self.w4.nested_tables += cell.nested_tables.len();
                 match cell.v_merge {
                     docx_core::VMerge::Continue => {
@@ -2488,7 +2514,7 @@ impl Lowering {
                         }
                     }
                 }
-                col += span;
+                col = col.saturating_add(span);
             }
         }
 
@@ -3500,6 +3526,16 @@ fn parse_hex(hex: &str) -> Option<(f32, f32, f32)> {
     Some((r as f32, g as f32, b as f32))
 }
 
+/// The most grid columns one cell spans. A `w:gridSpan` is a number read from
+/// the file: Word's own tables stop at 63 columns, and a larger value than
+/// this is not a table anyone laid out, so the sums over a row stay in range.
+const GRID_SPAN_LIMIT: u32 = 1 << 14;
+
+/// A cell's `w:gridSpan`, at least one column and at most [`GRID_SPAN_LIMIT`].
+fn grid_span(cell: &docx_core::TableCell) -> u32 {
+    cell.grid_span.clamp(1, GRID_SPAN_LIMIT)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
@@ -4147,6 +4183,49 @@ mod tests {
             ptab_notes(&l)[0].contains("table cell"),
             "{:?}",
             l.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_grid_span_read_from_the_file_cannot_overflow_the_grid__feat__plugin_doc_read_path() {
+        let cell = |grid_span| TableCell {
+            paragraphs: vec![Paragraph::default()],
+            grid_span,
+            v_merge: VMerge::None,
+            ..Default::default()
+        };
+        let mut doc = DocxDocument::default();
+        // No `w:tblGrid`: the column count is the widest row's span sum.
+        doc.body.push(Block::Table(Table {
+            rows: vec![TableRow {
+                height_rule: Default::default(),
+                cant_split: false,
+                height: None,
+                is_header: false,
+                cells: vec![cell(u32::MAX), cell(u32::MAX), cell(0), cell(2)],
+            }],
+            ..Default::default()
+        }));
+        let l = lower(&doc);
+        let table = l
+            .story
+            .blocks
+            .iter()
+            .find_map(|b| match b {
+                LoweredBlock::Table(t) => Some(t),
+                _ => None,
+            })
+            .expect("a table");
+        assert_eq!(table.cols, 2 * GRID_SPAN_LIMIT + 3);
+        let at: Vec<_> = table.cells.iter().map(|c| (c.col, c.col_span)).collect();
+        assert_eq!(
+            at,
+            [
+                (0, GRID_SPAN_LIMIT),
+                (GRID_SPAN_LIMIT, GRID_SPAN_LIMIT),
+                (2 * GRID_SPAN_LIMIT, 1),
+                (2 * GRID_SPAN_LIMIT + 1, 2),
+            ]
         );
     }
 

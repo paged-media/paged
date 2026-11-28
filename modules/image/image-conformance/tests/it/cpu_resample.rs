@@ -25,11 +25,15 @@
 //! The tolerance ADR 467 states is the one held here: on an opaque picture
 //! the two backends agree within one 8-bit level per channel (the GPU
 //! carries f16 working values, the CPU f32 with f64 weights; both sample
-//! the same points). Where translucent pixels are filtered the results
-//! differ by design — the CPU filters premultiplied, the GPU kernels
-//! straight — so a translucent picture is measured and printed, not
-//! bounded (the difference reaches opaque output pixels whose footprint
-//! holds translucent ones, too).
+//! the same points). Where translucent pixels are filtered the resize
+//! results differ: the CPU filters premultiplied, and the `resample.*`
+//! kernel, dispatched here on its own, filters whatever window it is
+//! handed, which is the straight one. So a translucent picture is
+//! measured and printed, not bounded (the difference reaches opaque
+//! output pixels whose footprint holds translucent ones, too). The
+//! product's doors (`image_js` Image Size, `resize_image`,
+//! `straighten_crop_rgba8`) hand the kernels an associated window when
+//! the picture is not opaque.
 
 use half::f16;
 use image_js::ingest::{straighten_crop_rgba8, DecodedImage};

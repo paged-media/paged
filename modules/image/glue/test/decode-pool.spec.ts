@@ -32,8 +32,12 @@ import type { PagedEditor, PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createDecodePool, DECODE_WORKER_MODULE } from "../src/decode-pool";
-import type { DecodeReply, DecodeRequest } from "../src/decode-worker";
-import { bootEngine } from "../src/engine";
+import {
+  decodeReply,
+  type DecodeReply,
+  type DecodeRequest,
+} from "../src/decode-worker";
+import { bootEngine, displayTreatmentOf } from "../src/engine";
 import {
   makeFakeEditor,
   mapBacking,
@@ -201,6 +205,90 @@ describe("the paged.image decode pool (K-3 consumer)", () => {
     // terminates them even without an explicit pool.dispose().
     dispose();
     expect(mock.spawned.every((s) => !s.alive)).toBe(true);
+  });
+
+  it("the worker's reply carries the display treatment and the 16-bit samples [image.io.depth-color-modes]", () => {
+    // Code 3: a CMYK source converted through its profile on the worker.
+    const samples16 = new Uint16Array(4);
+    const { reply, transfer } = decodeReply(7, {
+      width: 1,
+      height: 1,
+      rgba: new Uint8Array(4),
+      display: 3,
+      samples16,
+    });
+    expect(reply).toMatchObject({ id: 7, ok: true, display: 3 });
+    expect(reply.ok && reply.samples16).toBe(samples16.buffer);
+    expect(transfer.length).toBe(2);
+    // Code 0 (managed) is a value, not an absence.
+    const managed = decodeReply(8, {
+      width: 1,
+      height: 1,
+      rgba: new Uint8Array(4),
+      display: 0,
+    }).reply;
+    expect(managed.ok && managed.display).toBe(0);
+    // An engine build without the field says nothing.
+    const old = decodeReply(9, {
+      width: 1,
+      height: 1,
+      rgba: new Uint8Array(4),
+    }).reply;
+    expect("display" in old).toBe(false);
+  });
+
+  it("the pool hands the worker's display treatment to the session [image.io.depth-color-modes]", async () => {
+    // A worker that answers every request with a fixed treatment code.
+    const replying = (display: number | undefined): WorkerBackend => ({
+      async spawn() {
+        const handlers = new Set<(m: unknown) => void>();
+        return {
+          post(message) {
+            const { id } = message as DecodeRequest;
+            const { reply } = decodeReply(id, {
+              width: 1,
+              height: 1,
+              rgba: new Uint8Array(4),
+              ...(display !== undefined ? { display } : {}),
+            });
+            queueMicrotask(() => {
+              for (const h of handlers) h(reply);
+            });
+          },
+          onMessage(handler) {
+            handlers.add(handler);
+            return { dispose: () => handlers.delete(handler) };
+          },
+          terminate() {
+            handlers.clear();
+          },
+        };
+      },
+    });
+    const poolOver = async (display: number | undefined) => {
+      const fake = makeFakeEditor();
+      const { host } = createBundleHost(
+        () => fake.editor as unknown as PagedEditor,
+        manifestJson as PluginManifest,
+        {
+          console: silentConsole,
+          storage: mapBacking(),
+          workers: replying(display),
+        },
+      );
+      return (await createDecodePool(host))!;
+    };
+    for (const [code, name] of [
+      [0, "managed"],
+      [3, "cmyk-converted"],
+      [undefined, "assumed-srgb"],
+    ] as const) {
+      const pool = await poolOver(code);
+      const decoded = await pool.decode(new Uint8Array(1));
+      expect(decoded.display).toBe(code);
+      expect(displayTreatmentOf(decoded.display)).toBe(name);
+      pool.dispose();
+    }
   });
 
   it("returns null when the host wires no workers (honest main-thread fallback)", async () => {
