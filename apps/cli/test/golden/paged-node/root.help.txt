@@ -24,15 +24,16 @@ verbs:
   generate <template>                                                                          a batch: one document per record or per group of records (paged.data's planBatch), each a Data Merge of the template, in --out
   preflight <doc>                                                                              the PDF exporter's findings for the document (paged.publish's typed preflight, the editor's Preflight panel); exit 1 when one is an error
   package <doc>                                                                                InDesign's File ▸ Package: the document as IDML with its linked files in Links/, the fonts it sets in, Instructions.txt, a report and the document as .paged (with the module content IDML cannot carry), into a new folder or a .zip
-  plugins [doc]                                                                                the discovered bundles, their versions and object kinds
+  plugins [doc]                                                                                the loaded bundles (--plugins), their versions and object kinds
   describe [doc]                                                                               kinds × schemas × typed commands × verbs, as one JSON document (for agents and the docs)
   template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>   template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields, ingest a document tagged for XML as a template
   ml <health|generate|edit> [prompt]                                                           the local image model (paged-ml-host on this machine, extensions ADR 1100): its health, text to image, and an image edited by a prompt (mask, references); nothing leaves the machine
   mcp                                                                                          serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document, create_document, export_document)
 
 options (every verb):
-  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
-  --no-plugins                       load no plugin bundles (core objects only)
+  --plugins <a,b|auto>               load these plugin bundles (package names or paths); `auto` discovers the ones installed in the current directory. A bundle is code that runs with your rights: none loads unless named here or in PAGED_PLUGINS
+  --no-plugins                       load no plugin bundles (core objects only; the default, and it overrides PAGED_PLUGINS)
+  --debug                            report an unexpected failure with its stack trace (also PAGED_DEBUG=1)
   --font <file.ttf>                  fallback face for text no registered font answers for (default: the bundled Inter)
   --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
   --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
@@ -41,6 +42,8 @@ options (every verb):
   --text                             human-readable output instead of JSON
   -h, --help                         show help
 
+Plugin bundles load only on request: --plugins <a,b> names them, --plugins auto (or PAGED_PLUGINS=auto)
+  discovers the ones installed in the current directory. Use auto only in a directory whose packages you trust.
 Output is JSON; --text (or --format text where --format is not a file format) is for humans.
 Exit codes: 0 ok · 1 rejected write or failed check · 2 usage or IO error.
 Addresses: doc, page:#1, textFrame:<id>, story:<id>, storyRange:<id>@a..b, swatch:<name>, style:<family>/<name>,

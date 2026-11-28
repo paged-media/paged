@@ -119,6 +119,8 @@ impl EngineObject {
             .map_err(|e| worker::Error::from(e.to_string()))
     }
 
+    /// Seals the working copy under the run's key. It is sealed again at the
+    /// same address after every engine call; each seal has its own nonce.
     async fn keep(&self, run: &str, meta: &Run, bytes: &[u8]) -> Result<()> {
         let sealed = crate::crypto::seal(&meta.key, run.as_bytes(), &paged_repo::keep_bytes(bytes));
         self.env

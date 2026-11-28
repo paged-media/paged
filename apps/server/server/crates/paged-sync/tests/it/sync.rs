@@ -194,6 +194,49 @@ fn strangers_are_refused() {
         other.push(&repo, "main"),
         Err(Error::Server(403, ..))
     ));
+
+    // Whoever has no role does not reach the kernel: a ref move or an approval
+    // answers as a repository that is not there, and the evidence log is as
+    // long as it was.
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let evidence = || -> usize {
+        let entries: Vec<serde_json::Value> = agent
+            .get(&format!("{url}/v1/r/{name}/evidence"))
+            .header("authorization", "Bearer dev-token")
+            .call()
+            .unwrap()
+            .into_body()
+            .read_json()
+            .unwrap();
+        entries.len()
+    };
+    let before = evidence();
+    let moved = agent
+        .post(&format!("{url}/v1/r/{name}/refs/main"))
+        .header("authorization", "Bearer other-token")
+        .send_json(serde_json::json!({ "expected": null, "new": null }))
+        .unwrap();
+    assert_eq!(moved.status(), 404);
+    let approved = agent
+        .post(&format!("{url}/v1/r/{name}/cr/1/approve"))
+        .header("authorization", "Bearer other-token")
+        .send_empty()
+        .unwrap();
+    assert_eq!(approved.status(), 404);
+    assert_eq!(evidence(), before, "a stranger leaves no evidence");
+    let read = agent
+        .get(&format!("{url}/v1/r/{name}/refs"))
+        .header("authorization", "Bearer dev-token")
+        .call()
+        .unwrap();
+    assert_eq!(
+        read.headers()["cache-control"].to_str().unwrap(),
+        "private, no-store"
+    );
+
     let nobody = Remote::new(&url, &name, "not-a-token");
     assert!(matches!(nobody.refs(), Err(Error::Server(401, ..))));
 }

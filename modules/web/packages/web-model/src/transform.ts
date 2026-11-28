@@ -266,18 +266,23 @@ export function renderWebFrameSource(
   }
   // Bound data (document, frame, data provider) under its reserved
   // namespaces; an author variable of the same name wins. Bound values come
-  // from outside the source, so the HTML lane gets them escaped as text.
+  // from outside the source.
   const authored = source.vars ?? {};
   const raw: TemplateVars = { ...(hasBound ? bound : {}), ...authored };
-  const escaped: TemplateVars = { ...raw };
+  // Each lane escapes them for its own grammar, so a value stays a value:
+  // text or one attribute value in the HTML, one token in the CSS.
+  const forHtml: TemplateVars = { ...raw };
+  const forCss: TemplateVars = { ...raw };
   if (hasBound && bound) {
     for (const k of Object.keys(bound)) {
-      if (!Object.prototype.hasOwnProperty.call(authored, k))
-        escaped[k] = escapeHtmlText(bound[k]);
+      if (!Object.prototype.hasOwnProperty.call(authored, k)) {
+        forHtml[k] = escapeBoundHtml(bound[k]);
+        forCss[k] = escapeBoundCss(bound[k]);
+      }
     }
   }
-  const html = applyTemplate(source.html, escaped);
-  const css = applyTemplate(source.css, raw);
+  const html = applyTemplate(source.html, forHtml);
+  const css = applyTemplate(source.css, forCss);
   return {
     html: html.output,
     css: css.output,
@@ -327,6 +332,28 @@ export function boundNamesIn(
   return out;
 }
 
-function escapeHtmlText(v: unknown): string {
-  return escapeXmlText(String(v));
+/** A bound value for the HTML lane: safe as text and inside an attribute
+ *  value, quoted either way or unquoted. Beyond `&`, `<`, `>` it escapes
+ *  both quotes, the backtick and `=`, so the value can neither close the
+ *  attribute it stands in nor start one with a value of its own. */
+export function escapeBoundHtml(v: unknown): string {
+  return escapeXmlText(String(v)).replace(
+    /["'`=]/g,
+    (c) => `&#${c.charCodeAt(0)};`,
+  );
+}
+
+/** A bound value for the CSS lane: every character outside a small plain
+ *  set (letters, digits, space and `_ . , # % + -`; non-ASCII passes) is
+ *  written as a six-digit CSS escape. An escaped character is never
+ *  syntax, so the value cannot end its declaration or rule, open a
+ *  function, a string, a comment or an at-rule, or close the `<style>`
+ *  element. A number, a length, a hex colour, a keyword or a family name
+ *  comes through unchanged; a function such as `rgb(…)` or `url(…)` does
+ *  not survive as a function. */
+export function escapeBoundCss(v: unknown): string {
+  return String(v).replace(
+    /[^A-Za-z0-9 _.,#%+\-\u00a0-\uffff]/g,
+    (c) => `\\${c.charCodeAt(0).toString(16).padStart(6, "0")}`,
+  );
 }

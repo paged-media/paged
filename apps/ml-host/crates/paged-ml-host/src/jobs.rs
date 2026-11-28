@@ -117,6 +117,8 @@ pub struct Shared {
     pub sd_override: Option<PathBuf>,
     pub config_path: PathBuf,
     pub allow_origins: Vec<String>,
+    /// The access token of this launch ([`crate::auth`]).
+    pub token: String,
     /// This process's job directories live below it.
     pub work_root: PathBuf,
 }

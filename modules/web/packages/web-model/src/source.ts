@@ -503,8 +503,43 @@ export function composeSrcdoc(
   source: WebFrameSource,
   fontFaceCss = "",
 ): string {
+  return composeDocument(source, fontFaceCss, "");
+}
+
+/** The content security policy of the browser preview's document. The
+ *  preview needs inline CSS and resources the document already carries as
+ *  `data:` URLs (its faces, embedded images); nothing else. No script, no
+ *  network fetch of any kind, no form target, no `<base>`, no nested
+ *  frame: a previewed source cannot reach a remote origin, whatever it
+ *  contains. It stands next to the frame's `sandbox=""`, not in its place. */
+export const PREVIEW_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; " +
+  "font-src data:; media-src data:; base-uri 'none'; form-action 'none'";
+
+/** `composeSrcdoc` for the sandboxed browser preview: the same document
+ *  with `PREVIEW_CSP` as the first element of its head, ahead of every
+ *  byte the source contributes. The engine and bake lanes keep
+ *  `composeSrcdoc` (they load nothing from the network by construction). */
+export function composePreviewSrcdoc(
+  source: WebFrameSource,
+  fontFaceCss = "",
+): string {
+  return composeDocument(
+    source,
+    fontFaceCss,
+    `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`,
+  );
+}
+
+function composeDocument(
+  source: WebFrameSource,
+  fontFaceCss: string,
+  policyMeta: string,
+): string {
   return (
-    '<!doctype html><html><head><meta charset="utf-8">' +
+    "<!doctype html><html><head>" +
+    policyMeta +
+    '<meta charset="utf-8">' +
     `<style>${fontFaceCss}${source.css}</style>` +
     `</head><body class="media-${source.options.media}">` +
     source.html +

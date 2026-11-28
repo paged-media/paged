@@ -33,7 +33,7 @@
 //! governed by the workspace's policy (`WorkspaceObject`, /v1/w/{ws}/policy).
 //!
 //!   /.well-known/oauth-authorization-server, /.well-known/oauth-protected-resource,
-//!   /oauth/{register,authorize,callback,token}   sign-in (see `oauth`)
+//!   /oauth/{register,authorize,callback,consent,token}   sign-in (see `oauth`)
 //!
 //! Errors are RFC 9457 problem+json (the OAuth token endpoint answers in OAuth's own shape).
 
@@ -86,10 +86,17 @@ fn valid_repo(name: &str) -> bool {
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = cors::allowed(&env, req.headers().get("origin")?);
     if req.method() == Method::Options {
-        return cors::apply(Response::empty()?.with_status(204), origin.as_deref());
+        return cors::finish(
+            Response::empty()?.with_status(204),
+            origin.as_deref(),
+            false,
+        );
     }
+    // What a repository, a workspace, a session or sign-in answers depends on
+    // who asks: no cache, shared or the browser's own, keeps it.
+    let private = !cors::public_path(&req.path());
     let resp = route(req, env).await?;
-    cors::apply(resp, origin.as_deref())
+    cors::finish(resp, origin.as_deref(), private)
 }
 
 async fn route(mut req: Request, env: Env) -> Result<Response> {
@@ -126,6 +133,7 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
             (Method::Post, "register") => oauth::register(req, &env).await,
             (Method::Get, "authorize") => oauth::authorize(req, &env, &cfg).await,
             (Method::Get, "callback") => oauth::callback(req, &env, &cfg).await,
+            (Method::Post, "consent") => oauth::consent(req, &env).await,
             (Method::Post, "token") => oauth::token(req, &env, &cfg).await,
             _ => problem(404, "Not found", "no such route"),
         };

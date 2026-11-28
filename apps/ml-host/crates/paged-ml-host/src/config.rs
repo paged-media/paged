@@ -128,6 +128,53 @@ impl Model {
 pub type Refusal = (u16, &'static str, String);
 
 impl Config {
+    /// A config from the HTTP API with its programs held to `stored` (the
+    /// config file read at start): what the host executes, and with which
+    /// arguments, is set in that file or on the command line (`--sd`), never
+    /// over HTTP. `sdBinary`, `extraArgs` and `matting` left out keep their
+    /// stored values; a different `sdBinary`, `extraArgs`, `matting.binary`
+    /// or `matting.args` is refused (`403 program_locked`).
+    pub fn with_stored_programs(
+        mut self,
+        stored: &Config,
+        sd_override: Option<&Path>,
+    ) -> Result<Config, Refusal> {
+        let locked = |field: &str| {
+            Err((
+                403,
+                "program_locked",
+                format!(
+                    "{field} cannot be set through the API: set it in the host's config file \
+                     (or --sd for the sd binary) and restart the host"
+                ),
+            ))
+        };
+        match &self.sd_binary {
+            None => self.sd_binary = stored.sd_binary.clone(),
+            Some(p) if Some(p) == stored.sd_binary.as_ref() || Some(p.as_path()) == sd_override => {
+            }
+            Some(_) => return locked("sdBinary"),
+        }
+        if self.extra_args.is_empty() {
+            self.extra_args = stored.extra_args.clone();
+        } else if self.extra_args != stored.extra_args {
+            return locked("extraArgs");
+        }
+        match (&self.matting, &stored.matting) {
+            (None, _) => self.matting = stored.matting.clone(),
+            (Some(m), Some(s)) => {
+                if m.binary != s.binary {
+                    return locked("matting.binary");
+                }
+                if m.args != s.args {
+                    return locked("matting.args");
+                }
+            }
+            (Some(_), None) => return locked("matting"),
+        }
+        Ok(self)
+    }
+
     /// The PUT checks, in the API's order: shape, licence gate, files.
     pub fn validate(&self) -> Result<(), Refusal> {
         let bad = |m: String| Err((400, "bad_request", m));
@@ -251,4 +298,109 @@ pub fn save(path: &Path, config: &Config) -> io::Result<()> {
     let bytes = serde_json::to_vec_pretty(config).map_err(io::Error::other)?;
     fs::write(&tmp, bytes)?;
     fs::rename(&tmp, path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn matting(binary: &str, args: &[&str]) -> Matting {
+        Matting {
+            id: "m".into(),
+            licence_id: None,
+            licence_acknowledged: Some(true),
+            binary: binary.into(),
+            model: None,
+            args: args.iter().map(|a| a.to_string()).collect(),
+        }
+    }
+
+    fn stored() -> Config {
+        Config {
+            sd_binary: Some("/opt/sd".into()),
+            model: None,
+            extra_args: vec!["--offload-to-cpu".into()],
+            matting: Some(matting("/opt/matte", &["{input}", "{output}"])),
+        }
+    }
+
+    fn code(r: Result<Config, Refusal>) -> &'static str {
+        r.err().map(|(_, code, _)| code).unwrap_or("ok")
+    }
+
+    #[test]
+    fn omitted_programs_keep_the_stored_ones() {
+        let merged = Config::default()
+            .with_stored_programs(&stored(), None)
+            .unwrap();
+        assert_eq!(merged, stored());
+    }
+
+    #[test]
+    fn the_stored_programs_pass_unchanged() {
+        assert_eq!(
+            stored().with_stored_programs(&stored(), None).unwrap(),
+            stored()
+        );
+        // The --sd override is one the user chose at launch.
+        let mut c = stored();
+        c.sd_binary = Some("/usr/local/bin/sd".into());
+        let merged = c
+            .with_stored_programs(&stored(), Some(Path::new("/usr/local/bin/sd")))
+            .unwrap();
+        assert_eq!(merged.sd_binary, Some("/usr/local/bin/sd".into()));
+    }
+
+    #[test]
+    fn other_programs_are_refused() {
+        let mut c = stored();
+        c.sd_binary = Some("/tmp/other".into());
+        assert_eq!(
+            code(c.with_stored_programs(&stored(), None)),
+            "program_locked"
+        );
+
+        let mut c = stored();
+        c.extra_args = vec!["--other".into()];
+        assert_eq!(
+            code(c.with_stored_programs(&stored(), None)),
+            "program_locked"
+        );
+
+        let mut c = stored();
+        c.matting = Some(matting("/tmp/other", &["{input}", "{output}"]));
+        assert_eq!(
+            code(c.with_stored_programs(&stored(), None)),
+            "program_locked"
+        );
+
+        let mut c = stored();
+        c.matting = Some(matting("/opt/matte", &["-x", "{input}", "{output}"]));
+        assert_eq!(
+            code(c.with_stored_programs(&stored(), None)),
+            "program_locked"
+        );
+
+        // Nothing stored: the API cannot introduce a program either.
+        let empty = Config::default();
+        assert_eq!(
+            code(stored().with_stored_programs(&empty, None)),
+            "program_locked"
+        );
+        let c = Config {
+            matting: Some(matting("/opt/matte", &[])),
+            ..Config::default()
+        };
+        assert_eq!(code(c.with_stored_programs(&empty, None)), "program_locked");
+    }
+
+    #[test]
+    fn a_matting_model_and_licence_may_change() {
+        let mut c = stored();
+        let m = c.matting.as_mut().unwrap();
+        m.id = "other".into();
+        m.model = Some("/models/other.onnx".into());
+        let merged = c.clone().with_stored_programs(&stored(), None).unwrap();
+        assert_eq!(merged, c);
+    }
 }

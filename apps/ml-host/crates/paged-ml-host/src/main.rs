@@ -28,6 +28,13 @@ usage: paged-ml-host [--port <port>] [--config <file>] [--sd <path>] [--allow-or
   --config <file>          config file (env PAGED_ML_HOST_CONFIG; default <config dir>/paged/ml-host.json)
   --sd <path>              the stable-diffusion.cpp CLI binary (overrides the config's sdBinary)
   --allow-origin <origin>  also accept requests from this Origin (repeatable)
+
+Every route but GET /api/ml/health needs the access token of this launch
+(Authorization: Bearer <token>). The host writes it, readable by you alone, to
+<config file stem>.token beside the config; a launcher may supply its own in
+PAGED_ML_HOST_TOKEN instead. The programs the host runs (sdBinary, extraArgs,
+matting.binary, matting.args) are set in the config file or with --sd, never
+through the API.
 ";
 
 fn parse(args: &[String]) -> Result<Options, String> {
@@ -70,11 +77,15 @@ fn parse(args: &[String]) -> Result<Options, String> {
         })
         .or_else(config::default_path)
         .ok_or("no config location: pass --config <file>")?;
+    let token = std::env::var("PAGED_ML_HOST_TOKEN")
+        .ok()
+        .filter(|v| !v.is_empty());
     Ok(Options {
         port,
         config_path,
         sd_binary: sd,
         allow_origins: origins,
+        token,
         work_parent: None,
         keep_finished: paged_ml_host::jobs::KEEP_FINISHED,
     })
@@ -106,6 +117,10 @@ fn main() -> ExitCode {
     };
     signals::watch(host.stopper());
     println!("paged-ml-host listening on http://{}", host.addr());
+    match host.token_file() {
+        Some(path) => println!("access token: {}", path.display()),
+        None => println!("access token: from PAGED_ML_HOST_TOKEN"),
+    }
     let _ = std::io::stdout().flush();
     host.wait();
     ExitCode::SUCCESS

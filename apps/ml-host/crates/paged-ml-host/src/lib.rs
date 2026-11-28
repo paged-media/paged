@@ -22,6 +22,7 @@
 //! a model.
 
 pub mod api;
+pub mod auth;
 pub mod config;
 mod http;
 pub mod jobs;
@@ -53,6 +54,10 @@ pub struct Options {
     pub sd_binary: Option<PathBuf>,
     /// `--allow-origin`: non-loopback origins allowed to call the API.
     pub allow_origins: Vec<String>,
+    /// The access token, when the launcher supplies one
+    /// (`PAGED_ML_HOST_TOKEN`); otherwise the host generates one and writes
+    /// it to [`auth::token_path`] for this user alone.
+    pub token: Option<String>,
     /// The parent of this process's job directory (default: the temp dir).
     pub work_parent: Option<PathBuf>,
     /// Finished jobs kept before the oldest is evicted ([`jobs::KEEP_FINISHED`]).
@@ -64,6 +69,8 @@ pub struct Options {
 pub struct Host {
     addr: SocketAddr,
     shared: Arc<Shared>,
+    /// The token file this host wrote, when it generated its token.
+    token_file: Option<PathBuf>,
     worker: Option<JoinHandle<()>>,
     accept: Option<JoinHandle<()>>,
 }
@@ -79,6 +86,26 @@ pub fn start(opts: Options) -> io::Result<Host> {
             format!("config {}: {e}", opts.config_path.display()),
         )
     })?;
+    let (token, token_file) = match opts.token {
+        Some(t) if auth::acceptable(&t) => (t, None),
+        Some(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "the supplied access token must be {} to 512 characters of A-Z a-z 0-9 - _ . ~",
+                    auth::MIN_TOKEN_LEN
+                ),
+            ))
+        }
+        None => {
+            let token = auth::generate()?;
+            let path = auth::token_path(&opts.config_path);
+            auth::write_token_file(&path, &token).map_err(|e| {
+                io::Error::new(e.kind(), format!("token file {}: {e}", path.display()))
+            })?;
+            (token, Some(path))
+        }
+    };
     let parent = opts.work_parent.unwrap_or_else(std::env::temp_dir);
     sweep_stale(&parent);
     static HOSTS: AtomicUsize = AtomicUsize::new(0);
@@ -96,6 +123,7 @@ pub fn start(opts: Options) -> io::Result<Host> {
         sd_override: opts.sd_binary,
         config_path: opts.config_path,
         allow_origins: opts.allow_origins,
+        token,
         work_root,
     });
 
@@ -114,6 +142,7 @@ pub fn start(opts: Options) -> io::Result<Host> {
     Ok(Host {
         addr,
         shared,
+        token_file,
         worker: Some(worker),
         accept: Some(accept),
     })
@@ -155,6 +184,16 @@ impl Host {
         self.addr
     }
 
+    /// The access token of this launch.
+    pub fn token(&self) -> &str {
+        &self.shared.token
+    }
+
+    /// The file the token was written to; `None` when the launcher supplied it.
+    pub fn token_file(&self) -> Option<&Path> {
+        self.token_file.as_deref()
+    }
+
     /// Serves until the process ends.
     pub fn wait(mut self) {
         if let Some(a) = self.accept.take() {
@@ -167,6 +206,7 @@ impl Host {
         Stopper {
             shared: Arc::clone(&self.shared),
             addr: self.addr,
+            token_file: self.token_file.clone(),
         }
     }
 
@@ -196,6 +236,7 @@ impl Drop for Host {
 pub struct Stopper {
     shared: Arc<Shared>,
     addr: SocketAddr,
+    token_file: Option<PathBuf>,
 }
 
 impl Stopper {
@@ -229,6 +270,9 @@ impl Stopper {
         // Wakes the blocking accept so it sees the flag.
         let _ = TcpStream::connect(self.addr);
         let _ = fs::remove_dir_all(&self.shared.work_root);
+        if let Some(path) = &self.token_file {
+            auth::remove_token_file(path, &self.shared.token);
+        }
     }
 }
 

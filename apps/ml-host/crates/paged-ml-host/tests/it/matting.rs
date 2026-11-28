@@ -20,6 +20,7 @@
 #![allow(non_snake_case)] // the `__feat__<id>` suffix links each test to its cockpit feature
 
 use std::fs;
+use std::path::Path;
 
 use serde_json::{json, Value};
 
@@ -27,9 +28,9 @@ use crate::support::{b64, png, Fake, TestHost};
 
 /// A runner that copies `{input}` to `{output}`; with `model` set it is
 /// called with `--model {model} {input} {output}`.
-fn runner(t: &TestHost) -> String {
-    let path = t.dir.join("matte");
-    let log = t.dir.join("matte.log");
+fn runner(dir: &Path) -> String {
+    let path = dir.join("matte");
+    let log = dir.join("matte.log");
     fs::write(
         &path,
         format!(
@@ -44,15 +45,15 @@ fn runner(t: &TestHost) -> String {
     path.display().to_string()
 }
 
-fn matting_config(t: &TestHost, args: Value) -> Value {
-    fs::write(t.dir.join("matte.onnx"), b"weights").unwrap();
+fn matting_config(dir: &Path, args: Value) -> Value {
+    fs::write(dir.join("matte.onnx"), b"weights").unwrap();
     json!({
         "matting": {
             "id": "a-matting-model",
             "licenceId": "its-own",
             "licenceAcknowledged": true,
-            "binary": runner(t),
-            "model": t.file("matte.onnx"),
+            "binary": runner(dir),
+            "model": dir.join("matte.onnx").display().to_string(),
             "args": args,
         }
     })
@@ -60,14 +61,10 @@ fn matting_config(t: &TestHost, args: Value) -> Value {
 
 #[test]
 fn a_matting_runner_alone_serves_matting__feat__plugin_platform_ml_service() {
-    let t = TestHost::new(Fake::default());
-    let h = t.get("/api/ml/health").json();
-    assert_eq!(h["capabilities"], json!([]));
-    let r = t.put(
-        "/api/ml/config",
-        &matting_config(&t, json!(["--model", "{model}", "{input}", "{output}"])),
-    );
-    assert_eq!(r.status, 200, "{}", r.text());
+    // The runner is the config file's: the API cannot name a program.
+    let t = TestHost::with_stored(Fake::default(), |dir| {
+        matting_config(dir, json!(["--model", "{model}", "{input}", "{output}"]))
+    });
     let h = t.get("/api/ml/health").json();
     // Matting is ready on its own; generation still needs sd and a model.
     assert_eq!(h["capabilities"], json!(["matting"]));
@@ -113,22 +110,31 @@ fn matting_without_a_runner_is_not_ready__feat__plugin_platform_ml_service() {
 
 #[test]
 fn a_matting_config_is_checked() {
-    let t = TestHost::new(Fake::default());
+    let t = TestHost::with_stored(Fake::default(), |dir| matting_config(dir, json!([])));
     // The licence gate.
-    let mut c = matting_config(&t, json!([]));
+    let mut c = matting_config(&t.dir, json!([]));
     c["matting"]["licenceAcknowledged"] = json!(false);
     assert_eq!(t.put("/api/ml/config", &c).status, 409);
-    // The placeholders.
-    let c = matting_config(&t, json!(["{input}"]));
-    assert_eq!(t.put("/api/ml/config", &c).status, 400);
-    // The files.
-    let mut c = matting_config(&t, json!([]));
+    // The runner and its arguments are the config file's.
+    let c = matting_config(&t.dir, json!(["{input}", "{output}", "--other"]));
+    let r = t.put("/api/ml/config", &c);
+    assert_eq!(r.status, 403);
+    assert_eq!(r.code(), "program_locked");
+    assert!(r.text().contains("matting.args"), "{}", r.text());
+    let mut c = matting_config(&t.dir, json!([]));
     c["matting"]["binary"] = json!(t.file("no-such-runner"));
     let r = t.put("/api/ml/config", &c);
-    assert_eq!(r.status, 400);
+    assert_eq!(r.status, 403);
+    assert_eq!(r.code(), "program_locked");
     assert!(r.text().contains("matting.binary"), "{}", r.text());
+    // The model file is checked.
+    let mut c = matting_config(&t.dir, json!([]));
+    c["matting"]["model"] = json!(t.file("no-such-model"));
+    let r = t.put("/api/ml/config", &c);
+    assert_eq!(r.status, 400);
+    assert!(r.text().contains("matting.model"), "{}", r.text());
     // A picture is required.
-    let c = matting_config(&t, json!([]));
+    let c = matting_config(&t.dir, json!([]));
     assert_eq!(t.put("/api/ml/config", &c).status, 200);
     let r = t.post("/api/ml/jobs", &json!({ "kind": "matting" }));
     assert_eq!(r.status, 400);
@@ -136,14 +142,15 @@ fn a_matting_config_is_checked() {
 
 #[test]
 fn a_failing_runner_fails_the_job() {
-    let t = TestHost::new(Fake::default());
-    let path = t.dir.join("broken");
-    fs::write(&path, "#!/bin/sh\necho 'no model here' >&2\nexit 3\n").unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-    let mut c = matting_config(&t, json!([]));
-    c["matting"]["binary"] = json!(path.display().to_string());
-    assert_eq!(t.put("/api/ml/config", &c).status, 200);
+    let t = TestHost::with_stored(Fake::default(), |dir| {
+        let path = dir.join("broken");
+        fs::write(&path, "#!/bin/sh\necho 'no model here' >&2\nexit 3\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut c = matting_config(dir, json!([]));
+        c["matting"]["binary"] = json!(path.display().to_string());
+        c
+    });
     let id = t.submit(&json!({ "kind": "matting", "image": b64(&png(8, 8)) }));
     let job = t.wait_state(&id, "failed");
     let err = job["error"].as_str().unwrap();

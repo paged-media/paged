@@ -75,7 +75,7 @@ import {
   asFrameTarget,
   boundNamesIn,
   composeFontFaces,
-  composeSrcdoc,
+  composePreviewSrcdoc,
   DEFAULT_SOURCE,
   diagnoseFonts,
   diagnoseHtml,
@@ -1235,7 +1235,7 @@ function SourceEditor({
   // document's actual faces for every resolved family. The srcdoc body
   // is the RENDERED source (template pass applied).
   const fontFaceCss = composeFontFaces(resolvedFaces);
-  const srcdoc = composeSrcdoc(
+  const srcdoc = composePreviewSrcdoc(
     { html: rendered.html, css: rendered.css, options: preview.options },
     fontFaceCss,
   );

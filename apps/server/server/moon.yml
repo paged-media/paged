@@ -53,12 +53,13 @@ tasks:
       runInCI: false
 
   rust-test:
+    # The default run is paged-server's unit tests, which need no server.
     # Every paged-sync test talks to a running local worker, so they are an
-    # opt-in lane (`#[ignore = "server: …"]`, .config/nextest.toml) and the
-    # default nextest run has nothing to run. Run the lane instead: without
-    # PAGED_SERVER_URL (README.md) each test reports `unavailable: running
-    # server`, and PAGED_REQUIRE_SERVER=1 turns that into a failure.
-    script: "cargo nextest run --profile server --run-ignored only"
+    # opt-in lane (`#[ignore = "server: …"]`, .config/nextest.toml), run
+    # after it: without PAGED_SERVER_URL (README.md) each test reports
+    # `unavailable: running server`, and PAGED_REQUIRE_SERVER=1 turns that
+    # into a failure.
+    script: "cargo nextest run && cargo nextest run --profile server --run-ignored only"
     options:
       # There is no CI lane for them.
       runInCI: false

@@ -30,20 +30,88 @@
 // Not a relay: only `/api/ml/` paths, only the host's methods, no cookies
 // or credentials forwarded, the target fixed by the server's environment
 // (PAGED_ML_HOST_URL, a loopback URL), never by the request.
+//
+// The host answers only a caller that presents its access token
+// (apps/ml-host/README.md). The proxy presents it for the page, so the
+// proxy holds the host's guards itself: it serves only a request addressed
+// to a loopback name (`Host`), and a browser request only from the page of
+// that same origin (`Origin`, `Sec-Fetch-Site`). What the browser said about
+// its origin is forwarded, so the host's own origin guard still applies.
 
 export const ML_HOST_DEFAULT_TARGET = "http://127.0.0.1:7861";
 
 const METHODS = new Set(["GET", "PUT", "POST", "DELETE"]);
-const FORWARDED = ["content-type", "accept", "last-event-id"];
+const FORWARDED = [
+  "content-type",
+  "accept",
+  "last-event-id",
+  "origin",
+  "sec-fetch-site",
+];
+const LOOPBACK = ["127.0.0.1", "localhost", "[::1]"];
 
 /** The target from the environment, if it is a loopback http URL. */
 export function mlHostTarget(env: string | undefined): string | null {
   const raw = env?.trim() || ML_HOST_DEFAULT_TARGET;
   try {
     const u = new URL(raw);
-    const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname);
+    const loopback = LOOPBACK.includes(u.hostname);
     if (u.protocol !== "http:" || !loopback || u.pathname !== "/") return null;
     return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+type Env = Record<string, string | undefined>;
+
+/** Where the host wrote its token: PAGED_ML_HOST_TOKEN_FILE, else beside
+ *  the host's config (PAGED_ML_HOST_CONFIG, else the platform's config
+ *  directory), `<config stem>.token`. */
+export function mlHostTokenFile(
+  env: Env,
+  platform: string = process.platform,
+): string | null {
+  const set = (k: string) => env[k]?.trim() || null;
+  const explicit = set("PAGED_ML_HOST_TOKEN_FILE");
+  if (explicit) return explicit;
+  const config = set("PAGED_ML_HOST_CONFIG");
+  if (config) {
+    const cut = Math.max(config.lastIndexOf("/"), config.lastIndexOf("\\"));
+    const dot = config.lastIndexOf(".");
+    return `${dot > cut + 1 ? config.slice(0, dot) : config}.token`;
+  }
+  const home = set("HOME");
+  if (platform === "win32") {
+    const base = set("APPDATA");
+    return base ? `${base}\\paged\\ml-host.token` : null;
+  }
+  const base =
+    platform === "darwin"
+      ? home && `${home}/Library/Application Support`
+      : (set("XDG_CONFIG_HOME") ?? (home && `${home}/.config`));
+  return base ? `${base}/paged/ml-host.token` : null;
+}
+
+const TOKEN = /^[A-Za-z0-9._~-]{32,512}$/;
+
+/** The host's access token: PAGED_ML_HOST_TOKEN, else the token file's
+ *  content, read on each call (a restarted host has a new one). */
+export async function mlHostToken(
+  env: Env,
+  readFile?: (path: string) => Promise<string>,
+): Promise<string | null> {
+  const given = env["PAGED_ML_HOST_TOKEN"]?.trim();
+  if (given) return TOKEN.test(given) ? given : null;
+  const path = mlHostTokenFile(env);
+  if (!path) return null;
+  try {
+    const read =
+      readFile ??
+      (async (p: string) =>
+        (await import("node:fs/promises")).readFile(p, "utf8"));
+    const token = (await read(path)).trim();
+    return TOKEN.test(token) ? token : null;
   } catch {
     return null;
   }
@@ -55,9 +123,49 @@ const problem = (status: number, error: string, message: string) =>
     headers: { "content-type": "application/json" },
   });
 
+/** The host's guards, held here because the proxy presents the token: a
+ *  loopback `Host`, and a browser request only from this same origin. */
+function refusal(request: Request, url: URL): Response | null {
+  if (!LOOPBACK.includes(url.hostname))
+    return problem(
+      403,
+      "forbidden_host",
+      "the local image model is reached only through a loopback address",
+    );
+  const origin = request.headers.get("origin");
+  if (origin !== null) {
+    let host: string | null = null;
+    try {
+      host = new URL(origin).host;
+    } catch {
+      // "null" and other opaque origins
+    }
+    if (host !== url.host)
+      return problem(
+        403,
+        "forbidden_origin",
+        "the local image model answers only this page's own origin",
+      );
+  }
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin" && site !== "none")
+    return problem(
+      403,
+      "forbidden_origin",
+      "the local image model answers only this page's own origin",
+    );
+  return null;
+}
+
 export async function handleMlProxy(
   request: Request,
-  options: { target: string | null; fetch?: typeof fetch },
+  options: {
+    target: string | null;
+    fetch?: typeof fetch;
+    /** The host's access token; resolved from the environment and the
+     *  host's token file when left out, `null` for none. */
+    token?: string | null;
+  },
 ): Promise<Response> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/ml/"))
@@ -68,6 +176,8 @@ export async function handleMlProxy(
       "method_not_allowed",
       `${request.method} is not allowed`,
     );
+  const refused = refusal(request, url);
+  if (refused) return refused;
   if (!options.target)
     return problem(
       503,
@@ -79,6 +189,11 @@ export async function handleMlProxy(
     const v = request.headers.get(name);
     if (v) headers.set(name, v);
   }
+  const token =
+    options.token === undefined
+      ? await mlHostToken(process.env)
+      : options.token;
+  if (token) headers.set("authorization", `Bearer ${token}`);
   const doFetch = options.fetch ?? fetch;
   let res: Response;
   try {

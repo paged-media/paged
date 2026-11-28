@@ -21,6 +21,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
@@ -59,12 +60,55 @@ pub struct TestHost {
 
 static N: AtomicUsize = AtomicUsize::new(0);
 
+/// The access token of each test host, by address: [`send`] presents it
+/// unless the caller names an `Authorization` header (or `NO_TOKEN`).
+static TOKENS: Mutex<Vec<(SocketAddr, String)>> = Mutex::new(Vec::new());
+
+/// A header that makes [`send`] present no token.
+pub const NO_TOKEN: (&str, &str) = ("X-Test-No-Token", "1");
+
+pub fn register(host: &Host) {
+    TOKENS
+        .lock()
+        .unwrap()
+        .push((host.addr(), host.token().to_string()));
+}
+
+fn token_of(addr: SocketAddr) -> Option<String> {
+    let tokens = TOKENS.lock().unwrap();
+    tokens
+        .iter()
+        .rev()
+        .find(|(a, _)| *a == addr)
+        .map(|(_, t)| t.clone())
+}
+
 impl TestHost {
     pub fn new(fake: Fake) -> Self {
         Self::with_origins(fake, Vec::new())
     }
 
     pub fn with_origins(fake: Fake, allow_origins: Vec<String>) -> Self {
+        Self::build(fake, allow_origins, true, |_| json!({}))
+    }
+
+    /// A host whose config file holds no program at all.
+    pub fn unconfigured(fake: Fake) -> Self {
+        Self::build(fake, Vec::new(), false, |_| json!({}))
+    }
+
+    /// A host whose config file also holds what `extra` returns (it gets the
+    /// test directory): the programs a host runs come from that file.
+    pub fn with_stored(fake: Fake, extra: impl FnOnce(&Path) -> Value) -> Self {
+        Self::build(fake, Vec::new(), false, extra)
+    }
+
+    fn build(
+        fake: Fake,
+        allow_origins: Vec<String>,
+        sd_stored: bool,
+        extra: impl FnOnce(&Path) -> Value,
+    ) -> Self {
         let dir = std::env::temp_dir().join(format!(
             "paged-ml-host-test-{}-{}",
             std::process::id(),
@@ -87,15 +131,27 @@ impl TestHost {
             fs::set_permissions(&sd, fs::Permissions::from_mode(0o755)).unwrap();
         }
         let config_path = dir.join("config").join("ml-host.json");
+        // The programs are the config file's: the API cannot set them.
+        let mut stored = extra(&dir);
+        if sd_stored {
+            stored["sdBinary"] = json!(sd.display().to_string());
+            stored["extraArgs"] = json!(["--offload-to-cpu"]);
+        }
+        if stored.as_object().is_some_and(|o| !o.is_empty()) {
+            fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+            fs::write(&config_path, stored.to_string()).unwrap();
+        }
         let host = start(Options {
             port: 0,
             config_path: config_path.clone(),
             sd_binary: None,
             allow_origins,
+            token: None,
             work_parent: Some(dir.join("work")),
             keep_finished: fake.keep_finished,
         })
         .unwrap();
+        register(&host);
         TestHost {
             host: Some(host),
             dir,
@@ -105,6 +161,10 @@ impl TestHost {
             pid_file,
             result_png,
         }
+    }
+
+    pub fn token(&self) -> String {
+        self.host.as_ref().unwrap().token().to_string()
     }
 
     pub fn addr(&self) -> SocketAddr {
@@ -306,7 +366,15 @@ fn send(
     if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
         head.push_str(&format!("Host: {addr}\r\n"));
     }
-    for (n, v) in headers {
+    let explicit = headers
+        .iter()
+        .any(|(n, _)| n.eq_ignore_ascii_case("authorization") || *n == NO_TOKEN.0);
+    if !explicit {
+        if let Some(token) = token_of(addr) {
+            head.push_str(&format!("Authorization: Bearer {token}\r\n"));
+        }
+    }
+    for (n, v) in headers.iter().filter(|(n, _)| *n != NO_TOKEN.0) {
         head.push_str(&format!("{n}: {v}\r\n"));
     }
     if let Some(b) = body {

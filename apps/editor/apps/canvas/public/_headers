@@ -32,8 +32,10 @@
   # a `credentialless` one — the modes must match). Both values yield
   # crossOriginIsolated === true, so SharedArrayBuffer still works; credentialless
   # just loads any cross-origin subresource without credentials instead of
-  # requiring CORP — and the CSP below already walls fetches to same-origin, so
-  # there are none. Lock-step with the dev header in apps/canvas/vite.config.ts.
+  # requiring CORP. (The enforced CSP below bounds script-initiated requests
+  # only; an element may still load a cross-origin subresource, which then
+  # arrives without credentials.) Lock-step with the dev header in
+  # apps/canvas/vite.config.ts.
   Cross-Origin-Embedder-Policy: credentialless
   # Allow this document to be embedded as a cross-origin <iframe> by the docs
   # scripting playground. A COEP parent (docs.paged.media) blocks a cross-origin
@@ -41,13 +43,16 @@
   # CORP — without this the iframe shows "refused to connect". `cross-origin` (vs
   # `same-site`) keeps the open playground embeddable from anywhere.
   Cross-Origin-Resource-Policy: cross-origin
-  # D-03 network wall — bound EVERY page/worker fetch to same-origin + local
-  # bytes; no external origin is reachable (every first-party bundle declares
-  # `network: false`, so the consented set is empty). `connect-src` only — no
-  # `default-src` — so script/style/img are untouched (just the egress wall).
-  # Lock-step with the dev header in apps/canvas/vite.config.ts.
-  # The module host (ADR 220) is part of the floor: the deployed build's wasm
-  # redirects there.
+  # D-03 network wall — bound every SCRIPT-INITIATED request of the page and
+  # its workers (fetch, XHR, WebSocket, EventSource, sendBeacon) to same-origin,
+  # local bytes and the module host (ADR 220: the deployed build's wasm
+  # redirects there). Every first-party bundle declares `network: false`, so
+  # the consented set is empty. `connect-src` only — no `default-src` — so this
+  # line does NOT bound what elements load: an `<img>`, a stylesheet, a font,
+  # a media element, a script element or a frame can still name another
+  # origin. The policy that bounds those is the report-only line further down.
+  # Lock-step with the dev header in apps/canvas/vite.config.ts. This must stay
+  # the FIRST Content-Security-Policy line: the build's rewrite replaces it.
   Content-Security-Policy: connect-src 'self' blob: data: https://modules.paged.media
   # ADR 240, ADR 273 — Trusted Types, ENFORCED: a string reaching an HTML,
   # script or script-URL sink without a policy is refused, and the violation
@@ -58,6 +63,28 @@
   # TRUSTED_TYPES_POLICY (the dev server sends it from there;
   # scripts/trusted-types.test.mjs keeps the two equal).
   Content-Security-Policy: require-trusted-types-for 'script'; report-uri /api/csp-report
+  # The resource policy, REPORT-ONLY: nothing is blocked by it yet; each
+  # violation is posted to /api/csp-report. It states what the editor is known
+  # to load, so the reports show what an enforced policy would break before it
+  # is enforced (and the dev server does not send it yet).
+  #   default-src  same-origin for everything not named below
+  #   script-src   the editor's own scripts, blob: workers and glue, the module
+  #                host; 'wasm-unsafe-eval' compiles the engines' wasm;
+  #                'unsafe-eval' is the scripting playground's `new Function`,
+  #                whose source Trusted Types (above) must approve
+  #   worker-src   the editor's workers, by URL or from a blob
+  #   style-src    'unsafe-inline': the entry page's <style>, style attributes,
+  #                and the sandboxed web preview (a srcdoc frame inherits this
+  #                policy and carries its own stricter one)
+  #   img/font/media-src  same-origin, blob: and data: (document bytes)
+  #   connect-src  the wall above, restated so default-src does not narrow it;
+  #                a build that admits data origins rewrites only the enforced
+  #                line, so those origins are reported here
+  #   frame-src    embed.html in the embedding demo
+  #   object-src 'none', base-uri 'self', form-action 'self'
+  # Known report: oauth-callback.html runs an inline script, which script-src
+  # here does not admit; it moves to a file before this policy is enforced.
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval' blob: https://modules.paged.media; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://modules.paged.media; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report
 
 # Embedding plan E6 — embed.html is the editor a host drives through an
 # iframe. Which pages may frame it is a deploy-time list: the floor is the

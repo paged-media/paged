@@ -45,7 +45,7 @@ async function writeTemplate(
   maxLength: number,
 ): Promise<string> {
   const fx = await writeFixture(dir);
-  const s = await openSession(fx.paged, {});
+  const s = await openSession(fx.paged, { plugins: ["@paged-media/data"] });
   try {
     const objects = s.h.objects;
     await objects.invoke(`${D}.defineSource` as never, {

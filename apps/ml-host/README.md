@@ -64,15 +64,42 @@ cargo run --release --bin paged-ml-host -- [--port 7861] [--config <file>] [--sd
   `sd-cli` on `PATH` (not a bare `sd`, which is often an unrelated tool).
 - `--allow-origin <origin>` accepts browser requests from a non-loopback origin
   (repeatable). Loopback origins (`http://localhost:*`, `http://127.0.0.1:*`,
-  `http://[::1]:*`) are always accepted.
+  `http://[::1]:*`, and their `https` forms) are always accepted.
+
+### The access token
+
+Every route but `GET /api/ml/health` needs the access token of this launch:
+`Authorization: Bearer <token>`, `401 unauthorized` without it. Reaching the
+loopback port is not enough to drive the host.
+
+- At start the host generates a token and writes it, readable by you alone, to
+  `<config file stem>.token` beside the config (`ml-host.token` beside the default
+  `ml-host.json`); it prints the path and removes the file when it exits. Two hosts
+  sharing one config file share that path: the later one's token is the file's.
+- A launcher may supply the token instead in `PAGED_ML_HOST_TOKEN` (32 to 512
+  characters of `A-Z a-z 0-9 - _ . ~`); then no file is written.
+- The editor's dev proxy and `paged-node` present it for you. They read
+  `PAGED_ML_HOST_TOKEN`, else the file named by `PAGED_ML_HOST_TOKEN_FILE`, else the
+  token file beside `PAGED_ML_HOST_CONFIG` or the default config.
+
+### The programs the host runs
+
+What the host executes, and with which arguments, is yours to set in the config
+file or on the command line, never over HTTP: `sdBinary`, `extraArgs`,
+`matting.binary` and `matting.args`. `PUT /api/ml/config` keeps the stored value
+of each when the request leaves it out, accepts the stored value (and `--sd`'s
+path for `sdBinary`) unchanged, and refuses any other with `403 program_locked`.
+Edit the config file and restart the host to change them.
 
 Job files live in `<temp>/paged-ml-host-<pid>-<n>/` and are removed when the host
 exits (Ctrl-C, SIGTERM) or a finished job is evicted (the last 32 are kept).
 
 ## Point it at your model files
 
-```bash
-curl -X PUT http://127.0.0.1:7861/api/ml/config -H 'Content-Type: application/json' -d '{
+Write the config file (`--config`, above), then start the host:
+
+```json
+{
   "sdBinary": "/abs/path/to/stable-diffusion.cpp/build/bin/sd-cli",
   "model": {
     "id": "qwen-image-2.1",
@@ -83,8 +110,20 @@ curl -X PUT http://127.0.0.1:7861/api/ml/config -H 'Content-Type: application/js
     "vae": "/abs/path/<vae>.safetensors"
   },
   "extraArgs": ["--offload-to-cpu"]
-}'
+}
+```
+
+```bash
 curl http://127.0.0.1:7861/api/ml/health
+```
+
+The model block can also be set while the host runs (the editor's Settings ▸
+Models does), with the access token:
+
+```bash
+curl -X PUT http://127.0.0.1:7861/api/ml/config \
+  -H "Authorization: Bearer $(cat "<config dir>/paged/ml-host.token")" \
+  -H 'Content-Type: application/json' -d '{ "model": { … } }'
 ```
 
 Every path must exist (`400 missing_file` names the field otherwise). The text
@@ -98,13 +137,15 @@ and model want.
 Errors are JSON `{"error": "<code>", "message": "<text>"}`. Field names are
 camelCase. Requests whose `Host` is not loopback get `403 forbidden_host` (DNS
 rebinding); an `Origin` that is neither loopback nor allowed gets
-`403 forbidden_origin`. Bodies are capped at 64 MiB (`413 too_large`).
+`403 forbidden_origin`, as does a browser request that names no `Origin` and is
+not same-origin (`Sec-Fetch-Site`). Every route but `GET /api/ml/health` needs
+the access token (`401 unauthorized`). Bodies are capped at 64 MiB (`413 too_large`).
 
 | Route                          | What                                                                                                                                                                                                                                                                                     |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/ml/health`           | `ok`, `version`, `api: 1`, `runtime {binary, found}`, `model {id, configured, licenceAcknowledged}`, `ready`, `matting {id, configured, licenceAcknowledged, ready}`, `capabilities` (`generate` and `edit` when ready, `matting` when the matting runner is), `queue {running, queued}` |
 | `GET /api/ml/config`           | The stored config                                                                                                                                                                                                                                                                        |
-| `PUT /api/ml/config`           | Store and persist a config; `409 licence_not_acknowledged`, `400 missing_file`, `400 bad_request`                                                                                                                                                                                        |
+| `PUT /api/ml/config`           | Store and persist a config; `403 program_locked`, `409 licence_not_acknowledged`, `400 missing_file`                                                                                                                                                                                     |
 | `POST /api/ml/jobs`            | `generate {prompt, negativePrompt?, width, height, steps?=20, seed?=-1, cfgScale?=2.5}`, `edit {prompt, image, mask?, references?(≤10), steps?, seed?, strength?=0.75}` or `matting {image}` (base64 PNGs) → `202 {id, state: "queued"}`                                                 |
 | `GET /api/ml/jobs/{id}`        | `{id, kind, state, progress {step, total}, error?}`; `404 no_job`                                                                                                                                                                                                                        |
 | `GET /api/ml/jobs/{id}/events` | Server-sent events: `state`, `progress`, then `done` / `failed` / `cancelled` with the job JSON, then the stream closes                                                                                                                                                                  |
@@ -137,7 +178,8 @@ lines in `error`.
 
 Remove background (`media.paged.image/remove-background`) can use a matting model you installed,
 run by a program you installed: the host runs it like sd, one job at a time, and never fetches
-either. Name it in the config (merged with the rest of it):
+either. Name it in the config file (merged with the rest of it); the API cannot set
+its `binary` or `args`:
 
 ```json
 "matting": {

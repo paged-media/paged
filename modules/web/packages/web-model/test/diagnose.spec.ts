@@ -19,7 +19,13 @@
 import { describe, expect, it } from "bun:test";
 
 import { diagnoseHtml } from "../src/diagnose";
-import { composeSrcdoc, DEFAULT_SOURCE, sourceKeyFor } from "../src/source";
+import {
+  composePreviewSrcdoc,
+  composeSrcdoc,
+  DEFAULT_SOURCE,
+  PREVIEW_CSP,
+  sourceKeyFor,
+} from "../src/source";
 
 describe("diagnoseHtml — policy", () => {
   it("flags <script> as a policy error with its line", () => {
@@ -86,6 +92,44 @@ describe("source model", () => {
     expect(doc).toContain("<style>p{color:red}</style>");
     expect(doc).toContain('class="media-print"');
     expect(doc).toContain("<p>hi</p>");
+  });
+
+  it("the preview document states its policy ahead of every source byte", () => {
+    const source = {
+      html: '<img src="https://example.invalid/a.png"><p>hi</p>',
+      css: "p{background:url(https://example.invalid/b.png)}",
+      options: { media: "print" as const, overflow: "clip" as const },
+    };
+    const doc = composePreviewSrcdoc(source, "@font-face{font-family:F}");
+    const meta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
+    expect(doc.startsWith(`<!doctype html><html><head>${meta}`)).toBe(true);
+    expect(doc.indexOf(meta)).toBeLessThan(doc.indexOf("@font-face"));
+    expect(doc.indexOf(meta)).toBeLessThan(doc.indexOf(source.css));
+    expect(doc.indexOf(meta)).toBeLessThan(doc.indexOf(source.html));
+    // The rest is the document every other lane composes.
+    expect(doc.replace(meta, "")).toBe(
+      composeSrcdoc(source, "@font-face{font-family:F}"),
+    );
+  });
+
+  it("the preview policy allows inline CSS and data: resources only", () => {
+    const directives = new Map(
+      PREVIEW_CSP.split(";").map((d) => {
+        const [name, ...values] = d.trim().split(/\s+/);
+        return [name, values] as const;
+      }),
+    );
+    expect(directives.get("default-src")).toEqual(["'none'"]);
+    expect(directives.get("style-src")).toEqual(["'unsafe-inline'"]);
+    for (const name of ["img-src", "font-src", "media-src"])
+      expect(directives.get(name)).toEqual(["data:"]);
+    expect(directives.get("base-uri")).toEqual(["'none'"]);
+    expect(directives.get("form-action")).toEqual(["'none'"]);
+    // Nothing grants script, a connection, a frame or a network scheme.
+    for (const name of ["script-src", "connect-src", "frame-src", "child-src"])
+      expect(directives.has(name)).toBe(false);
+    expect(PREVIEW_CSP).not.toMatch(/https?:|\*|blob:|'self'/);
+    expect(PREVIEW_CSP).not.toContain('"');
   });
 
   it("sourceKeyFor is stable per element", () => {

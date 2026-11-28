@@ -22,7 +22,21 @@
 // registries — and adds what a command line needs: open a file, discover and
 // activate the installed bundles, save or export the result.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fchmodSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeSync,
+} from "node:fs";
+import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,6 +64,7 @@ import {
 import ENGINE_CATALOG from "@paged-media/ai/catalog";
 
 import {
+  AUTO_PLUGINS,
   autoCandidates,
   importBundle,
   resolvable,
@@ -69,8 +84,9 @@ export type CoreExportFormat = "paged" | "idml" | "pdf";
 
 export interface SessionOptions {
   cwd?: string;
-  /** Explicit bundle list; `[]` = none; undefined = auto discovery. */
-  plugins?: readonly string[];
+  /** The bundles to load: an explicit list, or `"auto"` for discovery from
+   *  the cwd. Absent (and `[]`): none — a bundle loads only when asked for. */
+  plugins?: readonly string[] | "auto";
   /** A TTF/OTF every load lays text out with (the editor's default font).
    *  Absent: the face the CLI ships (Inter, see `bundledFont`). */
   font?: string;
@@ -289,10 +305,70 @@ function readInput(path: string): Uint8Array {
   }
 }
 
+/** Best effort: make a directory entry durable (not every platform lets a
+ *  directory be opened or synced). */
+function syncDirectory(dir: string): void {
+  try {
+    const fd = openSync(dir, "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    /* the file's own bytes are synced; the entry follows with the next flush */
+  }
+}
+
+/**
+ * Write `bytes` to `path` so that a reader, or a crash, sees the old file or
+ * the new one and never a part of either: the bytes go to a new file beside
+ * the target, are synced, and that file is renamed over the target. Saving a
+ * document back to its source goes through here, so a failed save leaves the
+ * source as it was. An existing target keeps its permissions, and a target
+ * that is a symbolic link keeps being one (the file it names is replaced).
+ */
+export function writeFileAtomic(path: string, bytes: Uint8Array): void {
+  let target = resolve(path);
+  mkdirSync(dirname(target), { recursive: true });
+  let kept: number | null = null;
+  if (existsSync(target)) {
+    target = realpathSync(target);
+    kept = statSync(target).mode & 0o777;
+  }
+  const dir = dirname(target);
+  const temp = join(
+    dir,
+    `.${basename(target)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`,
+  );
+  // "wx": the temporary name must not exist, so nothing is written through
+  // a file or link someone else put there.
+  const fd = openSync(temp, "wx", kept ?? 0o666);
+  try {
+    try {
+      if (kept !== null) fchmodSync(fd, kept);
+      let at = 0;
+      while (at < bytes.byteLength)
+        at += writeSync(fd, bytes, at, bytes.byteLength - at);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(temp, target);
+  } catch (err) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      /* already gone */
+    }
+    throw err;
+  }
+  syncDirectory(dir);
+}
+
 export function writeOutput(path: string, bytes: Uint8Array): void {
   try {
-    mkdirSync(dirname(resolve(path)), { recursive: true });
-    writeFileSync(path, bytes);
+    writeFileAtomic(path, bytes);
   } catch (err) {
     throw new CliError(
       EXIT.usage,
@@ -404,10 +480,11 @@ export async function openSession(
   // ---- bundles
   const plugins: LoadedPlugin[] = [];
   const problems: DiscoveryProblem[] = [];
-  const explicit = options.plugins !== undefined;
-  const sources = explicit
-    ? [...options.plugins!]
-    : autoCandidates(cwd).filter((s) => resolvable(s, cwd));
+  const explicit = options.plugins !== AUTO_PLUGINS;
+  const sources =
+    options.plugins === AUTO_PLUGINS
+      ? autoCandidates(cwd).filter((s) => resolvable(s, cwd))
+      : [...(options.plugins ?? [])];
   for (const source of sources) {
     let found: DiscoveredBundle;
     try {

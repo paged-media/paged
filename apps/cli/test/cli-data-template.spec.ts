@@ -28,9 +28,12 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { openSession } from "../src/session";
-import { cli, tempDir, writeFixture } from "./helpers";
+import { cli as runCli, tempDir, writeFixture } from "./helpers";
 
 const D = "media.paged.data";
+/** Every verb here needs the data module, and a bundle loads only on request. */
+const DATA = "--plugins=@paged-media/data";
+const cli = (argv: string[]) => runCli([...argv, DATA]);
 const MM = 72 / 25.4;
 const CSV = "sku,weight_mm,name\nA-1,2,Alpha\nB-2,4,Beta\nC-3,6,Gamma\n";
 
@@ -42,7 +45,7 @@ let templatePath = "";
  *  (labelled by `name`), granting the stroke. */
 async function writeTemplate(dir: string): Promise<string> {
   const fx = await writeFixture(dir);
-  const s = await openSession(fx.idml, {});
+  const s = await openSession(fx.idml, { plugins: ["@paged-media/data"] });
   try {
     const objects = s.h.objects;
     await objects.invoke(`${D}.defineSource` as never, {

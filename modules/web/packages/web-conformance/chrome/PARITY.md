@@ -130,10 +130,10 @@ on the runs' baselines. One defect is pinned against the source's intent:
 | IB-01 | The bake drops font weight and style: an `<h1>` (bold) arrives in InDesign as Inter Regular. | 1 of 4 runs |
 
 **Property tests** (fast-check). `web-model/test/properties.spec.ts` found three sanitizer defects,
-pinned with `it.fails`: S-01 an unterminated tag at the end of a paste keeps its surface
-(`<script`, `<a href='javascript:`); S-02 a removal splices its neighbours into a new construct
-(`<scr<script>ipt>alert(1)</scr<script>ipt>` becomes `<script>alert(1)`; `<a ON onclick="x"A=y>`
-becomes `<a ONA=y>`); S-03 an empty `onerror=` is kept. The template pass, the envelope round-trip
+since fixed and held by ordinary tests: S-01 an unterminated tag or quoted value at the end of a
+paste is removed with the rest of the input; S-02 the passes repeat until the text is a fixed
+point, so a removal cannot join its neighbours into a new construct; S-03 an empty `onerror=` is
+removed. The template pass, the envelope round-trip
 and (`web-bundle/test/flow-properties.spec.ts`, real engine) text conservation across random frame
 chains hold, lists included.
 

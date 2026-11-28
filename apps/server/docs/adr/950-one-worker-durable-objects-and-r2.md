@@ -22,8 +22,8 @@ own, and be governable.
    so a ref's compare-and-set is atomic without a lock. Each request builds a `Repo` over
    the object's store, and nothing else is kept between requests.
 3. **R2 for blobs above 64 KiB**, written before their row, so a ref never reaches bytes that
-   are not there. They are sealed under the repository's own key (AES-256-GCM, nonce from key
-   and address), and every read is checked against its address. R2 is not trusted.
+   are not there. They are sealed under the repository's own key (AES-256-GCM, a random
+   nonce stored with the ciphertext, the address authenticated), and every read is checked against its address. R2 is not trusted.
 4. **The kernel is synchronous and R2 is not**: an operation that needs an R2 object fails
    with `Missing`, the object fetches it, and the operation runs again (`faulting`). Where
    a projection reads many, they are fetched in one pass first.

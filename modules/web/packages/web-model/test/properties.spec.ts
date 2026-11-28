@@ -88,12 +88,21 @@ const htmlish = fc
   .map((parts) => parts.join(""));
 
 /** Executable surface as the sanitizer defines it. A script tag counts
- *  when it is terminated by `>`; the unterminated tail is DEFECT S-01. */
-const SCRIPT_TAG = /<\s*\/?\s*script\b[^>]*>/i;
-/** A handler with a value (an empty `onx=` is DEFECT S-03). */
-const EVENT_ATTR = /\son[a-z]+\s*=\s*(?:"|'|[^\s>])/i;
-const JS_URL =
-  /\s[a-z][a-z0-9-]*\s*=\s*["']?\s*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:/i;
+ *  whether `>` terminates it or the input ends inside it. */
+const SCRIPT_TAG = /<\s*\/?\s*script\b[^>]*(?:>|$)/i;
+/** A handler, with or without a value. */
+const EVENT_ATTR = /\son[a-z]+\s*=/i;
+const PAD = "[\\0-\\x20]*";
+const JS_URL = new RegExp(
+  "\\s[a-z][a-z0-9-]*\\s*=\\s*[\"']?" +
+    PAD +
+    [..."javascript"].join(PAD) +
+    PAD +
+    ":",
+  "i",
+);
+/** A character reference the scheme scan resolves (`&#106;`, `&Tab;`). */
+const CHAR_REF = /&#|&(?:tab|newline|colon);/i;
 
 describe("sanitizeHtml properties", () => {
   it("is total: never throws, always returns a string @feat:plugin-web.source-model", () => {
@@ -106,12 +115,10 @@ describe("sanitizeHtml properties", () => {
     );
   });
 
-  it("is idempotent on fragments whose removals splice nothing together @feat:plugin-web.source-model", () => {
+  it("is idempotent, also where a removal joins its neighbours @feat:plugin-web.source-model", () => {
     fc.assert(
       fc.property(htmlish, (s) => {
         const once = sanitizeHtml(s);
-        // A removal that joins its neighbours into a new match is S-02.
-        fc.pre((s.match(/scr|\son|j\s*a\s*v\s*a/gi) ?? []).length <= 1);
         const twice = sanitizeHtml(once.html);
         expect(twice.html).toBe(once.html);
         expect(twice.removed).toEqual([]);
@@ -123,7 +130,12 @@ describe("sanitizeHtml properties", () => {
   it("leaves input without executable surface byte-for-byte @feat:plugin-web.source-model", () => {
     fc.assert(
       fc.property(htmlish, (s) => {
-        fc.pre(!SCRIPT_TAG.test(s) && !EVENT_ATTR.test(s) && !JS_URL.test(s));
+        fc.pre(
+          !SCRIPT_TAG.test(s) &&
+            !EVENT_ATTR.test(s) &&
+            !JS_URL.test(s) &&
+            !CHAR_REF.test(s),
+        );
         expect(sanitizeHtml(s)).toEqual({ html: s, removed: [] });
       }),
       RUNS,
@@ -132,12 +144,11 @@ describe("sanitizeHtml properties", () => {
 
   it("never emits a <script> tag, an on…= handler or a javascript: URL @feat:plugin-web.source-model", () => {
     // Checked on CLOSED input: whatever quote or tag the fragment leaves
-    // open is closed by the terminator. Open-ended input is DEFECT S-01.
+    // open is closed by the terminator.
     fc.assert(
       fc.property(htmlish, fc.constantFrom("", "'\">", "\"'>"), (s, term) => {
         const out = sanitizeHtml(s + term).html;
-        // Outputs that are not a fixed point are DEFECT S-02.
-        fc.pre(sanitizeHtml(out).html === out);
+        expect(sanitizeHtml(out).html).toBe(out);
         const even = (t: string, q: string) => t.split(q).length % 2 === 1;
         fc.pre(!/<[^>]*$/.test(out));
         fc.pre(
@@ -157,78 +168,57 @@ describe("sanitizeHtml properties", () => {
   });
 });
 
-describe("sanitizeHtml pinned defects", () => {
-  // DEFECT S-02: removing one construct can splice its neighbours into a
-  // new one — a single pass is not a fixed point.
-  // `<scr<script>ipt>alert(1)</scr<script>ipt>` becomes `<script>alert(1)`;
-  // `<a ON onclick="x"A=y>` becomes `<a ONA=y>`, a new handler;
-  // ` href=javascript:a() javascript:` becomes ` href= javascript:`.
-  // Found by the property hunt (fast-check, 5000 unseeded runs).
-  it.failing(
-    "DEFECT S-02: a removal splices its neighbours into a new <script> tag @feat:plugin-web.source-model",
-    () => {
-      expect(
-        sanitizeHtml("<scr<script>ipt>alert(1)</scr<script>ipt>").html,
-      ).not.toMatch(SCRIPT_TAG);
-    },
-  );
-  it.failing(
-    "DEFECT S-02: a removal splices its neighbours into a new javascript: URL @feat:plugin-web.source-model",
-    () => {
-      const out = sanitizeHtml(
-        "<a href=javascript:alert(1) javascript:x>",
-      ).html;
-      expect(out).toBe(sanitizeHtml(out).html);
-    },
-  );
-  it.failing(
-    "DEFECT S-02: a removal splices its neighbours into a new event handler @feat:plugin-web.source-model",
-    () => {
-      const out = sanitizeHtml('<a ON onclick="go()"A=x>link</a>').html;
-      expect(out).toBe(sanitizeHtml(out).html);
-    },
-  );
-  // DEFECT S-03: an event handler with an EMPTY unquoted value (`<img
-  // onerror=>`) is kept — the pattern needs at least one value character.
-  // Inert today (an empty handler runs nothing), but not removed.
-  it.failing(
-    "DEFECT S-03: an empty on…= handler is not removed @feat:plugin-web.source-model",
-    () => {
-      expect(sanitizeHtml("<img onerror=>").html).not.toMatch(/\sonerror\s*=/i);
-    },
-  );
+describe("sanitizeHtml fixed point and open-ended input", () => {
+  // A removal can join its neighbours into a new construct, so the passes
+  // repeat until nothing changes.
+  it("a removal that joins its neighbours leaves no <script> tag @feat:plugin-web.source-model", () => {
+    expect(
+      sanitizeHtml("<scr<script>ipt>alert(1)</scr<script>ipt>").html,
+    ).not.toMatch(SCRIPT_TAG);
+  });
+  it("a removal that joins its neighbours leaves no javascript: URL @feat:plugin-web.source-model", () => {
+    const out = sanitizeHtml("<a href=javascript:alert(1) javascript:x>").html;
+    expect(out).toBe(sanitizeHtml(out).html);
+    expect(out).not.toMatch(/javascript:/i);
+  });
+  it("a removal that joins its neighbours leaves no event handler @feat:plugin-web.source-model", () => {
+    const out = sanitizeHtml('<a ON onclick="go()"A=x>link</a>').html;
+    expect(out).toBe(sanitizeHtml(out).html);
+    expect(out).not.toMatch(EVENT_ATTR);
+  });
+  it("removes an on…= handler with an empty value @feat:plugin-web.source-model", () => {
+    expect(sanitizeHtml("<img onerror=>").html).not.toMatch(/\sonerror\s*=/i);
+  });
 
-  // DEFECT S-01: an unterminated tag at the very end of the input keeps
-  // its executable surface: a trailing `<script` and a trailing
-  // `<a href='javascript:` both survive. SCRIPT_OPEN needs the closing `>`, so the tag is left for
-  // whatever follows it in the composed document to complete:
-  // composeSrcdoc appends `</body></html>`, and `<script </body>` parses as
-  // a script START tag (attributes `<` and `body`). It cannot run today
-  // (the element is unclosed at EOF and the preview is sandbox=""), but it
-  // breaks the documented "never reaches the source" property. Flip to
-  // `it` when the scanner strips a trailing open `<script`.
-  it.failing(
-    "DEFECT S-01: a trailing unterminated <script survives sanitizing @feat:plugin-web.source-model",
-    () => {
-      for (const s of [
-        "<script",
-        "<p>x</p><script ",
-        "<SCRIPT src=https://example.invalid/x.js ",
-      ]) {
-        expect(sanitizeHtml(s).html).not.toMatch(/<\s*script\b/i);
-      }
-    },
-  );
-  it.failing(
-    "DEFECT S-01: an unclosed javascript: attribute survives, and what follows the paste can close it @feat:plugin-web.source-model",
-    () => {
-      // Sanitized alone the quote is open, so the pattern (which needs the
-      // closing quote) misses it; pasted ahead of existing source that
-      // contains a `'`, the link becomes a closed javascript: href.
-      const pasted = sanitizeHtml("<a href='javascript:alert(1)>Click").html;
-      expect(pasted).not.toMatch(/javascript:/i);
-    },
-  );
+  // The input may end inside a tag or a quoted value; what is appended
+  // after the fragment must not be able to complete it.
+  it("removes a trailing unterminated <script @feat:plugin-web.source-model", () => {
+    for (const s of [
+      "<script",
+      "<p>x</p><script ",
+      "<SCRIPT src=https://example.invalid/x.js ",
+    ]) {
+      expect(sanitizeHtml(s).html).not.toMatch(/<\s*script\b/i);
+    }
+  });
+  it("neutralizes a javascript: value whose quote never closes @feat:plugin-web.source-model", () => {
+    const pasted = sanitizeHtml("<a href='javascript:alert(1)>Click").html;
+    expect(pasted).not.toMatch(/javascript:/i);
+    const handler = sanitizeHtml('<img onerror="go()>x').html;
+    expect(handler).not.toMatch(EVENT_ATTR);
+  });
+  it("neutralizes a javascript: scheme written with character references @feat:plugin-web.source-model", () => {
+    for (const s of [
+      '<a href="&#106;avascript:alert(1)">x</a>',
+      '<a href="&#x6A;ava&#115;cript&#58;alert(1)">x</a>',
+      '<a href="java&Tab;script&colon;alert(1)">x</a>',
+      "<a href=&#74;AVASCRIPT:alert(1)>x</a>",
+    ]) {
+      const r = sanitizeHtml(s);
+      expect(r.removed).toEqual(["javascript: URL"]);
+      expect(r.html).not.toMatch(/script/i);
+    }
+  });
 });
 
 const NAME = fc.stringMatching(/^[A-Za-z_][A-Za-z0-9_]{0,8}$/);

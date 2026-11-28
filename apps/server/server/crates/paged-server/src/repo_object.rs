@@ -77,6 +77,51 @@ fn answer(e: Error) -> Result<Response> {
     }
 }
 
+/// What the caller may do here, decided from the policy alone and before any
+/// route reads a body, moves a ref or writes evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Access {
+    /// Has a role: may read, and may ask the kernel for anything a role allows.
+    pub read: bool,
+    /// Editor or above; or the first writer of a personal repository.
+    pub write: bool,
+    /// May address the routes the kernel governs (ref moves, change requests):
+    /// a member, or the first writer of a personal repository nobody owns yet.
+    /// Whoever is neither gets the answer a repository that does not exist
+    /// gives, and leaves no trace in the evidence log.
+    pub member: bool,
+}
+
+pub(crate) fn access(
+    policy: Option<&std::result::Result<Policy, Refusal>>,
+    in_workspace: bool,
+    principal: &str,
+) -> Access {
+    match policy {
+        // Nobody has written yet. A personal repository is its first writer's;
+        // a workspace's repository is governed by a policy or by nothing.
+        None => Access {
+            read: false,
+            write: !in_workspace,
+            member: !in_workspace,
+        },
+        Some(Ok(p)) => {
+            let role = p.role(principal);
+            Access {
+                read: role.is_some(),
+                write: role.is_some_and(|r| r >= paged_repo::Role::Editor),
+                member: role.is_some(),
+            }
+        }
+        // A policy that does not read admits nobody.
+        Some(Err(_)) => Access {
+            read: false,
+            write: false,
+            member: false,
+        },
+    }
+}
+
 impl RepoObject {
     fn bucket(&self) -> Result<Bucket> {
         self.env.bucket("BLOBS")
@@ -369,14 +414,11 @@ impl DurableObject for RepoObject {
             None => Self::policy(&store),
         };
         // Reading needs a role; a repository nobody has written yet has none to read.
-        let may_read = matches!(&policy, Some(Ok(p)) if p.role(&principal).is_some());
-        let may_write = match &policy {
-            None => workspace.is_none(),
-            Some(Ok(p)) => p
-                .role(&principal)
-                .is_some_and(|r| r >= paged_repo::Role::Editor),
-            Some(Err(_)) => false,
-        };
+        let Access {
+            read: may_read,
+            write: may_write,
+            member,
+        } = access(policy.as_ref(), workspace.is_some(), &principal);
 
         match (req.method(), route.as_str()) {
             (Method::Post, "have") => {
@@ -470,6 +512,11 @@ impl DurableObject for RepoObject {
                 Response::from_json(&refs)
             }
             (Method::Post, r) if r.starts_with("refs/") => {
+                // The kernel decides what a member's role may move; whoever has
+                // no role here does not reach it.
+                if !member {
+                    return problem(404, "Not found", "no such repository");
+                }
                 let ref_name = r.trim_start_matches("refs/").to_string();
                 let mv: RefMove = req.json().await?;
                 let (expected, new) = (
@@ -537,10 +584,9 @@ impl DurableObject for RepoObject {
                 let Some(bytes) = store.get(&h) else {
                     return problem(404, "Not found", "no such object");
                 };
-                let mut resp = Response::from_bytes(bytes)?;
-                resp.headers_mut()
-                    .set("cache-control", "public, max-age=31536000, immutable")?;
-                Ok(resp)
+                // Immutable, but readable only with a role: the Worker marks
+                // every answer `private, no-store`, this one included.
+                Response::from_bytes(bytes)
             }
             (Method::Get, r) if r.starts_with("file/") => {
                 if !may_read {
@@ -944,6 +990,11 @@ impl DurableObject for RepoObject {
                 Response::from_json(&change_requests(&store, Some(id))?[0])
             }
             (Method::Post, r) if r.starts_with("cr/") => {
+                // Approving, merging and closing are a member's to attempt; the
+                // kernel's verdict on the attempt is what the evidence records.
+                if !may_read {
+                    return problem(404, "Not found", "no such repository");
+                }
                 let mut it = r.trim_start_matches("cr/").splitn(2, '/');
                 let id: i64 = it.next().and_then(|i| i.parse().ok()).unwrap_or(-1);
                 let action = it.next().unwrap_or("").to_string();
@@ -1095,4 +1146,90 @@ fn change_requests(store: &DoStore, id: Option<i64>) -> Result<Vec<serde_json::V
         }));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use paged_repo::Role;
+
+    fn policy() -> std::result::Result<Policy, Refusal> {
+        let mut p = Policy::local("user:owner@idp.example");
+        p.roles
+            .insert("user:editor@idp.example".into(), Role::Editor);
+        p.roles
+            .insert("user:reviewer@idp.example".into(), Role::Reviewer);
+        p.roles
+            .insert("user:viewer@idp.example".into(), Role::Viewer);
+        Ok(p)
+    }
+
+    const NOBODY: Access = Access {
+        read: false,
+        write: false,
+        member: false,
+    };
+
+    #[test]
+    fn someone_without_a_role_is_no_member() {
+        let p = policy();
+        for in_workspace in [false, true] {
+            assert_eq!(
+                access(Some(&p), in_workspace, "user:stranger@idp.example"),
+                NOBODY
+            );
+            // A role is held by an exact id.
+            assert_eq!(access(Some(&p), in_workspace, "user:owner"), NOBODY);
+            assert_eq!(access(Some(&p), in_workspace, ""), NOBODY);
+        }
+    }
+
+    #[test]
+    fn every_role_is_a_member_and_editors_up_write() {
+        let p = policy();
+        for (who, write) in [
+            ("user:owner@idp.example", true),
+            ("user:editor@idp.example", true),
+            ("user:reviewer@idp.example", false),
+            ("user:viewer@idp.example", false),
+        ] {
+            assert_eq!(
+                access(Some(&p), true, who),
+                Access {
+                    read: true,
+                    write,
+                    member: true
+                },
+                "{who}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unwritten_personal_repository_is_its_first_writers() {
+        assert_eq!(
+            access(None, false, "user:anyone@idp.example"),
+            Access {
+                read: false,
+                write: true,
+                member: true
+            }
+        );
+    }
+
+    #[test]
+    fn a_workspace_repository_without_a_policy_admits_nobody() {
+        assert_eq!(access(None, true, "user:owner@idp.example"), NOBODY);
+    }
+
+    #[test]
+    fn an_unreadable_policy_admits_nobody() {
+        let broken = Err(Refusal::PolicyInvalid("unreadable".into()));
+        for in_workspace in [false, true] {
+            assert_eq!(
+                access(Some(&broken), in_workspace, "user:owner@idp.example"),
+                NOBODY
+            );
+        }
+    }
 }

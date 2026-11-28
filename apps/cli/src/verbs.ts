@@ -66,6 +66,7 @@ import {
   type SessionOptions,
 } from "./session";
 import { withModuleContentDrawn } from "./module-content";
+import { parsePluginSelection } from "./plugins";
 import { exporterArgs, pdfCommand, typedPdf } from "./pdf";
 import { describeType, parseCliValue } from "./values";
 import { defaultLibrary } from "./mcp/library";
@@ -134,10 +135,17 @@ const LABEL: OptionSpec = {
 export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   {
     name: "plugins",
-    value: "a,b",
-    help: "load exactly these bundles (package names or paths) instead of discovering them",
+    value: "a,b|auto",
+    help: "load these plugin bundles (package names or paths); `auto` discovers the ones installed in the current directory. A bundle is code that runs with your rights: none loads unless named here or in PAGED_PLUGINS",
   },
-  { name: "no-plugins", help: "load no plugin bundles (core objects only)" },
+  {
+    name: "no-plugins",
+    help: "load no plugin bundles (core objects only; the default, and it overrides PAGED_PLUGINS)",
+  },
+  {
+    name: "debug",
+    help: "report an unexpected failure with its stack trace (also PAGED_DEBUG=1)",
+  },
   {
     name: "font",
     value: "file.ttf",
@@ -1469,7 +1477,7 @@ const invoke: Verb = {
 const plugins: Verb = {
   name: "plugins",
   usage: "[doc]",
-  summary: "the discovered bundles, their versions and object kinds",
+  summary: "the loaded bundles (--plugins), their versions and object kinds",
   min: 0,
   max: 1,
   options: [OUTPUT_FORMAT],
@@ -1829,15 +1837,17 @@ export const VERBS: readonly Verb[] = [
   mcp,
 ];
 
-export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
-  const plugins = flagBool(args, "no-plugins")
-    ? []
-    : flagStr(args, "plugins") !== undefined
-      ? flagStr(args, "plugins")!
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean)
-      : undefined;
+export function sessionOptions(
+  args: ParsedArgs,
+  cwd: string,
+  env: Record<string, string | undefined> = process.env,
+): SessionOptions {
+  // Bundles load on request only: `--no-plugins`, then `--plugins`, then
+  // PAGED_PLUGINS; with none of them, nothing loads.
+  const requested = flagBool(args, "no-plugins")
+    ? ""
+    : (flagStr(args, "plugins") ?? env["PAGED_PLUGINS"] ?? "");
+  const plugins = parsePluginSelection(requested);
   const font = flagStr(args, "font");
   const noDefaultFont = flagBool(args, "no-default-font");
   if (font && noDefaultFont)
@@ -1851,7 +1861,7 @@ export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
   return {
     ...(mlHost ? { mlHost } : {}),
     cwd,
-    ...(plugins ? { plugins } : {}),
+    plugins,
     ...(font ? { font } : {}),
     ...(noDefaultFont ? { noDefaultFont } : {}),
     ...(cmykProfile ? { cmykProfile } : {}),

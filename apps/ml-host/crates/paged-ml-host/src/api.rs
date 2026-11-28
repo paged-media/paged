@@ -24,6 +24,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use serde_json::{json, Value};
 
+use crate::auth;
 use crate::config::{self, Config};
 use crate::http::{self, ReadError, Request, Response};
 use crate::jobs::{self, JobState, Shared};
@@ -62,6 +63,11 @@ pub fn handle_connection(shared: &Shared, stream: TcpStream) {
     let cors = cors_headers(&req);
     let path = req.path.trim_end_matches('/');
     let segs: Vec<&str> = path.split('/').skip(1).collect();
+    if let Err(mut res) = authorize(shared, &req, &segs) {
+        res.headers.extend(cors);
+        let _ = http::write_response(&stream, &res);
+        return;
+    }
     // Event streams write as they go; everything else is one response.
     if let ["api", "ml", "jobs", id, "events"] = segs.as_slice() {
         if req.method == "GET" {
@@ -87,8 +93,10 @@ fn route(shared: &Shared, req: &Request, segs: &[&str]) -> Response {
             "Access-Control-Allow-Methods",
             "GET, PUT, POST, DELETE, OPTIONS".into(),
         ));
-        res.headers
-            .push(("Access-Control-Allow-Headers", "Content-Type".into()));
+        res.headers.push((
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization".into(),
+        ));
         return res;
     }
     let not_allowed = || {
@@ -170,7 +178,30 @@ fn valid_port(s: &str) -> bool {
 fn is_loopback_origin(origin: &str) -> bool {
     origin
         .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
         .is_some_and(|rest| !rest.contains('/') && is_loopback_host(rest))
+}
+
+/// The access token ([`auth`]): every route needs it but the liveness probe
+/// (`GET /api/ml/health`) and a CORS preflight, which carries no credentials.
+fn authorize(shared: &Shared, req: &Request, segs: &[&str]) -> Result<(), Response> {
+    let open = req.method == "OPTIONS" || (req.method == "GET" && segs == ["api", "ml", "health"]);
+    if open {
+        return Ok(());
+    }
+    match auth::bearer(req.header("authorization")) {
+        Some(given) if auth::matches(&shared.token, given) => Ok(()),
+        _ => {
+            let mut res = Response::error(
+                401,
+                "unauthorized",
+                "this route needs the host's access token (Authorization: Bearer <token>); \
+                 the host writes it to the token file beside its config at start",
+            );
+            res.headers.push(("WWW-Authenticate", "Bearer".into()));
+            Err(res)
+        }
+    }
 }
 
 /// DNS rebinding (Host) and cross-site (Origin) guards.
@@ -193,6 +224,16 @@ fn guard(shared: &Shared, req: &Request) -> Result<(), Response> {
                 403,
                 "forbidden_origin",
                 format!("Origin {origin:?} is not allowed (see --allow-origin)"),
+            ));
+        }
+    } else if let Some(site) = req.header("sec-fetch-site") {
+        // A browser request that names no Origin (a plain GET, an embedded
+        // resource, a navigation) still says where it comes from.
+        if !matches!(site, "same-origin" | "none") {
+            return Err(Response::error(
+                403,
+                "forbidden_origin",
+                format!("a {site} browser request without an allowed Origin is refused"),
             ));
         }
     }
@@ -266,6 +307,12 @@ fn put_config(shared: &Shared, body: &[u8]) -> Response {
         Ok(c) => c,
         Err(e) => return Response::error(400, "bad_request", format!("invalid config: {e}")),
     };
+    // Held across the write, so two PUTs cannot interleave.
+    let mut st = shared.lock();
+    let config = match config.with_stored_programs(&st.config, shared.sd_override.as_deref()) {
+        Ok(c) => c,
+        Err((status, code, message)) => return Response::error(status, code, message),
+    };
     if let Err((status, code, message)) = config.validate() {
         return Response::error(status, code, message);
     }
@@ -277,7 +324,7 @@ fn put_config(shared: &Shared, body: &[u8]) -> Response {
         );
     }
     let v = config_json(&config);
-    shared.lock().config = config;
+    st.config = config;
     Response::json(200, &v)
 }
 
@@ -637,7 +684,9 @@ mod tests {
         assert!(is_loopback_origin("http://localhost:5173"));
         assert!(is_loopback_origin("http://127.0.0.1"));
         assert!(is_loopback_origin("http://[::1]:3000"));
-        assert!(!is_loopback_origin("https://localhost:5173"));
+        assert!(is_loopback_origin("https://localhost:5173"));
+        assert!(!is_loopback_origin("https://localhost.evil.example"));
+        assert!(!is_loopback_origin("ftp://localhost"));
         assert!(!is_loopback_origin("http://evil.example"));
         assert!(!is_loopback_origin("null"));
     }

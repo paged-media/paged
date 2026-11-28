@@ -572,11 +572,18 @@ describe("paged plugins", () => {
     expect(r.json.plugins[0].version).toBe(DATA_VERSION);
   });
 
-  it("auto discovery finds first-party bundles resolvable from the cwd", async () => {
-    const r = await cli(["plugins"], join(FIXTURES, ".."));
+  it("--plugins auto finds first-party bundles resolvable from the cwd", async () => {
+    const r = await cli(["plugins", "--plugins", "auto"], join(FIXTURES, ".."));
     expect(r.json.plugins.map((p: { id: string }) => p.id)).toContain(
       "media.paged.data",
     );
+  });
+
+  it("without --plugins, no bundle resolvable from the cwd is loaded", async () => {
+    const r = await cli(["plugins"], join(FIXTURES, ".."));
+    expect(r.code).toBe(0);
+    expect(r.json.plugins).toEqual([]);
+    expect(r.json.problems).toEqual([]);
   });
 });
 

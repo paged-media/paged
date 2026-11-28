@@ -106,7 +106,9 @@ Why the host's scene layer: [ADR 011](adr/011-web-rendering-fork-defer-to-scenel
 The layer is session state: it is not written to the document, and a render happens only
 when a render command runs. The source panel's preview is a different renderer: an
 `<iframe sandbox="">` fed by `srcdoc`, drawn by the browser, with the document's fonts
-inlined as `data:` URLs. Page JavaScript runs in neither; see
+inlined as `data:` URLs. That document carries its own content security policy
+(`PREVIEW_CSP`: inline CSS and `data:` resources, nothing from the network). Page JavaScript
+runs in neither; see
 [ADR 408](adr/408-no-page-javascript.md).
 
 ## A flow across several frames

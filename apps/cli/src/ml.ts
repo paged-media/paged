@@ -26,8 +26,13 @@
 //   paged-node invoke doc.paged paged.ml.generate '{"prompt":"…"}' --result-out out.png
 //
 // The host is PAGED_ML_HOST_URL or --ml-host (default
-// http://127.0.0.1:7861). Images cross as PNG, through the shared 8-bit
+// http://127.0.0.1:7861). It answers only a caller that presents its
+// access token (apps/ml-host/README.md): PAGED_ML_HOST_TOKEN, else the
+// token file the host wrote (PAGED_ML_HOST_TOKEN_FILE, else beside the
+// host's config: PAGED_ML_HOST_CONFIG or the platform's config directory). Images cross as PNG, through the shared 8-bit
 // codec of @paged-media/helpers.
+
+import { readFile } from "node:fs/promises";
 
 import { decodePng, encodePng } from "@paged-media/helpers";
 import type { MlImage } from "@paged-media/plugin-api";
@@ -57,6 +62,75 @@ export function mlHostUrl(flag: string | undefined): string {
   return flag ?? process.env["PAGED_ML_HOST_URL"] ?? ML_HOST_DEFAULT_URL;
 }
 
+type Env = Record<string, string | undefined>;
+
+/** Where the host wrote its token (`<config stem>.token`). */
+export function mlHostTokenFile(
+  env: Env = process.env,
+  platform: string = process.platform,
+): string | null {
+  const set = (k: string) => env[k]?.trim() || null;
+  const explicit = set("PAGED_ML_HOST_TOKEN_FILE");
+  if (explicit) return explicit;
+  const config = set("PAGED_ML_HOST_CONFIG");
+  if (config) {
+    const cut = Math.max(config.lastIndexOf("/"), config.lastIndexOf("\\"));
+    const dot = config.lastIndexOf(".");
+    return `${dot > cut + 1 ? config.slice(0, dot) : config}.token`;
+  }
+  const home = set("HOME");
+  if (platform === "win32") {
+    const base = set("APPDATA");
+    return base ? `${base}\\paged\\ml-host.token` : null;
+  }
+  const base =
+    platform === "darwin"
+      ? home && `${home}/Library/Application Support`
+      : (set("XDG_CONFIG_HOME") ?? (home && `${home}/.config`));
+  return base ? `${base}/paged/ml-host.token` : null;
+}
+
+const TOKEN = /^[A-Za-z0-9._~-]{32,512}$/;
+
+/** The host's access token, read on each call (a restarted host has a
+ *  new one); `null` when there is none to present. */
+export async function mlHostToken(
+  env: Env = process.env,
+  read: (path: string) => Promise<string> = (p) => readFile(p, "utf8"),
+): Promise<string | null> {
+  const given = env["PAGED_ML_HOST_TOKEN"]?.trim();
+  if (given) return TOKEN.test(given) ? given : null;
+  const path = mlHostTokenFile(env);
+  if (!path) return null;
+  try {
+    const token = (await read(path)).trim();
+    return TOKEN.test(token) ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `fetch` that presents the host's token, and only to `baseUrl`. */
+export function mlHostFetch(
+  baseUrl: string,
+  token: () => Promise<string | null> = () => mlHostToken(),
+  doFetch: typeof fetch = globalThis.fetch.bind(globalThis),
+): typeof fetch {
+  const origin = new URL(baseUrl).origin;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    const t = url.origin === origin ? await token() : null;
+    if (!t) return doFetch(input, init);
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    headers.set("authorization", `Bearer ${t}`);
+    return doFetch(input, { ...init, headers });
+  }) as typeof fetch;
+}
+
 /** The ML backend of a headless session: the local host as its one
  *  provider, its health checked before every call (a CLI run is short; a
  *  host started after the session still answers). */
@@ -66,7 +140,7 @@ export function cliMlBackend(url: string): {
   provider: MlHostProvider;
 } {
   const registry = createMlRegistry();
-  const client = createMlHostClient({ baseUrl: url });
+  const client = createMlHostClient({ baseUrl: url, fetch: mlHostFetch(url) });
   let handle: { changed(): void } | null = null;
   const provider = mlHostProvider({
     client,

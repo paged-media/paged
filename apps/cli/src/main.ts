@@ -69,6 +69,8 @@ export function helpText(): string {
     "options (every verb):",
     ...GLOBAL_OPTIONS.map(optionLine),
     "",
+    "Plugin bundles load only on request: --plugins <a,b> names them, --plugins auto (or PAGED_PLUGINS=auto)",
+    "  discovers the ones installed in the current directory. Use auto only in a directory whose packages you trust.",
     "Output is JSON; --text (or --format text where --format is not a file format) is for humans.",
     "Exit codes: 0 ok · 1 rejected write or failed check · 2 usage or IO error.",
     "Addresses: doc, page:#1, textFrame:<id>, story:<id>, storyRange:<id>@a..b, swatch:<name>, style:<family>/<name>,",
@@ -101,6 +103,19 @@ function textMode(args: ParsedArgs, verb: Verb): boolean {
   return fmtIsOutput && f === "text";
 }
 
+/** Is a stack trace asked for: `--debug` among the options (before a `--`),
+ *  or PAGED_DEBUG set to anything but `0`? Read ahead of the parse, so a
+ *  failure of the parse itself honours it too. */
+export function debugRequested(
+  argv: readonly string[],
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const end = argv.indexOf("--");
+  if ((end < 0 ? argv : argv.slice(0, end)).includes("--debug")) return true;
+  const v = env["PAGED_DEBUG"];
+  return v !== undefined && v !== "" && v !== "0";
+}
+
 /** Run the CLI; resolves to the exit code. Never calls process.exit. */
 export async function main(
   argv: readonly string[],
@@ -125,6 +140,7 @@ export async function main(
   }
   const verb = VERBS.find((v) => v.name === first);
   let text = false;
+  let debug = debugRequested(rest);
   let session: CliSession | null = null;
   const extra: CliSession[] = [];
   try {
@@ -138,6 +154,7 @@ export async function main(
       io.stdout(verbHelp(verb));
       return EXIT.ok;
     }
+    debug = debug || flagBool(args, "debug");
     text = textMode(args, verb);
     if (
       args.positionals.length < verb.min ||
@@ -174,18 +191,34 @@ export async function main(
     );
     return result.exit ?? EXIT.ok;
   } catch (err) {
+    // An unexpected failure reports its message only: a stack trace names
+    // the installation's paths and internals, so it is for `--debug`.
     const e =
       err instanceof CliError
         ? err
         : new CliError(
             EXIT.failed,
-            err instanceof Error ? (err.stack ?? err.message) : String(err),
+            err instanceof Error ? err.message : String(err),
           );
-    if (text) io.stderr(`${BIN}: ${e.message}`);
+    const stack =
+      debug &&
+      !(err instanceof CliError) &&
+      err instanceof Error &&
+      typeof err.stack === "string"
+        ? err.stack
+        : undefined;
+    if (text) io.stderr(`${BIN}: ${stack ?? e.message}`);
     else
       io.stdout(
         JSON.stringify(
-          { error: { message: e.message, exit: e.exit, ...(e.detail ?? {}) } },
+          {
+            error: {
+              message: e.message,
+              exit: e.exit,
+              ...(e.detail ?? {}),
+              ...(stack !== undefined ? { stack } : {}),
+            },
+          },
           null,
           2,
         ),

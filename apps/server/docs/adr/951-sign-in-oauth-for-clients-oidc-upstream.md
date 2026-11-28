@@ -18,6 +18,9 @@ provider. The JavaScript OAuth provider for Workers cannot be used from a Rust W
    - RFC 7591 dynamic registration of public clients, with https or loopback redirects
      matched exactly.
    - PKCE S256 only, one-time codes, rotating refresh tokens.
+   - Registration is open, so the signed-in person consents to each sign-in: after the
+     provider's answer checks out, a page names the client, the origin of its redirect
+     URI and the person, and only their "allow" mints a code (`POST /oauth/consent`).
 2. **Identity comes from any OpenID Connect provider** (discovery; code + PKCE + nonce).
    - The ID token comes from the provider's token endpoint over TLS with our client
      secret, so (OIDC Core §3.1.3.7) issuer, audience, expiry and nonce are checked and the

@@ -51,11 +51,15 @@ fn health_not_ready_then_ready_after_put_config__feat__plugin_platform_ml_servic
 #[test]
 fn config_round_trips_and_persists__feat__plugin_platform_ml_service() {
     let t = TestHost::new(Fake::default());
-    let empty = t.get("/api/ml/config");
-    assert_eq!(empty.status, 200);
+    let first = t.get("/api/ml/config");
+    assert_eq!(first.status, 200);
     assert_eq!(
-        empty.json(),
-        json!({ "sdBinary": null, "model": null, "extraArgs": [] })
+        first.json(),
+        json!({
+            "sdBinary": t.sd.display().to_string(),
+            "model": null,
+            "extraArgs": ["--offload-to-cpu"],
+        })
     );
     let put = t.put("/api/ml/config", &t.good_config());
     assert_eq!(put.status, 200, "{}", put.text());
@@ -72,10 +76,12 @@ fn config_round_trips_and_persists__feat__plugin_platform_ml_service() {
         config_path: t.config_path.clone(),
         sd_binary: None,
         allow_origins: Vec::new(),
+        token: None,
         work_parent: Some(t.dir.join("work2")),
         keep_finished: 32,
     })
     .unwrap();
+    crate::support::register(&again);
     let r = crate::support::request(again.addr(), "GET", "/api/ml/config", &[], None);
     assert_eq!(r.json(), stored);
     again.shutdown();
@@ -106,7 +112,9 @@ fn config_refuses_an_unacknowledged_licence__feat__plugin_platform_ml_service() 
     assert_eq!(r.code(), "licence_not_acknowledged");
     // Nothing was stored.
     assert_eq!(t.get("/api/ml/config").json()["model"], json!(null));
-    assert!(!t.config_path.exists());
+    let on_disk: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&t.config_path).unwrap()).unwrap();
+    assert_eq!(on_disk.get("model"), None);
 }
 
 #[test]
@@ -121,13 +129,68 @@ fn config_refuses_a_missing_file__feat__plugin_platform_ml_service() {
     let msg = r.json()["message"].as_str().unwrap().to_string();
     assert!(msg.contains("model.textEncoder"), "{msg}");
     assert!(msg.contains(&missing), "{msg}");
+}
 
+/// The programs the host runs are the config file's (or `--sd`): the API
+/// keeps them, and refuses any other.
+#[test]
+fn the_api_cannot_set_a_program() {
+    let t = TestHost::new(Fake::default());
+    let other = t.dir.join("other-program");
+    std::fs::write(&other, "#!/bin/sh\n").unwrap();
+    let before = std::fs::read(&t.config_path).unwrap();
+    let changes: [(&str, serde_json::Value); 4] = [
+        ("sdBinary", json!(other.display().to_string())),
+        ("extraArgs", json!(["--other"])),
+        (
+            "matting",
+            json!({
+                "id": "m",
+                "licenceAcknowledged": true,
+                "binary": other.display().to_string(),
+            }),
+        ),
+        ("sdBinary", json!(t.file("no-sd"))),
+    ];
+    for (field, value) in changes {
+        let mut c = t.good_config();
+        c[field] = value;
+        let r = t.put("/api/ml/config", &c);
+        assert_eq!(r.status, 403, "{field}: {}", r.text());
+        assert_eq!(r.code(), "program_locked", "{field}");
+        assert!(r.text().contains(field), "{}", r.text());
+    }
+    // Nothing was stored, in memory or on disk.
+    assert_eq!(t.get("/api/ml/config").json()["model"], json!(null));
+    assert_eq!(std::fs::read(&t.config_path).unwrap(), before);
+
+    // Left out, the stored programs stay.
     let mut c = t.good_config();
-    c["sdBinary"] = json!(t.file("no-sd"));
+    let o = c.as_object_mut().unwrap();
+    o.remove("sdBinary");
+    o.remove("extraArgs");
     let r = t.put("/api/ml/config", &c);
-    assert_eq!(r.status, 400);
-    assert_eq!(r.code(), "missing_file");
-    assert!(r.text().contains("sdBinary"));
+    assert_eq!(r.status, 200, "{}", r.text());
+    assert_eq!(r.json()["sdBinary"], t.sd.display().to_string());
+    assert_eq!(r.json()["extraArgs"], json!(["--offload-to-cpu"]));
+}
+
+/// A host with no program in its config file takes none from the API.
+#[test]
+fn an_unconfigured_host_takes_no_program_from_the_api() {
+    let t = TestHost::unconfigured(Fake::default());
+    let r = t.put("/api/ml/config", &t.good_config());
+    assert_eq!(r.status, 403, "{}", r.text());
+    assert_eq!(r.code(), "program_locked");
+    assert!(!t.config_path.exists());
+    // The model alone is the API's to set.
+    let mut c = t.good_config();
+    let o = c.as_object_mut().unwrap();
+    o.remove("sdBinary");
+    o.remove("extraArgs");
+    let r = t.put("/api/ml/config", &c);
+    assert_eq!(r.status, 200, "{}", r.text());
+    assert_eq!(r.json()["sdBinary"], json!(null));
 }
 
 #[test]

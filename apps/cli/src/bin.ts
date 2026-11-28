@@ -18,7 +18,7 @@
  */
 
 import { BIN } from "./errors";
-import { main } from "./main";
+import { debugRequested, main } from "./main";
 
 // stdout carries the verb's JSON only: the engine and the bundles log through
 // console.log / info / debug, so those go to stderr.
@@ -52,8 +52,12 @@ main(process.argv.slice(2))
       process.exitCode = code;
     },
     (err) => {
+      const stack =
+        err instanceof Error && debugRequested(process.argv.slice(2))
+          ? err.stack
+          : undefined;
       process.stderr.write(
-        `${BIN}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+        `${BIN}: ${stack ?? (err instanceof Error ? err.message : String(err))}\n`,
       );
       process.exitCode = 2;
     },

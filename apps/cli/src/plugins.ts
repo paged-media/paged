@@ -17,14 +17,18 @@
  */
 
 // Bundle DISCOVERY (ADR 324 §2). The CLI never depends on a plugin at build
-// time; it finds installed bundles at run time:
+// time; it loads bundles at run time, and only the ones it is told to. A
+// bundle is code that runs with the caller's rights, so the directory a
+// command happens to run in never decides what loads:
+//   · default, and `--no-plugins` — none (core objects only);
 //   · `--plugins a,b` — exactly these (package names or paths); a miss is
 //     an error;
-//   · otherwise every first-party bundle resolvable from the cwd
+//   · `--plugins auto` — every first-party bundle resolvable from the cwd
 //     (`@paged-media/{draw,image,sheet,data,web,doc,slide,publish,pdf}`) plus
 //     every dependency of the cwd's package.json that carries a
-//     `"paged": { "manifest": … }` entry; a miss is silent;
-//   · `--no-plugins` — none.
+//     `"paged": { "manifest": … }` entry; a miss is silent.
+// `PAGED_PLUGINS` in the environment takes the same values and is the
+// default when neither flag is given.
 
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -44,6 +48,21 @@ export const FIRST_PARTY_BUNDLES = [
   "@paged-media/publish",
   "@paged-media/pdf",
 ] as const;
+
+/** The value of `--plugins` / `PAGED_PLUGINS` that asks for discovery. */
+export const AUTO_PLUGINS = "auto";
+
+/** What a `--plugins` / `PAGED_PLUGINS` value selects: `"auto"` (discovery
+ *  from the cwd) or the listed sources; an empty value selects none. */
+export function parsePluginSelection(
+  value: string,
+): readonly string[] | typeof AUTO_PLUGINS {
+  const list = value
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return list.length === 1 && list[0] === AUTO_PLUGINS ? AUTO_PLUGINS : list;
+}
 
 export interface DiscoveredBundle {
   /** The package (or path) it came from. */

@@ -13,6 +13,7 @@ publish = false
 # engine's crates, the same code the browser and the CLI run, path-depended
 # from engine/core in this repository (paths relative to this file).
 paged-repo = { path = "../../../engine/core/crates/paged-repo" }
+paged-fmt = { path = "../../../engine/core/crates/paged-fmt" }
 paged-mcp = { path = "../../../engine/core/crates/paged-mcp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

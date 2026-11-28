@@ -56,8 +56,16 @@ provider.
 | `GET /.well-known/oauth-protected-resource`   | RFC 9728; a 401 names it in `WWW-Authenticate`                               |
 | `POST /oauth/register`                        | RFC 7591 dynamic registration; public clients, https or loopback redirects   |
 | `GET /oauth/authorize`                        | PKCE S256 only → the provider (code + PKCE + nonce) → `/oauth/callback`      |
+| `GET /oauth/callback`                         | checks the provider's answer, then shows the consent page                    |
+| `POST /oauth/consent`                         | the signed-in person's answer; only "allow" mints a code for the client      |
 | `POST /oauth/token`                           | `authorization_code` (one-time, PKCE-checked) and `refresh_token` (rotating) |
 
+- Registration is open, so it grants nothing by itself. Redirect URIs are matched
+  character for character (at most eight per client, https or loopback http, no
+  fragment, no credentials). After the provider has said who is signing in, the
+  consent page names the client, the origin its redirect URI points at and the
+  signed-in person; the code is minted only when that person allows it. The
+  consent id is random, lives five minutes and is spent by either answer.
 - Access tokens are HMAC-signed (`PAGED_TOKEN_SECRET`, ≥ 32 chars) and live an
   hour: checking one needs no lookup.
 - Registered clients, pending logins, one-time codes and refresh tokens live in
@@ -95,10 +103,14 @@ POST, no server-initiated stream; `GET` answers 405). The tools are core's
 
 ## Keeping a repository
 
-- **Sealed at rest.** R2 bytes are AES-256-GCM sealed under the repository's own key,
-  with a nonce derived from the key and the object's address. One address is one
-  plaintext, so a nonce never meets two. Objects written before keys existed are
-  read in plain from `r/…`, still checked by address.
+- **Sealed at rest.** R2 bytes are AES-256-GCM sealed under the repository's own key.
+  A sealed object is a version byte, a random 96-bit nonce and the ciphertext; the
+  object's address is authenticated with it, so bytes sealed for one address do not
+  open at another. Objects written before keys existed are read in plain from
+  `r/…`, still checked by address.
+- **Never cached.** Every answer but `/healthz` and the two `/.well-known` documents
+  leaves with `cache-control: private, no-store`: what a repository answers depends
+  on who asks.
 - **Collected.** `POST …/gc` (owner) removes what no ref reaches. An object
   recorded in the last hour (`PAGED_GC_GRACE_MS`) is kept, because a push uploads
   before it moves its ref. The maintenance alarm also collects, ten minutes after a
@@ -159,8 +171,10 @@ cd ../.. && PAGED_SERVER_URL=http://127.0.0.1:8791 PAGED_REQUIRE_SERVER=1 \
   cargo nextest run --profile server --run-ignored only
 ```
 
-The integration tests are `#[ignore = "server: …"]`: a plain `cargo test`
-skips them, and an ignored run without `PAGED_SERVER_URL` reports
+A plain `cargo test` (or `cargo nextest run`) runs what needs no server: the
+unit tests of `paged-server` (sealing, token and redirect checks, the consent
+page, who may reach a repository). The integration tests need a running Worker,
+so they are `#[ignore = "server: …"]`: a plain run skips them, and an ignored run without `PAGED_SERVER_URL` reports
 `unavailable: running server` (a failure under `PAGED_REQUIRE_SERVER=1`;
 `docs/development/testing.md` at the repository root).
 

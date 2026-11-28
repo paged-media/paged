@@ -13,7 +13,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The few primitives sign-in needs: random tokens, SHA-256, HMAC, base64url.
+//! The few primitives sign-in and storage need: random tokens, SHA-256, HMAC,
+//! base64url, and sealing bytes at rest.
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine;
@@ -68,34 +69,166 @@ pub fn unb64_std(s: &str) -> Option<Vec<u8>> {
         .ok()
 }
 
-/// Seals an object for R2 under a repository's key (AES-256-GCM). The nonce is
-/// derived from the key and the object's address: one address is one
-/// plaintext, so a nonce never meets two plaintexts.
+/// The first byte of everything `seal` writes. A sealed object is
+/// `version ‖ nonce (12 bytes) ‖ ciphertext and tag`.
+const SEAL_V1: u8 = 1;
+const NONCE_LEN: usize = 12;
+const TAG_LEN: usize = 16;
+
+/// Seals bytes for R2 under a key (AES-256-GCM) with a fresh random nonce,
+/// stored in front of the ciphertext. The address is authenticated with the
+/// ciphertext, so bytes sealed for one address do not open at another. The
+/// same address may be sealed any number of times: a working copy is.
+///
+/// A random 96-bit nonce bounds one key to about 2^32 seals; a repository's
+/// key and a run's key stay far below that.
 pub fn seal(key: &[u8], address: &[u8], plaintext: &[u8]) -> Vec<u8> {
-    use aes_gcm::aead::Aead;
+    let mut nonce = [0u8; NONCE_LEN];
+    getrandom::fill(&mut nonce).expect("the platform has a CSPRNG");
+    seal_with(key, address, plaintext, &nonce)
+}
+
+fn seal_with(key: &[u8], address: &[u8], plaintext: &[u8], nonce: &[u8; NONCE_LEN]) -> Vec<u8> {
+    use aes_gcm::aead::{Aead, Payload};
     let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).expect("a 32-byte key");
-    cipher
-        .encrypt(&nonce(key, address), plaintext)
-        .expect("encryption does not fail")
+    let body = cipher
+        .encrypt(
+            &gcm_nonce(nonce),
+            Payload {
+                msg: plaintext,
+                aad: address,
+            },
+        )
+        .expect("encryption does not fail");
+    let mut out = Vec::with_capacity(1 + NONCE_LEN + body.len());
+    out.push(SEAL_V1);
+    out.extend_from_slice(nonce);
+    out.extend_from_slice(&body);
+    out
 }
 
-/// Opens what `seal` sealed; None when the key or the bytes are wrong.
+/// Opens what `seal` sealed; None when the key, the address, the format
+/// version or the bytes are wrong.
 pub fn open(key: &[u8], address: &[u8], sealed: &[u8]) -> Option<Vec<u8>> {
-    use aes_gcm::aead::Aead;
+    use aes_gcm::aead::{Aead, Payload};
+    let (version, rest) = sealed.split_first()?;
+    if *version != SEAL_V1 || rest.len() < NONCE_LEN + TAG_LEN {
+        return None;
+    }
+    let (nonce, body) = rest.split_at(NONCE_LEN);
     let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).ok()?;
-    cipher.decrypt(&nonce(key, address), sealed).ok()
+    cipher
+        .decrypt(
+            &gcm_nonce(nonce.try_into().ok()?),
+            Payload {
+                msg: body,
+                aad: address,
+            },
+        )
+        .ok()
 }
 
-/// The nonce `seal` and `open` use: the first 12 bytes of
-/// SHA-256(key ‖ address).
-fn nonce(key: &[u8], address: &[u8]) -> aes_gcm::aead::Nonce<aes_gcm::Aes256Gcm> {
-    let digest = sha256(&[key, address].concat());
-    aes_gcm::aead::Nonce::<aes_gcm::Aes256Gcm>::try_from(&digest[..12])
-        .expect("a SHA-256 digest has 12 bytes to spare")
+fn gcm_nonce(bytes: &[u8; NONCE_LEN]) -> aes_gcm::aead::Nonce<aes_gcm::Aes256Gcm> {
+    aes_gcm::aead::Nonce::<aes_gcm::Aes256Gcm>::try_from(&bytes[..])
+        .expect("an AES-GCM nonce is 12 bytes")
 }
 
 pub fn random_bytes(n: usize) -> Vec<u8> {
     let mut buf = vec![0u8; n];
     getrandom::fill(&mut buf).expect("the platform has a CSPRNG");
     buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEY: [u8; 32] = [7; 32];
+
+    fn nonce_of(sealed: &[u8]) -> &[u8] {
+        &sealed[1..1 + NONCE_LEN]
+    }
+
+    #[test]
+    fn a_sealed_object_opens_to_what_was_sealed() {
+        let sealed = seal(&KEY, b"address", b"the working copy");
+        assert_eq!(sealed[0], SEAL_V1);
+        assert_eq!(
+            sealed.len(),
+            1 + NONCE_LEN + b"the working copy".len() + TAG_LEN
+        );
+        assert_eq!(
+            open(&KEY, b"address", &sealed).as_deref(),
+            Some(&b"the working copy"[..])
+        );
+        let empty = seal(&KEY, b"address", b"");
+        assert_eq!(open(&KEY, b"address", &empty).as_deref(), Some(&b""[..]));
+    }
+
+    #[test]
+    fn two_seals_at_one_address_use_different_nonces() {
+        let first = seal(&KEY, b"run", b"version one");
+        let second = seal(&KEY, b"run", b"version two");
+        assert_ne!(nonce_of(&first), nonce_of(&second));
+        // The same plaintext sealed twice differs too.
+        let again = seal(&KEY, b"run", b"version one");
+        assert_ne!(nonce_of(&first), nonce_of(&again));
+        assert_ne!(first, again);
+        assert_eq!(
+            open(&KEY, b"run", &second).as_deref(),
+            Some(&b"version two"[..])
+        );
+    }
+
+    #[test]
+    fn the_nonce_stored_is_the_nonce_used() {
+        let nonce = [9u8; NONCE_LEN];
+        let sealed = seal_with(&KEY, b"a", b"bytes", &nonce);
+        assert_eq!(nonce_of(&sealed), &nonce);
+        assert_eq!(open(&KEY, b"a", &sealed).as_deref(), Some(&b"bytes"[..]));
+    }
+
+    #[test]
+    fn a_changed_byte_anywhere_does_not_open() {
+        let sealed = seal(&KEY, b"address", b"some bytes worth keeping");
+        for i in 0..sealed.len() {
+            let mut bad = sealed.clone();
+            bad[i] ^= 1;
+            assert!(open(&KEY, b"address", &bad).is_none(), "byte {i}");
+        }
+    }
+
+    #[test]
+    fn another_key_address_or_version_does_not_open() {
+        let sealed = seal(&KEY, b"address", b"bytes");
+        assert!(open(&[8; 32], b"address", &sealed).is_none());
+        assert!(open(&KEY, b"elsewhere", &sealed).is_none());
+        assert!(open(&KEY[..16], b"address", &sealed).is_none());
+        let mut later = sealed.clone();
+        later[0] = 2;
+        assert!(open(&KEY, b"address", &later).is_none());
+        // Bytes without the version and nonce in front are not a sealed object.
+        assert!(open(&KEY, b"address", &sealed[1 + NONCE_LEN..]).is_none());
+        assert!(open(&KEY, b"address", &sealed[..NONCE_LEN]).is_none());
+        assert!(open(&KEY, b"address", &[]).is_none());
+    }
+
+    #[test]
+    fn an_hmac_checks_out_only_for_its_key_and_data() {
+        let tag = hmac(b"key", b"data");
+        assert!(hmac_ok(b"key", b"data", &tag));
+        assert!(!hmac_ok(b"other", b"data", &tag));
+        assert!(!hmac_ok(b"key", b"datum", &tag));
+        assert!(!hmac_ok(b"key", b"data", &tag[..tag.len() - 1]));
+    }
+
+    #[test]
+    fn pkce_s256_is_the_base64url_of_the_sha256() {
+        // SHA-256("abc"), the FIPS 180-2 example.
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(s256("abc"), "ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0");
+    }
 }

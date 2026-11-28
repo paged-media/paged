@@ -127,7 +127,11 @@ fn agent() -> ureq::Agent {
 
 fn location(r: &ureq::http::Response<ureq::Body>) -> String {
     use ureq::ResponseExt;
-    assert_eq!(r.status(), 302, "expected a redirect from {}", r.get_uri());
+    assert!(
+        matches!(r.status().as_u16(), 302 | 303),
+        "expected a redirect from {}",
+        r.get_uri()
+    );
     r.headers()
         .get("location")
         .expect("a location")
@@ -136,8 +140,24 @@ fn location(r: &ureq::http::Response<ureq::Body>) -> String {
         .to_string()
 }
 
-/// Registers a client and signs in, returning (client_id, code, verifier).
-fn sign_in(url: &str) -> (String, String, String) {
+/// The consent id in the consent page's form.
+fn consent_id(page: &str) -> String {
+    let marker = r#"name="consent" value=""#;
+    let from = page.find(marker).expect("a consent form") + marker.len();
+    page[from..].split('"').next().unwrap().to_string()
+}
+
+fn answer(url: &str, consent: &str, decision: &str) -> ureq::http::Response<ureq::Body> {
+    agent()
+        .post(&format!("{url}/oauth/consent"))
+        .header("origin", url)
+        .send_form([("consent", consent), ("decision", decision)])
+        .unwrap()
+}
+
+/// Registers a client and signs in as far as the consent page, returning
+/// (client_id, consent id, verifier).
+fn to_consent(url: &str) -> (String, String, String) {
     let reg: serde_json::Value = ureq::post(&format!("{url}/oauth/register"))
         .send_json(serde_json::json!({ "client_name": "test", "redirect_uris": [REDIRECT] }))
         .unwrap()
@@ -155,8 +175,29 @@ fn sign_in(url: &str) -> (String, String, String) {
     let to_idp = location(&a.get(&start).call().unwrap());
     assert!(to_idp.starts_with(&format!("http://{IDP}/authorize")));
     let to_callback = location(&a.get(&to_idp).call().unwrap());
-    let to_client = location(&a.get(&to_callback).call().unwrap());
+    // The provider's answer mints nothing: the person is asked first.
+    let mut asked = a.get(&to_callback).call().unwrap();
+    assert_eq!(asked.status(), 200, "the callback shows the consent page");
+    assert!(asked.headers()["cache-control"]
+        .to_str()
+        .unwrap()
+        .contains("no-store"));
+    let page = asked.body_mut().read_to_string().unwrap();
+    assert!(page.contains("http://127.0.0.1:9999"), "names the redirect");
+    assert!(page.contains("user:alice@127.0.0.1"), "names the person");
+    (client_id, consent_id(&page), verifier)
+}
+
+/// Registers a client and signs in, returning (client_id, code, verifier).
+fn sign_in(url: &str) -> (String, String, String) {
+    let (client_id, consent, verifier) = to_consent(url);
+    let to_client = location(&answer(url, &consent, "allow"));
     assert!(to_client.starts_with(REDIRECT), "{to_client}");
+    assert_eq!(
+        answer(url, &consent, "allow").status(),
+        400,
+        "a consent is spent once"
+    );
     let q = query(&to_client);
     assert_eq!(q["state"], "xyz", "the client's state comes back");
     (client_id, q["code"].clone(), verifier)
@@ -310,4 +351,51 @@ fn a_wrong_verifier_or_redirect_gets_no_token() {
         ],
     );
     assert!(matches!(r, Err((400, _))));
+}
+
+#[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
+fn no_code_is_minted_without_the_persons_consent() {
+    let Some(url) = server() else {
+        return;
+    };
+    idp();
+    // Denied: the client hears so, and gets no code.
+    let (_, consent, _) = to_consent(&url);
+    let to_client = location(&answer(&url, &consent, "deny"));
+    let q = query(&to_client);
+    assert_eq!(q["error"], "access_denied");
+    assert!(!q.contains_key("code"));
+    assert_eq!(q["state"], "xyz");
+    assert_eq!(
+        answer(&url, &consent, "allow").status(),
+        400,
+        "a denied consent cannot be allowed afterwards"
+    );
+
+    // An answer from another origin, and one that names no consent.
+    let (_, consent, _) = to_consent(&url);
+    let foreign = agent()
+        .post(&format!("{url}/oauth/consent"))
+        .header("origin", "https://elsewhere.example")
+        .send_form([("consent", consent.as_str()), ("decision", "allow")])
+        .unwrap();
+    assert_eq!(foreign.status(), 403);
+    assert_eq!(answer(&url, "not-a-consent", "allow").status(), 400);
+
+    // A redirect URI that is not the registered one, character for character.
+    let reg: serde_json::Value = ureq::post(&format!("{url}/oauth/register"))
+        .send_json(serde_json::json!({ "client_name": "test", "redirect_uris": [REDIRECT] }))
+        .unwrap()
+        .into_body()
+        .read_json()
+        .unwrap();
+    let start = format!(
+        "{url}/oauth/authorize?response_type=code&client_id={}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&state=xyz",
+        reg["client_id"].as_str().unwrap(),
+        url::form_urlencoded::byte_serialize(format!("{REDIRECT}/more").as_bytes())
+            .collect::<String>(),
+        s256("a-verifier-that-is-at-least-forty-three-characters-long"),
+    );
+    assert_eq!(agent().get(&start).call().unwrap().status(), 400);
 }
