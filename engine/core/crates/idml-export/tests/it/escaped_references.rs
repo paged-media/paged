@@ -42,11 +42,11 @@ const LAYER_A_NAME: &str = "Fore & <Back> \"q\" 's'";
 
 /// `text` as it is spelled inside an attribute.
 fn esc(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+    let settings = paged_fmt::xml::AttrEscape {
+        apos: true,
+        ..Default::default()
+    };
+    paged_fmt::xml::escape_attr_with(text, settings).into_owned()
 }
 
 /// The fixture as the writer leaves it. The hand-written package names

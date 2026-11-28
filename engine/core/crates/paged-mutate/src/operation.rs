@@ -3213,16 +3213,14 @@ export interface FlowGrowRule {
 }
 "#;
 
-/// W3.A1 — `Deserialize`-able mirror of the round-trippable fields of a
-/// `paged_model::TableCell`, used inside the `DeleteTable{Row,Column}`
-/// restore blob. Captures the cell's structure + style (spans, insets,
-/// fill, per-edge strokes, applied style, vertical justification).
-/// **Does NOT carry the cell's `paragraphs`** — cell text content is
-/// out-of-band of the story-offset space and not addressable in W3.A1
-/// (see the task's cell-text finding); restoring cell *text* on a
-/// delete-undo is a v2 item. The renderer re-emits an empty cell from
-/// the restored structure, matching `NodeSpec`'s "minimal supported
-/// field set" precedent (drop_shadow / effects residue on re-insert).
+/// W3.A1 — `Deserialize`-able mirror of a `paged_model::TableCell`'s
+/// structure and style (spans, insets, fill, per-edge strokes, applied
+/// style, vertical justification), as the `DeleteTable{Row,Column}`
+/// restore blob first carried a cell. It leaves out the cell's id and
+/// its `paragraphs`, so a restore from it alone returns an empty cell;
+/// the blob now carries the whole cell beside it
+/// ([`RemovedTableLine::whole_cells`]) and this mirror decodes the blobs
+/// written before that.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TableCellSpec {
     pub name: Option<String>,
@@ -3401,6 +3399,72 @@ pub struct RemovedTableLine {
     /// written before it existed; the cells are then appended.
     #[serde(default)]
     pub positions: Vec<usize>,
+    /// The removed row, column and cells as the model held them: cell
+    /// text, ids and every attribute the specs above leave out. The
+    /// restore reads these and falls back to the specs only for a blob
+    /// written before they existed, so undoing a delete returns the
+    /// table it found rather than empty cells.
+    #[serde(default)]
+    pub whole_row: Option<paged_model::TableRow>,
+    #[serde(default)]
+    pub whole_column: Option<paged_model::TableColumn>,
+    #[serde(default)]
+    pub whole_cells: Vec<paged_model::TableCell>,
+}
+
+impl RemovedTableLine {
+    /// The capture of a removed row and the cells that stood in it.
+    pub fn of_row(
+        row: paged_model::TableRow,
+        cells: Vec<paged_model::TableCell>,
+        positions: Vec<usize>,
+    ) -> Self {
+        Self {
+            whole_row: Some(row),
+            whole_cells: cells,
+            positions,
+            ..Default::default()
+        }
+    }
+
+    /// The capture of a removed column and the cells that stood in it.
+    pub fn of_column(
+        column: paged_model::TableColumn,
+        cells: Vec<paged_model::TableCell>,
+        positions: Vec<usize>,
+    ) -> Self {
+        Self {
+            whole_column: Some(column),
+            whole_cells: cells,
+            positions,
+            ..Default::default()
+        }
+    }
+
+    /// The cells to put back: the whole ones, else the specs' rebuild.
+    pub fn restored_cells(&self) -> Vec<paged_model::TableCell> {
+        if self.whole_cells.is_empty() {
+            self.cells.iter().map(TableCellSpec::to_parse).collect()
+        } else {
+            self.whole_cells.clone()
+        }
+    }
+
+    /// The row to put back.
+    pub fn restored_row(&self) -> paged_model::TableRow {
+        self.whole_row
+            .clone()
+            .or_else(|| self.row.as_ref().map(TableRowSpec::to_parse))
+            .unwrap_or_default()
+    }
+
+    /// The column to put back.
+    pub fn restored_column(&self) -> paged_model::TableColumn {
+        self.whole_column
+            .clone()
+            .or_else(|| self.column.as_ref().map(TableColumnSpec::to_parse))
+            .unwrap_or_default()
+    }
 }
 
 /// Typed payload for a `SetProperty` Op. Each variant carries a value
@@ -5293,6 +5357,9 @@ pub enum Operation {
     /// facing change set it, the document's facing flag). The undo of
     /// `SetFacingPages` and of a page inserted into or removed from a
     /// facing document. Its inverse is itself, carrying what it replaced.
+    /// A capture can also carry page labels (`Page@Name`) alone: the undo
+    /// of a section edit that renamed a page whose label the section
+    /// rules do not derive.
     RestoreSpreads {
         first: usize,
         capture_json: String,
@@ -5318,9 +5385,11 @@ pub enum Operation {
         #[serde(default)]
         self_id: Option<String>,
     },
-    /// Track M — remove a layer. The apply layer captures the
-    /// removed layer's full state for the inverse so undo restores
-    /// name + flags + position bytewise.
+    /// Track M — remove a layer. Its items stay, with their `ItemLayer`
+    /// cleared (no item is left naming a layer the document does not
+    /// hold). The apply layer captures the removed layer's full state
+    /// for the inverse, so undo restores name + flags + position
+    /// bytewise and puts each item back on the layer.
     RemoveLayer {
         layer_id: String,
     },
@@ -6055,7 +6124,10 @@ pub enum Operation {
     /// redo re-creates it identically. A user-initiated detach passes
     /// `None` for both and takes slot 0. Inverse:
     /// `AttachTextToPath` with the story id + knobs captured at apply
-    /// time.
+    /// time — or, for an entry those knobs do not rebuild (an imported
+    /// one holding its `Self`, `PathEffect` or `PathAlignment`, or one
+    /// that is not the host's last), the host's snapshot
+    /// (`ExpandAppearance { restore }`).
     DetachTextFromPath {
         host: NodeId,
         #[serde(default)]

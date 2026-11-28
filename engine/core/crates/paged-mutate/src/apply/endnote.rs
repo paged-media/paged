@@ -56,6 +56,24 @@ struct Captured {
     range: EndnoteRangeDef,
     /// The range's text: the opening mark through the closing one.
     text: String,
+    /// The runs of the paragraph that held the reference, as they stood.
+    /// Putting the marker back char by char returns the text but not the
+    /// run it sat in (a marker alone in its run leaves that run empty and
+    /// comes back in a neighbour), so the restore puts these back.
+    #[serde(default)]
+    host_runs: Vec<paged_model::CharacterRun>,
+    /// The endnote story's paragraph that held the range, and its runs.
+    #[serde(default)]
+    note_runs: Option<(usize, Vec<paged_model::CharacterRun>)>,
+}
+
+/// Put `runs` back as `para`'s runs when they spell the text it holds
+/// now: the same characters, cut into the runs the delete found.
+fn put_back_runs(para: &mut paged_model::Paragraph, runs: Vec<paged_model::CharacterRun>) {
+    let held: Vec<char> = runs.iter().flat_map(|r| r.text.chars()).collect();
+    if !runs.is_empty() && held == text_of(para) {
+        para.runs = runs;
+    }
 }
 
 fn missing(endnote_id: &str) -> OperationError {
@@ -255,6 +273,8 @@ pub(super) fn apply_insert_endnote(
         parent: NodeId::Story(story_id.to_string()),
         child_kind: "endnote in a document with no endnote story".to_string(),
     })?;
+    let mut host_runs = Vec::new();
+    let mut note_runs = None;
     let (reference, range, body) = match restore {
         Some(json) => {
             let c: Captured =
@@ -262,6 +282,8 @@ pub(super) fn apply_insert_endnote(
                     parent: NodeId::Story(story_id.to_string()),
                     child_kind: format!("endnote whose saved state does not read ({e})"),
                 })?;
+            host_runs = c.host_runs;
+            note_runs = c.note_runs;
             (c.reference, c.range, c.text)
         }
         None => (
@@ -306,8 +328,14 @@ pub(super) fn apply_insert_endnote(
     insert_char(para, at, REF);
     let k = k.min(para.endnote_references.len());
     para.endnote_references.insert(k, reference);
+    put_back_runs(para, host_runs);
     // Its range, in the endnote story.
     place_range(doc, ei, endnote_id, range, &body);
+    if let Some((index, runs)) = note_runs {
+        if let Some(para) = doc.stories[ei].story.paragraphs.get_mut(index) {
+            put_back_runs(para, runs);
+        }
+    }
     let endnote_story_id = doc.stories[ei].self_id.clone();
     let mut invalidation = reflow_hint_for_story(doc, story_id);
     invalidation.merge(reflow_hint_for_story(doc, &endnote_story_id));
@@ -351,6 +379,7 @@ pub(super) fn apply_delete_endnote(
     let start = paragraph_start(story, pi);
     let para = &mut story.paragraphs[pi];
     let at = marks(para, REF).get(k).copied();
+    let host_runs = para.runs.clone();
     let reference = para.endnote_references.remove(k);
     if let Some(at) = at {
         remove_char(para, at);
@@ -358,6 +387,7 @@ pub(super) fn apply_delete_endnote(
     }
     // Its range, with the break before it.
     let mut captured_range = None;
+    let mut note_runs = None;
     let mut endnote_story_id = None;
     if let Some(ei) = endnote_story(doc) {
         endnote_story_id = Some(doc.stories[ei].self_id.clone());
@@ -367,6 +397,7 @@ pub(super) fn apply_delete_endnote(
             .find(|(_, def)| def.as_ref().and_then(|d| d.source.as_deref()) == Some(endnote_id));
         if let Some((r, Some(def))) = found {
             let para = &mut story.paragraphs[r.paragraph];
+            note_runs = Some((r.paragraph, para.runs.clone()));
             let text: String = text_of(para)[r.start as usize..r.end as usize]
                 .iter()
                 .collect();
@@ -397,6 +428,8 @@ pub(super) fn apply_delete_endnote(
         reference,
         range,
         text,
+        host_runs,
+        note_runs,
     })
     .ok();
     let mut invalidation = reflow_hint_for_story(doc, &story_id);

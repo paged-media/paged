@@ -148,8 +148,7 @@ pub fn read_document(paged: &[u8]) -> Result<Document, String> {
         }
     }
     let model = model.ok_or("the document has no native model part")?;
-    crate::from_parts(&model, blobs)
-        .ok_or_else(|| "the native model part does not read".to_string())
+    crate::from_parts(&model, blobs).map_err(|e| e.to_string())
 }
 
 /// Wrap `doc` in the `.paged` container. `name` is the document name the

@@ -22,10 +22,18 @@
 //!
 //! A container carrying `paged/core/model/document.pgm` is reconstructed
 //! from that part with no source parse — it is the model truth, edits not
-//! yet written back to the IDML parts included. A part that is absent, or
-//! one this engine cannot read (a stale or foreign format version), falls
-//! back to importing the IDML parts: a stale part is never a load error
-//! (ADR-022 Q2).
+//! yet written back to the IDML parts included.
+//!
+//! A part this engine cannot read is never passed over in silence, because
+//! the IDML parts beside it may be older than the model and the next save
+//! would replace the model with them:
+//!
+//! * a part written by a NEWER engine refuses to open
+//!   ([`OpenError::NewerModel`]);
+//! * a part that is damaged, incomplete (an image part is gone) or older
+//!   than this engine reads falls back to importing the IDML parts, and
+//!   [`Opened::model_part_fallback`] carries the reason for the caller to
+//!   show.
 
 use paged_scene::Document;
 
@@ -36,42 +44,118 @@ pub struct Opened {
     pub archive: idml_import::SourceArchive,
     /// Whether the document came from the native model part.
     pub from_model_part: bool,
+    /// Set when the container carries a native model part that did not
+    /// read, and the document is the import of its IDML parts instead: it
+    /// may lack what was edited since those parts were written. A caller
+    /// that lets the user edit or save must show it
+    /// ([`Self::fallback_warning`]).
+    pub model_part_fallback: Option<paged_store::PgmError>,
 }
 
-/// Open `bytes` as an IDML package or a `.paged` container.
-pub fn open_document(bytes: &[u8]) -> Result<Opened, String> {
-    let archive = idml_import::open_source_archive(bytes).map_err(|e| e.to_string())?;
-    if let Some(mut document) = archive
-        .entry(paged_store::DOCUMENT_PGM_PATH)
-        .and_then(|pgm| {
-            // The model part names its images; their bytes are the
-            // container's blob parts (a part written before blobs carries
-            // them inline, and needs none).
-            paged_store::from_parts(
-                &pgm[..],
-                archive
-                    .entries
-                    .iter()
-                    .filter_map(|(path, bytes)| {
-                        paged_store::blob_name_of(path)
-                            .map(|name| (name.to_string(), bytes.to_vec()))
-                    })
-                    .collect(),
+impl Opened {
+    /// The user-facing line for [`Self::model_part_fallback`].
+    pub fn fallback_warning(&self) -> Option<String> {
+        self.model_part_fallback.as_ref().map(|why| {
+            format!(
+                "{why}. The document was opened from its IDML parts instead and may lack \
+                 recent edits; saving replaces the unreadable model."
             )
         })
-    {
-        adopt_style_leading(&mut document, &archive);
-        return Ok(Opened {
-            document,
-            archive,
-            from_model_part: true,
-        });
     }
-    let document = idml_import::import_idml_archive(&archive).map_err(|e| e.to_string())?;
+}
+
+/// Why a document's bytes did not open.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenError {
+    /// The bytes are not a package this engine opens.
+    Archive(String),
+    /// The native model part was written by a newer engine. Opening the
+    /// IDML parts instead would silently downgrade the document, so the
+    /// open is refused.
+    NewerModel { found: u32, supported: u32 },
+    /// The IDML parts did not import. `model_part` is set when they were
+    /// the fallback from a native model part that did not read either.
+    Import {
+        error: String,
+        model_part: Option<paged_store::PgmError>,
+    },
+}
+
+impl std::fmt::Display for OpenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Archive(e) => f.write_str(e),
+            Self::NewerModel { found, supported } => write!(
+                f,
+                "{}",
+                paged_store::PgmError::NewerVersion {
+                    found: *found,
+                    supported: *supported,
+                }
+            ),
+            Self::Import {
+                error,
+                model_part: None,
+            } => f.write_str(error),
+            Self::Import {
+                error,
+                model_part: Some(why),
+            } => write!(f, "{why}, and its IDML parts do not import: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for OpenError {}
+
+/// Open `bytes` as an IDML package or a `.paged` container.
+pub fn open_document(bytes: &[u8]) -> Result<Opened, OpenError> {
+    let archive =
+        idml_import::open_source_archive(bytes).map_err(|e| OpenError::Archive(e.to_string()))?;
+    let model_part = archive.entry(paged_store::DOCUMENT_PGM_PATH).map(|pgm| {
+        // The model part names its images; their bytes are the
+        // container's blob parts (a part written before blobs carries
+        // them inline, and needs none).
+        paged_store::from_parts(
+            &pgm[..],
+            archive
+                .entries
+                .iter()
+                .filter_map(|(path, bytes)| {
+                    paged_store::blob_name_of(path).map(|name| (name.to_string(), bytes.to_vec()))
+                })
+                .collect(),
+        )
+    });
+    let model_part_fallback = match model_part {
+        Some(Ok(mut document)) => {
+            adopt_style_leading(&mut document, &archive);
+            return Ok(Opened {
+                document,
+                archive,
+                from_model_part: true,
+                model_part_fallback: None,
+            });
+        }
+        Some(Err(paged_store::PgmError::NewerVersion { found, supported })) => {
+            return Err(OpenError::NewerModel { found, supported });
+        }
+        Some(Err(why)) => Some(why),
+        None => None,
+    };
+    let document = match idml_import::import_idml_archive(&archive) {
+        Ok(document) => document,
+        Err(e) => {
+            return Err(OpenError::Import {
+                error: e.to_string(),
+                model_part: model_part_fallback,
+            })
+        }
+    };
     Ok(Opened {
         document,
         archive,
         from_model_part: false,
+        model_part_fallback,
     })
 }
 

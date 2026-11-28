@@ -227,6 +227,9 @@ pub(super) fn apply_detach_text_from_path(
             format!("C-29: a {} never hosts text-on-a-path", host.kind()),
         ));
     }
+    // The host as it stands, for an entry `AttachTextToPath` cannot
+    // rebuild (see below).
+    let host_before = super::expand_appearance::item_snapshot(doc, host)?;
     for parsed in doc.spreads.iter_mut() {
         let spread = &mut parsed.spread;
         let Some(paths) = host_text_paths(spread, host) else {
@@ -253,17 +256,31 @@ pub(super) fn apply_detach_text_from_path(
         let spec = restore
             .cloned()
             .unwrap_or_else(|| TextPathSpec::from_model(&removed));
+        // `AttachTextToPath` appends an entry made of the spec's knobs
+        // alone. An imported `<TextPath>` also holds its `Self`, its
+        // `PathEffect` and its `PathAlignment`, and need not be the
+        // host's last: re-attaching would lose those, so the inverse then
+        // puts the host back whole instead.
+        let rebuilt_by_attach = removed.self_id.is_none()
+            && removed.path_effect.is_none()
+            && removed.path_alignment.is_none()
+            && idx == paths.len()
+            && spec == TextPathSpec::from_model(&removed);
+        let inverse = match host_before {
+            Some(whole) if !rebuilt_by_attach => whole,
+            _ => Operation::AttachTextToPath {
+                host: host.clone(),
+                story_id: removed.parent_story.clone(),
+                spec,
+            },
+        };
         return Ok(AppliedOperation {
             op: Operation::DetachTextFromPath {
                 host: host.clone(),
                 index: Some(idx),
                 restore: Some(TextPathSpec::from_model(&removed)),
             },
-            inverse: Operation::AttachTextToPath {
-                host: host.clone(),
-                story_id: removed.parent_story.clone(),
-                spec,
-            },
+            inverse,
             invalidation: InvalidationHint {
                 structural: true,
                 frame_geometry: vec![host.clone()],

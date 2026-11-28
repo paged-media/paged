@@ -1020,6 +1020,253 @@ fn every_property_path_renders_what_it_claims_to() {
     );
 }
 
+// ── the undo sweep ──────────────────────────────────────────────────
+//
+// The sweep above asks whether an op that applies RENDERS. This one asks
+// whether an op that applies can be TAKEN BACK: the same cases, and after
+// each applied mutation
+//
+//   * `undo` must leave a scene EQUAL to the one the op found,
+//   * `redo` must leave the scene the op made, and
+//   * the scene must be structurally sound after the op and after its
+//     undo (`scene_integrity`: every id names one thing, every reference
+//     names something the document holds).
+//
+// Equality is of the whole serialised scene, the model a save writes.
+// The derived indexes are not in it; they are rebuilt from it.
+//
+// An op that writes no undo step is measured too: it must leave the
+// scene alone (its state lives outside the document: a view setting, a
+// font registration), or it is an edit nobody can take back.
+//
+// `UNDO_KNOWN` is the same kind of ratchet as `KNOWN`: every red on file
+// with what was observed, enforced in both directions.
+
+/// The whole serialised scene.
+fn scene_json(m: &CanvasModel) -> serde_json::Value {
+    serde_json::to_value(m.scene()).expect("the scene serialises")
+}
+
+/// The first few paths at which two scenes differ.
+fn scene_diff(a: &serde_json::Value, b: &serde_json::Value) -> String {
+    fn brief(v: &serde_json::Value) -> String {
+        let s = v.to_string();
+        if s.len() > 60 {
+            let cut = (0..=60).rev().find(|i| s.is_char_boundary(*i)).unwrap_or(0);
+            format!("{}…", &s[..cut])
+        } else {
+            s
+        }
+    }
+    fn walk(a: &serde_json::Value, b: &serde_json::Value, path: &str, out: &mut Vec<String>) {
+        use serde_json::Value as V;
+        if out.len() >= 4 || a == b {
+            return;
+        }
+        match (a, b) {
+            (V::Object(x), V::Object(y)) => {
+                let keys: BTreeSet<&String> = x.keys().chain(y.keys()).collect();
+                for k in keys {
+                    match (x.get(k), y.get(k)) {
+                        (Some(p), Some(q)) => walk(p, q, &format!("{path}.{k}"), out),
+                        (Some(_), None) => out.push(format!("{path}.{k} is gone")),
+                        (None, Some(_)) => out.push(format!("{path}.{k} is new")),
+                        (None, None) => {}
+                    }
+                }
+            }
+            (V::Array(x), V::Array(y)) if x.len() == y.len() => {
+                for (i, (p, q)) in x.iter().zip(y).enumerate() {
+                    walk(p, q, &format!("{path}[{i}]"), out);
+                }
+            }
+            (V::Array(x), V::Array(y)) => {
+                out.push(format!("{path} has {} entries, had {}", y.len(), x.len()))
+            }
+            _ => out.push(format!("{path}: {} became {}", brief(a), brief(b))),
+        }
+    }
+    let mut out = Vec::new();
+    walk(a, b, "$", &mut out);
+    out.join("; ")
+}
+
+/// What an edit broke: the integrity findings the scene has now and did
+/// not have before.
+fn broke(before: &BTreeSet<String>, m: &CanvasModel) -> Option<String> {
+    let now = super::scene_integrity::issues(m.scene());
+    let new: Vec<&str> = now.difference(before).map(String::as_str).collect();
+    (!new.is_empty()).then(|| new.join("; "))
+}
+
+/// One case through apply, undo and redo. `Ok` says how it held;
+/// `Err` is the finding.
+fn run_undo_case(case: &Case) -> Result<&'static str, String> {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let mut m = load_sample(case.fixture);
+        let mutation = (case.prepare)(&mut m);
+
+        let before = scene_json(&m);
+        let sound_before = super::scene_integrity::issues(m.scene());
+        let steps = m.applied_log_len();
+
+        if let Err(e) = m.apply_mutation(&mutation) {
+            return Err(format!("REJECTED · {e:?}"));
+        }
+        let after = scene_json(&m);
+        if let Some(what) = broke(&sound_before, &m) {
+            return Err(format!("the op leaves the scene unsound · {what}"));
+        }
+        match m.applied_log_len() - steps.min(m.applied_log_len()) {
+            0 if after == before => return Ok("no undo step, scene untouched"),
+            0 => {
+                return Err(format!(
+                    "the op changed the scene and wrote no undo step · {}",
+                    scene_diff(&before, &after)
+                ))
+            }
+            1 => {}
+            n => return Err(format!("the op wrote {n} undo steps, not one")),
+        }
+
+        if m.undo().is_none() {
+            return Err("undo was refused".to_string());
+        }
+        let undone = scene_json(&m);
+        if undone != before {
+            return Err(format!(
+                "undo does not restore the scene · {}",
+                scene_diff(&before, &undone)
+            ));
+        }
+        if let Some(what) = broke(&sound_before, &m) {
+            return Err(format!("undo leaves the scene unsound · {what}"));
+        }
+
+        if m.redo().is_none() {
+            return Err("redo was refused".to_string());
+        }
+        let redone = scene_json(&m);
+        if redone != after {
+            return Err(format!(
+                "redo does not restore the op's result · {}",
+                scene_diff(&after, &redone)
+            ));
+        }
+        if let Some(what) = broke(&sound_before, &m) {
+            return Err(format!("redo leaves the scene unsound · {what}"));
+        }
+        Ok("undo and redo exact")
+    }));
+    match result {
+        Ok(r) => r,
+        Err(p) => Err(format!(
+            "SETUP FAILED · {}",
+            p.downcast_ref::<String>()
+                .cloned()
+                .or_else(|| p.downcast_ref::<&str>().map(|s| (*s).to_string()))
+                .unwrap_or_else(|| "panic".to_string())
+        )),
+    }
+}
+
+/// A red of the undo sweep that is on file: the op, and what was observed.
+/// Nothing goes here to make the sweep green: an entry is a defect (or a
+/// limit of this harness) written down, and it must go when it is fixed.
+struct UndoKnown {
+    op: &'static str,
+    observed: &'static str,
+}
+
+const UNDO_KNOWN: &[UndoKnown] = &[];
+
+fn undo_known(op: &str) -> Option<&'static UndoKnown> {
+    UNDO_KNOWN.iter().find(|k| k.op == op)
+}
+
+/// Sweep `cases` through apply, undo and redo, and hold the result to
+/// `UNDO_KNOWN` in both directions.
+fn sweep_undo(axis: &str, cases: &[Case]) {
+    let mut rows = Vec::new();
+    let mut new_findings = Vec::new();
+    let mut fixed = Vec::new();
+    for case in cases {
+        let result = run_undo_case(case);
+        let tag = match (&result, undo_known(case.op)) {
+            (Ok(_), None) => "ok",
+            (Ok(_), Some(k)) => {
+                fixed.push(k.op);
+                "FIXED — remove its UNDO_KNOWN entry"
+            }
+            (Err(_), Some(_)) => "known",
+            (Err(e), None) => {
+                new_findings.push(format!("{} ({}): {e}", case.op, case.fixture));
+                "NEW FINDING"
+            }
+        };
+        rows.push(format!(
+            "{:<34} {:<14} {:<12} {}",
+            case.op,
+            case.fixture,
+            tag,
+            match &result {
+                Ok(how) => (*how).to_string(),
+                Err(e) => e.clone(),
+            }
+        ));
+    }
+    let table = rows.join("\n");
+    println!(
+        "\n── undo sweep · {axis} · {} cases, {} known findings ──\n{table}\n",
+        cases.len(),
+        UNDO_KNOWN.len()
+    );
+    assert!(
+        fixed.is_empty(),
+        "\nthese ops now undo and redo exactly — delete their UNDO_KNOWN entries so the \
+         ratchet cannot slip back: {fixed:?}\n\n{table}\n"
+    );
+    assert!(
+        new_findings.is_empty(),
+        "\n{} case(s) do not survive apply → undo → redo, with nothing on file:\n  {}\n\n{table}\n",
+        new_findings.len(),
+        new_findings.join("\n  ")
+    );
+}
+
+#[test]
+fn every_mutation_undoes_to_the_scene_it_found_and_redoes_to_the_one_it_made() {
+    sweep_undo("mutation variants", &cases());
+}
+
+#[test]
+fn every_property_path_undoes_to_the_scene_it_found_and_redoes_to_the_one_it_made() {
+    sweep_undo("property paths", &property_cases());
+}
+
+/// Every `UNDO_KNOWN` entry names an op the sweep runs and says what was
+/// seen.
+#[test]
+fn every_known_undo_finding_names_a_swept_case() {
+    let swept: BTreeSet<&str> = cases()
+        .iter()
+        .chain(property_cases().iter())
+        .map(|c| c.op)
+        .collect();
+    for k in UNDO_KNOWN {
+        assert!(
+            swept.contains(k.op),
+            "UNDO_KNOWN names {:?}, which the sweep does not cover",
+            k.op
+        );
+        assert!(
+            k.observed.len() > 40,
+            "{}'s entry does not say what was observed",
+            k.op
+        );
+    }
+}
+
 /// Every diagnosis must name a real mutation, and must actually say
 /// something. A `KNOWN` entry whose op was renamed away would otherwise
 /// sit there forever describing a defect nobody can find.

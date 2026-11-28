@@ -66,30 +66,120 @@ fn model_round_trips_through_native_bytes_and_renders_identically() {
     }
 }
 
-/// A part stamped with an incompatible `PGM_FORMAT_VERSION` is rejected (→ the
-/// loader falls back to the IDML import), never mis-deserialized (ADR-022 Q2).
-#[test]
-fn incompatible_format_version_is_rejected() {
+fn fixture_pgm() -> Vec<u8> {
     let idml = paged_gen::write_idml(&paged_gen::samples::geometry::build())
         .expect("generate fixture idml");
     let doc = idml_import::import_idml_doc(&idml).expect("import fixture");
-    let bytes = paged_store::to_bytes(&doc).expect("serialize to .pgm");
+    paged_store::to_bytes(&doc).expect("serialize to .pgm")
+}
 
-    // Current version round-trips.
+fn with_version(pgm: &[u8], version: u32) -> serde_json::Value {
+    let mut v: serde_json::Value = serde_json::from_slice(pgm).expect("parse envelope");
+    v["format_version"] = serde_json::json!(version);
+    v
+}
+
+fn err_of(bytes: &[u8]) -> paged_store::PgmError {
+    match paged_store::from_bytes(bytes) {
+        Ok(_) => panic!("the part must not read"),
+        Err(e) => e,
+    }
+}
+
+/// A part stamped with a version this build does not read is rejected, never
+/// mis-deserialized (ADR-022 Q2), and the error says which way it is off: a
+/// loader refuses a newer part and may replace only an older one.
+#[test]
+fn incompatible_format_version_is_rejected() {
+    let bytes = fixture_pgm();
     assert!(
-        paged_store::from_bytes(&bytes).is_some(),
+        paged_store::from_bytes(&bytes).is_ok(),
         "current PGM_FORMAT_VERSION must load"
     );
 
-    // Bump the envelope's version → incompatible → None.
-    let mut v: serde_json::Value = serde_json::from_slice(&bytes).expect("parse envelope");
-    v["format_version"] = serde_json::json!(paged_store::PGM_FORMAT_VERSION + 1);
-    let future = serde_json::to_vec(&v).expect("reserialize");
-    assert!(
-        paged_store::from_bytes(&future).is_none(),
-        "an incompatible format version must be rejected"
+    let newer = paged_store::PGM_FORMAT_VERSION + 1;
+    let future = serde_json::to_vec(&with_version(&bytes, newer)).expect("reserialize");
+    let e = err_of(&future);
+    assert_eq!(
+        e,
+        paged_store::PgmError::NewerVersion {
+            found: newer,
+            supported: paged_store::PGM_FORMAT_VERSION,
+        }
     );
+    assert!(e.is_newer_version());
+    assert!(e.to_string().contains("newer"), "{e}");
 
-    // Garbage bytes are also rejected (not a panic).
-    assert!(paged_store::from_bytes(b"not json").is_none());
+    let stale = serde_json::to_vec(&with_version(&bytes, 1)).expect("reserialize");
+    let e = err_of(&stale);
+    assert!(
+        matches!(e, paged_store::PgmError::StaleVersion { found: 1, .. }),
+        "{e:?}"
+    );
+    assert!(!e.is_newer_version());
+}
+
+/// A newer part need not have this build's model shape. The version is still
+/// the reason reported, not the shape error it causes.
+#[test]
+fn a_newer_part_of_another_shape_is_still_a_newer_part() {
+    let newer = paged_store::PGM_FORMAT_VERSION + 7;
+    let future = serde_json::to_vec(&serde_json::json!({
+        "format_version": newer,
+        "model": { "spreads": "not what this build calls spreads" },
+    }))
+    .expect("serialize");
+    assert_eq!(
+        err_of(&future),
+        paged_store::PgmError::NewerVersion {
+            found: newer,
+            supported: paged_store::PGM_FORMAT_VERSION,
+        }
+    );
+}
+
+/// Bytes that are not a model part are corrupt, not a panic and not a
+/// version problem.
+#[test]
+fn a_part_that_is_not_a_model_is_corrupt() {
+    for bytes in [
+        &b"not json"[..],
+        b"{\"not\":\"a model\"}",
+        b"{\"format_version\":4,\"model\":7}",
+    ] {
+        let e = err_of(bytes);
+        assert!(matches!(e, paged_store::PgmError::Corrupt(_)), "{e:?}");
+    }
+    // Truncated mid-way: what an interrupted write leaves.
+    let bytes = fixture_pgm();
+    let e = err_of(&bytes[..bytes.len() / 2]);
+    assert!(matches!(e, paged_store::PgmError::Corrupt(_)), "{e:?}");
+}
+
+/// A part that names an image blob the container does not hold says which.
+#[test]
+fn a_part_whose_image_blob_is_gone_names_the_blob() {
+    let mut doc = paged_scene::Document::default();
+    let mut spread = paged_model::Spread::default();
+    let mut rect = paged_model::Rectangle::new("r1", paged_model::Bounds::ZERO);
+    rect.image_bytes = Some(vec![1, 2, 3, 4]);
+    spread.rectangles.push(rect);
+    doc.spreads.push(paged_scene::ParsedSpread {
+        src: "Spreads/Spread_s1.xml".into(),
+        spread,
+    });
+    let (pgm, blobs) = paged_store::to_parts(&doc).expect("parts");
+    assert_eq!(blobs.len(), 1, "the image is one blob part");
+    let by_name: std::collections::HashMap<String, Vec<u8>> = blobs
+        .iter()
+        .map(|(path, bytes)| {
+            (
+                paged_store::blob_name_of(path).expect("blob path").into(),
+                bytes.clone(),
+            )
+        })
+        .collect();
+    let name = by_name.keys().next().expect("one blob").clone();
+    assert!(paged_store::from_parts(&pgm, by_name).is_ok());
+    assert_eq!(err_of(&pgm), paged_store::PgmError::MissingBlob { name });
 }

@@ -60,6 +60,31 @@ pub(super) struct SpreadsCapture {
     pub(super) restore_facing: bool,
     #[serde(default)]
     pub(super) facing_pages: Option<bool>,
+    /// Page labels (`Page@Name`) to put back, each by its spread's index
+    /// and its index on the spread, applied after the spreads. A section
+    /// edit re-derives the labels of the pages it governs; the labels its
+    /// rules could not have produced travel here (`sections.rs`).
+    #[serde(default)]
+    pub(super) page_names: Vec<(usize, usize, Option<String>)>,
+}
+
+/// A capture that replaces no spread and puts `page_names` back: the
+/// [`Operation::RestoreSpreads`] a section edit's inverse carries.
+pub(super) fn restore_page_names(
+    doc: &Document,
+    page_names: Vec<(usize, usize, Option<String>)>,
+) -> Result<Operation, OperationError> {
+    let capture = SpreadsCapture {
+        spreads: Vec::new(),
+        restore_facing: false,
+        facing_pages: None,
+        page_names,
+    };
+    Ok(Operation::RestoreSpreads {
+        first: doc.spreads.len(),
+        capture_json: serde_json::to_string(&capture)
+            .map_err(|e| invalid(format!("page label capture failed: {e}")))?,
+    })
 }
 
 fn invalid(reason: impl Into<String>) -> OperationError {
@@ -77,10 +102,28 @@ pub(super) fn capture(
     first: usize,
     restore_facing: bool,
 ) -> Result<String, OperationError> {
+    capture_with_names(doc, first, restore_facing, &[])
+}
+
+/// [`capture`], with the current label of every page `names` addresses, so
+/// the inverse of a restore that set labels sets them back.
+fn capture_with_names(
+    doc: &Document,
+    first: usize,
+    restore_facing: bool,
+    names: &[(usize, usize, Option<String>)],
+) -> Result<String, OperationError> {
     let capture = SpreadsCapture {
         spreads: doc.spreads[first.min(doc.spreads.len())..].to_vec(),
         restore_facing,
         facing_pages: doc.designmap.document_preference.facing_pages,
+        page_names: names
+            .iter()
+            .filter_map(|(spread, page, _)| {
+                let held = doc.spreads.get(*spread)?.spread.pages.get(*page)?;
+                Some((*spread, *page, held.name.clone()))
+            })
+            .collect(),
     };
     serde_json::to_string(&capture).map_err(|e| invalid(format!("spread capture failed: {e}")))
 }
@@ -98,9 +141,21 @@ pub(super) fn apply_restore_spreads(
     if first > doc.spreads.len() {
         return Err(invalid("RestoreSpreads starts past the last spread"));
     }
-    let current = capture(doc, first, restore.restore_facing)?;
+    // The labels are read before the spreads change and written after:
+    // a capture carries spreads or labels, and a label index names the
+    // same page either side of a restore that carries only labels.
+    let current = capture_with_names(doc, first, restore.restore_facing, &restore.page_names)?;
     doc.spreads.truncate(first);
     doc.spreads.extend(restore.spreads);
+    for (spread, page, name) in restore.page_names {
+        if let Some(held) = doc
+            .spreads
+            .get_mut(spread)
+            .and_then(|s| s.spread.pages.get_mut(page))
+        {
+            held.name = name;
+        }
+    }
     if restore.restore_facing {
         doc.designmap.document_preference.facing_pages = restore.facing_pages;
     }

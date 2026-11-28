@@ -1184,6 +1184,64 @@ pub(super) fn expect_bool(path: PropertyPath, value: &Value) -> Result<bool, Ope
     }
 }
 
+/// What an inverse carries for a flag that was NOT SET before the write:
+/// `Value::Bool` holds two states and an optional flag has three, so the
+/// absence travels as `Value::Length(None)`, the vocabulary's existing
+/// spelling of "unset / inherit the default".
+pub(super) fn unset_flag() -> Value {
+    Value::Length(None)
+}
+
+/// A value for an optional flag: `Some` for `Value::Bool`, `None` for
+/// [`unset_flag`] (what the inverse of a first write puts back).
+pub(super) fn expect_flag(
+    path: PropertyPath,
+    value: &Value,
+) -> Result<Option<bool>, OperationError> {
+    match value {
+        Value::Bool(b) => Ok(Some(*b)),
+        Value::Length(None) => Ok(None),
+        _ => Err(OperationError::TypeMismatch {
+            path,
+            expected: "Bool".to_string(),
+        }),
+    }
+}
+
+/// Write an optional flag and return what it held, as the inverse's
+/// value: the flag itself, or [`unset_flag`] when it was absent — so undo
+/// restores the absence instead of the default the flag reads as.
+pub(super) fn replace_flag(
+    slot: &mut Option<bool>,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<Value, OperationError> {
+    let next = expect_flag(path, value)?;
+    Ok(std::mem::replace(slot, next).map_or_else(unset_flag, Value::Bool))
+}
+
+/// Whether an effects bag holds no effect at all.
+pub(super) fn effects_bag_is_empty(bag: &paged_model::FrameEffects) -> bool {
+    let paged_model::FrameEffects {
+        inner_shadow,
+        outer_glow,
+        inner_glow,
+        bevel,
+        satin,
+        feather,
+        directional_feather,
+        gradient_feather,
+    } = bag;
+    inner_shadow.is_none()
+        && outer_glow.is_none()
+        && inner_glow.is_none()
+        && bevel.is_none()
+        && satin.is_none()
+        && feather.is_none()
+        && directional_feather.is_none()
+        && gradient_feather.is_none()
+}
+
 pub(super) fn expect_text(path: PropertyPath, value: &Value) -> Result<String, OperationError> {
     match value {
         Value::Text(s) => Ok(s.clone()),
@@ -1225,27 +1283,26 @@ pub(super) fn find_frame_effects_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut paged_model::FrameEffects> {
+    frame_effects_slot_mut(doc, node).map(|slot| slot.get_or_insert_with(Default::default))
+}
+
+/// The item's effects bag as the model holds it — `None` inside when the
+/// item has none — without materialising it. `None` when `node` is not an
+/// effect-bearing item of the document.
+pub(super) fn frame_effects_slot_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<paged_model::FrameEffects>> {
     // Engine ADR 1045 — an anchored frame, when `node` names one.
     if super::anchored_look::names_anchored(doc, node) {
-        return super::anchored_look::frame_mut(doc, node)
-            .map(|f| f.effects.get_or_insert_with(Default::default));
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.effects);
     }
     match node {
-        NodeId::TextFrame(id) => {
-            find_text_frame_mut(doc, id).map(|f| f.effects.get_or_insert_with(Default::default))
-        }
-        NodeId::Rectangle(id) => {
-            find_rectangle_mut(doc, id).map(|r| r.effects.get_or_insert_with(Default::default))
-        }
-        NodeId::Oval(id) => {
-            find_oval_mut(doc, id).map(|o| o.effects.get_or_insert_with(Default::default))
-        }
-        NodeId::Polygon(id) => {
-            find_polygon_mut(doc, id).map(|p| p.effects.get_or_insert_with(Default::default))
-        }
-        NodeId::GraphicLine(id) => {
-            find_graphic_line_mut(doc, id).map(|l| l.effects.get_or_insert_with(Default::default))
-        }
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.effects),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.effects),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.effects),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.effects),
+        NodeId::GraphicLine(id) => find_graphic_line_mut(doc, id).map(|l| &mut l.effects),
         _ => None,
     }
 }

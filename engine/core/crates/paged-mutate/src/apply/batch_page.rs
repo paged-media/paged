@@ -50,47 +50,13 @@ pub(super) const FALLBACK_PAGE_BOUNDS: [f32; 4] = [0.0, 0.0, 792.0, 612.0];
 /// Pasteboard gap between an inserted spread and everything above it.
 pub(super) const SPREAD_STACK_GAP_PT: f32 = 72.0;
 
-/// Mint two fresh `u<hex>` ids (spread + page), unique across every
-/// self id in the document — page items, spreads, and pages alike.
+/// Mint two fresh `u<hex>` ids (spread + page), past the document's whole
+/// shared `u<hex>` line ([`crate::ids::highest_u_hex_id`]): the masters'
+/// items, layers, sections, stories, symbol definitions and links hold ids
+/// on it too, and a scan of the document spreads alone handed one of
+/// theirs out again.
 pub(super) fn mint_spread_page_ids(doc: &Document) -> (String, String) {
-    let mut max: u64 = 0;
-    let mut scan = |id: Option<&str>| {
-        let Some(id) = id else { return };
-        let Some(hex) = id.strip_prefix('u') else {
-            return;
-        };
-        if hex.is_empty() || hex.len() > 12 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
-            return;
-        }
-        if let Ok(v) = u64::from_str_radix(hex, 16) {
-            max = max.max(v);
-        }
-    };
-    for parsed in &doc.spreads {
-        let s = &parsed.spread;
-        scan(s.self_id.as_deref());
-        for p in &s.pages {
-            scan(p.self_id.as_deref());
-        }
-        for f in &s.text_frames {
-            scan(f.self_id.as_deref());
-        }
-        for r in &s.rectangles {
-            scan(r.self_id.as_deref());
-        }
-        for o in &s.ovals {
-            scan(o.self_id.as_deref());
-        }
-        for l in &s.graphic_lines {
-            scan(l.self_id.as_deref());
-        }
-        for p in &s.polygons {
-            scan(p.self_id.as_deref());
-        }
-        for g in &s.groups {
-            scan(g.self_id.as_deref());
-        }
-    }
+    let max = crate::ids::highest_u_hex_id(doc);
     (format!("u{:x}", max + 1), format!("u{:x}", max + 2))
 }
 

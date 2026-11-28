@@ -58,14 +58,13 @@ pub(super) fn numbering_style_to_idml(s: paged_model::NumberingStyle) -> &'stati
 /// section's start page is not that section's business, and leaving
 /// those alone preserves any label the walk cannot reproduce.
 ///
-/// Undo needs no captured names. Each section op's inverse is another
-/// section op, so undo re-derives against the RESTORED rules — exact
-/// for any document whose names were section-derived to begin with,
-/// which is every document InDesign wrote. The one thing it does not
-/// restore is a name that never was a label: a page inside the edited
-/// range whose `Name` was hand-set to something the rules could not
-/// produce (paged-gen's `showcase-base` writes descriptors there)
-/// comes back as its section number.
+/// Undo: each section op's inverse is another section op, which
+/// re-derives against the RESTORED rules — exact for every page whose
+/// name was section-derived to begin with, which is every page InDesign
+/// wrote. A name the old rules could not have produced (a missing one, or
+/// one hand-set to a descriptor, as paged-gen's `showcase-base` writes)
+/// is not derivable, so [`underivable_labels`] captures those before the
+/// edit and [`with_labels`] has the inverse put them back.
 pub(super) fn rebake_page_labels(doc: &mut Document, from_page: Option<&str>) {
     // An anchor we cannot find (a section with no `PageStart`, or one
     // naming a page that has since been deleted) re-bakes the whole
@@ -91,6 +90,54 @@ pub(super) fn rebake_page_labels(doc: &mut Document, from_page: Option<&str>) {
             }
         }
     }
+}
+
+/// The pages a re-bake from `from_page` is about to rename whose current
+/// name the CURRENT section rules do not derive, each as (spread index,
+/// index on the spread, name). Call before the edit: these are the names
+/// the inverse section op cannot re-derive.
+fn underivable_labels(
+    doc: &Document,
+    from_page: Option<&str>,
+) -> Vec<(usize, usize, Option<String>)> {
+    let anchored = from_page.is_some_and(|id| {
+        doc.spreads
+            .iter()
+            .flat_map(|s| s.spread.pages.iter())
+            .any(|p| p.self_id.as_deref() == Some(id))
+    });
+    let mut writing = !anchored;
+    let mut walk = paged_model::SectionWalk::new(&doc.designmap.sections);
+    let mut out = Vec::new();
+    for (si, parsed) in doc.spreads.iter().enumerate() {
+        for (pi, page) in parsed.spread.pages.iter().enumerate() {
+            let label = walk.derived_label(page.self_id.as_deref());
+            if !writing && page.self_id.as_deref() == from_page {
+                writing = true;
+            }
+            if writing && page.name.as_deref() != Some(label.as_str()) {
+                out.push((si, pi, page.name.clone()));
+            }
+        }
+    }
+    out
+}
+
+/// `inverse`, followed by the restore of `labels` when there are any.
+fn with_labels(
+    doc: &Document,
+    inverse: Operation,
+    labels: Vec<(usize, usize, Option<String>)>,
+) -> Result<Operation, OperationError> {
+    if labels.is_empty() {
+        return Ok(inverse);
+    }
+    Ok(Operation::Batch {
+        ops: vec![
+            inverse,
+            super::page_layout::restore_page_names(doc, labels)?,
+        ],
+    })
 }
 
 pub(super) fn apply_insert_section(
@@ -137,17 +184,25 @@ pub(super) fn apply_insert_section(
         marker: None,
         include_prefix: prefix.is_some(),
     };
-    sections.push(section);
+    let labels = underivable_labels(doc, Some(at_page));
+    doc.designmap.sections.push(section);
     rebake_page_labels(doc, Some(at_page));
+    let inverse = with_labels(
+        doc,
+        Operation::DeleteSection {
+            section_id: id.clone(),
+        },
+        labels,
+    )?;
     Ok(AppliedOperation {
         op: Operation::InsertSection {
             at_page: at_page.to_string(),
             prefix,
             numbering_style,
             start_at,
-            self_id: Some(id.clone()),
+            self_id: Some(id),
         },
-        inverse: Operation::DeleteSection { section_id: id },
+        inverse,
         invalidation: InvalidationHint {
             structural: true,
             ..Default::default()
@@ -162,6 +217,14 @@ pub(super) fn apply_edit_section(
     numbering_style: Option<String>,
     start_at: Option<Option<u32>>,
 ) -> Result<AppliedOperation, OperationError> {
+    let labels = doc
+        .designmap
+        .sections
+        .iter()
+        .find(|s| s.self_id == section_id)
+        .map(|s| s.page_start.clone())
+        .map(|start| underivable_labels(doc, start.as_deref()))
+        .unwrap_or_default();
     let sections = &mut doc.designmap.sections;
     let section = sections
         .iter_mut()
@@ -187,6 +250,16 @@ pub(super) fn apply_edit_section(
     }
     let page_start = section.page_start.clone();
     rebake_page_labels(doc, page_start.as_deref());
+    let inverse = with_labels(
+        doc,
+        Operation::EditSection {
+            section_id: section_id.to_string(),
+            prefix: Some(prev_prefix),
+            numbering_style: Some(prev_style),
+            start_at: Some(prev_start),
+        },
+        labels,
+    )?;
 
     Ok(AppliedOperation {
         op: Operation::EditSection {
@@ -195,12 +268,7 @@ pub(super) fn apply_edit_section(
             numbering_style,
             start_at,
         },
-        inverse: Operation::EditSection {
-            section_id: section_id.to_string(),
-            prefix: Some(prev_prefix),
-            numbering_style: Some(prev_style),
-            start_at: Some(prev_start),
-        },
+        inverse,
         invalidation: InvalidationHint {
             structural: true,
             ..Default::default()
@@ -220,21 +288,28 @@ pub(super) fn apply_delete_section(
             collection: "sections".to_string(),
             id: section_id.to_string(),
         })?;
-    let removed = sections.remove(pos);
+    let start = sections[pos].page_start.clone();
+    let labels = underivable_labels(doc, start.as_deref());
+    let removed = doc.designmap.sections.remove(pos);
     let style_str = numbering_style_to_idml(removed.numbering_style).to_string();
     let at_page = removed.page_start.clone().unwrap_or_default();
     rebake_page_labels(doc, removed.page_start.as_deref());
-    Ok(AppliedOperation {
-        op: Operation::DeleteSection {
-            section_id: section_id.to_string(),
-        },
-        inverse: Operation::InsertSection {
+    let inverse = with_labels(
+        doc,
+        Operation::InsertSection {
             at_page,
             prefix: removed.section_prefix.clone(),
             numbering_style: Some(style_str),
             start_at: removed.start_at,
             self_id: Some(removed.self_id.clone()),
         },
+        labels,
+    )?;
+    Ok(AppliedOperation {
+        op: Operation::DeleteSection {
+            section_id: section_id.to_string(),
+        },
+        inverse,
         invalidation: InvalidationHint {
             structural: true,
             ..Default::default()

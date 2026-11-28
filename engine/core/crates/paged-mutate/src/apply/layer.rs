@@ -126,6 +126,42 @@ pub(super) fn apply_insert_layer(
     })
 }
 
+/// Clear `ItemLayer` on every item of `spread` that sits on `layer_id`,
+/// returning the items it cleared.
+fn clear_item_layer(spread: &mut paged_model::Spread, layer_id: &str) -> Vec<NodeId> {
+    let mut cleared = Vec::new();
+    macro_rules! clear {
+        ($items:expr, $node:path) => {
+            for item in $items.iter_mut() {
+                // An item without a `Self` cannot be named by the inverse,
+                // so it keeps its reference rather than lose it for good.
+                if let (Some(id), Some(layer)) = (&item.self_id, &item.item_layer) {
+                    if layer == layer_id {
+                        cleared.push($node(id.clone()));
+                        item.item_layer = None;
+                    }
+                }
+            }
+        };
+    }
+    clear!(spread.text_frames, NodeId::TextFrame);
+    clear!(spread.rectangles, NodeId::Rectangle);
+    clear!(spread.ovals, NodeId::Oval);
+    clear!(spread.graphic_lines, NodeId::GraphicLine);
+    clear!(spread.polygons, NodeId::Polygon);
+    clear!(spread.instances, NodeId::Instance);
+    cleared
+}
+
+/// `RemoveLayer`. The layer's record goes and its items STAY, with their
+/// `ItemLayer` cleared: an item that names no layer is a state the model
+/// holds (it draws, unlocked, above the layered items — exactly how the
+/// renderer and the hit-test already treated a reference to a layer that
+/// is gone), where a reference to a missing layer is not one and would be
+/// written into an exported file. Deleting the items with the layer, as
+/// InDesign does behind a warning, is a different, destructive gesture
+/// that a caller composes from `RemoveNode`s; the inverse here puts the
+/// layer back and each item back onto it.
 pub(super) fn apply_remove_layer(
     doc: &mut Document,
     layer_id: &str,
@@ -136,6 +172,36 @@ pub(super) fn apply_remove_layer(
         .position(|l| l.self_id == layer_id)
         .ok_or_else(|| OperationError::NodeNotFound(NodeId::Layer(layer_id.to_string())))?;
     let captured = layers.remove(idx);
+    let back_on_layer = |node: NodeId| Operation::SetProperty {
+        node,
+        path: PropertyPath::ItemLayer,
+        value: Value::Text(layer_id.to_string()),
+    };
+    let mut rehome: Vec<Operation> = Vec::new();
+    for parsed in &mut doc.spreads {
+        rehome.extend(
+            clear_item_layer(&mut parsed.spread, layer_id)
+                .into_iter()
+                .map(back_on_layer),
+        );
+    }
+    // Masters in a fixed order, so the inverse reads the same every run.
+    let mut masters: Vec<&String> = doc.master_spreads.keys().collect();
+    masters.sort();
+    let masters: Vec<String> = masters.into_iter().cloned().collect();
+    for key in masters {
+        let Some(master) = doc.master_spreads.get_mut(&key) else {
+            continue;
+        };
+        rehome.extend(
+            clear_item_layer(&mut master.spread, layer_id)
+                .into_iter()
+                .map(|node| Operation::OnMaster {
+                    master_id: key.clone(),
+                    op: Box::new(back_on_layer(node)),
+                }),
+        );
+    }
     // Inverse: re-insert at the original index, then rename to
     // restore name + re-apply flags. We pack the restore into a
     // Batch so a single Cmd-Z reverses the whole removal.
@@ -168,6 +234,7 @@ pub(super) fn apply_remove_layer(
             self_id: Some(captured.self_id.clone()),
         })
         .chain(restore_flags)
+        .chain(rehome)
         .collect(),
     };
     Ok(AppliedOperation {

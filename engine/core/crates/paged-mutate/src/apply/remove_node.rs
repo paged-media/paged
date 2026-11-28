@@ -106,8 +106,26 @@ pub(super) fn apply_remove_node(
             },
         });
     }
+    // A threaded text frame leaves its chain whole: the frame before it
+    // takes over its link (InDesign closes the thread around a deleted
+    // frame). Left alone, the frame before kept naming an id the document
+    // no longer held, and the frames after it dropped out of the chain.
+    let thread = match node {
+        NodeId::TextFrame(id) => thread_around(doc, id),
+        _ => None,
+    };
     let (parent, position, captured, z_slot) = remove_and_capture(doc, node)?;
-    let inverse = invert_remove_node(parent, position, captured, z_slot);
+    let mut inverse = invert_remove_node(parent, position, captured, z_slot);
+    if let Some((before, after)) = thread {
+        // The pointer write `UnlinkFrames` is, inverse-only field and all:
+        // its inverse re-points `before` at the frame the undo has just
+        // re-inserted (which comes back with its own link intact).
+        let relinked =
+            super::path_topology::apply_unlink_frames(doc, &before, after.as_deref(), None)?;
+        inverse = Operation::Batch {
+            ops: vec![inverse, relinked.inverse],
+        };
+    }
     Ok(AppliedOperation {
         op: Operation::RemoveNode { node: node.clone() },
         inverse,
@@ -116,6 +134,24 @@ pub(super) fn apply_remove_node(
             ..Default::default()
         },
     })
+}
+
+/// The thread around text frame `id`: the frame whose `next_text_frame`
+/// names it, and what `id` itself links to (taken as it stands, an end of
+/// chain included). `None` when no other frame links to it.
+fn thread_around(doc: &Document, id: &str) -> Option<(String, Option<String>)> {
+    let frames = || doc.spreads.iter().flat_map(|s| s.spread.text_frames.iter());
+    let before = frames()
+        .find(|f| f.next_text_frame.as_deref() == Some(id) && f.self_id.as_deref() != Some(id))?
+        .self_id
+        .clone()?;
+    let after = frames()
+        .find(|f| f.self_id.as_deref() == Some(id))?
+        .next_text_frame
+        .clone()
+        // A frame the chain already passed through cannot follow it again.
+        .filter(|next| *next != before);
+    Some((before, after))
 }
 
 /// What removing `node` removes, leaf by leaf, in paint order: the

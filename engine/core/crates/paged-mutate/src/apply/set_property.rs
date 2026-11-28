@@ -35,6 +35,41 @@ pub(super) fn apply_set_property(
     path: PropertyPath,
     value: &Value,
 ) -> Result<AppliedOperation, OperationError> {
+    // An effect write materialises the item's effects bag when it has
+    // none, and the write that undoes it (switch the effect off, clear the
+    // gradient feather) leaves the bag behind, empty. An empty bag draws
+    // what no bag draws, so a write that empties it drops it: undo then
+    // restores the absence it found. A bag that was already empty before
+    // the write is the document's own and stays.
+    let item = matches!(
+        node,
+        NodeId::TextFrame(_)
+            | NodeId::Rectangle(_)
+            | NodeId::Oval(_)
+            | NodeId::Polygon(_)
+            | NodeId::GraphicLine(_)
+    );
+    let held_empty_bag = item
+        && frame_effects_slot_mut(doc, node)
+            .and_then(|slot| slot.as_ref().map(effects_bag_is_empty))
+            .unwrap_or(false);
+    let applied = apply_set_property_following(doc, node, path, value)?;
+    if item && !held_empty_bag {
+        if let Some(slot) = frame_effects_slot_mut(doc, node) {
+            if slot.as_ref().is_some_and(effects_bag_is_empty) {
+                *slot = None;
+            }
+        }
+    }
+    Ok(applied)
+}
+
+fn apply_set_property_following(
+    doc: &mut Document,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<AppliedOperation, OperationError> {
     // Engine ADR 1096 — a write that moves or resizes an item refits a
     // live preset on it and routes the connectors glued to it, in the same
     // apply; the inverse then restores everything it touched.
@@ -2362,12 +2397,13 @@ fn apply_set_property_core(
             | NodeId::GraphicLine(_),
             PropertyPath::FrameSatinInvert,
         ) => {
-            let new_val = expect_bool(path, value)?;
+            // The type is checked before the block is reached, so a
+            // refused value materialises nothing.
+            expect_flag(path, value)?;
             let e = find_satin_mut(doc, node)
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
-            let prev = e.invert.unwrap_or(false);
-            e.invert = Some(new_val);
-            (Value::Bool(prev), frame_style_hint(node))
+            let prev = replace_flag(&mut e.invert, path, value)?;
+            (prev, frame_style_hint(node))
         }
         (
             NodeId::TextFrame(_)
@@ -3318,13 +3354,11 @@ fn apply_set_property_core(
             )
         }
         (NodeId::TextFrame(id), PropertyPath::TextFrameColumnBalance) => {
-            let new_val = expect_bool(path, value)?;
             let frame = find_text_frame_mut(doc, id)
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
-            let prev = frame.column_balance.unwrap_or(false);
-            frame.column_balance = Some(new_val);
+            let prev = replace_flag(&mut frame.column_balance, path, value)?;
             (
-                Value::Bool(prev),
+                prev,
                 InvalidationHint {
                     text_reflow: vec![node.clone()],
                     ..Default::default()
@@ -3481,14 +3515,17 @@ fn apply_set_property_core(
             },
         ),
         (NodeId::Rectangle(id), PropertyPath::FrameAutoFit) => {
-            let new_val = expect_bool(path, value)?;
+            expect_flag(path, value)?;
             let rect = find_rectangle_mut(doc, id)
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
             let ff = rect.frame_fitting.get_or_insert_with(Default::default);
-            let prev = ff.auto_fit.unwrap_or(false);
-            ff.auto_fit = Some(new_val);
+            let prev = replace_flag(&mut ff.auto_fit, path, value)?;
+            // As the reference point above: an emptied option is dropped.
+            if ff.is_empty() {
+                rect.frame_fitting = None;
+            }
             (
-                Value::Bool(prev),
+                prev,
                 InvalidationHint {
                     frame_style: vec![node.clone()],
                     ..Default::default()

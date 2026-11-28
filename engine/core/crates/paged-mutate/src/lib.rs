@@ -4509,12 +4509,14 @@ mod tests {
                 value: Value::GradientFeather(None),
             })
             .expect("clear feather");
-        assert!(project.document().spreads[0].spread.text_frames[0]
-            .effects
-            .as_ref()
-            .expect("effects struct survives the clear")
-            .gradient_feather
-            .is_none());
+        // The feather was the bag's only effect: clearing it drops the
+        // emptied bag, as an item with no effect holds none.
+        assert!(
+            project.document().spreads[0].spread.text_frames[0]
+                .effects
+                .is_none(),
+            "an emptied effects bag is dropped"
+        );
         crate::apply(project.document_mut(), &cleared.inverse).expect("undo clear");
         let restored = project.document().spreads[0].spread.text_frames[0]
             .effects
@@ -7152,11 +7154,10 @@ mod tests {
             ),
             |d| assert_eq!(d.spreads[0].spread.text_frames[0].column_gutter, Some(14.0)),
         );
-        // column_balance is `Option<bool>`; `Value::Bool` carries no
-        // `None`, so undo of a write whose prior was `None` restores
-        // `Some(false)` (the default), not `None` — the documented
-        // `CharacterUnderline` lossy-default precedent. Assert value +
-        // semantic restore rather than bytewise identity.
+        // column_balance is `Option<bool>`: the inverse of a write whose
+        // prior was `None` carries the absence (`Value::Length(None)`,
+        // "unset"), so undo restores `None`, not the default the flag
+        // reads as.
         let applied = p
             .apply(set_op(
                 node,
@@ -7173,14 +7174,16 @@ mod tests {
             set_op(
                 NodeId::TextFrame("TextFrame/u1".to_string()),
                 PropertyPath::TextFrameColumnBalance,
-                Value::Bool(false),
+                Value::Length(None),
             )
         );
-        crate::apply(p.document_mut(), &applied.inverse).unwrap();
+        let undone = crate::apply(p.document_mut(), &applied.inverse).unwrap();
         assert_eq!(
             p.document().spreads[0].spread.text_frames[0].column_balance,
-            Some(false)
+            None
         );
+        // A flag that was set comes back as itself.
+        assert_eq!(undone.inverse, applied.op);
     }
 
     #[test]
@@ -7306,13 +7309,14 @@ mod tests {
                 .and_then(|ff| ff.auto_fit),
             Some(true)
         );
+        // The flag was not set before: undo restores that, and the
+        // option it was the only knob of goes with it.
         crate::apply(p.document_mut(), &applied.inverse).unwrap();
-        assert_eq!(
+        assert!(
             p.document().spreads[0].spread.rectangles[0]
                 .frame_fitting
-                .as_ref()
-                .and_then(|ff| ff.auto_fit),
-            Some(false)
+                .is_none(),
+            "undo leaves no auto-fit flag and no empty fitting option"
         );
     }
 

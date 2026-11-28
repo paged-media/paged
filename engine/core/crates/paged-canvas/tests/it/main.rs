@@ -132,6 +132,7 @@ mod rotate_scale_gesture;
 mod rotated_scale_gesture;
 mod ruler_guides_handle;
 mod save_keeps_untouched_styles;
+mod scene_integrity;
 mod scene_layer;
 mod scene_scoped_fonts;
 mod screen_aids;

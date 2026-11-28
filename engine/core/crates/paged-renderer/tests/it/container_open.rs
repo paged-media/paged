@@ -77,8 +77,10 @@ fn a_container_opens_from_its_model_part() {
     assert_eq!(opened.document.spreads.len(), 1);
 }
 
+/// A part that is not a model falls back to the IDML parts, and the open
+/// says so: the caller shows the reason before a save replaces the part.
 #[test]
-fn a_part_this_engine_cannot_read_falls_back_to_the_idml_parts() {
+fn a_corrupt_part_falls_back_to_the_idml_parts_and_says_so() {
     let bytes = idml();
     let spreads = idml_import::import_idml_doc(&bytes)
         .expect("import")
@@ -87,4 +89,93 @@ fn a_part_this_engine_cannot_read_falls_back_to_the_idml_parts() {
     let opened = open_document(&container(&bytes, b"{\"not\":\"a model\"}")).expect("open");
     assert!(!opened.from_model_part);
     assert_eq!(opened.document.spreads.len(), spreads);
+    assert!(matches!(
+        opened.model_part_fallback,
+        Some(paged_store::PgmError::Corrupt(_))
+    ));
+    let warning = opened.fallback_warning().expect("a warning");
+    assert!(warning.contains("IDML parts"), "{warning}");
+}
+
+/// A model part whose image blob is gone from the container: the same
+/// fallback, with the blob named.
+#[test]
+fn a_part_missing_its_image_blob_falls_back_and_says_so() {
+    let bytes = idml();
+    let mut doc = idml_import::import_idml_doc(&bytes).expect("import");
+    let mut spread = paged_model::Spread::default();
+    let mut rect = paged_model::Rectangle::new("blobbed", paged_model::Bounds::ZERO);
+    rect.image_bytes = Some(vec![9, 8, 7]);
+    spread.rectangles.push(rect);
+    doc.spreads.push(paged_scene::ParsedSpread {
+        src: "Spreads/Spread_blobbed.xml".into(),
+        spread,
+    });
+    // The model part alone, without the blob part it names.
+    let (pgm, blobs) = paged_store::to_parts(&doc).expect("parts");
+    assert_eq!(blobs.len(), 1);
+    let opened = open_document(&container(&bytes, &pgm)).expect("open");
+    assert!(!opened.from_model_part);
+    assert!(matches!(
+        opened.model_part_fallback,
+        Some(paged_store::PgmError::MissingBlob { .. })
+    ));
+    assert!(opened.fallback_warning().is_some());
+}
+
+/// A part older than this engine reads is stale, not newer: it falls back,
+/// with the warning.
+#[test]
+fn a_stale_part_falls_back_and_says_so() {
+    let bytes = idml();
+    let opened =
+        open_document(&container(&bytes, b"{\"format_version\":1,\"model\":{}}")).expect("open");
+    assert!(!opened.from_model_part);
+    assert!(matches!(
+        opened.model_part_fallback,
+        Some(paged_store::PgmError::StaleVersion { found: 1, .. })
+    ));
+}
+
+/// A part written by a NEWER engine refuses to open: importing the IDML
+/// parts instead would downgrade the document without a word, and the next
+/// save would write the downgrade over the model.
+#[test]
+fn a_part_from_a_newer_engine_refuses_to_open() {
+    let bytes = idml();
+    let doc = idml_import::import_idml_doc(&bytes).expect("import");
+    let mut pgm: serde_json::Value =
+        serde_json::from_slice(&paged_store::to_bytes(&doc).expect("pgm")).expect("json");
+    let newer = paged_store::PGM_FORMAT_VERSION + 1;
+    pgm["format_version"] = serde_json::json!(newer);
+    let pgm = serde_json::to_vec(&pgm).expect("json");
+    let err = match open_document(&container(&bytes, &pgm)) {
+        Ok(_) => panic!("a newer model part must not open"),
+        Err(e) => e,
+    };
+    assert_eq!(
+        err,
+        paged_renderer::container::OpenError::NewerModel {
+            found: newer,
+            supported: paged_store::PGM_FORMAT_VERSION,
+        }
+    );
+    assert!(err.to_string().contains("newer"), "{err}");
+}
+
+/// An IDML package and a container that opened from its model part carry no
+/// fallback.
+#[test]
+fn an_open_without_a_fallback_carries_no_warning() {
+    let bytes = idml();
+    assert!(open_document(&bytes)
+        .expect("open")
+        .fallback_warning()
+        .is_none());
+    let doc = idml_import::import_idml_doc(&bytes).expect("import");
+    let pgm = paged_store::to_bytes(&doc).expect("pgm");
+    assert!(open_document(&container(&bytes, &pgm))
+        .expect("open")
+        .fallback_warning()
+        .is_none());
 }

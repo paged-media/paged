@@ -367,7 +367,8 @@ pub(super) fn apply_duplicate_page(
     })
 }
 
-/// Give `spread`, its pages and all its items fresh `u<hex>` ids from
+/// Give `spread`, its pages and all its items (symbol instances included)
+/// fresh `u<hex>` ids from
 /// `next` on, and move the spread's id-keyed side maps (labels with
 /// plugin metadata, page margins, placed-image metadata, pasted-in
 /// children, opacity masks and a mask's item reference) to the new ids.
@@ -407,6 +408,11 @@ pub(super) fn fresh_ids(
     }
     for g in &mut spread.groups {
         remap(&mut g.self_id, next);
+    }
+    // Engine ADR 1039 — instances are page items on the same line; left
+    // alone, the copy's instances shared their ids with the source's.
+    for i in &mut spread.instances {
+        remap(&mut i.self_id, next);
     }
     fn rekey<V>(
         map: &mut std::collections::HashMap<String, V>,

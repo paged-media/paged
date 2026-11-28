@@ -31,7 +31,10 @@
 use paged_model::{FrameRef, Polygon, Rectangle, TextFrame};
 use paged_scene::Document;
 
-use super::helpers::{find_polygon_mut, find_rectangle_mut, find_text_frame_mut, spread_parent_id};
+use super::helpers::{
+    find_graphic_line_mut, find_polygon_mut, find_rectangle_mut, find_text_frame_mut,
+    spread_parent_id,
+};
 use super::insert_node::{ref_home, RefHome};
 use crate::error::OperationError;
 use crate::operation::{
@@ -70,6 +73,28 @@ fn snapshot<T: serde::Serialize>(item: &T) -> Result<String, OperationError> {
         path: PropertyPath::FrameEffectStack,
         reason: format!("the item does not serialise: {e}"),
     })
+}
+
+/// The op that puts `node` back as it stands now — its whole struct, the
+/// same snapshot Expand Appearance's own inverse carries — for an op
+/// whose inverse cannot rebuild the item from its arguments. `None` for a
+/// kind that takes no snapshot or an item the document does not hold.
+pub(super) fn item_snapshot(
+    doc: &mut Document,
+    node: &NodeId,
+) -> Result<Option<Operation>, OperationError> {
+    let json = match node {
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|i| snapshot(i)),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|i| snapshot(i)),
+        NodeId::GraphicLine(id) => find_graphic_line_mut(doc, id).map(|i| snapshot(i)),
+        _ => None,
+    };
+    Ok(json
+        .transpose()?
+        .map(|restore| Operation::ExpandAppearance {
+            node: node.clone(),
+            restore: Some(restore),
+        }))
 }
 
 pub(super) fn apply_expand_appearance(
@@ -125,6 +150,16 @@ pub(super) fn apply_expand_appearance(
                 None => paged_vector_fx::bake::bake_text_frame(item)
                     .ok_or_else(|| refuse(node, "the item has no vector effects to expand"))?,
             };
+            let prev = std::mem::replace(item, next);
+            Ok(applied(snapshot(&prev)?))
+        }
+        // A line has no appearance to expand; it takes only a snapshot
+        // (the restore another op's inverse carries, `item_snapshot`).
+        NodeId::GraphicLine(id) if restore.is_some() => {
+            let item = find_graphic_line_mut(doc, id)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let next: paged_model::GraphicLine = serde_json::from_str(restore.unwrap_or_default())
+                .map_err(|e| refuse(node, format!("not a line snapshot: {e}")))?;
             let prev = std::mem::replace(item, next);
             Ok(applied(snapshot(&prev)?))
         }

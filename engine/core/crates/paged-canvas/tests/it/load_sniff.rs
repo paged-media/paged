@@ -130,3 +130,52 @@ fn export_auto_embeds_the_native_model_part() {
         "auto-embedded native reload diverges from the original"
     );
 }
+
+/// A native model part written by a newer engine refuses to load: the IDML
+/// parts beside it are not the document, and a save after a silent fallback
+/// would write them over the model.
+#[test]
+fn a_model_part_from_a_newer_engine_refuses_to_load() {
+    let idml = paged_gen::write_idml(&paged_gen::samples::geometry::build()).expect("gen fixture");
+    let model = CanvasModel::load("a", &idml, CanvasOptions::default()).expect("load");
+    let mut pgm: serde_json::Value =
+        serde_json::from_slice(&paged_store::to_bytes(model.scene()).expect("pgm")).expect("json");
+    pgm["format_version"] = serde_json::json!(paged_store::PGM_FORMAT_VERSION + 1);
+    let paged = inject_part(
+        &idml,
+        DOCUMENT_PGM_PATH,
+        &serde_json::to_vec(&pgm).expect("json"),
+    );
+    let err = match CanvasModel::load("n", &paged, CanvasOptions::default()) {
+        Ok(_) => panic!("a newer model part must not load"),
+        Err(e) => e,
+    };
+    assert!(
+        matches!(&err, paged_canvas::channel::LoadError::Parse(m) if m.contains("newer")),
+        "{err:?}"
+    );
+}
+
+/// A native model part that does not read loads the IDML parts instead, and
+/// the document's import notes say so first: the user sees it before a save
+/// replaces the part.
+#[test]
+fn a_corrupt_model_part_loads_the_source_parts_with_a_warning() {
+    let idml = paged_gen::write_idml(&paged_gen::samples::geometry::build()).expect("gen fixture");
+    let plain = CanvasModel::load("p", &idml, CanvasOptions::default()).expect("load");
+    assert!(
+        plain.import_notes().is_empty(),
+        "a plain package carries no note"
+    );
+
+    let paged = inject_part(&idml, DOCUMENT_PGM_PATH, b"{\"format_version\":4,\"mod");
+    let loaded = CanvasModel::load("c", &paged, CanvasOptions::default()).expect("load");
+    assert_eq!(digests(&loaded), digests(&plain));
+    let notes = loaded.import_notes();
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(
+        notes[0].contains("does not read") && notes[0].contains("IDML parts"),
+        "{notes:?}"
+    );
+    assert_eq!(loaded.import_note_rows().len(), 1);
+}

@@ -2977,8 +2977,12 @@ impl CanvasModel {
         // scene `Document` — the model no longer carries the IDML archive (N9).
         let mut import_notes: Vec<String> = Vec::new();
         let (scene, source_archive) = {
-            let opened =
-                paged_renderer::container::open_document(bytes).map_err(LoadError::Parse)?;
+            // A model part from a newer engine refuses here; one that is
+            // damaged or incomplete opened from the IDML parts, which the
+            // user is told (`import_notes`) before a save replaces it.
+            let opened = paged_renderer::container::open_document(bytes)
+                .map_err(|e| LoadError::Parse(e.to_string()))?;
+            let fallback_warning = opened.fallback_warning();
             let mut doc = opened.document;
             // Engine ADR 1039 — an IDML this engine wrote carries its
             // symbols as labelled artwork; bring the instances back.
@@ -2986,6 +2990,10 @@ impl CanvasModel {
                 paged_mutate::restore_symbols_from_labels(&mut doc);
                 // Engine ADR 1057 — and its theme, with the links that held.
                 import_notes = paged_mutate::restore_theme_from_labels(&mut doc);
+            }
+            // First: it is the note that says the rest may be stale.
+            if let Some(warning) = fallback_warning {
+                import_notes.insert(0, warning);
             }
             if opened.from_model_part {
                 // The IDML parts beside the model keep each next /
@@ -4505,9 +4513,20 @@ impl CanvasModel {
                 LoggedMutation::Frame(paged_mutate::apply(&mut self.scene, &prev.op).ok()?)
             }
             LoggedMutation::Composite(children) => {
-                let mut replayed = Vec::with_capacity(children.len());
+                let mut replayed: Vec<LoggedMutation> = Vec::with_capacity(children.len());
                 for child in children {
-                    replayed.push(self.replay_logged(child)?);
+                    match self.replay_logged(child) {
+                        Some(entry) => replayed.push(entry),
+                        // All or nothing: take back the children already
+                        // replayed, newest first, so a failed replay
+                        // leaves the scene where it found it.
+                        None => {
+                            for done in replayed.iter().rev() {
+                                self.revert_logged(done);
+                            }
+                            return None;
+                        }
+                    }
                 }
                 LoggedMutation::Composite(replayed)
             }
@@ -7312,6 +7331,10 @@ impl CanvasModel {
     /// applies the cached inverse + rebuilds + pushes onto the redo
     /// stack. Phase B — handles both text and frame variants of the
     /// unified log.
+    ///
+    /// The record leaves the undo log only once its inverse has run: an
+    /// inverse the scene refuses changes nothing, and the record stays
+    /// where it was (popped first, it was lost from both logs).
     pub fn undo(&mut self) -> Option<UndoOutcome> {
         // Engine ADR 1300 — the history waits for an active gesture; a host
         // asks `refuse_during_gesture` first for the typed refusal.
@@ -7319,26 +7342,28 @@ impl CanvasModel {
             return None;
         }
         let rec = self.applied_log.pop()?;
-        self.amend_anchor = None;
-        self.history_moves += 1;
         let mut invalidation = Invalidation::Everything;
-        let affected_story_id = match &rec.kind {
+        let reverted: Option<Option<String>> = match &rec.kind {
             LoggedMutation::Text { op: _, inverse } => {
                 let edit = crate::mutate::edit_span(inverse, &self.scene);
-                let _ = crate::mutate::apply(&mut self.scene, inverse).ok()?;
-                invalidation = Invalidation::Text {
-                    story: story_id_of_text_op(inverse).to_string(),
-                    edit,
-                };
-                Some(story_id_of_text_op(inverse).to_string())
+                crate::mutate::apply(&mut self.scene, inverse)
+                    .ok()
+                    .map(|_| {
+                        invalidation = Invalidation::Text {
+                            story: story_id_of_text_op(inverse).to_string(),
+                            edit,
+                        };
+                        Some(story_id_of_text_op(inverse).to_string())
+                    })
             }
             LoggedMutation::Frame(applied) => {
                 // Undoing a repaint is a repaint: see `apply_operation`.
                 if self.paints_a_plain_page_item(&applied.inverse) {
                     invalidation = Invalidation::PageItemPaint;
                 }
-                let _ = paged_mutate::apply(&mut self.scene, &applied.inverse).ok()?;
-                None
+                paged_mutate::apply(&mut self.scene, &applied.inverse)
+                    .ok()
+                    .map(|_| None)
             }
             // One batch = one undo step: reverse its children newest
             // first, the same order `apply_mixed_batch` rolls back in.
@@ -7346,21 +7371,32 @@ impl CanvasModel {
                 for child in children.iter().rev() {
                     self.revert_logged(child);
                 }
-                children.iter().find_map(story_id_of_logged)
+                Some(children.iter().find_map(story_id_of_logged))
             }
             // C-15 — a top-level `Defaults` record cannot occur (only a
             // batch child logs one), but undo stays total rather than
             // silently skipping a record it cannot classify.
             LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
                 self.revert_logged(&rec.kind);
-                None
+                Some(None)
             }
             // ADR 1030 — undoing a restore replays what it reverted.
             LoggedMutation::Reverted(inner) => {
                 self.revert_logged(&rec.kind);
-                story_id_of_logged(inner)
+                Some(story_id_of_logged(inner))
             }
         };
+        let Some(affected_story_id) = reverted else {
+            // The scene is as it was: so is the history.
+            self.applied_log.push(rec);
+            return None;
+        };
+        self.amend_anchor = None;
+        self.history_moves += 1;
+        // From here the scene holds the undone state, so the record is a
+        // redo step whatever the rebuild says.
+        let undone_seq = rec.applied_seq;
+        self.redo_log.push(rec);
         // Perf-MasterText + Perf-BodyStory — undo replays an inverse
         // through the same scene paths as the forward commit, so the
         // same invariant applies: a content-only text inverse keeps the
@@ -7369,10 +7405,8 @@ impl CanvasModel {
         // re-insert) shifts page indices under the cached per-page
         // deltas. Mirror apply_mutation / apply_operation.
         self.commit_and_rebuild(invalidation).ok()?;
-        let undone_seq = rec.applied_seq;
         let applied_seq = self.bump_applied_seq();
         let page_ids: Vec<PageId> = self.dirty_page_ids();
-        self.redo_log.push(rec);
         Some(UndoOutcome {
             undone_seq,
             applied_seq,
@@ -7383,64 +7417,70 @@ impl CanvasModel {
 
     /// Redo the most-recently-undone mutation. Phase 3 Item 7. Phase B
     /// — handles both text and frame variants.
+    ///
+    /// Like [`Self::undo`], the record leaves the redo log only once it has
+    /// replayed: a replay the scene refuses leaves scene and history as
+    /// they were.
     pub fn redo(&mut self) -> Option<UndoOutcome> {
         if self.active_gesture.is_some() {
             return None;
         }
         let rec = self.redo_log.pop()?;
-        self.amend_anchor = None;
-        self.history_moves += 1;
         let mut invalidation = Invalidation::Everything;
-        let (new_kind, affected_story_id) = match &rec.kind {
+        let replayed: Option<(LoggedMutation, Option<String>)> = match &rec.kind {
             LoggedMutation::Text { op, inverse: _ } => {
                 let edit = crate::mutate::edit_span(op, &self.scene);
-                let applied = crate::mutate::apply(&mut self.scene, op).ok()?;
-                invalidation = Invalidation::Text {
-                    story: story_id_of_text_op(op).to_string(),
-                    edit,
-                };
-                let sid = Some(story_id_of_text_op(op).to_string());
-                (
-                    LoggedMutation::Text {
-                        op: op.clone(),
-                        inverse: applied.inverse,
-                    },
-                    sid,
-                )
+                crate::mutate::apply(&mut self.scene, op)
+                    .ok()
+                    .map(|applied| {
+                        invalidation = Invalidation::Text {
+                            story: story_id_of_text_op(op).to_string(),
+                            edit,
+                        };
+                        (
+                            LoggedMutation::Text {
+                                op: op.clone(),
+                                inverse: applied.inverse,
+                            },
+                            Some(story_id_of_text_op(op).to_string()),
+                        )
+                    })
             }
             LoggedMutation::Frame(prev_applied) => {
                 if self.paints_a_plain_page_item(&prev_applied.op) {
                     invalidation = Invalidation::PageItemPaint;
                 }
-                let applied = paged_mutate::apply(&mut self.scene, &prev_applied.op).ok()?;
-                (LoggedMutation::Frame(applied), None)
+                paged_mutate::apply(&mut self.scene, &prev_applied.op)
+                    .ok()
+                    .map(|applied| (LoggedMutation::Frame(applied), None))
             }
             // Redo replays the children FORWARD, in the order they were
             // originally applied, and re-captures their inverses (a
             // text op's inverse depends on the state it ran against).
-            LoggedMutation::Composite(children) => {
-                let mut replayed = Vec::with_capacity(children.len());
-                for child in children {
-                    replayed.push(self.replay_logged(child)?);
-                }
-                let sid = replayed.iter().find_map(story_id_of_logged);
-                (LoggedMutation::Composite(replayed), sid)
-            }
+            // `replay_logged` takes back the children already replayed
+            // when a later one fails.
+            LoggedMutation::Composite(children) => self.replay_logged(&rec.kind).map(|kind| {
+                let sid = children.iter().find_map(story_id_of_logged);
+                (kind, sid)
+            }),
             // C-15 — see `undo`: unreachable as a top-level record, kept
             // total.
             LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
-                (self.replay_logged(&rec.kind)?, None)
+                self.replay_logged(&rec.kind).map(|kind| (kind, None))
             }
-            LoggedMutation::Reverted(inner) => {
-                (self.replay_logged(&rec.kind)?, story_id_of_logged(inner))
-            }
+            LoggedMutation::Reverted(inner) => self
+                .replay_logged(&rec.kind)
+                .map(|kind| (kind, story_id_of_logged(inner))),
         };
-        // Perf-MasterText + Perf-BodyStory — same invariant as undo():
-        // the replayed op mutates content/structure under the caches.
-        self.commit_and_rebuild(invalidation).ok()?;
+        let Some((new_kind, affected_story_id)) = replayed else {
+            // The scene is as it was: so is the history.
+            self.redo_log.push(rec);
+            return None;
+        };
+        self.history_moves += 1;
         let redone_seq = rec.applied_seq;
-        let applied_seq = self.bump_applied_seq();
-        let page_ids: Vec<PageId> = self.dirty_page_ids();
+        // From here the scene holds the redone state, so the record is an
+        // undo step whatever the rebuild says.
         // W1.24 (B19) — capped push (oldest-evicted). A redo can only
         // re-grow the log up to the cap; the front-eviction here is the
         // same as the forward paths.
@@ -7452,6 +7492,11 @@ impl CanvasModel {
         // Engine ADR 1004 — history moved: the replayed entry is not one a
         // follow-up write may join.
         self.amend_anchor = None;
+        // Perf-MasterText + Perf-BodyStory — same invariant as undo():
+        // the replayed op mutates content/structure under the caches.
+        self.commit_and_rebuild(invalidation).ok()?;
+        let applied_seq = self.bump_applied_seq();
+        let page_ids: Vec<PageId> = self.dirty_page_ids();
         Some(UndoOutcome {
             undone_seq: redone_seq,
             applied_seq,
@@ -8652,7 +8697,7 @@ impl CanvasModel {
     /// absent / incompatible / fails to deserialize.
     pub fn read_model_part(&self) -> Option<Document> {
         let bytes = self.get_paged_part(paged_store::DOCUMENT_PGM_PATH)?;
-        paged_store::from_bytes(&bytes)
+        paged_store::from_bytes(&bytes).ok()
     }
 
     /// Phase 4 Step 3 — return the pages whose frame chains touch

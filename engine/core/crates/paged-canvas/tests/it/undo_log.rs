@@ -393,3 +393,123 @@ fn a_restore_forward_replays_as_one_step__feat__plugin_platform_undo_log_labels(
     model.undo().expect("undo");
     assert_eq!(model.current_state_hash(), h0);
 }
+
+/// A step whose replay the scene refuses stays in its log. `undo` and
+/// `redo` used to take the record off its log before replaying it, so a
+/// refused replay dropped the step from both: the edit could no longer be
+/// undone, and nothing said so.
+#[test]
+fn a_refused_replay_leaves_the_step_in_its_log() {
+    let mut m = load();
+    let frame = match m
+        .apply_mutation(&Mutation::InsertFrame {
+            page_id: PageId("p1".into()),
+            bounds: (20.0, 20.0, 120.0, 120.0),
+        })
+        .expect("insert")
+        .created_id
+        .expect("created id")
+    {
+        ElementId::Rectangle(id) => id,
+        other => panic!("expected a rectangle, got {other:?}"),
+    };
+    assert_eq!((m.applied_log_len(), m.redo_log_len()), (1, 0));
+
+    // Undo removes the frame by id. Behind the history's back the frame
+    // takes another id, so there is nothing for the inverse to remove.
+    m.scene_mut().spreads[0].spread.rectangles[0].self_id = Some("elsewhere".into());
+    assert!(m.undo().is_none(), "the inverse is refused");
+    assert_eq!(
+        (m.applied_log_len(), m.redo_log_len()),
+        (1, 0),
+        "the refused step is still an undo step"
+    );
+    assert_eq!(m.scene().spreads[0].spread.rectangles.len(), 1);
+
+    // With the frame back under its id the same step undoes.
+    m.scene_mut().spreads[0].spread.rectangles[0].self_id = Some(frame.clone());
+    m.undo().expect("undo");
+    assert_eq!((m.applied_log_len(), m.redo_log_len()), (0, 1));
+    assert!(m.scene().spreads[0].spread.rectangles.is_empty());
+
+    // Redo inserts the frame under the id it had. An item already holding
+    // that id makes the scene refuse the insert.
+    let squatter = paged_model::Rectangle::new(
+        frame.clone(),
+        paged_model::Bounds {
+            top: 0.0,
+            left: 0.0,
+            bottom: 10.0,
+            right: 10.0,
+        },
+    );
+    m.scene_mut().spreads[0].spread.rectangles.push(squatter);
+    assert!(m.redo().is_none(), "the replay is refused");
+    assert_eq!(
+        (m.applied_log_len(), m.redo_log_len()),
+        (0, 1),
+        "the refused step is still a redo step"
+    );
+
+    m.scene_mut().spreads[0].spread.rectangles.clear();
+    m.redo().expect("redo");
+    assert_eq!((m.applied_log_len(), m.redo_log_len()), (1, 0));
+    assert_eq!(
+        m.scene().spreads[0].spread.rectangles[0].self_id.as_deref(),
+        Some(frame.as_str())
+    );
+}
+
+/// A batch whose replay fails part-way takes back the children it had
+/// already replayed: the scene is where the redo found it, and the step
+/// is still a redo step.
+#[test]
+fn a_batch_refused_part_way_through_its_redo_changes_nothing() {
+    let mut m = load();
+    let page = PageId("p1".into());
+    m.apply_mutation(&Mutation::Batch {
+        ops: vec![
+            Mutation::InsertFrame {
+                page_id: page.clone(),
+                bounds: (20.0, 20.0, 120.0, 120.0),
+            },
+            Mutation::InsertFrame {
+                page_id: page,
+                bounds: (20.0, 200.0, 120.0, 300.0),
+            },
+        ],
+    })
+    .expect("batch");
+    assert_eq!(m.applied_log_len(), 1, "one batch is one step");
+    let second = m.scene().spreads[0].spread.rectangles[1]
+        .self_id
+        .clone()
+        .expect("id");
+    m.undo().expect("undo");
+    assert!(m.scene().spreads[0].spread.rectangles.is_empty());
+
+    // The second child's id is taken, so the batch's redo fails after its
+    // first child has been replayed.
+    let squatter = paged_model::Rectangle::new(
+        second,
+        paged_model::Bounds {
+            top: 0.0,
+            left: 0.0,
+            bottom: 10.0,
+            right: 10.0,
+        },
+    );
+    m.scene_mut().spreads[0].spread.rectangles.push(squatter);
+    assert!(m.redo().is_none(), "the replay is refused");
+    assert_eq!((m.applied_log_len(), m.redo_log_len()), (0, 1));
+    assert_eq!(
+        m.scene().spreads[0].spread.rectangles.len(),
+        1,
+        "the first child's replay was taken back"
+    );
+
+    m.scene_mut().spreads[0].spread.rectangles.clear();
+    m.redo().expect("redo");
+    assert_eq!((m.applied_log_len(), m.redo_log_len()), (1, 0));
+    assert_eq!(m.scene().spreads[0].spread.rectangles.len(), 2);
+}

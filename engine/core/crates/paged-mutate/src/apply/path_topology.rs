@@ -1684,7 +1684,7 @@ pub(super) fn reflow_hint_for_story(doc: &Document, story_id: &str) -> Invalidat
 // W3.A1 — table NodeId surface (addressing + mutation)
 // ===========================================================================
 
-use crate::operation::{RemovedTableLine, TableCellSpec, TableColumnSpec, TableRowSpec};
+use crate::operation::RemovedTableLine;
 
 /// W3.A1 — locate a `<Table>` inside a story by `(story_id, table_id)`.
 /// Returns the story index + the host paragraph index. Tables hang off
@@ -2550,19 +2550,14 @@ pub(super) fn apply_insert_table_row(
         Some(blob) => {
             let removed = parse_restore_blob(blob, story_id, table_id)?;
             positions = removed.positions.clone();
-            let mut cells: Vec<paged_model::TableCell> =
-                removed.cells.iter().map(TableCellSpec::to_parse).collect();
+            let mut cells: Vec<paged_model::TableCell> = removed.restored_cells();
             // Re-key the restored cells to the insertion row.
             for cell in &mut cells {
                 if let Some((c, _)) = cell.coords() {
                     set_cell_name(cell, c, at);
                 }
             }
-            let row = removed
-                .row
-                .as_ref()
-                .map(TableRowSpec::to_parse)
-                .unwrap_or_default();
+            let row = removed.restored_row();
             (row, cells)
         }
         None => {
@@ -2646,7 +2641,7 @@ pub(super) fn apply_delete_table_row(
 
     // Capture the row declaration + every cell originating on it.
     let removed_row = table.rows.remove(at as usize);
-    let mut captured_cells: Vec<TableCellSpec> = Vec::new();
+    let mut captured_cells: Vec<paged_model::TableCell> = Vec::new();
     let mut positions: Vec<usize> = Vec::new();
     let mut index = 0usize;
     table.cells.retain(|cell| {
@@ -2654,7 +2649,7 @@ pub(super) fn apply_delete_table_row(
         index += 1;
         match cell.coords() {
             Some((_, r)) if r == at => {
-                captured_cells.push(TableCellSpec::from_parse(cell));
+                captured_cells.push(cell.clone());
                 positions.push(at_index);
                 false
             }
@@ -2672,12 +2667,11 @@ pub(super) fn apply_delete_table_row(
     table.body_row_count = table.body_row_count.saturating_sub(1);
     renumber_table_rows(table);
 
-    let restore_blob = serde_json::to_string(&RemovedTableLine {
-        row: Some(TableRowSpec::from_parse(&removed_row)),
-        column: None,
-        cells: captured_cells,
+    let restore_blob = serde_json::to_string(&RemovedTableLine::of_row(
+        removed_row,
+        captured_cells,
         positions,
-    })
+    ))
     .expect("RemovedTableLine serialises");
 
     let invalidation = reflow_hint_for_story(doc, story_id);
@@ -2747,18 +2741,13 @@ pub(super) fn apply_insert_table_column(
             Some(blob) => {
                 let removed = parse_restore_blob(blob, story_id, table_id)?;
                 positions = removed.positions.clone();
-                let mut cells: Vec<paged_model::TableCell> =
-                    removed.cells.iter().map(TableCellSpec::to_parse).collect();
+                let mut cells: Vec<paged_model::TableCell> = removed.restored_cells();
                 for cell in &mut cells {
                     if let Some((_, r)) = cell.coords() {
                         set_cell_name(cell, at, r);
                     }
                 }
-                let col = removed
-                    .column
-                    .as_ref()
-                    .map(TableColumnSpec::to_parse)
-                    .unwrap_or_default();
+                let col = removed.restored_column();
                 (col, cells)
             }
             None => {
@@ -2822,7 +2811,7 @@ pub(super) fn apply_delete_table_column(
     }
 
     let removed_col = table.columns.remove(at as usize);
-    let mut captured_cells: Vec<TableCellSpec> = Vec::new();
+    let mut captured_cells: Vec<paged_model::TableCell> = Vec::new();
     let mut positions: Vec<usize> = Vec::new();
     let mut index = 0usize;
     table.cells.retain(|cell| {
@@ -2830,7 +2819,7 @@ pub(super) fn apply_delete_table_column(
         index += 1;
         match cell.coords() {
             Some((c, _)) if c == at => {
-                captured_cells.push(TableCellSpec::from_parse(cell));
+                captured_cells.push(cell.clone());
                 positions.push(at_index);
                 false
             }
@@ -2847,12 +2836,11 @@ pub(super) fn apply_delete_table_column(
     table.column_count = table.column_count.saturating_sub(1);
     renumber_table_columns(table);
 
-    let restore_blob = serde_json::to_string(&RemovedTableLine {
-        row: None,
-        column: Some(TableColumnSpec::from_parse(&removed_col)),
-        cells: captured_cells,
+    let restore_blob = serde_json::to_string(&RemovedTableLine::of_column(
+        removed_col,
+        captured_cells,
         positions,
-    })
+    ))
     .expect("RemovedTableLine serialises");
 
     let invalidation = reflow_hint_for_story(doc, story_id);
@@ -2930,18 +2918,13 @@ pub(super) fn apply_insert_band_row(
         Some(blob) => {
             let removed = parse_restore_blob(blob, story_id, table_id)?;
             positions = removed.positions.clone();
-            let mut cells: Vec<paged_model::TableCell> =
-                removed.cells.iter().map(TableCellSpec::to_parse).collect();
+            let mut cells: Vec<paged_model::TableCell> = removed.restored_cells();
             for cell in &mut cells {
                 if let Some((c, _)) = cell.coords() {
                     set_cell_name(cell, c, at);
                 }
             }
-            let row = removed
-                .row
-                .as_ref()
-                .map(TableRowSpec::to_parse)
-                .unwrap_or_default();
+            let row = removed.restored_row();
             (row, cells)
         }
         None => {
@@ -3037,7 +3020,7 @@ pub(super) fn apply_remove_band_row(
     };
 
     let removed_row = table.rows.remove(at as usize);
-    let mut captured_cells: Vec<TableCellSpec> = Vec::new();
+    let mut captured_cells: Vec<paged_model::TableCell> = Vec::new();
     let mut positions: Vec<usize> = Vec::new();
     let mut index = 0usize;
     table.cells.retain(|cell| {
@@ -3045,7 +3028,7 @@ pub(super) fn apply_remove_band_row(
         index += 1;
         match cell.coords() {
             Some((_, r)) if r == at => {
-                captured_cells.push(TableCellSpec::from_parse(cell));
+                captured_cells.push(cell.clone());
                 positions.push(at_index);
                 false
             }
@@ -3070,12 +3053,11 @@ pub(super) fn apply_remove_band_row(
     }
     renumber_table_rows(table);
 
-    let restore_blob = serde_json::to_string(&RemovedTableLine {
-        row: Some(TableRowSpec::from_parse(&removed_row)),
-        column: None,
-        cells: captured_cells,
+    let restore_blob = serde_json::to_string(&RemovedTableLine::of_row(
+        removed_row,
+        captured_cells,
         positions,
-    })
+    ))
     .expect("RemovedTableLine serialises");
 
     let (op, inverse) = match band {
